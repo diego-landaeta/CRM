@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
+import LeadFormDialog from '../components/LeadFormDialog';
 import {
   MagnifyingGlass,
   Plus,
@@ -57,8 +59,18 @@ export default function LeadsPage() {
     filterOrigen, setFilterOrigen,
   } = useLeads();
 
+  const [formOpen, setFormOpen] = useState(false);
+
+  async function handleCreateLead(data) {
+    // TODO: llamar API real — POST /api/leads
+    console.log('Nuevo lead:', data);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
   return (
     <div className="space-y-6">
+      <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -70,7 +82,10 @@ export default function LeadsPage() {
             <Export size={16} weight="bold" />
             Exportar
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+          <button
+            onClick={() => setFormOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+          >
             <Plus size={16} weight="bold" />
             Nuevo Lead
           </button>

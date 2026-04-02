@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
+import LeadFormDialog from '../components/LeadFormDialog';
 import {
   ArrowLeft,
   PencilSimple,
@@ -49,6 +51,13 @@ export default function LeadDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { lead, timeline, loading } = useLeadDetail(id);
+  const [editOpen, setEditOpen] = useState(false);
+
+  async function handleEditLead(data) {
+    // TODO: llamar API real — PATCH /api/leads/:id
+    console.log('Editar lead:', id, data);
+    await new Promise((r) => setTimeout(r, 500));
+  }
 
   if (loading) return <div className="py-20 text-center text-muted-foreground">Cargando...</div>;
 
@@ -65,6 +74,8 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-6">
+      <LeadFormDialog open={editOpen} onClose={() => setEditOpen(false)} lead={lead} onSubmit={handleEditLead} />
+
       {/* Header */}
       <div>
         <button
@@ -87,7 +98,7 @@ export default function LeadDetailPage() {
             </span>
           </div>
           <div className="flex gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
+            <button onClick={() => setEditOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
               <PencilSimple size={14} /> Editar
             </button>
             <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors">
