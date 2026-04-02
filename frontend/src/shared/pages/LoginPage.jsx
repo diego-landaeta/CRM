@@ -1,14 +1,23 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Package, Eye, EyeSlash } from '@phosphor-icons/react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Si ya esta logueado, redirigir al dashboard
+  if (isAuthenticated) {
+    const from = location.state?.from?.pathname || '/';
+    return <Navigate to={from} replace />;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,10 +29,15 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    // TODO: reemplazar con auth real cuando backend este listo
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    navigate('/');
+    try {
+      await login(email, password);
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

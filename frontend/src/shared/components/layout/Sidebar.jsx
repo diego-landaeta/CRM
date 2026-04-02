@@ -12,6 +12,7 @@ import {
   Moon,
   Sun,
 } from '@phosphor-icons/react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
@@ -55,8 +56,12 @@ function NavItem({ to, icon: Icon, label, badge }) {
 }
 
 export default function Sidebar() {
+  const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
+
+  const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+  const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
 
   return (
     <aside className="w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
@@ -114,13 +119,13 @@ export default function Sidebar() {
         {/* User */}
         <div className="flex items-center gap-3 px-2">
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs">
-            AM
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-foreground truncate tracking-tight">Angel M.</p>
-            <p className="text-[10px] text-muted-foreground">Gestor</p>
+            <p className="text-xs font-bold text-foreground truncate tracking-tight">{user?.nombre}</p>
+            <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
           </div>
-          <button className="text-muted-foreground hover:text-foreground transition-colors p-1">
+          <button onClick={logout} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Cerrar sesion">
             <SignOut size={16} />
           </button>
         </div>

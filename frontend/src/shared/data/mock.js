@@ -18,7 +18,9 @@ export const PROJECTS = [
 export const USERS = [
   { id: 1, nombre: 'Manuel Casas', email: 'manuel@empresa.com', role: 'superadmin', projects: [1, 2, 3, 4, 5, 6] },
   { id: 2, nombre: 'Diego R.', email: 'diego@empresa.com', role: 'admin', projects: [1, 2] },
-  { id: 3, nombre: 'Angel M.', email: 'angel@empresa.com', role: 'gestor', projects: [1, 3] },
+  { id: 3, nombre: 'Angel M.', email: 'angel@empresa.com', role: 'admin', projects: [1, 3] },
+  { id: 4, nombre: 'Laura Gomez', email: 'laura@empresa.com', role: 'gestor', projects: [1] },
+  { id: 5, nombre: 'Carlos Vega', email: 'carlos@empresa.com', role: 'gestor', projects: [1, 2] },
 ];
 
 // --- PRODUCTOS por proyecto (tabla products) ---
