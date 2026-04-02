@@ -12,40 +12,70 @@ CRM interno multi-proyecto para gestion de leads, conversiones, campanas publici
 - **Email:** Brevo — Notificaciones leads + bienvenida usuarios
 - **APIs externas:** Meta Marketing API v19+, Google Ads API v16+, GSC API, Stripe, Claude AI
 
-## Estructura del repositorio
+## Estructura del repositorio (modular)
+
+Arquitectura por modulos: cada dominio (products, dossiers, leads, auth...) contiene todo su codigo (routes, controller, service, model, validation). Codigo compartido en `shared/`.
+
 ```
 backend/
   src/
-    config/           # db.js, r2.js, brevo.js, validacion de env
-    middleware/        # auth.js, roleGuard.js, projectAccess.js, errorHandler.js
-    routes/           # auth.routes.js, users.routes.js, leads.routes.js, ...
-    controllers/      # auth.controller.js, users.controller.js, ...
-    services/         # auth.service.js, leads.service.js, roundRobin.service.js, ...
-    models/           # Queries SQL directas con pg pool (NO ORM)
-    jobs/             # Cron jobs: reminders, metaSync, googleSync, ...
-    utils/            # utmParser.js, hashSha256.js, presignedUrl.js, logger.js
-    validations/      # Schemas Zod por entidad
-    app.js            # Setup Express
-  migrations/         # SQL secuencial: 001_initial_schema.sql, ...
-  seeds/              # Seed data SQL
-  tests/              # Tests con Vitest
-  ecosystem.config.js # PM2
+    modules/              # Un directorio por dominio de negocio
+      auth/               # Diego: login, logout, refresh, set-password
+        index.js          # Exporta { prefix, router }
+      users/              # Diego: CRUD usuarios, bienvenida Brevo
+        index.js
+      leads/              # Diego: webhook, round-robin, UTMs
+        index.js
+      products/           # Angel: CRUD productos por proyecto
+        index.js
+        product.routes.js
+        product.controller.js
+        product.service.js
+        product.model.js
+        product.validation.js
+      dossiers/           # Angel: upload PDF, pre-signed URL, historial
+        index.js
+        dossier.routes.js
+        dossier.controller.js
+        dossier.service.js
+        dossier.model.js
+        dossier.validation.js
+    shared/               # Codigo compartido entre modulos
+      config/             # db.js (pg pool), r2.js (S3 client)
+      middleware/         # auth.js, roleGuard, projectAccess, errorHandler, upload
+      services/           # r2.service.js (upload/delete R2)
+      utils/              # AppError.js, logger.js, presignedUrl.js
+    jobs/                 # Cron jobs: reminders, metaSync, googleSync
+    app.js                # Express setup + registro automatico de modulos
+  migrations/             # SQL secuencial: 001_initial_schema.sql, ...
+  seeds/                  # Seed data SQL
+  tests/                  # Tests con Vitest
+  ecosystem.config.js     # PM2
   package.json
   .env.example
 
 frontend/
   src/
-    api/              # Axios instance + funciones por dominio
-    components/
-      ui/             # Primitivas shadcn/ui (Button, Input, Dialog, Table, ...)
-      layout/         # AppLayout, Sidebar, Navbar, ProjectSelector
-      shared/         # StatusBadge, LeadCard, TimelineItem, FilterBar, ...
-    pages/            # Una por ruta: LoginPage, DashboardPage, LeadsPage, ...
-    hooks/            # useAuth, useProject, useLeads, usePagination, ...
-    contexts/         # AuthContext, ProjectContext
-    lib/              # cn(), constantes, formateadores
-    router.jsx        # React Router v6
+    modules/              # Un directorio por feature/dominio
+      products/           # Angel: panel productos + dossiers
+        api/              # products.api.js, dossiers.api.js
+        hooks/            # useProducts.js, useDossiers.js
+        components/       # DossierPanel.jsx
+        pages/            # ProductsPage.jsx, ProductDetailPage.jsx
+      leads/              # Diego (placeholder)
+      auth/               # Diego (placeholder)
+    shared/               # Codigo compartido entre modulos
+      api/                # client.js (axios instance + interceptors)
+      components/
+        ui/               # Primitivas shadcn/ui (Button, Input, Dialog, Table, ...)
+        layout/           # AppLayout, Sidebar, Navbar, ProjectSelector
+      hooks/              # useProject.js, useAuth.js
+      lib/                # cn(), constantes, formateadores
+      pages/              # LoginPage, DashboardPage (compartidas)
+    contexts/             # AuthContext, ProjectContext
+    App.jsx               # Router principal — importa pages de cada modulo
     main.jsx
+    index.css
   tailwind.config.js
   vite.config.js
   package.json
@@ -54,6 +84,19 @@ docs/       # Documentacion tecnica en Markdown
 nginx/      # Template configuracion Nginx
 scripts/    # backup.sh, deploy.sh
 ```
+
+### Como crear un nuevo modulo (backend)
+1. Crear directorio `backend/src/modules/<nombre>/`
+2. Crear archivos: `<nombre>.routes.js`, `<nombre>.controller.js`, `<nombre>.service.js`, `<nombre>.model.js`, `<nombre>.validation.js`
+3. Crear `index.js` que exporte `{ prefix: '/api/<nombre>', router }`
+4. Importar y registrar en `app.js` (array `modules`)
+
+### Como crear un nuevo modulo (frontend)
+1. Crear directorio `frontend/src/modules/<nombre>/`
+2. Subdirectorios: `api/`, `hooks/`, `components/`, `pages/`
+3. Importar pages con lazy() en `App.jsx` y anadir rutas
+4. Imports internos del modulo: relativos (`../hooks/useX`)
+5. Imports compartidos: alias (`@/shared/components/ui/button`)
 
 ## Convenciones de codigo
 

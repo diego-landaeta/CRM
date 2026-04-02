@@ -1,0 +1,229 @@
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { useDashboard } from '@/shared/hooks/useDashboard';
+import {
+  UserPlus,
+  CheckCircle,
+  CurrencyEur,
+  UserMinus,
+  TrendUp,
+  TrendDown,
+  ArrowRight,
+} from '@phosphor-icons/react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from 'recharts';
+
+const ESTADO_STYLES = {
+  nuevo: 'bg-blue-50 text-blue-600',
+  contactado: 'bg-emerald-50 text-emerald-600',
+  en_proceso: 'bg-amber-50 text-amber-600',
+  convertido: 'bg-violet-50 text-violet-600',
+  perdido: 'bg-red-50 text-red-600',
+};
+
+const ESTADO_LABELS = {
+  nuevo: 'Nuevo',
+  contactado: 'Contactado',
+  en_proceso: 'En proceso',
+  convertido: 'Convertido',
+  perdido: 'Perdido',
+};
+
+function KpiCard({ icon: Icon, iconBg, label, value, badge, badgeColor, trend }) {
+  const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
+  return (
+    <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <div className="flex items-center justify-between mb-4">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+          <Icon size={20} weight="duotone" />
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${badgeColor}`}>
+          <TrendIcon size={12} weight="bold" />
+          {badge}
+        </span>
+      </div>
+      <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-wider">{label}</p>
+      <h3 className="text-3xl font-extrabold mt-1 tracking-tight">{value}</h3>
+    </div>
+  );
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-zinc-900 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-lg">
+      {label}: <span className="text-blue-300">{payload[0].value} leads</span>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const { activeProject } = useProjectContext();
+  const { kpis, leadsSemana, conversionProyecto, leadsRecientes } = useDashboard();
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
+          <p className="text-zinc-500 text-sm">
+            Resumen de actividad &mdash; {activeProject.nombre}
+          </p>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard
+          icon={UserPlus}
+          iconBg="bg-blue-50 text-blue-600"
+          label="Leads Nuevos"
+          value={kpis.leadsNuevos.value}
+          badge={kpis.leadsNuevos.change}
+          badgeColor="bg-emerald-50 text-emerald-600"
+          trend="up"
+        />
+        <KpiCard
+          icon={CheckCircle}
+          iconBg="bg-violet-50 text-violet-600"
+          label="Conversiones"
+          value={kpis.conversiones.value}
+          badge={kpis.conversiones.rate}
+          badgeColor="bg-violet-50 text-violet-600"
+          trend="up"
+        />
+        <KpiCard
+          icon={CurrencyEur}
+          iconBg="bg-emerald-50 text-emerald-600"
+          label="Ingresos Mes"
+          value={`${kpis.ingresosMes.value.toLocaleString('es-ES')} €`}
+          badge={kpis.ingresosMes.change}
+          badgeColor="bg-emerald-50 text-emerald-600"
+          trend="up"
+        />
+        <KpiCard
+          icon={UserMinus}
+          iconBg="bg-red-50 text-red-500"
+          label="Tasa Abandono"
+          value={`${kpis.tasaAbandono.value}%`}
+          badge={kpis.tasaAbandono.change}
+          badgeColor="bg-red-50 text-red-600"
+          trend="down"
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Bar Chart */}
+        <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-3">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-bold">Leads por Semana</h3>
+              <p className="text-[11px] text-zinc-400 mt-0.5">Marzo 2026</p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={leadsSemana} barSize={40}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
+              <XAxis
+                dataKey="semana"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#a1a1aa', fontWeight: 600 }}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#a1a1aa' }}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
+              <Bar dataKey="leads" radius={[8, 8, 0, 0]} fill="#4361ee" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Pie Chart */}
+        <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-2">
+          <h3 className="font-bold mb-1">Conversion por Proyecto</h3>
+          <p className="text-[11px] text-zinc-400 mb-4">Tasa acumulada</p>
+          <div className="flex justify-center mb-4">
+            <ResponsiveContainer width={160} height={160}>
+              <PieChart>
+                <Pie
+                  data={conversionProyecto}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={72}
+                  paddingAngle={3}
+                  dataKey="value"
+                  strokeWidth={0}
+                >
+                  {conversionProyecto.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-2.5">
+            {conversionProyecto.map((p) => (
+              <div key={p.name} className="flex items-center justify-between text-[13px]">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                  <span className="font-medium">{p.name}</span>
+                </div>
+                <span className="font-bold">{p.value}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Leads */}
+      <div className="bg-white rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+        <div className="p-5 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold">Leads Recientes</h3>
+            <p className="text-[11px] text-zinc-400 mt-0.5">Ultimos 7 dias</p>
+          </div>
+          <button className="text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white px-3 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors flex items-center gap-1.5">
+            Ver todos <ArrowRight size={12} weight="bold" />
+          </button>
+        </div>
+        <table className="w-full text-[13px]">
+          <thead className="bg-zinc-50/80 border-y">
+            <tr>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Nombre</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Email</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Origen</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Estado</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Gestor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leadsRecientes.map((lead) => (
+              <tr key={lead.id} className="border-b last:border-0 hover:bg-zinc-50/50 transition-colors">
+                <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
+                <td className="px-5 py-3 text-zinc-500">{lead.email}</td>
+                <td className="px-5 py-3">
+                  <span className="bg-zinc-100 text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                    {lead.origen}
+                  </span>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
+                    {ESTADO_LABELS[lead.estado]}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-zinc-500">{lead.gestor}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

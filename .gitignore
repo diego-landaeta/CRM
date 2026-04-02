@@ -35,6 +35,9 @@ desktop.ini
 # Test
 coverage/
 
+# Uploads
+uploads/
+
 # Temp
 *.tmp
 *.bak
