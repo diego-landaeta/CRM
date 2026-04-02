@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema } from '../validation/product.schema';
 import { X } from '@phosphor-icons/react';
+import Portal from '@/shared/components/ui/portal';
 
 const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
@@ -43,9 +44,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md mx-4 p-8">
+    <Portal>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-extrabold tracking-tight">{isEdit ? 'Editar Producto' : 'Nuevo Producto'}</h2>
@@ -78,5 +80,6 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
         </form>
       </div>
     </div>
+    </Portal>
   );
 }

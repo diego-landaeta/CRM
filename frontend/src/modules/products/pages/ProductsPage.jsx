@@ -5,6 +5,7 @@ import { useProject } from '@/shared/hooks/useProject';
 import ProductFormDialog from '../components/ProductFormDialog';
 import { toast } from '@/shared/hooks/useToast';
 import { Plus, PencilSimple, Trash, FileText, Package } from '@phosphor-icons/react';
+import Portal from '@/shared/components/ui/portal';
 
 export default function ProductsPage() {
   const navigate = useNavigate();
@@ -58,9 +59,10 @@ export default function ProductsPage() {
 
       {/* Delete confirm */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
-          <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm mx-4 p-8 text-center">
+        <Portal>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+          <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] text-center">
             <h2 className="text-lg font-extrabold tracking-tight mb-2">Desactivar producto</h2>
             <p className="text-sm text-muted-foreground mb-6">
               Estas seguro de desactivar <strong>"{deleteTarget.nombre}"</strong>? El producto dejara de estar visible pero no se eliminara.
@@ -75,6 +77,7 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+        </Portal>
       )}
 
       {/* Header */}

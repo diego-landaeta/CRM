@@ -5,6 +5,7 @@ import { leadSchema, ORIGEN_OPTIONS } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { PRODUCTS } from '@/shared/data/mock';
 import { X } from '@phosphor-icons/react';
+import Portal from '@/shared/components/ui/portal';
 
 function Field({ label, error, children }) {
   return (
@@ -67,12 +68,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
+    <Portal>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Dialog */}
-      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-8 animate-in">
+      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -146,5 +148,6 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
         </form>
       </div>
     </div>
+    </Portal>
   );
 }
