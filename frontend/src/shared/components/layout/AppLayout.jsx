@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
+import CommandPalette from './CommandPalette';
 import { List, X } from '@phosphor-icons/react';
 
 export default function AppLayout() {
@@ -47,6 +48,7 @@ export default function AppLayout() {
       </main>
 
       <Toaster />
+      <CommandPalette />
     </div>
   );
 }
