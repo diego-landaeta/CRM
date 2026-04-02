@@ -1,7 +1,7 @@
 # Esquema de Base de Datos -- CRM MultiProyecto
 
 > **Motor:** PostgreSQL 15+
-> **Ultima actualizacion:** 2026-04-01
+> **Ultima actualizacion:** 2026-04-02
 
 ---
 
@@ -29,7 +29,9 @@
 CREATE TYPE user_role AS ENUM (
     'superadmin',
     'admin',
-    'gestor'
+    'gestor',
+    'direccion',
+    'operativo'
 );
 
 CREATE TYPE project_type AS ENUM (
@@ -50,14 +52,48 @@ CREATE TYPE interaction_type AS ENUM (
     'llamada',
     'email',
     'whatsapp',
-    'nota'
+    'nota',
+    'reunion'
+);
+
+CREATE TYPE loss_reason AS ENUM (
+    'precio',
+    'falta_interes',
+    'sin_respuesta',
+    'competencia',
+    'timing',
+    'otro'
+);
+
+CREATE TYPE expense_category AS ENUM (
+    'meta_ads',
+    'google_ads',
+    'tiktok_ads',
+    'salarios',
+    'herramientas',
+    'plataforma',
+    'otro'
+);
+
+CREATE TYPE activity_category AS ENUM (
+    'atencion_alumno',
+    'preparacion_material',
+    'reunion_interna',
+    'revision_campanas',
+    'soporte_tecnico',
+    'administracion',
+    'otra'
 );
 
 CREATE TYPE payment_method AS ENUM (
     'transferencia',
     'tarjeta',
     'efectivo',
-    'fraccionado'
+    'fraccionado',
+    'stripe',
+    'bizum',
+    'paypal',
+    'otro'
 );
 
 CREATE TYPE utm_channel AS ENUM (
@@ -293,6 +329,8 @@ Tabla principal de leads. Cada lead pertenece a un proyecto.
 | notas | TEXT | NULLABLE |
 | lead_duplicado_de | INTEGER | NULLABLE, FK -> leads(id) |
 | landing_url | TEXT | NULLABLE |
+| pais | VARCHAR(100) | NULLABLE |
+| motivo_perdida | loss_reason | NULLABLE (obligatorio si status = no_interesado) |
 | fecha_solicitud | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
@@ -317,6 +355,8 @@ CREATE TABLE leads (
     notas                TEXT,
     lead_duplicado_de    INTEGER,
     landing_url          TEXT,
+    pais                 VARCHAR(100),
+    motivo_perdida       loss_reason,
     fecha_solicitud      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     created_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
@@ -355,6 +395,8 @@ Parametros UTM capturados en la landing de origen de cada lead (relacion 1:1).
 | utm_term | VARCHAR(255) | NULLABLE |
 | landing_url | TEXT | NULLABLE |
 | canal_detectado | utm_channel | NULLABLE |
+| fbclid | VARCHAR(255) | NULLABLE (Meta click ID) |
+| gclid | VARCHAR(255) | NULLABLE (Google click ID) |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
 
 ```sql
@@ -371,6 +413,8 @@ CREATE TABLE lead_utms (
     utm_term         VARCHAR(255),
     landing_url      TEXT,
     canal_detectado  utm_channel,
+    fbclid           VARCHAR(255),
+    gclid            VARCHAR(255),
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_lead_utms_lead
@@ -904,6 +948,246 @@ CREATE TABLE ai_reports (
 
 ---
 
+### 4.7 `expenses`
+
+Gastos manuales por proyecto y categoria. Permite calcular beneficio neto = ingresos - gastos.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| project_id | INTEGER | NOT NULL, FK -> projects(id) |
+| category | expense_category | NOT NULL |
+| descripcion | VARCHAR(255) | NOT NULL |
+| importe | DECIMAL(10,2) | NOT NULL |
+| fecha | DATE | NOT NULL, DEFAULT CURRENT_DATE |
+| recurrente | BOOLEAN | NOT NULL, DEFAULT false |
+| campaign_id | VARCHAR(100) | NULLABLE (vincular gasto a campana para CAC) |
+| created_by | INTEGER | NOT NULL, FK -> users(id) |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+
+```sql
+-- ============================================================
+-- 4.7  EXPENSES
+-- ============================================================
+CREATE TABLE expenses (
+    id           SERIAL           PRIMARY KEY,
+    project_id   INTEGER          NOT NULL,
+    category     expense_category NOT NULL,
+    descripcion  VARCHAR(255)     NOT NULL,
+    importe      DECIMAL(10,2)    NOT NULL,
+    fecha        DATE             NOT NULL DEFAULT CURRENT_DATE,
+    recurrente   BOOLEAN          NOT NULL DEFAULT false,
+    campaign_id  VARCHAR(100),
+    created_by   INTEGER          NOT NULL,
+    created_at   TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_expenses_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_expenses_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_expenses_project_fecha ON expenses (project_id, fecha);
+```
+
+---
+
+### 4.8 `team_activities`
+
+Registro de actividad interna del equipo. Cada miembro registra en que esta trabajando.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| user_id | INTEGER | NOT NULL, FK -> users(id) |
+| category | activity_category | NOT NULL |
+| descripcion | TEXT | NULLABLE |
+| started_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+| ended_at | TIMESTAMPTZ | NULLABLE |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+
+```sql
+-- ============================================================
+-- 4.8  TEAM_ACTIVITIES
+-- ============================================================
+CREATE TABLE team_activities (
+    id           SERIAL             PRIMARY KEY,
+    user_id      INTEGER            NOT NULL,
+    category     activity_category  NOT NULL,
+    descripcion  TEXT,
+    started_at   TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+    ended_at     TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_team_activities_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_team_activities_user_started ON team_activities (user_id, started_at);
+```
+
+---
+
+### 4.9 `team_tasks`
+
+Tareas asignadas por el administrador a miembros del equipo.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| titulo | VARCHAR(255) | NOT NULL |
+| descripcion | TEXT | NULLABLE |
+| assigned_to | INTEGER | NOT NULL, FK -> users(id) |
+| created_by | INTEGER | NOT NULL, FK -> users(id) |
+| fecha_limite | DATE | NULLABLE |
+| completado | BOOLEAN | NOT NULL, DEFAULT false |
+| completado_at | TIMESTAMPTZ | NULLABLE |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+| updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+
+```sql
+-- ============================================================
+-- 4.9  TEAM_TASKS
+-- ============================================================
+CREATE TABLE team_tasks (
+    id             SERIAL        PRIMARY KEY,
+    titulo         VARCHAR(255)  NOT NULL,
+    descripcion    TEXT,
+    assigned_to    INTEGER       NOT NULL,
+    created_by     INTEGER       NOT NULL,
+    fecha_limite   DATE,
+    completado     BOOLEAN       NOT NULL DEFAULT false,
+    completado_at  TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_team_tasks_assigned_to
+        FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_team_tasks_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_team_tasks_assigned ON team_tasks (assigned_to, completado);
+```
+
+---
+
+### 4.10 `team_task_comments`
+
+Comentarios internos dentro de cada tarea (hilo de conversacion del equipo).
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| task_id | INTEGER | NOT NULL, FK -> team_tasks(id) |
+| user_id | INTEGER | NOT NULL, FK -> users(id) |
+| contenido | TEXT | NOT NULL |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+
+```sql
+-- ============================================================
+-- 4.10  TEAM_TASK_COMMENTS
+-- ============================================================
+CREATE TABLE team_task_comments (
+    id          SERIAL       PRIMARY KEY,
+    task_id     INTEGER      NOT NULL,
+    user_id     INTEGER      NOT NULL,
+    contenido   TEXT         NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_team_task_comments_task
+        FOREIGN KEY (task_id) REFERENCES team_tasks(id) ON DELETE CASCADE,
+    CONSTRAINT fk_team_task_comments_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+```
+
+---
+
+### 4.11 `ad_conversions_sent`
+
+Log de conversiones enviadas de vuelta a Meta (Conversions API) y Google (offline conversions) para optimizacion de algoritmos.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| conversion_id | INTEGER | NOT NULL, FK -> conversions(id) |
+| platform | VARCHAR(20) | NOT NULL ('meta' o 'google') |
+| event_name | VARCHAR(100) | NOT NULL (ej. 'Purchase', 'Lead') |
+| external_id | VARCHAR(255) | NULLABLE (fbclid o gclid) |
+| payload_json | JSONB | NOT NULL (payload enviado) |
+| response_status | INTEGER | NULLABLE (HTTP status de la API) |
+| response_body | TEXT | NULLABLE |
+| sent_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+| success | BOOLEAN | NOT NULL, DEFAULT false |
+
+```sql
+-- ============================================================
+-- 4.11  AD_CONVERSIONS_SENT
+-- ============================================================
+CREATE TABLE ad_conversions_sent (
+    id               SERIAL        PRIMARY KEY,
+    conversion_id    INTEGER       NOT NULL,
+    platform         VARCHAR(20)   NOT NULL,
+    event_name       VARCHAR(100)  NOT NULL,
+    external_id      VARCHAR(255),
+    payload_json     JSONB         NOT NULL,
+    response_status  INTEGER,
+    response_body    TEXT,
+    sent_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    success          BOOLEAN       NOT NULL DEFAULT false,
+
+    CONSTRAINT fk_ad_conversions_sent_conversion
+        FOREIGN KEY (conversion_id) REFERENCES conversions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ad_conversions_sent_conversion ON ad_conversions_sent (conversion_id);
+```
+
+---
+
+### 4.12 `gdpr_requests`
+
+Registro de solicitudes RGPD (derecho al olvido, exportacion de datos).
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | SERIAL | PRIMARY KEY |
+| tipo | VARCHAR(50) | NOT NULL ('export', 'delete', 'rectify') |
+| email_solicitante | VARCHAR(255) | NOT NULL |
+| lead_id | INTEGER | NULLABLE, FK -> leads(id) |
+| estado | VARCHAR(20) | NOT NULL, DEFAULT 'pendiente' |
+| processed_by | INTEGER | NULLABLE, FK -> users(id) |
+| processed_at | TIMESTAMPTZ | NULLABLE |
+| notas | TEXT | NULLABLE |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() |
+
+```sql
+-- ============================================================
+-- 4.12  GDPR_REQUESTS
+-- ============================================================
+CREATE TABLE gdpr_requests (
+    id                  SERIAL        PRIMARY KEY,
+    tipo                VARCHAR(50)   NOT NULL,
+    email_solicitante   VARCHAR(255)  NOT NULL,
+    lead_id             INTEGER,
+    estado              VARCHAR(20)   NOT NULL DEFAULT 'pendiente',
+    processed_by        INTEGER,
+    processed_at        TIMESTAMPTZ,
+    notas               TEXT,
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_gdpr_requests_lead
+        FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL,
+    CONSTRAINT fk_gdpr_requests_processed_by
+        FOREIGN KEY (processed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+```
+
+---
+
 ## 5. Resumen de indices
 
 | Tabla | Indice | Columnas |
@@ -927,6 +1211,10 @@ CREATE TABLE ai_reports (
 | google_campaign_metrics | `uq_google_campaign_metrics_project_campaign_date` (UNIQUE) | `(project_id, campaign_id, date)` |
 | gsc_metrics | `uq_gsc_metrics_project_date_query_page_device` (UNIQUE) | `(project_id, date, COALESCE(query,''), COALESCE(page,''), COALESCE(device,''))` |
 | ia_monthly_metrics | `uq_ia_monthly_metrics_project_month` (UNIQUE) | `(project_id, month)` |
+| expenses | `idx_expenses_project_fecha` | `(project_id, fecha)` |
+| team_activities | `idx_team_activities_user_started` | `(user_id, started_at)` |
+| team_tasks | `idx_team_tasks_assigned` | `(assigned_to, completado)` |
+| ad_conversions_sent | `idx_ad_conversions_sent_conversion` | `conversion_id` |
 
 ---
 
@@ -1050,7 +1338,9 @@ BEGIN;
 CREATE TYPE user_role AS ENUM (
     'superadmin',
     'admin',
-    'gestor'
+    'gestor',
+    'direccion',
+    'operativo'
 );
 
 CREATE TYPE project_type AS ENUM (
@@ -1071,14 +1361,48 @@ CREATE TYPE interaction_type AS ENUM (
     'llamada',
     'email',
     'whatsapp',
-    'nota'
+    'nota',
+    'reunion'
+);
+
+CREATE TYPE loss_reason AS ENUM (
+    'precio',
+    'falta_interes',
+    'sin_respuesta',
+    'competencia',
+    'timing',
+    'otro'
+);
+
+CREATE TYPE expense_category AS ENUM (
+    'meta_ads',
+    'google_ads',
+    'tiktok_ads',
+    'salarios',
+    'herramientas',
+    'plataforma',
+    'otro'
+);
+
+CREATE TYPE activity_category AS ENUM (
+    'atencion_alumno',
+    'preparacion_material',
+    'reunion_interna',
+    'revision_campanas',
+    'soporte_tecnico',
+    'administracion',
+    'otra'
 );
 
 CREATE TYPE payment_method AS ENUM (
     'transferencia',
     'tarjeta',
     'efectivo',
-    'fraccionado'
+    'fraccionado',
+    'stripe',
+    'bizum',
+    'paypal',
+    'otro'
 );
 
 CREATE TYPE utm_channel AS ENUM (
@@ -1199,6 +1523,8 @@ CREATE TABLE leads (
     notas                TEXT,
     lead_duplicado_de    INTEGER,
     landing_url          TEXT,
+    pais                 VARCHAR(100),
+    motivo_perdida       loss_reason,
     fecha_solicitud      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     created_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
@@ -1230,6 +1556,8 @@ CREATE TABLE lead_utms (
     utm_term         VARCHAR(255),
     landing_url      TEXT,
     canal_detectado  utm_channel,
+    fbclid           VARCHAR(255),
+    gclid            VARCHAR(255),
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_lead_utms_lead
