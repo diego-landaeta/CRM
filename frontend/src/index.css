@@ -25,6 +25,26 @@
     --ring: 230 75% 55%;
     --radius: 0.75rem;
   }
+
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 95%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 95%;
+    --primary: 230 75% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 12%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 240 5% 12%;
+    --muted-foreground: 240 4% 55%;
+    --accent: 240 5% 14%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 15%;
+    --input: 240 6% 15%;
+    --ring: 230 75% 60%;
+  }
 }
 
 @layer base {
@@ -34,5 +54,19 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .crm-card {
+    @apply bg-card text-card-foreground border border-border rounded-3xl;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  .crm-card-interactive {
+    @apply crm-card transition-all;
+  }
+  .crm-card-interactive:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.04), 0 4px 6px -4px rgb(0 0 0 / 0.02);
+    transform: translateY(-2px);
   }
 }

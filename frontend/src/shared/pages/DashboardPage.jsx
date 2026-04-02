@@ -33,7 +33,7 @@ const ESTADO_LABELS = {
 function KpiCard({ icon: Icon, iconBg, label, value, badge, badgeColor, trend }) {
   const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
   return (
-    <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+    <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
       <div className="flex items-center justify-between mb-4">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
           <Icon size={20} weight="duotone" />
@@ -43,7 +43,7 @@ function KpiCard({ icon: Icon, iconBg, label, value, badge, badgeColor, trend })
           {badge}
         </span>
       </div>
-      <p className="text-zinc-400 text-[11px] font-bold uppercase tracking-wider">{label}</p>
+      <p className="text-muted-foreground text-[11px] font-bold uppercase tracking-wider">{label}</p>
       <h3 className="text-3xl font-extrabold mt-1 tracking-tight">{value}</h3>
     </div>
   );
@@ -68,7 +68,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
-          <p className="text-zinc-500 text-sm">
+          <p className="text-muted-foreground text-sm">
             Resumen de actividad &mdash; {activeProject.nombre}
           </p>
         </div>
@@ -117,11 +117,11 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* Bar Chart */}
-        <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-3">
+        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-3">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="font-bold">Leads por Semana</h3>
-              <p className="text-[11px] text-zinc-400 mt-0.5">Marzo 2026</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Marzo 2026</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
@@ -145,9 +145,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Pie Chart */}
-        <div className="bg-white p-6 rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-2">
+        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-2">
           <h3 className="font-bold mb-1">Conversion por Proyecto</h3>
-          <p className="text-[11px] text-zinc-400 mb-4">Tasa acumulada</p>
+          <p className="text-[11px] text-muted-foreground mb-4">Tasa acumulada</p>
           <div className="flex justify-center mb-4">
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
@@ -183,33 +183,33 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Leads */}
-      <div className="bg-white rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
         <div className="p-5 flex items-center justify-between">
           <div>
             <h3 className="font-bold">Leads Recientes</h3>
-            <p className="text-[11px] text-zinc-400 mt-0.5">Ultimos 7 dias</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos 7 dias</p>
           </div>
-          <button className="text-xs font-semibold text-zinc-600 border border-zinc-200 bg-white px-3 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors flex items-center gap-1.5">
+          <button className="text-xs font-semibold text-zinc-600 border border-border bg-card px-3 py-1.5 rounded-lg hover:bg-muted transition-colors flex items-center gap-1.5">
             Ver todos <ArrowRight size={12} weight="bold" />
           </button>
         </div>
         <table className="w-full text-[13px]">
-          <thead className="bg-zinc-50/80 border-y">
+          <thead className="bg-muted/50 border-y">
             <tr>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Nombre</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Email</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Origen</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Estado</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Gestor</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
             </tr>
           </thead>
           <tbody>
             {leadsRecientes.map((lead) => (
-              <tr key={lead.id} className="border-b last:border-0 hover:bg-zinc-50/50 transition-colors">
+              <tr key={lead.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                 <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
-                <td className="px-5 py-3 text-zinc-500">{lead.email}</td>
+                <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
                 <td className="px-5 py-3">
-                  <span className="bg-zinc-100 text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                  <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
                     {lead.origen}
                   </span>
                 </td>
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                     {ESTADO_LABELS[lead.estado]}
                   </span>
                 </td>
-                <td className="px-5 py-3 text-zinc-500">{lead.gestor}</td>
+                <td className="px-5 py-3 text-muted-foreground">{lead.gestor}</td>
               </tr>
             ))}
           </tbody>

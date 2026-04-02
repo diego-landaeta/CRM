@@ -43,7 +43,7 @@ const MOCK_APIS = [
 const ROLE_STYLES = {
   superadmin: 'bg-violet-50 text-violet-600',
   admin: 'bg-blue-50 text-blue-600',
-  gestor: 'bg-zinc-100 text-zinc-500',
+  gestor: 'bg-muted text-muted-foreground',
 };
 
 function getInitials(name) {
@@ -56,26 +56,26 @@ function UsersTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-extrabold tracking-tight">Gestion de Usuarios</h2>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Administra los usuarios del CRM y sus roles</p>
+          <p className="text-[13px] text-muted-foreground mt-0.5">Administra los usuarios del CRM y sus roles</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4361ee] text-white text-sm font-semibold hover:bg-[#3a56d4] transition-colors shadow-lg shadow-[#4361ee]/20">
+        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
           <Plus size={14} weight="bold" /> Invitar Usuario
         </button>
       </div>
-      <div className="bg-white rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
         <table className="w-full text-[13px]">
-          <thead className="bg-zinc-50/80 border-b">
+          <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Usuario</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Email</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Rol</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Proyectos</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Estado</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Usuario</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rol</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Proyectos</th>
+              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
             </tr>
           </thead>
           <tbody>
             {MOCK_USERS.map((u) => (
-              <tr key={u.id} className="border-b last:border-0 hover:bg-zinc-50/50 transition-colors">
+              <tr key={u.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2.5">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${u.color}`}>
@@ -83,17 +83,17 @@ function UsersTab() {
                     </div>
                     <div>
                       <span className="font-semibold block">{u.name}</span>
-                      <span className="text-[10px] text-zinc-400">{u.subtitle}</span>
+                      <span className="text-[10px] text-muted-foreground">{u.subtitle}</span>
                     </div>
                   </div>
                 </td>
-                <td className="px-5 py-3.5 text-zinc-500">{u.email}</td>
+                <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
                 <td className="px-5 py-3.5">
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role]}`}>
                     {u.role}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 text-zinc-500">{u.projects}</td>
+                <td className="px-5 py-3.5 text-muted-foreground">{u.projects}</td>
                 <td className="px-5 py-3.5">
                   <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
                     {u.status}
@@ -113,19 +113,19 @@ function ProjectsTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-extrabold tracking-tight">Proyectos</h2>
-        <p className="text-[13px] text-zinc-500 mt-0.5">Proyectos educativos y plataformas IA registradas</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Proyectos educativos y plataformas IA registradas</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {MOCK_PROJECTS.map((p) => (
-          <div key={p.id} className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center gap-4">
+          <div key={p.id} className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 font-extrabold text-xs">
               {p.name.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1">
               <p className="font-semibold text-sm">{p.name}</p>
-              <p className="text-[11px] text-zinc-400">{p.domain} &bull; {p.leads} leads</p>
+              <p className="text-[11px] text-muted-foreground">{p.domain} &bull; {p.leads} leads</p>
             </div>
-            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${p.status === 'activo' ? 'bg-emerald-50 text-emerald-600' : 'bg-zinc-100 text-zinc-500'}`}>
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${p.status === 'activo' ? 'bg-emerald-50 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
               {p.status}
             </span>
           </div>
@@ -140,24 +140,24 @@ function ApisTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-extrabold tracking-tight">APIs Externas</h2>
-        <p className="text-[13px] text-zinc-500 mt-0.5">Credenciales encriptadas con AES-256-GCM</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Credenciales encriptadas con AES-256-GCM</p>
       </div>
       <div className="space-y-3">
         {MOCK_APIS.map((api) => (
-          <div key={api.name} className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center">
-              <Key size={18} className="text-zinc-500" />
+          <div key={api.name} className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+              <Key size={18} className="text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-sm">{api.name} <span className="text-zinc-400 font-normal text-xs">({api.version})</span></p>
-              <p className="text-[11px] text-zinc-400">Ultimo sync: {api.lastSync}</p>
+              <p className="font-semibold text-sm">{api.name} <span className="text-muted-foreground font-normal text-xs">({api.version})</span></p>
+              <p className="text-[11px] text-muted-foreground">Ultimo sync: {api.lastSync}</p>
             </div>
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
               api.status === 'conectada' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
             }`}>
               {api.status}
             </span>
-            <button className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white text-xs font-semibold text-zinc-600 hover:bg-zinc-50 transition-colors">
+            <button className="px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-zinc-600 hover:bg-muted transition-colors">
               Configurar
             </button>
           </div>
@@ -172,7 +172,7 @@ function EmailTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-extrabold tracking-tight">Email — Brevo</h2>
-        <p className="text-[13px] text-zinc-500 mt-0.5">Plantillas de email transaccional</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Plantillas de email transaccional</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
@@ -181,17 +181,17 @@ function EmailTab() {
           { name: 'Envio Dossier', trigger: 'Manual por gestor', sent: 89, rate: '99.1%' },
           { name: 'Confirmacion Pago', trigger: 'Stripe webhook', sent: 34, rate: '100%' },
         ].map((t) => (
-          <div key={t.name} className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+          <div key={t.name} className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><Envelope size={16} className="text-blue-600" /></div>
               <div>
                 <p className="font-semibold text-sm">{t.name}</p>
-                <p className="text-[11px] text-zinc-400">{t.trigger}</p>
+                <p className="text-[11px] text-muted-foreground">{t.trigger}</p>
               </div>
             </div>
             <div className="flex gap-4 text-[13px]">
-              <div><span className="text-zinc-400 text-[10px] font-bold uppercase">Enviados</span><p className="font-bold">{t.sent}</p></div>
-              <div><span className="text-zinc-400 text-[10px] font-bold uppercase">Entrega</span><p className="font-bold text-emerald-600">{t.rate}</p></div>
+              <div><span className="text-muted-foreground text-[10px] font-bold uppercase">Enviados</span><p className="font-bold">{t.sent}</p></div>
+              <div><span className="text-muted-foreground text-[10px] font-bold uppercase">Entrega</span><p className="font-bold text-emerald-600">{t.rate}</p></div>
             </div>
           </div>
         ))}
@@ -205,7 +205,7 @@ function SecurityTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-extrabold tracking-tight">Seguridad</h2>
-        <p className="text-[13px] text-zinc-500 mt-0.5">Configuracion de seguridad del sistema</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Configuracion de seguridad del sistema</p>
       </div>
       <div className="space-y-3">
         {[
@@ -218,14 +218,14 @@ function SecurityTab() {
           { label: 'Certificado SSL', value: "Let's Encrypt (auto-renewal)", ok: true },
           { label: 'Pre-signed URLs', value: '15 min expiracion', ok: true },
         ].map((s) => (
-          <div key={s.label} className="bg-white p-4 rounded-2xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center justify-between">
+          <div key={s.label} className="bg-card p-4 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
                 <ShieldCheck size={16} className={s.ok ? 'text-emerald-600' : 'text-red-500'} weight="duotone" />
               </div>
               <div>
                 <p className="text-[13px] font-semibold">{s.label}</p>
-                <p className="text-[11px] text-zinc-400">{s.value}</p>
+                <p className="text-[11px] text-muted-foreground">{s.value}</p>
               </div>
             </div>
             <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">OK</span>
@@ -252,7 +252,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Configuracion</h1>
-        <p className="text-zinc-500 text-sm">Ajustes del sistema y gestion de usuarios</p>
+        <p className="text-muted-foreground text-sm">Ajustes del sistema y gestion de usuarios</p>
       </div>
 
       <div className="flex gap-6">
@@ -265,7 +265,7 @@ export default function SettingsPage() {
               className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] transition-all ${
                 activeTab === tab.id
                   ? 'bg-blue-50 text-blue-700 font-bold'
-                  : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700'
+                  : 'text-muted-foreground hover:bg-muted hover:text-zinc-700'
               }`}
             >
               <tab.icon size={16} weight={activeTab === tab.id ? 'duotone' : 'regular'} />

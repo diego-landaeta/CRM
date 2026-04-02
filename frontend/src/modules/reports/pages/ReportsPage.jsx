@@ -33,9 +33,9 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Reportes</h1>
-          <p className="text-zinc-500 text-sm">Informes generados por Claude AI y metricas clave</p>
+          <p className="text-muted-foreground text-sm">Informes generados por Claude AI y metricas clave</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4361ee] text-white text-sm font-semibold hover:bg-[#3a56d4] transition-colors shadow-lg shadow-[#4361ee]/20">
+        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
           <Robot size={16} weight="bold" />
           Generar Reporte IA
         </button>
@@ -44,39 +44,39 @@ export default function ReportsPage() {
       {/* Key Metrics */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {MOCK_METRICS.map((m) => (
-          <div key={m.label} className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{m.label}</p>
+          <div key={m.label} className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{m.label}</p>
             <p className="text-2xl font-extrabold mt-1">{m.value}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{m.period}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{m.period}</p>
           </div>
         ))}
       </div>
 
       {/* Reports List */}
-      <div className="bg-white rounded-3xl border border-zinc-100 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
         <div className="p-5">
           <h3 className="font-bold">Reportes Generados</h3>
-          <p className="text-[11px] text-zinc-400 mt-0.5">Informes PDF con analisis de Claude AI</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Informes PDF con analisis de Claude AI</p>
         </div>
         <div className="divide-y">
           {MOCK_REPORTS.map((r) => (
-            <div key={r.id} className="flex items-center gap-4 px-5 py-4 hover:bg-zinc-50/50 transition-colors">
-              <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center flex-shrink-0">
-                <FileText size={20} className="text-zinc-500" />
+            <div key={r.id} className="flex items-center gap-4 px-5 py-4 hover:bg-muted/50 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                <FileText size={20} className="text-muted-foreground" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold truncate">{r.name}</p>
                 <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <CalendarBlank size={11} /> {r.date}
                   </span>
-                  <span className="text-[11px] text-zinc-400">{r.pages} paginas</span>
+                  <span className="text-[11px] text-muted-foreground">{r.pages} paginas</span>
                 </div>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${TYPE_STYLES[r.type]}`}>
                 {r.type}
               </span>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white text-xs font-semibold text-zinc-600 hover:bg-zinc-50 transition-colors">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-zinc-600 hover:bg-muted transition-colors">
                 <DownloadSimple size={14} weight="bold" /> PDF
               </button>
             </div>
