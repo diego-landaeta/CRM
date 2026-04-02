@@ -255,14 +255,14 @@ export default function SettingsPage() {
         <p className="text-muted-foreground text-sm">Ajustes del sistema y gestion de usuarios</p>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Sidebar */}
-        <div className="w-52 space-y-1 flex-shrink-0">
+        <div className="w-full lg:w-52 flex lg:flex-col gap-1 overflow-x-auto flex-shrink-0">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] transition-all ${
+              className={`w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] whitespace-nowrap transition-all ${
                 activeTab === tab.id
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-muted-foreground hover:bg-muted hover:text-zinc-700'

@@ -51,7 +51,7 @@ export default function CampaignsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] text-center">
           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total Gastado</p>
           <p className="text-2xl font-extrabold mt-1">{totalSpent.toLocaleString('es-ES')} &euro;</p>

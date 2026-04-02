@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import Toaster from './Toaster';
 import { List, X } from '@phosphor-icons/react';
 
 export default function AppLayout() {
@@ -41,9 +42,11 @@ export default function AppLayout() {
       </div>
 
       {/* Main content */}
-      <main className="lg:ml-64 p-4 pt-18 lg:p-6 lg:pt-6 xl:p-8">
+      <main className="lg:ml-64 p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8">
         <Outlet />
       </main>
+
+      <Toaster />
     </div>
   );
 }

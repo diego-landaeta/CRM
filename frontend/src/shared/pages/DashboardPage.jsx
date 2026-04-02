@@ -115,9 +115,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {/* Bar Chart */}
-        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-3">
+        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] md:col-span-3">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="font-bold">Leads por Semana</h3>
@@ -145,7 +145,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Pie Chart */}
-        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] lg:col-span-2">
+        <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] md:col-span-2">
           <h3 className="font-bold mb-1">Conversion por Proyecto</h3>
           <p className="text-[11px] text-muted-foreground mb-4">Tasa acumulada</p>
           <div className="flex justify-center mb-4">
@@ -183,7 +183,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Leads */}
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-x-auto">
         <div className="p-5 flex items-center justify-between">
           <div>
             <h3 className="font-bold">Leads Recientes</h3>

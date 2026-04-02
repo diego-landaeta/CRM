@@ -87,7 +87,7 @@ export default function RevenuePage() {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-x-auto">
         <div className="p-5">
           <h3 className="font-bold">Conversiones Recientes</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos pagos registrados</p>

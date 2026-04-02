@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
+import { toast } from '@/shared/hooks/useToast';
 import {
   ArrowLeft,
   PencilSimple,
@@ -57,6 +58,7 @@ export default function LeadDetailPage() {
     // TODO: llamar API real — PATCH /api/leads/:id
     console.log('Editar lead:', id, data);
     await new Promise((r) => setTimeout(r, 500));
+    toast({ title: 'Lead actualizado', description: 'Los cambios se han guardado' });
   }
 
   if (loading) return <div className="py-20 text-center text-muted-foreground">Cargando...</div>;
@@ -109,7 +111,7 @@ export default function LeadDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Info + Timeline */}
         <div className="col-span-2 space-y-5">
           <div className="bg-card p-6 rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
@@ -161,7 +163,10 @@ export default function LeadDetailPage() {
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
-            <button className="w-full h-10 mt-3 bg-primary text-white rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+            <button
+              onClick={() => toast({ title: 'Estado actualizado' })}
+              className="w-full h-10 mt-3 bg-primary text-white rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+            >
               Actualizar
             </button>
           </div>
@@ -176,7 +181,10 @@ export default function LeadDetailPage() {
               <option>Diego R.</option>
               <option>Angel M.</option>
             </select>
-            <button className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors">
+            <button
+              onClick={() => toast({ title: 'Gestor reasignado' })}
+              className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors"
+            >
               Reasignar
             </button>
           </div>
@@ -187,7 +195,10 @@ export default function LeadDetailPage() {
               placeholder="Agregar una nota..."
               className="w-full h-24 px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
             />
-            <button className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors">
+            <button
+              onClick={() => toast({ title: 'Nota guardada' })}
+              className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors"
+            >
               Guardar Nota
             </button>
           </div>

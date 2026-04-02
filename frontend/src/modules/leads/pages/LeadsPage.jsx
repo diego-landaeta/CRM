@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
+import { toast } from '@/shared/hooks/useToast';
 import {
   MagnifyingGlass,
   Plus,
@@ -65,6 +66,7 @@ export default function LeadsPage() {
     // TODO: llamar API real — POST /api/leads
     console.log('Nuevo lead:', data);
     await new Promise((r) => setTimeout(r, 500));
+    toast({ title: 'Lead creado', description: 'El lead se ha registrado correctamente' });
   }
 
   return (
@@ -72,7 +74,7 @@ export default function LeadsPage() {
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Gestion de Leads</h1>
           <p className="text-muted-foreground text-sm">Explora y gestiona tus clientes potenciales</p>
@@ -93,7 +95,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1 max-w-xs">
           <MagnifyingGlass size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -130,7 +132,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="bg-card px-4 py-3 rounded-2xl border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total</p>
           <p className="text-xl font-extrabold mt-0.5">{stats.total}</p>
@@ -149,7 +151,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead className="bg-muted/50 border-b">
             <tr>

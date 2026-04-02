@@ -60,7 +60,7 @@ export default function ReportsPage() {
         </div>
         <div className="divide-y">
           {MOCK_REPORTS.map((r) => (
-            <div key={r.id} className="flex items-center gap-4 px-5 py-4 hover:bg-muted/50 transition-colors">
+            <div key={r.id} className="flex flex-wrap items-center gap-4 px-5 py-4 hover:bg-muted/50 transition-colors">
               <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
                 <FileText size={20} className="text-muted-foreground" />
               </div>
