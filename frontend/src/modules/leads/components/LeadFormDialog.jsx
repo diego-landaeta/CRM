@@ -71,7 +71,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
 
   return (
     <Portal>
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Lead'} className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       {/* Overlay */}
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 

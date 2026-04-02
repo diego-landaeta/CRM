@@ -97,7 +97,7 @@ export default function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
+    <div role="dialog" aria-label="Busqueda rapida" className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_40px_rgb(0_0_0/0.15)] w-full max-w-lg mx-4 overflow-hidden">
         {/* Search input */}
@@ -109,6 +109,9 @@ export default function CommandPalette() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Buscar leads, secciones..."
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-palette-results"
             className="w-full h-14 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-1 rounded-md bg-muted text-[10px] font-bold text-muted-foreground border border-border">
@@ -117,7 +120,7 @@ export default function CommandPalette() {
         </div>
 
         {/* Results */}
-        <div className="max-h-[320px] overflow-y-auto p-2">
+        <div id="command-palette-results" role="listbox" className="max-h-[320px] overflow-y-auto p-2">
           {allResults.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               No se encontraron resultados para "{query}"
@@ -133,6 +136,8 @@ export default function CommandPalette() {
                     return (
                       <button
                         key={s.to}
+                        role="option"
+                        aria-selected={selectedIdx === globalIdx}
                         onClick={() => handleSelect(s)}
                         onMouseEnter={() => setSelectedIdx(globalIdx)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all ${
@@ -156,6 +161,8 @@ export default function CommandPalette() {
                     return (
                       <button
                         key={l.id}
+                        role="option"
+                        aria-selected={selectedIdx === globalIdx}
                         onClick={() => handleSelect({ to: `/leads/${l.id}` })}
                         onMouseEnter={() => setSelectedIdx(globalIdx)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all ${

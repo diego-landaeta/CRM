@@ -14,6 +14,7 @@ export default function AppLayout() {
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-30">
         <button
           onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menu"
           className="p-2 rounded-xl hover:bg-muted transition-colors"
         >
           <List size={22} weight="bold" />
@@ -29,6 +30,7 @@ export default function AppLayout() {
             <Sidebar onNavigate={() => setMobileOpen(false)} />
             <button
               onClick={() => setMobileOpen(false)}
+              aria-label="Cerrar menu"
               className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <X size={18} weight="bold" />
@@ -43,7 +45,7 @@ export default function AppLayout() {
       </div>
 
       {/* Main content */}
-      <main className="lg:ml-64 p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8">
+      <main role="main" aria-label="Contenido principal" className="lg:ml-64 p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8">
         <Outlet />
       </main>
 

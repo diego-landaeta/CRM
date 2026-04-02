@@ -54,7 +54,7 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} aria-label="Formulario de inicio de sesion" className="space-y-5">
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">
                 Email
@@ -90,6 +90,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Mostrar contrasena"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-zinc-600 transition-colors"
                 >
                   {showPassword ? <EyeSlash size={18} /> : <Eye size={18} />}

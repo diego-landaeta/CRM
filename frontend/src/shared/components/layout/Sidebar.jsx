@@ -66,7 +66,7 @@ export default function Sidebar({ onNavigate }) {
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
 
   return (
-    <aside className="w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
+    <aside role="navigation" aria-label="Menu principal" className="w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-2 mb-6">
         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
@@ -84,6 +84,7 @@ export default function Sidebar({ onNavigate }) {
           <select
             value={activeProject.id}
             onChange={(e) => switchProject(Number(e.target.value))}
+            aria-label="Selector de proyecto"
             className="w-full h-9 px-3 pr-8 rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer appearance-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
           >
             {projects.map((p) => (
