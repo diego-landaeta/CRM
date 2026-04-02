@@ -30,11 +30,12 @@ const SYSTEM_ITEMS = [
   { label: 'Configuracion', to: '/settings', icon: Gear },
 ];
 
-function NavItem({ to, icon: Icon, label, badge }) {
+function NavItem({ to, icon: Icon, label, badge, onClick }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
+      onClick={onClick}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
@@ -55,7 +56,7 @@ function NavItem({ to, icon: Icon, label, badge }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }) {
   const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
@@ -96,12 +97,12 @@ export default function Sidebar() {
       <nav className="space-y-0.5">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
         {NAV_ITEMS.map((item) => (
-          <NavItem key={item.to} {...item} />
+          <NavItem key={item.to} {...item} onClick={onNavigate} />
         ))}
 
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2 mt-6">Sistema</p>
         {SYSTEM_ITEMS.map((item) => (
-          <NavItem key={item.to} {...item} />
+          <NavItem key={item.to} {...item} onClick={onNavigate} />
         ))}
       </nav>
 
