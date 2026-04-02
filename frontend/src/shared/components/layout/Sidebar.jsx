@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   SquaresFour,
   Users,
@@ -57,6 +57,7 @@ function NavItem({ to, icon: Icon, label, badge, onClick }) {
 }
 
 export default function Sidebar({ onNavigate }) {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
@@ -119,10 +120,10 @@ export default function Sidebar({ onNavigate }) {
 
         {/* User */}
         <div className="flex items-center gap-3 px-2">
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs">
+          <button onClick={() => { navigate('/profile'); onNavigate?.(); }} className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs hover:bg-primary/20 transition-colors" title="Mi perfil">
             {initials}
-          </div>
-          <div className="flex-1 min-w-0">
+          </button>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { navigate('/profile'); onNavigate?.(); }}>
             <p className="text-xs font-bold text-foreground truncate tracking-tight">{user?.nombre}</p>
             <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
           </div>

@@ -88,9 +88,12 @@ export default function LeadsPage() {
           >
             Pipeline
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
+          <button
+            onClick={() => navigate('/leads/audiences')}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+          >
             <Export size={16} weight="bold" />
-            Exportar
+            Audiencias
           </button>
           <button
             onClick={() => setFormOpen(true)}

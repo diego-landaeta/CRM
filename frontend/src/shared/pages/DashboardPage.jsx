@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import {
@@ -60,20 +61,42 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
+const MONTHS = [
+  { value: '2026-03', label: 'Marzo 2026' },
+  { value: '2026-02', label: 'Febrero 2026' },
+  { value: '2026-01', label: 'Enero 2026' },
+  { value: '2025-12', label: 'Diciembre 2025' },
+  { value: '2025-11', label: 'Noviembre 2025' },
+  { value: '2025-10', label: 'Octubre 2025' },
+];
+
 export default function DashboardPage() {
   const { activeProject } = useProjectContext();
   const { kpis, leadsSemana, conversionProyecto, leadsRecientes } = useDashboard();
+  const [selectedMonth, setSelectedMonth] = useState('2026-03');
+
+  const monthLabel = MONTHS.find((m) => m.value === selectedMonth)?.label || selectedMonth;
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">
             Resumen de actividad &mdash; {activeProject.nombre}
           </p>
         </div>
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="h-10 px-4 pr-9 rounded-xl border border-border bg-card text-sm font-medium outline-none cursor-pointer appearance-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+        >
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* KPIs */}

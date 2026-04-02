@@ -11,10 +11,12 @@ const SetPasswordPage = lazy(() => import('./shared/pages/SetPasswordPage'));
 
 // Shared
 const DashboardPage = lazy(() => import('./shared/pages/DashboardPage'));
+const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 
 // Modules
 const LeadsPage = lazy(() => import('./modules/leads/pages/LeadsPage'));
 const LeadsPipelinePage = lazy(() => import('./modules/leads/pages/LeadsPipelinePage'));
+const AudienceExportPage = lazy(() => import('./modules/leads/pages/AudienceExportPage'));
 const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage'));
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
@@ -33,6 +35,7 @@ function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/pipeline" element={<LeadsPipelinePage />} />
+          <Route path="/leads/audiences" element={<AudienceExportPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
@@ -40,6 +43,7 @@ function App() {
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Route>
       </Routes>
     </Suspense>
