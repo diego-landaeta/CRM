@@ -38,6 +38,9 @@ coverage/
 # Uploads
 uploads/
 
+# Claude Code
+.claude/
+
 # Temp
 *.tmp
 *.bak
