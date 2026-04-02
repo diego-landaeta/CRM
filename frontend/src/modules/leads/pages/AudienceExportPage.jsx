@@ -175,7 +175,8 @@ export default function AudienceExportPage() {
             {filtered.length} leads
           </span>
         </div>
-        <div className="overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead className="bg-muted/50 border-y">
               <tr>
@@ -204,6 +205,26 @@ export default function AudienceExportPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y">
+          {filtered.slice(0, 10).map((l) => (
+            <div key={l.id} className="p-4 space-y-2">
+              <p className="text-[13px] font-semibold">{l.nombre}</p>
+              <p className="text-[13px] text-muted-foreground">{l.email}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-muted text-muted-foreground">{ESTADO_LABELS[l.estado]}</span>
+                <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">{ORIGEN_LABELS[l.origen] || l.origen}</span>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="px-5 py-12 text-center text-muted-foreground text-[13px]">No hay leads con estos filtros</div>
+          )}
+          {filtered.length > 10 && (
+            <div className="px-5 py-3 text-center text-[12px] text-muted-foreground">...y {filtered.length - 10} leads mas</div>
+          )}
         </div>
       </div>
     </div>

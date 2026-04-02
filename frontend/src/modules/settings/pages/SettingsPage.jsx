@@ -188,90 +188,156 @@ function UsersTab() {
 
       {/* Users table */}
       <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="bg-muted/50 border-b">
-            <tr>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Usuario</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rol</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Proyectos</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ultimo acceso</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-              <th className="px-5 py-2.5 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${u.status === 'inactivo' ? 'opacity-50' : ''}`}>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${u.color}`}>
-                      {getInitials(u.name)}
-                    </div>
-                    <div>
-                      <span className="font-semibold block">{u.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{u.subtitle}</span>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
-                <td className="px-5 py-3.5">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role]}`}>
-                    {u.role}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground max-w-[180px] truncate" title={formatProjectNames(u.projects)}>
-                  {formatProjectNames(u.projects)}
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground text-[12px]">{u.ultimo_acceso}</td>
-                <td className="px-5 py-3.5">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                    u.status === 'activo' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
-                  }`}>
-                    {u.status}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5 text-right">
-                  {u.role !== 'superadmin' && (
-                    <div className="relative inline-block">
-                      <button
-                        onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
-                        className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      >
-                        <DotsThreeVertical size={18} weight="bold" />
-                      </button>
-                      {openMenuId === u.id && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                          <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1.5">
-                            <button
-                              onClick={() => handleOpenEdit(u)}
-                              className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors"
-                            >
-                              <PencilSimple size={14} /> Editar rol
-                            </button>
-                            <button
-                              onClick={() => handleToggleActive(u)}
-                              className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors ${
-                                u.status === 'activo' ? 'text-red-500' : 'text-emerald-600'
-                              }`}
-                            >
-                              {u.status === 'activo' ? (
-                                <><UserCircleMinus size={14} /> Desactivar</>
-                              ) : (
-                                <><UserCirclePlus size={14} /> Reactivar</>
-                              )}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </td>
+        {/* Desktop table */}
+        <div className="hidden md:block">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/50 border-b">
+              <tr>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Usuario</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rol</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Proyectos</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ultimo acceso</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
+                <th className="px-5 py-2.5 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${u.status === 'inactivo' ? 'opacity-50' : ''}`}>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${u.color}`}>
+                        {getInitials(u.name)}
+                      </div>
+                      <div>
+                        <span className="font-semibold block">{u.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{u.subtitle}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role]}`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground max-w-[180px] truncate" title={formatProjectNames(u.projects)}>
+                    {formatProjectNames(u.projects)}
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground text-[12px]">{u.ultimo_acceso}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      u.status === 'activo' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                    }`}>
+                      {u.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {u.role !== 'superadmin' && (
+                      <div className="relative inline-block">
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                        >
+                          <DotsThreeVertical size={18} weight="bold" />
+                        </button>
+                        {openMenuId === u.id && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                            <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1.5">
+                              <button
+                                onClick={() => handleOpenEdit(u)}
+                                className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors"
+                              >
+                                <PencilSimple size={14} /> Editar rol
+                              </button>
+                              <button
+                                onClick={() => handleToggleActive(u)}
+                                className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors ${
+                                  u.status === 'activo' ? 'text-red-500' : 'text-emerald-600'
+                                }`}
+                              >
+                                {u.status === 'activo' ? (
+                                  <><UserCircleMinus size={14} /> Desactivar</>
+                                ) : (
+                                  <><UserCirclePlus size={14} /> Reactivar</>
+                                )}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y">
+          {users.map((u) => (
+            <div key={u.id} className={`p-4 space-y-2 ${u.status === 'inactivo' ? 'opacity-50' : ''}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${u.color}`}>
+                  {getInitials(u.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[13px] font-semibold block">{u.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{u.subtitle}</span>
+                </div>
+                {u.role !== 'superadmin' && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                      className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                    >
+                      <DotsThreeVertical size={18} weight="bold" />
+                    </button>
+                    {openMenuId === u.id && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                        <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(u)}
+                            className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors"
+                          >
+                            <PencilSimple size={14} /> Editar rol
+                          </button>
+                          <button
+                            onClick={() => handleToggleActive(u)}
+                            className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors ${
+                              u.status === 'activo' ? 'text-red-500' : 'text-emerald-600'
+                            }`}
+                          >
+                            {u.status === 'activo' ? (
+                              <><UserCircleMinus size={14} /> Desactivar</>
+                            ) : (
+                              <><UserCirclePlus size={14} /> Reactivar</>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-[13px] text-muted-foreground">{u.email}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role]}`}>
+                  {u.role}
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                  u.status === 'activo' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                }`}>
+                  {u.status}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ===== Create User Dialog ===== */}

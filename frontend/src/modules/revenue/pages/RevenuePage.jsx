@@ -95,28 +95,50 @@ export default function RevenuePage() {
         {conversions.length === 0 ? (
           <div className="px-5 py-12 text-center text-muted-foreground">No hay conversiones para este proyecto aun.</div>
         ) : (
-          <table className="w-full text-[13px]">
-            <thead className="bg-muted/50 border-y">
-              <tr>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Lead</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Producto</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Monto</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tipo</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <table className="w-full text-[13px]">
+                <thead className="bg-muted/50 border-y">
+                  <tr>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Lead</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Producto</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Monto</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tipo</th>
+                    <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conversions.map((c) => (
+                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="px-5 py-3 font-semibold">{c.lead}</td>
+                      <td className="px-5 py-3 text-muted-foreground">{c.producto}</td>
+                      <td className="px-5 py-3 font-bold">{c.monto.toLocaleString('es-ES')} &euro;</td>
+                      <td className="px-5 py-3"><span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${TIPO_STYLES[c.tipo]}`}>{c.tipo === 'pago_completo' ? 'Completo' : 'Parcial'}</span></td>
+                      <td className="px-5 py-3 text-muted-foreground">{c.fecha}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y">
               {conversions.map((c) => (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="px-5 py-3 font-semibold">{c.lead}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{c.producto}</td>
-                  <td className="px-5 py-3 font-bold">{c.monto.toLocaleString('es-ES')} &euro;</td>
-                  <td className="px-5 py-3"><span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${TIPO_STYLES[c.tipo]}`}>{c.tipo === 'pago_completo' ? 'Completo' : 'Parcial'}</span></td>
-                  <td className="px-5 py-3 text-muted-foreground">{c.fecha}</td>
-                </tr>
+                <div key={c.id} className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold">{c.lead}</span>
+                    <span className="text-[13px] font-bold">{c.monto.toLocaleString('es-ES')} &euro;</span>
+                  </div>
+                  <p className="text-[13px] text-muted-foreground">{c.producto}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${TIPO_STYLES[c.tipo]}`}>{c.tipo === 'pago_completo' ? 'Completo' : 'Parcial'}</span>
+                    <span className="text-[12px] text-muted-foreground ml-auto">{c.fecha}</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
     </div>

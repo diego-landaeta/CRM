@@ -218,36 +218,55 @@ export default function DashboardPage() {
             Ver todos <ArrowRight size={12} weight="bold" />
           </button>
         </div>
-        <table className="w-full text-[13px]">
-          <thead className="bg-muted/50 border-y">
-            <tr>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leadsRecientes.map((lead) => (
-              <tr key={lead.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
-                <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
-                <td className="px-5 py-3">
-                  <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
-                    {lead.origen}
-                  </span>
-                </td>
-                <td className="px-5 py-3">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
-                    {ESTADO_LABELS[lead.estado]}
-                  </span>
-                </td>
-                <td className="px-5 py-3 text-muted-foreground">{lead.gestor}</td>
+        {/* Desktop table */}
+        <div className="hidden md:block">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/50 border-y">
+              <tr>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {leadsRecientes.map((lead) => (
+                <tr key={lead.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
+                  <td className="px-5 py-3">
+                    <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                      {lead.origen}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
+                      {ESTADO_LABELS[lead.estado]}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">{lead.gestor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y">
+          {leadsRecientes.map((lead) => (
+            <div key={lead.id} className="p-4 space-y-2">
+              <p className="text-[13px] font-semibold">{lead.nombre}</p>
+              <p className="text-[13px] text-muted-foreground">{lead.email}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
+                  {ESTADO_LABELS[lead.estado]}
+                </span>
+                <span className="text-[12px] text-muted-foreground">{lead.gestor}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -164,59 +164,95 @@ export default function LeadsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead className="bg-muted/50 border-b">
-            <tr>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Telefono</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
-              <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Fecha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.map((lead) => (
-              <tr
-                key={lead.id}
-                onClick={() => navigate(`/leads/${lead.id}`)}
-                className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${getAvatarColor(lead.id)}`}>
-                      {getInitials(lead.nombre)}
-                    </div>
-                    <span className="font-semibold">{lead.nombre}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
-                <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono}</td>
-                <td className="px-5 py-3.5">
-                  <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
-                    {lead.origen}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
-                    {ESTADO_LABELS[lead.estado]}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground">{lead.gestor}</td>
-                <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.fecha)}</td>
-              </tr>
-            ))}
-            {leads.length === 0 && (
+      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/50 border-b">
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                  No se encontraron leads con esos filtros.
-                </td>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Telefono</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Fecha</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {leads.map((lead) => (
+                <tr
+                  key={lead.id}
+                  onClick={() => navigate(`/leads/${lead.id}`)}
+                  className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                >
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${getAvatarColor(lead.id)}`}>
+                        {getInitials(lead.nombre)}
+                      </div>
+                      <span className="font-semibold">{lead.nombre}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono}</td>
+                  <td className="px-5 py-3.5">
+                    <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                      {lead.origen}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
+                      {ESTADO_LABELS[lead.estado]}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{lead.gestor}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.fecha)}</td>
+                </tr>
+              ))}
+              {leads.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                    No se encontraron leads con esos filtros.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y">
+          {leads.map((lead) => (
+            <div
+              key={lead.id}
+              onClick={() => navigate(`/leads/${lead.id}`)}
+              className="p-4 space-y-2 cursor-pointer active:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${getAvatarColor(lead.id)}`}>
+                  {getInitials(lead.nombre)}
+                </div>
+                <span className="text-[13px] font-semibold">{lead.nombre}</span>
+              </div>
+              <p className="text-[13px] text-muted-foreground">{lead.email}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
+                  {ESTADO_LABELS[lead.estado]}
+                </span>
+                <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                  {lead.origen}
+                </span>
+                <span className="text-[12px] text-muted-foreground ml-auto">{formatDate(lead.fecha)}</span>
+              </div>
+            </div>
+          ))}
+          {leads.length === 0 && (
+            <div className="px-5 py-12 text-center text-muted-foreground text-[13px]">
+              No se encontraron leads con esos filtros.
+            </div>
+          )}
+        </div>
 
         {/* Pagination */}
         <div className="px-5 py-3 border-t flex items-center justify-between text-[13px] text-muted-foreground">
