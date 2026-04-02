@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
-import { Plus, User, Phone, EnvelopeSimple, Clock, DotsSixVertical } from '@phosphor-icons/react';
+import { Plus, User, Phone, EnvelopeSimple, Clock, DotsSixVertical, CurrencyEur } from '@phosphor-icons/react';
+import { PRODUCTS } from '@/shared/data/mock';
+import { useProjectContext } from '@/contexts/ProjectContext';
 
 const COLUMNS = [
   { key: 'nuevo', label: 'Nuevo', color: '#4361ee', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500' },
@@ -53,9 +55,14 @@ function LeadCard({ lead, onClick, onDragStart }) {
       </div>
 
       {lead.producto_interes && (
-        <p className="text-[11px] text-muted-foreground bg-muted rounded-lg px-2.5 py-1 mb-2 truncate">
-          {lead.producto_interes}
-        </p>
+        <div className="flex items-center justify-between bg-muted rounded-lg px-2.5 py-1 mb-2">
+          <p className="text-[11px] text-muted-foreground truncate">{lead.producto_interes}</p>
+          {lead.valor_estimado > 0 && (
+            <span className="text-[11px] font-bold text-foreground flex items-center gap-0.5 flex-shrink-0 ml-2">
+              <CurrencyEur size={10} weight="bold" />{lead.valor_estimado.toLocaleString('es-ES')}
+            </span>
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -89,19 +96,27 @@ function LeadCard({ lead, onClick, onDragStart }) {
 
 export default function LeadsPipelinePage() {
   const navigate = useNavigate();
+  const { activeProject } = useProjectContext();
   const { leads: allLeads, stats, search, setSearch } = useLeads();
   const [formOpen, setFormOpen] = useState(false);
   const [dragLead, setDragLead] = useState(null);
+  const products = PRODUCTS[activeProject.id] || [];
 
   // Usa todos los leads sin paginar para el pipeline
   const { leads: fullLeads } = useLeads();
+
+  // Enriquecer leads con valor estimado del producto
+  const enrichedLeads = fullLeads.map((lead) => {
+    const product = products.find((p) => p.id === lead.producto_interes_id);
+    return { ...lead, valor_estimado: product?.precio || 0 };
+  });
 
   // Agrupa leads por estado
   const grouped = {};
   for (const col of COLUMNS) {
     grouped[col.key] = [];
   }
-  for (const lead of fullLeads) {
+  for (const lead of enrichedLeads) {
     if (grouped[lead.estado]) {
       grouped[lead.estado].push(lead);
     }
@@ -164,6 +179,7 @@ export default function LeadsPipelinePage() {
       <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
         {COLUMNS.map((col) => {
           const colLeads = grouped[col.key] || [];
+          const colTotal = colLeads.reduce((sum, l) => sum + (l.valor_estimado || 0), 0);
           return (
             <div
               key={col.key}
@@ -182,6 +198,11 @@ export default function LeadsPipelinePage() {
                     {colLeads.length}
                   </span>
                 </div>
+                {colTotal > 0 && (
+                  <p className="text-[11px] font-semibold mt-1.5 flex items-center gap-0.5">
+                    <CurrencyEur size={11} weight="bold" />{colTotal.toLocaleString('es-ES')} &euro;
+                  </p>
+                )}
               </div>
 
               {/* Cards */}

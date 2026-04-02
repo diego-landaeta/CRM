@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { leadSchema, ORIGEN_OPTIONS } from '../validation/lead.schema';
+import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { PRODUCTS } from '@/shared/data/mock';
 import { X } from '@phosphor-icons/react';
@@ -41,6 +41,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
       telefono: '',
       origen: 'directo',
       producto_interes: '',
+      pais: '',
       notas: '',
     },
   });
@@ -52,6 +53,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
         email: lead.email || '',
         telefono: lead.telefono || '',
         origen: lead.origen?.toLowerCase().replace(' ', '_') || 'directo',
+        pais: lead.pais || '',
         producto_interes: lead.producto_interes || '',
         notas: '',
       } : {
@@ -110,14 +112,24 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
             </Field>
           </div>
 
-          <Field label="Producto de interes">
-            <select {...register('producto_interes')} className={selectClass} style={selectBg}>
-              <option value="">Sin producto especifico</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.nombre}>{p.nombre}</option>
-              ))}
-            </select>
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Producto de interes">
+              <select {...register('producto_interes')} className={selectClass} style={selectBg}>
+                <option value="">Sin producto especifico</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Pais">
+              <select {...register('pais')} className={selectClass} style={selectBg}>
+                <option value="">Sin especificar</option>
+                {PAIS_OPTIONS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
           <Field label="Notas">
             <textarea

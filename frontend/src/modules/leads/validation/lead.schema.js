@@ -9,8 +9,16 @@ export const leadSchema = z.object({
   }),
   estado: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
   producto_interes: z.string().optional(),
+  pais: z.string().optional(),
   notas: z.string().optional(),
 });
+
+export const PAIS_OPTIONS = [
+  'Espana', 'Mexico', 'Colombia', 'Argentina', 'Chile', 'Peru',
+  'Ecuador', 'Venezuela', 'Bolivia', 'Uruguay', 'Paraguay',
+  'Costa Rica', 'Panama', 'Rep. Dominicana', 'Guatemala',
+  'Portugal', 'Brasil', 'Estados Unidos', 'Alemania', 'Francia', 'Italia', 'Otro',
+];
 
 export const ORIGEN_OPTIONS = [
   { value: 'meta_ads', label: 'Meta Ads' },

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
 import ConversionDialog from '../components/ConversionDialog';
+import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { USERS } from '@/shared/data/mock';
@@ -84,6 +85,8 @@ export default function LeadDetailPage() {
   const { lead, timeline, interacciones, recordatorio, loading } = useLeadDetail(id);
   const [editOpen, setEditOpen] = useState(false);
   const [conversionOpen, setConversionOpen] = useState(false);
+  const [lossOpen, setLossOpen] = useState(false);
+  const [lossReason, setLossReason] = useState('');
   const [selectedEstado, setSelectedEstado] = useState(lead?.estado || 'nuevo');
 
   const gestoresProyecto = USERS.filter((u) => u.projects.includes(activeProject.id));
@@ -97,9 +100,18 @@ export default function LeadDetailPage() {
   function handleEstadoUpdate() {
     if (selectedEstado === 'convertido') {
       setConversionOpen(true);
+    } else if (selectedEstado === 'no_interesado') {
+      setLossOpen(true);
     } else {
       toast({ title: 'Estado actualizado', description: `Cambiado a ${ESTADO_LABELS[selectedEstado]}` });
     }
+  }
+
+  function handleLossConfirm() {
+    if (!lossReason) return;
+    toast({ title: 'Lead marcado como no interesado', description: `Motivo: ${lossReason}` });
+    setLossOpen(false);
+    setLossReason('');
   }
 
   async function handleConversion(data) {
@@ -125,6 +137,45 @@ export default function LeadDetailPage() {
     <div className="space-y-6">
       <LeadFormDialog open={editOpen} onClose={() => setEditOpen(false)} lead={lead} onSubmit={handleEditLead} />
       <ConversionDialog open={conversionOpen} onClose={() => setConversionOpen(false)} lead={lead} onSubmit={handleConversion} />
+
+      {/* Dialog motivo perdida obligatorio */}
+      {lossOpen && (
+        <Portal>
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setLossOpen(false)} />
+            <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm p-6">
+              <h2 className="text-lg font-extrabold tracking-tight mb-1">Motivo de perdida</h2>
+              <p className="text-muted-foreground text-sm mb-5">Este campo es obligatorio al marcar un lead como no interesado.</p>
+              <select
+                value={lossReason}
+                onChange={(e) => setLossReason(e.target.value)}
+                className="w-full h-11 px-4 pr-9 rounded-xl border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all mb-4"
+                style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+              >
+                <option value="">Selecciona un motivo</option>
+                <option value="precio">Precio</option>
+                <option value="falta_interes">Falta de interes</option>
+                <option value="sin_respuesta">Sin respuesta</option>
+                <option value="competencia">Competencia</option>
+                <option value="timing">Timing (no es el momento)</option>
+                <option value="otro">Otro</option>
+              </select>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setLossOpen(false)} className="px-4 py-2 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleLossConfirm}
+                  disabled={!lossReason}
+                  className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
 
       {/* Alerta duplicado */}
       {lead.lead_duplicado_de && (
@@ -187,6 +238,7 @@ export default function LeadDetailPage() {
               <InfoField label="Email">{lead.email}</InfoField>
               <InfoField label="Telefono">{lead.telefono}</InfoField>
               <InfoField label="Producto de interes">{lead.producto_interes || 'Sin producto'}</InfoField>
+              <InfoField label="Pais">{lead.pais || 'Sin especificar'}</InfoField>
               <InfoField label="Origen">
                 <span className="bg-muted text-muted-foreground px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">{lead.origen}</span>
               </InfoField>
@@ -197,6 +249,12 @@ export default function LeadDetailPage() {
               <InfoField label="UTM Source / Medium / Campaign">
                 {lead.utm_source} / {lead.utm_medium}{lead.utm_campaign ? ` / ${lead.utm_campaign}` : ''}
               </InfoField>
+              {(lead.fbclid || lead.gclid) && (
+                <InfoField label="Click ID">
+                  {lead.fbclid && <span className="text-xs text-muted-foreground block truncate">fbclid: {lead.fbclid}</span>}
+                  {lead.gclid && <span className="text-xs text-muted-foreground block truncate">gclid: {lead.gclid}</span>}
+                </InfoField>
+              )}
               <InfoField label="Gestor Asignado">{lead.gestor}</InfoField>
               <InfoField label="Dossier Enviado">
                 {lead.dossier_enviado
