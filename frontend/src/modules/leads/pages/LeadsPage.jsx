@@ -82,6 +82,12 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-sm">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => navigate('/leads/pipeline')}
+            className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Pipeline
+          </button>
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
             <Export size={16} weight="bold" />
             Exportar

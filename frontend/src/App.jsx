@@ -14,6 +14,7 @@ const DashboardPage = lazy(() => import('./shared/pages/DashboardPage'));
 
 // Modules
 const LeadsPage = lazy(() => import('./modules/leads/pages/LeadsPage'));
+const LeadsPipelinePage = lazy(() => import('./modules/leads/pages/LeadsPipelinePage'));
 const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage'));
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
@@ -31,6 +32,7 @@ function App() {
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/leads" element={<LeadsPage />} />
+          <Route path="/leads/pipeline" element={<LeadsPipelinePage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
