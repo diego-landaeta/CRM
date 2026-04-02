@@ -7,6 +7,7 @@ export const leadSchema = z.object({
   origen: z.enum(['meta_ads', 'google_ads', 'organico', 'referido', 'directo'], {
     required_error: 'Selecciona un origen',
   }),
+  estado: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
   producto_interes: z.string().optional(),
   notas: z.string().optional(),
 });
@@ -17,4 +18,13 @@ export const ORIGEN_OPTIONS = [
   { value: 'organico', label: 'Organico' },
   { value: 'referido', label: 'Referido' },
   { value: 'directo', label: 'Directo' },
+];
+
+export const ESTADO_OPTIONS = [
+  { value: 'nuevo', label: 'Nuevo' },
+  { value: 'por_contactar', label: 'Por contactar' },
+  { value: 'contactado', label: 'Contactado' },
+  { value: 'en_seguimiento', label: 'En seguimiento' },
+  { value: 'convertido', label: 'Convertido' },
+  { value: 'no_interesado', label: 'No interesado' },
 ];

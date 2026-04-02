@@ -58,5 +58,8 @@ export function useLeadDetail(id) {
     { id: 3, action: `Asignado a ${lead.gestor} (round-robin)`, date: `${lead.fecha}, 14:33`, source: 'Sistema', color: '#d97706' },
   ] : [];
 
-  return { lead, timeline, loading: false };
+  const interacciones = lead?.interacciones || [];
+  const recordatorio = lead?.recordatorio || null;
+
+  return { lead, timeline, interacciones, recordatorio, loading: false };
 }

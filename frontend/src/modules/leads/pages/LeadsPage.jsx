@@ -13,18 +13,20 @@ import {
 
 const ESTADO_STYLES = {
   nuevo: 'bg-blue-50 text-blue-600',
+  por_contactar: 'bg-orange-50 text-orange-600',
   contactado: 'bg-emerald-50 text-emerald-600',
-  en_proceso: 'bg-amber-50 text-amber-600',
+  en_seguimiento: 'bg-amber-50 text-amber-600',
   convertido: 'bg-violet-50 text-violet-600',
-  perdido: 'bg-red-50 text-red-600',
+  no_interesado: 'bg-red-50 text-red-600',
 };
 
 const ESTADO_LABELS = {
   nuevo: 'Nuevo',
+  por_contactar: 'Por contactar',
   contactado: 'Contactado',
-  en_proceso: 'En proceso',
+  en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
-  perdido: 'Perdido',
+  no_interesado: 'No interesado',
 };
 
 const AVATAR_COLORS = [
@@ -132,16 +134,18 @@ export default function LeadsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <div className="bg-card px-4 py-3 rounded-2xl border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total</p>
           <p className="text-xl font-extrabold mt-0.5">{stats.total}</p>
         </div>
         {[
           { key: 'nuevo', label: 'Nuevos', color: '#4361ee' },
+          { key: 'por_contactar', label: 'Por contactar', color: '#ea580c' },
           { key: 'contactado', label: 'Contactados', color: '#059669' },
-          { key: 'en_proceso', label: 'En proceso', color: '#d97706' },
+          { key: 'en_seguimiento', label: 'En seguimiento', color: '#d97706' },
           { key: 'convertido', label: 'Convertidos', color: '#7c3aed' },
+          { key: 'no_interesado', label: 'No interesado', color: '#dc2626' },
         ].map(({ key, label, color }) => (
           <div key={key} className="bg-card px-4 py-3 rounded-2xl border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2" style={{ borderBottomColor: color }}>
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>

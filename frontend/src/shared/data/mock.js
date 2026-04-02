@@ -61,30 +61,73 @@ const LEAD_NAMES = [
 
 const LEAD_DOMAINS = ['gmail.com', 'hotmail.com', 'yahoo.com', 'outlook.com', 'live.com'];
 const ORIGENES = ['meta_ads', 'google_ads', 'organico', 'referido', 'directo'];
-const ESTADOS = ['nuevo', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado'];
+const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado'];
+
+// --- TIPOS DE INTERACCION (tabla lead_interactions) ---
+const INTERACTION_TYPES = ['llamada', 'email', 'whatsapp', 'nota'];
 
 function generateLeads(projectId, count, startId) {
   const gestores = USERS.filter((u) => u.projects.includes(projectId));
+  const products = PRODUCTS[projectId] || [];
   return Array.from({ length: count }, (_, i) => {
     const nameIdx = (startId + i) % LEAD_NAMES.length;
     const name = LEAD_NAMES[nameIdx];
     const emailName = name.toLowerCase().replace(' ', '.').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const day = Math.max(1, 31 - i);
     const month = day > 20 ? '03' : '04';
+    const fecha = `2026-${month}-${String(day).padStart(2, '0')}`;
+    const estado = ESTADOS[i % ESTADOS.length];
+    const gestor = gestores[i % gestores.length]?.nombre || 'Sin asignar';
+    const producto = products[i % (products.length || 1)] || null;
+    const isDuplicate = i === 5 || i === 11;
+
+    // Interacciones mock (2-4 por lead)
+    const numInteractions = 2 + (i % 3);
+    const interacciones = Array.from({ length: numInteractions }, (_, j) => ({
+      id: startId * 100 + i * 10 + j,
+      tipo: INTERACTION_TYPES[j % INTERACTION_TYPES.length],
+      nota: [
+        'Primer contacto realizado, interesado en recibir mas informacion',
+        'Enviado dossier por email, queda pendiente llamada de seguimiento',
+        'Llamada de seguimiento — confirma interes, pide detalles de pago',
+        'Nota interna: lead con perfil muy cualificado, priorizar',
+      ][j % 4],
+      fecha: `2026-${month}-${String(Math.min(28, day + j)).padStart(2, '0')}`,
+      created_by: gestor,
+    }));
+
+    // Recordatorio mock (50% de leads tienen uno)
+    const recordatorio = i % 2 === 0 ? {
+      fecha: `2026-04-${String(5 + (i % 20)).padStart(2, '0')}`,
+      nota: ['Llamar para seguimiento', 'Enviar propuesta economica', 'Confirmar fecha de inicio'][i % 3],
+      completado: i % 4 === 0,
+    } : null;
+
     return {
       id: startId + i,
       project_id: projectId,
       nombre: name,
       email: `${emailName}@${LEAD_DOMAINS[i % LEAD_DOMAINS.length]}`,
       telefono: `+34 6${String(10 + i).padStart(2, '0')} ${String(100 + i * 111).slice(0, 3)} ${String(200 + i * 222).slice(0, 3)}`,
-      estado: ESTADOS[i % ESTADOS.length],
+      estado,
       origen: ORIGENES[i % ORIGENES.length],
-      gestor: gestores[i % gestores.length]?.nombre || 'Sin asignar',
-      fecha: `2026-${month}-${String(day).padStart(2, '0')}`,
+      gestor,
+      fecha,
       campana: i % 3 === 0 ? null : `Campana ${projectId}-${Math.ceil((i + 1) / 3)}`,
       utm_source: ['facebook', 'google', 'google', 'referral', 'direct'][i % 5],
       utm_medium: ['cpc', 'cpc', 'organic', 'word_of_mouth', 'none'][i % 5],
-      producto_interes: PRODUCTS[projectId]?.[i % (PRODUCTS[projectId]?.length || 1)]?.nombre || null,
+      utm_campaign: i % 3 === 0 ? null : `camp_${projectId}_${Math.ceil((i + 1) / 3)}`,
+      utm_content: i % 4 === 0 ? 'video_testimonial' : null,
+      landing_url: `https://${PROJECTS.find(p => p.id === projectId)?.domain || 'ejemplo.com'}/solicitud`,
+      producto_interes: producto?.nombre || null,
+      producto_interes_id: producto?.id || null,
+      dossier_enviado: estado !== 'nuevo' && estado !== 'por_contactar' && producto?.has_dossier,
+      dossier_enviado_at: estado !== 'nuevo' && estado !== 'por_contactar' ? `2026-${month}-${String(Math.min(28, day + 1)).padStart(2, '0')}` : null,
+      notas: i % 3 === 0 ? 'Lead cualificado, muy interesado en la formacion' : null,
+      lead_duplicado_de: isDuplicate ? startId : null,
+      interacciones,
+      recordatorio,
+      dias_sin_actualizar: estado === 'en_seguimiento' ? 3 + (i % 5) : estado === 'por_contactar' ? 1 + (i % 3) : 0,
     };
   });
 }
@@ -100,12 +143,12 @@ export const LEADS = {
 
 // --- STATS por proyecto ---
 export const STATS = {
-  1: { total: 842, nuevo: 127, contactado: 312, en_seguimiento: 89, convertido: 284, no_interesado: 30, ingresosMes: 12450, tasaConversion: 33.7, tasaAbandono: 3.6, cplMedio: 26.29 },
-  2: { total: 234, nuevo: 45, contactado: 78, en_seguimiento: 34, convertido: 67, no_interesado: 10, ingresosMes: 8900, tasaConversion: 28.6, tasaAbandono: 4.3, cplMedio: 42.10 },
-  3: { total: 128, nuevo: 22, contactado: 41, en_seguimiento: 18, convertido: 38, no_interesado: 9, ingresosMes: 4200, tasaConversion: 29.7, tasaAbandono: 7.0, cplMedio: 31.50 },
-  4: { total: 456, nuevo: 89, contactado: 156, en_seguimiento: 67, convertido: 134, no_interesado: 10, ingresosMes: 3420, tasaConversion: 29.4, tasaAbandono: 2.2, cplMedio: 8.50 },
-  5: { total: 87, nuevo: 18, contactado: 28, en_seguimiento: 12, convertido: 24, no_interesado: 5, ingresosMes: 890, tasaConversion: 27.6, tasaAbandono: 5.7, cplMedio: 12.30 },
-  6: { total: 52, nuevo: 15, contactado: 12, en_seguimiento: 8, convertido: 14, no_interesado: 3, ingresosMes: 340, tasaConversion: 26.9, tasaAbandono: 5.8, cplMedio: 6.20 },
+  1: { total: 842, nuevo: 127, por_contactar: 64, contactado: 248, en_seguimiento: 89, convertido: 284, no_interesado: 30, ingresosMes: 12450, tasaConversion: 33.7, tasaAbandono: 3.6, cplMedio: 26.29 },
+  2: { total: 234, nuevo: 45, por_contactar: 18, contactado: 60, en_seguimiento: 34, convertido: 67, no_interesado: 10, ingresosMes: 8900, tasaConversion: 28.6, tasaAbandono: 4.3, cplMedio: 42.10 },
+  3: { total: 128, nuevo: 22, por_contactar: 9, contactado: 32, en_seguimiento: 18, convertido: 38, no_interesado: 9, ingresosMes: 4200, tasaConversion: 29.7, tasaAbandono: 7.0, cplMedio: 31.50 },
+  4: { total: 456, nuevo: 89, por_contactar: 34, contactado: 122, en_seguimiento: 67, convertido: 134, no_interesado: 10, ingresosMes: 3420, tasaConversion: 29.4, tasaAbandono: 2.2, cplMedio: 8.50 },
+  5: { total: 87, nuevo: 18, por_contactar: 7, contactado: 21, en_seguimiento: 12, convertido: 24, no_interesado: 5, ingresosMes: 890, tasaConversion: 27.6, tasaAbandono: 5.7, cplMedio: 12.30 },
+  6: { total: 52, nuevo: 15, por_contactar: 5, contactado: 7, en_seguimiento: 8, convertido: 14, no_interesado: 3, ingresosMes: 340, tasaConversion: 26.9, tasaAbandono: 5.8, cplMedio: 6.20 },
 };
 
 // --- LEADS POR SEMANA (dashboard chart) ---

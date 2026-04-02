@@ -16,18 +16,20 @@ import {
 
 const ESTADO_STYLES = {
   nuevo: 'bg-blue-50 text-blue-600',
+  por_contactar: 'bg-orange-50 text-orange-600',
   contactado: 'bg-emerald-50 text-emerald-600',
-  en_proceso: 'bg-amber-50 text-amber-600',
+  en_seguimiento: 'bg-amber-50 text-amber-600',
   convertido: 'bg-violet-50 text-violet-600',
-  perdido: 'bg-red-50 text-red-600',
+  no_interesado: 'bg-red-50 text-red-600',
 };
 
 const ESTADO_LABELS = {
   nuevo: 'Nuevo',
+  por_contactar: 'Por contactar',
   contactado: 'Contactado',
-  en_proceso: 'En proceso',
+  en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
-  perdido: 'Perdido',
+  no_interesado: 'No interesado',
 };
 
 function KpiCard({ icon: Icon, iconBg, label, value, badge, badgeColor, trend }) {
