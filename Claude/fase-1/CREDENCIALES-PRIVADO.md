@@ -42,6 +42,25 @@ Luego en pgAdmin:
 - User: crm_user
 - SSL mode: disable
 
+## Entornos Servidor
+
+| Entorno | URL | Backend | DB | Nginx config |
+|---------|-----|---------|-----|-------------|
+| Production | ip/crm | localhost:3001 | crm_db | /etc/nginx/sites-available/crm |
+| Staging | ip/testeo_crm | localhost:3002 | crm_test_db | mismo archivo |
+| Health | ip/health | — | — | retorna "OK" |
+
+### Nginx
+- Version: 1.26.3
+- Config: /etc/nginx/sites-available/crm
+- HTTPS: pendiente (necesita dominio + Certbot)
+- Preparado para subdominios: crm.dominio.com / test.crm.dominio.com
+
+### Directorios
+- Frontend prod: /var/www/crm/production/frontend
+- Frontend staging: /var/www/crm/staging/frontend
+- Logs: /var/log/crm/{production,staging}
+
 ## Pendientes (agregar cuando se configuren)
 
 - Cloudflare R2 (ACCESS_KEY_ID, SECRET_ACCESS_KEY)
