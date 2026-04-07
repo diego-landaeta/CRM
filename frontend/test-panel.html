@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM MultiProyecto - QA Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .header { background: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 20px; color: #38bdf8; }
+    .header .badge { background: #7c2d12; color: #fdba74; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+    .card h2 { color: #94a3b8; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+    .card h3 { font-size: 14px; color: #38bdf8; margin-bottom: 10px; }
+    .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 4px; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-success:hover { background: #16a34a; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-warning { background: #f59e0b; color: #1e293b; }
+    .btn-warning:hover { background: #d97706; }
+    .btn-secondary { background: #475569; color: white; }
+    .btn-secondary:hover { background: #64748b; }
+    input, select { width: 100%; padding: 8px 12px; background: #0f172a; border: 1px solid #475569; border-radius: 8px; color: #e2e8f0; margin-bottom: 8px; font-size: 13px; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; }
+    label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px; }
+    .result { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-top: 12px; max-height: 300px; overflow-y: auto; }
+    .result pre { font-size: 12px; white-space: pre-wrap; word-break: break-all; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+    .result.success { border-color: #22c55e; }
+    .result.error { border-color: #ef4444; }
+    .status-bar { background: #1e293b; padding: 10px 30px; border-top: 1px solid #334155; position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20px; align-items: center; font-size: 12px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.online { background: #22c55e; }
+    .status-dot.offline { background: #ef4444; }
+    .user-info { background: #065f46; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: #6ee7b7; margin: 20px 30px 0; display: none; }
+    .user-info.visible { display: block; }
+    .full-width { grid-column: 1 / -1; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>CRM MultiProyecto - QA Testing Panel</h1>
+    <span class="badge">ENTORNO QA - testeo_crm</span>
+  </div>
+
+  <div id="userInfo" class="user-info"></div>
+
+  <div class="container">
+    <!-- LOGIN -->
+    <div class="card">
+      <h2>Autenticacion</h2>
+      <h3>POST /api/auth/login</h3>
+      <label>Email</label>
+      <select id="loginEmail">
+        <option value="manuel@empresa.com">Manuel Casas (superadmin)</option>
+        <option value="diego@empresa.com" selected>Diego R. (admin)</option>
+        <option value="angel@empresa.com">Angel M. (admin)</option>
+      </select>
+      <label>Password</label>
+      <input type="password" id="loginPassword" value="CrmTemp2026!" />
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="doLogin()">Login</button>
+        <button class="btn btn-warning" onclick="doRefresh()">Refresh Token</button>
+        <button class="btn btn-danger" onclick="doLogout()">Logout</button>
+      </div>
+      <div id="loginResult" class="result"><pre>Haz click en Login para empezar...</pre></div>
+    </div>
+
+    <!-- ME -->
+    <div class="card">
+      <h2>Usuario Autenticado</h2>
+      <h3>GET /api/auth/me</h3>
+      <button class="btn btn-primary" onclick="doMe()">Obtener mis datos</button>
+      <div id="meResult" class="result"><pre>Necesitas hacer login primero</pre></div>
+    </div>
+
+    <!-- HEALTH -->
+    <div class="card">
+      <h2>Estado del Servidor</h2>
+      <h3>GET /api/health</h3>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="doHealth()">Health Check</button>
+        <button class="btn btn-secondary" onclick="doApiRoot()">API Info</button>
+      </div>
+      <div id="healthResult" class="result"><pre>Click para verificar...</pre></div>
+    </div>
+
+    <!-- SET PASSWORD -->
+    <div class="card">
+      <h2>Establecer Contrasena</h2>
+      <h3>POST /api/auth/set-password</h3>
+      <label>Token</label>
+      <input type="text" id="setPassToken" placeholder="Token recibido por email" />
+      <label>Nueva contrasena</label>
+      <input type="password" id="setPassNew" placeholder="Min 8 chars, 1 mayuscula, 1 numero" />
+      <label>Confirmar</label>
+      <input type="password" id="setPassConfirm" placeholder="Repetir contrasena" />
+      <button class="btn btn-primary" onclick="doSetPassword()">Establecer</button>
+      <div id="setPassResult" class="result"><pre>Para probar: genera un token desde la DB</pre></div>
+    </div>
+
+    <!-- ENDPOINTS -->
+    <div class="card full-width">
+      <h2>Otros Endpoints (requieren auth)</h2>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="testEndpoint('/users/health')">Users</button>
+        <button class="btn btn-secondary" onclick="testEndpoint('/leads/health')">Leads</button>
+        <button class="btn btn-secondary" onclick="testEndpoint('/products?projectId=1')">Products (Psiko)</button>
+        <button class="btn btn-secondary" onclick="testEndpoint('/products?projectId=2')">Products (ISEIH)</button>
+        <button class="btn btn-secondary" onclick="testEndpoint('/products?projectId=3')">Products (Fono)</button>
+      </div>
+      <div id="otherResult" class="result"><pre>Click en cualquier endpoint...</pre></div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span><span id="statusDot" class="status-dot offline"></span><span id="statusText">Verificando...</span></span>
+    <span id="tokenStatus" style="color:#94a3b8;">Sin sesion</span>
+    <span style="margin-left:auto; color:#475569;">QA: 187.124.128.126/testeo_crm</span>
+  </div>
+
+  <script>
+    const API = '/testeo_crm/api';
+    let accessToken = null;
+
+    window.addEventListener('load', function() { doHealth(); });
+
+    function showResult(id, data, isErr) {
+      var el = document.getElementById(id);
+      el.className = 'result ' + (isErr ? 'error' : 'success');
+      el.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    }
+
+    async function apiCall(method, path, body, useAuth) {
+      var opts = { method: method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
+      if (useAuth && accessToken) opts.headers['Authorization'] = 'Bearer ' + accessToken;
+      if (body) opts.body = JSON.stringify(body);
+      var res = await fetch(API + path, opts);
+      var text = await res.text();
+      try { var data = JSON.parse(text); } catch(e) { var data = { success: false, error: 'Respuesta no JSON: ' + text.substring(0, 100), code: 'NOT_JSON' }; }
+      return { status: res.status, data: data };
+    }
+
+    function updateUserInfo(user, projects) {
+      var el = document.getElementById('userInfo');
+      if (user) {
+        var projs = projects.map(function(p) { return p.emoji + ' ' + p.nombre; }).join(', ');
+        el.innerHTML = 'Sesion activa: <strong>' + user.nombre + '</strong> (' + user.role + ') | Proyectos: ' + projs;
+        el.className = 'user-info visible';
+        document.getElementById('tokenStatus').innerHTML = 'Token activo: ' + user.email;
+        document.getElementById('tokenStatus').style.color = '#6ee7b7';
+      } else {
+        el.className = 'user-info';
+        document.getElementById('tokenStatus').innerHTML = 'Sin sesion';
+        document.getElementById('tokenStatus').style.color = '#94a3b8';
+      }
+    }
+
+    async function doLogin() {
+      try {
+        var r = await apiCall('POST', '/auth/login', { email: document.getElementById('loginEmail').value, password: document.getElementById('loginPassword').value });
+        showResult('loginResult', r.data, !r.data.success);
+        if (r.data.success) { accessToken = r.data.data.accessToken; updateUserInfo(r.data.data.user, r.data.data.projects); }
+      } catch (e) { showResult('loginResult', { error: e.message }, true); }
+    }
+
+    async function doRefresh() {
+      try {
+        var r = await apiCall('POST', '/auth/refresh');
+        showResult('loginResult', r.data, !r.data.success);
+        if (r.data.success) accessToken = r.data.data.accessToken;
+      } catch (e) { showResult('loginResult', { error: e.message }, true); }
+    }
+
+    async function doLogout() {
+      try {
+        var r = await apiCall('POST', '/auth/logout', null, true);
+        showResult('loginResult', r.data, !r.data.success);
+        accessToken = null; updateUserInfo(null);
+      } catch (e) { showResult('loginResult', { error: e.message }, true); }
+    }
+
+    async function doMe() {
+      try {
+        var r = await apiCall('GET', '/auth/me', null, true);
+        showResult('meResult', r.data, !r.data.success);
+      } catch (e) { showResult('meResult', { error: e.message }, true); }
+    }
+
+    async function doHealth() {
+      try {
+        var r = await apiCall('GET', '/health');
+        showResult('healthResult', r.data, !r.data.success);
+        if (r.data.success) {
+          document.getElementById('statusDot').className = 'status-dot online';
+          document.getElementById('statusText').textContent = 'API Online - ' + r.data.data.timestamp;
+        }
+      } catch (e) {
+        showResult('healthResult', { error: 'API no disponible' }, true);
+        document.getElementById('statusDot').className = 'status-dot offline';
+        document.getElementById('statusText').textContent = 'API Offline';
+      }
+    }
+
+    async function doApiRoot() {
+      try { var r = await apiCall('GET', ''); showResult('healthResult', r.data, !r.data.success); }
+      catch (e) { showResult('healthResult', { error: e.message }, true); }
+    }
+
+    async function doSetPassword() {
+      try {
+        var r = await apiCall('POST', '/auth/set-password', {
+          token: document.getElementById('setPassToken').value,
+          password: document.getElementById('setPassNew').value,
+          confirmPassword: document.getElementById('setPassConfirm').value
+        });
+        showResult('setPassResult', r.data, !r.data.success);
+      } catch (e) { showResult('setPassResult', { error: e.message }, true); }
+    }
+
+    async function testEndpoint(path) {
+      try { var r = await apiCall('GET', path, null, true); showResult('otherResult', r.data, !r.data.success); }
+      catch (e) { showResult('otherResult', { error: e.message }, true); }
+    }
+  </script>
+</body>
+</html>
