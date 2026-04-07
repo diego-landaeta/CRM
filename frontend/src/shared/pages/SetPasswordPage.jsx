@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import client from '@/shared/api/client';
 import { Package, Eye, EyeSlash, Check, X } from '@phosphor-icons/react';
 
 const RULES = [
@@ -37,10 +38,18 @@ export default function SetPasswordPage() {
     setError(null);
 
     try {
-      // TODO: llamar API real — POST /api/auth/set-password { token, password }
-      await new Promise((r) => setTimeout(r, 800));
-      setSuccess(true);
-      setTimeout(() => navigate('/login'), 2000);
+      const res = await client.post('/auth/set-password', {
+        token,
+        password,
+        confirmPassword: confirm,
+      });
+
+      if (res.success) {
+        setSuccess(true);
+        setTimeout(() => navigate('/login'), 2000);
+      } else {
+        setError(res.error || 'Error al guardar la contrasena');
+      }
     } catch (err) {
       setError(err.message || 'Error al guardar la contrasena');
     } finally {
@@ -49,7 +58,7 @@ export default function SetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-emerald-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       <div className="w-full max-w-[400px] px-4">
         <div className="bg-card rounded-3xl shadow-[0_20px_25px_-5px_rgb(0_0_0/0.06),0_8px_10px_-6px_rgb(0_0_0/0.04)] border border-border p-8 md:p-10">
           {/* Header */}
@@ -63,7 +72,7 @@ export default function SetPasswordPage() {
 
           {success ? (
             <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mx-auto mb-4">
                 <Check size={32} className="text-emerald-600" weight="bold" />
               </div>
               <h2 className="text-lg font-bold">Contrasena guardada</h2>
@@ -140,7 +149,9 @@ export default function SetPasswordPage() {
               </div>
 
               {error && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 font-medium">{error}</p>
+                <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2.5 font-medium">
+                  {error}
+                </div>
               )}
 
               <button
@@ -148,14 +159,21 @@ export default function SetPasswordPage() {
                 disabled={!allPassed || loading}
                 className="w-full h-12 bg-emerald-600 text-white rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
               >
-                {loading ? 'Guardando...' : 'Guardar contrasena'}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Guardando...
+                  </span>
+                ) : (
+                  'Guardar contrasena'
+                )}
               </button>
             </form>
           )}
         </div>
 
         {!token && (
-          <p className="text-center text-[10px] text-amber-600 bg-amber-50 rounded-xl px-4 py-2 mt-4 font-medium">
+          <p className="text-center text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-xl px-4 py-2 mt-4 font-medium border border-amber-200 dark:border-amber-800">
             Token no detectado — esta pagina normalmente se accede desde el email de invitacion.
           </p>
         )}

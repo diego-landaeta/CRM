@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   Folder,
 } from '@phosphor-icons/react';
-import { PROJECTS } from '@/shared/data/mock';
+// Proyectos ahora vienen del AuthContext via ProjectContext
 
 const profileSchema = z.object({
   nombre: z.string().min(2, 'Minimo 2 caracteres'),
@@ -50,9 +50,7 @@ export default function ProfilePage() {
   const { theme, toggleTheme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
 
-  const userProjects = user?.projects
-    ? PROJECTS.filter((p) => user.projects.includes(p.id))
-    : [];
+  const userProjects = allProjects || [];
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
 

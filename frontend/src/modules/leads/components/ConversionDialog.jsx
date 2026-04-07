@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { PRODUCTS } from '@/shared/data/mock';
+import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 
@@ -40,7 +40,7 @@ function Field({ label, error, children }) {
 
 export default function ConversionDialog({ open, onClose, lead, onSubmit }) {
   const { activeProject } = useProjectContext();
-  const products = PRODUCTS[activeProject.id] || [];
+  const { products } = useProducts(activeProject?.id);
 
   const {
     register,

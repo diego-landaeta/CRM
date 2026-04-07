@@ -1,46 +1,66 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PRODUCTS } from '@/shared/data/mock';
-
-// TODO: reemplazar con llamadas API reales cuando backend este listo
-// import { getProducts, createProduct, updateProduct, deactivateProduct } from '../api/products.api';
+import client from '@/shared/api/client';
 
 export function useProducts(projectId) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetch = useCallback(() => {
+  const fetchProducts = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
-    // Mock: cargar productos del proyecto
-    setTimeout(() => {
-      setProducts(PRODUCTS[projectId] || []);
+    try {
+      const res = await client.get(`/products?projectId=${projectId}`);
+      if (res.success) {
+        setProducts(res.data || []);
+      }
+    } catch (err) {
+      setError(err.message);
+      setProducts([]);
+    } finally {
       setLoading(false);
-    }, 300);
+    }
   }, [projectId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
+  // Placeholder CRUD functions — product write endpoints pendientes
   const create = async (payload) => {
-    const newProduct = {
-      id: Date.now(),
-      project_id: projectId,
-      active: true,
-      has_dossier: false,
-      ...payload,
-    };
-    setProducts((prev) => [newProduct, ...prev]);
-    return newProduct;
+    try {
+      const res = await client.post('/products', { ...payload, project_id: projectId });
+      if (res.success) {
+        await fetchProducts();
+        return res.data;
+      }
+    } catch (err) {
+      throw err;
+    }
   };
 
   const update = async (id, payload) => {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...payload } : p)));
+    try {
+      const res = await client.patch(`/products/${id}`, payload);
+      if (res.success) {
+        await fetchProducts();
+      }
+    } catch (err) {
+      throw err;
+    }
   };
 
   const deactivate = async (id) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    try {
+      const res = await client.delete(`/products/${id}`);
+      if (res.success) {
+        await fetchProducts();
+      }
+    } catch (err) {
+      throw err;
+    }
   };
 
-  return { products, loading, error, refetch: fetch, create, update, deactivate };
+  return { products, loading, error, refetch: fetchProducts, create, update, deactivate };
 }

@@ -8,10 +8,25 @@ class ApiError extends Error {
   }
 }
 
+// Token en memoria (NO localStorage por seguridad)
+let accessToken = null;
+let onAuthFailure = null; // callback para logout en caso de fallo total
+
+export function setAccessToken(token) {
+  accessToken = token;
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function setOnAuthFailure(cb) {
+  onAuthFailure = cb;
+}
+
 async function request(url, options = {}) {
-  const token = localStorage.getItem('accessToken');
   const headers = { 'Content-Type': 'application/json', ...options.headers };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   const res = await fetch(`${BASE_URL}${url}`, {
     credentials: 'include',
@@ -29,12 +44,13 @@ async function request(url, options = {}) {
       });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
-        localStorage.setItem('accessToken', refreshData.data.accessToken);
+        accessToken = refreshData.data.accessToken;
         return request(url, { ...options, _retry: true });
       }
-    } catch { /* ignore */ }
-    localStorage.removeItem('accessToken');
-    window.location.href = '/crm/login';
+    } catch { /* ignore refresh error */ }
+    // Refresh tambien fallo — sesion expirada
+    accessToken = null;
+    if (onAuthFailure) onAuthFailure();
     throw new ApiError('Session expired', 401);
   }
 
@@ -55,14 +71,15 @@ const client = {
   patch: (url, body, options) => request(url, { method: 'PATCH', body: JSON.stringify(body), ...options }),
   put: (url, body, options) => request(url, { method: 'PUT', body: JSON.stringify(body), ...options }),
   delete: (url, options) => request(url, { method: 'DELETE', ...options }),
-  upload: async (url, file, onProgress) => {
-    const token = localStorage.getItem('accessToken');
+  upload: async (url, file) => {
     const formData = new FormData();
     formData.append('file', file);
+    const headers = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     const res = await fetch(`${BASE_URL}${url}`, {
       method: 'POST',
       credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers,
       body: formData,
     });
     if (!res.ok) {

@@ -1,17 +1,26 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Package, Eye, EyeSlash } from '@phosphor-icons/react';
+import { Package, Eye, EyeSlash, ShieldCheck } from '@phosphor-icons/react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Esperando restauracion de sesion
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   // Si ya esta logueado, redirigir al dashboard
   if (isAuthenticated) {
@@ -34,23 +43,28 @@ export default function LoginPage() {
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Credenciales incorrectas');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-[400px] px-4">
-        <div className="bg-card rounded-3xl shadow-[0_20px_25px_-5px_rgb(0_0_0/0.06),0_8px_10px_-6px_rgb(0_0_0/0.04)] border-border p-8 md:p-10">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+      <div className="w-full max-w-[420px] px-4">
+        <div className="bg-card rounded-3xl shadow-[0_20px_25px_-5px_rgb(0_0_0/0.06),0_8px_10px_-6px_rgb(0_0_0/0.04)] border border-border p-8 md:p-10">
           {/* Header */}
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white mb-6 shadow-lg shadow-primary/20">
               <Package size={28} weight="duotone" />
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Bienvenido de nuevo</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">CRM MultiProyecto</h1>
             <p className="text-muted-foreground text-sm mt-2">Introduce tus credenciales para acceder</p>
+            {/* Beta badge */}
+            <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <ShieldCheck size={12} weight="duotone" className="text-amber-600" />
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">v0.1.0 Fase Beta</span>
+            </div>
           </div>
 
           {/* Form */}
@@ -74,9 +88,6 @@ export default function LoginPage() {
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Contrasena
                 </label>
-                <button type="button" className="text-[11px] font-semibold text-primary hover:text-primary/90 transition-colors">
-                  Olvidaste tu contrasena?
-                </button>
               </div>
               <div className="relative">
                 <input
@@ -98,21 +109,25 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 px-1">
-              <input type="checkbox" id="remember" className="w-4 h-4 rounded accent-primary" />
-              <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">Recordarme en este dispositivo</label>
-            </div>
-
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 font-medium">{error}</p>
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2.5 font-medium">
+                {error}
+              </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-zinc-950 text-white rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-950/10 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+              className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
             >
-              {loading ? 'Iniciando sesion...' : 'Iniciar Sesion'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Iniciando sesion...
+                </span>
+              ) : (
+                'Iniciar Sesion'
+              )}
             </button>
           </form>
 

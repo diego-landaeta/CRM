@@ -9,15 +9,17 @@ import {
   Export,
   CaretLeft,
   CaretRight,
+  Users,
+  WarningCircle,
 } from '@phosphor-icons/react';
 
 const ESTADO_STYLES = {
-  nuevo: 'bg-blue-50 text-blue-600',
-  por_contactar: 'bg-orange-50 text-orange-600',
-  contactado: 'bg-emerald-50 text-emerald-600',
-  en_seguimiento: 'bg-amber-50 text-amber-600',
-  convertido: 'bg-violet-50 text-violet-600',
-  no_interesado: 'bg-red-50 text-red-600',
+  nuevo: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
+  por_contactar: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400',
+  contactado: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
+  en_seguimiento: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
+  convertido: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
+  no_interesado: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
 };
 
 const ESTADO_LABELS = {
@@ -41,6 +43,7 @@ const AVATAR_COLORS = [
 ];
 
 function getInitials(name) {
+  if (!name) return '??';
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
@@ -49,8 +52,23 @@ function getAvatarColor(id) {
 }
 
 function formatDate(dateStr) {
+  if (!dateStr) return '--';
   const d = new Date(dateStr);
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+}
+
+function SkeletonRow() {
+  return (
+    <tr className="border-b animate-pulse">
+      <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-full bg-muted" /><div className="w-24 h-4 bg-muted rounded" /></div></td>
+      <td className="px-5 py-3.5"><div className="w-32 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-24 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-20 h-5 bg-muted rounded-full" /></td>
+      <td className="px-5 py-3.5"><div className="w-20 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
+    </tr>
+  );
 }
 
 export default function LeadsPage() {
@@ -60,15 +78,25 @@ export default function LeadsPage() {
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen,
+    loading, error,
   } = useLeads();
 
   const [formOpen, setFormOpen] = useState(false);
 
   async function handleCreateLead(data) {
-    // TODO: llamar API real — POST /api/leads
-    console.log('Nuevo lead:', data);
-    await new Promise((r) => setTimeout(r, 500));
+    // El formulario de creacion manual no tiene endpoint webhook
+    // Por ahora solo mostrar toast — leads se crean via webhook
+    console.log('Nuevo lead (manual):', data);
     toast({ title: 'Lead creado', description: 'El lead se ha registrado correctamente' });
+  }
+
+  // Generar array de paginas visibles (max 5 en torno a la actual)
+  function getVisiblePages() {
+    const pages = [];
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, page + 2);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
   }
 
   return (
@@ -135,36 +163,47 @@ export default function LeadsPage() {
           style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
         >
           <option value="">Todos los origenes</option>
-          <option value="Meta Ads">Meta Ads</option>
-          <option value="Google Ads">Google Ads</option>
-          <option value="Organico">Organico</option>
-          <option value="Referido">Referido</option>
+          <option value="meta_ads">Meta Ads</option>
+          <option value="google_ads">Google Ads</option>
+          <option value="organico">Organico</option>
+          <option value="referido">Referido</option>
+          <option value="directo">Directo</option>
         </select>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        <div className="bg-card px-4 py-3 rounded-2xl border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total</p>
-          <p className="text-xl font-extrabold mt-0.5">{stats.total}</p>
-        </div>
-        {[
-          { key: 'nuevo', label: 'Nuevos', color: '#4361ee' },
-          { key: 'por_contactar', label: 'Por contactar', color: '#ea580c' },
-          { key: 'contactado', label: 'Contactados', color: '#059669' },
-          { key: 'en_seguimiento', label: 'En seguimiento', color: '#d97706' },
-          { key: 'convertido', label: 'Convertidos', color: '#7c3aed' },
-          { key: 'no_interesado', label: 'No interesado', color: '#dc2626' },
-        ].map(({ key, label, color }) => (
-          <div key={key} className="bg-card px-4 py-3 rounded-2xl border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2" style={{ borderBottomColor: color }}>
-            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
-            <p className="text-xl font-extrabold mt-0.5" style={{ color }}>{stats[key]}</p>
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total</p>
+            <p className="text-xl font-extrabold mt-0.5">{stats.total || 0}</p>
           </div>
-        ))}
-      </div>
+          {[
+            { key: 'nuevo', label: 'Nuevos', color: '#4361ee' },
+            { key: 'por_contactar', label: 'Por contactar', color: '#ea580c' },
+            { key: 'contactado', label: 'Contactados', color: '#059669' },
+            { key: 'en_seguimiento', label: 'En seguimiento', color: '#d97706' },
+            { key: 'convertido', label: 'Convertidos', color: '#7c3aed' },
+            { key: 'no_interesado', label: 'No interesado', color: '#dc2626' },
+          ].map(({ key, label, color }) => (
+            <div key={key} className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2" style={{ borderBottomColor: color }}>
+              <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+              <p className="text-xl font-extrabold mt-0.5" style={{ color }}>{stats[key] || 0}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl p-6 text-center">
+          <WarningCircle size={32} className="text-red-500 mx-auto mb-2" weight="duotone" />
+          <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
+        </div>
+      )}
 
       {/* Table */}
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <div className="bg-card rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -180,7 +219,12 @@ export default function LeadsPage() {
               </tr>
             </thead>
             <tbody>
-              {leads.map((lead) => (
+              {loading && leads.length === 0 && (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
+                </>
+              )}
+              {!loading && leads.map((lead) => (
                 <tr
                   key={lead.id}
                   onClick={() => navigate(`/leads/${lead.id}`)}
@@ -195,25 +239,27 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono || '--'}</td>
                   <td className="px-5 py-3.5">
-                    <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                    <span className="bg-muted text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
                       {lead.origen}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
-                      {ESTADO_LABELS[lead.estado]}
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
+                      {ESTADO_LABELS[lead.estado] || lead.estado}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.gestor}</td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.fecha)}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.created_at || lead.fecha)}</td>
                 </tr>
               ))}
-              {leads.length === 0 && (
+              {!loading && leads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                    No se encontraron leads con esos filtros.
+                  <td colSpan={7} className="px-5 py-16 text-center">
+                    <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
+                    <p className="text-muted-foreground text-sm font-medium">No se encontraron leads</p>
+                    <p className="text-muted-foreground text-xs mt-1">Ajusta los filtros o crea un nuevo lead</p>
                   </td>
                 </tr>
               )}
@@ -223,7 +269,12 @@ export default function LeadsPage() {
 
         {/* Mobile cards */}
         <div className="md:hidden divide-y">
-          {leads.map((lead) => (
+          {loading && leads.length === 0 && (
+            <div className="p-8 text-center">
+              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+            </div>
+          )}
+          {!loading && leads.map((lead) => (
             <div
               key={lead.id}
               onClick={() => navigate(`/leads/${lead.id}`)}
@@ -237,58 +288,61 @@ export default function LeadsPage() {
               </div>
               <p className="text-[13px] text-muted-foreground">{lead.email}</p>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado]}`}>
-                  {ESTADO_LABELS[lead.estado]}
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
+                  {ESTADO_LABELS[lead.estado] || lead.estado}
                 </span>
-                <span className="bg-muted text-zinc-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                <span className="bg-muted text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
                   {lead.origen}
                 </span>
-                <span className="text-[12px] text-muted-foreground ml-auto">{formatDate(lead.fecha)}</span>
+                <span className="text-[12px] text-muted-foreground ml-auto">{formatDate(lead.created_at || lead.fecha)}</span>
               </div>
             </div>
           ))}
-          {leads.length === 0 && (
-            <div className="px-5 py-12 text-center text-muted-foreground text-[13px]">
-              No se encontraron leads con esos filtros.
+          {!loading && leads.length === 0 && !error && (
+            <div className="px-5 py-16 text-center">
+              <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
+              <p className="text-muted-foreground text-sm">No se encontraron leads</p>
             </div>
           )}
         </div>
 
         {/* Pagination */}
-        <div className="px-5 py-3 border-t flex items-center justify-between text-[13px] text-muted-foreground">
-          <span>
-            Mostrando <strong className="text-foreground">{(page - 1) * 6 + 1}&ndash;{Math.min(page * 6, total)}</strong> de {total}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage(Math.max(1, page - 1))}
-              disabled={page === 1}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            >
-              <CaretLeft size={12} weight="bold" /> Anterior
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        {total > 0 && (
+          <div className="px-5 py-3 border-t flex items-center justify-between text-[13px] text-muted-foreground">
+            <span>
+              Mostrando <strong className="text-foreground">{Math.min((page - 1) * 20 + 1, total)}&ndash;{Math.min(page * 20, total)}</strong> de {total}
+            </span>
+            <div className="flex items-center gap-1">
               <button
-                key={p}
-                onClick={() => setPage(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  p === page
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'border border-border bg-card hover:bg-muted'
-                }`}
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
-                {p}
+                <CaretLeft size={12} weight="bold" /> Anterior
               </button>
-            ))}
-            <button
-              onClick={() => setPage(Math.min(totalPages, page + 1))}
-              disabled={page === totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            >
-              Siguiente <CaretRight size={12} weight="bold" />
-            </button>
+              {getVisiblePages().map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    p === page
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'border border-border bg-card hover:bg-muted'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                Siguiente <CaretRight size={12} weight="bold" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

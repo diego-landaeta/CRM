@@ -11,6 +11,7 @@ import {
   CaretDown,
   Moon,
   Sun,
+  ShieldCheck,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -40,17 +41,21 @@ function NavItem({ to, icon: Icon, label, badge, onClick }) {
         cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
           isActive
-            ? 'bg-secondary text-foreground font-bold'
+            ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )
       }
     >
-      <Icon size={18} weight="regular" />
-      {label}
-      {badge && (
-        <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
-          {badge}
-        </span>
+      {({ isActive }) => (
+        <>
+          <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
+          {label}
+          {badge && (
+            <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+              {badge}
+            </span>
+          )}
+        </>
       )}
     </NavLink>
   );
@@ -64,6 +69,11 @@ export default function Sidebar({ onNavigate }) {
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login');
+  }
 
   return (
     <aside role="navigation" aria-label="Menu principal" className="w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
@@ -82,7 +92,7 @@ export default function Sidebar({ onNavigate }) {
         </label>
         <div className="relative">
           <select
-            value={activeProject.id}
+            value={activeProject?.id || ''}
             onChange={(e) => switchProject(Number(e.target.value))}
             aria-label="Selector de proyecto"
             className="w-full h-9 px-3 pr-8 rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer appearance-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
@@ -96,7 +106,7 @@ export default function Sidebar({ onNavigate }) {
       </div>
 
       {/* Navigation */}
-      <nav className="space-y-0.5">
+      <nav className="space-y-0.5 flex-1">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
         {NAV_ITEMS.map((item) => (
           <NavItem key={item.to} {...item} onClick={onNavigate} />
@@ -108,8 +118,14 @@ export default function Sidebar({ onNavigate }) {
         ))}
       </nav>
 
-      {/* Footer: Theme + User */}
+      {/* Footer: Beta Badge + Theme + User */}
       <div className="mt-auto pt-4 border-t border-border space-y-3">
+        {/* Beta Badge */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+          <ShieldCheck size={14} weight="duotone" className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">v0.1.0 Fase Beta</span>
+        </div>
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
@@ -128,7 +144,7 @@ export default function Sidebar({ onNavigate }) {
             <p className="text-xs font-bold text-foreground truncate tracking-tight">{user?.nombre}</p>
             <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
           </div>
-          <button onClick={logout} className="text-muted-foreground hover:text-foreground transition-colors p-1" title="Cerrar sesion">
+          <button onClick={handleLogout} className="text-muted-foreground hover:text-red-500 transition-colors p-1" title="Cerrar sesion">
             <SignOut size={16} />
           </button>
         </div>
