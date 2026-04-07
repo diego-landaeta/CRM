@@ -25,6 +25,26 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// API root
+app.get('/api', (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      name: 'CRM MultiProyecto API',
+      version: '1.0.0',
+      status: 'online',
+      endpoints: {
+        health: '/api/health',
+        auth: '/api/auth (login, refresh, logout, set-password, me)',
+        users: '/api/users',
+        leads: '/api/leads',
+        products: '/api/products',
+        dossiers: '/api/dossiers',
+      },
+    },
+  });
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
