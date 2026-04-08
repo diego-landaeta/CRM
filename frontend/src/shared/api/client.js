@@ -1,4 +1,4 @@
-const BASE_URL = '/crm/api';
+const BASE_URL = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
 
 class ApiError extends Error {
   constructor(message, status, data) {

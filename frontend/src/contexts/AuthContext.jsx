@@ -18,7 +18,8 @@ export function AuthProvider({ children }) {
     async function restoreSession() {
       try {
         // Intentar refresh para obtener nuevo accessToken
-        const refreshRes = await fetch('/crm/api/auth/refresh', {
+        const apiBase = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
+        const refreshRes = await fetch(`${apiBase}/auth/refresh`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
