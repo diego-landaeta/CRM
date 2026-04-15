@@ -58,10 +58,18 @@ export async function login(email, password, ipAddress) {
     refreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
     user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role },
-    projects,
+    projects: sanitizeProjects(projects, user.role),
     activeProjectId,
   };
 }
+
+// Solo admin/superadmin pueden ver el webhook_api_key
+function sanitizeProjects(projects, role) {
+  if (role === 'admin' || role === 'superadmin') return projects;
+  return projects.map(({ webhook_api_key, ...rest }) => rest);
+}
+
+export { sanitizeProjects };
 
 export async function refresh(refreshToken) {
   if (!refreshToken) {

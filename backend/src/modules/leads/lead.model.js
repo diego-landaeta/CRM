@@ -235,6 +235,32 @@ export async function reassignLead(leadId, newResponsableId) {
   await query(`UPDATE leads SET responsable_id = $1, updated_at = NOW() WHERE id = $2`, [newResponsableId, leadId]);
 }
 
+export async function updateLead(id, fields) {
+  const sets = [];
+  const params = [];
+  let idx = 1;
+
+  const allowed = ['nombre', 'telefono', 'notas', 'producto_interes_id'];
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      sets.push(`${key} = $${idx++}`);
+      params.push(fields[key]);
+    }
+  }
+
+  if (sets.length === 0) return null;
+
+  sets.push(`updated_at = NOW()`);
+  params.push(id);
+
+  const { rows } = await query(
+    `UPDATE leads SET ${sets.join(', ')} WHERE id = $${idx}
+     RETURNING id, nombre, email, telefono, notas, producto_interes_id, status, responsable_id, updated_at`,
+    params
+  );
+  return rows[0] || null;
+}
+
 export async function getLeadProjectId(leadId) {
   const { rows } = await query(`SELECT project_id FROM leads WHERE id = $1`, [leadId]);
   return rows[0]?.project_id || null;

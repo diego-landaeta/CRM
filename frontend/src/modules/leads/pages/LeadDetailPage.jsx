@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import ConversionDialog from '../components/ConversionDialog';
 import Portal from '@/shared/components/ui/portal';
@@ -14,12 +14,12 @@ import {
   Note,
   CalendarCheck,
   WarningCircle,
-  Copy,
-  CheckCircle,
-  Clock,
-  FileText,
-  DownloadSimple,
   Users,
+  PencilSimple,
+  X,
+  Check,
+  Link as LinkIcon,
+  Lightning,
 } from '@phosphor-icons/react';
 
 const ESTADO_STYLES = {
@@ -38,6 +38,16 @@ const ESTADO_LABELS = {
   en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
   no_interesado: 'No interesado',
+};
+
+const CANAL_LABELS = {
+  meta_ads: 'Meta Ads',
+  google_ads: 'Google Ads',
+  tiktok_ads: 'TikTok Ads',
+  organico: 'Organico',
+  chatgpt_ia: 'ChatGPT IA',
+  directo: 'Directo',
+  referido: 'Referido',
 };
 
 const INTERACTION_ICONS = {
@@ -69,11 +79,12 @@ function InfoField({ label, children }) {
   return (
     <div>
       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
-      <div className="text-[13px] font-medium">{children}</div>
+      <div className="text-[13px] font-medium break-words">{children}</div>
     </div>
   );
 }
 
+const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = "w-full h-11 px-4 pr-9 rounded-xl border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all";
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
@@ -82,8 +93,8 @@ export default function LeadDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    lead, timeline, interacciones, recordatorio, loading, error,
-    updateStatus, addInteraction, addReminder, completeReminder, reassign,
+    lead, timeline, interacciones, reminders, utms, loading, error,
+    updateStatus, addInteraction, addReminder, completeReminder, reassign, updateLead,
   } = useLeadDetail(id);
 
   const [conversionOpen, setConversionOpen] = useState(false);
@@ -91,6 +102,13 @@ export default function LeadDetailPage() {
   const [lossReason, setLossReason] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
+
+  // Edicion inline lead
+  const [editMode, setEditMode] = useState(false);
+  const [editNombre, setEditNombre] = useState('');
+  const [editTelefono, setEditTelefono] = useState('');
+  const [editNotas, setEditNotas] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   // Interaccion form
   const [interactionOpen, setInteractionOpen] = useState(false);
@@ -104,28 +122,38 @@ export default function LeadDetailPage() {
   const [reminderNota, setReminderNota] = useState('');
   const [reminderLoading, setReminderLoading] = useState(false);
 
-  // Nota rapida
-  const [nota, setNota] = useState('');
-  const [notaLoading, setNotaLoading] = useState(false);
-
-  // Reasignar
+  // Reassign dialog
+  const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignId, setReassignId] = useState('');
   const [reassignLoading, setReassignLoading] = useState(false);
   const [gestores, setGestores] = useState([]);
 
-  // Cargar gestores al montar (si admin+)
-  useState(() => {
-    if (user?.role === 'superadmin' || user?.role === 'admin') {
-      client.get('/users?limit=100').then((res) => {
-        if (res.success) setGestores(res.data || []);
-      }).catch(() => {});
-    }
-  });
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
+
+  // Cargar gestores al montar (si admin+) — solo cuando se abre dialog
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (gestores.length > 0) return;
+    client.get('/users?limit=100')
+      .then((res) => { if (res.success) setGestores(res.data || []); })
+      .catch(() => {});
+  }, [isAdmin, gestores.length]);
 
   // Sincronizar selectedEstado cuando lead cambia
-  if (lead && !selectedEstado) {
-    setSelectedEstado(lead.estado);
-  }
+  useEffect(() => {
+    if (lead?.estado && !selectedEstado) {
+      setSelectedEstado(lead.estado);
+    }
+  }, [lead, selectedEstado]);
+
+  // Sincronizar form de edicion al activar
+  useEffect(() => {
+    if (lead && editMode) {
+      setEditNombre(lead.nombre || '');
+      setEditTelefono(lead.telefono || '');
+      setEditNotas(lead.notas || '');
+    }
+  }, [lead, editMode]);
 
   async function handleEstadoUpdate() {
     if (!selectedEstado || selectedEstado === lead.estado) return;
@@ -141,7 +169,7 @@ export default function LeadDetailPage() {
 
     setStatusLoading(true);
     try {
-      await updateStatus(selectedEstado);
+      await updateStatus(selectedEstado, `Cambio manual a ${ESTADO_LABELS[selectedEstado]}`);
       toast({ title: 'Estado actualizado', description: `Cambiado a ${ESTADO_LABELS[selectedEstado]}` });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -167,7 +195,7 @@ export default function LeadDetailPage() {
 
   async function handleAddInteraction(e) {
     e.preventDefault();
-    if (!interactionNota.trim()) return;
+    if (!interactionNota.trim() && interactionTipo !== 'llamada') return;
     setInteractionLoading(true);
     try {
       await addInteraction(interactionTipo, interactionNota);
@@ -183,10 +211,12 @@ export default function LeadDetailPage() {
 
   async function handleAddReminder(e) {
     e.preventDefault();
-    if (!reminderFecha || !reminderNota.trim()) return;
+    if (!reminderFecha) return;
     setReminderLoading(true);
     try {
-      await addReminder(reminderFecha, reminderNota);
+      // Convertir datetime-local a YYYY-MM-DD que el backend espera
+      const fechaSolo = reminderFecha.slice(0, 10);
+      await addReminder(fechaSolo, reminderNota);
       toast({ title: 'Recordatorio programado' });
       setReminderOpen(false);
       setReminderFecha('');
@@ -198,26 +228,14 @@ export default function LeadDetailPage() {
     }
   }
 
-  async function handleAddNota() {
-    if (!nota.trim()) return;
-    setNotaLoading(true);
-    try {
-      await addInteraction('nota', nota);
-      toast({ title: 'Nota guardada' });
-      setNota('');
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    } finally {
-      setNotaLoading(false);
-    }
-  }
-
   async function handleReassign() {
     if (!reassignId) return;
     setReassignLoading(true);
     try {
       await reassign(Number(reassignId));
-      toast({ title: 'Gestor reasignado' });
+      toast({ title: 'Lead reasignado correctamente' });
+      setReassignOpen(false);
+      setReassignId('');
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -234,13 +252,34 @@ export default function LeadDetailPage() {
     }
   }
 
+  async function handleSaveEdit() {
+    setEditLoading(true);
+    try {
+      const fields = {};
+      if (editNombre !== lead.nombre) fields.nombre = editNombre.trim();
+      if ((editTelefono || '') !== (lead.telefono || '')) fields.telefono = editTelefono.trim() || null;
+      if ((editNotas || '') !== (lead.notas || '')) fields.notas = editNotas.trim() || null;
+
+      if (Object.keys(fields).length === 0) {
+        setEditMode(false);
+        return;
+      }
+
+      await updateLead(fields);
+      toast({ title: 'Lead actualizado' });
+      setEditMode(false);
+    } catch (err) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
   // Loading skeleton
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <div className="w-24 h-4 bg-muted rounded animate-pulse" />
-        </div>
+        <div className="w-24 h-4 bg-muted rounded animate-pulse" />
         <div className="flex items-center gap-4 animate-pulse">
           <div className="w-12 h-12 rounded-full bg-muted" />
           <div>
@@ -290,7 +329,7 @@ export default function LeadDetailPage() {
   return (
     <div className="space-y-6">
       <ConversionDialog open={conversionOpen} onClose={() => setConversionOpen(false)} lead={lead} onSubmit={async (data) => {
-        await updateStatus('convertido');
+        await updateStatus('convertido', data?.motivo || 'Conversion registrada');
         toast({ title: 'Conversion registrada', description: `${data.producto_contratado} — ${data.importe_total} EUR` });
       }} />
 
@@ -328,6 +367,51 @@ export default function LeadDetailPage() {
         </Portal>
       )}
 
+      {/* Dialog reasignar gestor */}
+      {reassignOpen && (
+        <Portal>
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setReassignOpen(false)} />
+            <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-extrabold tracking-tight">Reasignar Lead</h2>
+                  <p className="text-muted-foreground text-sm mt-0.5">Selecciona un nuevo responsable para este lead</p>
+                </div>
+                <button onClick={() => setReassignOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
+                  <X size={18} weight="bold" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nuevo responsable</label>
+                  <select value={reassignId} onChange={(e) => setReassignId(e.target.value)} className={selectClass} style={selectBg}>
+                    <option value="">Seleccionar responsable</option>
+                    {gestores
+                      .filter((g) => g.role === 'admin' || g.role === 'gestor' || g.role === 'superadmin')
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>{g.nombre} ({g.role})</option>
+                      ))}
+                  </select>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button onClick={() => setReassignOpen(false)} className="px-4 py-2 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleReassign}
+                    disabled={!reassignId || reassignLoading}
+                    className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40"
+                  >
+                    {reassignLoading ? 'Guardando...' : 'Reasignar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
       {/* Dialog nueva interaccion */}
       {interactionOpen && (
         <Portal>
@@ -347,14 +431,13 @@ export default function LeadDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nota *</label>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nota</label>
                   <textarea
                     value={interactionNota}
                     onChange={(e) => setInteractionNota(e.target.value)}
                     placeholder="Describe la interaccion..."
                     rows={3}
                     className="w-full px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
-                    required
                   />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -383,7 +466,7 @@ export default function LeadDetailPage() {
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Fecha *</label>
                   <input
-                    type="datetime-local"
+                    type="date"
                     value={reminderFecha}
                     onChange={(e) => setReminderFecha(e.target.value)}
                     className="w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
@@ -391,14 +474,13 @@ export default function LeadDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nota *</label>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nota</label>
                   <textarea
                     value={reminderNota}
                     onChange={(e) => setReminderNota(e.target.value)}
                     placeholder="Que hay que recordar..."
                     rows={2}
                     className="w-full px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
-                    required
                   />
                 </div>
                 <div className="flex justify-end gap-2">
@@ -419,9 +501,15 @@ export default function LeadDetailPage() {
       {lead.lead_duplicado_de && (
         <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
           <WarningCircle size={20} weight="duotone" className="flex-shrink-0" />
-          <div className="text-sm">
-            <span className="font-bold">Lead duplicado</span> — Este email ya existe en el sistema (Lead #{lead.lead_duplicado_de}).
+          <div className="text-sm flex-1">
+            <span className="font-bold">Lead duplicado</span> &mdash; Este email ya existe en el sistema.
           </div>
+          <Link
+            to={`/leads/${lead.lead_duplicado_de}`}
+            className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors flex-shrink-0"
+          >
+            <LinkIcon size={12} weight="bold" /> Ver original #{lead.lead_duplicado_de}
+          </Link>
         </div>
       )}
 
@@ -437,11 +525,24 @@ export default function LeadDetailPage() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight">{lead.nombre}</h1>
-              <p className="text-muted-foreground text-sm">Lead #{lead.id} &bull; {new Date(lead.created_at || lead.fecha).toLocaleDateString('es-ES')}</p>
+              <p className="text-muted-foreground text-sm">
+                Lead #{lead.id} &bull; {lead.created_at ? new Date(lead.created_at).toLocaleDateString('es-ES') : ''}
+                {lead.proyecto_nombre && <> &bull; {lead.proyecto_nombre}</>}
+              </p>
             </div>
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
               {ESTADO_LABELS[lead.estado] || lead.estado}
             </span>
+          </div>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <button
+                onClick={() => setReassignOpen(true)}
+                className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors flex items-center gap-2"
+              >
+                <Lightning size={14} weight="bold" /> Reasignar
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -450,31 +551,117 @@ export default function LeadDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Info del Lead */}
+          {/* Info del Lead - Editable */}
           <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-            <h3 className="font-bold mb-5">Informacion del Lead</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
-              <InfoField label="Email">{lead.email}</InfoField>
-              <InfoField label="Telefono">{lead.telefono || 'Sin telefono'}</InfoField>
-              <InfoField label="Producto de interes">{lead.producto_interes || 'Sin producto'}</InfoField>
-              <InfoField label="Pais">{lead.pais || 'Sin especificar'}</InfoField>
-              <InfoField label="Origen">
-                <span className="bg-muted text-muted-foreground px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">{lead.origen}</span>
-              </InfoField>
-              <InfoField label="Gestor Asignado">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</InfoField>
-              {lead.utm_source && (
-                <InfoField label="UTM Source / Medium">
-                  {lead.utm_source}{lead.utm_medium ? ` / ${lead.utm_medium}` : ''}
-                </InfoField>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold">Informacion del Lead</h3>
+              {!editMode ? (
+                <button
+                  onClick={() => setEditMode(true)}
+                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5"
+                >
+                  <PencilSimple size={12} weight="bold" /> Editar
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditMode(false)}
+                    disabled={editLoading}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 rounded hover:bg-muted"
+                  >
+                    <X size={12} weight="bold" /> Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={editLoading}
+                    className="text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 px-3 py-1.5 rounded-lg disabled:opacity-50"
+                  >
+                    <Check size={12} weight="bold" /> {editLoading ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
               )}
-              {lead.utm_campaign && <InfoField label="UTM Campaign">{lead.utm_campaign}</InfoField>}
-              {lead.landing_url && (
-                <InfoField label="Landing URL">
-                  <span className="text-xs text-muted-foreground truncate block">{lead.landing_url}</span>
-                </InfoField>
-              )}
-              {lead.notas && <InfoField label="Notas">{lead.notas}</InfoField>}
             </div>
+            {!editMode ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                <InfoField label="Nombre">{lead.nombre}</InfoField>
+                <InfoField label="Email">{lead.email}</InfoField>
+                <InfoField label="Telefono">{lead.telefono || 'Sin telefono'}</InfoField>
+                <InfoField label="Producto de interes">{lead.producto_nombre || lead.producto_interes || 'Sin producto'}</InfoField>
+                <InfoField label="Gestor Asignado">{lead.responsable_nombre || 'Sin asignar'}</InfoField>
+                <InfoField label="Fecha de solicitud">
+                  {lead.fecha_solicitud ? new Date(lead.fecha_solicitud).toLocaleString('es-ES') : '--'}
+                </InfoField>
+                {lead.notas && (
+                  <div className="sm:col-span-2">
+                    <InfoField label="Notas">{lead.notas}</InfoField>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Nombre</p>
+                  <input value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Email (no editable)</p>
+                  <input value={lead.email} disabled className={inputClass + ' opacity-60 cursor-not-allowed'} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Telefono</p>
+                  <input value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} className={inputClass} />
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Notas</p>
+                  <textarea
+                    value={editNotas}
+                    onChange={(e) => setEditNotas(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* UTMs / Origen */}
+          <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <div className="flex items-center gap-3 mb-5">
+              <h3 className="font-bold">Origen y UTMs</h3>
+              {(utms?.canal_detectado || lead.origen) && (
+                <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
+                  {CANAL_LABELS[utms?.canal_detectado || lead.origen] || (utms?.canal_detectado || lead.origen)}
+                </span>
+              )}
+            </div>
+            {utms ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                <InfoField label="UTM Source">{utms.utm_source || '--'}</InfoField>
+                <InfoField label="UTM Medium">{utms.utm_medium || '--'}</InfoField>
+                <InfoField label="UTM Campaign">{utms.utm_campaign || '--'}</InfoField>
+                <InfoField label="UTM Content">{utms.utm_content || '--'}</InfoField>
+                <InfoField label="UTM Term">{utms.utm_term || '--'}</InfoField>
+                <InfoField label="Canal detectado">
+                  <span className="font-semibold">{CANAL_LABELS[utms.canal_detectado] || utms.canal_detectado}</span>
+                </InfoField>
+                {utms.landing_url && (
+                  <div className="sm:col-span-2">
+                    <InfoField label="Landing URL">
+                      <a
+                        href={utms.landing_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline text-xs break-all"
+                      >
+                        {utms.landing_url}
+                      </a>
+                    </InfoField>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Este lead no tiene datos UTM registrados (canal: directo)</p>
+            )}
           </div>
 
           {/* Interacciones */}
@@ -509,14 +696,64 @@ export default function LeadDetailPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-[11px] font-bold uppercase text-muted-foreground">{inter.tipo}</span>
-                          <span className="text-[11px] text-muted-foreground">&bull; {new Date(inter.created_at || inter.fecha).toLocaleDateString('es-ES')}</span>
+                          <span className="text-[11px] text-muted-foreground">&bull; {inter.fecha ? new Date(inter.fecha).toLocaleString('es-ES') : ''}</span>
                         </div>
-                        <p className="text-[13px]">{inter.nota}</p>
-                        {inter.created_by_name && <p className="text-[11px] text-muted-foreground mt-1">Por {inter.created_by_name}</p>}
+                        <p className="text-[13px]">{inter.nota || <span className="text-muted-foreground italic">Sin nota</span>}</p>
+                        {inter.created_by_nombre && <p className="text-[11px] text-muted-foreground mt-1">Por {inter.created_by_nombre}</p>}
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Recordatorios */}
+          <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold flex items-center gap-2">
+                <CalendarCheck size={16} weight="duotone" /> Recordatorios ({reminders.length})
+              </h3>
+              <button
+                onClick={() => setReminderOpen(true)}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                + Nuevo recordatorio
+              </button>
+            </div>
+            {reminders.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No hay recordatorios programados</p>
+            ) : (
+              <div className="space-y-3">
+                {reminders.map((rem) => (
+                  <div
+                    key={rem.id}
+                    className={`p-4 rounded-xl border ${
+                      rem.completado
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-[11px] font-bold uppercase ${rem.completado ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                        {rem.completado ? 'Completado' : 'Pendiente'}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-semibold">
+                        {rem.fecha_recordatorio ? new Date(rem.fecha_recordatorio).toLocaleDateString('es-ES') : ''}
+                      </span>
+                    </div>
+                    {rem.nota && <p className="text-[13px]">{rem.nota}</p>}
+                    {rem.created_by_nombre && <p className="text-[11px] text-muted-foreground mt-1">Por {rem.created_by_nombre}</p>}
+                    {!rem.completado && (
+                      <button
+                        onClick={() => handleCompleteReminder(rem.id)}
+                        className="mt-2 text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1"
+                      >
+                        <Check size={12} weight="bold" /> Marcar como completado
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -560,78 +797,54 @@ export default function LeadDetailPage() {
             </button>
           </div>
 
-          {/* Reasignar Gestor */}
-          {(user?.role === 'superadmin' || user?.role === 'admin') && gestores.length > 0 && (
-            <div className="bg-card p-5 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-              <h3 className="text-[13px] font-bold mb-3">Reasignar Gestor</h3>
-              <select value={reassignId} onChange={(e) => setReassignId(e.target.value)} className={selectClass} style={selectBg}>
-                <option value="">Seleccionar gestor</option>
-                {gestores.map((u) => (
-                  <option key={u.id} value={u.id}>{u.nombre} ({u.role})</option>
-                ))}
-              </select>
-              <button
-                onClick={handleReassign}
-                disabled={!reassignId || reassignLoading}
-                className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors disabled:opacity-40"
-              >
-                {reassignLoading ? 'Guardando...' : 'Reasignar'}
-              </button>
-            </div>
-          )}
-
-          {/* Recordatorio */}
+          {/* Acciones rapidas */}
           <div className="bg-card p-5 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-            <h3 className="text-[13px] font-bold mb-3 flex items-center gap-2">
-              <CalendarCheck size={15} weight="duotone" /> Recordatorio
-            </h3>
-            {recordatorio ? (
-              <div className={`p-3 rounded-xl text-sm ${recordatorio.completado ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-[12px]">
-                    {new Date(recordatorio.fecha_recordatorio || recordatorio.fecha).toLocaleDateString('es-ES')}
-                  </span>
-                  <span className={`text-[10px] font-bold uppercase ${recordatorio.completado ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {recordatorio.completado ? 'Completado' : 'Pendiente'}
-                  </span>
-                </div>
-                <p className="text-[13px]">{recordatorio.nota}</p>
-                {!recordatorio.completado && recordatorio.id && (
-                  <button
-                    onClick={() => handleCompleteReminder(recordatorio.id)}
-                    className="mt-2 text-xs font-semibold text-emerald-600 hover:underline"
-                  >
-                    Marcar como completado
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="text-[13px] text-muted-foreground mb-2">Sin recordatorio programado</p>
-            )}
-            <button
-              onClick={() => setReminderOpen(true)}
-              className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors"
-            >
-              {recordatorio ? 'Nuevo recordatorio' : 'Programar recordatorio'}
-            </button>
+            <h3 className="text-[13px] font-bold mb-3">Acciones rapidas</h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => setInteractionOpen(true)}
+                className="w-full h-10 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
+              >
+                <Phone size={14} weight="bold" /> Registrar interaccion
+              </button>
+              <button
+                onClick={() => setReminderOpen(true)}
+                className="w-full h-10 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
+              >
+                <CalendarCheck size={14} weight="bold" /> Programar recordatorio
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setReassignOpen(true)}
+                  className="w-full h-10 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
+                >
+                  <Lightning size={14} weight="bold" /> Reasignar
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Notas */}
+          {/* Stats rapidas */}
           <div className="bg-card p-5 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-            <h3 className="text-[13px] font-bold mb-3">Agregar Nota</h3>
-            <textarea
-              value={nota}
-              onChange={(e) => setNota(e.target.value)}
-              placeholder="Escribe una nota sobre este lead..."
-              className="w-full h-24 px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
-            />
-            <button
-              onClick={handleAddNota}
-              disabled={!nota.trim() || notaLoading}
-              className="w-full h-10 mt-3 rounded-xl border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors disabled:opacity-40"
-            >
-              {notaLoading ? 'Guardando...' : 'Guardar Nota'}
-            </button>
+            <h3 className="text-[13px] font-bold mb-3">Resumen</h3>
+            <div className="space-y-2 text-[13px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Interacciones</span>
+                <span className="font-bold">{interacciones.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Recordatorios</span>
+                <span className="font-bold">{reminders.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Cambios estado</span>
+                <span className="font-bold">{(lead.statusHistory || []).length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Canal</span>
+                <span className="font-bold">{CANAL_LABELS[lead.origen] || lead.origen}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

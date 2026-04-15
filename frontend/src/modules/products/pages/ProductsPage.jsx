@@ -28,20 +28,29 @@ export default function ProductsPage() {
   }
 
   async function handleSubmit(data) {
-    if (editingProduct) {
-      await update(editingProduct.id, data);
-      toast({ title: 'Producto actualizado', description: data.nombre });
-    } else {
-      await create(data);
-      toast({ title: 'Producto creado', description: data.nombre });
+    try {
+      if (editingProduct) {
+        await update(editingProduct.id, data);
+        toast({ title: 'Producto actualizado', description: data.nombre });
+      } else {
+        await create(data);
+        toast({ title: 'Producto creado', description: data.nombre });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      throw err;
     }
   }
 
   async function handleDeactivate() {
     if (!deleteTarget) return;
-    await deactivate(deleteTarget.id);
-    toast({ title: 'Producto desactivado', description: deleteTarget.nombre, variant: 'destructive' });
-    setDeleteTarget(null);
+    try {
+      await deactivate(deleteTarget.id);
+      toast({ title: 'Producto desactivado', description: deleteTarget.nombre, variant: 'destructive' });
+      setDeleteTarget(null);
+    } catch (err) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   }
 
   if (!projectId) {

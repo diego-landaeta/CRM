@@ -1,4 +1,5 @@
 import * as authService from './auth.service.js';
+import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import { loginSchema, setPasswordSchema } from './auth.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -119,7 +120,7 @@ export async function me(req, res, next) {
       success: true,
       data: {
         user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role },
-        projects,
+        projects: sanitizeProjects(projects, user.role),
       },
     });
   } catch (err) {

@@ -42,3 +42,12 @@ export const createReminderSchema = z.object({
 export const reassignSchema = z.object({
   responsable_id: z.number().int().positive('ID de responsable requerido'),
 });
+
+export const updateLeadSchema = z.object({
+  nombre: z.string().min(1, 'Nombre no puede estar vacio').max(200).optional(),
+  telefono: z.string().max(50).nullable().optional(),
+  notas: z.string().max(2000).nullable().optional(),
+  producto_interes_id: z.number().int().positive().nullable().optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+  message: 'Al menos un campo debe ser proporcionado',
+});

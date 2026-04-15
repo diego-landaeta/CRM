@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
+import client from '@/shared/api/client';
 import {
   MagnifyingGlass,
   Plus,
@@ -73,15 +75,28 @@ function SkeletonRow() {
 
 export default function LeadsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen,
+    filterResponsable, setFilterResponsable,
     loading, error,
   } = useLeads();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [gestores, setGestores] = useState([]);
+
+  // Cargar lista de responsables para el filtro (solo admin/superadmin)
+  useEffect(() => {
+    if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
+    client.get('/users?limit=100')
+      .then((res) => {
+        if (res.success) setGestores(res.data || []);
+      })
+      .catch(() => {});
+  }, [user?.role]);
 
   async function handleCreateLead(data) {
     // El formulario de creacion manual no tiene endpoint webhook
@@ -162,13 +177,28 @@ export default function LeadsPage() {
           className="h-11 px-4 pr-9 rounded-xl border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
           style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
         >
-          <option value="">Todos los origenes</option>
+          <option value="">Todos los canales</option>
           <option value="meta_ads">Meta Ads</option>
           <option value="google_ads">Google Ads</option>
+          <option value="tiktok_ads">TikTok Ads</option>
           <option value="organico">Organico</option>
+          <option value="chatgpt_ia">ChatGPT IA</option>
           <option value="referido">Referido</option>
           <option value="directo">Directo</option>
         </select>
+        {(user?.role === 'superadmin' || user?.role === 'admin') && (
+          <select
+            value={filterResponsable}
+            onChange={(e) => { setFilterResponsable(e.target.value); setPage(1); }}
+            className="h-11 px-4 pr-9 rounded-xl border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+          >
+            <option value="">Todos los responsables</option>
+            {gestores.map((g) => (
+              <option key={g.id} value={g.id}>{g.nombre}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Stats */}

@@ -23,7 +23,7 @@ export async function findUserById(id) {
 
 export async function getUserProjects(userId) {
   const { rows } = await query(
-    `SELECT p.id, p.nombre, p.slug, p.emoji, p.type
+    `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key
      FROM user_projects up
      JOIN projects p ON p.id = up.project_id
      WHERE up.user_id = $1 AND up.active = true AND p.active = true

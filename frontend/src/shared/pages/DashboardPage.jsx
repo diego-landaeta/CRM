@@ -156,7 +156,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard
           icon={UserPlus}
@@ -181,7 +181,7 @@ export default function DashboardPage() {
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
           label="Total Leads"
           value={stats.total || 0}
-          badge={kpis.ingresosMes.change}
+          badge="--"
           badgeColor="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
           trend="up"
         />
@@ -194,6 +194,28 @@ export default function DashboardPage() {
           badgeColor="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
           trend="down"
         />
+      </div>
+
+      {/* KPIs secundarios por estado */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { key: 'contactado', label: 'Contactados', color: '#059669' },
+          { key: 'en_seguimiento', label: 'En seguimiento', color: '#d97706' },
+          { key: 'por_contactar', label: 'Por contactar', color: '#ea580c' },
+          { key: 'convertido', label: 'Convertidos', color: '#7c3aed' },
+          { key: 'conversionRate', label: 'Tasa conversion', color: '#4361ee', isPercent: true },
+        ].map(({ key, label, color, isPercent }) => (
+          <div
+            key={key}
+            className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2"
+            style={{ borderBottomColor: color }}
+          >
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
+            <p className="text-xl font-extrabold mt-0.5" style={{ color }}>
+              {stats[key] || 0}{isPercent ? '%' : ''}
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Charts */}

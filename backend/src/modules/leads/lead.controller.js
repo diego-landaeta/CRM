@@ -1,5 +1,5 @@
 import * as leadService from './lead.service.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema } from './lead.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 // ============================================================
@@ -107,6 +107,19 @@ export async function completeReminder(req, res, next) {
     const reminderId = parseInt(req.params.reminderId);
     if (isNaN(reminderId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await leadService.markReminderComplete(reminderId);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function update(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const parsed = updateLeadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const result = await leadService.updateLead(id, parsed.data);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

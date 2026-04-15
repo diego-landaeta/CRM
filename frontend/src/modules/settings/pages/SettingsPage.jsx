@@ -13,6 +13,12 @@ import {
   UserCirclePlus,
   CaretDown,
   WarningCircle,
+  PlugsConnected,
+  Copy,
+  CheckCircle,
+  Eye,
+  EyeSlash,
+  Clock,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +28,7 @@ import Portal from '@/shared/components/ui/portal';
 const TABS = [
   { id: 'users', label: 'Usuarios', icon: Users },
   { id: 'projects', label: 'Proyectos', icon: Folder },
+  { id: 'webhooks', label: 'Webhooks', icon: PlugsConnected },
   { id: 'apis', label: 'APIs Externas', icon: Key },
   { id: 'email', label: 'Email (Brevo)', icon: Envelope },
   { id: 'security', label: 'Seguridad', icon: ShieldCheck },
@@ -104,16 +111,19 @@ function UsersTab() {
     e.preventDefault();
     if (!newName.trim() || !newEmail.trim()) return;
 
+    if (newProjects.length === 0) {
+      toast({ title: 'Error', description: 'Debes asignar al menos un proyecto', variant: 'destructive' });
+      return;
+    }
+
     setCreateLoading(true);
     try {
       const payload = {
         nombre: newName.trim(),
         email: newEmail.trim(),
         role: newRole,
+        projectIds: newProjects,
       };
-      if (newRole === 'gestor' && newProjects.length > 0) {
-        payload.project_ids = newProjects;
-      }
 
       const res = await client.post('/users', payload);
       if (res.success) {
@@ -147,8 +157,8 @@ function UsersTab() {
     setEditLoading(true);
     try {
       const payload = { role: editRole };
-      if (editRole === 'gestor') {
-        payload.project_ids = editProjects;
+      if (editProjects.length > 0) {
+        payload.projectIds = editProjects;
       }
 
       await client.patch(`/users/${editingUser.id}`, payload);
@@ -164,13 +174,14 @@ function UsersTab() {
 
   async function handleToggleActive(user) {
     try {
-      if (user.activo !== false && user.status !== 'inactivo') {
+      const isActive = user.active !== false;
+      if (isActive) {
         // Desactivar = DELETE
         await client.delete(`/users/${user.id}`);
         toast({ title: 'Usuario desactivado', description: `${user.nombre || user.name} desactivado`, variant: 'destructive' });
       } else {
-        // Reactivar = PATCH
-        await client.patch(`/users/${user.id}`, { activo: true });
+        // Reactivar = PATCH /reactivate
+        await client.patch(`/users/${user.id}/reactivate`);
         toast({ title: 'Usuario reactivado', description: `${user.nombre || user.name} reactivado` });
       }
       setOpenMenuId(null);
@@ -247,13 +258,14 @@ function UsersTab() {
                 <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
                 <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rol</th>
                 <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Proyectos</th>
+                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ultima conexion</th>
                 <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
                 <th className="px-5 py-2.5 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => {
-                const isActive = u.activo !== false && u.status !== 'inactivo';
+                const isActive = u.active !== false;
                 const userName = u.nombre || u.name || 'Sin nombre';
                 return (
                   <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${!isActive ? 'opacity-50' : ''}`}>
@@ -273,6 +285,16 @@ function UsersTab() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground max-w-[180px] truncate" title={formatProjectNames(u)}>
                       {formatProjectNames(u)}
+                    </td>
+                    <td className="px-5 py-3.5 text-muted-foreground">
+                      {u.last_login_at ? (
+                        <span className="flex items-center gap-1.5 text-[12px]">
+                          <Clock size={12} weight="duotone" />
+                          {new Date(u.last_login_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="text-[12px] italic text-muted-foreground/60">Nunca</span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
@@ -323,7 +345,7 @@ function UsersTab() {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center">
+                  <td colSpan={7} className="px-5 py-12 text-center">
                     <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
                     <p className="text-muted-foreground text-sm">No hay usuarios registrados</p>
                   </td>
@@ -336,7 +358,7 @@ function UsersTab() {
         {/* Mobile cards */}
         <div className="md:hidden divide-y">
           {users.map((u) => {
-            const isActive = u.activo !== false && u.status !== 'inactivo';
+            const isActive = u.active !== false;
             const userName = u.nombre || u.name || 'Sin nombre';
             return (
               <div key={u.id} className={`p-4 space-y-2 ${!isActive ? 'opacity-50' : ''}`}>
@@ -424,9 +446,10 @@ function UsersTab() {
                   </select>
                 </div>
 
-                {newRole === 'gestor' && projects.length > 0 && (
+                {projects.length > 0 && (
                   <div>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Proyectos asignados</label>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Proyectos asignados *</label>
+                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona al menos un proyecto al que tendra acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
@@ -492,9 +515,10 @@ function UsersTab() {
                   </select>
                 </div>
 
-                {editRole === 'gestor' && projects.length > 0 && (
+                {projects.length > 0 && (
                   <div>
                     <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Proyectos asignados</label>
+                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona los proyectos a los que tendra acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
@@ -555,6 +579,152 @@ function ProjectsTab() {
         {projects.length === 0 && (
           <p className="text-sm text-muted-foreground col-span-2 text-center py-8">No hay proyectos configurados</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function WebhooksTab() {
+  const { projects } = useAuth();
+  const [revealed, setRevealed] = useState({});
+  const [copied, setCopied] = useState(null);
+
+  // El backend devuelve la URL base relativa a /crm — construir URL completa
+  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
+
+  function toggleReveal(projectId) {
+    setRevealed((prev) => ({ ...prev, [projectId]: !prev[projectId] }));
+  }
+
+  async function handleCopy(text, key) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      toast({ title: 'Copiado', description: 'Texto copiado al portapapeles' });
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+    }
+  }
+
+  if (!projects || projects.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <PlugsConnected size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
+        <p className="text-sm text-muted-foreground">No hay proyectos configurados</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-extrabold tracking-tight">Webhooks de Leads</h2>
+        <p className="text-[13px] text-muted-foreground mt-0.5">
+          URL y API key para integrar formularios externos. Cada lead recibido genera un nuevo registro y se asigna automaticamente por round-robin.
+        </p>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
+        <WarningCircle size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" weight="duotone" />
+        <div className="text-[13px] text-amber-800 dark:text-amber-200">
+          <p className="font-bold">Mantener la API key en privado</p>
+          <p className="mt-0.5">Solo administradores pueden ver esta clave. Si se filtra, contacta al superadmin para regenerarla.</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {projects.map((project) => {
+          const url = `${baseUrl}/leads/webhooks/${project.slug}`;
+          const apiKey = project.webhook_api_key;
+          const isRevealed = !!revealed[project.id];
+
+          return (
+            <div key={project.id} className="bg-card p-5 rounded-2xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <PlugsConnected size={18} className="text-primary" weight="duotone" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">{project.nombre}</p>
+                  <p className="text-[11px] text-muted-foreground">{project.slug}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">URL del webhook</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={url}
+                      className="flex-1 h-10 px-3 rounded-xl border border-border bg-muted/50 text-xs font-mono outline-none"
+                    />
+                    <button
+                      onClick={() => handleCopy(url, `url-${project.id}`)}
+                      className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                    >
+                      {copied === `url-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+
+                {apiKey ? (
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">X-API-Key (header)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        type={isRevealed ? 'text' : 'password'}
+                        value={apiKey}
+                        className="flex-1 h-10 px-3 rounded-xl border border-border bg-muted/50 text-xs font-mono outline-none"
+                      />
+                      <button
+                        onClick={() => toggleReveal(project.id)}
+                        className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                      >
+                        {isRevealed ? <EyeSlash size={14} weight="bold" /> : <Eye size={14} weight="bold" />}
+                        {isRevealed ? 'Ocultar' : 'Ver'}
+                      </button>
+                      <button
+                        onClick={() => handleCopy(apiKey, `key-${project.id}`)}
+                        className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                      >
+                        {copied === `key-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Sin API key configurada para este proyecto</p>
+                )}
+
+                <details className="mt-2 group">
+                  <summary className="cursor-pointer text-xs font-semibold text-primary hover:underline">
+                    Ver ejemplo de payload
+                  </summary>
+                  <pre className="mt-2 p-3 rounded-xl bg-zinc-900 text-zinc-100 text-[11px] font-mono overflow-x-auto">
+{`POST ${url}
+Content-Type: application/json
+X-API-Key: ${isRevealed && apiKey ? apiKey : '***'}
+
+{
+  "nombre": "Juan Perez",
+  "email": "juan@example.com",
+  "telefono": "+34611111111",
+  "producto_interes": "Curso Psicologia",
+  "utm_source": "facebook",
+  "utm_medium": "cpc",
+  "utm_campaign": "verano-2026",
+  "landing_url": "https://example.com/landing"
+}`}
+                  </pre>
+                </details>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -673,6 +843,7 @@ function SecurityTab() {
 const TAB_CONTENT = {
   users: UsersTab,
   projects: ProjectsTab,
+  webhooks: WebhooksTab,
   apis: ApisTab,
   email: EmailTab,
   security: SecurityTab,

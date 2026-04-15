@@ -25,7 +25,13 @@ export async function findAll({ active, role, projectId, page, limit }) {
   const total = parseInt(countResult.rows[0].count);
 
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at
+    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at,
+            COALESCE(
+              (SELECT json_agg(up.project_id ORDER BY up.project_id)
+               FROM user_projects up
+               WHERE up.user_id = u.id AND up.active = true),
+              '[]'::json
+            ) AS project_ids
      FROM users u ${where}
      ORDER BY u.created_at DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

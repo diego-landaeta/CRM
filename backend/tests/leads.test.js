@@ -280,6 +280,63 @@ describe('POST /api/leads/:id/reminders', () => {
 });
 
 // ============================================================
+// PATCH /api/leads/:id (editar lead)
+// ============================================================
+
+describe('PATCH /api/leads/:id', () => {
+  it('actualiza nombre y telefono', async () => {
+    const res = await request.patch(`/api/leads/${createdLeadId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ nombre: 'Lead Test 1 Editado', telefono: '+34611111111' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.nombre).toBe('Lead Test 1 Editado');
+    expect(res.body.data.telefono).toBe('+34611111111');
+  });
+
+  it('actualiza solo notas', async () => {
+    const res = await request.patch(`/api/leads/${createdLeadId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ notas: 'Notas actualizadas via PATCH' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.notas).toBe('Notas actualizadas via PATCH');
+  });
+
+  it('falla con body vacio', async () => {
+    const res = await request.patch(`/api/leads/${createdLeadId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('falla con ID inexistente', async () => {
+    const res = await request.patch('/api/leads/99999')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ nombre: 'Inexistente' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('falla sin auth', async () => {
+    const res = await request.patch(`/api/leads/${createdLeadId}`)
+      .send({ nombre: 'Sin auth' });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('falla con nombre vacio', async () => {
+    const res = await request.patch(`/api/leads/${createdLeadId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ nombre: '' });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+// ============================================================
 // GET /api/leads/stats
 // ============================================================
 

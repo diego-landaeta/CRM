@@ -1,8 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 
 const PAGE_SIZE = 20;
+
+// Normaliza la respuesta del backend para mantener compatibilidad con la UI.
+// El backend devuelve `status` y `canal_detectado`, la UI usa `estado` y `origen`.
+function normalizeLead(lead) {
+  if (!lead) return lead;
+  return {
+    ...lead,
+    estado: lead.status || lead.estado,
+    origen: lead.canal_detectado || lead.origen || 'directo',
+  };
+}
 
 export function useLeads() {
   const { activeProject } = useProjectContext();
@@ -14,10 +25,25 @@ export function useLeads() {
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
   const [filterOrigen, setFilterOrigen] = useState('');
+  const [filterResponsable, setFilterResponsable] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Debounce para search (350ms)
+  const searchTimerRef = useRef(null);
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 350);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [search]);
 
   // Fetch leads
   const fetchLeads = useCallback(async () => {
@@ -29,13 +55,14 @@ export function useLeads() {
       params.set('projectId', pid);
       params.set('page', page);
       params.set('limit', PAGE_SIZE);
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (filterEstado) params.set('status', filterEstado);
-      if (filterOrigen) params.set('origen', filterOrigen);
+      if (filterOrigen) params.set('canal', filterOrigen);
+      if (filterResponsable) params.set('responsableId', filterResponsable);
 
       const res = await client.get(`/leads?${params.toString()}`);
       if (res.success) {
-        setLeads(res.data || []);
+        setLeads((res.data || []).map(normalizeLead));
         if (res.pagination) {
           setTotal(res.pagination.total || 0);
           setTotalPages(res.pagination.totalPages || 1);
@@ -47,7 +74,7 @@ export function useLeads() {
     } finally {
       setLoading(false);
     }
-  }, [pid, page, search, filterEstado, filterOrigen]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable]);
 
   // Fetch stats
   const fetchStats = useCallback(async () => {
@@ -55,7 +82,17 @@ export function useLeads() {
     try {
       const res = await client.get(`/leads/stats?projectId=${pid}`);
       if (res.success) {
-        setStats(res.data || {});
+        // Backend devuelve nuevos, contactados, etc — mapear a singular
+        const d = res.data || {};
+        setStats({
+          total: Number(d.total) || 0,
+          nuevo: Number(d.nuevos) || 0,
+          por_contactar: Number(d.por_contactar) || 0,
+          contactado: Number(d.contactados) || 0,
+          en_seguimiento: Number(d.en_seguimiento) || 0,
+          convertido: Number(d.convertidos) || 0,
+          no_interesado: Number(d.no_interesados) || 0,
+        });
       }
     } catch {
       // Stats son secundarios, no bloquear UI
@@ -70,12 +107,6 @@ export function useLeads() {
     fetchStats();
   }, [fetchStats]);
 
-  // Reset page cuando cambian filtros
-  const setSearchAndReset = useCallback((val) => {
-    setSearch(val);
-    setPage(1);
-  }, []);
-
   return {
     leads,
     stats,
@@ -84,11 +115,13 @@ export function useLeads() {
     totalPages,
     setPage,
     search,
-    setSearch: setSearchAndReset,
+    setSearch,
     filterEstado,
     setFilterEstado,
     filterOrigen,
     setFilterOrigen,
+    filterResponsable,
+    setFilterResponsable,
     loading,
     error,
     refetch: fetchLeads,
@@ -107,7 +140,7 @@ export function useLeadDetail(id) {
     try {
       const res = await client.get(`/leads/${id}`);
       if (res.success) {
-        setLead(res.data);
+        setLead(normalizeLead(res.data));
       }
     } catch (err) {
       setError(err.message);
@@ -121,25 +154,27 @@ export function useLeadDetail(id) {
     fetchLead();
   }, [fetchLead]);
 
-  // Extraer datos del lead
-  const interacciones = lead?.interactions || lead?.interacciones || [];
-  const recordatorio = lead?.reminders?.[0] || lead?.recordatorio || null;
+  // Datos del lead
+  const interacciones = lead?.interactions || [];
+  const reminders = lead?.reminders || [];
+  const recordatorio = reminders[0] || null;
+  const utms = lead?.utms || null;
+  const statusHistory = lead?.statusHistory || [];
 
   // Construir timeline del sistema desde history
-  const timeline = (lead?.history || []).map((h, i) => ({
+  const timeline = statusHistory.map((h, i) => ({
     id: h.id || i,
-    action: h.descripcion || h.action || h.description || '',
-    date: h.fecha || h.created_at || '',
-    source: h.source || 'Sistema',
+    action: `Estado cambiado a ${h.status_nuevo}${h.changed_by_nombre ? ' por ' + h.changed_by_nombre : ''}`,
+    date: h.changed_at ? new Date(h.changed_at).toLocaleString('es-ES') : '',
+    source: 'Sistema',
     color: ['#4361ee', '#059669', '#d97706', '#7c3aed'][i % 4],
   }));
 
-  // Si no hay history, construir uno basico
   if (timeline.length === 0 && lead) {
     timeline.push({
       id: 1,
       action: 'Lead creado',
-      date: lead.created_at || lead.fecha || '',
+      date: lead.created_at ? new Date(lead.created_at).toLocaleString('es-ES') : '',
       source: 'Sistema',
       color: '#4361ee',
     });
@@ -150,41 +185,37 @@ export function useLeadDetail(id) {
     const body = { status };
     if (motivo) body.motivo = motivo;
     const res = await client.patch(`/leads/${id}/status`, body);
-    if (res.success) {
-      await fetchLead(); // Refrescar datos
-    }
+    if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
   const addInteraction = useCallback(async (tipo, nota) => {
     const res = await client.post(`/leads/${id}/interactions`, { tipo, nota });
-    if (res.success) {
-      await fetchLead();
-    }
+    if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
   const addReminder = useCallback(async (fecha_recordatorio, nota) => {
     const res = await client.post(`/leads/${id}/reminders`, { fecha_recordatorio, nota });
-    if (res.success) {
-      await fetchLead();
-    }
+    if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
   const completeReminder = useCallback(async (reminderId) => {
     const res = await client.patch(`/leads/reminders/${reminderId}/complete`);
-    if (res.success) {
-      await fetchLead();
-    }
+    if (res.success) await fetchLead();
     return res;
   }, [fetchLead]);
 
   const reassign = useCallback(async (responsable_id) => {
     const res = await client.patch(`/leads/${id}/reassign`, { responsable_id });
-    if (res.success) {
-      await fetchLead();
-    }
+    if (res.success) await fetchLead();
+    return res;
+  }, [id, fetchLead]);
+
+  const updateLead = useCallback(async (fields) => {
+    const res = await client.patch(`/leads/${id}`, fields);
+    if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
@@ -192,7 +223,10 @@ export function useLeadDetail(id) {
     lead,
     timeline,
     interacciones,
+    reminders,
     recordatorio,
+    utms,
+    statusHistory,
     loading,
     error,
     refetch: fetchLead,
@@ -201,5 +235,6 @@ export function useLeadDetail(id) {
     addReminder,
     completeReminder,
     reassign,
+    updateLead,
   };
 }

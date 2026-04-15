@@ -18,18 +18,24 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 
+// Cada item declara los roles que pueden verlo (omitir = todos)
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
   { label: 'Leads', to: '/leads', icon: Users },
-  { label: 'Productos', to: '/products', icon: Package },
-  { label: 'Campanas', to: '/campaigns', icon: Megaphone },
-  { label: 'Ingresos', to: '/revenue', icon: CurrencyEur },
-  { label: 'Reportes', to: '/reports', icon: ChartLineUp },
+  { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'] },
+  { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
+  { label: 'Ingresos', to: '/revenue', icon: CurrencyEur, roles: ['superadmin', 'admin'] },
+  { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 
 const SYSTEM_ITEMS = [
-  { label: 'Configuracion', to: '/settings', icon: Gear },
+  { label: 'Configuracion', to: '/settings', icon: Gear, roles: ['superadmin', 'admin'] },
 ];
+
+function canSeeItem(item, role) {
+  if (!item.roles) return true;
+  return item.roles.includes(role);
+}
 
 function NavItem({ to, icon: Icon, label, badge, onClick }) {
   return (
@@ -108,14 +114,18 @@ export default function Sidebar({ onNavigate }) {
       {/* Navigation */}
       <nav className="space-y-0.5 flex-1">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) => (
           <NavItem key={item.to} {...item} onClick={onNavigate} />
         ))}
 
-        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2 mt-6">Sistema</p>
-        {SYSTEM_ITEMS.map((item) => (
-          <NavItem key={item.to} {...item} onClick={onNavigate} />
-        ))}
+        {SYSTEM_ITEMS.some((item) => canSeeItem(item, user?.role)) && (
+          <>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2 mt-6">Sistema</p>
+            {SYSTEM_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) => (
+              <NavItem key={item.to} {...item} onClick={onNavigate} />
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer: Beta Badge + Theme + User */}

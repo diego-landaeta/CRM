@@ -135,3 +135,12 @@ export async function reassign(leadId, newResponsableId, userId) {
 
   return { message: 'Lead reasignado', responsable_id: newResponsableId };
 }
+
+export async function updateLead(leadId, data) {
+  const lead = await leadModel.findById(leadId);
+  if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  const updated = await leadModel.updateLead(leadId, data);
+  if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
+  return updated;
+}

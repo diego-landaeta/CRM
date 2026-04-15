@@ -19,6 +19,9 @@ router.get('/', leadController.list);
 router.get('/stats', leadController.stats);
 router.get('/:id', leadController.getById);
 
+// Edicion general del lead
+router.patch('/:id', leadController.update);
+
 // Operaciones sobre lead
 router.patch('/:id/status', leadController.changeStatus);
 router.post('/:id/interactions', leadController.addInteraction);
