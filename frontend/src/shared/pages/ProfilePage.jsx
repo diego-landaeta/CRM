@@ -120,7 +120,7 @@ export default function ProfilePage() {
             <div className="flex flex-wrap gap-2">
               {userProjects.map((p) => (
                 <span key={p.id} className="px-3 py-1.5 rounded-xl bg-muted text-[12px] font-medium">
-                  {p.emoji} {p.nombre}
+                  {p.nombre}
                 </span>
               ))}
             </div>

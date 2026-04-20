@@ -24,6 +24,8 @@ import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 
 const TABS = [
   { id: 'users', label: 'Usuarios', icon: Users },
@@ -204,31 +206,27 @@ function UsersTab() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="w-40 h-5 bg-muted rounded animate-pulse mb-2" />
-            <div className="w-60 h-4 bg-muted rounded animate-pulse" />
-          </div>
+        <div>
+          <div className="w-40 h-5 bg-muted rounded animate-pulse mb-2" />
+          <div className="w-60 h-4 bg-muted rounded animate-pulse" />
         </div>
-        <div className="bg-card rounded-3xl border border-border p-6 space-y-4 animate-pulse">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center gap-4">
-              <div className="w-8 h-8 rounded-full bg-muted" />
-              <div className="flex-1 h-4 bg-muted rounded" />
-              <div className="w-16 h-4 bg-muted rounded" />
-            </div>
-          ))}
-        </div>
+        <SkeletonTable rows={5} columns={6} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
+      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl p-8 text-center">
         <WarningCircle size={40} className="text-red-500 mx-auto mb-3" weight="duotone" />
-        <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
-        <button onClick={fetchUsers} className="mt-3 text-xs font-semibold text-primary hover:underline">Reintentar</button>
+        <p className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">No se pudieron cargar los usuarios</p>
+        <p className="text-xs text-red-500/80 dark:text-red-400/80 mb-4">{error}</p>
+        <button
+          onClick={fetchUsers}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -855,10 +853,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Configuracion</h1>
-        <p className="text-muted-foreground text-sm">Ajustes del sistema y gestion de usuarios</p>
-      </div>
+      <PageHeader title="Configuracion" subtitle="Ajustes del sistema y gestion de usuarios" />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Sidebar */}

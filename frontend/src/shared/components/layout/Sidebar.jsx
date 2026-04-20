@@ -45,7 +45,7 @@ function NavItem({ to, icon: Icon, label, badge, onClick }) {
       onClick={onClick}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
+          'relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -54,6 +54,12 @@ function NavItem({ to, icon: Icon, label, badge, onClick }) {
     >
       {({ isActive }) => (
         <>
+          {isActive && (
+            <span
+              aria-hidden="true"
+              className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+            />
+          )}
           <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
           {label}
           {badge && (

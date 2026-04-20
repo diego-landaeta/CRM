@@ -4,7 +4,9 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
-import { Plus, User, Phone, EnvelopeSimple, Clock, DotsSixVertical, Users } from '@phosphor-icons/react';
+import { Plus, User, DotsSixVertical, Users } from '@phosphor-icons/react';
+import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import PageHeader from '@/shared/components/ui/PageHeader';
 
 const COLUMNS = [
   { key: 'nuevo', label: 'Nuevo', color: '#4361ee', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500' },
@@ -32,40 +34,57 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
+function daysAgo(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const diff = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff <= 0) return 'hoy';
+  if (diff === 1) return 'ayer';
+  return `hace ${diff}d`;
+}
+
 function LeadCard({ lead, onClick, onDragStart }) {
+  const canal = lead.canal_detectado || lead.origen;
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, lead)}
       onClick={() => onClick(lead.id)}
-      className="bg-card border border-border rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all group"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onClick(lead.id); }}
+      className="bg-card border border-border rounded-lg p-3 space-y-2 cursor-grab active:cursor-grabbing hover:shadow-sm hover:border-primary/30 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${AVATAR_COLORS[lead.id % AVATAR_COLORS.length]}`}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 ${AVATAR_COLORS[lead.id % AVATAR_COLORS.length]}`}>
             {getInitials(lead.nombre)}
           </div>
-          <div>
-            <p className="text-[13px] font-semibold leading-tight">{lead.nombre}</p>
-            <p className="text-[11px] text-muted-foreground">{lead.email}</p>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold leading-tight truncate">{lead.nombre}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{lead.email}</p>
           </div>
         </div>
-        <DotsSixVertical size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        <DotsSixVertical size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
       </div>
 
       {lead.producto_interes && (
-        <div className="bg-muted rounded-lg px-2.5 py-1 mb-2">
-          <p className="text-[11px] text-muted-foreground truncate">{lead.producto_interes}</p>
-        </div>
+        <p className="text-[11px] text-muted-foreground bg-muted rounded-md px-2 py-1 truncate">
+          {lead.producto_interes}
+        </p>
       )}
 
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1">
-            <User size={11} /> {(lead.responsable_nombre || lead.gestor || 'N/A').split(' ')[0]}
-          </span>
-          <span>{formatDate(lead.created_at || lead.fecha)}</span>
-        </div>
+      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        {canal ? <ChannelBadge channel={canal} showIcon /> : <span />}
+        <span className="flex items-center gap-1 flex-shrink-0">
+          {(lead.responsable_nombre || lead.gestor) && (
+            <>
+              <User size={10} weight="duotone" />
+              <span className="truncate max-w-[60px]">{(lead.responsable_nombre || lead.gestor).split(' ')[0]}</span>
+              <span className="text-muted-foreground/60">&bull;</span>
+            </>
+          )}
+          <span>{daysAgo(lead.created_at || lead.fecha)}</span>
+        </span>
       </div>
     </div>
   );
@@ -185,27 +204,26 @@ export default function LeadsPipelinePage() {
     <div className="space-y-5">
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Pipeline de Leads</h1>
-          <p className="text-muted-foreground text-sm">Vista Kanban — arrastra para cambiar estado</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate('/leads')}
-            className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-          >
-            Vista tabla
-          </button>
-          <button
-            onClick={() => setFormOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
-          >
-            <Plus size={16} weight="bold" /> Nuevo Lead
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Pipeline de Leads"
+        subtitle="Vista Kanban &mdash; arrastra una tarjeta para cambiar su estado"
+        actions={
+          <>
+            <button
+              onClick={() => navigate('/leads')}
+              className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            >
+              Vista tabla
+            </button>
+            <button
+              onClick={() => setFormOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            >
+              <Plus size={16} weight="bold" /> Nuevo Lead
+            </button>
+          </>
+        }
+      />
 
       {/* Pipeline columns */}
       <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">

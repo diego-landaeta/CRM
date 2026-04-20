@@ -20,35 +20,10 @@ import {
   Check,
   Link as LinkIcon,
   Lightning,
+  ArrowClockwise,
 } from '@phosphor-icons/react';
-
-const ESTADO_STYLES = {
-  nuevo: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-  por_contactar: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400',
-  contactado: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  en_seguimiento: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-  convertido: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
-  no_interesado: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
-};
-
-const ESTADO_LABELS = {
-  nuevo: 'Nuevo',
-  por_contactar: 'Por contactar',
-  contactado: 'Contactado',
-  en_seguimiento: 'En seguimiento',
-  convertido: 'Convertido',
-  no_interesado: 'No interesado',
-};
-
-const CANAL_LABELS = {
-  meta_ads: 'Meta Ads',
-  google_ads: 'Google Ads',
-  tiktok_ads: 'TikTok Ads',
-  organico: 'Organico',
-  chatgpt_ia: 'ChatGPT IA',
-  directo: 'Directo',
-  referido: 'Referido',
-};
+import StatusBadge, { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBadge';
+import ChannelBadge, { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
 
 const INTERACTION_ICONS = {
   llamada: Phone,
@@ -317,11 +292,27 @@ export default function LeadDetailPage() {
   if (error || !lead) {
     return (
       <div className="py-20 text-center">
-        <Users size={48} className="text-muted-foreground/30 mx-auto mb-4" weight="duotone" />
-        <p className="text-muted-foreground mb-2">{error || 'Lead no encontrado'}</p>
-        <button onClick={() => navigate('/leads')} className="text-sm font-semibold text-primary hover:underline">
-          Volver a Leads
-        </button>
+        <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-950/30 flex items-center justify-center mx-auto mb-4">
+          <WarningCircle size={32} className="text-red-500" weight="duotone" />
+        </div>
+        <h3 className="font-semibold mb-1">{error ? 'No se pudo cargar el lead' : 'Lead no encontrado'}</h3>
+        {error && <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">{error}</p>}
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => navigate('/leads')}
+            className="text-sm font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 rounded px-2 py-1"
+          >
+            Volver a Leads
+          </button>
+          {error && (
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 py-1.5 rounded-lg hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            >
+              <ArrowClockwise size={12} weight="bold" /> Reintentar
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -530,9 +521,7 @@ export default function LeadDetailPage() {
                 {lead.proyecto_nombre && <> &bull; {lead.proyecto_nombre}</>}
               </p>
             </div>
-            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
-              {ESTADO_LABELS[lead.estado] || lead.estado}
-            </span>
+            <StatusBadge status={lead.estado} showIcon />
           </div>
           <div className="flex gap-2">
             {isAdmin && (
@@ -629,9 +618,7 @@ export default function LeadDetailPage() {
             <div className="flex items-center gap-3 mb-5">
               <h3 className="font-bold">Origen y UTMs</h3>
               {(utms?.canal_detectado || lead.origen) && (
-                <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
-                  {CANAL_LABELS[utms?.canal_detectado || lead.origen] || (utms?.canal_detectado || lead.origen)}
-                </span>
+                <ChannelBadge channel={utms?.canal_detectado || lead.origen} />
               )}
             </div>
             {utms ? (

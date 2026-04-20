@@ -6,12 +6,12 @@
 
 // --- PROYECTOS (tabla projects) ---
 export const PROJECTS = [
-  { id: 1, nombre: 'Psiko Aprende', slug: 'psiko-aprende', type: 'crm', emoji: '🧠', domain: 'psikoaprende.com' },
-  { id: 2, nombre: 'ISEIH', slug: 'iseih', type: 'crm', emoji: '🎓', domain: 'iseih.com' },
-  { id: 3, nombre: 'Fono Aprende', slug: 'fono-aprende', type: 'crm', emoji: '🗣️', domain: 'fonoaprende.com' },
-  { id: 4, nombre: 'Psicologo IA', slug: 'psicologo-ia', type: 'ia', emoji: '🤖', domain: 'psicologoia.com' },
-  { id: 5, nombre: 'Nutricionista IA', slug: 'nutricionista-ia', type: 'ia', emoji: '🥗', domain: 'nutricionistaia.com' },
-  { id: 6, nombre: 'Tarot IA', slug: 'tarot-ia', type: 'ia', emoji: '🔮', domain: 'tarotia.com' },
+  { id: 1, nombre: 'Psiko Aprende', slug: 'psiko-aprende', type: 'crm', domain: 'psikoaprende.com' },
+  { id: 2, nombre: 'ISEIH', slug: 'iseih', type: 'crm', domain: 'iseih.com' },
+  { id: 3, nombre: 'Fono Aprende', slug: 'fono-aprende', type: 'crm', domain: 'fonoaprende.com' },
+  { id: 4, nombre: 'Psicologo IA', slug: 'psicologo-ia', type: 'ia', domain: 'psicologoia.com' },
+  { id: 5, nombre: 'Nutricionista IA', slug: 'nutricionista-ia', type: 'ia', domain: 'nutricionistaia.com' },
+  { id: 6, nombre: 'Tarot IA', slug: 'tarot-ia', type: 'ia', domain: 'tarotia.com' },
 ];
 
 // --- USUARIOS (tabla users) ---

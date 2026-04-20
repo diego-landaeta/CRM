@@ -14,24 +14,9 @@ import {
   Users,
   WarningCircle,
 } from '@phosphor-icons/react';
-
-const ESTADO_STYLES = {
-  nuevo: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-  por_contactar: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400',
-  contactado: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  en_seguimiento: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-  convertido: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
-  no_interesado: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
-};
-
-const ESTADO_LABELS = {
-  nuevo: 'Nuevo',
-  por_contactar: 'Por contactar',
-  contactado: 'Contactado',
-  en_seguimiento: 'En seguimiento',
-  convertido: 'Convertido',
-  no_interesado: 'No interesado',
-};
+import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import EmptyState from '@/shared/components/ui/EmptyState';
 
 const AVATAR_COLORS = [
   'bg-rose-100 text-rose-700',
@@ -167,7 +152,7 @@ export default function LeadsPage() {
           style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
         >
           <option value="">Todos los estados</option>
-          {Object.entries(ESTADO_LABELS).map(([k, v]) => (
+          {Object.entries(STATUS_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
@@ -271,14 +256,10 @@ export default function LeadsPage() {
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono || '--'}</td>
                   <td className="px-5 py-3.5">
-                    <span className="bg-muted text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
-                      {lead.origen}
-                    </span>
+                    <ChannelBadge channel={lead.origen} />
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
-                      {ESTADO_LABELS[lead.estado] || lead.estado}
-                    </span>
+                    <StatusBadge status={lead.estado} />
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.created_at || lead.fecha)}</td>
@@ -286,10 +267,12 @@ export default function LeadsPage() {
               ))}
               {!loading && leads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center">
-                    <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
-                    <p className="text-muted-foreground text-sm font-medium">No se encontraron leads</p>
-                    <p className="text-muted-foreground text-xs mt-1">Ajusta los filtros o crea un nuevo lead</p>
+                  <td colSpan={7} className="px-5">
+                    <EmptyState
+                      icon={Users}
+                      title="No se encontraron leads"
+                      description="Ajusta los filtros o crea un nuevo lead manualmente."
+                    />
                   </td>
                 </tr>
               )}
@@ -318,21 +301,18 @@ export default function LeadsPage() {
               </div>
               <p className="text-[13px] text-muted-foreground">{lead.email}</p>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ESTADO_STYLES[lead.estado] || 'bg-muted text-muted-foreground'}`}>
-                  {ESTADO_LABELS[lead.estado] || lead.estado}
-                </span>
-                <span className="bg-muted text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">
-                  {lead.origen}
-                </span>
+                <StatusBadge status={lead.estado} />
+                <ChannelBadge channel={lead.origen} />
                 <span className="text-[12px] text-muted-foreground ml-auto">{formatDate(lead.created_at || lead.fecha)}</span>
               </div>
             </div>
           ))}
           {!loading && leads.length === 0 && !error && (
-            <div className="px-5 py-16 text-center">
-              <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
-              <p className="text-muted-foreground text-sm">No se encontraron leads</p>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No se encontraron leads"
+              description="Ajusta los filtros o crea un nuevo lead manualmente."
+            />
           )}
         </div>
 
