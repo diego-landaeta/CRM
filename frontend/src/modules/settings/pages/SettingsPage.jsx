@@ -19,6 +19,9 @@ import {
   Eye,
   EyeSlash,
   Clock,
+  ArrowUp,
+  ArrowDown,
+  FloppyDisk,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -768,35 +771,52 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
   );
 }
 
+const FIELD_TYPES = [
+  { v: 'text', label: 'Texto corto' },
+  { v: 'textarea', label: 'Texto largo' },
+  { v: 'number', label: 'Numero' },
+  { v: 'date', label: 'Fecha' },
+  { v: 'select', label: 'Seleccion' },
+  { v: 'boolean', label: 'Si/No' },
+];
+
 function FieldDefsDialog({ project, onClose }) {
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newField, setNewField] = useState({ field_key: '', label: '', type: 'text', required: false });
+  const [view, setView] = useState('editor'); // 'editor' | 'preview'
+  const [editingId, setEditingId] = useState(null);
+  const [editBuf, setEditBuf] = useState({});
+  const [newField, setNewField] = useState({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await client.get(`/field-definitions/project/${project.id}`);
       if (res.success) setFields(res.data);
     } finally { setLoading(false); }
-  }
+  }, [project.id]);
 
-  useEffect(() => { load(); }, [project.id]);
+  useEffect(() => { load(); }, [load]);
 
   async function handleAdd(e) {
     e.preventDefault();
     if (!newField.field_key || !newField.label) return;
     try {
-      await client.post('/field-definitions', {
+      const payload = {
         project_id: project.id,
         field_key: newField.field_key,
         label: newField.label,
         type: newField.type,
         required: newField.required,
         orden: fields.length,
-      });
+        grupo: newField.grupo || null,
+      };
+      if (newField.type === 'select' && newField.options) {
+        payload.options = newField.options.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      await client.post('/field-definitions', payload);
       toast({ title: 'Campo agregado' });
-      setNewField({ field_key: '', label: '', type: 'text', required: false });
+      setNewField({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
@@ -814,65 +834,205 @@ function FieldDefsDialog({ project, onClose }) {
     }
   }
 
+  async function handleMove(idx, dir) {
+    const next = [...fields];
+    const j = idx + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setFields(next);
+    try {
+      await client.post('/field-definitions/reorder', {
+        project_id: project.id,
+        order: next.map((f, i) => ({ id: f.id, orden: i })),
+      });
+    } catch (err) {
+      toast({ title: 'Error reordenando', description: err?.data?.error, variant: 'destructive' });
+      await load();
+    }
+  }
+
+  function startEdit(f) {
+    setEditingId(f.id);
+    setEditBuf({ label: f.label, required: f.required, grupo: f.grupo || '', options: Array.isArray(f.options) ? f.options.join(', ') : '' });
+  }
+
+  async function saveEdit(f) {
+    try {
+      const payload = { label: editBuf.label, required: editBuf.required, grupo: editBuf.grupo || null };
+      if (f.type === 'select' && editBuf.options !== undefined) {
+        payload.options = editBuf.options.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      await client.patch(`/field-definitions/${f.id}`, payload);
+      setEditingId(null);
+      await load();
+      toast({ title: 'Campo actualizado' });
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    }
+  }
+
   const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+
+  // Agrupar por "grupo" para preview y visualizacion
+  const groups = fields.reduce((acc, f) => {
+    const g = f.grupo || 'General';
+    (acc[g] = acc[g] || []).push(f);
+    return acc;
+  }, {});
 
   return (
     <Portal>
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]">
-          <div className="flex items-center justify-between mb-4">
+        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
               <h2 className="text-lg font-bold">Campos personalizados</h2>
-              <p className="text-xs text-muted-foreground">{project.nombre} - hasta ~15 campos recomendados</p>
+              <p className="text-xs text-muted-foreground">{project.nombre} &mdash; {fields.length} / 15 campos recomendados</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
-          </div>
-
-          <div className="mb-4 p-4 bg-muted/30 rounded-xl">
-            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">Agregar campo nuevo</p>
-            <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2">
-              <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave (snake_case)" className={inputClass + ' font-mono text-xs'} required />
-              <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta (ej: Titulacion actual)" className={inputClass} required />
-              <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={inputClass}>
-                <option value="text">Texto corto</option>
-                <option value="textarea">Texto largo</option>
-                <option value="number">Numero</option>
-                <option value="date">Fecha</option>
-                <option value="select">Seleccion</option>
-                <option value="boolean">Si/No</option>
-              </select>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1 text-xs">
-                  <input type="checkbox" checked={newField.required} onChange={e => setNewField({ ...newField, required: e.target.checked })} />
-                  Requerido
-                </label>
-                <button type="submit" className="ml-auto px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">Agregar</button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40">
+                <button onClick={() => setView('editor')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'editor' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Editor</button>
+                <button onClick={() => setView('preview')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'preview' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Vista previa</button>
               </div>
-            </form>
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+            </div>
           </div>
 
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando...</p>
-          ) : fields.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Este proyecto aun no tiene campos custom. Los leads solo tendran los campos base.</p>
-          ) : (
-            <div className="space-y-2">
-              {fields.map(f => (
-                <div key={f.id} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">{f.label}</span>
-                      <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-muted">{f.type}</span>
-                      {f.required && <span className="text-[9px] font-bold text-red-500">REQ</span>}
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {view === 'editor' ? (
+              <>
+                {/* Add */}
+                <div className="mb-5 p-4 bg-muted/30 rounded-xl border border-border">
+                  <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">Agregar campo nuevo</p>
+                  <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2">
+                    <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={inputClass + ' font-mono text-xs'} required />
+                    <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={inputClass} required />
+                    <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={inputClass}>
+                      {FIELD_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                    </select>
+                    <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Seccion (opcional, ej: Academico)" className={inputClass} />
+                    {newField.type === 'select' && (
+                      <input value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={inputClass + ' col-span-2'} />
+                    )}
+                    <div className="col-span-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs font-medium">
+                        <input type="checkbox" checked={newField.required} onChange={e => setNewField({ ...newField, required: e.target.checked })} />
+                        Campo requerido
+                      </label>
+                      <button type="submit" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">
+                        <Plus size={14} weight="bold" /> Agregar campo
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* List */}
+                {loading ? (
+                  <p className="text-sm text-muted-foreground">Cargando...</p>
+                ) : fields.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                    Este proyecto aun no tiene campos custom.<br />
+                    <span className="text-xs">Los leads solo tendran los campos base (nombre, email, telefono...).</span>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {fields.map((f, idx) => {
+                      const isEditing = editingId === f.id;
+                      return (
+                        <div key={f.id} className="group flex items-start gap-2 p-3 bg-muted/20 hover:bg-muted/40 rounded-lg border border-border transition-colors">
+                          <div className="flex flex-col gap-0.5 pt-0.5">
+                            <button onClick={() => handleMove(idx, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-20" title="Subir"><ArrowUp size={12} /></button>
+                            <button onClick={() => handleMove(idx, 1)} disabled={idx === fields.length - 1} className="p-0.5 rounded hover:bg-muted disabled:opacity-20" title="Bajar"><ArrowDown size={12} /></button>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {isEditing ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                <input value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={inputClass + ' h-8'} placeholder="Etiqueta" />
+                                <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={inputClass + ' h-8'} placeholder="Seccion" />
+                                {f.type === 'select' && (
+                                  <input value={editBuf.options} onChange={e => setEditBuf({ ...editBuf, options: e.target.value })} className={inputClass + ' h-8 col-span-2'} placeholder="Opciones, separadas, por, coma" />
+                                )}
+                                <label className="flex items-center gap-1.5 text-xs col-span-2">
+                                  <input type="checkbox" checked={editBuf.required} onChange={e => setEditBuf({ ...editBuf, required: e.target.checked })} />
+                                  Requerido
+                                </label>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-sm">{f.label}</span>
+                                  <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
+                                  {f.required && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400">REQ</span>}
+                                  {f.grupo && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">{f.grupo}</span>}
+                                </div>
+                                {Array.isArray(f.options) && f.options.length > 0 && (
+                                  <p className="text-[11px] text-muted-foreground mt-1 truncate">Opciones: {f.options.join(', ')}</p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isEditing ? (
+                              <>
+                                <button onClick={() => saveEdit(f)} className="p-1.5 rounded hover:bg-green-50 text-green-600" title="Guardar"><FloppyDisk size={14} weight="bold" /></button>
+                                <button onClick={() => setEditingId(null)} className="p-1.5 rounded hover:bg-muted" title="Cancelar"><X size={14} /></button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => startEdit(f)} className="p-1.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity" title="Editar"><PencilSimple size={14} /></button>
+                                <button onClick={() => handleDelete(f.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar"><X size={14} /></button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              // Preview - simula el formulario de lead con estos campos
+              <div className="space-y-5">
+                <p className="text-xs text-muted-foreground">Asi se veran los campos al crear/editar un lead de <strong>{project.nombre}</strong>:</p>
+                {Object.keys(groups).length === 0 ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl">Sin campos que mostrar</div>
+                ) : Object.entries(groups).map(([grupo, items]) => (
+                  <div key={grupo} className="bg-muted/20 rounded-xl p-4 border border-border">
+                    <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">{grupo}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {items.map(f => (
+                        <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
+                          <label className="text-xs font-semibold mb-1 block">
+                            {f.label}
+                            {f.required && <span className="text-red-500 ml-0.5">*</span>}
+                          </label>
+                          {f.type === 'textarea' ? (
+                            <textarea disabled className={inputClass + ' h-20 resize-none'} placeholder={`(${f.field_key})`} />
+                          ) : f.type === 'select' ? (
+                            <select disabled className={inputClass}><option>Seleccionar...</option>{(f.options || []).map(o => <option key={o}>{o}</option>)}</select>
+                          ) : f.type === 'boolean' ? (
+                            <label className="flex items-center gap-2 h-9"><input type="checkbox" disabled /><span className="text-xs text-muted-foreground">Si / No</span></label>
+                          ) : (
+                            <input disabled type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} className={inputClass} placeholder={`(${f.field_key})`} />
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <button onClick={() => handleDelete(f.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-muted/20 rounded-b-2xl">
+            <p className="text-[11px] text-muted-foreground">Los cambios se guardan al instante. Usar secciones para agrupar campos relacionados.</p>
+            <button onClick={onClose} className="px-4 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted">Cerrar</button>
+          </div>
         </div>
       </div>
     </Portal>
