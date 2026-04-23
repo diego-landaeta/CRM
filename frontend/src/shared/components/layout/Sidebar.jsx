@@ -1,4 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   SquaresFour,
   Users,
@@ -9,11 +10,13 @@ import {
   Gear,
   SignOut,
   CaretDown,
+  CaretRight,
   Moon,
   Sun,
   ShieldCheck,
   Calculator,
   Receipt,
+  UserCheck,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -24,10 +27,19 @@ import { cn } from '@/shared/lib/utils';
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
   { label: 'Leads', to: '/leads', icon: Users },
+  { label: 'Clientes', to: '/clients', icon: UserCheck },
   { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'] },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
-  { label: 'Contabilidad', to: '/accounting', icon: Calculator, roles: ['superadmin', 'admin'] },
-  { label: 'Egresos', to: '/accounting/expenses', icon: Receipt, roles: ['superadmin', 'admin'] },
+  {
+    label: 'Contabilidad', icon: Calculator, roles: ['superadmin', 'admin'],
+    children: [
+      { label: 'Dashboard', to: '/accounting' },
+      { label: 'Ingresos', to: '/accounting/income' },
+      { label: 'Egresos', to: '/accounting/expenses' },
+      { label: 'Cuentas por cobrar', to: '/accounting/receivable' },
+      { label: 'Cuentas por pagar', to: '/accounting/payable' },
+    ],
+  },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 
@@ -38,6 +50,49 @@ const SYSTEM_ITEMS = [
 function canSeeItem(item, role) {
   if (!item.roles) return true;
   return item.roles.includes(role);
+}
+
+function NavGroup({ icon: Icon, label, children, onNavigate }) {
+  const location = useLocation();
+  const hasActiveChild = children.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
+  const [open, setOpen] = useState(hasActiveChild);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
+          hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+        {label}
+        <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
+          {children.map((child) => (
+            <NavLink
+              key={child.to}
+              to={child.to}
+              end={child.to === '/accounting'}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
+                  isActive
+                    ? 'bg-primary/10 text-primary font-semibold'
+                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                )
+              }
+            >
+              {child.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NavItem({ to, icon: Icon, label, badge, onClick }) {
@@ -123,9 +178,13 @@ export default function Sidebar({ onNavigate }) {
       {/* Navigation */}
       <nav className="space-y-0.5 flex-1">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
-        {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) => (
-          <NavItem key={item.to} {...item} onClick={onNavigate} />
-        ))}
+        {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) =>
+          item.children ? (
+            <NavGroup key={item.label} {...item} onNavigate={onNavigate} />
+          ) : (
+            <NavItem key={item.to} {...item} onClick={onNavigate} />
+          )
+        )}
 
         {SYSTEM_ITEMS.some((item) => canSeeItem(item, user?.role)) && (
           <>

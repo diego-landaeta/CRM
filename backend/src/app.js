@@ -17,6 +17,7 @@ import accountingModule from './modules/accounting/index.js';
 import fieldDefsModule from './modules/field-definitions/index.js';
 import credentialsModule from './modules/credentials/index.js';
 import projectsModule from './modules/projects/index.js';
+import accountsPayableModule from './modules/accounts-payable/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -56,7 +57,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule];
+const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule];
 
 for (const mod of modules) {
   app.use(mod.prefix, mod.router);

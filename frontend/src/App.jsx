@@ -26,6 +26,10 @@ const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
 const ExpensesPage = lazy(() => import('./modules/accounting/pages/ExpensesPage'));
+const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
+const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
+const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
+const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 
 function App() {
   return (
@@ -44,7 +48,11 @@ function App() {
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />
+          <Route path="/accounting/income" element={<IncomePage />} />
           <Route path="/accounting/expenses" element={<ExpensesPage />} />
+          <Route path="/accounting/receivable" element={<ReceivablePage />} />
+          <Route path="/accounting/payable" element={<AccountsPayablePage />} />
+          <Route path="/clients" element={<ClientsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />

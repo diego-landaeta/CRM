@@ -1076,8 +1076,30 @@ function WebhooksTab() {
       <div>
         <h2 className="text-base font-extrabold tracking-tight">Webhooks de Leads</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">
-          URL y API key para integrar formularios externos. Cada lead recibido genera un nuevo registro y se asigna automaticamente por round-robin.
+          Endpoints HTTP para recibir leads desde formularios externos, landing pages o integraciones (Typeform, Wix, Meta Lead Ads, etc).
         </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Como usar cada webhook</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
+          <div className="p-3 rounded-lg bg-muted/40">
+            <p className="font-bold mb-1">POST nuevo lead</p>
+            <p className="text-muted-foreground">Envia <code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_*</code> para crear un lead y asignarlo por round-robin automatico al gestor menos cargado.</p>
+          </div>
+          <div className="p-3 rounded-lg bg-muted/40">
+            <p className="font-bold mb-1">Autenticacion</p>
+            <p className="text-muted-foreground">Header <code className="font-mono text-[11px]">X-API-Key: &lt;clave&gt;</code> o <code className="font-mono text-[11px]">Authorization: Bearer &lt;clave&gt;</code>. Cada proyecto tiene su propia clave.</p>
+          </div>
+          <div className="p-3 rounded-lg bg-muted/40">
+            <p className="font-bold mb-1">Respuesta rapida</p>
+            <p className="text-muted-foreground">El endpoint responde en &lt;500ms. El email de notificacion al gestor se envia en segundo plano (no bloquea).</p>
+          </div>
+          <div className="p-3 rounded-lg bg-muted/40">
+            <p className="font-bold mb-1">Duplicados y reincidentes</p>
+            <p className="text-muted-foreground">Si el email ya existe, se crea un nuevo registro vinculado con <code className="font-mono text-[11px]">lead_duplicado_de</code>. Si coincide producto, se marca como <strong>reincidente</strong>.</p>
+          </div>
+        </div>
       </div>
 
       <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
@@ -1186,7 +1208,7 @@ X-API-Key: ${isRevealed && apiKey ? apiKey : '***'}
 }
 
 const SERVICES_CATALOG = [
-  { service: 'brevo', name: 'Brevo (Email transaccional)', description: 'API Key para envio de emails', placeholder: 'xkeysib-...', global: true },
+  { service: 'brevo', name: 'Brevo (Email transaccional)', description: 'API Key para envio de emails desde cada proyecto (remitente configurable)', placeholder: 'xkeysib-...', global: false },
   { service: 'meta', name: 'Meta Marketing API', description: 'Token larga duracion + account_id', placeholder: 'EAAD...', global: false },
   { service: 'google_ads', name: 'Google Ads API', description: 'Developer Token + OAuth2', placeholder: 'developer-token', global: false },
   { service: 'gsc', name: 'Google Search Console', description: 'OAuth2 + property URL', placeholder: 'refresh_token', global: false },

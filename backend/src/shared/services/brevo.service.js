@@ -5,9 +5,13 @@ const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
 const FROM_NAME = process.env.BREVO_FROM_NAME || 'CRM MultiProyecto';
 
-async function getApiKey() {
-  // Prioridad: credentials DB > env var
+async function getApiKey(projectId = null) {
+  // Prioridad: credencial especifica del proyecto > credencial global > env var
   try {
+    if (projectId) {
+      const perProject = await getDecryptedValue('brevo', projectId);
+      if (perProject) return perProject;
+    }
     const fromDb = await getDecryptedValue('brevo', null);
     if (fromDb) return fromDb;
   } catch (err) {
@@ -18,15 +22,15 @@ async function getApiKey() {
   return envKey;
 }
 
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [] }) {
-  const apiKey = await getApiKey();
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName }) {
+  const apiKey = await getApiKey(projectId);
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     return { sent: false, reason: 'NO_API_KEY' };
   }
 
   const payload = {
-    sender: { email: FROM_EMAIL, name: FROM_NAME },
+    sender: { email: fromEmail || FROM_EMAIL, name: fromName || FROM_NAME },
     to: Array.isArray(to) ? to : [{ email: to.email || to, name: to.name }],
     subject,
     htmlContent,
