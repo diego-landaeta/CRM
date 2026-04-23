@@ -9,6 +9,8 @@ export const createProjectSchema = z.object({
   google_account_id: z.string().max(100).optional().nullable(),
   gsc_property: z.string().max(255).optional().nullable(),
   dias_alerta_inactividad: z.number().int().min(1).max(365).default(3),
+  producto_label: z.string().max(50).optional(),
+  producto_label_plural: z.string().max(50).optional(),
 });
 
 export const updateProjectSchema = z.object({
@@ -20,4 +22,6 @@ export const updateProjectSchema = z.object({
   gsc_property: z.string().max(255).nullable().optional(),
   dias_alerta_inactividad: z.number().int().min(1).max(365).optional(),
   active: z.boolean().optional(),
+  producto_label: z.string().max(50).optional(),
+  producto_label_plural: z.string().max(50).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

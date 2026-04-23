@@ -110,6 +110,7 @@ export default function LeadsPage() {
         producto_interes_id: productoInteresId,
         canal: data.origen || 'directo',
         notas: data.notas || '',
+        custom_fields: data.custom_fields || undefined,
       });
 
       if (res.success) {

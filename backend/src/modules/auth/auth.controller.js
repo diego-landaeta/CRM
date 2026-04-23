@@ -14,7 +14,7 @@ function setRefreshCookie(res, refreshToken, expiryDays) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: expiryDays * 24 * 60 * 60 * 1000,
-    path: '/api/auth',
+    path: '/',
   });
 }
 
@@ -23,7 +23,7 @@ function clearRefreshCookie(res) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: '/api/auth',
+    path: '/',
   });
 }
 

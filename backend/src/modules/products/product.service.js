@@ -12,10 +12,10 @@ export async function getById(id, projectId) {
   return product;
 }
 
-export async function create({ projectId, nombre, descripcion }) {
+export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id }) {
   const existing = await ProductModel.findByProjectAndName(projectId, nombre);
   if (existing) throw new AppError('Ya existe un producto con ese nombre en este proyecto', 409, 'PRODUCT_DUPLICATE');
-  return ProductModel.create({ projectId, nombre, descripcion });
+  return ProductModel.create({ projectId, nombre, descripcion, categoria_id, subcategoria_id });
 }
 
 export async function update(id, projectId, data) {

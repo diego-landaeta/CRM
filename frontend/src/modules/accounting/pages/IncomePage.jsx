@@ -21,9 +21,11 @@ export default function IncomePage() {
     (async () => {
       setLoading(true);
       try {
-        const params = activeProject?.id ? `?projectId=${activeProject.id}&limit=500` : '?limit=500';
+        const params = activeProject?.id ? `?projectId=${activeProject.id}&limit=100` : '?limit=100';
         const res = await client.get(`/conversions${params}`);
         if (res.success) setItems(res.data || []);
+      } catch {
+        setItems([]);
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id]);

@@ -24,7 +24,7 @@ export default function ClientsPage() {
       setLoading(true);
       try {
         // Clientes = leads con status='convertido' + sus conversiones
-        const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=500`);
+        const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
         if (res.success) {
           // Para cada lead, intentar traer sus conversiones
           const enriched = await Promise.all((res.data || []).map(async (l) => {

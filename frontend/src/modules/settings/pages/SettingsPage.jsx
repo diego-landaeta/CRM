@@ -560,6 +560,7 @@ function ProjectsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [fieldsProject, setFieldsProject] = useState(null);
+  const [categoriesProject, setCategoriesProject] = useState(null);
 
   const canCreate = user?.role === 'superadmin';
 
@@ -609,8 +610,9 @@ function ProjectsTab() {
                   {p.active ? 'activo' : 'inactivo'}
                 </span>
                 {canCreate && (
-                  <div className="flex gap-1 mt-1">
+                  <div className="flex gap-1 mt-1 flex-wrap justify-end">
                     <button onClick={() => setFieldsProject(p)} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Campos</button>
+                    <button onClick={() => setCategoriesProject(p)} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Categorias</button>
                     <button onClick={() => { setEditing(p); setDialogOpen(true); }} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Editar</button>
                   </div>
                 )}
@@ -636,7 +638,131 @@ function ProjectsTab() {
           onClose={() => setFieldsProject(null)}
         />
       )}
+
+      {categoriesProject && (
+        <CategoriesDialog
+          project={categoriesProject}
+          onClose={() => setCategoriesProject(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function CategoriesDialog({ project, onClose }) {
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newCat, setNewCat] = useState({ nombre: '', parent_id: '' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get(`/product-categories/project/${project.id}`);
+      if (res.success) setCats(res.data || []);
+    } finally { setLoading(false); }
+  }, [project.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!newCat.nombre.trim()) return;
+    try {
+      await client.post('/product-categories', {
+        project_id: project.id,
+        parent_id: newCat.parent_id ? Number(newCat.parent_id) : null,
+        nombre: newCat.nombre.trim(),
+        orden: cats.length,
+      });
+      toast({ title: 'Categoria creada' });
+      setNewCat({ nombre: '', parent_id: '' });
+      await load();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Eliminar esta categoria? Los productos vinculados quedan sin categoria.')) return;
+    try {
+      await client.delete(`/product-categories/${id}`);
+      await load();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    }
+  }
+
+  const parents = cats.filter(c => !c.parent_id);
+  const childrenByParent = cats.reduce((acc, c) => {
+    if (c.parent_id) (acc[c.parent_id] = acc[c.parent_id] || []).push(c);
+    return acc;
+  }, {});
+
+  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold">Categorias y subcategorias</h2>
+              <p className="text-xs text-muted-foreground">{project.nombre} &mdash; Organiza productos/{project.producto_label_plural?.toLowerCase() || 'formaciones'} en grupos</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+          </div>
+
+          <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2 p-4 bg-muted/30 rounded-xl mb-4">
+            <input
+              value={newCat.nombre}
+              onChange={e => setNewCat({ ...newCat, nombre: e.target.value })}
+              placeholder="Nombre de categoria"
+              className={inputClass}
+              required
+            />
+            <select
+              value={newCat.parent_id}
+              onChange={e => setNewCat({ ...newCat, parent_id: e.target.value })}
+              className={inputClass}
+            >
+              <option value="">Categoria raiz</option>
+              {parents.map(p => <option key={p.id} value={p.id}>Subcategoria de: {p.nombre}</option>)}
+            </select>
+            <button type="submit" className="col-span-2 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">
+              <Plus size={14} weight="bold" className="inline mr-1" /> Añadir
+            </button>
+          </form>
+
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Cargando...</p>
+          ) : parents.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Sin categorias. Crea una para empezar.</p>
+          ) : (
+            <div className="space-y-2">
+              {parents.map(p => (
+                <div key={p.id} className="bg-muted/20 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">{p.nombre}</span>
+                    <button onClick={() => handleDelete(p.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
+                  </div>
+                  {childrenByParent[p.id]?.length > 0 && (
+                    <div className="mt-2 ml-4 space-y-1 border-l border-border pl-3">
+                      {childrenByParent[p.id].map(c => (
+                        <div key={c.id} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">— {c.nombre}</span>
+                          <button onClick={() => handleDelete(c.id)} className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Portal>
   );
 }
 
@@ -660,9 +786,11 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
           gsc_property: existing.gsc_property || '',
           emoji: existing.emoji || '',
           active: existing.active !== false,
+          producto_label: existing.producto_label || 'Producto',
+          producto_label_plural: existing.producto_label_plural || 'Productos',
         });
       } else {
-        setForm({ nombre: '', slug: '', type: 'crm', dias_alerta_inactividad: 3, meta_account_id: '', google_account_id: '', gsc_property: '', emoji: '', active: true });
+        setForm({ nombre: '', slug: '', type: 'crm', dias_alerta_inactividad: 3, meta_account_id: '', google_account_id: '', gsc_property: '', emoji: '', active: true, producto_label: 'Producto', producto_label_plural: 'Productos' });
       }
     }
   }, [open, existing]);
@@ -681,6 +809,8 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
         meta_account_id: form.meta_account_id || null,
         google_account_id: form.google_account_id || null,
         gsc_property: form.gsc_property || null,
+        producto_label: form.producto_label || 'Producto',
+        producto_label_plural: form.producto_label_plural || 'Productos',
       };
       if (existing) {
         payload.active = form.active;
@@ -733,6 +863,21 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
               <div>
                 <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
                 <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: e.target.value })} className={inputClass} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-border">
+              <div className="col-span-2">
+                <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">Etiqueta de producto</p>
+                <p className="text-[11px] text-muted-foreground">Personaliza como se llama &quot;Producto&quot; en este proyecto (ej: Formacion, Plan, Servicio)</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Singular</label>
+                <input value={form.producto_label} onChange={e => setForm({ ...form, producto_label: e.target.value })} className={inputClass} placeholder="Formacion" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Plural</label>
+                <input value={form.producto_label_plural} onChange={e => setForm({ ...form, producto_label_plural: e.target.value })} className={inputClass} placeholder="Formaciones" />
               </div>
             </div>
 

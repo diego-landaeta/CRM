@@ -51,6 +51,7 @@ export const createLeadManualSchema = z.object({
   producto_interes_id: z.number().int().positive().optional().nullable(),
   canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia']).default('directo'),
   notas: z.string().max(2000).optional().or(z.literal('')),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 export const updateLeadSchema = z.object({

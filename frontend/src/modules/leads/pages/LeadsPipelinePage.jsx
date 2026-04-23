@@ -174,13 +174,24 @@ export default function LeadsPipelinePage() {
   async function handleCreateLead(data) {
     if (!pid) return;
     try {
+      let productoInteresId = null;
+      if (data.producto_interes) {
+        try {
+          const pr = await client.get(`/products/${pid}`);
+          const list = pr.success ? (pr.data || []) : [];
+          const prod = list.find(p => p.nombre === data.producto_interes);
+          productoInteresId = prod?.id || null;
+        } catch {}
+      }
       const res = await client.post('/leads', {
         project_id: pid,
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
+        producto_interes_id: productoInteresId,
         canal: data.origen || 'directo',
         notas: data.notas || '',
+        custom_fields: data.custom_fields || undefined,
       });
       if (res.success) {
         toast({ title: 'Lead creado' });

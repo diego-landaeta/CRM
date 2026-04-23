@@ -1,9 +1,14 @@
 import { query } from '../../shared/config/db.js';
 
 export async function findByProject(projectId, { includeInactive = false } = {}) {
+  const base = `SELECT p.*, c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre
+                FROM products p
+                LEFT JOIN product_categories c ON c.id = p.categoria_id
+                LEFT JOIN product_categories sc ON sc.id = p.subcategoria_id
+                WHERE p.project_id = $1`;
   const sql = includeInactive
-    ? 'SELECT * FROM products WHERE project_id = $1 ORDER BY created_at DESC'
-    : 'SELECT * FROM products WHERE project_id = $1 AND active = true ORDER BY created_at DESC';
+    ? base + ' ORDER BY p.created_at DESC'
+    : base + ' AND p.active = true ORDER BY p.created_at DESC';
   const { rows } = await query(sql, [projectId]);
   return rows;
 }
@@ -13,23 +18,25 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
-export async function create({ projectId, nombre, descripcion }) {
+export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id }) {
   const { rows } = await query(
-    `INSERT INTO products (project_id, nombre, descripcion)
-     VALUES ($1, $2, $3)
+    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [projectId, nombre, descripcion]
+    [projectId, nombre, descripcion, categoria_id || null, subcategoria_id || null]
   );
   return rows[0];
 }
 
-export async function update(id, { nombre, descripcion }) {
+export async function update(id, data) {
+  const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id'];
   const fields = [];
   const values = [];
   let idx = 1;
 
-  if (nombre !== undefined) { fields.push(`nombre = $${idx++}`); values.push(nombre); }
-  if (descripcion !== undefined) { fields.push(`descripcion = $${idx++}`); values.push(descripcion); }
+  for (const k of allowed) {
+    if (data[k] !== undefined) { fields.push(`${k} = $${idx++}`); values.push(data[k]); }
+  }
 
   if (fields.length === 0) return findById(id);
 
