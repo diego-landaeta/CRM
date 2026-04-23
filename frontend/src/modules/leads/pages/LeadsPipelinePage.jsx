@@ -104,10 +104,14 @@ export default function LeadsPipelinePage() {
     if (!pid) return;
     setLoading(true);
     try {
-      // Obtener todos los leads (limit alto para pipeline)
       const res = await client.get(`/leads?projectId=${pid}&limit=200`);
       if (res.success) {
-        setAllLeads(res.data || []);
+        // Backend devuelve status, frontend usa estado - normalizar
+        setAllLeads((res.data || []).map(l => ({
+          ...l,
+          estado: l.status || l.estado,
+          origen: l.canal_detectado || l.origen || 'directo',
+        })));
       }
     } catch (err) {
       toast({ title: 'Error cargando leads', description: err.message, variant: 'destructive' });
@@ -149,24 +153,42 @@ export default function LeadsPipelinePage() {
     }
 
     try {
-      await client.patch(`/leads/${dragLead.id}/status`, { status: targetEstado });
+      // Backend requiere motivo al cambiar status
+      await client.patch(`/leads/${dragLead.id}/status`, {
+        status: targetEstado,
+        motivo: `Movido a ${COLUMNS.find(c => c.key === targetEstado)?.label} desde pipeline`,
+      });
       toast({
         title: 'Estado actualizado',
         description: `${dragLead.nombre} movido a "${COLUMNS.find(c => c.key === targetEstado)?.label}"`,
       });
-      // Actualizar localmente para UX inmediata
       setAllLeads((prev) =>
-        prev.map((l) => l.id === dragLead.id ? { ...l, estado: targetEstado } : l)
+        prev.map((l) => l.id === dragLead.id ? { ...l, estado: targetEstado, status: targetEstado } : l)
       );
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     }
     setDragLead(null);
   }
 
   async function handleCreateLead(data) {
-    console.log('Nuevo lead:', data);
-    toast({ title: 'Lead creado', description: 'El lead se ha registrado correctamente' });
+    if (!pid) return;
+    try {
+      const res = await client.post('/leads', {
+        project_id: pid,
+        nombre: data.nombre,
+        email: data.email,
+        telefono: data.telefono || '',
+        canal: data.origen || 'directo',
+        notas: data.notas || '',
+      });
+      if (res.success) {
+        toast({ title: 'Lead creado' });
+        await fetchAllLeads();
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    }
   }
 
   if (loading) {
