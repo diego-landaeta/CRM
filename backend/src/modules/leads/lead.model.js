@@ -14,7 +14,7 @@ export async function findProjectBySlug(slug) {
 
 export async function findDuplicateByEmail(email, projectId) {
   const { rows } = await query(
-    `SELECT id, nombre, email, status FROM leads WHERE email = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT id, nombre, email, status, producto_interes_id FROM leads WHERE email = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 1`,
     [email, projectId]
   );
   return rows[0] || null;
@@ -28,7 +28,7 @@ export async function findProductByName(name, projectId) {
   return rows[0] || null;
 }
 
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, utms }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -63,10 +63,10 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe]
+      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente]
     );
     const lead = leadRows[0];
 
@@ -118,12 +118,16 @@ export async function findAll({ projectId, status, responsableId, canal, search,
 
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
-            l.created_at,
+            l.reincidente, l.updated_at, l.created_at,
             u.nombre as responsable_nombre,
-            lu.canal_detectado, lu.utm_source, lu.utm_campaign
+            lu.canal_detectado, lu.utm_source, lu.utm_campaign,
+            (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
+            p.dias_alerta_inactividad,
+            EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+     LEFT JOIN projects p ON p.id = l.project_id
      ${where}
      ORDER BY l.fecha_solicitud DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

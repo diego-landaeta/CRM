@@ -9,8 +9,15 @@ import { AppError } from '../../shared/utils/AppError.js';
 export async function webhook(req, res, next) {
   try {
     const { slug } = req.params;
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey) throw new AppError('X-API-Key requerido', 401, 'API_KEY_REQUIRED');
+    // Acepta Authorization: Bearer {key} (PDF spec) o X-API-Key (compat)
+    let apiKey = req.headers['x-api-key'];
+    if (!apiKey) {
+      const authHeader = req.headers['authorization'];
+      if (authHeader?.startsWith('Bearer ')) {
+        apiKey = authHeader.slice(7).trim();
+      }
+    }
+    if (!apiKey) throw new AppError('API key requerida (Authorization: Bearer o X-API-Key)', 401, 'API_KEY_REQUIRED');
 
     const parsed = webhookLeadSchema.safeParse(req.body);
     if (!parsed.success) {

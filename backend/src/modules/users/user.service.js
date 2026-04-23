@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
+import { revokeAllUserTokens } from '../auth/auth.model.js';
 
 const BCRYPT_ROUNDS = 12;
 const SET_PASSWORD_EXPIRY_HOURS = 24;
@@ -72,6 +73,8 @@ export async function deactivate(id) {
   }
 
   await userModel.deactivate(id);
+  // PDF spec: al desactivar, la sesion activa se cierra inmediatamente
+  await revokeAllUserTokens(id);
   return { message: 'Usuario desactivado' };
 }
 

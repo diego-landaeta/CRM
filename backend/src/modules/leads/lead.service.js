@@ -41,6 +41,13 @@ export async function processWebhook(slug, apiKey, leadData) {
   const duplicate = await leadModel.findDuplicateByEmail(leadData.email, project.id);
   const duplicadoDe = duplicate ? duplicate.id : null;
 
+  // Reincidente = mismo proyecto + mismo producto que duplicado
+  const reincidente = !!(
+    duplicate &&
+    productoInteresId &&
+    duplicate.producto_interes_id === productoInteresId
+  );
+
   // Detectar canal
   const canalDetectado = detectChannel(leadData.utm_source, leadData.utm_medium);
 
@@ -54,6 +61,7 @@ export async function processWebhook(slug, apiKey, leadData) {
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
     duplicadoDe,
+    reincidente,
     utms: {
       utm_source: leadData.utm_source || null,
       utm_medium: leadData.utm_medium || null,
@@ -72,6 +80,7 @@ export async function processWebhook(slug, apiKey, leadData) {
     responsable_id: lead.responsableId,
     duplicado: !!duplicadoDe,
     duplicado_de: duplicadoDe,
+    reincidente,
     canal: canalDetectado,
   };
 }

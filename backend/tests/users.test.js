@@ -240,6 +240,31 @@ describe('DELETE /api/users/:id', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('CANNOT_DEACTIVATE_SUPERADMIN');
   });
+
+  it('desactivar revoca refresh tokens (cierra sesion inmediata - PDF spec)', async () => {
+    // Reactivar primero para la prueba
+    await pool.query(`UPDATE users SET active = true WHERE id = $1`, [createdUserId]);
+
+    // Crear refresh token simulado
+    const fakeHash = 'test-revoke-hash-' + Date.now();
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 30);
+    await pool.query(
+      `INSERT INTO user_refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [createdUserId, fakeHash, futureDate]
+    );
+
+    // Desactivar
+    await request.delete(`/api/users/${createdUserId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    // Verificar que el token esta revoked
+    const { rows } = await pool.query(
+      `SELECT revoked FROM user_refresh_tokens WHERE token_hash = $1`,
+      [fakeHash]
+    );
+    expect(rows[0].revoked).toBe(true);
+  });
 });
 
 // ============================================================

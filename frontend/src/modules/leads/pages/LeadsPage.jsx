@@ -251,6 +251,24 @@ export default function LeadsPage() {
                         {getInitials(lead.nombre)}
                       </div>
                       <span className="font-semibold">{lead.nombre}</span>
+                      {lead.reincidente && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya pregunto por este producto antes">
+                          Reincidente
+                        </span>
+                      )}
+                      {!lead.reincidente && lead.lead_duplicado_de && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Este email ya existe en el proyecto">
+                          Duplicado
+                        </span>
+                      )}
+                      {lead.dias_inactivo != null &&
+                       lead.dias_alerta_inactividad != null &&
+                       lead.dias_inactivo > lead.dias_alerta_inactividad &&
+                       !['convertido', 'no_interesado'].includes(lead.estado) && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} dias`}>
+                          {lead.dias_inactivo}d
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>

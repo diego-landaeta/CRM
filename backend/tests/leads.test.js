@@ -140,6 +140,53 @@ describe('POST /api/leads/webhooks/:slug', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('acepta Authorization Bearer como header alternativo (PDF spec)', async () => {
+    const res = await request.post(`/api/leads/webhooks/${PROJECT_SLUG}`)
+      .set('Authorization', `Bearer ${webhookApiKey}`)
+      .send({ nombre: 'Bearer Lead', email: 'bearer@test-leads.com' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('marca reincidente si mismo email + mismo producto', async () => {
+    // Primero obtener un producto del proyecto
+    const { rows } = await pool.query(`SELECT id FROM products WHERE project_id = $1 LIMIT 1`, [PROJECT_ID]);
+    const productoInteres = rows[0];
+    const { rows: prodNombre } = await pool.query(`SELECT nombre FROM products WHERE id = $1`, [productoInteres.id]);
+
+    // Crear primer lead
+    const res1 = await request.post(`/api/leads/webhooks/${PROJECT_SLUG}`)
+      .set('X-API-Key', webhookApiKey)
+      .send({ nombre: 'Reinc 1', email: 'reinc@test-leads.com', producto_interes: prodNombre[0].nombre });
+
+    expect(res1.body.data.reincidente).toBe(false);
+
+    // Crear duplicado con MISMO producto
+    const res2 = await request.post(`/api/leads/webhooks/${PROJECT_SLUG}`)
+      .set('X-API-Key', webhookApiKey)
+      .send({ nombre: 'Reinc 2', email: 'reinc@test-leads.com', producto_interes: prodNombre[0].nombre });
+
+    expect(res2.body.data.duplicado).toBe(true);
+    expect(res2.body.data.reincidente).toBe(true);
+  });
+
+  it('NO marca reincidente si mismo email pero DIFERENTE producto', async () => {
+    const { rows: prods } = await pool.query(`SELECT id, nombre FROM products WHERE project_id = $1 ORDER BY id LIMIT 2`, [PROJECT_ID]);
+    if (prods.length < 2) return; // skip si no hay 2 productos
+
+    await request.post(`/api/leads/webhooks/${PROJECT_SLUG}`)
+      .set('X-API-Key', webhookApiKey)
+      .send({ nombre: 'NoReinc 1', email: 'noreinc@test-leads.com', producto_interes: prods[0].nombre });
+
+    const res2 = await request.post(`/api/leads/webhooks/${PROJECT_SLUG}`)
+      .set('X-API-Key', webhookApiKey)
+      .send({ nombre: 'NoReinc 2', email: 'noreinc@test-leads.com', producto_interes: prods[1].nombre });
+
+    expect(res2.body.data.duplicado).toBe(true);
+    expect(res2.body.data.reincidente).toBe(false);
+  });
 });
 
 // ============================================================
