@@ -22,6 +22,7 @@ import {
   ArrowUp,
   ArrowDown,
   FloppyDisk,
+  Gear,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,13 +30,12 @@ import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import ProjectSettingsDialog from '../components/ProjectSettingsDialog';
 
 const TABS = [
-  { id: 'users', label: 'Usuarios', icon: Users },
   { id: 'projects', label: 'Proyectos', icon: Folder },
-  { id: 'webhooks', label: 'Webhooks', icon: PlugsConnected },
-  { id: 'apis', label: 'APIs Externas', icon: Key },
-  { id: 'email', label: 'Email (Brevo)', icon: Envelope },
+  { id: 'users', label: 'Usuarios', icon: Users },
+  { id: 'apis', label: 'APIs globales', icon: Key },
   { id: 'security', label: 'Seguridad', icon: ShieldCheck },
 ];
 
@@ -559,8 +559,7 @@ function ProjectsTab() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [fieldsProject, setFieldsProject] = useState(null);
-  const [categoriesProject, setCategoriesProject] = useState(null);
+  const [configProject, setConfigProject] = useState(null);
 
   const canCreate = user?.role === 'superadmin';
 
@@ -593,30 +592,33 @@ function ProjectsTab() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {projects.map((p) => (
-            <div key={p.id} className="bg-card p-5 rounded-2xl border border-border flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600 font-extrabold text-xs">
-                {(p.nombre || '').slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-sm truncate">{p.nombre}</p>
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${p.type === 'ia' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{p.type}</span>
+            <div key={p.id} className="bg-card rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow">
+              <div className="p-5 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
+                  {p.emoji || '📁'}
                 </div>
-                <p className="text-[11px] text-muted-foreground">/{p.slug}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Alerta inactividad: {p.dias_alerta_inactividad} dias</p>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                  {p.active ? 'activo' : 'inactivo'}
-                </span>
-                {canCreate && (
-                  <div className="flex gap-1 mt-1 flex-wrap justify-end">
-                    <button onClick={() => setFieldsProject(p)} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Campos</button>
-                    <button onClick={() => setCategoriesProject(p)} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Categorias</button>
-                    <button onClick={() => { setEditing(p); setDialogOpen(true); }} className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80">Editar</button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-sm truncate">{p.nombre}</p>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${p.type === 'ia' ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>{p.type}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                      {p.active ? 'activo' : 'inactivo'}
+                    </span>
                   </div>
-                )}
+                  <p className="text-[11px] text-muted-foreground font-mono">/{p.slug}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {p.producto_label_plural || 'Productos'} &middot; Alerta {p.dias_alerta_inactividad}d
+                  </p>
+                </div>
               </div>
+              {canCreate && (
+                <div className="border-t border-border bg-muted/20 px-5 py-2.5 flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">Gestion completa del proyecto</span>
+                  <button onClick={() => setConfigProject(p)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 shadow">
+                    <Gear size={13} weight="bold" /> Configurar
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {projects.length === 0 && (
@@ -632,17 +634,11 @@ function ProjectsTab() {
         onSaved={load}
       />
 
-      {fieldsProject && (
-        <FieldDefsDialog
-          project={fieldsProject}
-          onClose={() => setFieldsProject(null)}
-        />
-      )}
-
-      {categoriesProject && (
-        <CategoriesDialog
-          project={categoriesProject}
-          onClose={() => setCategoriesProject(null)}
+      {configProject && (
+        <ProjectSettingsDialog
+          project={configProject}
+          onClose={() => setConfigProject(null)}
+          onSaved={load}
         />
       )}
     </div>
@@ -1410,63 +1406,27 @@ function ApisTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-extrabold tracking-tight">APIs Externas</h2>
-        <p className="text-[13px] text-muted-foreground mt-0.5">Credenciales encriptadas con AES-256-GCM. Solo superadmin.</p>
+        <h2 className="text-base font-extrabold tracking-tight">APIs globales</h2>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Credenciales compartidas por todos los proyectos (ej: Claude AI para reportes). Las APIs por proyecto se configuran en Proyectos &gt; Configurar &gt; APIs.</p>
       </div>
 
       {loading ? (
         <SkeletonTable rows={6} cols={1} />
       ) : (
         <div className="space-y-3">
-          {SERVICES_CATALOG.map((svc) => {
-            if (svc.global) {
-              const cred = getCredFor(svc.service, null);
-              return (
-                <CredentialCard
-                  key={svc.service}
-                  service={svc}
-                  projectId={null}
-                  projectName="Global (todos los proyectos)"
-                  credential={cred}
-                  onConfigure={() => { setDialogService(svc); setDialogProjectId(null); }}
-                  onTest={() => cred && handleTest(cred.id)}
-                  onDelete={() => cred && handleDelete(cred.id)}
-                />
-              );
-            }
-            // Por proyecto
+          {SERVICES_CATALOG.filter(s => s.global).map((svc) => {
+            const cred = getCredFor(svc.service, null);
             return (
-              <div key={svc.service} className="bg-card p-5 rounded-2xl border border-border">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                    <Key size={18} className="text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{svc.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{svc.description} - por proyecto</p>
-                  </div>
-                </div>
-                <div className="space-y-2 ml-13">
-                  {projects.map((proj) => {
-                    const cred = getCredFor(svc.service, proj.id);
-                    return (
-                      <div key={proj.id} className="flex items-center gap-3 text-[13px] p-2 rounded-lg bg-muted/30">
-                        <span className="flex-1 font-medium">{proj.nombre}</span>
-                        {cred ? (
-                          <>
-                            <span className="font-mono text-[10px] text-muted-foreground">{cred.masked_value}</span>
-                            <button onClick={() => handleTest(cred.id)} className="px-2 py-1 rounded bg-blue-50 text-blue-600 text-[10px] font-bold dark:bg-blue-950/30 dark:text-blue-400">Test</button>
-                            <button onClick={() => { setDialogService(svc); setDialogProjectId(proj.id); }} className="px-2 py-1 rounded border border-border text-[10px] font-bold">Editar</button>
-                            <button onClick={() => handleDelete(cred.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
-                          </>
-                        ) : (
-                          <button onClick={() => { setDialogService(svc); setDialogProjectId(proj.id); }} className="px-3 py-1 rounded-lg bg-primary text-white text-[11px] font-bold">Configurar</button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <CredentialCard
+                key={svc.service}
+                service={svc}
+                projectId={null}
+                projectName="Global (todos los proyectos)"
+                credential={cred}
+                onConfigure={() => { setDialogService(svc); setDialogProjectId(null); }}
+                onTest={() => cred && handleTest(cred.id)}
+                onDelete={() => cred && handleDelete(cred.id)}
+              />
             );
           })}
         </div>
@@ -1672,14 +1632,12 @@ function SecurityTab() {
 const TAB_CONTENT = {
   users: UsersTab,
   projects: ProjectsTab,
-  webhooks: WebhooksTab,
   apis: ApisTab,
-  email: EmailTab,
   security: SecurityTab,
 };
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('projects');
   const TabContent = TAB_CONTENT[activeTab];
 
   return (
