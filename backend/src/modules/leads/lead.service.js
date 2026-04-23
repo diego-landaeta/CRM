@@ -103,6 +103,10 @@ export async function getStats(projectId) {
   return await leadModel.getStats(projectId);
 }
 
+export async function getTodaySummary(ctx) {
+  return await leadModel.getTodaySummary(ctx);
+}
+
 // ============================================================
 // OPERACIONES
 // ============================================================

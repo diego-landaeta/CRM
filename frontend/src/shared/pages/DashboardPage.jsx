@@ -53,7 +53,7 @@ function CustomTooltip({ active, payload, label, suffix = 'leads' }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
-  const { kpis, stats, leadsRecientes, loading, error } = useDashboard();
+  const { kpis, stats, leadsRecientes, today, loading, error } = useDashboard();
 
   if (loading) {
     return (
@@ -110,12 +110,91 @@ export default function DashboardPage() {
     .map(([k, v]) => ({ key: k, name: CHANNEL_LABELS[k] || k, value: v }))
     .sort((a, b) => b.value - a.value);
 
+  const todayDate = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
     <div className="space-y-8">
       <PageHeader
         title="Dashboard"
-        subtitle={`Resumen de actividad — ${activeProject?.nombre || 'Sin proyecto'}`}
+        subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
       />
+
+      {/* SECCION HOY */}
+      {today && (
+        <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-bold text-lg">Tu dia de hoy</h2>
+              <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del dia</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="bg-card rounded-xl p-3 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Pendientes</p>
+              <p className="text-2xl font-bold tabular-nums text-orange-600">{today.reminders_pendientes?.length || 0}</p>
+              <p className="text-[10px] text-muted-foreground">reminders hoy</p>
+            </div>
+            <div className="bg-card rounded-xl p-3 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Nuevos</p>
+              <p className="text-2xl font-bold tabular-nums text-blue-600">{today.nuevos_hoy || 0}</p>
+              <p className="text-[10px] text-muted-foreground">hoy ({today.nuevos_semana || 0} semana)</p>
+            </div>
+            <div className="bg-card rounded-xl p-3 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Inactivos</p>
+              <p className="text-2xl font-bold tabular-nums text-amber-600">{today.inactivos || 0}</p>
+              <p className="text-[10px] text-muted-foreground">leads sin actividad</p>
+            </div>
+            <div className="bg-card rounded-xl p-3 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Cobros vencidos</p>
+              <p className="text-2xl font-bold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
+              <p className="text-[10px] text-muted-foreground">pagos atrasados</p>
+            </div>
+            <div className="bg-card rounded-xl p-3 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground">Ingresos hoy</p>
+              <p className="text-2xl font-bold tabular-nums text-emerald-600">{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(today.ingresos_hoy || 0)}</p>
+              <p className="text-[10px] text-muted-foreground">cobrado hoy</p>
+            </div>
+          </div>
+
+          {/* Reminders pendientes */}
+          {today.reminders_pendientes && today.reminders_pendientes.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">Seguimientos pendientes</h3>
+              <div className="space-y-2">
+                {today.reminders_pendientes.slice(0, 5).map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => navigate(`/leads/${r.lead_id}`)}
+                    className="w-full text-left bg-card border border-border rounded-lg p-3 hover:shadow-md transition-all flex items-center gap-3"
+                  >
+                    <div className={`w-2 h-10 rounded-full ${r.vencido ? 'bg-red-500' : 'bg-orange-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm truncate">{r.lead_nombre}</span>
+                        {r.vencido && <span className="text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded">VENCIDO</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{r.nota || 'Sin nota'}</p>
+                    </div>
+                    <ArrowRight size={14} className="text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+                {today.reminders_pendientes.length > 5 && (
+                  <p className="text-xs text-center text-muted-foreground pt-1">
+                    + {today.reminders_pendientes.length - 5} mas pendientes
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg p-4 text-center">
+              <CheckCircle size={20} className="text-emerald-500 mx-auto mb-1" weight="duotone" />
+              <p className="text-sm font-semibold">Nada pendiente para hoy</p>
+              <p className="text-xs text-muted-foreground">Al dia con los seguimientos</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Top KPI row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -17,6 +17,7 @@ router.use(verifyToken);
 // Listado y detalle
 router.get('/', leadController.list);
 router.get('/stats', leadController.stats);
+router.get('/today', leadController.today);
 router.get('/:id', leadController.getById);
 
 // Creacion manual (formulario interno)

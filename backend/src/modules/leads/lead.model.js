@@ -274,6 +274,87 @@ export async function getLeadProjectId(leadId) {
 // DASHBOARD STATS
 // ============================================================
 
+// Panel "Hoy" - actividad del dia, reminders pendientes, alertas
+export async function getTodaySummary({ userId, role, projectId }) {
+  // Usamos parametros para evitar SQL injection
+  const userIdParam = role === 'gestor' ? userId : null;
+  const pidParam = projectId || null;
+
+  const { rows: remRows } = await query(
+    `SELECT lr.id, lr.lead_id, lr.fecha_recordatorio, lr.nota,
+            l.nombre as lead_nombre, l.email as lead_email, l.status as lead_status,
+            CASE WHEN lr.fecha_recordatorio < CURRENT_DATE THEN true ELSE false END as vencido
+     FROM lead_reminders lr
+     JOIN leads l ON l.id = lr.lead_id
+     WHERE lr.completado = false
+       AND lr.fecha_recordatorio <= CURRENT_DATE
+       AND ($1::int IS NULL OR lr.created_by = $1)
+       AND ($2::int IS NULL OR l.project_id = $2)
+     ORDER BY lr.fecha_recordatorio ASC, lr.id DESC
+     LIMIT 20`,
+    [userIdParam, pidParam]
+  );
+
+  const { rows: nuevosHoy } = await query(
+    `SELECT COUNT(*) FROM leads l
+     WHERE l.fecha_solicitud::date = CURRENT_DATE
+       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($2::int IS NULL OR l.project_id = $2)`,
+    [userIdParam, pidParam]
+  );
+
+  const { rows: nuevosSemana } = await query(
+    `SELECT COUNT(*) FROM leads l
+     WHERE l.fecha_solicitud >= CURRENT_DATE - INTERVAL '7 days'
+       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($2::int IS NULL OR l.project_id = $2)`,
+    [userIdParam, pidParam]
+  );
+
+  const { rows: inactivos } = await query(
+    `SELECT COUNT(*)
+     FROM leads l
+     LEFT JOIN projects p ON p.id = l.project_id
+     WHERE l.status NOT IN ('convertido', 'no_interesado')
+       AND EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at))) > p.dias_alerta_inactividad
+       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($2::int IS NULL OR l.project_id = $2)`,
+    [userIdParam, pidParam]
+  );
+
+  const { rows: cobrosVencidos } = await query(
+    `SELECT COUNT(*)
+     FROM conversions c
+     LEFT JOIN leads l ON l.id = c.lead_id
+     WHERE c.importe_pagado < c.importe_total
+       AND c.fecha_compromiso_pago IS NOT NULL
+       AND c.fecha_compromiso_pago < CURRENT_DATE
+       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($2::int IS NULL OR c.project_id = $2)`,
+    [userIdParam, pidParam]
+  );
+
+  const { rows: ingresosHoy } = await query(
+    `SELECT COALESCE(SUM(cp.importe), 0) as total
+     FROM conversion_payments cp
+     JOIN conversions c ON c.id = cp.conversion_id
+     LEFT JOIN leads l ON l.id = c.lead_id
+     WHERE cp.fecha = CURRENT_DATE
+       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($2::int IS NULL OR c.project_id = $2)`,
+    [userIdParam, pidParam]
+  );
+
+  return {
+    reminders_pendientes: remRows,
+    nuevos_hoy: parseInt(nuevosHoy[0].count),
+    nuevos_semana: parseInt(nuevosSemana[0].count),
+    inactivos: parseInt(inactivos[0].count),
+    cobros_vencidos: parseInt(cobrosVencidos[0].count),
+    ingresos_hoy: Number(ingresosHoy[0].total),
+  };
+}
+
 export async function getStats(projectId) {
   const { rows } = await query(
     `SELECT

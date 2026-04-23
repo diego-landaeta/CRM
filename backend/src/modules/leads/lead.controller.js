@@ -57,6 +57,18 @@ export async function getById(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function today(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const data = await leadService.getTodaySummary({
+      userId: req.user.userId,
+      role: req.user.role,
+      projectId: projectId && !isNaN(projectId) ? projectId : null,
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 export async function stats(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);

@@ -37,6 +37,7 @@ export function useDashboard() {
 
   const [stats, setStats] = useState(null);
   const [recentLeads, setRecentLeads] = useState([]);
+  const [today, setToday] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -48,17 +49,15 @@ export function useDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, leadsRes] = await Promise.all([
+      const [statsRes, leadsRes, todayRes] = await Promise.all([
         client.get(`/leads/stats?projectId=${pid}`),
         client.get(`/leads?projectId=${pid}&limit=5&page=1`),
+        client.get(`/leads/today?projectId=${pid}`).catch(() => ({ success: false })),
       ]);
 
-      if (statsRes.success) {
-        setStats(normalizeStats(statsRes.data));
-      }
-      if (leadsRes.success) {
-        setRecentLeads((leadsRes.data || []).map(normalizeLead));
-      }
+      if (statsRes.success) setStats(normalizeStats(statsRes.data));
+      if (leadsRes.success) setRecentLeads((leadsRes.data || []).map(normalizeLead));
+      if (todayRes.success) setToday(todayRes.data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -92,7 +91,9 @@ export function useDashboard() {
     conversionProyecto: [],
     leadsRecientes: recentLeads,
     stats: s,
+    today,
     loading,
     error,
+    refetch: fetchDashboard,
   };
 }
