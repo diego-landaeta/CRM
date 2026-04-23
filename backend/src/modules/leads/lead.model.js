@@ -244,11 +244,11 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'telefono', 'notas', 'producto_interes_id'];
+  const allowed = ['nombre', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);
-      params.push(fields[key]);
+      params.push(key === 'custom_fields' ? JSON.stringify(fields[key]) : fields[key]);
     }
   }
 
@@ -259,7 +259,7 @@ export async function updateLead(id, fields) {
 
   const { rows } = await query(
     `UPDATE leads SET ${sets.join(', ')} WHERE id = $${idx}
-     RETURNING id, nombre, email, telefono, notas, producto_interes_id, status, responsable_id, updated_at`,
+     RETURNING id, nombre, email, telefono, notas, producto_interes_id, custom_fields, status, responsable_id, updated_at`,
     params
   );
   return rows[0] || null;

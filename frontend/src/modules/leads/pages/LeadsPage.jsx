@@ -4,6 +4,8 @@ import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
 import {
   MagnifyingGlass,
@@ -67,8 +69,11 @@ export default function LeadsPage() {
     filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
-    loading, error,
+    loading, error, refetch,
   } = useLeads();
+
+  const { activeProject } = useProjectContext();
+  const { products } = useProducts(activeProject?.id);
 
   const [formOpen, setFormOpen] = useState(false);
   const [gestores, setGestores] = useState([]);
@@ -84,10 +89,46 @@ export default function LeadsPage() {
   }, [user?.role]);
 
   async function handleCreateLead(data) {
-    // El formulario de creacion manual no tiene endpoint webhook
-    // Por ahora solo mostrar toast — leads se crean via webhook
-    console.log('Nuevo lead (manual):', data);
-    toast({ title: 'Lead creado', description: 'El lead se ha registrado correctamente' });
+    if (!activeProject?.id) {
+      toast({ title: 'Error', description: 'Selecciona un proyecto primero', variant: 'destructive' });
+      return;
+    }
+
+    // Resolver producto_interes_id a partir del nombre
+    let productoInteresId = null;
+    if (data.producto_interes) {
+      const prod = products.find(p => p.nombre === data.producto_interes);
+      productoInteresId = prod?.id || null;
+    }
+
+    try {
+      const res = await client.post('/leads', {
+        project_id: activeProject.id,
+        nombre: data.nombre,
+        email: data.email,
+        telefono: data.telefono || '',
+        producto_interes_id: productoInteresId,
+        canal: data.origen || 'directo',
+        notas: data.notas || '',
+      });
+
+      if (res.success) {
+        const { reincidente, duplicado } = res.data;
+        let desc = 'Lead creado y asignado por round-robin';
+        if (reincidente) desc = 'Lead REINCIDENTE detectado (mismo producto)';
+        else if (duplicado) desc = 'Lead duplicado detectado en este proyecto';
+
+        toast({ title: 'Lead creado', description: desc });
+        await refetch();
+      }
+    } catch (err) {
+      toast({
+        title: 'Error al crear lead',
+        description: err?.data?.error || err?.message || 'Error desconocido',
+        variant: 'destructive',
+      });
+      throw err;
+    }
   }
 
   // Generar array de paginas visibles (max 5 en torno a la actual)

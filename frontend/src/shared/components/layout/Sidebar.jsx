@@ -12,6 +12,8 @@ import {
   Moon,
   Sun,
   ShieldCheck,
+  Calculator,
+  Receipt,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -24,7 +26,8 @@ const NAV_ITEMS = [
   { label: 'Leads', to: '/leads', icon: Users },
   { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'] },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
-  { label: 'Ingresos', to: '/revenue', icon: CurrencyEur, roles: ['superadmin', 'admin'] },
+  { label: 'Contabilidad', to: '/accounting', icon: Calculator, roles: ['superadmin', 'admin'] },
+  { label: 'Egresos', to: '/accounting/expenses', icon: Receipt, roles: ['superadmin', 'admin'] },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 

@@ -19,6 +19,9 @@ router.get('/', leadController.list);
 router.get('/stats', leadController.stats);
 router.get('/:id', leadController.getById);
 
+// Creacion manual (formulario interno)
+router.post('/', leadController.createManual);
+
 // Edicion general del lead
 router.patch('/:id', leadController.update);
 

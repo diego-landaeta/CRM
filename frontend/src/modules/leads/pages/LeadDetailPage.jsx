@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
-import ConversionDialog from '../components/ConversionDialog';
+import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,7 @@ import {
   Link as LinkIcon,
   Lightning,
   ArrowClockwise,
+  CurrencyEur,
 } from '@phosphor-icons/react';
 import StatusBadge, { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge, { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
@@ -134,7 +135,15 @@ export default function LeadDetailPage() {
     if (!selectedEstado || selectedEstado === lead.estado) return;
 
     if (selectedEstado === 'convertido') {
+      toast({
+        title: 'Registra la compra',
+        description: 'Ve al apartado "Historial de compras" mas abajo y registra la conversion con importe y metodo de pago.',
+      });
       setConversionOpen(true);
+      // Scroll hasta la seccion de compras
+      setTimeout(() => {
+        document.querySelector('[data-section="compras"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
       return;
     }
     if (selectedEstado === 'no_interesado') {
@@ -319,10 +328,7 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-6">
-      <ConversionDialog open={conversionOpen} onClose={() => setConversionOpen(false)} lead={lead} onSubmit={async (data) => {
-        await updateStatus('convertido', data?.motivo || 'Conversion registrada');
-        toast({ title: 'Conversion registrada', description: `${data.producto_contratado} — ${data.importe_total} EUR` });
-      }} />
+      {/* Conversion dialog removido - ahora se crea desde el tab Compras */}
 
       {/* Dialog motivo perdida */}
       {lossOpen && (
@@ -693,6 +699,18 @@ export default function LeadDetailPage() {
                 })}
               </div>
             )}
+          </div>
+
+          {/* Compras / Conversiones */}
+          <div data-section="compras" className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <h3 className="font-bold mb-4 flex items-center gap-2">
+              <CurrencyEur size={16} weight="duotone" /> Historial de compras
+            </h3>
+            <ConversionsTab
+              lead={lead}
+              projectId={lead.project_id}
+              canManage={user?.role === 'admin' || user?.role === 'superadmin' || lead.responsable_id === user?.userId}
+            />
           </div>
 
           {/* Recordatorios */}

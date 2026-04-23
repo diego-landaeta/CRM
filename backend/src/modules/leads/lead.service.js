@@ -145,6 +145,48 @@ export async function reassign(leadId, newResponsableId, userId) {
   return { message: 'Lead reasignado', responsable_id: newResponsableId };
 }
 
+export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas }) {
+  // Detectar duplicado
+  const duplicate = await leadModel.findDuplicateByEmail(email, project_id);
+  const duplicadoDe = duplicate ? duplicate.id : null;
+
+  const reincidente = !!(
+    duplicate &&
+    producto_interes_id &&
+    duplicate.producto_interes_id === producto_interes_id
+  );
+
+  const lead = await leadModel.createLeadWithRoundRobin({
+    projectId: project_id,
+    nombre,
+    email,
+    telefono: telefono || null,
+    productoInteresId: producto_interes_id || null,
+    notas: notas || null,
+    landingUrl: null,
+    duplicadoDe,
+    reincidente,
+    utms: {
+      utm_source: null,
+      utm_medium: null,
+      utm_campaign: null,
+      utm_content: null,
+      utm_term: null,
+      landing_url: null,
+      canal_detectado: canal || 'directo',
+    },
+  });
+
+  return {
+    lead_id: lead.id,
+    responsable_id: lead.responsableId,
+    duplicado: !!duplicadoDe,
+    duplicado_de: duplicadoDe,
+    reincidente,
+    canal: canal || 'directo',
+  };
+}
+
 export async function updateLead(leadId, data) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');

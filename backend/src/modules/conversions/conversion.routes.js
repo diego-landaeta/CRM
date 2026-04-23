@@ -1,0 +1,27 @@
+import { Router } from 'express';
+import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import * as ctrl from './conversion.controller.js';
+
+const router = Router();
+
+router.use(verifyToken);
+
+// Listado y detalle
+router.get('/', ctrl.list);
+router.get('/by-lead/:leadId', ctrl.listByLead);
+router.get('/:id', ctrl.getById);
+
+// Creacion
+router.post('/', ctrl.create);
+
+// Edicion
+router.patch('/:id', ctrl.update);
+
+// Pagos parciales
+router.post('/:id/payments', ctrl.addPayment);
+router.delete('/payments/:paymentId', roleGuard('admin', 'superadmin'), ctrl.removePayment);
+
+// Eliminar (solo admin/superadmin)
+router.delete('/:id', roleGuard('admin', 'superadmin'), ctrl.remove);
+
+export default router;

@@ -24,6 +24,8 @@ const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
+const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
+const ExpensesPage = lazy(() => import('./modules/accounting/pages/ExpensesPage'));
 
 function App() {
   return (
@@ -41,6 +43,8 @@ function App() {
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
+          <Route path="/accounting" element={<AccountingDashboardPage />} />
+          <Route path="/accounting/expenses" element={<ExpensesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
