@@ -160,18 +160,31 @@ export default function Sidebar({ onNavigate }) {
         <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-2 mb-1.5 block">
           Proyecto
         </label>
-        <div className="relative">
-          <select
-            value={activeProject?.id || ''}
-            onChange={(e) => switchProject(Number(e.target.value))}
-            aria-label="Selector de proyecto"
-            className="w-full h-9 px-3 pr-8 rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer appearance-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
-          <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className="flex items-center gap-2">
+          {activeProject?.logo_url ? (
+            <img
+              src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${activeProject.id}/logo`}
+              alt=""
+              className="w-8 h-8 rounded-lg object-contain bg-muted/50 flex-shrink-0"
+            />
+          ) : activeProject?.emoji ? (
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">
+              {activeProject.emoji}
+            </div>
+          ) : null}
+          <div className="relative flex-1">
+            <select
+              value={activeProject?.id || ''}
+              onChange={(e) => switchProject(Number(e.target.value))}
+              aria-label="Selector de proyecto"
+              className="w-full h-9 px-3 pr-8 rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer appearance-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </div>
         </div>
       </div>
 

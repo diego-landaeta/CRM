@@ -58,7 +58,7 @@ export async function create(data) {
 export async function update(id, fields) {
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
-                   'producto_label', 'producto_label_plural'];
+                   'producto_label', 'producto_label_plural', 'logo_url', 'logo_key'];
   const sets = [];
   const params = [];
   let idx = 1;

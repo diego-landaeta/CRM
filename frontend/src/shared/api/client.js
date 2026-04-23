@@ -25,7 +25,10 @@ export function setOnAuthFailure(cb) {
 }
 
 async function request(url, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const isFormData = options.body instanceof FormData;
+  const headers = isFormData
+    ? { ...options.headers }
+    : { 'Content-Type': 'application/json', ...options.headers };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   const res = await fetch(`${BASE_URL}${url}`, {
@@ -67,9 +70,9 @@ async function request(url, options = {}) {
 
 const client = {
   get: (url, options) => request(url, { method: 'GET', ...options }),
-  post: (url, body, options) => request(url, { method: 'POST', body: JSON.stringify(body), ...options }),
-  patch: (url, body, options) => request(url, { method: 'PATCH', body: JSON.stringify(body), ...options }),
-  put: (url, body, options) => request(url, { method: 'PUT', body: JSON.stringify(body), ...options }),
+  post: (url, body, options) => request(url, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
+  patch: (url, body, options) => request(url, { method: 'PATCH', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
+  put: (url, body, options) => request(url, { method: 'PUT', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
   delete: (url, options) => request(url, { method: 'DELETE', ...options }),
   upload: async (url, file) => {
     const formData = new FormData();

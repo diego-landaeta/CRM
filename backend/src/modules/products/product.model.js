@@ -18,18 +18,20 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
-export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id }) {
+export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info }) {
   const { rows } = await query(
-    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'EUR'), $8, $9, $10, $11)
      RETURNING *`,
-    [projectId, nombre, descripcion, categoria_id || null, subcategoria_id || null]
+    [projectId, nombre, descripcion, categoria_id || null, subcategoria_id || null,
+     precio ?? null, moneda || null, stripe_link || null, sku || null, duracion || null, url_info || null]
   );
   return rows[0];
 }
 
 export async function update(id, data) {
-  const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id'];
+  const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id',
+                   'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info'];
   const fields = [];
   const values = [];
   let idx = 1;

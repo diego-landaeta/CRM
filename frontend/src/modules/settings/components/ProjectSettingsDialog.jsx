@@ -87,6 +87,47 @@ function GeneralTab({ project, onSaved }) {
     producto_label_plural: project.producto_label_plural || 'Productos',
   });
   const [saving, setSaving] = useState(false);
+  const [logoVersion, setLogoVersion] = useState(Date.now());
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const hasLogo = !!project.logo_key;
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Archivo muy grande', description: 'Maximo 5 MB', variant: 'destructive' });
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post(`/projects/${project.id}/logo`, fd);
+      if (res.success) {
+        toast({ title: 'Logo actualizado' });
+        setLogoVersion(Date.now());
+        onSaved?.();
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleLogoDelete() {
+    if (!confirm('Eliminar el logo?')) return;
+    try {
+      await client.delete(`/projects/${project.id}/logo`);
+      toast({ title: 'Logo eliminado' });
+      setLogoVersion(Date.now());
+      onSaved?.();
+    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  }
+
+  const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+  const logoSrc = hasLogo ? `${baseUrl}/api/projects/${project.id}/logo?v=${logoVersion}` : null;
 
   async function handleSave(e) {
     e.preventDefault();
@@ -113,12 +154,37 @@ function GeneralTab({ project, onSaved }) {
 
   return (
     <form onSubmit={handleSave} className="space-y-5 max-w-2xl">
+      <SectionTitle title="Logo del proyecto" subtitle="PNG, JPG, WEBP o SVG. Max 5 MB. Se usa en el sidebar y dashboard." />
+      <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-xl border border-border">
+        <div className="w-20 h-20 rounded-xl bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+          {logoSrc ? (
+            <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+          ) : (
+            <span className="text-3xl">{form.emoji || '📁'}</span>
+          )}
+        </div>
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 cursor-pointer">
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleLogoUpload} disabled={uploadingLogo} className="hidden" />
+              {uploadingLogo ? 'Subiendo...' : hasLogo ? 'Cambiar logo' : 'Subir logo'}
+            </label>
+            {hasLogo && (
+              <button type="button" onClick={handleLogoDelete} className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100">
+                Eliminar
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">Si no hay logo se muestra el emoji. El logo tiene prioridad.</p>
+        </div>
+      </div>
+
       <SectionTitle title="Informacion basica" />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Nombre *">
           <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} required />
         </Field>
-        <Field label="Emoji / Icono" hint="Emoji unico para identificar el proyecto">
+        <Field label="Emoji de respaldo" hint="Se muestra si no hay logo">
           <input value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} className={inputClass} placeholder="🎓" maxLength={4} />
         </Field>
         <Field label="Tipo">
