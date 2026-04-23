@@ -3,6 +3,8 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
 import { revokeAllUserTokens } from '../auth/auth.model.js';
+import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const BCRYPT_ROUNDS = 12;
 const SET_PASSWORD_EXPIRY_HOURS = 24;
@@ -46,8 +48,16 @@ export async function create({ nombre, email, role, projectIds }) {
 
   const projects = await userModel.getUserProjects(user.id);
 
-  // TODO: enviar email Brevo con link set-password cuando se configure
-  // Por ahora retorna el token raw para testing
+  // Envio de email Brevo (async - no bloquea la respuesta)
+  const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
+  sendWelcomeUserEmail({ nombre: user.nombre, email: user.email, setPasswordToken: rawToken, baseUrl })
+    .then((r) => {
+      if (r.sent) logger.info({ userId: user.id, messageId: r.messageId }, 'Welcome email enviado');
+      else logger.warn({ userId: user.id, reason: r.reason }, 'Welcome email NO enviado');
+    })
+    .catch((err) => logger.error({ err: err.message, userId: user.id }, 'Welcome email error'));
+
+  // Retorna el token raw en respuesta para test/desarrollo
   return { ...user, projects, setPasswordToken: rawToken };
 }
 

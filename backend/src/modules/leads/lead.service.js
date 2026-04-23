@@ -1,5 +1,8 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from './lead.model.js';
+import { query } from '../../shared/config/db.js';
+import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // ============================================================
 // DETECCION DE CANAL POR UTMs
@@ -73,7 +76,25 @@ export async function processWebhook(slug, apiKey, leadData) {
     },
   });
 
-  // TODO: enviar email Brevo asincrono al gestor asignado (CRM-56)
+  // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
+  if (lead.responsableId) {
+    (async () => {
+      try {
+        const { rows } = await query(`SELECT id, nombre, email FROM users WHERE id = $1`, [lead.responsableId]);
+        if (rows[0]?.email) {
+          const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
+          await sendLeadAssignedEmail({
+            gestor: rows[0],
+            lead: { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono },
+            proyecto: { nombre: project.nombre },
+            baseUrl,
+          });
+        }
+      } catch (err) {
+        logger.warn({ err: err.message, leadId: lead.id }, 'Notificacion gestor fallo');
+      }
+    })();
+  }
 
   return {
     lead_id: lead.id,

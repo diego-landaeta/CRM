@@ -2,14 +2,14 @@ import { query } from '../../shared/config/db.js';
 import { encrypt, decrypt, maskSecret } from '../../shared/utils/crypto.js';
 
 export async function list({ projectId, service }) {
-  const conditions = ['active = true'];
+  const conditions = ['ac.active = true'];
   const params = [];
   let idx = 1;
   if (projectId !== undefined) {
-    conditions.push(projectId === null ? `project_id IS NULL` : `project_id = $${idx++}`);
+    conditions.push(projectId === null ? `ac.project_id IS NULL` : `ac.project_id = $${idx++}`);
     if (projectId !== null) params.push(projectId);
   }
-  if (service) { conditions.push(`service = $${idx++}`); params.push(service); }
+  if (service) { conditions.push(`ac.service = $${idx++}`); params.push(service); }
 
   const { rows } = await query(
     `SELECT ac.id, ac.project_id, ac.service, ac.metadata, ac.active,
