@@ -26,6 +26,7 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -67,12 +68,15 @@ const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http
 
 function UsersTab() {
   const { projects } = useAuth();
+  const { activeProject } = useProjectContext();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  // Filtro proyecto: 'active' (solo del proyecto activo), 'all' (todos), o id especifico
+  const [projectFilter, setProjectFilter] = useState('active');
 
   // Create user form
   const [newName, setNewName] = useState('');
@@ -90,7 +94,13 @@ function UsersTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await client.get('/users?limit=100');
+      let projectIdParam = '';
+      if (projectFilter === 'active' && activeProject?.id) {
+        projectIdParam = `&projectId=${activeProject.id}`;
+      } else if (projectFilter !== 'active' && projectFilter !== 'all') {
+        projectIdParam = `&projectId=${projectFilter}`;
+      }
+      const res = await client.get(`/users?limit=100${projectIdParam}`);
       if (res.success) {
         setUsers(res.data || []);
       }
@@ -99,7 +109,7 @@ function UsersTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectFilter, activeProject?.id]);
 
   useEffect(() => {
     fetchUsers();
@@ -247,6 +257,34 @@ function UsersTab() {
         >
           <Plus size={14} weight="bold" /> Crear Usuario
         </button>
+      </div>
+
+      {/* Filtro por proyecto */}
+      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-card">
+        <span className="text-[11px] font-bold uppercase text-muted-foreground">Mostrar:</span>
+        <button
+          onClick={() => setProjectFilter('active')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'active' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+        >
+          {activeProject?.nombre || 'Proyecto activo'}
+        </button>
+        <button
+          onClick={() => setProjectFilter('all')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'all' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+        >
+          Todos los proyectos
+        </button>
+        <select
+          value={projectFilter !== 'active' && projectFilter !== 'all' ? projectFilter : ''}
+          onChange={(e) => e.target.value && setProjectFilter(e.target.value)}
+          className="h-8 px-2 rounded-lg border border-border bg-muted/50 text-xs ml-auto"
+        >
+          <option value="">Proyecto especifico...</option>
+          {(projects || []).map((p) => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+        <span className="text-[11px] text-muted-foreground">{users.length} usuario{users.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Users table */}
