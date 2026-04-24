@@ -1,87 +1,216 @@
+import { useEffect, useState } from 'react';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import client from '@/shared/api/client';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import KpiCard from '@/shared/components/ui/KpiCard';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { toast } from '@/shared/hooks/useToast';
 import {
-  ChartLineUp,
-  FileText,
-  CalendarBlank,
-  DownloadSimple,
-  Robot,
+  Users, CurrencyEur, Wallet, TrendUp, ChartBar, Package, Megaphone, UserList,
 } from '@phosphor-icons/react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
-const MOCK_REPORTS = [
-  { id: 1, name: 'Reporte Mensual — Marzo 2026', type: 'mensual', date: '01 abr 2026', status: 'generado', pages: 12 },
-  { id: 2, name: 'Reporte Mensual — Febrero 2026', type: 'mensual', date: '01 mar 2026', status: 'generado', pages: 10 },
-  { id: 3, name: 'Reporte Mensual — Enero 2026', type: 'mensual', date: '01 feb 2026', status: 'generado', pages: 11 },
-  { id: 4, name: 'Analisis de Campanas Q1 2026', type: 'trimestral', date: '01 abr 2026', status: 'generado', pages: 18 },
-  { id: 5, name: 'Reporte Rendimiento Gestores', type: 'custom', date: '28 mar 2026', status: 'generado', pages: 8 },
-];
+function fmt(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+}
 
-const MOCK_METRICS = [
-  { label: 'Leads Totales', value: '1,284', period: 'Acumulado' },
-  { label: 'Tasa Conversion', value: '26.8%', period: 'Ultimo mes' },
-  { label: 'CPL Medio', value: '29.42 €', period: 'Ultimo mes' },
-  { label: 'ROI Campanas', value: '3.2x', period: 'Q1 2026' },
-];
-
-const TYPE_STYLES = {
-  mensual: 'bg-blue-50 text-blue-600',
-  trimestral: 'bg-violet-50 text-violet-600',
-  custom: 'bg-amber-50 text-amber-600',
+const CANAL_COLORS = ['#4361ee', '#ea580c', '#059669', '#d97706', '#7c3aed', '#dc2626', '#94a3b8'];
+const PIPELINE_COLORS = {
+  nuevo: '#4361ee',
+  por_contactar: '#ea580c',
+  contactado: '#059669',
+  en_seguimiento: '#d97706',
+  convertido: '#7c3aed',
+  no_interesado: '#dc2626',
 };
 
 export default function ReportsPage() {
+  const { activeProject } = useProjectContext();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState({
+    from: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
+    to: new Date().toISOString().slice(0, 10),
+  });
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const params = { ...(activeProject?.id ? { projectId: activeProject.id } : {}), from: range.from, to: range.to };
+        const qs = new URLSearchParams(params).toString();
+        const res = await client.get(`/reports/overview?${qs}`);
+        if (res.success) setData(res.data);
+      } catch (err) {
+        toast({ title: 'Error cargando reportes', description: err?.data?.error || err.message, variant: 'destructive' });
+      } finally { setLoading(false); }
+    }
+    load();
+  }, [activeProject?.id, range.from, range.to]);
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Reportes" subtitle="Cargando..." />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-xl animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const pipelineData = [
+    { estado: 'Nuevo', total: Number(data.leads.nuevo), color: PIPELINE_COLORS.nuevo },
+    { estado: 'Por contactar', total: Number(data.leads.por_contactar), color: PIPELINE_COLORS.por_contactar },
+    { estado: 'Contactado', total: Number(data.leads.contactado), color: PIPELINE_COLORS.contactado },
+    { estado: 'En seguimiento', total: Number(data.leads.en_seguimiento), color: PIPELINE_COLORS.en_seguimiento },
+    { estado: 'Convertido', total: Number(data.leads.convertido), color: PIPELINE_COLORS.convertido },
+    { estado: 'No interesado', total: Number(data.leads.no_interesado), color: PIPELINE_COLORS.no_interesado },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Reportes</h1>
-          <p className="text-muted-foreground text-sm">Informes generados por Claude AI y metricas clave</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
-          <Robot size={16} weight="bold" />
-          Generar Reporte IA
-        </button>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {MOCK_METRICS.map((m) => (
-          <div key={m.label} className="bg-card p-5 rounded-2xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{m.label}</p>
-            <p className="text-2xl font-extrabold mt-1">{m.value}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{m.period}</p>
+    <div className="space-y-6 pb-8">
+      <PageHeader
+        title="Reportes"
+        subtitle={activeProject ? `${activeProject.nombre}` : 'Todos los proyectos'}
+        actions={
+          <div className="flex items-center gap-2">
+            <input type="date" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} className="h-9 px-3 rounded-lg border border-border bg-card text-sm" />
+            <span className="text-xs text-muted-foreground">hasta</span>
+            <input type="date" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} className="h-9 px-3 rounded-lg border border-border bg-card text-sm" />
           </div>
-        ))}
+        }
+      />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={Users} label="Total leads" value={data.leads.total} />
+        <KpiCard icon={TrendUp} label="Tasa conversion" value={`${data.tasa_conversion}%`} tone="success" />
+        <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
+        <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
 
-      {/* Reports List */}
-      <div className="bg-card rounded-3xl border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
-        <div className="p-5">
-          <h3 className="font-bold">Reportes Generados</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Informes PDF con analisis de Claude AI</p>
+      {/* Pipeline de leads + ingresos mensual */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <h3 className="font-bold mb-4 flex items-center gap-2"><UserList size={16} /> Leads por estado</h3>
+          {data.leads.total === 0 ? (
+            <EmptyState icon={Users} title="Sin leads" description="No hay leads en el rango seleccionado" />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={pipelineData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis type="number" stroke="#6b7280" fontSize={11} />
+                <YAxis type="category" dataKey="estado" stroke="#6b7280" fontSize={11} width={110} />
+                <Tooltip />
+                <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                  {pipelineData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
-        <div className="divide-y">
-          {MOCK_REPORTS.map((r) => (
-            <div key={r.id} className="flex flex-wrap items-center gap-4 px-5 py-4 hover:bg-muted/50 transition-colors">
-              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
-                <FileText size={20} className="text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold truncate">{r.name}</p>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <CalendarBlank size={11} /> {r.date}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">{r.pages} paginas</span>
-                </div>
-              </div>
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${TYPE_STYLES[r.type]}`}>
-                {r.type}
-              </span>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-zinc-600 hover:bg-muted transition-colors">
-                <DownloadSimple size={14} weight="bold" /> PDF
-              </button>
+
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <h3 className="font-bold mb-4 flex items-center gap-2"><ChartBar size={16} /> Ingresos mensual (12 meses)</h3>
+          {(data.ingresos_mensual || []).length === 0 ? (
+            <EmptyState icon={CurrencyEur} title="Sin ingresos" description="No hay ingresos registrados" />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={data.ingresos_mensual}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mes" stroke="#6b7280" fontSize={11} tickFormatter={(v) => v?.slice(5) || v} />
+                <YAxis stroke="#6b7280" fontSize={11} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
+                <Tooltip formatter={(v) => fmt(v)} />
+                <Line type="monotone" dataKey="ingresos" stroke="#22c55e" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Por canal + por gestor */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <h3 className="font-bold mb-4 flex items-center gap-2"><Megaphone size={16} /> Leads por canal</h3>
+          {(data.leads_por_canal || []).length === 0 ? (
+            <EmptyState icon={Megaphone} title="Sin datos" description="No hay leads clasificados por canal" />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={data.leads_por_canal} dataKey="total" nameKey="canal" cx="50%" cy="50%" outerRadius={90} label={(e) => `${e.canal}: ${e.total}`}>
+                  {data.leads_por_canal.map((e, i) => <Cell key={i} fill={CANAL_COLORS[i % CANAL_COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <h3 className="font-bold mb-4 flex items-center gap-2"><Users size={16} /> Leads por gestor</h3>
+          {(data.leads_por_gestor || []).length === 0 ? (
+            <EmptyState icon={Users} title="Sin datos" description="No hay leads asignados" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-bold">Gestor</th>
+                    <th className="text-right px-3 py-2 font-bold">Leads</th>
+                    <th className="text-right px-3 py-2 font-bold">Convertidos</th>
+                    <th className="text-right px-3 py-2 font-bold">Tasa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.leads_por_gestor.map(g => {
+                    const tasa = g.total > 0 ? Math.round((g.convertidos / g.total) * 100) : 0;
+                    return (
+                      <tr key={g.gestor} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-semibold">{g.gestor}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{g.total}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-green-600">{g.convertidos}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{tasa}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
+          )}
         </div>
+      </div>
+
+      {/* Top productos */}
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <h3 className="font-bold mb-4 flex items-center gap-2"><Package size={16} /> Top productos por ventas</h3>
+        {(data.top_productos || []).length === 0 ? (
+          <EmptyState icon={Package} title="Sin ventas" description="No hay conversiones en el rango seleccionado" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="text-left px-3 py-2 font-bold">Producto</th>
+                  <th className="text-right px-3 py-2 font-bold">Ventas</th>
+                  <th className="text-right px-3 py-2 font-bold">Facturado</th>
+                  <th className="text-right px-3 py-2 font-bold">Cobrado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_productos.map((p, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-semibold">{p.producto}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{p.ventas}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(p.total)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-green-600">{fmt(p.cobrado)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

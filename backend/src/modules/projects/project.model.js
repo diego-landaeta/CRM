@@ -4,7 +4,8 @@ import crypto from 'crypto';
 export async function findAll({ active }) {
   const where = active === undefined ? '' : `WHERE active = ${active === 'true' || active === true}`;
   const { rows } = await query(
-    `SELECT id, nombre, slug, type, emoji, webhook_api_key, meta_account_id, google_account_id,
+    `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
+            webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at
      FROM projects ${where}
      ORDER BY nombre ASC`
@@ -14,7 +15,8 @@ export async function findAll({ active }) {
 
 export async function findById(id) {
   const { rows } = await query(
-    `SELECT id, nombre, slug, type, emoji, webhook_api_key, meta_account_id, google_account_id,
+    `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
+            webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at
      FROM projects WHERE id = $1`,
     [id]
