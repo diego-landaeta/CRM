@@ -1,12 +1,19 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as conversionModel from './conversion.model.js';
+import * as commissionModel from '../commissions/commission.model.js';
+import { logger } from '../../shared/utils/logger.js';
 
 export async function create(data, userId) {
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
 
-  return await conversionModel.create({ ...data, changed_by: userId });
+  const conv = await conversionModel.create({ ...data, changed_by: userId });
+  // Hook: crear comision automaticamente si hay regla
+  commissionModel.createCommissionForConversion(conv.id).catch(err =>
+    logger.warn({ err: err.message, conversionId: conv.id }, 'createCommission failed (non-blocking)')
+  );
+  return conv;
 }
 
 export async function getById(id) {
@@ -41,6 +48,10 @@ export async function addPayment(conversionId, data) {
   const result = await conversionModel.addPayment(conversionId, data);
   if (result.error === 'NOT_FOUND') throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (result.error === 'OVERPAY') throw new AppError('El importe excede el pendiente', 400, 'OVERPAY');
+  // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
+  commissionModel.recalculateCommission(conversionId).catch(err =>
+    logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
+  );
   return result;
 }
 

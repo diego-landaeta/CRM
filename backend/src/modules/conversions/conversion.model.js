@@ -17,6 +17,7 @@ export async function create(data) {
       lead_id,
       project_id,
       producto_contratado,
+      producto_contratado_id,
       importe_total,
       importe_pagado,
       metodo_pago,
@@ -28,12 +29,12 @@ export async function create(data) {
     // INSERT conversion
     const { rows: convRows } = await client.query(
       `INSERT INTO conversions
-        (lead_id, project_id, producto_contratado, importe_total, importe_pagado,
+        (lead_id, project_id, producto_contratado, producto_contratado_id, importe_total, importe_pagado,
          metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, CURRENT_DATE), $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10)
        RETURNING *`,
-      [lead_id, project_id, producto_contratado, importe_total, importe_pagado,
-       metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago]
+      [lead_id, project_id, producto_contratado, producto_contratado_id || null,
+       importe_total, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago]
     );
     const conversion = convRows[0];
 
@@ -150,7 +151,7 @@ export async function findAll({ projectId, leadId, pendiente, vencido, from, to,
 }
 
 export async function update(id, fields) {
-  const allowed = ['producto_contratado', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'notas_pago'];
+  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'notas_pago'];
   const sets = [];
   const params = [];
   let idx = 1;

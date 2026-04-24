@@ -30,6 +30,7 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
+const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
           <Route path="/accounting/receivable" element={<ReceivablePage />} />
           <Route path="/accounting/payable" element={<AccountsPayablePage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/commissions" element={<CommissionsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />

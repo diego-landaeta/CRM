@@ -6,6 +6,7 @@ export const createConversionSchema = z.object({
   lead_id: z.number().int().positive('lead_id requerido'),
   project_id: z.number().int().positive('project_id requerido'),
   producto_contratado: z.string().min(1, 'Producto requerido').max(255),
+  producto_contratado_id: z.number().int().positive().nullable().optional(),
   importe_total: z.number().positive('Importe debe ser positivo'),
   importe_pagado: z.number().min(0).default(0),
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
@@ -19,6 +20,7 @@ export const createConversionSchema = z.object({
 
 export const updateConversionSchema = z.object({
   producto_contratado: z.string().min(1).max(255).optional(),
+  producto_contratado_id: z.number().int().positive().nullable().optional(),
   importe_total: z.number().positive().optional(),
   metodo_pago: z.enum(PAYMENT_METHODS).nullable().optional(),
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

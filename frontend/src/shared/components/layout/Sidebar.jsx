@@ -17,6 +17,7 @@ import {
   Calculator,
   Receipt,
   UserCheck,
+  Coins,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
       { label: 'Cuentas por pagar', to: '/accounting/payable' },
     ],
   },
+  { label: 'Comisiones', to: '/commissions', icon: Coins },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 
