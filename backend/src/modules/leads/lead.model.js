@@ -14,7 +14,7 @@ export async function findProjectBySlug(slug) {
 
 export async function findDuplicateByEmail(email, projectId) {
   const { rows } = await query(
-    `SELECT id, nombre, email, status, producto_interes_id FROM leads WHERE email = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT id, nombre, email, status, producto_interes_id, responsable_id, created_at, fecha_solicitud FROM leads WHERE email = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 1`,
     [email, projectId]
   );
   return rows[0] || null;
@@ -214,11 +214,12 @@ export async function updateStatus(leadId, statusNuevo, statusAnterior, changedB
   }
 }
 
-export async function createInteraction(leadId, tipo, nota, createdBy) {
+export async function createInteraction(leadId, tipo, nota, createdBy, fecha) {
   const { rows } = await query(
-    `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)
+    `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+     VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, NOW()))
      RETURNING id, lead_id, tipo, nota, fecha, created_by`,
-    [leadId, tipo, nota, createdBy]
+    [leadId, tipo, nota, createdBy, fecha || null]
   );
   return rows[0];
 }

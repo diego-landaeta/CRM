@@ -189,8 +189,8 @@ export function useLeadDetail(id) {
     return res;
   }, [id, fetchLead]);
 
-  const addInteraction = useCallback(async (tipo, nota) => {
-    const res = await client.post(`/leads/${id}/interactions`, { tipo, nota });
+  const addInteraction = useCallback(async (tipo, nota, fecha) => {
+    const res = await client.post(`/leads/${id}/interactions`, { tipo, nota, fecha: fecha || undefined });
     if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);

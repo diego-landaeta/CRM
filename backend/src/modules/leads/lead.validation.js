@@ -32,6 +32,7 @@ export const updateStatusSchema = z.object({
 export const createInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']),
   nota: z.string().max(2000).optional(),
+  fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 });
 
 export const createReminderSchema = z.object({

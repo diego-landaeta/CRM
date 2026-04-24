@@ -141,11 +141,11 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
   return { previous: lead.status, current: newStatus };
 }
 
-export async function addInteraction(leadId, tipo, nota, userId) {
+export async function addInteraction(leadId, tipo, nota, userId, fecha) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
-  return await leadModel.createInteraction(leadId, tipo, nota, userId);
+  return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
 }
 
 export async function addReminder(leadId, fechaRecordatorio, nota, userId) {
@@ -173,6 +173,22 @@ export async function reassign(leadId, newResponsableId, userId) {
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }) {
   // Detectar duplicado
   const duplicate = await leadModel.findDuplicateByEmail(email, project_id);
+
+  // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
+  // asumimos doble submit y devolvemos el lead existente en vez de crear otro
+  if (duplicate && duplicate.nombre === nombre) {
+    const age = Date.now() - new Date(duplicate.created_at || duplicate.fecha_solicitud).getTime();
+    if (age < 10_000) {
+      return {
+        lead_id: duplicate.id,
+        responsable_id: duplicate.responsable_id,
+        duplicado: true,
+        reincidente: false,
+        deduped: true,
+      };
+    }
+  }
+
   const duplicadoDe = duplicate ? duplicate.id : null;
 
   const reincidente = !!(

@@ -103,7 +103,7 @@ export async function addInteraction(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId);
+    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }

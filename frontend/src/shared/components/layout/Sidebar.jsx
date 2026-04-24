@@ -23,6 +23,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
+import { lazy, Suspense } from 'react';
+
+const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 
 // Cada item declara los roles que pueden verlo (omitir = todos)
 const NAV_ITEMS = [
@@ -32,16 +35,16 @@ const NAV_ITEMS = [
   { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'] },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
   {
-    label: 'Contabilidad', icon: Calculator, roles: ['superadmin', 'admin'],
+    label: 'Contabilidad', icon: Calculator,
     children: [
-      { label: 'Dashboard', to: '/accounting' },
-      { label: 'Ingresos', to: '/accounting/income' },
-      { label: 'Egresos', to: '/accounting/expenses' },
-      { label: 'Cuentas por cobrar', to: '/accounting/receivable' },
-      { label: 'Cuentas por pagar', to: '/accounting/payable' },
+      { label: 'Dashboard', to: '/accounting', roles: ['superadmin', 'admin'] },
+      { label: 'Ingresos', to: '/accounting/income', roles: ['superadmin', 'admin'] },
+      { label: 'Egresos', to: '/accounting/expenses', roles: ['superadmin', 'admin'] },
+      { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'] },
+      { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'] },
+      { label: 'Comisiones', to: '/commissions' },
     ],
   },
-  { label: 'Comisiones', to: '/commissions', icon: Coins },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 
@@ -54,10 +57,12 @@ function canSeeItem(item, role) {
   return item.roles.includes(role);
 }
 
-function NavGroup({ icon: Icon, label, children, onNavigate }) {
+function NavGroup({ icon: Icon, label, children, role, onNavigate }) {
+  const visible = children.filter((c) => !c.roles || c.roles.includes(role));
   const location = useLocation();
-  const hasActiveChild = children.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
+  const hasActiveChild = visible.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
   const [open, setOpen] = useState(hasActiveChild);
+  if (!visible.length) return null;
   return (
     <div>
       <button
@@ -73,7 +78,7 @@ function NavGroup({ icon: Icon, label, children, onNavigate }) {
       </button>
       {open && (
         <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
-          {children.map((child) => (
+          {visible.map((child) => (
             <NavLink
               key={child.to}
               to={child.to}
@@ -138,6 +143,7 @@ export default function Sidebar({ onNavigate }) {
   const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
+  const [configOpen, setConfigOpen] = useState(false);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
@@ -187,15 +193,34 @@ export default function Sidebar({ onNavigate }) {
             </select>
             <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
+          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && (
+            <button
+              onClick={() => setConfigOpen(true)}
+              className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"
+              title={`Configurar ${activeProject.nombre}`}
+              aria-label="Configurar proyecto activo"
+            >
+              <Gear size={14} weight="bold" className="text-muted-foreground" />
+            </button>
+          )}
         </div>
       </div>
+
+      {configOpen && activeProject && (
+        <Suspense fallback={null}>
+          <ProjectSettingsDialog
+            project={activeProject}
+            onClose={() => setConfigOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Navigation */}
       <nav className="space-y-0.5 flex-1">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
         {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) =>
           item.children ? (
-            <NavGroup key={item.label} {...item} onNavigate={onNavigate} />
+            <NavGroup key={item.label} {...item} role={user?.role} onNavigate={onNavigate} />
           ) : (
             <NavItem key={item.to} {...item} onClick={onNavigate} />
           )

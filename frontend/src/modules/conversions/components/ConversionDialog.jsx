@@ -37,8 +37,17 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.producto_contratado || !form.importe_total) {
-      toast({ title: 'Faltan campos', description: 'Producto e importe son requeridos', variant: 'destructive' });
+    const importe = Number(form.importe_total);
+    if (!form.producto_contratado?.trim()) {
+      toast({ title: 'Producto requerido', variant: 'destructive' });
+      return;
+    }
+    if (!form.importe_total || isNaN(importe) || importe <= 0) {
+      toast({ title: 'Importe invalido', description: 'El importe debe ser mayor que 0', variant: 'destructive' });
+      return;
+    }
+    if (Number(form.importe_pagado || 0) > importe) {
+      toast({ title: 'Importe pagado invalido', description: 'No puede superar el total', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -109,7 +118,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Importe total (EUR) *</label>
-                <input type="number" step="0.01" min="0" value={form.importe_total} onChange={e => update('importe_total', e.target.value)} className={inputClass} required />
+                <input type="number" step="0.01" min="0.01" value={form.importe_total} onChange={e => update('importe_total', e.target.value)} className={inputClass} required />
               </div>
               <div>
                 <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Importe pagado hoy</label>

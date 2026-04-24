@@ -90,6 +90,12 @@ export default function LeadDetailPage() {
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [interactionTipo, setInteractionTipo] = useState('llamada');
   const [interactionNota, setInteractionNota] = useState('');
+  const [interactionFecha, setInteractionFecha] = useState(() => {
+    // Datetime-local espera YYYY-MM-DDTHH:mm en hora local
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
   const [interactionLoading, setInteractionLoading] = useState(false);
 
   // Reminder form
@@ -182,7 +188,9 @@ export default function LeadDetailPage() {
     if (!interactionNota.trim() && interactionTipo !== 'llamada') return;
     setInteractionLoading(true);
     try {
-      await addInteraction(interactionTipo, interactionNota);
+      // Convertir datetime-local (sin tz) a ISO con offset local
+      const fechaIso = interactionFecha ? new Date(interactionFecha).toISOString() : undefined;
+      await addInteraction(interactionTipo, interactionNota, fechaIso);
       toast({ title: 'Interaccion registrada' });
       setInteractionOpen(false);
       setInteractionNota('');
@@ -426,6 +434,16 @@ export default function LeadDetailPage() {
                     <option value="whatsapp">WhatsApp</option>
                     <option value="nota">Nota</option>
                   </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Fecha y hora</label>
+                  <input
+                    type="datetime-local"
+                    value={interactionFecha}
+                    onChange={(e) => setInteractionFecha(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Por defecto es ahora. Editala si la interaccion ocurrio antes.</p>
                 </div>
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">Nota</label>
