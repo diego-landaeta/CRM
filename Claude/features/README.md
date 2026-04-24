@@ -16,6 +16,8 @@ Cada feature vive en un archivo propio. Documento vivo, se actualiza en cada ite
 | [08-conversiones-pagos.md](08-conversiones-pagos.md) | Conversiones + pagos parciales | — ✅ |
 | [09-brevo-por-proyecto.md](09-brevo-por-proyecto.md) | Brevo credenciales por proyecto | — ✅ |
 | [10-project-settings-dialog.md](10-project-settings-dialog.md) | Dialog unificado de config proyecto | — ✅ |
+| [11-configuracion-footer.md](11-configuracion-footer.md) | Config al footer del sidebar | CRM-190 ✅ |
+| [12-favicon-dinamico.md](12-favicon-dinamico.md) | Favicon = logo del proyecto activo | — ✅ |
 
 ## 📝 Backlog (pendientes)
 
@@ -53,9 +55,9 @@ Cada feature vive en un archivo propio. Documento vivo, se actualiza en cada ite
 
 | Archivo | Bug | Jira |
 |---|---|---|
-| [90-bug-spa-reload.md](90-bug-spa-reload.md) | Paginas recargan completo en algunos clicks | CRM-188 |
+| [90-bug-spa-reload.md](90-bug-spa-reload.md) | Paginas recargan completo en algunos clicks | CRM-188 ✅ |
 | [91-bug-pagos-sin-fecha.md](91-bug-pagos-sin-fecha.md) | Enforcement fecha obligatoria | CRM-184 |
-| [92-filtro-usuarios-proyecto.md](92-filtro-usuarios-proyecto.md) | Filtro usuarios por proyecto | CRM-189 |
+| [92-filtro-usuarios-proyecto.md](92-filtro-usuarios-proyecto.md) | Filtro usuarios por proyecto | CRM-189 ✅ |
 | [93-seed-demo.md](93-seed-demo.md) | Datos demo en Psiko + Psicologo IA | CRM-193 ✅ |
 | [94-campos-custom-visibles.md](94-campos-custom-visibles.md) | Exponer campos custom + forms + webhook desde Leads | CRM-194 |
 
