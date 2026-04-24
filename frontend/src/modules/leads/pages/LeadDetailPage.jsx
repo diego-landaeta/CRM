@@ -69,7 +69,7 @@ export default function LeadDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    lead, timeline, interacciones, reminders, utms, loading, error,
+    lead, timeline, interacciones, reminders, utms, loading, error, refetch,
     updateStatus, addInteraction, addReminder, completeReminder, reassign, updateLead,
   } = useLeadDetail(id);
 
@@ -323,7 +323,7 @@ export default function LeadDetailPage() {
           </button>
           {error && (
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => refetch()}
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 py-1.5 rounded-lg hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
             >
               <ArrowClockwise size={12} weight="bold" /> Reintentar

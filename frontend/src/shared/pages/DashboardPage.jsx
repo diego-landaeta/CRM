@@ -53,7 +53,7 @@ function CustomTooltip({ active, payload, label, suffix = 'leads' }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
-  const { kpis, stats, leadsRecientes, today, loading, error } = useDashboard();
+  const { kpis, stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
 
   if (loading) {
     return (
@@ -76,7 +76,7 @@ export default function DashboardPage() {
           <p className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">No se pudieron cargar los datos</p>
           <p className="text-xs text-red-500/80 dark:text-red-400/80 mb-4">{error}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => refetch()}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2"
           >
             <ArrowClockwise size={12} weight="bold" /> Reintentar

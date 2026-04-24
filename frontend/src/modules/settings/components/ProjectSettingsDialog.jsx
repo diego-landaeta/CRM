@@ -598,9 +598,9 @@ function FieldsTab({ project }) {
 function WebhookTab({ project }) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(null);
+  const [apiKey, setApiKey] = useState(project.webhook_api_key);
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
   const url = `${baseUrl}/leads/webhooks/${project.slug}`;
-  const apiKey = project.webhook_api_key;
 
   async function doCopy(text, key) {
     try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); } catch {}
@@ -610,9 +610,10 @@ function WebhookTab({ project }) {
     if (!confirm('Regenerar API Key? La clave anterior dejara de funcionar de inmediato.')) return;
     try {
       const res = await client.post(`/projects/${project.id}/regenerate-webhook-key`);
-      if (res.success) {
+      if (res.success && res.data?.webhook_api_key) {
+        setApiKey(res.data.webhook_api_key);
+        setRevealed(true);
         toast({ title: 'Clave regenerada', description: 'Actualiza las integraciones con la nueva clave' });
-        location.reload();
       }
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
