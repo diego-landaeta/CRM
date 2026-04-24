@@ -594,8 +594,10 @@ function ProjectsTab() {
           {projects.map((p) => (
             <div key={p.id} className="bg-card rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow">
               <div className="p-5 flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-                  {p.emoji || '📁'}
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                  {p.logo_url ? (
+                    <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${p.id}/logo`} alt="" className="w-full h-full object-contain" />
+                  ) : (p.emoji || '📁')}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

@@ -48,10 +48,6 @@ const NAV_ITEMS = [
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
 ];
 
-const SYSTEM_ITEMS = [
-  { label: 'Configuracion', to: '/settings', icon: Gear, roles: ['superadmin', 'admin'] },
-];
-
 function canSeeItem(item, role) {
   if (!item.roles) return true;
   return item.roles.includes(role);
@@ -226,14 +222,6 @@ export default function Sidebar({ onNavigate }) {
           )
         )}
 
-        {SYSTEM_ITEMS.some((item) => canSeeItem(item, user?.role)) && (
-          <>
-            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2 mt-6">Sistema</p>
-            {SYSTEM_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) => (
-              <NavItem key={item.to} {...item} onClick={onNavigate} />
-            ))}
-          </>
-        )}
       </nav>
 
       {/* Footer: Beta Badge + Theme + User */}
@@ -252,6 +240,21 @@ export default function Sidebar({ onNavigate }) {
           {theme === 'dark' ? <Sun size={18} weight="duotone" /> : <Moon size={18} weight="duotone" />}
           {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
         </button>
+
+        {/* Configuracion (solo admin/superadmin) */}
+        {(user?.role === 'admin' || user?.role === 'superadmin') && (
+          <NavLink
+            to="/settings"
+            onClick={onNavigate}
+            className={({ isActive }) => cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all',
+              isActive ? 'bg-primary/10 text-primary font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+            )}
+          >
+            <Gear size={18} weight="duotone" />
+            Configuracion
+          </NavLink>
+        )}
 
         {/* User */}
         <div className="flex items-center gap-3 px-2">
