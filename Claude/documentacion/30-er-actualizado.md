@@ -1,287 +1,48 @@
-# Diagrama Entidad-Relacion (actualizado 2026-04-23)
+# Diagrama Entidad-Relacion (actualizado 2026-04-24)
 
-23 tablas en produccion. Marco cada bloque por dominio.
+23 tablas en produccion. Divido en 4 sub-diagramas por dominio para que se lea bien.
 
-```mermaid
-erDiagram
-    %% ===== USUARIOS Y PROYECTOS =====
-    users ||--o{ user_projects : "asignado a"
-    users ||--o{ user_refresh_tokens : "tiene"
-    users ||--o{ user_activity_log : "genera"
-    projects ||--o{ user_projects : "tiene"
-    projects ||--|| project_queue_state : "tiene cola"
+---
 
-    %% ===== LEADS =====
-    projects ||--o{ leads : "contiene"
-    users ||--o{ leads : "responsable"
-    leads ||--o{ lead_interactions : "tiene"
-    leads ||--o{ lead_reminders : "tiene"
-    leads ||--o{ lead_status_history : "tiene"
-    leads ||--|| lead_utms : "tiene"
-    leads }o--|| leads : "duplicado_de"
+## 1. Leads + Interacciones + Cola round-robin
 
-    %% ===== PRODUCTOS =====
-    projects ||--o{ products : "ofrece"
-    projects ||--o{ product_categories : "define"
-    product_categories ||--o{ product_categories : "subcategoria de"
-    products }o--|| product_categories : "categoria"
-    products }o--|| product_categories : "subcategoria"
-    products ||--o{ dossiers : "tiene"
-    products ||--o{ leads : "interes en"
+![ER Leads](img/er-1-leads.png)
 
-    %% ===== CONVERSIONES Y PAGOS =====
-    leads ||--o{ conversions : "convierte a"
-    products ||--o{ conversions : "vende"
-    conversions ||--o{ conversion_payments : "tiene pagos"
+Nucleo del CRM. Cada lead pertenece a un proyecto, tiene responsable (gestor), puede referenciar un producto de interes y otro lead del que fue duplicado. Historial de status, interacciones, recordatorios y UTMs viven colgando del lead.
 
-    %% ===== CONTABILIDAD =====
-    projects ||--o{ expenses : "registra"
-    projects ||--o{ accounts_payable : "debe"
-    accounts_payable ||--o{ accounts_payable_payments : "paga"
-    users ||--o{ expenses : "registrado_por"
-    users ||--o{ accounts_payable : "registrado_por"
+La tabla `project_queue_state` mantiene el cursor del round-robin para distribuir leads entre gestores activos de forma justa.
 
-    %% ===== COMISIONES =====
-    users ||--o{ commission_rules : "tiene reglas"
-    products ||--o{ commission_rules : "aplica"
-    projects ||--o{ commission_rules : "scope"
-    commission_rules ||--o{ commissions : "genera"
-    conversions ||--|| commissions : "tiene"
-    users ||--o{ commissions : "cobra"
+---
 
-    %% ===== CONFIG / META =====
-    projects ||--o{ project_field_definitions : "campos custom"
-    api_credentials }o--|| projects : "scope (opcional)"
-    leads ||--o{ project_field_definitions : "valores custom_fields JSONB"
+## 2. Productos + Categorias + Conversiones (ventas)
 
-    users {
-        int id PK
-        varchar email UK
-        varchar nombre
-        varchar password_hash
-        enum role "superadmin/admin/gestor"
-        bool active
-        timestamp created_at
-    }
+![ER Productos y Ventas](img/er-2-productos-ventas.png)
 
-    projects {
-        int id PK
-        varchar nombre
-        varchar slug UK
-        enum type "crm/ia"
-        varchar emoji
-        varchar logo_url
-        varchar logo_key "R2"
-        varchar producto_label "ej Formacion"
-        varchar producto_label_plural
-        int dias_alerta_inactividad
-        varchar webhook_api_key
-        bool active
-    }
+`product_categories` es auto-referencial (parent_id) para soportar categoria + subcategoria por proyecto. Cada producto puede llevar su PDF (`dossiers`) y vincularse como producto_contratado en una conversion.
 
-    leads {
-        int id PK
-        int project_id FK
-        int responsable_id FK "user"
-        int producto_interes_id FK
-        int lead_duplicado_de FK "self"
-        varchar nombre
-        varchar email
-        varchar telefono
-        enum status
-        enum canal
-        bool reincidente
-        jsonb custom_fields
-        timestamp created_at
-    }
+`conversions` es la venta cerrada; `conversion_payments` permite llevar pagos parciales sin perder trazabilidad.
 
-    products {
-        int id PK
-        int project_id FK
-        int categoria_id FK
-        int subcategoria_id FK
-        varchar nombre
-        text descripcion
-        decimal precio
-        varchar moneda
-        varchar stripe_link
-        varchar sku
-        varchar duracion
-        varchar url_info
-        bool active
-    }
+---
 
-    product_categories {
-        int id PK
-        int project_id FK
-        int parent_id FK "self - subcat"
-        varchar nombre
-        int orden
-        bool active
-    }
+## 3. Contabilidad + Comisiones
 
-    conversions {
-        int id PK
-        int lead_id FK
-        int project_id FK
-        int producto_contratado_id FK
-        varchar producto_contratado
-        decimal importe_total
-        decimal importe_pagado
-        date fecha_compromiso_pago
-        date fecha_conversion
-        enum metodo_pago
-    }
+![ER Contabilidad y Comisiones](img/er-3-contabilidad-comisiones.png)
 
-    conversion_payments {
-        int id PK
-        int conversion_id FK
-        decimal importe
-        date fecha
-        text notas
-    }
+`commission_rules` define el % que cobra cada gestor por cada producto (UNIQUE gestor + producto). Cuando se crea una conversion, el hook del backend busca si el gestor asignado tiene regla para ese producto y genera una fila en `commissions`.
 
-    commission_rules {
-        int id PK
-        int project_id FK
-        int user_id FK "gestor"
-        int product_id FK
-        decimal pct "0-100"
-        bool active
-    }
+`expenses` = gastos ya hechos. `accounts_payable` = facturas con proveedor pendientes de pagar (con sus pagos parciales en `accounts_payable_payments`).
 
-    commissions {
-        int id PK
-        int conversion_id FK UK
-        int rule_id FK
-        int user_id FK
-        int product_id FK
-        decimal importe_base
-        decimal pct
-        decimal importe_comision
-        enum estado "pendiente/pagado/cancelado"
-        date fecha_pago
-    }
+---
 
-    expenses {
-        int id PK
-        int project_id FK
-        varchar concepto
-        decimal importe
-        date fecha
-        enum categoria
-        int registrado_por FK
-    }
+## 4. Usuarios + Config global
 
-    accounts_payable {
-        int id PK
-        int project_id FK
-        varchar proveedor
-        varchar concepto
-        enum categoria
-        decimal importe_total
-        decimal importe_pagado
-        date fecha_factura
-        date fecha_compromiso_pago
-        enum estado "pendiente/parcial/pagado/cancelado"
-    }
+![ER Usuarios y Config](img/er-4-usuarios-config.png)
 
-    accounts_payable_payments {
-        int id PK
-        int payable_id FK
-        decimal importe
-        date fecha_pago
-        varchar metodo
-    }
+Multi-proyecto via `user_projects`. Sesiones JWT rotadas en `user_refresh_tokens`. `project_field_definitions` permite a cada proyecto definir sus campos custom para leads (JSONB). `api_credentials` guarda tokens de Brevo/Meta/Google/Stripe/Claude encriptados AES-256-GCM, con scope global o por proyecto.
 
-    project_field_definitions {
-        int id PK
-        int project_id FK
-        varchar field_key
-        varchar label
-        enum type "text/textarea/number/date/select/boolean"
-        bool required
-        varchar grupo
-        int orden
-        jsonb options
-    }
+---
 
-    api_credentials {
-        int id PK
-        int project_id FK "NULL=global"
-        varchar service
-        bytea encrypted_value
-        bytea iv
-        bytea auth_tag
-        jsonb metadata
-        bool active
-    }
-
-    dossiers {
-        int id PK
-        int product_id FK
-        varchar key "R2"
-        varchar filename_original
-        int version
-        bool active
-        int subido_por FK
-    }
-
-    lead_interactions {
-        int id PK
-        int lead_id FK
-        enum tipo "llamada/email/whatsapp/nota"
-        text nota
-        int created_by FK
-        timestamp created_at
-    }
-
-    lead_reminders {
-        int id PK
-        int lead_id FK
-        timestamp fecha_recordatorio
-        text nota
-        bool completado
-    }
-
-    lead_status_history {
-        int id PK
-        int lead_id FK
-        enum status_anterior
-        enum status_nuevo
-        text motivo
-        int changed_by FK
-    }
-
-    lead_utms {
-        int id PK
-        int lead_id FK
-        varchar utm_source
-        varchar utm_medium
-        varchar utm_campaign
-        varchar canal_detectado
-    }
-
-    user_projects {
-        int user_id FK
-        int project_id FK
-    }
-
-    user_refresh_tokens {
-        int id PK
-        int user_id FK
-        varchar token_hash
-        timestamp expires_at
-    }
-
-    project_queue_state {
-        int project_id PK_FK
-        int next_index
-        int responsable_id FK
-    }
-```
-
-## Tablas por dominio
+## Tablas por dominio (23 total)
 
 | Dominio | Tablas |
 |---|---|
