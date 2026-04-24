@@ -56,7 +56,7 @@ Cada feature vive en un archivo propio. Documento vivo, se actualiza en cada ite
 | [90-bug-spa-reload.md](90-bug-spa-reload.md) | Paginas recargan completo en algunos clicks | CRM-188 |
 | [91-bug-pagos-sin-fecha.md](91-bug-pagos-sin-fecha.md) | Enforcement fecha obligatoria | CRM-184 |
 | [92-filtro-usuarios-proyecto.md](92-filtro-usuarios-proyecto.md) | Filtro usuarios por proyecto | CRM-189 |
-| [93-seed-demo.md](93-seed-demo.md) | Datos demo en Psiko + Psicologo IA | CRM-193 |
+| [93-seed-demo.md](93-seed-demo.md) | Datos demo en Psiko + Psicologo IA | CRM-193 ✅ |
 | [94-campos-custom-visibles.md](94-campos-custom-visibles.md) | Exponer campos custom + forms + webhook desde Leads | CRM-194 |
 
 ## Template
