@@ -35,24 +35,47 @@ export async function generateReport(projectId, periodo) {
 
 /**
  * POST /api/reports/:id/export-pdf  (CRM-121)
- * Devuelve el PDF como blob real.
- * Mock: genera el PDF en cliente con jsPDF parseando el markdown.
- * Real: backend debe usar Puppeteer / wkhtmltopdf con branding del proyecto.
+ * Genera y descarga el PDF directamente. Usa doc.save() de jsPDF para evitar
+ * el bug de Chrome que ignora `a.download` con blob URLs en algunos casos.
+ *
+ * Mock: render del markdown a PDF en cliente con jsPDF.
+ * Real (cuando backend este listo): pedir blob al endpoint y usar saveAs.
  */
-export async function exportReportPdf(id) {
+export async function exportReportPdf(id, { filename } = {}) {
   if (USE_MOCKS) {
     await delay(800);
     const md = await getReport(id);
-    return buildPdfFromMarkdown(md.data);
+    return buildPdfFromMarkdown(md.data, filename);
   }
-  return client.post(`/reports/${id}/export-pdf`, {}, { responseType: 'blob' });
+  // Real: backend devuelve blob → guardar via jsPDF utility o saveAs
+  const blob = await client.post(`/reports/${id}/export-pdf`, {}, { responseType: 'blob' });
+  triggerDownload(blob, filename || 'reporte.pdf');
+  return blob;
+}
+
+/**
+ * Descarga garantizada de un blob. Usa data URL (no blob:) para que Chrome
+ * respete el atributo download.
+ */
+function triggerDownload(blob, filename) {
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const a = document.createElement('a');
+    a.href = reader.result;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 100);
+  };
+  reader.readAsDataURL(blob);
 }
 
 /**
  * Genera un PDF real (estructura PDF valida) a partir del markdown del reporte.
  * Renderiza headings, paragrafos, listas, tablas, blockquotes, hr.
  */
-async function buildPdfFromMarkdown(report) {
+async function buildPdfFromMarkdown(report, filenameOverride) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
@@ -196,6 +219,13 @@ async function buildPdfFromMarkdown(report) {
     doc.text(`Generado por Claude AI · ${new Date(report.createdAt).toLocaleDateString('es-ES')}`, MARGIN, PAGE_H - 8);
   }
 
+  // Forzar descarga directa via jsPDF (mas robusto que blob+a.download en Chrome)
+  if (filenameOverride) {
+    doc.save(filenameOverride);
+  } else {
+    const slug = (report.projectName || 'proyecto').replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    doc.save(`reporte-${slug}-${report.periodo}.pdf`);
+  }
   return doc.output('blob');
 }
 

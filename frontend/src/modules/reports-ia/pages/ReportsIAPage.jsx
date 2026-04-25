@@ -52,23 +52,10 @@ export default function ReportsIAPage() {
     if (!reportsIA.selected) return;
     setPdfLoading(true);
     try {
-      const blob = await exportReportPdf(reportsIA.selected.id);
-      // Sanitize slug y verifica que el blob es valido
+      // jsPDF dispara la descarga directamente con el filename correcto
       const slug = (activeProject?.slug || 'proyecto').replace(/[^a-z0-9-]/gi, '-').toLowerCase();
       const filename = `reporte-${slug}-${reportsIA.selected.periodo}.pdf`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.rel = 'noopener';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      // Delay cleanup para que Chrome procese el download attribute correctamente
-      setTimeout(() => {
-        a.remove();
-        URL.revokeObjectURL(url);
-      }, 1000);
+      await exportReportPdf(reportsIA.selected.id, { filename });
       toast({ title: 'PDF descargado', description: filename });
     } catch (err) {
       toast({ title: 'Error generando PDF', description: err.message, variant: 'destructive' });
