@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -78,23 +78,36 @@ function cleanPhone(phone) {
   return (phone || '').replace(/[^\d]/g, '');
 }
 
-function QuickActions({ lead, onMarkContacted, onConvert }) {
+function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder }) {
   const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
   const email = lead.email;
+
+  function handleWhatsapp() {
+    onLogInteraction?.(lead, 'whatsapp');
+  }
+  function handleEmail() {
+    onLogInteraction?.(lead, 'email');
+  }
 
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp"
+        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp (registra interaccion)" onClick={handleWhatsapp}
           className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors">
           <WhatsappLogo size={14} weight="regular" />
         </a>
       )}
       {email && (
-        <a href={`mailto:${email}`} title="Email"
+        <a href={`mailto:${email}`} title="Email (registra interaccion)" onClick={handleEmail}
           className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors">
           <EnvelopeSimple size={14} weight="regular" />
         </a>
+      )}
+      {onCreateReminder && (
+        <button onClick={() => onCreateReminder(lead)} title="Programar siguiente contacto"
+          className="p-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-950/40 text-muted-foreground hover:text-blue-700 dark:hover:text-blue-400 transition-colors">
+          <CalendarPlus size={14} weight="regular" />
+        </button>
       )}
       {lead.estado !== 'contactado' && lead.estado !== 'convertido' && lead.estado !== 'no_interesado' && onMarkContacted && (
         <button onClick={() => onMarkContacted(lead)} title="Marcar contactado"
@@ -109,6 +122,134 @@ function QuickActions({ lead, onMarkContacted, onConvert }) {
         </button>
       )}
     </div>
+  );
+}
+
+// Mini-dialog inline para crear recordatorio rapido
+function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
+  const [fecha, setFecha] = useState('');
+  const [hora, setHora] = useState('10:00');
+  const [nota, setNota] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      // Default: manana a las 10am
+      const tomorrow = new Date(Date.now() + 86400000);
+      setFecha(tomorrow.toISOString().slice(0, 10));
+      setHora('10:00');
+      setNota('');
+    }
+  }, [open]);
+
+  if (!open || !lead) return null;
+
+  async function handleSave() {
+    if (!fecha) return;
+    setSaving(true);
+    try {
+      const fechaIso = new Date(`${fecha}T${hora}:00`).toISOString();
+      await client.post(`/leads/${lead.id}/reminders`, { fecha: fechaIso, nota: nota || `Contacto programado` });
+      toast({ title: 'Recordatorio creado', description: `${lead.nombre} — ${new Date(fechaIso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` });
+      onSaved?.();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Suspense fallback={null}>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
+          <div className="px-5 py-4 border-b border-border flex items-start gap-3">
+            <div className="w-9 h-9 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+              <CalendarPlus size={18} weight="regular" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-base">Programar siguiente contacto</h3>
+              <p className="text-xs text-muted-foreground truncate">{lead.nombre}</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Fecha</label>
+                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Hora</label>
+                <input type="time" value={hora} onChange={e => setHora(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Nota (opcional)</label>
+              <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2}
+                placeholder="Ej. Llamar para cerrar venta del Master"
+                className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none" />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { label: 'En 2 horas', delta: 2 * 3600000 },
+                { label: 'Manana 10am', getDate: () => { const t = new Date(Date.now() + 86400000); t.setHours(10, 0, 0, 0); return t; } },
+                { label: 'En 3 dias', delta: 3 * 86400000 },
+                { label: 'En 1 semana', delta: 7 * 86400000 },
+              ].map(p => (
+                <button key={p.label} type="button"
+                  onClick={() => {
+                    const d = p.getDate ? p.getDate() : new Date(Date.now() + p.delta);
+                    setFecha(d.toISOString().slice(0, 10));
+                    setHora(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+                  }}
+                  className="px-2.5 py-1 rounded-md border border-border bg-card text-xs hover:bg-muted">
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 p-4 border-t border-border bg-muted/20">
+            <button onClick={onClose} disabled={saving}
+              className="inline-flex items-center h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={saving || !fecha}
+              className="inline-flex items-center h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              {saving ? 'Guardando...' : 'Crear recordatorio'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Suspense>
+  );
+}
+
+function QuickChip({ active, onClick, label, count, tone = 'default' }) {
+  const toneActive = {
+    default: 'bg-primary text-white',
+    danger: 'bg-red-600 text-white',
+    warning: 'bg-amber-600 text-white',
+  }[tone];
+  const toneIdleCount = {
+    default: 'bg-primary/15 text-primary',
+    danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+  }[tone];
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+        active ? toneActive : 'bg-muted text-muted-foreground hover:bg-muted/80'
+      }`}
+    >
+      {label}
+      {typeof count === 'number' && count > 0 && (
+        <span className={`text-[10px] font-bold rounded-full px-1.5 ${active ? 'bg-white/20' : toneIdleCount}`}>{count}</span>
+      )}
+    </button>
   );
 }
 
@@ -148,6 +289,45 @@ export default function LeadsPage() {
   const [gestores, setGestores] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
+  const [reminderLead, setReminderLead] = useState(null);
+  const [quickFilter, setQuickFilter] = useState(''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
+
+  // Filtros rapidos client-side (sobre los leads ya cargados)
+  const filteredLeads = useMemo(() => {
+    if (!quickFilter) return leads;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 86400000);
+    return leads.filter(l => {
+      const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
+      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
+      if (quickFilter === 'overdue') return next && next < now;
+      if (quickFilter === 'today') return next && next >= today && next < tomorrow;
+      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
+      if (quickFilter === 'urgent') {
+        // Vencidos + hoy + sin contacto en estado nuevo/por_contactar
+        if (next && next < tomorrow) return true;
+        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
+        return false;
+      }
+      return true;
+    });
+  }, [leads, quickFilter]);
+
+  const quickCounts = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 86400000);
+    let overdue = 0, todayCount = 0, noContact = 0;
+    leads.forEach(l => {
+      const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
+      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
+      if (next && next < now) overdue++;
+      if (next && next >= today && next < tomorrow) todayCount++;
+      if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
+    });
+    return { overdue, today: todayCount, noContact, urgent: overdue + todayCount + noContact };
+  }, [leads]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin)
   useEffect(() => {
@@ -181,6 +361,26 @@ export default function LeadsPage() {
 
   function handleConvert(lead) {
     setConvertingLead(lead);
+  }
+
+  function handleCreateReminder(lead) {
+    setReminderLead(lead);
+  }
+
+  // Auto-log de interaccion al usar acciones rapidas (WhatsApp/Email)
+  async function handleLogInteraction(lead, tipo) {
+    try {
+      await client.post(`/leads/${lead.id}/interactions`, {
+        tipo,
+        nota: tipo === 'whatsapp' ? 'Contacto por WhatsApp (acceso rapido)' : 'Email enviado (acceso rapido)',
+        fecha: new Date().toISOString(),
+      });
+      toast({ title: 'Interaccion registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
+      refetch();
+    } catch (err) {
+      // Silent fail — el link igual abre, no queremos bloquear al usuario
+      console.warn('No se pudo registrar interaccion:', err);
+    }
   }
 
   async function handleConversionCreated() {
@@ -396,6 +596,20 @@ export default function LeadsPage() {
         </div>
       )}
 
+      {/* Filtros rapidos por accion (client-side) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <span className="text-xs text-muted-foreground flex-shrink-0">Mostrar</span>
+        <QuickChip active={!quickFilter} onClick={() => setQuickFilter('')} label="Todos" />
+        <QuickChip active={quickFilter === 'urgent'} onClick={() => setQuickFilter('urgent')}
+          label="Necesitan accion hoy" count={quickCounts.urgent} tone="danger" />
+        <QuickChip active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}
+          label="Vencidos" count={quickCounts.overdue} tone="danger" />
+        <QuickChip active={quickFilter === 'today'} onClick={() => setQuickFilter('today')}
+          label="Hoy" count={quickCounts.today} tone="warning" />
+        <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
+          label="Sin contacto" count={quickCounts.noContact} tone="default" />
+      </div>
+
       {/* Error state */}
       {error && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
@@ -427,7 +641,7 @@ export default function LeadsPage() {
                   {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
                 </>
               )}
-              {!loading && leads.map((lead) => (
+              {!loading && filteredLeads.map((lead) => (
                 <tr
                   key={lead.id}
                   onClick={() => navigate(`/leads/${lead.id}`)}
@@ -478,11 +692,11 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} />
                   </td>
                 </tr>
               ))}
-              {!loading && leads.length === 0 && !error && (
+              {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
                   <td colSpan={8} className="px-5">
                     <EmptyState
@@ -504,7 +718,7 @@ export default function LeadsPage() {
               <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
             </div>
           )}
-          {!loading && leads.map((lead) => (
+          {!loading && filteredLeads.map((lead) => (
             <div
               key={lead.id}
               onClick={() => navigate(`/leads/${lead.id}`)}
@@ -533,11 +747,11 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} />
               </div>
             </div>
           ))}
-          {!loading && leads.length === 0 && !error && (
+          {!loading && filteredLeads.length === 0 && !error && (
             <EmptyState
               icon={Users}
               title="No se encontraron prospectos"
@@ -609,6 +823,14 @@ export default function LeadsPage() {
           onCancel={() => setConfirmingContact(null)}
         />
       </Suspense>
+
+      {/* Crear recordatorio inline */}
+      <ReminderQuickDialog
+        open={!!reminderLead}
+        lead={reminderLead}
+        onClose={() => setReminderLead(null)}
+        onSaved={() => { setReminderLead(null); refetch(); }}
+      />
     </div>
   );
 }

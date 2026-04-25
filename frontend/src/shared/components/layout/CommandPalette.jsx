@@ -6,6 +6,7 @@ import {
   MagnifyingGlass,
   SquaresFour,
   Users,
+  UserCheck,
   Package,
   Megaphone,
   CurrencyEur,
@@ -13,16 +14,38 @@ import {
   Gear,
   User,
   ArrowRight,
+  FacebookLogo,
+  GoogleLogo,
+  Robot,
+  Sparkle,
+  ChartBar,
+  Calculator,
+  Receipt,
+  Wallet,
+  Coins,
+  Export,
 } from '@phosphor-icons/react';
 
 const SECTIONS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
   { label: 'Prospectos', to: '/leads', icon: Users },
   { label: 'Pipeline', to: '/leads/pipeline', icon: Users },
+  { label: 'Crear audiencia', to: '/leads/audiences', icon: Export },
+  { label: 'Clientes', to: '/clients', icon: UserCheck },
   { label: 'Productos', to: '/products', icon: Package },
-  { label: 'Campanas', to: '/campaigns', icon: Megaphone },
-  { label: 'Ingresos', to: '/revenue', icon: CurrencyEur },
-  { label: 'Reportes', to: '/reports', icon: ChartLineUp },
+  { label: 'Campanas — Consolidado', to: '/campaigns', icon: Megaphone },
+  { label: 'Campanas — Meta Ads', to: '/campaigns/meta', icon: FacebookLogo },
+  { label: 'Campanas — Google Ads', to: '/campaigns/google', icon: GoogleLogo },
+  { label: 'Trafico organico (SEO)', to: '/seo', icon: MagnifyingGlass },
+  { label: 'Dashboard IA', to: '/ia-dashboard', icon: Robot },
+  { label: 'Reportes IA', to: '/reports-ia', icon: Sparkle },
+  { label: 'Contabilidad', to: '/accounting', icon: Calculator },
+  { label: 'Ingresos', to: '/accounting/income', icon: CurrencyEur },
+  { label: 'Egresos', to: '/accounting/expenses', icon: Receipt },
+  { label: 'Cuentas por cobrar', to: '/accounting/receivable', icon: Wallet },
+  { label: 'Cuentas por pagar', to: '/accounting/payable', icon: Wallet },
+  { label: 'Comisiones', to: '/commissions', icon: Coins },
+  { label: 'Reportes', to: '/reports', icon: ChartBar },
   { label: 'Configuracion', to: '/settings', icon: Gear },
 ];
 
@@ -57,7 +80,7 @@ export default function CommandPalette() {
 
   const results = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return { sections: SECTIONS.slice(0, 6), leads: [] };
+    if (!q) return { sections: SECTIONS.slice(0, 8), leads: [] };
 
     const matchedSections = SECTIONS.filter((s) => s.label.toLowerCase().includes(q));
     const matchedLeads = leads.filter((l) =>
