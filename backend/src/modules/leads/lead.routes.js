@@ -23,6 +23,9 @@ router.get('/:id', leadController.getById);
 // Creacion manual (formulario interno)
 router.post('/', leadController.createManual);
 
+// Import CSV (bulk)
+router.post('/bulk', leadController.bulkCreate);
+
 // Edicion general del lead
 router.patch('/:id', leadController.update);
 

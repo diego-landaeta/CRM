@@ -4,7 +4,7 @@
 import client from '@/shared/api/client';
 import { reportsListMock, reportDetailMock, generateReportMock } from '../mocks/reports-ia.mock';
 
-const USE_MOCKS = true;
+const USE_MOCKS = false;  // Backend listo (con fallback si falta ANTHROPIC_API_KEY)
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -14,7 +14,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 export async function listReports(projectId, params = {}) {
   if (USE_MOCKS) { await delay(250); return { success: true, data: reportsListMock(projectId, params) }; }
   const qs = new URLSearchParams(params).toString();
-  return client.get(`/reports/${projectId}${qs ? '?' + qs : ''}`);
+  return client.get(`/reports-ia/${projectId}${qs ? '?' + qs : ''}`);
 }
 
 /**
@@ -22,7 +22,7 @@ export async function listReports(projectId, params = {}) {
  */
 export async function getReport(id) {
   if (USE_MOCKS) { await delay(250); return { success: true, data: reportDetailMock(id) }; }
-  return client.get(`/reports/detail/${id}`);
+  return client.get(`/reports-ia/detail/${id}`);
 }
 
 /**
@@ -30,7 +30,7 @@ export async function getReport(id) {
  */
 export async function generateReport(projectId, periodo) {
   if (USE_MOCKS) { await delay(2000); return { success: true, data: generateReportMock(projectId, periodo) }; }
-  return client.post(`/reports/${projectId}/generate`, { periodo });
+  return client.post(`/reports-ia/${projectId}/generate`, { periodo });
 }
 
 /**
@@ -48,7 +48,7 @@ export async function exportReportPdf(id, { filename } = {}) {
     return buildPdfFromMarkdown(md.data, filename);
   }
   // Real: backend devuelve blob → guardar via jsPDF utility o saveAs
-  const blob = await client.post(`/reports/${id}/export-pdf`, {}, { responseType: 'blob' });
+  const blob = await client.post(`/reports-ia/${id}/export-pdf`, {}, { responseType: 'blob' });
   triggerDownload(blob, filename || 'reporte.pdf');
   return blob;
 }

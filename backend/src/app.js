@@ -27,6 +27,10 @@ import formsModule from './modules/forms/index.js';
 import payrollModule from './modules/payroll/index.js';
 import woocommerceModule from './modules/woocommerce/index.js';
 import webhookTokensModule from './modules/webhook-tokens/index.js';
+import audiencesModule from './modules/audiences/index.js';
+import iaMonitorModule from './modules/ia-monitor/index.js';
+import reportsIaModule from './modules/reports-ia/index.js';
+import claudeChatModule from './modules/claude-chat/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 
@@ -68,7 +72,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule];
+const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule, audiencesModule, iaMonitorModule, reportsIaModule, claudeChatModule];
 
 for (const mod of modules) {
   app.use(mod.prefix, mod.router);

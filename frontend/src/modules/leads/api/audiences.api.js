@@ -5,7 +5,7 @@
 
 import client from '@/shared/api/client';
 
-const USE_MOCKS = true;
+const USE_MOCKS = false;  // Backend listo
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 

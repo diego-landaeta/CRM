@@ -141,6 +141,42 @@ export async function createManual(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// CRM-import CSV: bulk insert con tolerancia a errores por fila
+export async function bulkCreate(req, res, next) {
+  try {
+    const { projectId, leads } = req.body || {};
+    if (!projectId || !Array.isArray(leads)) {
+      throw new AppError('projectId y leads[] requeridos', 400, 'VALIDATION_ERROR');
+    }
+    if (leads.length > 500) {
+      throw new AppError('Maximo 500 leads por bulk', 400, 'BULK_TOO_LARGE');
+    }
+    let ok = 0; let fail = 0; const errors = [];
+    const created = [];
+    for (let i = 0; i < leads.length; i++) {
+      const row = leads[i] || {};
+      try {
+        if (!row.nombre || !row.email) throw new Error('nombre y email requeridos');
+        const result = await leadService.createManualLead({
+          project_id: Number(projectId),
+          nombre: row.nombre,
+          email: String(row.email).toLowerCase().trim(),
+          telefono: row.telefono || null,
+          notas: row.notas || null,
+          producto_interes_id: row.producto_interes_id ? parseInt(row.producto_interes_id) : null,
+          canal: row.canal || null,
+        });
+        created.push({ line: i + 1, lead_id: result.lead_id || result.id });
+        ok++;
+      } catch (err) {
+        errors.push({ line: i + 1, email: row.email || null, error: err.message?.slice(0, 200) || 'error' });
+        fail++;
+      }
+    }
+    res.status(201).json({ success: true, data: { ok, fail, errors, created } });
+  } catch (err) { next(err); }
+}
+
 export async function update(req, res, next) {
   try {
     const id = parseInt(req.params.id);

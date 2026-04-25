@@ -5,7 +5,7 @@
 import client from '@/shared/api/client';
 import { stripeMetricsMock } from '../mocks/stripe.mock';
 
-const USE_MOCKS = true; // Cambiar a false cuando Diego termine el modulo backend
+const USE_MOCKS = false; // Backend listo (con fallback si falta STRIPE_API_KEY)
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 

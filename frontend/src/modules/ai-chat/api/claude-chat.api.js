@@ -1,8 +1,9 @@
 // Claude AI Chat API (CRM-119)
-// Backend pendiente — endpoint SSE POST /api/claude/chat
-// USE_MOCKS=true: simulamos streaming via setInterval
+// Backend SSE POST /api/claude/chat — fallback si falta ANTHROPIC_API_KEY
 
-const USE_MOCKS = true;
+import { getAccessToken } from '@/shared/api/client';
+
+const USE_MOCKS = false;  // Backend listo (con fallback si falta ANTHROPIC_API_KEY)
 
 /**
  * Inicia un chat streaming con Claude.
@@ -15,7 +16,8 @@ export async function streamChatMessage({ message, projectId, signal }, onEvent)
     return mockStream({ message, projectId, signal }, onEvent);
   }
   // Real: usar fetch con response body reader (mas flexible que EventSource para POST + headers)
-  const res = await fetch('/crm/api/claude/chat', {
+  const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+  const res = await fetch(`${baseUrl}/api/claude/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -49,9 +51,7 @@ export async function streamChatMessage({ message, projectId, signal }, onEvent)
 }
 
 function getToken() {
-  try {
-    return JSON.parse(localStorage.getItem('crm_user') || '{}').accessToken || '';
-  } catch { return ''; }
+  return getAccessToken() || '';
 }
 
 // =============== MOCK ===============
