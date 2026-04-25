@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
@@ -44,9 +44,15 @@ export default function AppLayout() {
         <Sidebar />
       </div>
 
-      {/* Main content */}
+      {/* Main content - Suspense interno para que el sidebar no se desmonte al lazy-cargar paginas */}
       <main role="main" aria-label="Contenido principal" className="lg:ml-64 p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8">
-        <Outlet />
+        <Suspense fallback={
+          <div className="flex items-center justify-center py-20">
+            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        }>
+          <Outlet />
+        </Suspense>
       </main>
 
       <Toaster />
