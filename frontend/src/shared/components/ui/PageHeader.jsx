@@ -14,7 +14,7 @@ export default function PageHeader({ title, subtitle, actions, breadcrumbs, clas
     <div className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
       <div className="min-w-0">
         {breadcrumbs && <div className="mb-1">{breadcrumbs}</div>}
-        <h1 className="text-2xl font-semibold tracking-tight truncate">{title}</h1>
+        <h1 className="text-xl font-semibold truncate">{title}</h1>
         {subtitle && (
           <p className="text-muted-foreground text-sm mt-0.5 truncate">{subtitle}</p>
         )}

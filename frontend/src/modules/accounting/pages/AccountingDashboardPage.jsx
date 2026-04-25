@@ -57,8 +57,8 @@ export default function AccountingDashboardPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Contabilidad" subtitle="Cargando..." />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-xl animate-pulse" />)}
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-md animate-pulse" />)}
         </div>
       </div>
     );
@@ -83,19 +83,19 @@ export default function AccountingDashboardPage() {
         title="Contabilidad"
         subtitle={activeProject ? `${activeProject.nombre}` : 'Todos los proyectos'}
         actions={
-          <div className="flex items-center gap-2">
-            <input type="date" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} className="h-9 px-3 rounded-lg border border-border bg-card text-sm" />
-            <span className="text-xs text-muted-foreground">hasta</span>
-            <input type="date" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} className="h-9 px-3 rounded-lg border border-border bg-card text-sm" />
-            <button onClick={() => navigate('/accounting/expenses')} className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+          <>
+            <input type="date" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} className="h-9 px-3 rounded-md border border-border bg-card text-sm" />
+            <span className="text-xs text-muted-foreground hidden sm:inline">hasta</span>
+            <input type="date" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} className="h-9 px-3 rounded-md border border-border bg-card text-sm" />
+            <button onClick={() => navigate('/accounting/expenses')} className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 whitespace-nowrap">
               <Plus size={14} weight="bold" /> Egreso
             </button>
-          </div>
+          </>
         }
       />
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           icon={CurrencyEur}
           label="Ingresos cobrados"
@@ -124,33 +124,33 @@ export default function AccountingDashboardPage() {
 
       {/* Graficas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4">Evolucion mensual (12 meses)</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" stroke="#6b7280" fontSize={11} />
-              <YAxis stroke="#6b7280" fontSize={11} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
-              <Tooltip formatter={(v) => fmt(v)} />
-              <Legend />
-              <Line type="monotone" dataKey="ingresos" stroke="#22c55e" strokeWidth={2} name="Ingresos" />
-              <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" />
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4">Evolucion mensual (12 meses)</h3>
+          <ResponsiveContainer width="100%" height={220} minHeight={200}>
+            <LineChart data={trendData} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" />
+              <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
+              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+              <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2} name="Ingresos" dot={{ fill: '#10b981', r: 3 }} />
+              <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4">Egresos por categoria</h3>
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4">Egresos por categoria</h3>
           {egresos.por_categoria.length === 0 ? (
             <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados en este periodo" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={egresos.por_categoria} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
-                <YAxis type="category" dataKey="categoria" stroke="#6b7280" fontSize={11} width={100} />
-                <Tooltip formatter={(v) => fmt(v)} />
-                <Bar dataKey="total" fill="#ef4444" radius={[0, 4, 4, 0]} />
+            <ResponsiveContainer width="100%" height={220} minHeight={200}>
+              <BarChart data={egresos.por_categoria} layout="vertical" margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" horizontal={false} />
+                <XAxis type="number" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
+                <YAxis type="category" dataKey="categoria" stroke="#6b7280" fontSize={12} width={100} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(v) => fmt(v)} cursor={{ fill: '#f9fafb' }} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Bar dataKey="total" fill="#ef4444" radius={[0, 4, 4, 0]} maxBarSize={20} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -158,9 +158,9 @@ export default function AccountingDashboardPage() {
       </div>
 
       {/* Cuentas por cobrar */}
-      <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold">Cuentas por cobrar ({cuentas_por_cobrar.length})</h3>
+          <h3 className="font-semibold">Cuentas por cobrar ({cuentas_por_cobrar.length})</h3>
           {cuentas_por_cobrar.length > 0 && (
             <div className="text-sm text-muted-foreground">
               Total pendiente: <span className="font-bold text-orange-600">{fmt(cuentas_por_cobrar.reduce((s, r) => s + Number(r.importe_pendiente), 0))}</span>
@@ -173,7 +173,7 @@ export default function AccountingDashboardPage() {
         ) : (
           <div className="overflow-x-auto -mx-5">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+              <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                 <tr>
                   <th className="text-left px-5 py-2.5 font-bold">Lead</th>
                   <th className="text-left px-5 py-2.5 font-bold">Producto</th>

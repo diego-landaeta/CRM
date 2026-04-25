@@ -1,5 +1,5 @@
 import {
-  Sparkle,
+  Circle,
   Clock,
   Phone,
   ChartLineUp,
@@ -28,7 +28,7 @@ export const STATUS_LABELS = {
 };
 
 export const STATUS_ICONS = {
-  nuevo: Sparkle,
+  nuevo: Circle,
   por_contactar: Clock,
   contactado: Phone,
   en_seguimiento: ChartLineUp,
@@ -53,12 +53,12 @@ export default function StatusBadge({ status, showIcon = false, className }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
         style,
         className,
       )}
     >
-      {showIcon && Icon && <Icon size={11} weight="fill" />}
+      {showIcon && Icon && <Icon size={11} weight="bold" />}
       {label}
     </span>
   );

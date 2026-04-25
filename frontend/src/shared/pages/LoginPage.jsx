@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Package, Eye, EyeSlash, ShieldCheck } from '@phosphor-icons/react';
+import { Package, Eye, EyeSlash } from '@phosphor-icons/react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -50,27 +50,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
-      <div className="w-full max-w-[420px] px-4">
-        <div className="bg-card rounded-3xl shadow-[0_20px_25px_-5px_rgb(0_0_0/0.06),0_8px_10px_-6px_rgb(0_0_0/0.04)] border border-border p-8 md:p-10">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-[400px] px-4">
+        <div className="bg-card rounded-lg border border-border p-8">
           {/* Header */}
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white mb-6 shadow-lg shadow-primary/20">
-              <Package size={28} weight="duotone" />
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-md bg-primary text-white mb-4">
+              <Package size={24} weight="regular" />
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight">CRM MultiProyecto</h1>
-            <p className="text-muted-foreground text-sm mt-2">Introduce tus credenciales para acceder</p>
-            {/* Beta badge */}
-            <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-              <ShieldCheck size={12} weight="duotone" className="text-amber-600" />
-              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">v0.1.0 Fase Beta</span>
-            </div>
+            <h1 className="text-xl font-semibold">CRM MultiProyecto</h1>
+            <p className="text-muted-foreground text-sm mt-1">Introduce tus credenciales para acceder</p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} aria-label="Formulario de inicio de sesion" className="space-y-5">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">
+              <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
                 Email
               </label>
               <input
@@ -79,13 +74,13 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nombre@empresa.com"
                 autoComplete="email"
-                className="w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                className="w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5 px-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <label className="text-xs text-muted-foreground text-muted-foreground">
                   Contrasena
                 </label>
               </div>
@@ -96,7 +91,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Tu contrasena"
                   autoComplete="current-password"
-                  className="w-full h-11 px-4 pr-11 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                  className="w-full h-11 px-4 pr-11 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
                 />
                 <button
                   type="button"
@@ -110,7 +105,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2.5 font-medium">
+              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md px-4 py-2.5 font-medium">
                 {error}
               </div>
             )}
@@ -118,7 +113,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
+              className="w-full h-12 bg-primary text-primary-foreground rounded-md font-semibold text-sm hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -132,18 +127,18 @@ export default function LoginPage() {
           </form>
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t text-center">
+          <div className="mt-6 pt-5 border-t border-border text-center">
             <p className="text-xs text-muted-foreground">
               No tienes cuenta?{' '}
-              <span className="text-foreground font-bold cursor-pointer underline underline-offset-2">
+              <span className="text-foreground font-medium cursor-pointer hover:underline underline-offset-2">
                 Contacta con el administrador
               </span>
             </p>
           </div>
         </div>
 
-        <p className="text-center text-[10px] text-muted-foreground mt-6">
-          &copy; 2026 CRM MultiProyecto &mdash; Psiko Aprende &bull; ISEIH &bull; Fono Aprende
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          &copy; 2026 CRM MultiProyecto
         </p>
       </div>
     </div>

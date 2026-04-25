@@ -60,12 +60,12 @@ export default function ChannelBadge({ channel, showIcon = true, className }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
+        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium',
         style,
         className,
       )}
     >
-      {showIcon && <Icon size={11} weight="fill" />}
+      {showIcon && <Icon size={12} weight="bold" />}
       {label}
     </span>
   );

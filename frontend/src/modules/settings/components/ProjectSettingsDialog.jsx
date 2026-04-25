@@ -20,7 +20,7 @@ const MODULES_REGISTRY = {
   comercial: {
     label: 'Comercial',
     items: [
-      { key: 'leads', label: 'Leads (captura + pipeline)' },
+      { key: 'leads', label: 'Prospectos (captura + pipeline)' },
       { key: 'clients', label: 'Clientes (convertidos)', requires: ['leads'] },
       { key: 'products', label: 'Productos / Catalogo' },
       { key: 'conversions', label: 'Conversiones (ventas)', requires: ['products'] },
@@ -61,41 +61,43 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-4xl flex flex-col max-h-[92vh]">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl">
+        <div className="relative bg-card sm:rounded-lg border border-border w-full max-w-4xl flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
                 {project.emoji || '📁'}
               </div>
-              <div>
-                <h2 className="text-lg font-extrabold tracking-tight">Configurar {project.nombre}</h2>
-                <p className="text-xs text-muted-foreground">{project.slug} &mdash; {project.type === 'crm' ? 'Proyecto CRM' : 'Proyecto IA'}</p>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-semibold truncate">Configurar {project.nombre}</h2>
+                <p className="text-xs text-muted-foreground truncate">{project.slug} &mdash; {project.type === 'crm' ? 'Proyecto CRM' : 'Proyecto IA'}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+            <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted flex-shrink-0"><X size={18} /></button>
           </div>
 
-          <div className="flex flex-1 min-h-0">
-            <nav className="w-52 border-r border-border p-3 space-y-1 bg-muted/20 flex-shrink-0">
-              {TABS.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    tab === t.id
-                      ? 'bg-primary text-white font-bold shadow-md'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <t.icon size={16} weight={tab === t.id ? 'fill' : 'regular'} />
-                  {t.label}
-                </button>
-              ))}
+          <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+            <nav className="lg:w-52 lg:border-r border-b lg:border-b-0 border-border lg:p-3 p-2 lg:space-y-1 bg-muted/20 flex-shrink-0 overflow-x-auto lg:overflow-x-visible">
+              <div className="flex lg:flex-col gap-1 lg:gap-1 lg:w-auto w-max">
+                {TABS.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`lg:w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors whitespace-nowrap ${
+                      tab === t.id
+                        ? 'bg-primary text-white font-semibold'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                  >
+                    <t.icon size={16} weight={tab === t.id ? 'fill' : 'regular'} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </nav>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 lg:p-6 min-w-0">
               {tab === 'general' && <GeneralTab project={project} onSaved={onSaved} />}
               {tab === 'modulos' && <ModulosTab project={project} onSaved={onSaved} />}
               {tab === 'categorias' && <CategoriesTab project={project} />}
@@ -195,8 +197,8 @@ function GeneralTab({ project, onSaved }) {
   return (
     <form onSubmit={handleSave} className="space-y-5 max-w-2xl">
       <SectionTitle title="Logo del proyecto" subtitle="PNG, JPG, WEBP o SVG. Max 5 MB. Se usa en el sidebar y dashboard." />
-      <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-xl border border-border">
-        <div className="w-20 h-20 rounded-xl bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+      <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-md border border-border">
+        <div className="w-20 h-20 rounded-md bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
           {logoSrc ? (
             <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
           ) : (
@@ -220,7 +222,7 @@ function GeneralTab({ project, onSaved }) {
       </div>
 
       <SectionTitle title="Informacion basica" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Nombre *">
           <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} required />
         </Field>
@@ -239,7 +241,7 @@ function GeneralTab({ project, onSaved }) {
       </div>
 
       <SectionTitle title="Terminologia del proyecto" subtitle="Como se llaman &quot;productos&quot; aqui (ej Formacion, Plan, Servicio)" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Producto singular">
           <input value={form.producto_label} onChange={e => setForm({ ...form, producto_label: e.target.value })} className={inputClass} placeholder="Formacion" />
         </Field>
@@ -273,7 +275,7 @@ function GeneralTab({ project, onSaved }) {
       </div>
 
       <div className="flex justify-end pt-2">
-        <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
+        <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>
@@ -338,8 +340,8 @@ function CategoriesTab({ project }) {
         <SectionTitle title="Categorias y subcategorias" subtitle={`Organiza ${productoLabel} en grupos (ej: Cursos, Presenciales, Talleres)`} />
       </div>
 
-      <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-xl border border-border space-y-2">
-        <p className="text-[11px] font-bold uppercase text-muted-foreground">Añadir categoria</p>
+      <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
+        <p className="text-[11px] font-medium text-muted-foreground">Añadir categoria</p>
         <div className="flex gap-2">
           <input
             value={newCat.nombre}
@@ -365,15 +367,15 @@ function CategoriesTab({ project }) {
       {loading ? (
         <p className="text-sm text-muted-foreground">Cargando...</p>
       ) : parents.length === 0 ? (
-        <div className="text-center py-10 border-2 border-dashed border-border rounded-xl">
-          <Tag size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="duotone" />
+        <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
+          <Tag size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
           <p className="text-sm font-semibold">Sin categorias</p>
           <p className="text-xs text-muted-foreground mt-1">Crea una categoria para empezar a organizar tus {productoLabel}</p>
         </div>
       ) : (
         <div className="space-y-2">
           {parents.map(p => (
-            <div key={p.id} className="bg-card border border-border rounded-xl p-3">
+            <div key={p.id} className="bg-card border border-border rounded-md p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Tag size={14} className="text-primary" weight="fill" />
@@ -517,9 +519,9 @@ function FieldsTab({ project }) {
 
       {view === 'editor' ? (
         <>
-          <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-xl border border-border">
-            <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">Nuevo campo</p>
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border">
+            <p className="text-[11px] font-medium text-muted-foreground mb-3">Nuevo campo</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={smallInput + ' font-mono text-xs'} required />
               <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={smallInput} required />
               <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={smallInput}>
@@ -544,10 +546,10 @@ function FieldsTab({ project }) {
           {loading ? (
             <p className="text-sm text-muted-foreground">Cargando...</p>
           ) : fields.length === 0 ? (
-            <div className="text-center py-10 border-2 border-dashed border-border rounded-xl">
-              <Notepad size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="duotone" />
+            <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
+              <Notepad size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
               <p className="text-sm font-semibold">Sin campos custom</p>
-              <p className="text-xs text-muted-foreground mt-1">Los leads solo tendran los campos base (nombre, email, telefono)</p>
+              <p className="text-xs text-muted-foreground mt-1">Los prospectos solo tendran los campos base (nombre, email, telefono)</p>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -561,7 +563,7 @@ function FieldsTab({ project }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       {isEditing ? (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={smallInput + ' h-8'} />
                           <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={smallInput + ' h-8'} placeholder="Seccion" />
                           {f.type === 'select' && (
@@ -577,7 +579,7 @@ function FieldsTab({ project }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{f.label}</span>
                             <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
                             {f.required && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600">REQ</span>}
                             {f.grupo && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
                           </div>
@@ -610,11 +612,11 @@ function FieldsTab({ project }) {
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">Asi se veran los campos al crear/editar un lead:</p>
           {Object.keys(groups).length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl">Sin campos</div>
+            <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">Sin campos</div>
           ) : Object.entries(groups).map(([grupo, items]) => (
-            <div key={grupo} className="bg-muted/20 rounded-xl p-4 border border-border">
-              <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">{grupo}</p>
-              <div className="grid grid-cols-2 gap-3">
+            <div key={grupo} className="bg-muted/20 rounded-md p-4 border border-border">
+              <p className="text-[11px] font-medium text-muted-foreground mb-3">{grupo}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {items.map(f => (
                   <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
                     <label className="text-xs font-semibold mb-1 block">
@@ -660,11 +662,11 @@ function WebhookTab({ project }) {
 
   return (
     <div className="space-y-5 max-w-2xl">
-      <SectionTitle title="Webhook de leads" subtitle="Endpoint HTTP para recibir leads desde formularios externos" />
+      <SectionTitle title="Webhook de leads" subtitle="Endpoint HTTP para recibir prospectos desde formularios externos" />
 
-      <div className="space-y-3 bg-muted/30 rounded-xl p-4 border border-border">
+      <div className="space-y-3 bg-muted/30 rounded-md p-4 border border-border">
         <div>
-          <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">URL del webhook</label>
+          <label className="text-[10px] font-medium text-muted-foreground block mb-1">URL del webhook</label>
           <div className="flex gap-2">
             <input readOnly value={url} className={inputClass + ' font-mono text-xs'} />
             <button onClick={() => doCopy(url, 'url')} className="h-10 px-3 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted flex items-center gap-1">
@@ -673,7 +675,7 @@ function WebhookTab({ project }) {
           </div>
         </div>
         <div>
-          <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">API Key</label>
+          <label className="text-[10px] font-medium text-muted-foreground block mb-1">API Key</label>
           <div className="flex gap-2">
             <input readOnly value={revealed ? apiKey : '•'.repeat(Math.min(40, (apiKey || '').length))} className={inputClass + ' font-mono text-xs'} />
             <button onClick={() => setRevealed(!revealed)} className="h-10 px-3 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted">
@@ -778,7 +780,7 @@ function ApisTab({ project }) {
                 </div>
                 {cred ? (
                   <>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-medium ${
                       cred.last_test_result === 'ok'
                         ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                     }`}>{cred.last_test_result || 'sin probar'}</span>
@@ -819,16 +821,16 @@ function CredentialQuickDialog({ project, service, existing, onClose, onSaved })
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/60" onClick={onClose} />
-        <form onSubmit={handleSave} className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md p-6 space-y-3">
+        <form onSubmit={handleSave} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">{existing ? 'Editar' : 'Configurar'} {service.name}</h3>
+            <h3 className="text-lg font-semibold">{existing ? 'Editar' : 'Configurar'} {service.name}</h3>
             <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <p className="text-xs text-muted-foreground">{service.description}</p>
           <div>
-            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">
+            <label className="text-[10px] font-medium text-muted-foreground block mb-1">
               {existing ? 'Nuevo valor (si no lo cambias, deja vacio y cancela)' : 'API Key / Token'}
             </label>
             <input
@@ -853,7 +855,7 @@ function CredentialQuickDialog({ project, service, existing, onClose, onSaved })
 function SectionTitle({ title, subtitle }) {
   return (
     <div>
-      <h3 className="text-sm font-extrabold tracking-tight">{title}</h3>
+      <h3 className="text-sm font-semibold">{title}</h3>
       {subtitle && <p className="text-xs text-muted-foreground mt-0.5" dangerouslySetInnerHTML={{ __html: subtitle }} />}
     </div>
   );
@@ -862,7 +864,7 @@ function SectionTitle({ title, subtitle }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">{label}</label>
+      <label className="text-xs text-muted-foreground text-muted-foreground mb-1 block">{label}</label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
     </div>
@@ -912,17 +914,19 @@ function ModulosTab({ project, onSaved }) {
         <SectionTitle title="Modulos activos" subtitle="Define que secciones del CRM estan disponibles para este proyecto. El sidebar y los endpoints respetan estos toggles." />
       </div>
 
-      <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 border border-border">
-        <span className="text-[11px] font-bold uppercase text-muted-foreground">Presets:</span>
-        <button onClick={() => applyPreset('crm')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">CRM Formacion</button>
-        <button onClick={() => applyPreset('ia')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">Plataforma IA</button>
-        <button onClick={() => applyPreset('minimal')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">Minimal</button>
+      <div className="p-3 rounded-md bg-muted/30 border border-border">
+        <p className="text-xs font-medium text-muted-foreground mb-2">Aplicar preset</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button onClick={() => applyPreset('crm')} className="px-3 py-2 rounded-md bg-card border border-border text-xs font-semibold hover:bg-muted">CRM Formacion</button>
+          <button onClick={() => applyPreset('ia')} className="px-3 py-2 rounded-md bg-card border border-border text-xs font-semibold hover:bg-muted">Plataforma IA</button>
+          <button onClick={() => applyPreset('minimal')} className="px-3 py-2 rounded-md bg-card border border-border text-xs font-semibold hover:bg-muted">Minimal</button>
+        </div>
       </div>
 
       {Object.entries(MODULES_REGISTRY).map(([groupKey, group]) => (
-        <div key={groupKey} className="bg-muted/20 rounded-xl border border-border overflow-hidden">
+        <div key={groupKey} className="bg-muted/20 rounded-md border border-border overflow-hidden">
           <div className="px-4 py-2 border-b border-border bg-muted/40">
-            <p className="text-[11px] font-bold uppercase text-muted-foreground">{group.label}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">{group.label}</p>
           </div>
           <div className="divide-y divide-border">
             {group.items.map((item) => {
@@ -948,7 +952,7 @@ function ModulosTab({ project, onSaved }) {
       ))}
 
       <div className="flex justify-end pt-2">
-        <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
           {saving ? 'Guardando...' : 'Guardar modulos'}
         </button>
       </div>

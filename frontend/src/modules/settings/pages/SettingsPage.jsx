@@ -62,7 +62,7 @@ const AVATAR_COLORS = [
   'bg-teal-100 text-teal-700',
 ];
 
-const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
@@ -230,8 +230,8 @@ function UsersTab() {
 
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl p-8 text-center">
-        <WarningCircle size={40} className="text-red-500 mx-auto mb-3" weight="duotone" />
+      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-8 text-center">
+        <WarningCircle size={40} className="text-red-500 mx-auto mb-3" weight="regular" />
         <p className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">No se pudieron cargar los usuarios</p>
         <p className="text-xs text-red-500/80 dark:text-red-400/80 mb-4">{error}</p>
         <button
@@ -248,20 +248,20 @@ function UsersTab() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-extrabold tracking-tight">Gestion de Usuarios</h2>
+          <h2 className="text-base font-semibold">Gestion de Usuarios</h2>
           <p className="text-[13px] text-muted-foreground mt-0.5">Administra los usuarios del CRM y sus roles</p>
         </div>
         <button
           onClick={() => { resetCreateForm(); setShowCreateDialog(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <Plus size={14} weight="bold" /> Crear Usuario
         </button>
       </div>
 
       {/* Filtro por proyecto */}
-      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-card">
-        <span className="text-[11px] font-bold uppercase text-muted-foreground">Mostrar:</span>
+      <div className="flex items-center gap-2 p-3 rounded-md border border-border bg-card">
+        <span className="text-[11px] font-medium text-muted-foreground">Mostrar:</span>
         <button
           onClick={() => setProjectFilter('active')}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'active' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
@@ -288,18 +288,18 @@ function UsersTab() {
       </div>
 
       {/* Users table */}
-      <div className="bg-card rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden">
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
         <div className="hidden md:block">
           <table className="w-full text-[13px]">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Usuario</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Rol</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Proyectos</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ultima conexion</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-                <th className="px-5 py-2.5 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Acciones</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Usuario</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Rol</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyectos</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Ultima conexion</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
+                <th className="px-5 py-2.5 text-right text-xs text-muted-foreground">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -310,7 +310,7 @@ function UsersTab() {
                   <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${!isActive ? 'opacity-50' : ''}`}>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
                           {getInitials(userName)}
                         </div>
                         <span className="font-semibold">{userName}</span>
@@ -318,7 +318,7 @@ function UsersTab() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
                     <td className="px-5 py-3.5">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
                         {u.role}
                       </span>
                     </td>
@@ -328,7 +328,7 @@ function UsersTab() {
                     <td className="px-5 py-3.5 text-muted-foreground">
                       {u.last_login_at ? (
                         <span className="flex items-center gap-1.5 text-[12px]">
-                          <Clock size={12} weight="duotone" />
+                          <Clock size={12} weight="regular" />
                           {new Date(u.last_login_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       ) : (
@@ -336,7 +336,7 @@ function UsersTab() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
                         isActive ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-400'
                       }`}>
                         {isActive ? 'activo' : 'inactivo'}
@@ -354,7 +354,7 @@ function UsersTab() {
                           {openMenuId === u.id && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                              <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1.5">
+                              <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-md border border-border py-1.5">
                                 <button
                                   onClick={() => handleOpenEdit(u)}
                                   className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors"
@@ -385,7 +385,7 @@ function UsersTab() {
               {users.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-5 py-12 text-center">
-                    <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
+                    <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="regular" />
                     <p className="text-muted-foreground text-sm">No hay usuarios registrados</p>
                   </td>
                 </tr>
@@ -402,7 +402,7 @@ function UsersTab() {
             return (
               <div key={u.id} className={`p-4 space-y-2 ${!isActive ? 'opacity-50' : ''}`}>
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-extrabold ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
                     {getInitials(userName)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -420,7 +420,7 @@ function UsersTab() {
                       {openMenuId === u.id && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                          <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1.5">
+                          <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-md border border-border py-1.5">
                             <button onClick={() => handleOpenEdit(u)} className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors">
                               <PencilSimple size={14} /> Editar rol
                             </button>
@@ -437,10 +437,10 @@ function UsersTab() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
                     {u.role}
                   </span>
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
                     isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
                   }`}>
                     {isActive ? 'activo' : 'inactivo'}
@@ -455,12 +455,12 @@ function UsersTab() {
       {/* Create User Dialog */}
       {showCreateDialog && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreateDialog(false)} />
-            <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
+            <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-lg font-extrabold tracking-tight">Crear Usuario</h2>
+                  <h2 className="text-lg font-semibold">Crear Usuario</h2>
                   <p className="text-muted-foreground text-sm mt-0.5">Se enviara un email de bienvenida al nuevo usuario</p>
                 </div>
                 <button onClick={() => setShowCreateDialog(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
@@ -470,15 +470,15 @@ function UsersTab() {
 
               <form onSubmit={handleCreateUser} className="space-y-4">
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Nombre *</label>
+                  <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Nombre *</label>
                   <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre completo" className={inputClass} required />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Email *</label>
+                  <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Email *</label>
                   <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} type="email" placeholder="correo@empresa.com" className={inputClass} required />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Rol *</label>
+                  <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Rol *</label>
                   <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={selectClass} style={selectBg}>
                     <option value="admin">Admin</option>
                     <option value="gestor">Gestor</option>
@@ -487,11 +487,11 @@ function UsersTab() {
 
                 {projects.length > 0 && (
                   <div>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Proyectos asignados *</label>
+                    <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Proyectos asignados *</label>
                     <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona al menos un proyecto al que tendra acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
-                        <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
+                        <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
                           <input
                             type="checkbox"
                             checked={newProjects.includes(p.id)}
@@ -506,10 +506,10 @@ function UsersTab() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowCreateDialog(false)} className="px-5 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                  <button type="button" onClick={() => setShowCreateDialog(false)} className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={createLoading} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50">
+                  <button type="submit" disabled={createLoading} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {createLoading ? 'Creando...' : 'Crear usuario'}
                   </button>
                 </div>
@@ -522,12 +522,12 @@ function UsersTab() {
       {/* Edit Role Dialog */}
       {editingUser && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
-            <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
+            <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-lg font-extrabold tracking-tight">Editar rol</h2>
+                  <h2 className="text-lg font-semibold">Editar rol</h2>
                   <p className="text-muted-foreground text-sm mt-0.5">Cambia el rol y proyectos de {editingUser.nombre || editingUser.name}</p>
                 </div>
                 <button onClick={() => setEditingUser(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
@@ -536,8 +536,8 @@ function UsersTab() {
               </div>
 
               <form onSubmit={handleSaveEdit} className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-2xl bg-muted/50">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-extrabold ${AVATAR_COLORS[editingUser.id % AVATAR_COLORS.length]}`}>
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold ${AVATAR_COLORS[editingUser.id % AVATAR_COLORS.length]}`}>
                     {getInitials(editingUser.nombre || editingUser.name)}
                   </div>
                   <div>
@@ -547,7 +547,7 @@ function UsersTab() {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Rol</label>
+                  <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Rol</label>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className={selectClass} style={selectBg}>
                     <option value="admin">Admin</option>
                     <option value="gestor">Gestor</option>
@@ -556,11 +556,11 @@ function UsersTab() {
 
                 {projects.length > 0 && (
                   <div>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">Proyectos asignados</label>
+                    <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Proyectos asignados</label>
                     <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona los proyectos a los que tendra acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
-                        <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
+                        <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
                           <input
                             type="checkbox"
                             checked={editProjects.includes(p.id)}
@@ -575,10 +575,10 @@ function UsersTab() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setEditingUser(null)} className="px-5 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                  <button type="button" onClick={() => setEditingUser(null)} className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={editLoading} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50">
+                  <button type="submit" disabled={editLoading} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {editLoading ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 </div>
@@ -615,12 +615,12 @@ function ProjectsTab() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-extrabold tracking-tight">Proyectos</h2>
+          <h2 className="text-base font-semibold">Proyectos</h2>
           <p className="text-[13px] text-muted-foreground mt-0.5">Psiko, ISEIH, Fono Aprende + plataformas IA</p>
         </div>
         {canCreate && (
-          <button onClick={() => { setEditing(null); setDialogOpen(true); }} className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90">
-            <Plus size={14} weight="bold" /> Nuevo proyecto
+          <button onClick={() => { setEditing(null); setDialogOpen(true); }} className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 whitespace-nowrap flex-shrink-0">
+            <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nuevo proyecto</span><span className="sm:hidden">Nuevo</span>
           </button>
         )}
       </div>
@@ -630,9 +630,9 @@ function ProjectsTab() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {projects.map((p) => (
-            <div key={p.id} className="bg-card rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow">
+            <div key={p.id} className="bg-card rounded-lg border border-border overflow-hidden hover:border-foreground/20 transition-colors">
               <div className="p-5 flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
                   {p.logo_url ? (
                     <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${p.id}/logo`} alt="" className="w-full h-full object-contain" />
                   ) : (p.emoji || '📁')}
@@ -640,8 +640,8 @@ function ProjectsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-bold text-sm truncate">{p.nombre}</p>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${p.type === 'ia' ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>{p.type}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${p.type === 'ia' ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>{p.type}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
                       {p.active ? 'activo' : 'inactivo'}
                     </span>
                   </div>
@@ -738,18 +738,18 @@ function CategoriesDialog({ project, onClose }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-bold">Categorias y subcategorias</h2>
+              <h2 className="text-lg font-semibold">Categorias y subcategorias</h2>
               <p className="text-xs text-muted-foreground">{project.nombre} &mdash; Organiza productos/{project.producto_label_plural?.toLowerCase() || 'formaciones'} en grupos</p>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
 
-          <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2 p-4 bg-muted/30 rounded-xl mb-4">
+          <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2 p-4 bg-muted/30 rounded-md mb-4">
             <input
               value={newCat.nombre}
               onChange={e => setNewCat({ ...newCat, nombre: e.target.value })}
@@ -868,43 +868,43 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">{existing ? 'Editar' : 'Nuevo'} proyecto</h2>
+            <h2 className="text-lg font-semibold">{existing ? 'Editar' : 'Nuevo'} proyecto</h2>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Nombre *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Nombre *</label>
                 <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Slug *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Slug *</label>
                 <input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} className={inputClass + ' font-mono'} disabled={!!existing} placeholder="psiko-aprende" required />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Tipo</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Tipo</label>
                 <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className={inputClass}>
                   <option value="crm">CRM (leads)</option>
                   <option value="ia">IA (monitor pagos)</option>
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
                 <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: e.target.value })} className={inputClass} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-border">
               <div className="col-span-2">
-                <p className="text-[11px] font-bold uppercase text-muted-foreground mb-1">Etiqueta de producto</p>
+                <p className="text-[11px] font-medium text-muted-foreground mb-1">Etiqueta de producto</p>
                 <p className="text-[11px] text-muted-foreground">Personaliza como se llama &quot;Producto&quot; en este proyecto (ej: Formacion, Plan, Servicio)</p>
               </div>
               <div>
@@ -918,17 +918,17 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Meta Account ID (opcional)</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Meta Account ID (opcional)</label>
               <input value={form.meta_account_id} onChange={e => setForm({ ...form, meta_account_id: e.target.value })} className={inputClass} placeholder="act_1234567890" />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Google Ads Account ID (opcional)</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Google Ads Account ID (opcional)</label>
               <input value={form.google_account_id} onChange={e => setForm({ ...form, google_account_id: e.target.value })} className={inputClass} placeholder="123-456-7890" />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">GSC Property URL (opcional)</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">GSC Property URL (opcional)</label>
               <input value={form.gsc_property} onChange={e => setForm({ ...form, gsc_property: e.target.value })} className={inputClass} placeholder="sc-domain:psikoaprende.com" />
             </div>
 
@@ -1005,7 +1005,7 @@ function FieldDefsDialog({ project, onClose }) {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Eliminar este campo? Los datos existentes en leads se mantienen pero ya no se veran.')) return;
+    if (!confirm('Eliminar este campo? Los datos existentes en prospectos se mantienen pero ya no se veran.')) return;
     try {
       await client.delete(`/field-definitions/${id}`);
       toast({ title: 'Campo eliminado' });
@@ -1063,13 +1063,13 @@ function FieldDefsDialog({ project, onClose }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-3xl flex flex-col max-h-[92vh]">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-3xl flex flex-col max-h-[92vh]">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
-              <h2 className="text-lg font-bold">Campos personalizados</h2>
+              <h2 className="text-lg font-semibold">Campos personalizados</h2>
               <p className="text-xs text-muted-foreground">{project.nombre} &mdash; {fields.length} / 15 campos recomendados</p>
             </div>
             <div className="flex items-center gap-2">
@@ -1086,8 +1086,8 @@ function FieldDefsDialog({ project, onClose }) {
             {view === 'editor' ? (
               <>
                 {/* Add */}
-                <div className="mb-5 p-4 bg-muted/30 rounded-xl border border-border">
-                  <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">Agregar campo nuevo</p>
+                <div className="mb-5 p-4 bg-muted/30 rounded-md border border-border">
+                  <p className="text-[11px] font-medium text-muted-foreground mb-3">Agregar campo nuevo</p>
                   <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2">
                     <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={inputClass + ' font-mono text-xs'} required />
                     <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={inputClass} required />
@@ -1114,9 +1114,9 @@ function FieldDefsDialog({ project, onClose }) {
                 {loading ? (
                   <p className="text-sm text-muted-foreground">Cargando...</p>
                 ) : fields.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">
                     Este proyecto aun no tiene campos custom.<br />
-                    <span className="text-xs">Los leads solo tendran los campos base (nombre, email, telefono...).</span>
+                    <span className="text-xs">Los prospectos solo tendran los campos base (nombre, email, telefono...).</span>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -1146,7 +1146,7 @@ function FieldDefsDialog({ project, onClose }) {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-semibold text-sm">{f.label}</span>
                                   <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
                                   {f.required && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400">REQ</span>}
                                   {f.grupo && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">{f.grupo}</span>}
                                 </div>
@@ -1180,10 +1180,10 @@ function FieldDefsDialog({ project, onClose }) {
               <div className="space-y-5">
                 <p className="text-xs text-muted-foreground">Asi se veran los campos al crear/editar un lead de <strong>{project.nombre}</strong>:</p>
                 {Object.keys(groups).length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-xl">Sin campos que mostrar</div>
+                  <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">Sin campos que mostrar</div>
                 ) : Object.entries(groups).map(([grupo, items]) => (
-                  <div key={grupo} className="bg-muted/20 rounded-xl p-4 border border-border">
-                    <p className="text-[11px] font-bold uppercase text-muted-foreground mb-3">{grupo}</p>
+                  <div key={grupo} className="bg-muted/20 rounded-md p-4 border border-border">
+                    <p className="text-[11px] font-medium text-muted-foreground mb-3">{grupo}</p>
                     <div className="grid grid-cols-2 gap-3">
                       {items.map(f => (
                         <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
@@ -1246,7 +1246,7 @@ function WebhooksTab() {
   if (!projects || projects.length === 0) {
     return (
       <div className="text-center py-12">
-        <PlugsConnected size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="duotone" />
+        <PlugsConnected size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="regular" />
         <p className="text-sm text-muted-foreground">No hay proyectos configurados</p>
       </div>
     );
@@ -1255,14 +1255,14 @@ function WebhooksTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-extrabold tracking-tight">Webhooks de Leads</h2>
+        <h2 className="text-base font-semibold">Webhooks de Prospectos</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">
-          Endpoints HTTP para recibir leads desde formularios externos, landing pages o integraciones (Typeform, Wix, Meta Lead Ads, etc).
+          Endpoints HTTP para recibir prospectos desde formularios externos, landing pages o integraciones (Typeform, Wix, Meta Lead Ads, etc).
         </p>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Como usar cada webhook</p>
+      <div className="bg-card border border-border rounded-lg p-5 space-y-3">
+        <p className="text-xs text-muted-foreground text-muted-foreground">Como usar cada webhook</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
           <div className="p-3 rounded-lg bg-muted/40">
             <p className="font-bold mb-1">POST nuevo lead</p>
@@ -1283,8 +1283,8 @@ function WebhooksTab() {
         </div>
       </div>
 
-      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex gap-3 items-start">
-        <WarningCircle size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" weight="duotone" />
+      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex gap-3 items-start">
+        <WarningCircle size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" weight="regular" />
         <div className="text-[13px] text-amber-800 dark:text-amber-200">
           <p className="font-bold">Mantener la API key en privado</p>
           <p className="mt-0.5">Solo administradores pueden ver esta clave. Si se filtra, contacta al superadmin para regenerarla.</p>
@@ -1298,10 +1298,10 @@ function WebhooksTab() {
           const isRevealed = !!revealed[project.id];
 
           return (
-            <div key={project.id} className="bg-card p-5 rounded-2xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+            <div key={project.id} className="bg-card p-5 rounded-lg border border-border">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <PlugsConnected size={18} className="text-primary" weight="duotone" />
+                <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+                  <PlugsConnected size={18} className="text-primary" weight="regular" />
                 </div>
                 <div className="flex-1">
                   <p className="font-bold text-sm">{project.nombre}</p>
@@ -1311,16 +1311,16 @@ function WebhooksTab() {
 
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">URL del webhook</label>
+                  <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block">URL del webhook</label>
                   <div className="flex items-center gap-2">
                     <input
                       readOnly
                       value={url}
-                      className="flex-1 h-10 px-3 rounded-xl border border-border bg-muted/50 text-xs font-mono outline-none"
+                      className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
                     />
                     <button
                       onClick={() => handleCopy(url, `url-${project.id}`)}
-                      className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                      className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                     >
                       {copied === `url-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
                       Copiar
@@ -1330,24 +1330,24 @@ function WebhooksTab() {
 
                 {apiKey ? (
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">X-API-Key (header)</label>
+                    <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block">X-API-Key (header)</label>
                     <div className="flex items-center gap-2">
                       <input
                         readOnly
                         type={isRevealed ? 'text' : 'password'}
                         value={apiKey}
-                        className="flex-1 h-10 px-3 rounded-xl border border-border bg-muted/50 text-xs font-mono outline-none"
+                        className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
                       />
                       <button
                         onClick={() => toggleReveal(project.id)}
-                        className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                        className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
                         {isRevealed ? <EyeSlash size={14} weight="bold" /> : <Eye size={14} weight="bold" />}
                         {isRevealed ? 'Ocultar' : 'Ver'}
                       </button>
                       <button
                         onClick={() => handleCopy(apiKey, `key-${project.id}`)}
-                        className="h-10 px-3 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                        className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
                         {copied === `key-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
                         Copiar
@@ -1362,7 +1362,7 @@ function WebhooksTab() {
                   <summary className="cursor-pointer text-xs font-semibold text-primary hover:underline">
                     Ver ejemplo de payload
                   </summary>
-                  <pre className="mt-2 p-3 rounded-xl bg-zinc-900 text-zinc-100 text-[11px] font-mono overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-md bg-zinc-900 text-zinc-100 text-[11px] font-mono overflow-x-auto">
 {`POST ${url}
 Content-Type: application/json
 X-API-Key: ${isRevealed && apiKey ? apiKey : '***'}
@@ -1446,7 +1446,7 @@ function ApisTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-extrabold tracking-tight">APIs globales</h2>
+        <h2 className="text-base font-semibold">APIs globales</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">Credenciales compartidas por todos los proyectos (ej: Claude AI para reportes). Las APIs por proyecto se configuran en Proyectos &gt; Configurar &gt; APIs.</p>
       </div>
 
@@ -1486,8 +1486,8 @@ function ApisTab() {
 
 function CredentialCard({ service, projectId, projectName, credential, onConfigure, onTest, onDelete }) {
   return (
-    <div className="bg-card p-5 rounded-2xl border border-border flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+    <div className="bg-card p-5 rounded-lg border border-border flex items-center gap-4">
+      <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
         <Key size={18} className="text-muted-foreground" />
       </div>
       <div className="flex-1">
@@ -1499,7 +1499,7 @@ function CredentialCard({ service, projectId, projectName, credential, onConfigu
       </div>
       {credential ? (
         <>
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
             credential.last_test_result === 'ok'
               ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
               : 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400'
@@ -1512,7 +1512,7 @@ function CredentialCard({ service, projectId, projectName, credential, onConfigu
         </>
       ) : (
         <>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">sin configurar</span>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">sin configurar</span>
           <button onClick={onConfigure} className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">Configurar</button>
         </>
       )}
@@ -1564,12 +1564,12 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md p-6">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-md p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-bold">{existing ? 'Editar' : 'Configurar'} {service.name}</h2>
+              <h2 className="text-lg font-semibold">{existing ? 'Editar' : 'Configurar'} {service.name}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">{service.description}</p>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
@@ -1577,13 +1577,13 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
 
           <form onSubmit={handleSave} className="space-y-3">
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">API Key / Token *</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">API Key / Token *</label>
               <input type="password" value={value} onChange={e => setValue(e.target.value)} placeholder={service.placeholder} className={inputClass + ' font-mono'} required autoFocus />
               <p className="text-[10px] text-muted-foreground mt-1">Se cifra con AES-256-GCM antes de guardar</p>
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Metadata (JSON opcional)</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Metadata (JSON opcional)</label>
               <textarea value={metadata} onChange={e => setMetadata(e.target.value)} placeholder='{"account_id": "12345", "refresh_token": "..."}' rows={3} className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-xs outline-none font-mono resize-none focus:border-primary" />
             </div>
 
@@ -1604,7 +1604,7 @@ function EmailTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-extrabold tracking-tight">Email -- Brevo</h2>
+        <h2 className="text-base font-semibold">Email -- Brevo</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">Plantillas de email transaccional</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1614,7 +1614,7 @@ function EmailTab() {
           { name: 'Bienvenida Usuario', trigger: 'POST /api/users', sent: '--', rate: '--' },
           { name: 'Confirmacion Pago', trigger: 'Stripe webhook', sent: '--', rate: '--' },
         ].map((t) => (
-          <div key={t.name} className="bg-card p-5 rounded-2xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+          <div key={t.name} className="bg-card p-5 rounded-lg border border-border">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center"><Envelope size={16} className="text-blue-600 dark:text-blue-400" /></div>
               <div>
@@ -1623,8 +1623,8 @@ function EmailTab() {
               </div>
             </div>
             <div className="flex gap-4 text-[13px]">
-              <div><span className="text-muted-foreground text-[10px] font-bold uppercase">Enviados</span><p className="font-bold">{t.sent}</p></div>
-              <div><span className="text-muted-foreground text-[10px] font-bold uppercase">Entrega</span><p className="font-bold text-emerald-600">{t.rate}</p></div>
+              <div><span className="text-muted-foreground text-[10px] font-medium">Enviados</span><p className="font-bold">{t.sent}</p></div>
+              <div><span className="text-muted-foreground text-[10px] font-medium">Entrega</span><p className="font-bold text-emerald-600">{t.rate}</p></div>
             </div>
           </div>
         ))}
@@ -1637,7 +1637,7 @@ function SecurityTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-extrabold tracking-tight">Seguridad</h2>
+        <h2 className="text-base font-semibold">Seguridad</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">Configuracion de seguridad del sistema</p>
       </div>
       <div className="space-y-3">
@@ -1651,17 +1651,17 @@ function SecurityTab() {
           { label: 'Certificado SSL', value: "Let's Encrypt (auto-renewal)", ok: true },
           { label: 'Pre-signed URLs', value: '15 min expiracion', ok: true },
         ].map((s) => (
-          <div key={s.label} className="bg-card p-4 rounded-2xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] flex items-center justify-between">
+          <div key={s.label} className="bg-card p-4 rounded-lg border border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.ok ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
-                <ShieldCheck size={16} className={s.ok ? 'text-emerald-600' : 'text-red-500'} weight="duotone" />
+                <ShieldCheck size={16} className={s.ok ? 'text-emerald-600' : 'text-red-500'} weight="regular" />
               </div>
               <div>
                 <p className="text-[13px] font-semibold">{s.label}</p>
                 <p className="text-[11px] text-muted-foreground">{s.value}</p>
               </div>
             </div>
-            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">OK</span>
+            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 px-2.5 py-1 rounded-full text-[10px] font-medium">OK</span>
           </div>
         ))}
       </div>
@@ -1691,7 +1691,7 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] whitespace-nowrap transition-all ${
+              className={`w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-md text-[13px] whitespace-nowrap transition-all ${
                 activeTab === tab.id
                   ? 'bg-primary/10 text-primary font-bold'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'

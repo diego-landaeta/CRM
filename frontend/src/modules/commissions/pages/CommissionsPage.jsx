@@ -77,14 +77,14 @@ export default function CommissionsPage() {
         title={isAdmin ? 'Comisiones' : 'Mis comisiones'}
         subtitle={isAdmin ? 'Comisiones generadas a partir de las ventas (round-robin -> regla -> conversion)' : 'Tu acumulado por ventas'}
         actions={isAdmin && user?.role === 'superadmin' ? (
-          <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+          <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-10 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
             <Gear size={14} weight="bold" /> Reglas (% por gestor)
           </button>
         ) : null}
       />
 
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard icon={ChartBar} label="Total generado" value={fmt(stats.total)} />
           <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.pagado)} tone="success" />
           <KpiCard icon={Clock} label="Pendiente" value={fmt(stats.pendiente)} tone="warning" />
@@ -92,7 +92,7 @@ export default function CommissionsPage() {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border flex items-center gap-2 flex-wrap">
           {ESTADOS.map(e => (
             <button key={e.v} onClick={() => setFilterEstado(e.v)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterEstado === e.v ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}>
@@ -112,54 +112,101 @@ export default function CommissionsPage() {
         ) : items.length === 0 ? (
           <EmptyState icon={CurrencyEur} title="Sin comisiones" description={isAdmin ? 'Aun no se han generado comisiones. Asegurate de tener reglas creadas.' : 'No tienes comisiones aun. Cierra ventas para empezar a acumular.'} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
-                  {isAdmin && <th className="text-left px-4 py-2.5 font-bold">Gestor</th>}
-                  <th className="text-left px-4 py-2.5 font-bold">Cliente / Producto</th>
-                  <th className="text-right px-4 py-2.5 font-bold">Base cobrada</th>
-                  <th className="text-right px-4 py-2.5 font-bold">%</th>
-                  <th className="text-right px-4 py-2.5 font-bold">Comision</th>
-                  <th className="text-left px-4 py-2.5 font-bold">Estado</th>
-                  {isAdmin && <th className="px-4 py-2.5"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(r => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(r.created_at)}</td>
-                    {isAdmin && <td className="px-4 py-3 font-semibold">{r.user_nombre}</td>}
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">{r.lead_nombre}</div>
-                      <div className="text-xs text-muted-foreground">{r.product_nombre || r.producto_contratado || '—'}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_base)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{r.pct}%</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold">{fmt(r.importe_comision)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
-                        r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
-                        'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
-                      }`}>{r.estado}</span>
-                      {r.fecha_pago && <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(r.fecha_pago)}</p>}
-                    </td>
-                    {isAdmin && (
-                      <td className="px-4 py-3 text-right">
-                        {r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
-                          <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-green-50 text-green-600 text-[11px] font-semibold hover:bg-green-100">
-                            Pagar
-                          </button>
-                        )}
-                      </td>
-                    )}
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-[11px] text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
+                    {isAdmin && <th className="text-left px-4 py-2.5 font-bold">Gestor</th>}
+                    <th className="text-left px-4 py-2.5 font-bold">Cliente / Producto</th>
+                    <th className="text-right px-4 py-2.5 font-bold">Base cobrada</th>
+                    <th className="text-right px-4 py-2.5 font-bold">%</th>
+                    <th className="text-right px-4 py-2.5 font-bold">Comision</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Estado</th>
+                    {isAdmin && <th className="px-4 py-2.5"></th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {items.map(r => (
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-3 text-muted-foreground">{formatDate(r.created_at)}</td>
+                      {isAdmin && <td className="px-4 py-3 font-semibold">{r.user_nombre}</td>}
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">{r.lead_nombre}</div>
+                        <div className="text-xs text-muted-foreground">{r.product_nombre || r.producto_contratado || '—'}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_base)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.pct}%</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold">{fmt(r.importe_comision)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                          r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                          r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
+                          'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                        }`}>{r.estado}</span>
+                        {r.fecha_pago && <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(r.fecha_pago)}</p>}
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right">
+                          {r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
+                            <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-green-50 text-green-600 text-[11px] font-semibold hover:bg-green-100">
+                              Pagar
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-border">
+              {items.map(r => (
+                <div key={r.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{r.lead_nombre}</div>
+                      <div className="text-xs text-muted-foreground truncate">{r.product_nombre || r.producto_contratado || '—'}</div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                      r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                      r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
+                      'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                    }`}>{r.estado}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Base</div>
+                      <div className="tabular-nums">{fmt(r.importe_base)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">%</div>
+                      <div className="tabular-nums">{r.pct}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Comision</div>
+                      <div className="tabular-nums font-semibold">{fmt(r.importe_comision)}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="text-muted-foreground">
+                      {formatDate(r.created_at)}
+                      {isAdmin && r.user_nombre && <span> · <span className="font-medium text-foreground">{r.user_nombre}</span></span>}
+                    </div>
+                    {isAdmin && r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
+                      <button onClick={() => handlePay(r.id)} className="px-2 py-1 rounded bg-green-50 text-green-600 text-[11px] font-semibold hover:bg-green-100 flex-shrink-0">
+                        Pagar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -236,20 +283,20 @@ function RulesDialog({ onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+        <div className="relative bg-card sm:rounded-lg border border-border w-full max-w-3xl flex flex-col h-full sm:h-auto sm:max-h-[90vh]">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
-              <h2 className="text-lg font-extrabold">Reglas de comision</h2>
+              <h2 className="text-lg font-semibold">Reglas de comision</h2>
               <p className="text-xs text-muted-foreground">% que cobra cada gestor por cada producto/formacion</p>
             </div>
             <button onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
 
           <div className="overflow-y-auto p-6 space-y-5">
-            <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-xl border border-border space-y-2">
-              <p className="text-[11px] font-bold uppercase text-muted-foreground">Nueva regla</p>
+            <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground">Nueva regla</p>
               <div className="grid grid-cols-4 gap-2">
                 <select value={newRule.project_id} onChange={e => setNewRule({ ...newRule, project_id: e.target.value, product_id: '' })} className={inputClass} required>
                   <option value="">Proyecto</option>
@@ -280,8 +327,8 @@ function RulesDialog({ onClose, onSaved }) {
             {loading ? (
               <p className="text-sm text-muted-foreground">Cargando...</p>
             ) : rules.length === 0 ? (
-              <div className="text-center py-8 border-2 border-dashed border-border rounded-xl">
-                <Gear size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="duotone" />
+              <div className="text-center py-8 border-2 border-dashed border-border rounded-md">
+                <Gear size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
                 <p className="text-sm font-semibold">Sin reglas configuradas</p>
                 <p className="text-xs text-muted-foreground">Crea una regla para empezar a generar comisiones automaticamente</p>
               </div>

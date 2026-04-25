@@ -17,7 +17,7 @@ import {
 
 const SECTIONS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
-  { label: 'Leads', to: '/leads', icon: Users },
+  { label: 'Prospectos', to: '/leads', icon: Users },
   { label: 'Pipeline', to: '/leads/pipeline', icon: Users },
   { label: 'Productos', to: '/products', icon: Package },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone },
@@ -99,7 +99,7 @@ export default function CommandPalette() {
   return (
     <div role="dialog" aria-label="Busqueda rapida" className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_40px_rgb(0_0_0/0.15)] w-full max-w-lg mx-4 overflow-hidden">
+      <div className="relative bg-card rounded-lg border border-border  w-full max-w-lg mx-4 overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-3 px-5 border-b border-border">
           <MagnifyingGlass size={18} className="text-muted-foreground flex-shrink-0" />
@@ -114,7 +114,7 @@ export default function CommandPalette() {
             aria-controls="command-palette-results"
             className="w-full h-14 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-1 rounded-md bg-muted text-[10px] font-bold text-muted-foreground border border-border">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-1 rounded-md bg-muted text-[10px] font-medium text-muted-foreground border border-border">
             ESC
           </kbd>
         </div>
@@ -129,7 +129,7 @@ export default function CommandPalette() {
             <>
               {results.sections.length > 0 && (
                 <div className="mb-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 py-1.5">Secciones</p>
+                  <p className="text-xs text-muted-foreground px-3 py-1.5">Secciones</p>
                   {results.sections.map((s, i) => {
                     const globalIdx = i;
                     const Icon = s.icon;
@@ -140,7 +140,7 @@ export default function CommandPalette() {
                         aria-selected={selectedIdx === globalIdx}
                         onClick={() => handleSelect(s)}
                         onMouseEnter={() => setSelectedIdx(globalIdx)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all ${
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all ${
                           selectedIdx === globalIdx ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'
                         }`}
                       >
@@ -155,7 +155,7 @@ export default function CommandPalette() {
 
               {results.leads.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-3 py-1.5">Leads</p>
+                  <p className="text-xs text-muted-foreground px-3 py-1.5">Prospectos</p>
                   {results.leads.map((l, i) => {
                     const globalIdx = results.sections.length + i;
                     return (
@@ -165,7 +165,7 @@ export default function CommandPalette() {
                         aria-selected={selectedIdx === globalIdx}
                         onClick={() => handleSelect({ to: `/leads/${l.id}` })}
                         onMouseEnter={() => setSelectedIdx(globalIdx)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all ${
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all ${
                           selectedIdx === globalIdx ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'
                         }`}
                       >
@@ -186,9 +186,9 @@ export default function CommandPalette() {
 
         {/* Footer */}
         <div className="px-4 py-2.5 border-t border-border flex items-center gap-4 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-bold">↑↓</kbd> navegar</span>
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-bold">↵</kbd> seleccionar</span>
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-bold">esc</kbd> cerrar</span>
+          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-medium">↑↓</kbd> navegar</span>
+          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-medium">↵</kbd> seleccionar</span>
+          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded bg-muted border border-border font-medium">esc</kbd> cerrar</span>
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ export default function SkeletonTable({ rows = 8, columns = 5, className }) {
   return (
     <div
       className={cn(
-        'bg-card rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] overflow-hidden',
+        'bg-card rounded-lg border border-border overflow-hidden',
         className,
       )}
     >
@@ -38,13 +38,13 @@ export function SkeletonCard({ className }) {
   return (
     <div
       className={cn(
-        'bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] animate-pulse',
+        'bg-card p-5 rounded-lg border border-border animate-pulse',
         className,
       )}
     >
-      <div className="flex items-center justify-between mb-4">
-        <div className="w-10 h-10 rounded-xl bg-muted" />
-        <div className="w-12 h-5 rounded-full bg-muted" />
+      <div className="flex items-center justify-between mb-3">
+        <div className="w-9 h-9 rounded-md bg-muted" />
+        <div className="w-12 h-5 rounded bg-muted" />
       </div>
       <div className="w-20 h-3 bg-muted rounded mb-2" />
       <div className="w-16 h-8 bg-muted rounded" />

@@ -32,7 +32,7 @@ export default function ProductDetailPage() {
           <Link to="/products"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">{product.nombre}</h1>
+          <h1 className="text-2xl font-semibold">{product.nombre}</h1>
           {product.descripcion && <p className="text-muted-foreground">{product.descripcion}</p>}
         </div>
       </div>

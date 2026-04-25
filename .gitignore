@@ -44,3 +44,7 @@ uploads/
 # Temp
 *.tmp
 *.bak
+
+# Screenshots de validacion (transitorios, no commiteables)
+/*.png
+.playwright-mcp/

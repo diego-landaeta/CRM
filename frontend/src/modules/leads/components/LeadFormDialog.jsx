@@ -12,7 +12,7 @@ import client from '@/shared/api/client';
 function Field({ label, error, hint, children }) {
   return (
     <div>
-      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">
+      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
         {label}
       </label>
       {children}
@@ -22,7 +22,7 @@ function Field({ label, error, hint, children }) {
   );
 }
 
-const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
@@ -109,13 +109,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
 
   return (
     <Portal>
-      <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Lead'} className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Prospecto'} className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
+        <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-lg font-extrabold tracking-tight">{isEdit ? 'Editar Lead' : 'Nuevo Lead'}</h2>
+              <h2 className="text-lg font-semibold">{isEdit ? 'Editar Lead' : 'Nuevo Prospecto'}</h2>
               <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la informacion del lead' : 'Registra un nuevo lead manualmente'}</p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
@@ -134,7 +134,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
             </div>
 
             {duplicates.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl p-3 flex gap-3 items-start">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 flex gap-3 items-start">
                 <Warning size={16} weight="fill" className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
@@ -193,11 +193,11 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
 
             {customFields.length > 0 && (
               <div className="border-t border-border pt-4 mt-4 space-y-3">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Campos personalizados</p>
+                <p className="text-xs text-muted-foreground text-muted-foreground">Campos personalizados</p>
                 <div className="grid grid-cols-2 gap-4">
                   {customFields.map(f => (
                     <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">
+                      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
                         {f.label} {f.required && <span className="text-red-500">*</span>}
                       </label>
                       {f.type === 'textarea' ? (
@@ -245,16 +245,16 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
                 {...register('notas')}
                 placeholder="Notas adicionales sobre el lead..."
                 rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
               />
             </Field>
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose}
-                className="px-5 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
+                className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
               >Cancelar</button>
               <button type="submit" disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50"
+                className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
               >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear lead'}</button>
             </div>
           </form>

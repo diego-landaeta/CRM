@@ -123,6 +123,7 @@ export async function findAll({ projectId, status, responsableId, canal, search,
             u.nombre as responsable_nombre,
             lu.canal_detectado, lu.utm_source, lu.utm_campaign,
             (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
+            (SELECT MIN(fecha_recordatorio) FROM lead_reminders WHERE lead_id = l.id AND completado = false) AS next_reminder_at,
             p.dias_alerta_inactividad,
             EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo
      FROM leads l

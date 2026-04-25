@@ -24,14 +24,14 @@ const METODO_OPTIONS = [
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
-const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
 function Field({ label, error, children }) {
   return (
     <div>
-      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">{label}</label>
+      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">{label}</label>
       {children}
       {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
     </div>
@@ -72,12 +72,12 @@ export default function ConversionDialog({ open, onClose, lead, onSubmit }) {
 
   return (
     <Portal>
-    <div role="dialog" aria-label="Registrar Conversion" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div role="dialog" aria-label="Registrar Conversion" className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-3xl border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
+      <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight">Registrar Conversion</h2>
+            <h2 className="text-lg font-semibold">Registrar Conversion</h2>
             <p className="text-muted-foreground text-sm mt-0.5">
               {lead?.nombre} — Lead #{lead?.id}
             </p>
@@ -113,9 +113,9 @@ export default function ConversionDialog({ open, onClose, lead, onSubmit }) {
           </div>
 
           {/* Pendiente calculado */}
-          <div className={`p-3 rounded-xl text-center ${pendiente > 0 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>
-            <span className="text-[11px] font-bold uppercase tracking-wider opacity-70">Importe pendiente</span>
-            <p className="text-xl font-extrabold">{pendiente.toFixed(2)} €</p>
+          <div className={`p-3 rounded-md text-center ${pendiente > 0 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>
+            <span className="text-xs text-muted-foreground opacity-70">Importe pendiente</span>
+            <p className="text-xl font-semibold">{pendiente.toFixed(2)} €</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -136,15 +136,15 @@ export default function ConversionDialog({ open, onClose, lead, onSubmit }) {
               {...register('notas_pago')}
               placeholder="Observaciones sobre el acuerdo..."
               rows={2}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+              className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
             />
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition-colors shadow-lg shadow-violet-600/20 disabled:opacity-50">
+            <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-md bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition-colors shadow-violet-600/20 disabled:opacity-50">
               {isSubmitting ? 'Registrando...' : 'Registrar conversion'}
             </button>
           </div>

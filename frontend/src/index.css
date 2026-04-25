@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -23,7 +23,7 @@
     --border: 240 6% 90%;
     --input: 240 6% 90%;
     --ring: 230 75% 55%;
-    --radius: 0.75rem;
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -53,20 +53,44 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
   }
 }
 
 @layer components {
   .crm-card {
-    @apply bg-card text-card-foreground border border-border rounded-3xl;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    @apply bg-card text-card-foreground border border-border rounded-lg;
   }
   .crm-card-interactive {
-    @apply crm-card transition-all;
+    @apply crm-card transition-colors;
   }
   .crm-card-interactive:hover {
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.04), 0 4px 6px -4px rgb(0 0 0 / 0.02);
-    transform: translateY(-2px);
+    @apply border-foreground/20;
   }
+
+  /* Markdown viewer (CRM-113) */
+  .markdown-body {
+    @apply text-sm leading-relaxed text-foreground;
+  }
+  .markdown-body h1 { @apply text-2xl font-semibold mt-2 mb-4; }
+  .markdown-body h2 { @apply text-xl font-semibold mt-6 mb-3 pb-2 border-b border-border; }
+  .markdown-body h3 { @apply text-lg font-semibold mt-5 mb-2; }
+  .markdown-body h4 { @apply text-base font-semibold mt-4 mb-2; }
+  .markdown-body p  { @apply my-3; }
+  .markdown-body ul { @apply list-disc pl-5 my-3 space-y-1; }
+  .markdown-body ol { @apply list-decimal pl-5 my-3 space-y-1; }
+  .markdown-body li { @apply leading-relaxed; }
+  .markdown-body strong { @apply font-semibold text-foreground; }
+  .markdown-body code { @apply bg-muted px-1.5 py-0.5 rounded text-[12px] font-mono; }
+  .markdown-body pre  { @apply bg-muted/60 border border-border rounded-md p-3 my-3 overflow-x-auto text-xs; }
+  .markdown-body pre code { @apply bg-transparent p-0 text-xs; }
+  .markdown-body blockquote { @apply border-l-2 border-primary/40 bg-primary/5 pl-4 py-2 my-3 text-muted-foreground italic; }
+  .markdown-body hr { @apply my-6 border-border; }
+  .markdown-body a  { @apply text-primary underline underline-offset-2 hover:no-underline; }
+  .markdown-body table { @apply w-full text-sm my-4 border-collapse; }
+  .markdown-body th, .markdown-body td { @apply border border-border px-3 py-2 text-left; }
+  .markdown-body th { @apply bg-muted/60 font-semibold text-xs uppercase text-muted-foreground; }
+  .markdown-body tbody tr:nth-child(even) { @apply bg-muted/20; }
+  .markdown-body img { @apply max-w-full rounded-md my-3; }
 }

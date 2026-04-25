@@ -14,14 +14,14 @@ function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
 
-const CANAL_COLORS = ['#4361ee', '#ea580c', '#059669', '#d97706', '#7c3aed', '#dc2626', '#94a3b8'];
+const CANAL_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#ef4444', '#94a3b8'];
 const PIPELINE_COLORS = {
-  nuevo: '#4361ee',
-  por_contactar: '#ea580c',
-  contactado: '#059669',
-  en_seguimiento: '#d97706',
-  convertido: '#7c3aed',
-  no_interesado: '#dc2626',
+  nuevo: '#3b82f6',
+  por_contactar: '#f59e0b',
+  contactado: '#10b981',
+  en_seguimiento: '#eab308',
+  convertido: '#8b5cf6',
+  no_interesado: '#ef4444',
 };
 
 export default function ReportsPage() {
@@ -52,8 +52,8 @@ export default function ReportsPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Reportes" subtitle="Cargando..." />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-xl animate-pulse" />)}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-md animate-pulse" />)}
         </div>
       </div>
     );
@@ -84,8 +84,8 @@ export default function ReportsPage() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={Users} label="Total leads" value={data.leads.total} />
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
         <KpiCard icon={TrendUp} label="Tasa conversion" value={`${data.tasa_conversion}%`} tone="success" />
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
@@ -93,18 +93,18 @@ export default function ReportsPage() {
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4 flex items-center gap-2"><UserList size={16} /> Leads por estado</h3>
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4 flex items-center gap-2"><UserList size={16} /> Prospectos por estado</h3>
           {data.leads.total === 0 ? (
-            <EmptyState icon={Users} title="Sin leads" description="No hay leads en el rango seleccionado" />
+            <EmptyState icon={Users} title="Sin prospectos" description="No hay prospectos en el rango seleccionado" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={pipelineData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis type="category" dataKey="estado" stroke="#6b7280" fontSize={11} width={110} />
-                <Tooltip />
-                <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+            <ResponsiveContainer width="100%" height={220} minHeight={200}>
+              <BarChart data={pipelineData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" horizontal={false} />
+                <XAxis type="number" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="estado" stroke="#6b7280" fontSize={12} width={100} tickLine={false} axisLine={false} />
+                <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Bar dataKey="total" radius={[0, 4, 4, 0]} maxBarSize={20}>
                   {pipelineData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Bar>
               </BarChart>
@@ -112,18 +112,18 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4 flex items-center gap-2"><ChartBar size={16} /> Ingresos mensual (12 meses)</h3>
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4 flex items-center gap-2"><ChartBar size={16} /> Ingresos mensual (12 meses)</h3>
           {(data.ingresos_mensual || []).length === 0 ? (
             <EmptyState icon={CurrencyEur} title="Sin ingresos" description="No hay ingresos registrados" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={data.ingresos_mensual}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="mes" stroke="#6b7280" fontSize={11} tickFormatter={(v) => v?.slice(5) || v} />
-                <YAxis stroke="#6b7280" fontSize={11} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
-                <Tooltip formatter={(v) => fmt(v)} />
-                <Line type="monotone" dataKey="ingresos" stroke="#22c55e" strokeWidth={2} />
+            <ResponsiveContainer width="100%" height={220} minHeight={200}>
+              <LineChart data={data.ingresos_mensual} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" />
+                <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => v?.slice(5) || v} />
+                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${v/1000}k` : v} />
+                <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Line type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -132,33 +132,34 @@ export default function ReportsPage() {
 
       {/* Por canal + por gestor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4 flex items-center gap-2"><Megaphone size={16} /> Leads por canal</h3>
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4 flex items-center gap-2"><Megaphone size={16} /> Prospectos por canal</h3>
           {(data.leads_por_canal || []).length === 0 ? (
-            <EmptyState icon={Megaphone} title="Sin datos" description="No hay leads clasificados por canal" />
+            <EmptyState icon={Megaphone} title="Sin datos" description="No hay prospectos clasificados por canal" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={220} minHeight={200}>
               <PieChart>
-                <Pie data={data.leads_por_canal} dataKey="total" nameKey="canal" cx="50%" cy="50%" outerRadius={90} label={(e) => `${e.canal}: ${e.total}`}>
+                <Pie data={data.leads_por_canal} dataKey="total" nameKey="canal" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}>
                   {data.leads_por_canal.map((e, i) => <Cell key={i} fill={CANAL_COLORS[i % CANAL_COLORS.length]} />)}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                <Legend verticalAlign="bottom" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="font-bold mb-4 flex items-center gap-2"><Users size={16} /> Leads por gestor</h3>
+        <div className="bg-card border border-border rounded-lg p-5">
+          <h3 className="font-semibold mb-4 flex items-center gap-2"><Users size={16} /> Prospectos por gestor</h3>
           {(data.leads_por_gestor || []).length === 0 ? (
-            <EmptyState icon={Users} title="Sin datos" description="No hay leads asignados" />
+            <EmptyState icon={Users} title="Sin datos" description="No hay prospectos asignados" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+                <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     <th className="text-left px-3 py-2 font-bold">Gestor</th>
-                    <th className="text-right px-3 py-2 font-bold">Leads</th>
+                    <th className="text-right px-3 py-2 font-bold">Prospectos</th>
                     <th className="text-right px-3 py-2 font-bold">Convertidos</th>
                     <th className="text-right px-3 py-2 font-bold">Tasa</th>
                   </tr>
@@ -183,14 +184,14 @@ export default function ReportsPage() {
       </div>
 
       {/* Top productos */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <h3 className="font-bold mb-4 flex items-center gap-2"><Package size={16} /> Top productos por ventas</h3>
+      <div className="bg-card border border-border rounded-lg p-5">
+        <h3 className="font-semibold mb-4 flex items-center gap-2"><Package size={16} /> Top productos por ventas</h3>
         {(data.top_productos || []).length === 0 ? (
           <EmptyState icon={Package} title="Sin ventas" description="No hay conversiones en el rango seleccionado" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+              <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2 font-bold">Producto</th>
                   <th className="text-right px-3 py-2 font-bold">Ventas</th>

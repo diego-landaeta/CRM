@@ -70,17 +70,17 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
       {/* Header con stats */}
       <div className="flex items-start justify-between">
         <div className="grid grid-cols-3 gap-4 flex-1">
-          <div className="bg-card border border-border rounded-xl p-3">
-            <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Total facturado</div>
-            <div className="text-xl font-bold tabular-nums">{formatCurrency(totalFacturado)}</div>
+          <div className="bg-card border border-border rounded-md p-3">
+            <div className="text-[10px] text-muted-foreground font-bold mb-1">Total facturado</div>
+            <div className="text-xl font-semibold tabular-nums">{formatCurrency(totalFacturado)}</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-3">
-            <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Total pagado</div>
-            <div className="text-xl font-bold text-green-600 tabular-nums">{formatCurrency(totalPagado)}</div>
+          <div className="bg-card border border-border rounded-md p-3">
+            <div className="text-[10px] text-muted-foreground font-bold mb-1">Total pagado</div>
+            <div className="text-xl font-semibold text-green-600 tabular-nums">{formatCurrency(totalPagado)}</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-3">
-            <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Pendiente</div>
-            <div className="text-xl font-bold text-orange-600 tabular-nums">{formatCurrency(totalPendiente)}</div>
+          <div className="bg-card border border-border rounded-md p-3">
+            <div className="text-[10px] text-muted-foreground font-bold mb-1">Pendiente</div>
+            <div className="text-xl font-semibold text-orange-600 tabular-nums">{formatCurrency(totalPendiente)}</div>
           </div>
         </div>
       </div>
@@ -97,8 +97,8 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
 
       {/* Lista de conversiones */}
       {conversions.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl p-8 text-center">
-          <Receipt size={32} weight="duotone" className="mx-auto mb-3 text-muted-foreground" />
+        <div className="bg-card border border-border rounded-md p-8 text-center">
+          <Receipt size={32} weight="regular" className="mx-auto mb-3 text-muted-foreground" />
           <div className="text-sm text-muted-foreground">Este lead aun no tiene compras registradas</div>
           {canManage && (
             <button
@@ -117,7 +117,7 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
             const vencido = c.fecha_compromiso_pago && pendiente > 0 && new Date(c.fecha_compromiso_pago) < new Date();
 
             return (
-              <div key={c.id} className="bg-card border border-border rounded-xl p-4">
+              <div key={c.id} className="bg-card border border-border rounded-md p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -156,15 +156,15 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
                 {/* Importes */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <div className="bg-muted/50 rounded-lg p-2">
-                    <div className="text-[9px] uppercase text-muted-foreground font-bold">Total</div>
+                    <div className="text-[9px] text-muted-foreground font-bold">Total</div>
                     <div className="text-sm font-semibold tabular-nums">{formatCurrency(c.importe_total)}</div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2">
-                    <div className="text-[9px] uppercase text-muted-foreground font-bold">Pagado</div>
+                    <div className="text-[9px] text-muted-foreground font-bold">Pagado</div>
                     <div className="text-sm font-semibold text-green-600 tabular-nums">{formatCurrency(c.importe_pagado)}</div>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2">
-                    <div className="text-[9px] uppercase text-muted-foreground font-bold">Pendiente</div>
+                    <div className="text-[9px] text-muted-foreground font-bold">Pendiente</div>
                     <div className="text-sm font-semibold text-orange-600 tabular-nums">{formatCurrency(pendiente)}</div>
                   </div>
                 </div>

@@ -1,9 +1,11 @@
-import { useState, Suspense } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
 import CommandPalette from './CommandPalette';
 import { List, X } from '@phosphor-icons/react';
+
+const AIChatTrigger = lazy(() => import('@/modules/ai-chat/components/AIChatTrigger'));
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -15,18 +17,18 @@ export default function AppLayout() {
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menu"
-          className="p-2 rounded-xl hover:bg-muted transition-colors"
+          className="p-2 rounded-md hover:bg-muted transition-colors"
         >
           <List size={22} weight="bold" />
         </button>
-        <span className="ml-3 font-extrabold text-sm tracking-tight">MultiCRM</span>
+        <span className="ml-3 font-semibold text-sm">MultiCRM</span>
       </div>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <div className="relative w-64 h-full">
+          <div className="relative w-60 h-full">
             <Sidebar onNavigate={() => setMobileOpen(false)} />
             <button
               onClick={() => setMobileOpen(false)}
@@ -57,6 +59,9 @@ export default function AppLayout() {
 
       <Toaster />
       <CommandPalette />
+      <Suspense fallback={null}>
+        <AIChatTrigger />
+      </Suspense>
     </div>
   );
 }

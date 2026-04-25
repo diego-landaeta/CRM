@@ -28,20 +28,20 @@ export default function KpiCard({
   return (
     <div
       className={cn(
-        'bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] hover:shadow-md transition-shadow',
+        'bg-card p-5 rounded-lg border border-border transition-colors hover:border-foreground/20',
         className,
       )}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         {Icon && (
-          <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', iconBg)}>
-            <Icon size={20} weight="duotone" />
+          <div className={cn('w-9 h-9 rounded-md flex items-center justify-center', iconBg)}>
+            <Icon size={18} weight="regular" />
           </div>
         )}
         {showBadge && (
           <span
             className={cn(
-              'text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1',
+              'text-xs font-medium px-2 py-0.5 rounded inline-flex items-center gap-1',
               badgeColor,
             )}
           >
@@ -50,8 +50,8 @@ export default function KpiCard({
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-[11px] font-bold uppercase tracking-wider">{label}</p>
-      <h3 className="text-3xl font-extrabold mt-1 tracking-tight tabular-nums">{value}</h3>
+      <p className="text-muted-foreground text-sm">{label}</p>
+      <h3 className="text-2xl font-semibold mt-1 tabular-nums">{value}</h3>
     </div>
   );
 }

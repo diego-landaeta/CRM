@@ -18,6 +18,9 @@ import {
   Receipt,
   UserCheck,
   Coins,
+  MagnifyingGlass,
+  Robot,
+  Sparkle,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -30,10 +33,20 @@ const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/P
 // Cada item declara: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
-  { label: 'Leads', to: '/leads', icon: Users, module: 'leads' },
+  { label: 'Prospectos', to: '/leads', icon: Users, module: 'leads' },
   { label: 'Clientes', to: '/clients', icon: UserCheck, module: 'clients' },
   { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-  { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
+  {
+    label: 'Campanas', icon: Megaphone, roles: ['superadmin', 'admin'],
+    children: [
+      { label: 'Consolidado', to: '/campaigns', roles: ['superadmin', 'admin'] },
+      { label: 'Meta Ads', to: '/campaigns/meta', roles: ['superadmin', 'admin'] },
+      { label: 'Google Ads', to: '/campaigns/google', roles: ['superadmin', 'admin'] },
+    ],
+  },
+  { label: 'Trafico organico', to: '/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
+  { label: 'Dashboard IA', to: '/ia-dashboard', icon: Robot, roles: ['superadmin', 'admin'] },
+  { label: 'Reportes IA', to: '/reports-ia', icon: Sparkle, roles: ['superadmin', 'admin'] },
   {
     label: 'Contabilidad', icon: Calculator,
     children: [
@@ -65,7 +78,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, onNavigate }) {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
+          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -107,7 +120,7 @@ function NavItem({ to, icon: Icon, label, badge, onClick }) {
       onClick={onClick}
       className={({ isActive }) =>
         cn(
-          'relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all',
+          'relative flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -151,18 +164,18 @@ export default function Sidebar({ onNavigate }) {
   }
 
   return (
-    <aside role="navigation" aria-label="Menu principal" className="w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
+    <aside role="navigation" aria-label="Menu principal" className="w-60 lg:w-64 border-r bg-card h-screen fixed left-0 top-0 flex flex-col p-4 z-40">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-2 mb-6">
         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
           <Package size={16} weight="bold" />
         </div>
-        <span className="font-extrabold text-sm tracking-tight text-foreground">MultiCRM</span>
+        <span className="font-semibold text-sm text-foreground">MultiCRM</span>
       </div>
 
       {/* Project Selector */}
       <div className="mb-6 px-1">
-        <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-2 mb-1.5 block">
+        <label className="text-xs font-medium text-muted-foreground px-2 mb-1.5 block">
           Proyecto
         </label>
         <div className="flex items-center gap-2">
@@ -214,7 +227,7 @@ export default function Sidebar({ onNavigate }) {
 
       {/* Navigation */}
       <nav className="space-y-0.5 flex-1">
-        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
+        <p className="text-xs font-medium text-muted-foreground px-3 mb-2">Principal</p>
         {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role, activeProject?.modules)).map((item) =>
           item.children ? (
             <NavGroup key={item.label} {...item} role={user?.role} modules={activeProject?.modules} onNavigate={onNavigate} />
@@ -228,17 +241,17 @@ export default function Sidebar({ onNavigate }) {
       {/* Footer: Beta Badge + Theme + User */}
       <div className="mt-auto pt-4 border-t border-border space-y-3">
         {/* Beta Badge */}
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
-          <ShieldCheck size={14} weight="duotone" className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
-          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">v0.1.0 Fase Beta</span>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+          <ShieldCheck size={14} weight="regular" className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 font-medium">v0.1.0 Fase Beta</span>
         </div>
 
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-all"
         >
-          {theme === 'dark' ? <Sun size={18} weight="duotone" /> : <Moon size={18} weight="duotone" />}
+          {theme === 'dark' ? <Sun size={18} weight="regular" /> : <Moon size={18} weight="regular" />}
           {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
         </button>
 
@@ -248,24 +261,24 @@ export default function Sidebar({ onNavigate }) {
             to="/settings"
             onClick={onNavigate}
             className={({ isActive }) => cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all',
+              'w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] transition-all',
               isActive ? 'bg-primary/10 text-primary font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
             )}
           >
-            <Gear size={18} weight="duotone" />
+            <Gear size={18} weight="regular" />
             Configuracion
           </NavLink>
         )}
 
         {/* User */}
         <div className="flex items-center gap-3 px-2">
-          <button onClick={() => { navigate('/profile'); onNavigate?.(); }} className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs hover:bg-primary/20 transition-colors overflow-hidden" title="Mi perfil">
+          <button onClick={() => { navigate('/profile'); onNavigate?.(); }} className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs hover:bg-primary/20 transition-colors overflow-hidden" title="Mi perfil">
             {user?.avatar_url ? (
               <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/users/${user.id}/avatar`} alt="" className="w-full h-full object-cover" />
             ) : initials}
           </button>
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { navigate('/profile'); onNavigate?.(); }}>
-            <p className="text-xs font-bold text-foreground truncate tracking-tight">{user?.nombre}</p>
+            <p className="text-xs font-bold text-foreground truncate">{user?.nombre}</p>
             <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
           </div>
           <button onClick={handleLogout} className="text-muted-foreground hover:text-red-500 transition-colors p-1" title="Cerrar sesion">

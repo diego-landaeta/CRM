@@ -31,12 +31,12 @@ const passwordSchema = z.object({
   confirmar: z.string().min(1, 'Requerido'),
 }).refine((d) => d.nueva === d.confirmar, { message: 'Las contrasenas no coinciden', path: ['confirmar'] });
 
-const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
 function Field({ label, error, children }) {
   return (
     <div>
-      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block px-1">{label}</label>
+      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">{label}</label>
       {children}
       {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
     </div>
@@ -133,15 +133,15 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Mi Perfil</h1>
+        <h1 className="text-2xl font-semibold">Mi Perfil</h1>
         <p className="text-muted-foreground text-sm">Gestiona tu informacion personal y seguridad</p>
       </div>
 
       {/* Avatar + Info */}
-      <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <div className="bg-card p-6 rounded-lg border border-border">
         <div className="flex items-center gap-5">
           <div className="relative group">
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-2xl font-extrabold overflow-hidden">
+            <div className="w-20 h-20 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-2xl font-semibold overflow-hidden">
               {avatarSrc ? (
                 <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
               ) : initials}
@@ -151,17 +151,17 @@ export default function ProfilePage() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity"
+              className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 rounded-lg transition-opacity"
             >
               {uploadingAvatar ? 'Subiendo...' : avatarSrc ? 'Cambiar' : 'Subir foto'}
             </button>
           </div>
           <div className="flex-1">
-            <h2 className="text-lg font-bold">{user?.nombre}</h2>
+            <h2 className="text-lg font-semibold">{user?.nombre}</h2>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-primary/10 text-primary flex items-center gap-1">
-                <ShieldCheck size={12} weight="duotone" /> {ROLE_LABELS[user?.role] || user?.role}
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-primary/10 text-primary flex items-center gap-1">
+                <ShieldCheck size={12} weight="regular" /> {ROLE_LABELS[user?.role] || user?.role}
               </span>
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Folder size={12} /> {userProjects.length} proyecto{userProjects.length !== 1 ? 's' : ''}
@@ -178,10 +178,10 @@ export default function ProfilePage() {
         {/* Projects list */}
         {userProjects.length > 0 && (
           <div className="mt-5 pt-4 border-t">
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Proyectos asignados</p>
+            <p className="text-xs text-muted-foreground mb-2">Proyectos asignados</p>
             <div className="flex flex-wrap gap-2">
               {userProjects.map((p) => (
-                <span key={p.id} className="px-3 py-1.5 rounded-xl bg-muted text-[12px] font-medium">
+                <span key={p.id} className="px-3 py-1.5 rounded-md bg-muted text-[12px] font-medium">
                   {p.nombre}
                 </span>
               ))}
@@ -191,10 +191,10 @@ export default function ProfilePage() {
       </div>
 
       {/* Edit profile */}
-      <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <div className="bg-card p-6 rounded-lg border border-border">
         <div className="flex items-center gap-2 mb-5">
-          <User size={18} weight="duotone" className="text-primary" />
-          <h3 className="font-bold">Informacion Personal</h3>
+          <User size={18} weight="regular" className="text-primary" />
+          <h3 className="font-semibold">Informacion Personal</h3>
         </div>
         <form onSubmit={handleProfile(onSaveProfile)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -206,7 +206,7 @@ export default function ProfilePage() {
             </Field>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={subProfile} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50">
+            <button type="submit" disabled={subProfile} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
               {subProfile ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </div>
@@ -214,10 +214,10 @@ export default function ProfilePage() {
       </div>
 
       {/* Change password */}
-      <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <div className="bg-card p-6 rounded-lg border border-border">
         <div className="flex items-center gap-2 mb-5">
-          <Lock size={18} weight="duotone" className="text-primary" />
-          <h3 className="font-bold">Cambiar Contrasena</h3>
+          <Lock size={18} weight="regular" className="text-primary" />
+          <h3 className="font-semibold">Cambiar Contrasena</h3>
         </div>
         <form onSubmit={handlePass(onChangePassword)} className="space-y-4">
           <Field label="Contrasena actual *" error={errPass.current?.message}>
@@ -237,7 +237,7 @@ export default function ProfilePage() {
             </Field>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={subPass} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50">
+            <button type="submit" disabled={subPass} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
               {subPass ? 'Cambiando...' : 'Cambiar contrasena'}
             </button>
           </div>
@@ -245,11 +245,11 @@ export default function ProfilePage() {
       </div>
 
       {/* Preferences */}
-      <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-        <h3 className="font-bold mb-4">Preferencias</h3>
+      <div className="bg-card p-6 rounded-lg border border-border">
+        <h3 className="font-semibold mb-4">Preferencias</h3>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {theme === 'dark' ? <Moon size={18} weight="duotone" className="text-primary" /> : <Sun size={18} weight="duotone" className="text-primary" />}
+            {theme === 'dark' ? <Moon size={18} weight="regular" className="text-primary" /> : <Sun size={18} weight="regular" className="text-primary" />}
             <div>
               <p className="text-sm font-medium">Tema de la interfaz</p>
               <p className="text-[12px] text-muted-foreground">{theme === 'dark' ? 'Modo oscuro activado' : 'Modo claro activado'}</p>
@@ -257,7 +257,7 @@ export default function ProfilePage() {
           </div>
           <button
             onClick={toggleTheme}
-            className="px-4 py-2 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+            className="px-4 py-2 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
           >
             {theme === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}
           </button>

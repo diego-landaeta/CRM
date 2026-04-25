@@ -21,6 +21,11 @@ const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage')
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
 const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage'));
+const MetaCampaignsPage = lazy(() => import('./modules/campaigns/pages/MetaCampaignsPage'));
+const GoogleCampaignsPage = lazy(() => import('./modules/campaigns/pages/GoogleCampaignsPage'));
+const SeoPage = lazy(() => import('./modules/seo/pages/SeoPage'));
+const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
+const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
@@ -47,6 +52,11 @@ function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="/campaigns/meta" element={<MetaCampaignsPage />} />
+          <Route path="/campaigns/google" element={<GoogleCampaignsPage />} />
+          <Route path="/seo" element={<SeoPage />} />
+          <Route path="/ia-dashboard" element={<IADashboardPage />} />
+          <Route path="/reports-ia" element={<ReportsIAPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />
           <Route path="/accounting/income" element={<IncomePage />} />

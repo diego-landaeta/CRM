@@ -87,13 +87,13 @@ export default function ExpensesPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-14 bg-muted/50 rounded-xl animate-pulse" />)}</div>
+        <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-14 bg-muted/50 rounded-md animate-pulse" />)}</div>
       ) : expenses.length === 0 ? (
         <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados" action={<button onClick={() => setDialogOpen(true)} className="text-sm text-primary hover:underline">Crear el primero</button>} />
       ) : (
-        <div className="bg-card border border-border rounded-2xl overflow-x-auto">
+        <div className="bg-card border border-border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
+            <thead className="bg-muted/50 text-[11px] text-muted-foreground">
               <tr>
                 <th className="text-left px-5 py-2.5 font-bold">Fecha</th>
                 <th className="text-left px-5 py-2.5 font-bold">Concepto</th>
@@ -216,40 +216,40 @@ function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
 
   return (
     <Portal>
-      <div role="dialog" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div role="dialog" className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-md mx-4 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">{expense ? 'Editar egreso' : 'Nuevo egreso'}</h2>
+            <h2 className="text-lg font-semibold">{expense ? 'Editar egreso' : 'Nuevo egreso'}</h2>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} weight="bold" /></button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Concepto *</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Concepto *</label>
               <input value={form.concepto} onChange={e => setForm({ ...form, concepto: e.target.value })} placeholder="Alquiler oficina, salarios enero..." className={inputClass} required autoFocus />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Importe (EUR) *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe (EUR) *</label>
                 <input type="number" step="0.01" min="0.01" value={form.importe} onChange={e => setForm({ ...form, importe: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Fecha *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha *</label>
                 <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} required />
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Categoria</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Categoria</label>
               <select value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} className={inputClass + ' appearance-none cursor-pointer pr-8'}>
                 {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Notas</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Notas</label>
               <textarea value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm outline-none resize-none focus:border-primary" />
             </div>
 

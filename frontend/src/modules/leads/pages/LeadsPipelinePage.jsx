@@ -56,7 +56,7 @@ function LeadCard({ lead, onClick, onDragStart }) {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 ${AVATAR_COLORS[lead.id % AVATAR_COLORS.length]}`}>
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${AVATAR_COLORS[lead.id % AVATAR_COLORS.length]}`}>
             {getInitials(lead.nombre)}
           </div>
           <div className="min-w-0">
@@ -78,7 +78,7 @@ function LeadCard({ lead, onClick, onDragStart }) {
         <span className="flex items-center gap-1 flex-shrink-0">
           {(lead.responsable_nombre || lead.gestor) && (
             <>
-              <User size={10} weight="duotone" />
+              <User size={10} weight="regular" />
               <span className="truncate max-w-[60px]">{(lead.responsable_nombre || lead.gestor).split(' ')[0]}</span>
               <span className="text-muted-foreground/60">&bull;</span>
             </>
@@ -206,18 +206,18 @@ export default function LeadsPipelinePage() {
     return (
       <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Pipeline de Leads</h1>
+          <h1 className="text-2xl font-semibold">Pipeline de Leads</h1>
           <p className="text-muted-foreground text-sm">Cargando...</p>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
             <div key={col.key} className="flex-shrink-0 w-[280px]">
-              <div className={`rounded-2xl px-4 py-3 mb-3 ${col.bg} animate-pulse`}>
+              <div className={`rounded-lg px-4 py-3 mb-3 ${col.bg} animate-pulse`}>
                 <div className="w-24 h-4 bg-muted rounded" />
               </div>
               <div className="space-y-2.5">
                 {[1, 2].map((i) => (
-                  <div key={i} className="bg-card border border-border rounded-2xl p-4 animate-pulse">
+                  <div key={i} className="bg-card border border-border rounded-lg p-4 animate-pulse">
                     <div className="flex items-center gap-2.5 mb-3">
                       <div className="w-7 h-7 rounded-full bg-muted" />
                       <div><div className="w-20 h-4 bg-muted rounded mb-1" /><div className="w-28 h-3 bg-muted rounded" /></div>
@@ -244,15 +244,15 @@ export default function LeadsPipelinePage() {
           <>
             <button
               onClick={() => navigate('/leads')}
-              className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+              className="px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
             >
               Vista tabla
             </button>
             <button
               onClick={() => setFormOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-all duration-200 shadow-lg shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
             >
-              <Plus size={16} weight="bold" /> Nuevo Lead
+              <Plus size={16} weight="bold" /> Nuevo Prospecto
             </button>
           </>
         }
@@ -270,7 +270,7 @@ export default function LeadsPipelinePage() {
               className="flex-shrink-0 w-[280px] flex flex-col"
             >
               {/* Column header */}
-              <div className={`rounded-2xl px-4 py-3 mb-3 ${col.bg}`}>
+              <div className={`rounded-lg px-4 py-3 mb-3 ${col.bg}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
@@ -293,9 +293,9 @@ export default function LeadsPipelinePage() {
                   />
                 ))}
                 {colLeads.length === 0 && (
-                  <div className="border-2 border-dashed border-border rounded-2xl p-6 text-center text-[13px] text-muted-foreground">
-                    <Users size={20} className="mx-auto mb-1 opacity-40" weight="duotone" />
-                    Sin leads
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center text-[13px] text-muted-foreground">
+                    <Users size={20} className="mx-auto mb-1 opacity-40" weight="regular" />
+                    Sin prospectos
                   </div>
                 )}
               </div>

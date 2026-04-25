@@ -76,14 +76,14 @@ export default function AccountsPayablePage() {
         title="Cuentas por pagar"
         subtitle={`${activeProject ? activeProject.nombre + ' — ' : ''}Facturas y deudas con proveedores`}
         actions={
-          <button onClick={() => setDialog('new')} className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+          <button onClick={() => setDialog('new')} className="inline-flex items-center gap-2 h-10 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
             <Plus size={14} weight="bold" /> Nueva factura
           </button>
         }
       />
 
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard icon={Receipt} label="Facturado" value={fmt(stats.total_facturado)} />
           <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.total_pagado)} tone="success" />
           <KpiCard icon={Wallet} label="Pendiente" value={fmt(stats.total_pendiente)} tone="warning" />
@@ -91,17 +91,19 @@ export default function AccountsPayablePage() {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center gap-2">
-          {ESTADOS.map(e => (
-            <button
-              key={e.v}
-              onClick={() => setFilterEstado(e.v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filterEstado === e.v ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
-            >
-              {e.label}
-            </button>
-          ))}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-border overflow-x-auto">
+          <div className="flex items-center gap-2 w-max">
+            {ESTADOS.map(e => (
+              <button
+                key={e.v}
+                onClick={() => setFilterEstado(e.v)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${filterEstado === e.v ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
@@ -109,66 +111,124 @@ export default function AccountsPayablePage() {
         ) : items.length === 0 ? (
           <EmptyState icon={Receipt} title="Sin facturas" description="No hay cuentas por pagar registradas" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="text-left px-4 py-2.5 font-bold">Proveedor</th>
-                  <th className="text-left px-4 py-2.5 font-bold">Concepto</th>
-                  <th className="text-left px-4 py-2.5 font-bold">Categoria</th>
-                  <th className="text-right px-4 py-2.5 font-bold">Total</th>
-                  <th className="text-right px-4 py-2.5 font-bold">Pagado</th>
-                  <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
-                  <th className="text-left px-4 py-2.5 font-bold">Vence</th>
-                  <th className="text-left px-4 py-2.5 font-bold">Estado</th>
-                  <th className="px-4 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(r => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">{r.proveedor}</div>
-                      {r.proyecto_nombre && <div className="text-[10px] text-muted-foreground">{r.proyecto_nombre}</div>}
-                    </td>
-                    <td className="px-4 py-3">{r.concepto}</td>
-                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-muted">{r.categoria}</span></td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_total)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-green-600">{fmt(r.importe_pagado)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold text-orange-600">{fmt(r.importe_pendiente)}</td>
-                    <td className="px-4 py-3">
-                      {r.fecha_compromiso_pago ? (
-                        <span className={r.vencido ? 'text-red-600 font-semibold' : ''}>
-                          {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-1" />}
-                          {formatDate(r.fecha_compromiso_pago)}
-                        </span>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
-                        r.estado === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
-                        r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
-                        'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
-                      }`}>{r.estado}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {r.estado !== 'pagado' && r.estado !== 'cancelado' && (
-                          <button onClick={() => setDialog({ type: 'pay', payable: r })} className="p-1.5 rounded hover:bg-green-50 text-green-600" title="Registrar pago">
-                            <CurrencyEur size={14} weight="bold" />
-                          </button>
-                        )}
-                        <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Eliminar">
-                          <Trash size={14} />
-                        </button>
-                      </div>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-[11px] text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-bold">Proveedor</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Concepto</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Categoria</th>
+                    <th className="text-right px-4 py-2.5 font-bold">Total</th>
+                    <th className="text-right px-4 py-2.5 font-bold">Pagado</th>
+                    <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Vence</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Estado</th>
+                    <th className="px-4 py-2.5"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {items.map(r => (
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">{r.proveedor}</div>
+                        {r.proyecto_nombre && <div className="text-[10px] text-muted-foreground">{r.proyecto_nombre}</div>}
+                      </td>
+                      <td className="px-4 py-3">{r.concepto}</td>
+                      <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted">{r.categoria}</span></td>
+                      <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_total)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-green-600">{fmt(r.importe_pagado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold text-orange-600">{fmt(r.importe_pendiente)}</td>
+                      <td className="px-4 py-3">
+                        {r.fecha_compromiso_pago ? (
+                          <span className={r.vencido ? 'text-red-600 font-semibold' : ''}>
+                            {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-1" />}
+                            {formatDate(r.fecha_compromiso_pago)}
+                          </span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                          r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                          r.estado === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
+                          r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
+                          'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                        }`}>{r.estado}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {r.estado !== 'pagado' && r.estado !== 'cancelado' && (
+                            <button onClick={() => setDialog({ type: 'pay', payable: r })} className="p-1.5 rounded hover:bg-green-50 text-green-600" title="Registrar pago">
+                              <CurrencyEur size={14} weight="bold" />
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Eliminar">
+                            <Trash size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-border">
+              {items.map(r => (
+                <div key={r.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{r.proveedor}</div>
+                      <div className="text-xs text-muted-foreground truncate">{r.concepto}</div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                      r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                      r.estado === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
+                      r.estado === 'cancelado' ? 'bg-muted text-muted-foreground' :
+                      'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                    }`}>{r.estado}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Total</div>
+                      <div className="tabular-nums">{fmt(r.importe_total)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Pagado</div>
+                      <div className="tabular-nums text-green-600">{fmt(r.importe_pagado)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Pendiente</div>
+                      <div className="tabular-nums font-semibold text-orange-600">{fmt(r.importe_pendiente)}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs pt-1">
+                    <div className="flex items-center gap-2 text-muted-foreground min-w-0">
+                      <span className="px-2 py-0.5 rounded bg-muted text-[10px] font-medium flex-shrink-0">{r.categoria}</span>
+                      {r.fecha_compromiso_pago && (
+                        <span className={r.vencido ? 'text-red-600 font-semibold' : ''}>
+                          {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-0.5" />}
+                          Vence {formatDate(r.fecha_compromiso_pago)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {r.estado !== 'pagado' && r.estado !== 'cancelado' && (
+                        <button onClick={() => setDialog({ type: 'pay', payable: r })} className="p-1.5 rounded hover:bg-green-50 text-green-600">
+                          <CurrencyEur size={14} weight="bold" />
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500">
+                        <Trash size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -208,11 +268,11 @@ function PayableDialog({ projectId, onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <form onSubmit={handleSubmit} className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-lg p-6 space-y-3">
+        <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">Nueva factura por pagar</h2>
+            <h2 className="text-lg font-semibold">Nueva factura por pagar</h2>
             <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -224,11 +284,11 @@ function PayableDialog({ projectId, onClose, onSaved }) {
             <input required type="number" step="0.01" placeholder="Importe total" value={data.importe_total} onChange={e => setData({ ...data, importe_total: e.target.value })} className={inputClass} />
             <div></div>
             <div>
-              <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Fecha factura</label>
+              <label className="text-[10px] font-medium text-muted-foreground block mb-1">Fecha factura</label>
               <input type="date" value={data.fecha_factura} onChange={e => setData({ ...data, fecha_factura: e.target.value })} className={inputClass} required />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Vence</label>
+              <label className="text-[10px] font-medium text-muted-foreground block mb-1">Vence</label>
               <input type="date" value={data.fecha_compromiso_pago} onChange={e => setData({ ...data, fecha_compromiso_pago: e.target.value })} className={inputClass} />
             </div>
             <textarea placeholder="Notas (opcional)" value={data.notas} onChange={e => setData({ ...data, notas: e.target.value })} className={inputClass + ' col-span-2 h-20 py-2 resize-none'} />
@@ -268,12 +328,12 @@ function PaymentDialog({ payable, onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <form onSubmit={handleSubmit} className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md p-6 space-y-3">
+        <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold">Registrar pago</h2>
+              <h2 className="text-lg font-semibold">Registrar pago</h2>
               <p className="text-xs text-muted-foreground">{payable.proveedor} — {payable.concepto}</p>
               <p className="text-xs text-orange-600 font-semibold mt-1">Pendiente: {fmt(pendiente)}</p>
             </div>
@@ -281,16 +341,16 @@ function PaymentDialog({ payable, onClose, onSaved }) {
           </div>
           <div className="space-y-3">
             <div>
-              <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Importe</label>
+              <label className="text-[10px] font-medium text-muted-foreground block mb-1">Importe</label>
               <input required type="number" step="0.01" max={pendiente} value={data.importe} onChange={e => setData({ ...data, importe: e.target.value })} className={inputClass} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Fecha</label>
+                <label className="text-[10px] font-medium text-muted-foreground block mb-1">Fecha</label>
                 <input type="date" value={data.fecha_pago} onChange={e => setData({ ...data, fecha_pago: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Metodo</label>
+                <label className="text-[10px] font-medium text-muted-foreground block mb-1">Metodo</label>
                 <select value={data.metodo} onChange={e => setData({ ...data, metodo: e.target.value })} className={inputClass}>
                   <option value="transferencia">Transferencia</option>
                   <option value="tarjeta">Tarjeta</option>

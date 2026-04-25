@@ -60,12 +60,12 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
 
   return (
     <Portal>
-      <div role="dialog" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div role="dialog" className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="relative bg-card rounded-lg border border-border w-full max-w-md mx-4 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-bold">Registrar abono</h2>
+              <h2 className="text-lg font-semibold">Registrar abono</h2>
               <p className="text-xs text-muted-foreground mt-0.5">{conversion.producto_contratado}</p>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
@@ -90,7 +90,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Importe del abono (EUR) *</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe del abono (EUR) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -106,12 +106,12 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Fecha</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha</label>
               <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Notas</label>
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Notas</label>
               <input value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Primer plazo, segunda cuota, etc..." className={inputClass} />
             </div>
 

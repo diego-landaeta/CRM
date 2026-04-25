@@ -4,7 +4,7 @@ import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-const inputClass = 'w-full h-11 px-4 rounded-xl border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
 
 export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated }) {
   const [open, setOpen] = useState(false);
@@ -38,7 +38,7 @@ export default function ProductCombobox({ value, onChange, products, projectId, 
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-md overflow-hidden">
           <div className="p-2 border-b border-border">
             <div className="relative">
               <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -147,11 +147,11 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <form onSubmit={handleSubmit} className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-md p-6 space-y-3">
+        <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">Nuevo {projectLabel.toLowerCase()}</h3>
+            <h3 className="text-lg font-semibold">Nuevo {projectLabel.toLowerCase()}</h3>
             <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <div className="space-y-3">
