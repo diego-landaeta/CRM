@@ -25,4 +25,13 @@ export const updateProjectSchema = z.object({
   producto_label: z.string().max(50).optional(),
   producto_label_plural: z.string().max(50).optional(),
   modules: z.record(z.string(), z.boolean()).optional(),
+  lead_base_fields_config: z.record(z.string(), z.object({
+    required: z.boolean().optional(),
+    visible: z.boolean().optional(),
+  })).optional(),
+  lead_columns: z.array(z.object({
+    key: z.string().min(1),
+    label: z.string().min(1),
+    visible: z.boolean(),
+  })).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

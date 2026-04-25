@@ -21,6 +21,14 @@ import accountsPayableModule from './modules/accounts-payable/index.js';
 import productCategoriesModule from './modules/product-categories/index.js';
 import commissionsModule from './modules/commissions/index.js';
 import reportsModule from './modules/reports/index.js';
+import matriculasModule from './modules/matriculas/index.js';
+import emailSequencesModule from './modules/email-sequences/index.js';
+import formsModule from './modules/forms/index.js';
+import payrollModule from './modules/payroll/index.js';
+import woocommerceModule from './modules/woocommerce/index.js';
+import webhookTokensModule from './modules/webhook-tokens/index.js';
+import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
+import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,7 +68,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule];
+const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule];
 
 for (const mod of modules) {
   app.use(mod.prefix, mod.router);
@@ -74,6 +82,8 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`CRM API corriendo en puerto ${PORT}`);
+    startEmailSequenceScheduler();
+    startWooCommerceSyncScheduler();
   });
 }
 

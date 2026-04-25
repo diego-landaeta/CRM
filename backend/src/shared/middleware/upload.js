@@ -33,6 +33,21 @@ export const uploadImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 }).single('file');
 
+const DOC_MIMES = new Set([
+  'image/png', 'image/jpeg', 'image/webp', 'application/pdf',
+]);
+function docFilter(_req, file, cb) {
+  if (!DOC_MIMES.has(file.mimetype)) {
+    return cb(new AppError('Solo PDF, PNG, JPG o WEBP', 400, 'INVALID_DOC_TYPE'), false);
+  }
+  cb(null, true);
+}
+export const uploadDoc = multer({
+  storage,
+  fileFilter: docFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('file');
+
 export function validatePdfMagicBytes(req, _res, next) {
   if (!req.file) {
     return next(new AppError('Archivo PDF requerido', 400, 'FILE_REQUIRED'));

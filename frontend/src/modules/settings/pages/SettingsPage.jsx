@@ -42,6 +42,7 @@ const TABS = [
 
 const ROLE_STYLES = {
   superadmin: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
+  soporte: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
   admin: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
   gestor: 'bg-muted text-muted-foreground',
 };
@@ -482,6 +483,7 @@ function UsersTab() {
                   <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={selectClass} style={selectBg}>
                     <option value="admin">Admin</option>
                     <option value="gestor">Gestor</option>
+                    <option value="soporte">Desarrollador / Soporte</option>
                   </select>
                 </div>
 
@@ -551,6 +553,7 @@ function UsersTab() {
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className={selectClass} style={selectBg}>
                     <option value="admin">Admin</option>
                     <option value="gestor">Gestor</option>
+                    <option value="soporte">Desarrollador / Soporte</option>
                   </select>
                 </div>
 
