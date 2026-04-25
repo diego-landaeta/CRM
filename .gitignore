@@ -34,6 +34,9 @@ desktop.ini
 
 # Test
 coverage/
+playwright-report/
+test-results/
+.playwright/
 
 # Uploads
 uploads/
