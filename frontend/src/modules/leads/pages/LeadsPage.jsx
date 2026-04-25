@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
+import { useWhatsappTemplates, fillTemplate } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +27,10 @@ import {
   DotsThreeVertical,
   Lightning,
   UploadSimple,
+  ChatCircleText,
+  PencilSimple,
+  X,
+  ArrowCounterClockwise,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -80,12 +85,17 @@ function cleanPhone(phone) {
   return (phone || '').replace(/[^\d]/g, '');
 }
 
-function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder }) {
+function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder, templates, projectName, onEditTemplates }) {
   const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
   const email = lead.email;
+  const [waMenuOpen, setWaMenuOpen] = useState(false);
 
-  function handleWhatsapp() {
+  function openWhatsappWithTemplate(tpl) {
+    const text = tpl ? fillTemplate(tpl.text, { lead, projectName }) : '';
+    const url = `https://wa.me/${wa}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+    window.open(url, '_blank', 'noopener');
     onLogInteraction?.(lead, 'whatsapp');
+    setWaMenuOpen(false);
   }
   function handleEmail() {
     onLogInteraction?.(lead, 'email');
@@ -94,10 +104,55 @@ function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCr
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp (registra interaccion)" onClick={handleWhatsapp}
-          className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors">
-          <WhatsappLogo size={14} weight="regular" />
-        </a>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setWaMenuOpen(o => !o)}
+            title="WhatsApp con plantilla"
+            className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors"
+          >
+            <WhatsappLogo size={14} weight="regular" />
+          </button>
+          {waMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setWaMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-md py-1 min-w-60 z-40" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}>
+                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Plantillas</div>
+                <button
+                  type="button"
+                  onClick={() => openWhatsappWithTemplate(null)}
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2"
+                >
+                  <WhatsappLogo size={12} weight="regular" /> Mensaje en blanco
+                </button>
+                {(templates || []).map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => openWhatsappWithTemplate(tpl)}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted"
+                    title={tpl.text}
+                  >
+                    <span className="font-medium block truncate">{tpl.label}</span>
+                    <span className="block text-[10px] text-muted-foreground truncate">{tpl.text}</span>
+                  </button>
+                ))}
+                {onEditTemplates && (
+                  <>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      onClick={() => { onEditTemplates(); setWaMenuOpen(false); }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 text-muted-foreground"
+                    >
+                      <PencilSimple size={12} weight="regular" /> Editar plantillas
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
       {email && (
         <a href={`mailto:${email}`} title="Email (registra interaccion)" onClick={handleEmail}
@@ -284,6 +339,7 @@ export default function LeadsPage() {
 
   const { activeProject } = useProjectContext();
   const { products } = useProducts(activeProject?.id);
+  const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
 
   const [formOpen, setFormOpen] = useState(false);
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
@@ -293,12 +349,17 @@ export default function LeadsPage() {
   const [confirmingContact, setConfirmingContact] = useState(null);
   const [reminderLead, setReminderLead] = useState(null);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]); // bulk actions
+  const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [quickFilter, setQuickFilterState] = useState(searchParams.get('qf') || ''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
 
   // Sincronizar filtro con URL para deep-linking desde el Dashboard
   function setQuickFilter(v) {
     setQuickFilterState(v);
+    setSelectedIds([]);
     if (v) setSearchParams({ qf: v }, { replace: true });
     else setSearchParams({}, { replace: true });
   }
@@ -376,6 +437,72 @@ export default function LeadsPage() {
 
   function handleCreateReminder(lead) {
     setReminderLead(lead);
+  }
+
+  // Bulk actions ----------------------------------------------
+  function toggleSelected(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+  function toggleSelectAll() {
+    if (selectedIds.length === filteredLeads.length && filteredLeads.length > 0) setSelectedIds([]);
+    else setSelectedIds(filteredLeads.map(l => l.id));
+  }
+  function clearSelection() {
+    setSelectedIds([]);
+    setBulkAction(null);
+  }
+
+  async function handleBulkStatusChange(newStatus) {
+    setBulkLoading(true);
+    let ok = 0, fail = 0;
+    for (const id of selectedIds) {
+      try {
+        await client.patch(`/leads/${id}/status`, { status: newStatus, motivo: `Cambio masivo desde tabla` });
+        ok++;
+      } catch { fail++; }
+    }
+    setBulkLoading(false);
+    setBulkAction(null);
+    setSelectedIds([]);
+    toast({ title: `${ok} actualizados`, description: fail > 0 ? `${fail} con error` : null });
+    refetch();
+  }
+
+  async function handleBulkReassign(gestorId) {
+    setBulkLoading(true);
+    let ok = 0, fail = 0;
+    for (const id of selectedIds) {
+      try {
+        await client.patch(`/leads/${id}/reassign`, { responsable_id: gestorId });
+        ok++;
+      } catch { fail++; }
+    }
+    setBulkLoading(false);
+    setBulkAction(null);
+    setSelectedIds([]);
+    const gestor = gestores.find(g => g.id === gestorId);
+    toast({ title: `${ok} reasignados a ${gestor?.nombre || ''}`, description: fail > 0 ? `${fail} con error` : null });
+    refetch();
+  }
+
+  function handleBulkExportCsv() {
+    const selected = filteredLeads.filter(l => selectedIds.includes(l.id));
+    const headers = ['nombre', 'email', 'telefono', 'estado', 'origen', 'gestor', 'fecha'];
+    const rows = selected.map(l => [
+      l.nombre, l.email, l.telefono || '', l.estado || '',
+      l.origen || l.canal_detectado || '', l.responsable_nombre || '',
+      (l.created_at || '').slice(0, 10),
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prospectos_${activeProject?.slug || 'proyecto'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 100);
+    toast({ title: `${selected.length} prospectos exportados` });
   }
 
   // Auto-log de interaccion al usar acciones rapidas (WhatsApp/Email)
@@ -523,6 +650,12 @@ export default function LeadsPage() {
                   >
                     <PlugsConnected size={14} /> Webhook de captura
                   </button>
+                  <button
+                    onClick={() => { setWaTemplatesOpen(true); setMoreOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <ChatCircleText size={14} /> Plantillas de WhatsApp
+                  </button>
                 </div>
               )}
             </div>
@@ -643,6 +776,15 @@ export default function LeadsPage() {
           <table className="w-full text-[13px]">
             <thead className="bg-muted/50 border-b">
               <tr>
+                <th className="pl-5 pr-2 py-2.5 w-8">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length > 0 && selectedIds.length === filteredLeads.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-border"
+                    aria-label="Seleccionar todos"
+                  />
+                </th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
@@ -663,8 +805,17 @@ export default function LeadsPage() {
                 <tr
                   key={lead.id}
                   onClick={() => navigate(`/leads/${lead.id}`)}
-                  className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                  className={`border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer ${selectedIds.includes(lead.id) ? 'bg-primary/5' : ''}`}
                 >
+                  <td className="pl-5 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(lead.id)}
+                      onChange={() => toggleSelected(lead.id)}
+                      className="rounded border-border"
+                      aria-label={`Seleccionar ${lead.nombre}`}
+                    />
+                  </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold ${getAvatarColor(lead.id)}`}>
@@ -710,13 +861,13 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
               ))}
               {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={8} className="px-5">
+                  <td colSpan={9} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron prospectos"
@@ -765,7 +916,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}
@@ -842,6 +993,20 @@ export default function LeadsPage() {
         />
       </Suspense>
 
+      {/* Bulk action bar — sticky abajo cuando hay seleccion */}
+      {selectedIds.length > 0 && (
+        <BulkActionBar
+          count={selectedIds.length}
+          onClear={clearSelection}
+          onChangeStatus={status => handleBulkStatusChange(status)}
+          onReassign={gestorId => handleBulkReassign(gestorId)}
+          onExport={handleBulkExportCsv}
+          gestores={gestores}
+          isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
+          loading={bulkLoading}
+        />
+      )}
+
       {/* Crear recordatorio inline */}
       <ReminderQuickDialog
         open={!!reminderLead}
@@ -859,6 +1024,216 @@ export default function LeadsPage() {
           onImported={({ ok }) => { if (ok > 0) refetch(); }}
         />
       </Suspense>
+
+      {/* Plantillas WhatsApp por proyecto */}
+      <WhatsappTemplatesDialog
+        open={waTemplatesOpen}
+        onClose={() => setWaTemplatesOpen(false)}
+        templates={waTemplates}
+        onSave={saveWaTemplates}
+        onReset={resetWaTemplates}
+        projectName={activeProject?.nombre}
+      />
+    </div>
+  );
+}
+
+// ===== BulkActionBar — sticky abajo cuando hay seleccion =====
+function BulkActionBar({ count, onClear, onChangeStatus, onReassign, onExport, gestores, isAdmin, loading }) {
+  const [openMenu, setOpenMenu] = useState(null); // null | 'status' | 'reassign'
+
+  return (
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-card border border-border rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-[95vw]" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+      <span className="text-sm font-semibold tabular-nums whitespace-nowrap">
+        {count} seleccionado{count === 1 ? '' : 's'}
+      </span>
+
+      <div className="h-5 w-px bg-border" />
+
+      <div className="flex items-center gap-1 flex-wrap">
+        {/* Cambiar estado */}
+        <div className="relative">
+          <button
+            onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            <CheckCircle size={14} weight="regular" /> Cambiar estado <CaretDown size={10} weight="bold" />
+          </button>
+          {openMenu === 'status' && (
+            <div className="absolute bottom-full mb-1 left-0 bg-card border border-border rounded-md py-1 min-w-44 z-10" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                <button key={k} onClick={() => { onChangeStatus(k); setOpenMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted">
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Reasignar (solo admin) */}
+        {isAdmin && gestores.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setOpenMenu(openMenu === 'reassign' ? null : 'reassign')}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <Users size={14} weight="regular" /> Reasignar <CaretDown size={10} weight="bold" />
+            </button>
+            {openMenu === 'reassign' && (
+              <div className="absolute bottom-full mb-1 left-0 bg-card border border-border rounded-md py-1 min-w-48 max-h-60 overflow-y-auto z-10" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                {gestores.map(g => (
+                  <button key={g.id} onClick={() => { onReassign(g.id); setOpenMenu(null); }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted">
+                    {g.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exportar CSV */}
+        <button
+          onClick={onExport}
+          disabled={loading}
+          className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <Export size={14} weight="regular" /> Exportar CSV
+        </button>
+      </div>
+
+      <div className="h-5 w-px bg-border" />
+
+      <button onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground p-1 rounded">
+        Cancelar
+      </button>
+    </div>
+  );
+}
+
+// ===== WhatsappTemplatesDialog — editor de plantillas por proyecto =====
+function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, projectName }) {
+  const [draft, setDraft] = useState([]);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setDraft(templates ? templates.map(t => ({ ...t })) : []);
+      setDirty(false);
+    }
+  }, [open, templates]);
+
+  if (!open) return null;
+
+  function updateField(idx, field, value) {
+    setDraft(d => d.map((t, i) => i === idx ? { ...t, [field]: value } : t));
+    setDirty(true);
+  }
+  function addTemplate() {
+    setDraft(d => [...d, { id: `tpl_${Date.now()}`, label: 'Nueva plantilla', text: 'Hola {nombre}, ' }]);
+    setDirty(true);
+  }
+  function removeTemplate(idx) {
+    setDraft(d => d.filter((_, i) => i !== idx));
+    setDirty(true);
+  }
+  function handleSave() {
+    onSave(draft);
+    toast({ title: 'Plantillas guardadas', description: `${draft.length} plantillas para ${projectName || 'este proyecto'}` });
+    onClose();
+  }
+  function handleReset() {
+    onReset();
+    toast({ title: 'Plantillas restauradas a las predeterminadas' });
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b">
+          <div>
+            <h2 className="text-base font-semibold">Plantillas de WhatsApp</h2>
+            <p className="text-xs text-muted-foreground">Para {projectName || 'este proyecto'} - guardadas en este navegador</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} /></button>
+        </div>
+
+        <div className="px-5 py-3 text-xs text-muted-foreground bg-muted/30 border-b">
+          Variables disponibles: <code className="bg-card px-1 rounded">{'{nombre}'}</code> <code className="bg-card px-1 rounded">{'{nombreCompleto}'}</code> <code className="bg-card px-1 rounded">{'{producto}'}</code> <code className="bg-card px-1 rounded">{'{proyecto}'}</code> <code className="bg-card px-1 rounded">{'{email}'}</code> <code className="bg-card px-1 rounded">{'{telefono}'}</code>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {draft.map((tpl, idx) => (
+            <div key={tpl.id} className="border border-border rounded-md p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={tpl.label}
+                  onChange={e => updateField(idx, 'label', e.target.value)}
+                  className="flex-1 px-2 py-1.5 text-sm font-medium border border-border rounded bg-background"
+                  placeholder="Nombre de la plantilla"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTemplate(idx)}
+                  className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-700"
+                  title="Eliminar plantilla"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <textarea
+                value={tpl.text}
+                onChange={e => updateField(idx, 'text', e.target.value)}
+                rows={3}
+                className="w-full px-2 py-1.5 text-xs border border-border rounded bg-background resize-y font-mono"
+                placeholder="Hola {nombre}, ..."
+              />
+            </div>
+          ))}
+          {draft.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-6">No hay plantillas. Anade una para empezar.</p>
+          )}
+          <button
+            type="button"
+            onClick={addTemplate}
+            className="w-full py-2 border border-dashed border-border rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center justify-center gap-1.5"
+          >
+            <Plus size={14} weight="bold" /> Anadir plantilla
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted"
+          >
+            <ArrowCounterClockwise size={12} /> Restaurar predeterminadas
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-md text-sm font-medium hover:bg-muted"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty}
+              className="px-4 py-1.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
+            >
+              Guardar plantillas
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
