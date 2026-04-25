@@ -25,7 +25,7 @@ export async function findAll({ active, role, projectId, page, limit }) {
   const total = parseInt(countResult.rows[0].count);
 
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at,
+    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
             COALESCE(
               (SELECT json_agg(up.project_id ORDER BY up.project_id)
                FROM user_projects up
@@ -43,7 +43,7 @@ export async function findAll({ active, role, projectId, page, limit }) {
 
 export async function findById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at
+    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key
      FROM users u WHERE u.id = $1`,
     [id]
   );
@@ -96,7 +96,7 @@ export async function create({ nombre, email, passwordHash, role, projectIds, se
   }
 }
 
-export async function update(id, { nombre, role, projectIds }) {
+export async function update(id, { nombre, role, projectIds, avatar_url, avatar_key }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -107,6 +107,8 @@ export async function update(id, { nombre, role, projectIds }) {
 
     if (nombre) { sets.push(`nombre = $${paramIdx++}`); params.push(nombre); }
     if (role) { sets.push(`role = $${paramIdx++}`); params.push(role); }
+    if (avatar_url !== undefined) { sets.push(`avatar_url = $${paramIdx++}`); params.push(avatar_url); }
+    if (avatar_key !== undefined) { sets.push(`avatar_key = $${paramIdx++}`); params.push(avatar_key); }
 
     if (sets.length > 0) {
       sets.push(`updated_at = NOW()`);

@@ -116,6 +116,16 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!user;
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await client.get('/auth/me');
+      if (res.success) {
+        setUser(res.data.user);
+        setProjects(res.data.projects || []);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -127,6 +137,7 @@ export function AuthProvider({ children }) {
       login,
       logout,
       switchProject,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

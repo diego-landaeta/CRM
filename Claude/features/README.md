@@ -43,7 +43,7 @@ Cada feature vive en un archivo propio. Documento vivo, se actualiza en cada ite
 | [35-cursos-paola.md](35-cursos-paola.md) | Cursos pendientes de creacion | CRM-131 |
 | [36-cierre-mensual.md](36-cierre-mensual.md) | Cierre contabilidad mensual | CRM-134 |
 | [37-whatsapp-webhook.md](37-whatsapp-webhook.md) | Webhook generico WhatsApp/Make (opcional) | CRM-133 |
-| [38-avatar-usuario.md](38-avatar-usuario.md) | Foto de perfil todos los roles | CRM-186 |
+| [38-avatar-usuario.md](38-avatar-usuario.md) | Foto de perfil todos los roles | CRM-186 ✅ |
 | [39-egresos-avanzados.md](39-egresos-avanzados.md) | Categorias dinamicas + comprobantes + iconos | CRM-150 |
 | [40-canales-personalizados.md](40-canales-personalizados.md) | CRUD canales + webhook-canal mapping | CRM-151 |
 | [41-ajustes-nomina.md](41-ajustes-nomina.md) | Bonos/anticipos/descuentos en nomina | CRM-173 |

@@ -119,7 +119,7 @@ export async function me(req, res, next) {
     res.json({
       success: true,
       data: {
-        user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role },
+        user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url },
         projects: sanitizeProjects(projects, user.role),
       },
     });

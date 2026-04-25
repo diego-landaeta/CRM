@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from '@/shared/hooks/useToast';
+import client from '@/shared/api/client';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -45,14 +46,57 @@ function Field({ label, error, children }) {
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' };
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { projects: allProjects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(Date.now());
+  const fileInputRef = useRef(null);
 
   const userProjects = allProjects || [];
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+
+  const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+  const avatarSrc = user?.avatar_url ? `${baseUrl}/api/users/${user.id}/avatar?v=${avatarVersion}` : null;
+
+  async function handleAvatarUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'Imagen muy grande', description: 'Maximo 2 MB', variant: 'destructive' });
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await client.post(`/users/${user.id}/avatar`, fd);
+      if (res.success) {
+        toast({ title: 'Foto actualizada' });
+        setAvatarVersion(Date.now());
+        refreshUser?.();
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleAvatarDelete() {
+    if (!confirm('Eliminar foto de perfil?')) return;
+    try {
+      await client.delete(`/users/${user.id}/avatar`);
+      toast({ title: 'Foto eliminada' });
+      setAvatarVersion(Date.now());
+      refreshUser?.();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    }
+  }
 
   // Profile form
   const {
@@ -96,10 +140,23 @@ export default function ProfilePage() {
       {/* Avatar + Info */}
       <div className="bg-card p-6 rounded-3xl border border-border shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
         <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl font-extrabold">
-            {initials}
+          <div className="relative group">
+            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-2xl font-extrabold overflow-hidden">
+              {avatarSrc ? (
+                <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+              ) : initials}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleAvatarUpload} className="hidden" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity"
+            >
+              {uploadingAvatar ? 'Subiendo...' : avatarSrc ? 'Cambiar' : 'Subir foto'}
+            </button>
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-lg font-bold">{user?.nombre}</h2>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
             <div className="flex items-center gap-2 mt-1.5">
@@ -110,6 +167,11 @@ export default function ProfilePage() {
                 <Folder size={12} /> {userProjects.length} proyecto{userProjects.length !== 1 ? 's' : ''}
               </span>
             </div>
+            {avatarSrc && (
+              <button onClick={handleAvatarDelete} className="text-[11px] text-red-500 hover:underline mt-2">
+                Eliminar foto
+              </button>
+            )}
           </div>
         </div>
 

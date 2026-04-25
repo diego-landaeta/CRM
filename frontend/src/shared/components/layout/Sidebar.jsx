@@ -258,8 +258,10 @@ export default function Sidebar({ onNavigate }) {
 
         {/* User */}
         <div className="flex items-center gap-3 px-2">
-          <button onClick={() => { navigate('/profile'); onNavigate?.(); }} className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs hover:bg-primary/20 transition-colors" title="Mi perfil">
-            {initials}
+          <button onClick={() => { navigate('/profile'); onNavigate?.(); }} className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-extrabold text-xs hover:bg-primary/20 transition-colors overflow-hidden" title="Mi perfil">
+            {user?.avatar_url ? (
+              <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/users/${user.id}/avatar`} alt="" className="w-full h-full object-cover" />
+            ) : initials}
           </button>
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { navigate('/profile'); onNavigate?.(); }}>
             <p className="text-xs font-bold text-foreground truncate tracking-tight">{user?.nombre}</p>
