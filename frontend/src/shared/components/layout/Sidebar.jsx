@@ -25,6 +25,7 @@ import {
   Envelope,
   Globe,
   ShoppingBag,
+  BookOpen,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
     ],
   },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+  { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
 ];
 
 function canSeeItem(item, role, modules) {
