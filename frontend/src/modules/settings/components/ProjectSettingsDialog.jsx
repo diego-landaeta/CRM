@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   X, Gear, FolderOpen, Notepad, PlugsConnected, Key, ArrowUp, ArrowDown, FloppyDisk,
-  Plus, Copy, CheckCircle, Eye, EyeSlash, ArrowsClockwise, Tag,
+  Plus, Copy, CheckCircle, Eye, EyeSlash, ArrowsClockwise, Tag, Table as TableIcon,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
@@ -12,6 +12,7 @@ const TABS = [
   { id: 'modulos', label: 'Modulos', icon: Tag },
   { id: 'categorias', label: 'Categorias', icon: FolderOpen },
   { id: 'campos', label: 'Campos', icon: Notepad },
+  { id: 'columnas', label: 'Columnas', icon: TableIcon },
   { id: 'webhook', label: 'Webhook', icon: PlugsConnected },
   { id: 'apis', label: 'APIs', icon: Key },
 ];
@@ -27,7 +28,8 @@ const MODULES_REGISTRY = {
       { key: 'commissions', label: 'Comisiones', requires: ['products', 'conversions'] },
       { key: 'matriculas', label: 'Matriculas (post-conversion)', requires: ['conversions'] },
       { key: 'forms', label: 'Forms (editor de formularios)' },
-      { key: 'woocommerce', label: 'WooCommerce sync' },
+      { key: 'email_sequences', label: 'Email seguimiento (secuencias)', requires: ['leads'] },
+      { key: 'woocommerce', label: 'WooCommerce sync', requires: ['products'] },
       { key: 'platform_users', label: 'Usuarios de plataforma (modo IA)' },
     ],
   },
@@ -99,7 +101,8 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
               {tab === 'general' && <GeneralTab project={project} onSaved={onSaved} />}
               {tab === 'modulos' && <ModulosTab project={project} onSaved={onSaved} />}
               {tab === 'categorias' && <CategoriesTab project={project} />}
-              {tab === 'campos' && <FieldsTab project={project} />}
+              {tab === 'campos' && <FieldsTab project={project} onSaved={onSaved} />}
+              {tab === 'columnas' && <ColumnsTab project={project} onSaved={onSaved} />}
               {tab === 'webhook' && <WebhookTab project={project} />}
               {tab === 'apis' && <ApisTab project={project} />}
             </div>
@@ -416,7 +419,34 @@ const FIELD_TYPES = [
   { v: 'boolean', label: 'Si/No' },
 ];
 
-function FieldsTab({ project }) {
+const BASE_FIELDS = [
+  { key: 'nombre', label: 'Nombre', alwaysRequired: true },
+  { key: 'email', label: 'Email', alwaysRequired: true },
+  { key: 'telefono', label: 'Telefono', alwaysRequired: false },
+  { key: 'producto_interes_id', label: 'Producto de interes', alwaysRequired: false },
+  { key: 'notas', label: 'Notas', alwaysRequired: false },
+];
+
+function FieldsTab({ project, onSaved }) {
+  const [baseConfig, setBaseConfig] = useState(project.lead_base_fields_config || {});
+  const [savingBase, setSavingBase] = useState(false);
+
+  async function saveBase(next) {
+    setBaseConfig(next);
+    setSavingBase(true);
+    try {
+      const res = await client.patch(`/projects/${project.id}`, { lead_base_fields_config: next });
+      if (res.success && onSaved) onSaved(res.data);
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    } finally { setSavingBase(false); }
+  }
+
+  function toggleBase(key, prop) {
+    const cur = baseConfig[key] || { required: false, visible: true };
+    saveBase({ ...baseConfig, [key]: { ...cur, [prop]: !cur[prop] } });
+  }
+
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('editor');
@@ -504,7 +534,47 @@ function FieldsTab({ project }) {
   }, {});
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-5 max-w-3xl">
+      <div>
+        <SectionTitle title="Campos base" subtitle="Los que vienen por defecto en cada lead. No se pueden borrar." />
+        <div className="mt-3 border border-border rounded-xl divide-y divide-border bg-muted/10">
+          {BASE_FIELDS.map(bf => {
+            const cfg = baseConfig[bf.key] || { required: false, visible: true };
+            const isReq = bf.alwaysRequired || cfg.required;
+            const isVis = bf.key === 'nombre' || bf.key === 'email' ? true : (cfg.visible !== false);
+            return (
+              <div key={bf.key} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-semibold">{bf.label}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{bf.key}</span>
+                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className={`flex items-center gap-1.5 text-xs ${bf.key === 'nombre' || bf.key === 'email' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <input
+                      type="checkbox"
+                      checked={isVis}
+                      disabled={bf.key === 'nombre' || bf.key === 'email' || savingBase}
+                      onChange={() => toggleBase(bf.key, 'visible')}
+                    />
+                    Visible
+                  </label>
+                  <label className={`flex items-center gap-1.5 text-xs ${bf.alwaysRequired ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <input
+                      type="checkbox"
+                      checked={isReq}
+                      disabled={bf.alwaysRequired || savingBase}
+                      onChange={() => toggleBase(bf.key, 'required')}
+                    />
+                    Requerido
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle title="Campos personalizados" subtitle={`${fields.length} campos. Hasta ~15 recomendados.`} />
@@ -950,6 +1020,157 @@ function ModulosTab({ project, onSaved }) {
       <div className="flex justify-end pt-2">
         <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
           {saving ? 'Guardando...' : 'Guardar modulos'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// COLUMNAS DEL LISTADO DE LEADS
+// ============================================================
+const DEFAULT_COLUMNS = [
+  { key: 'nombre', label: 'Nombre', visible: true },
+  { key: 'email', label: 'Email', visible: true },
+  { key: 'telefono', label: 'Telefono', visible: true },
+  { key: 'canal_detectado', label: 'Origen', visible: true },
+  { key: 'status', label: 'Estado', visible: true },
+  { key: 'responsable_nombre', label: 'Gestor', visible: true },
+  { key: 'fecha_solicitud', label: 'Fecha', visible: true },
+];
+
+const AVAILABLE_EXTRA_COLUMNS = [
+  { key: 'utm_source', label: 'UTM Source' },
+  { key: 'utm_campaign', label: 'UTM Campaign' },
+  { key: 'dias_inactivo', label: 'Dias inactivo' },
+  { key: 'last_interaction_at', label: 'Ultima interaccion' },
+  { key: 'updated_at', label: 'Actualizado' },
+  { key: 'reincidente', label: 'Reincidente' },
+];
+
+function ColumnsTab({ project, onSaved }) {
+  const initial = Array.isArray(project.lead_columns) && project.lead_columns.length
+    ? project.lead_columns
+    : DEFAULT_COLUMNS;
+  const [cols, setCols] = useState(initial);
+  const [customFields, setCustomFields] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    client.get(`/field-definitions/project/${project.id}`).then(r => {
+      if (r.success) setCustomFields(r.data || []);
+    }).catch(() => {});
+  }, [project.id]);
+
+  function move(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= cols.length) return;
+    const next = [...cols];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setCols(next);
+  }
+
+  function toggle(idx) {
+    const next = [...cols];
+    next[idx] = { ...next[idx], visible: !next[idx].visible };
+    setCols(next);
+  }
+
+  function remove(idx) {
+    setCols(cols.filter((_, i) => i !== idx));
+  }
+
+  function addCol(col) {
+    if (cols.find(c => c.key === col.key)) {
+      toast({ title: 'Columna ya añadida' });
+      return;
+    }
+    setCols([...cols, { key: col.key, label: col.label, visible: true }]);
+  }
+
+  function resetDefaults() {
+    if (!confirm('Restablecer columnas por defecto?')) return;
+    setCols(DEFAULT_COLUMNS);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await client.patch(`/projects/${project.id}`, { lead_columns: cols });
+      if (res.success) {
+        toast({ title: 'Columnas guardadas' });
+        if (onSaved) onSaved(res.data);
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  const presentKeys = new Set(cols.map(c => c.key));
+  const extraOptions = [
+    ...AVAILABLE_EXTRA_COLUMNS.filter(c => !presentKeys.has(c.key)),
+    ...customFields
+      .filter(f => !presentKeys.has(`custom.${f.field_key}`))
+      .map(f => ({ key: `custom.${f.field_key}`, label: f.label + ' (custom)' })),
+  ];
+
+  return (
+    <div className="space-y-5 max-w-3xl">
+      <div className="flex items-start justify-between">
+        <SectionTitle title="Columnas del listado de leads" subtitle="Elige cuales se ven y en que orden. Aplica al listado tabla." />
+        <button onClick={resetDefaults} className="text-xs text-muted-foreground hover:text-foreground underline">Restablecer</button>
+      </div>
+
+      <div className="border border-border rounded-xl divide-y divide-border bg-muted/10">
+        {cols.length === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">Sin columnas. Añade alguna abajo.</div>
+        ) : cols.map((c, idx) => (
+          <div key={c.key} className="flex items-center gap-3 px-4 py-2.5">
+            <div className="flex flex-col gap-0.5">
+              <button onClick={() => move(idx, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowUp size={12} /></button>
+              <button onClick={() => move(idx, 1)} disabled={idx === cols.length - 1} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowDown size={12} /></button>
+            </div>
+            <div className="flex-1 min-w-0">
+              <input
+                value={c.label}
+                onChange={e => {
+                  const next = [...cols];
+                  next[idx] = { ...next[idx], label: e.target.value };
+                  setCols(next);
+                }}
+                className="w-full h-8 px-2 rounded-md bg-card border border-border text-sm outline-none focus:border-primary"
+              />
+              <p className="font-mono text-[10px] text-muted-foreground mt-0.5">{c.key}</p>
+            </div>
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input type="checkbox" checked={c.visible} onChange={() => toggle(idx)} />
+              Visible
+            </label>
+            <button onClick={() => remove(idx)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Quitar"><X size={14} /></button>
+          </div>
+        ))}
+      </div>
+
+      {extraOptions.length > 0 && (
+        <div>
+          <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">Añadir columna</p>
+          <div className="flex flex-wrap gap-2">
+            {extraOptions.map(c => (
+              <button
+                key={c.key}
+                onClick={() => addCol(c)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-muted/40 hover:bg-muted text-xs font-medium border border-border"
+              >
+                <Plus size={12} weight="bold" /> {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end pt-2 border-t border-border">
+        <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
+          {saving ? 'Guardando...' : 'Guardar columnas'}
         </button>
       </div>
     </div>

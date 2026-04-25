@@ -51,23 +51,83 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-function SkeletonRow() {
+function SkeletonRow({ cols = 7 }) {
   return (
     <tr className="border-b animate-pulse">
-      <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-full bg-muted" /><div className="w-24 h-4 bg-muted rounded" /></div></td>
-      <td className="px-5 py-3.5"><div className="w-32 h-4 bg-muted rounded" /></td>
-      <td className="px-5 py-3.5"><div className="w-24 h-4 bg-muted rounded" /></td>
-      <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
-      <td className="px-5 py-3.5"><div className="w-20 h-5 bg-muted rounded-full" /></td>
-      <td className="px-5 py-3.5"><div className="w-20 h-4 bg-muted rounded" /></td>
-      <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
+      {Array.from({ length: cols }).map((_, i) => (
+        <td key={i} className="px-5 py-3.5"><div className="w-24 h-4 bg-muted rounded" /></td>
+      ))}
     </tr>
   );
+}
+
+const DEFAULT_LEAD_COLUMNS = [
+  { key: 'nombre', label: 'Nombre', visible: true },
+  { key: 'email', label: 'Email', visible: true },
+  { key: 'telefono', label: 'Telefono', visible: true },
+  { key: 'canal_detectado', label: 'Origen', visible: true },
+  { key: 'status', label: 'Estado', visible: true },
+  { key: 'responsable_nombre', label: 'Gestor', visible: true },
+  { key: 'fecha_solicitud', label: 'Fecha', visible: true },
+];
+
+function renderColumn(key, lead) {
+  switch (key) {
+    case 'nombre':
+      return (
+        <div className="flex items-center gap-2.5">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${getAvatarColor(lead.id)}`}>
+            {getInitials(lead.nombre)}
+          </div>
+          <span className="font-semibold text-foreground">{lead.nombre}</span>
+          {lead.reincidente && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente">
+              Reincidente
+            </span>
+          )}
+          {!lead.reincidente && lead.lead_duplicado_de && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Duplicado">
+              Duplicado
+            </span>
+          )}
+          {lead.dias_inactivo != null &&
+            lead.dias_alerta_inactividad != null &&
+            lead.dias_inactivo > lead.dias_alerta_inactividad &&
+            !['convertido', 'no_interesado'].includes(lead.estado) && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} dias`}>
+                {lead.dias_inactivo}d
+              </span>
+            )}
+        </div>
+      );
+    case 'email': return lead.email || '--';
+    case 'telefono': return lead.telefono || '--';
+    case 'canal_detectado': return <ChannelBadge channel={lead.origen} />;
+    case 'status': return <StatusBadge status={lead.estado} />;
+    case 'responsable_nombre': return lead.responsable_nombre || lead.gestor || 'Sin asignar';
+    case 'fecha_solicitud': return formatDate(lead.created_at || lead.fecha);
+    case 'utm_source': return lead.utm_source || '--';
+    case 'utm_campaign': return lead.utm_campaign || '--';
+    case 'dias_inactivo': return lead.dias_inactivo != null ? `${lead.dias_inactivo}d` : '--';
+    case 'last_interaction_at': return formatDate(lead.last_interaction_at);
+    case 'updated_at': return formatDate(lead.updated_at);
+    case 'reincidente': return lead.reincidente ? 'Si' : 'No';
+    default:
+      if (key.startsWith('custom.')) {
+        const k = key.slice(7);
+        return lead.custom_fields?.[k] != null ? String(lead.custom_fields[k]) : '--';
+      }
+      return '--';
+  }
 }
 
 export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { activeProject: activeProjectForCols } = useProjectContext();
+  const visibleColumns = (Array.isArray(activeProjectForCols?.lead_columns) && activeProjectForCols.lead_columns.length
+    ? activeProjectForCols.lead_columns
+    : DEFAULT_LEAD_COLUMNS).filter(c => c.visible);
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
@@ -272,11 +332,15 @@ export default function LeadsPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-          <div className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-3">
+          <button
+            type="button"
+            onClick={() => { setFilterEstado(''); setPage(1); }}
+            className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] hover:bg-muted/40 transition"
+          >
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total</p>
             <p className="text-xl font-extrabold mt-0.5">{stats.total || 0}</p>
-          </div>
+          </button>
           {[
             { key: 'nuevo', label: 'Nuevos', color: '#4361ee' },
             { key: 'por_contactar', label: 'Por contactar', color: '#ea580c' },
@@ -285,11 +349,40 @@ export default function LeadsPage() {
             { key: 'convertido', label: 'Convertidos', color: '#7c3aed' },
             { key: 'no_interesado', label: 'No interesado', color: '#dc2626' },
           ].map(({ key, label, color }) => (
-            <div key={key} className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2" style={{ borderBottomColor: color }}>
+            <button
+              type="button"
+              key={key}
+              onClick={() => {
+                if (key === 'convertido') {
+                  navigate('/clients');
+                } else {
+                  setFilterEstado(key);
+                  setPage(1);
+                }
+              }}
+              className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2 hover:bg-muted/40 transition"
+              style={{ borderBottomColor: color }}
+              title={key === 'convertido' ? 'Ver clientes' : `Filtrar por ${label.toLowerCase()}`}
+            >
               <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{label}</p>
               <p className="text-xl font-extrabold mt-0.5" style={{ color }}>{stats[key] || 0}</p>
-            </div>
+            </button>
           ))}
+          {(() => {
+            const total = Number(stats.total || 0);
+            const conv = Number(stats.convertido || 0);
+            const pct = total > 0 ? Math.round((conv / total) * 1000) / 10 : 0;
+            return (
+              <div
+                className="bg-card px-4 py-3 rounded-2xl border border-border text-center shadow-[0_1px_2px_0_rgb(0_0_0/0.05)] border-b-2"
+                style={{ borderBottomColor: '#10b981' }}
+                title={`${conv} convertidos sobre ${total} leads totales`}
+              >
+                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">% Conversion</p>
+                <p className="text-xl font-extrabold mt-0.5 text-emerald-500">{pct}%</p>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -308,19 +401,15 @@ export default function LeadsPage() {
           <table className="w-full text-[13px]">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Telefono</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Origen</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gestor</th>
-                <th className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Fecha</th>
+                {visibleColumns.map(col => (
+                  <th key={col.key} className="px-5 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{col.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading && leads.length === 0 && (
                 <>
-                  {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
+                  {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} cols={visibleColumns.length} />)}
                 </>
               )}
               {!loading && leads.map((lead) => (
@@ -329,47 +418,16 @@ export default function LeadsPage() {
                   onClick={() => navigate(`/leads/${lead.id}`)}
                   className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
                 >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${getAvatarColor(lead.id)}`}>
-                        {getInitials(lead.nombre)}
-                      </div>
-                      <span className="font-semibold">{lead.nombre}</span>
-                      {lead.reincidente && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya pregunto por este producto antes">
-                          Reincidente
-                        </span>
-                      )}
-                      {!lead.reincidente && lead.lead_duplicado_de && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Este email ya existe en el proyecto">
-                          Duplicado
-                        </span>
-                      )}
-                      {lead.dias_inactivo != null &&
-                       lead.dias_alerta_inactividad != null &&
-                       lead.dias_inactivo > lead.dias_alerta_inactividad &&
-                       !['convertido', 'no_interesado'].includes(lead.estado) && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} dias`}>
-                          {lead.dias_inactivo}d
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.telefono || '--'}</td>
-                  <td className="px-5 py-3.5">
-                    <ChannelBadge channel={lead.origen} />
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <StatusBadge status={lead.estado} />
-                  </td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{formatDate(lead.created_at || lead.fecha)}</td>
+                  {visibleColumns.map(col => (
+                    <td key={col.key} className="px-5 py-3.5 text-muted-foreground">
+                      {renderColumn(col.key, lead)}
+                    </td>
+                  ))}
                 </tr>
               ))}
               {!loading && leads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={7} className="px-5">
+                  <td colSpan={visibleColumns.length} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron leads"

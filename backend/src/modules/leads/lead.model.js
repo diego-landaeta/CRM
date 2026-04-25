@@ -94,12 +94,17 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 // LISTADO + DETALLE
 // ============================================================
 
-export async function findAll({ projectId, status, responsableId, canal, search, page, limit }) {
+export async function findAll({ projectId, status, responsableId, canal, search, page, limit, includeConverted }) {
   const conditions = ['l.project_id = $1'];
   const params = [projectId];
   let paramIdx = 2;
 
-  if (status) { conditions.push(`l.status = $${paramIdx++}`); params.push(status); }
+  if (status) {
+    conditions.push(`l.status = $${paramIdx++}`);
+    params.push(status);
+  } else if (!includeConverted) {
+    conditions.push(`l.status <> 'convertido'`);
+  }
   if (responsableId) { conditions.push(`l.responsable_id = $${paramIdx++}`); params.push(responsableId); }
   if (canal) {
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);

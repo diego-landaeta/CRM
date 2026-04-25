@@ -18,6 +18,10 @@ import {
   Receipt,
   UserCheck,
   Coins,
+  GraduationCap,
+  Envelope,
+  Globe,
+  ShoppingBag,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -33,6 +37,10 @@ const NAV_ITEMS = [
   { label: 'Leads', to: '/leads', icon: Users, module: 'leads' },
   { label: 'Clientes', to: '/clients', icon: UserCheck, module: 'clients' },
   { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
+  { label: 'Matriculas', to: '/matriculas', icon: GraduationCap, module: 'matriculas' },
+  { label: 'Forms', to: '/forms', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
+  { label: 'Email seguimiento', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
+  { label: 'WooCommerce', to: '/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
   {
     label: 'Contabilidad', icon: Calculator,
@@ -43,12 +51,18 @@ const NAV_ITEMS = [
       { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'], module: 'accounting_receivable' },
       { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'], module: 'accounting_payable' },
       { label: 'Comisiones', to: '/commissions', module: 'commissions' },
+      { label: 'Nominas', to: '/payroll', roles: ['superadmin', 'admin'], module: 'payroll' },
     ],
   },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
 ];
 
 function canSeeItem(item, role, modules) {
+  // soporte ve todo (rol generico tipo dev)
+  if (role === 'soporte' || role === 'superadmin') {
+    if (item.module && modules && modules[item.module] === false) return false;
+    return true;
+  }
   if (item.roles && !item.roles.includes(role)) return false;
   if (item.module && modules && modules[item.module] === false) return false;
   return true;

@@ -21,7 +21,8 @@ export const listLeadsSchema = z.object({
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido']).optional(),
   search: z.string().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(20),
+  limit: z.coerce.number().int().positive().max(500).default(20),
+  includeConverted: z.coerce.boolean().optional(),
 });
 
 export const updateStatusSchema = z.object({

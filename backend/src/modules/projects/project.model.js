@@ -62,14 +62,16 @@ export async function create(data) {
 export async function update(id, fields) {
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
-                   'producto_label', 'producto_label_plural', 'logo_url', 'logo_key', 'modules'];
+                   'producto_label', 'producto_label_plural', 'logo_url', 'logo_key', 'modules',
+                   'lead_base_fields_config', 'lead_columns'];
   const sets = [];
   const params = [];
   let idx = 1;
+  const jsonbFields = new Set(['modules', 'lead_base_fields_config', 'lead_columns']);
   for (const k of allowed) {
     if (fields[k] !== undefined) {
       sets.push(`${k} = $${idx++}`);
-      params.push(fields[k]);
+      params.push(jsonbFields.has(k) ? JSON.stringify(fields[k]) : fields[k]);
     }
   }
   if (!sets.length) return null;

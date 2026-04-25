@@ -104,7 +104,7 @@ export default function LeadsPipelinePage() {
     if (!pid) return;
     setLoading(true);
     try {
-      const res = await client.get(`/leads?projectId=${pid}&limit=200`);
+      const res = await client.get(`/leads?projectId=${pid}&limit=500&includeConverted=1`);
       if (res.success) {
         // Backend devuelve status, frontend usa estado - normalizar
         setAllLeads((res.data || []).map(l => ({

@@ -31,6 +31,11 @@ const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivableP
 const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
+const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
+const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
+const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
+const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
+const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 
 function App() {
   return (
@@ -55,6 +60,11 @@ function App() {
           <Route path="/accounting/payable" element={<AccountsPayablePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
+          <Route path="/matriculas" element={<MatriculasPage />} />
+          <Route path="/email-sequences" element={<EmailSequencesPage />} />
+          <Route path="/forms" element={<FormsPage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
+          <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />

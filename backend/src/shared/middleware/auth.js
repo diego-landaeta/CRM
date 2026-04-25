@@ -22,7 +22,7 @@ export function roleGuard(...allowedRoles) {
     if (!req.user) {
       return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
     }
-    if (req.user.role === 'superadmin') return next();
+    if (req.user.role === 'superadmin' || req.user.role === 'soporte') return next();
     if (!allowedRoles.includes(req.user.role)) {
       return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
     }

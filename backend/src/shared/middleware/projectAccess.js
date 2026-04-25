@@ -7,7 +7,7 @@ export async function projectAccess(req, _res, next) {
     return next(new AppError('projectId requerido', 400, 'MISSING_PROJECT'));
   }
 
-  if (req.user.role === 'superadmin') {
+  if (req.user.role === 'superadmin' || req.user.role === 'soporte') {
     req.projectId = Number(projectId);
     return next();
   }
