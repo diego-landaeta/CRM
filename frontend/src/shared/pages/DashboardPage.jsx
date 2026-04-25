@@ -130,31 +130,36 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            <div className="bg-card rounded-md p-3 border border-border">
+            <button onClick={() => navigate('/leads?qf=urgent')}
+              className="bg-card rounded-md p-3 border border-border text-left hover:border-orange-300 hover:bg-orange-50/30 dark:hover:bg-orange-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Pendientes</p>
               <p className="text-2xl font-semibold tabular-nums text-orange-600">{today.reminders_pendientes?.length || 0}</p>
               <p className="text-[10px] text-muted-foreground">reminders hoy</p>
-            </div>
-            <div className="bg-card rounded-md p-3 border border-border">
+            </button>
+            <button onClick={() => navigate('/leads')}
+              className="bg-card rounded-md p-3 border border-border text-left hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Nuevos</p>
               <p className="text-2xl font-semibold tabular-nums text-blue-600">{today.nuevos_hoy || 0}</p>
               <p className="text-[10px] text-muted-foreground">hoy ({today.nuevos_semana || 0} semana)</p>
-            </div>
-            <div className="bg-card rounded-md p-3 border border-border">
+            </button>
+            <button onClick={() => navigate('/leads?qf=no-contact')}
+              className="bg-card rounded-md p-3 border border-border text-left hover:border-amber-300 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Inactivos</p>
               <p className="text-2xl font-semibold tabular-nums text-amber-600">{today.inactivos || 0}</p>
               <p className="text-[10px] text-muted-foreground">prospectos sin actividad</p>
-            </div>
-            <div className="bg-card rounded-md p-3 border border-border">
+            </button>
+            <button onClick={() => navigate('/accounting/receivable')}
+              className="bg-card rounded-md p-3 border border-border text-left hover:border-red-300 hover:bg-red-50/30 dark:hover:bg-red-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
               <p className="text-2xl font-semibold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
               <p className="text-[10px] text-muted-foreground">pagos atrasados</p>
-            </div>
-            <div className="bg-card rounded-md p-3 border border-border">
+            </button>
+            <button onClick={() => navigate('/accounting/income')}
+              className="bg-card rounded-md p-3 border border-border text-left hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Ingresos hoy</p>
               <p className="text-2xl font-semibold tabular-nums text-emerald-600">{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(today.ingresos_hoy || 0)}</p>
               <p className="text-[10px] text-muted-foreground">cobrado hoy</p>
-            </div>
+            </button>
           </div>
 
           {/* Reminders pendientes */}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { toast } from '@/shared/hooks/useToast';
@@ -25,11 +25,13 @@ import {
   CalendarPlus,
   DotsThreeVertical,
   Lightning,
+  UploadSimple,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
+const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -290,7 +292,16 @@ export default function LeadsPage() {
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
   const [reminderLead, setReminderLead] = useState(null);
-  const [quickFilter, setQuickFilter] = useState(''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [quickFilter, setQuickFilterState] = useState(searchParams.get('qf') || ''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
+
+  // Sincronizar filtro con URL para deep-linking desde el Dashboard
+  function setQuickFilter(v) {
+    setQuickFilterState(v);
+    if (v) setSearchParams({ qf: v }, { replace: true });
+    else setSearchParams({}, { replace: true });
+  }
 
   // Filtros rapidos client-side (sobre los leads ya cargados)
   const filteredLeads = useMemo(() => {
@@ -492,12 +503,19 @@ export default function LeadsPage() {
                 Configurar <CaretDown size={12} weight="bold" />
               </button>
               {moreOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg z-30 min-w-48 py-1">
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg z-30 min-w-52 py-1">
+                  <button
+                    onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <UploadSimple size={14} /> Importar desde CSV
+                  </button>
+                  <div className="my-1 border-t border-border" />
                   <button
                     onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
                   >
-                    <Notepad size={14} /> Campos custom de leads
+                    <Notepad size={14} /> Campos custom de prospectos
                   </button>
                   <button
                     onClick={() => { setConfigTab('webhook'); setMoreOpen(false); }}
@@ -831,6 +849,16 @@ export default function LeadsPage() {
         onClose={() => setReminderLead(null)}
         onSaved={() => { setReminderLead(null); refetch(); }}
       />
+
+      {/* Import CSV */}
+      <Suspense fallback={null}>
+        <CsvImportDialog
+          open={csvImportOpen}
+          onClose={() => setCsvImportOpen(false)}
+          projectId={activeProject?.id}
+          onImported={({ ok }) => { if (ok > 0) refetch(); }}
+        />
+      </Suspense>
     </div>
   );
 }

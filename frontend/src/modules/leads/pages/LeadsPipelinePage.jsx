@@ -9,12 +9,12 @@ import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
 
 const COLUMNS = [
-  { key: 'nuevo', label: 'Nuevo', color: '#4361ee', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500' },
-  { key: 'por_contactar', label: 'Por contactar', color: '#ea580c', bg: 'bg-orange-50 dark:bg-orange-950/30', dot: 'bg-orange-500' },
-  { key: 'contactado', label: 'Contactado', color: '#059669', bg: 'bg-emerald-50 dark:bg-emerald-950/30', dot: 'bg-emerald-500' },
-  { key: 'en_seguimiento', label: 'En seguimiento', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-950/30', dot: 'bg-amber-500' },
-  { key: 'convertido', label: 'Convertido', color: '#7c3aed', bg: 'bg-violet-50 dark:bg-violet-950/30', dot: 'bg-violet-500' },
-  { key: 'no_interesado', label: 'No interesado', color: '#dc2626', bg: 'bg-red-50 dark:bg-red-950/30', dot: 'bg-red-500' },
+  { key: 'nuevo', label: 'Nuevo', color: '#3b82f6', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500', ring: 'ring-blue-400' },
+  { key: 'por_contactar', label: 'Por contactar', color: '#f59e0b', bg: 'bg-orange-50 dark:bg-orange-950/30', dot: 'bg-amber-500', ring: 'ring-amber-400' },
+  { key: 'contactado', label: 'Contactado', color: '#10b981', bg: 'bg-emerald-50 dark:bg-emerald-950/30', dot: 'bg-emerald-500', ring: 'ring-emerald-400' },
+  { key: 'en_seguimiento', label: 'En seguimiento', color: '#eab308', bg: 'bg-amber-50 dark:bg-amber-950/30', dot: 'bg-yellow-500', ring: 'ring-yellow-400' },
+  { key: 'convertido', label: 'Convertido', color: '#8b5cf6', bg: 'bg-violet-50 dark:bg-violet-950/30', dot: 'bg-violet-500', ring: 'ring-violet-400' },
+  { key: 'no_interesado', label: 'No interesado', color: '#ef4444', bg: 'bg-red-50 dark:bg-red-950/30', dot: 'bg-red-500', ring: 'ring-red-400' },
 ];
 
 const AVATAR_COLORS = [
@@ -43,12 +43,13 @@ function daysAgo(dateStr) {
   return `hace ${diff}d`;
 }
 
-function LeadCard({ lead, onClick, onDragStart }) {
+function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
   const canal = lead.canal_detectado || lead.origen;
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, lead)}
+      onDragEnd={onDragEnd}
       onClick={() => onClick(lead.id)}
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onClick(lead.id); }}
@@ -99,6 +100,7 @@ export default function LeadsPipelinePage() {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [dragLead, setDragLead] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   const fetchAllLeads = useCallback(async () => {
     if (!pid) return;
@@ -140,13 +142,22 @@ export default function LeadsPipelinePage() {
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  function handleDragOver(e) {
+  function handleDragOver(e, colKey) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    if (dragOverCol !== colKey) setDragOverCol(colKey);
+  }
+  function handleDragLeave() {
+    setDragOverCol(null);
+  }
+  function handleDragEnd() {
+    setDragLead(null);
+    setDragOverCol(null);
   }
 
   async function handleDrop(e, targetEstado) {
     e.preventDefault();
+    setDragOverCol(null);
     if (!dragLead || dragLead.estado === targetEstado) {
       setDragLead(null);
       return;
@@ -206,7 +217,7 @@ export default function LeadsPipelinePage() {
     return (
       <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-semibold">Pipeline de Leads</h1>
+          <h1 className="text-2xl font-semibold">Pipeline de Prospectos</h1>
           <p className="text-muted-foreground text-sm">Cargando...</p>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -238,7 +249,7 @@ export default function LeadsPipelinePage() {
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
 
       <PageHeader
-        title="Pipeline de Leads"
+        title="Pipeline de Prospectos"
         subtitle="Vista Kanban &mdash; arrastra una tarjeta para cambiar su estado"
         actions={
           <>
@@ -265,31 +276,44 @@ export default function LeadsPipelinePage() {
           return (
             <div
               key={col.key}
-              onDragOver={handleDragOver}
+              onDragOver={(e) => handleDragOver(e, col.key)}
+              onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, col.key)}
-              className="flex-shrink-0 w-[280px] flex flex-col"
+              className={`flex-shrink-0 w-[280px] flex flex-col rounded-lg transition-all ${
+                dragOverCol === col.key && dragLead?.estado !== col.key
+                  ? `ring-2 ${col.ring} bg-muted/30`
+                  : ''
+              }`}
             >
               {/* Column header */}
               <div className={`rounded-lg px-4 py-3 mb-3 ${col.bg}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-                    <span className="text-[13px] font-bold">{col.label}</span>
+                    <span className="text-[13px] font-semibold">{col.label}</span>
                   </div>
-                  <span className="text-[12px] font-bold bg-card border border-border rounded-lg px-2 py-0.5">
+                  <span className="text-[12px] font-semibold bg-card border border-border rounded-md px-2 py-0.5 tabular-nums">
                     {colLeads.length}
                   </span>
                 </div>
               </div>
 
+              {/* Drop hint */}
+              {dragOverCol === col.key && dragLead?.estado !== col.key && (
+                <div className={`mb-2 px-3 py-2 rounded-md border-2 border-dashed text-xs font-medium text-center text-muted-foreground`} style={{ borderColor: col.color }}>
+                  Soltar para mover a "{col.label}"
+                </div>
+              )}
+
               {/* Cards */}
-              <div className="space-y-2.5 flex-1 min-h-[200px]">
+              <div className="space-y-2.5 flex-1 min-h-[200px] px-1">
                 {colLeads.map((lead) => (
                   <LeadCard
                     key={lead.id}
                     lead={lead}
                     onClick={(id) => navigate(`/leads/${id}`)}
                     onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
                   />
                 ))}
                 {colLeads.length === 0 && (

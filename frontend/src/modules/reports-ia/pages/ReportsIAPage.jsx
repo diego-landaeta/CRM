@@ -53,15 +53,23 @@ export default function ReportsIAPage() {
     setPdfLoading(true);
     try {
       const blob = await exportReportPdf(reportsIA.selected.id);
+      // Sanitize slug y verifica que el blob es valido
+      const slug = (activeProject?.slug || 'proyecto').replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+      const filename = `reporte-${slug}-${reportsIA.selected.periodo}.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `reporte_${activeProject.slug}_${reportsIA.selected.periodo}.pdf`;
+      a.download = filename;
+      a.rel = 'noopener';
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast({ title: 'PDF descargado', description: `Reporte ${fmtPeriodo(reportsIA.selected.periodo)}` });
+      // Delay cleanup para que Chrome procese el download attribute correctamente
+      setTimeout(() => {
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, 1000);
+      toast({ title: 'PDF descargado', description: filename });
     } catch (err) {
       toast({ title: 'Error generando PDF', description: err.message, variant: 'destructive' });
     } finally {
