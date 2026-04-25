@@ -6,7 +6,7 @@ export const createExpenseSchema = z.object({
   project_id: z.number().int().positive().nullable().optional(),
   concepto: z.string().min(1, 'Concepto requerido').max(255),
   importe: z.number().positive('Importe debe ser > 0'),
-  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha del egreso requerida (YYYY-MM-DD)'),
   categoria: z.enum(CATEGORIES).default('otros'),
   notas: z.string().max(2000).optional().nullable(),
 });

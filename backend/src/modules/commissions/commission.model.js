@@ -24,13 +24,28 @@ export async function listRules({ projectId, userId, productId }) {
 }
 
 export async function createRule(data) {
+  // ON CONFLICT por el unique index nuevo (project_id, user_id, COALESCE(product_id, 0))
+  // Hacemos UPSERT manual porque indices funcionales no soportan ON CONFLICT directamente.
+  const existing = await query(
+    `SELECT id FROM commission_rules
+     WHERE project_id = $1 AND user_id = $2 AND COALESCE(product_id, 0) = COALESCE($3::int, 0)`,
+    [data.project_id, data.user_id, data.product_id || null]
+  );
+  if (existing.rows[0]) {
+    const { rows } = await query(
+      `UPDATE commission_rules
+         SET pct = $1, base_calc = $2, condicion = $3, active = true, updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [data.pct, data.base_calc || 'cobrado', data.condicion ? JSON.stringify(data.condicion) : null, existing.rows[0].id]
+    );
+    return rows[0];
+  }
   const { rows } = await query(
-    `INSERT INTO commission_rules (project_id, user_id, product_id, pct)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (user_id, product_id) DO UPDATE
-       SET pct = EXCLUDED.pct, active = true, updated_at = NOW()
+    `INSERT INTO commission_rules (project_id, user_id, product_id, pct, base_calc, condicion)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [data.project_id, data.user_id, data.product_id, data.pct]
+    [data.project_id, data.user_id, data.product_id || null, data.pct, data.base_calc || 'cobrado',
+     data.condicion ? JSON.stringify(data.condicion) : null]
   );
   return rows[0];
 }
@@ -38,6 +53,8 @@ export async function createRule(data) {
 export async function updateRule(id, data) {
   const fields = []; const params = []; let idx = 1;
   if (data.pct !== undefined) { fields.push(`pct = $${idx++}`); params.push(data.pct); }
+  if (data.base_calc !== undefined) { fields.push(`base_calc = $${idx++}`); params.push(data.base_calc); }
+  if (data.condicion !== undefined) { fields.push(`condicion = $${idx++}`); params.push(data.condicion ? JSON.stringify(data.condicion) : null); }
   if (data.active !== undefined) { fields.push(`active = $${idx++}`); params.push(data.active); }
   if (!fields.length) return null;
   fields.push(`updated_at = NOW()`);
@@ -102,41 +119,83 @@ export async function listCommissions({ userId, estado, from, to, projectId }) {
   return rows;
 }
 
+// Evaluador simple de condicion JSONB: { field, op, value } o { op:AND/OR, rules:[...] }
+function evalCondition(cond, ctx) {
+  if (!cond) return true;
+  if (cond.op === 'AND') return (cond.rules || []).every((r) => evalCondition(r, ctx));
+  if (cond.op === 'OR') return (cond.rules || []).some((r) => evalCondition(r, ctx));
+  const v = ctx[cond.field];
+  if (v === undefined || v === null) return false;
+  switch (cond.op) {
+    case '>': return Number(v) > Number(cond.value);
+    case '>=': return Number(v) >= Number(cond.value);
+    case '<': return Number(v) < Number(cond.value);
+    case '<=': return Number(v) <= Number(cond.value);
+    case '=': case '==': return String(v) === String(cond.value);
+    case '!=': return String(v) !== String(cond.value);
+    case 'between': return Number(v) >= Number(cond.from) && Number(v) <= Number(cond.to);
+    default: return true;
+  }
+}
+
 export async function createCommissionForConversion(conversionId) {
   const c = await getClient();
   try {
     await c.query('BEGIN');
-    // Conversion + responsable
+    // Conversion + responsable + project
     const { rows: cvRows } = await c.query(
-      `SELECT cv.id, cv.lead_id, cv.producto_contratado_id, cv.importe_total, cv.importe_pagado, l.responsable_id
+      `SELECT cv.id, cv.lead_id, cv.project_id, cv.producto_contratado_id,
+              cv.importe_total, cv.importe_pagado, cv.fecha_conversion,
+              l.responsable_id
        FROM conversions cv JOIN leads l ON l.id = cv.lead_id WHERE cv.id = $1`,
       [conversionId]
     );
     const cv = cvRows[0];
-    if (!cv || !cv.responsable_id || !cv.producto_contratado_id) {
+    if (!cv || !cv.responsable_id) {
       await c.query('COMMIT'); return null;
     }
-    // Buscar regla
+    // Buscar regla: primero override por producto, luego generica del gestor
     const { rows: ruleRows } = await c.query(
-      `SELECT id, pct FROM commission_rules WHERE user_id = $1 AND product_id = $2 AND active = true LIMIT 1`,
-      [cv.responsable_id, cv.producto_contratado_id]
+      `SELECT id, pct, base_calc, condicion, product_id
+       FROM commission_rules
+       WHERE project_id = $1 AND user_id = $2 AND active = true
+         AND (product_id = $3 OR product_id IS NULL)
+       ORDER BY product_id NULLS LAST
+       LIMIT 1`,
+      [cv.project_id, cv.responsable_id, cv.producto_contratado_id || 0]
     );
     const rule = ruleRows[0];
     if (!rule) { await c.query('COMMIT'); return null; }
 
-    // Importe base = total cobrado proporcional. De inicio = importe_pagado (puede ser 0)
-    const base = Number(cv.importe_pagado || 0);
+    // Evaluar condicion
+    const ctx = {
+      importe_total: Number(cv.importe_total),
+      importe_pagado: Number(cv.importe_pagado || 0),
+      producto_id: cv.producto_contratado_id,
+      fecha: cv.fecha_conversion,
+    };
+    if (!evalCondition(rule.condicion, ctx)) {
+      await c.query('COMMIT'); return null;
+    }
+
+    // Calcular base segun base_calc
+    const base = rule.base_calc === 'vendido'
+      ? Number(cv.importe_total)
+      : Number(cv.importe_pagado || 0);
     const importe = Math.round(base * Number(rule.pct)) / 100;
+
     const { rows } = await c.query(
-      `INSERT INTO commissions (conversion_id, rule_id, user_id, product_id, importe_base, pct, importe_comision)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO commissions (conversion_id, rule_id, user_id, product_id, importe_base, pct, importe_comision, base_calc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (conversion_id) DO UPDATE
          SET importe_base = EXCLUDED.importe_base,
              importe_comision = EXCLUDED.importe_comision,
              pct = EXCLUDED.pct,
+             base_calc = EXCLUDED.base_calc,
+             rule_id = EXCLUDED.rule_id,
              updated_at = NOW()
        RETURNING *`,
-      [conversionId, rule.id, cv.responsable_id, cv.producto_contratado_id, base, rule.pct, importe]
+      [conversionId, rule.id, cv.responsable_id, cv.producto_contratado_id || null, base, rule.pct, importe, rule.base_calc]
     );
     await c.query('COMMIT');
     return rows[0];

@@ -1,4 +1,5 @@
 import * as conversionService from './conversion.service.js';
+import * as installmentsModel from './installments.model.js';
 import {
   createConversionSchema,
   updateConversionSchema,
@@ -84,5 +85,58 @@ export async function remove(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await conversionService.remove(id);
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// ===== INSTALLMENTS (CRM-183) =====
+
+export async function listInstallments(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    const rows = await installmentsModel.listByConversion(id);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function generateInstallments(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    const { num_cuotas, importe_total, fecha_inicio } = req.body;
+    if (!num_cuotas || num_cuotas < 2) throw new AppError('num_cuotas debe ser >= 2', 400, 'INVALID');
+    if (!importe_total) throw new AppError('importe_total requerido', 400, 'INVALID');
+    if (!fecha_inicio) throw new AppError('fecha_inicio requerida', 400, 'INVALID');
+    const rows = await installmentsModel.generateInstallments(id, Number(num_cuotas), Number(importe_total), fecha_inicio);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function updateInstallment(req, res, next) {
+  try {
+    const instId = parseInt(req.params.instId);
+    const r = await installmentsModel.update(instId, req.body);
+    if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+export async function payInstallment(req, res, next) {
+  try {
+    const instId = parseInt(req.params.instId);
+    const { fecha_cobro, importe_cobrado, metodo, notas } = req.body;
+    if (!fecha_cobro) throw new AppError('fecha_cobro requerida', 400, 'INVALID');
+    const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas });
+    if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data: r });
+  } catch (err) {
+    if (err.message === 'Cuota ya cobrada') return next(new AppError(err.message, 400, 'ALREADY_PAID'));
+    next(err);
+  }
+}
+
+export async function deleteInstallment(req, res, next) {
+  try {
+    const instId = parseInt(req.params.instId);
+    await installmentsModel.remove(instId);
+    res.json({ success: true });
   } catch (err) { next(err); }
 }

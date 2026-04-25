@@ -174,7 +174,7 @@ function RulesDialog({ onClose, onSaved }) {
   const [products, setProducts] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newRule, setNewRule] = useState({ project_id: '', user_id: '', product_id: '', pct: '' });
+  const [newRule, setNewRule] = useState({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
 
   async function load() {
     setLoading(true);
@@ -203,16 +203,17 @@ function RulesDialog({ onClose, onSaved }) {
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!newRule.project_id || !newRule.user_id || !newRule.product_id || newRule.pct === '') return;
+    if (!newRule.project_id || !newRule.user_id || newRule.pct === '') return;
     try {
       await commissionsApi.createRule({
         project_id: Number(newRule.project_id),
         user_id: Number(newRule.user_id),
-        product_id: Number(newRule.product_id),
+        product_id: newRule.product_id ? Number(newRule.product_id) : null,
         pct: Number(newRule.pct),
+        base_calc: newRule.base_calc || 'cobrado',
       });
       toast({ title: 'Regla guardada' });
-      setNewRule({ project_id: '', user_id: '', product_id: '', pct: '' });
+      setNewRule({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
       await load();
       onSaved?.();
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
@@ -258,8 +259,8 @@ function RulesDialog({ onClose, onSaved }) {
                   <option value="">Gestor</option>
                   {users.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                 </select>
-                <select value={newRule.product_id} onChange={e => setNewRule({ ...newRule, product_id: e.target.value })} className={inputClass} required disabled={!newRule.project_id}>
-                  <option value="">Producto</option>
+                <select value={newRule.product_id} onChange={e => setNewRule({ ...newRule, product_id: e.target.value })} className={inputClass} disabled={!newRule.project_id}>
+                  <option value="">Todas las ventas (generica)</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
                 <div className="flex gap-1">
@@ -268,8 +269,12 @@ function RulesDialog({ onClose, onSaved }) {
                     <Plus size={12} weight="bold" />
                   </button>
                 </div>
+                <select value={newRule.base_calc} onChange={e => setNewRule({ ...newRule, base_calc: e.target.value })} className={inputClass + ' col-span-4'}>
+                  <option value="cobrado">Calcular sobre lo cobrado (cuando cliente paga)</option>
+                  <option value="vendido">Calcular sobre lo vendido (al firmar venta)</option>
+                </select>
               </div>
-              <p className="text-[10px] text-muted-foreground">Si ya existe una regla para ese gestor + producto, se actualiza el %.</p>
+              <p className="text-[10px] text-muted-foreground">Si producto vacio = aplica a TODAS las ventas del gestor en ese proyecto. Producto especifico = override.</p>
             </form>
 
             {loading ? (

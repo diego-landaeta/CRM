@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -15,7 +15,12 @@ import {
   CaretRight,
   Users,
   WarningCircle,
+  Notepad,
+  PlugsConnected,
+  CaretDown,
 } from '@phosphor-icons/react';
+
+const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -76,6 +81,8 @@ export default function LeadsPage() {
   const { products } = useProducts(activeProject?.id);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
+  const [moreOpen, setMoreOpen] = useState(false);
   const [gestores, setGestores] = useState([]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin)
@@ -144,6 +151,15 @@ export default function LeadsPage() {
   return (
     <div className="space-y-6">
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
+      {configTab && activeProject && (
+        <Suspense fallback={null}>
+          <ProjectSettingsDialog
+            project={activeProject}
+            initialTab={configTab}
+            onClose={() => setConfigTab(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -165,6 +181,32 @@ export default function LeadsPage() {
             <Export size={16} weight="bold" />
             Audiencias
           </button>
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen(!moreOpen)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Configurar <CaretDown size={12} weight="bold" />
+              </button>
+              {moreOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-30 min-w-48 py-1">
+                  <button
+                    onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <Notepad size={14} /> Campos custom de leads
+                  </button>
+                  <button
+                    onClick={() => { setConfigTab('webhook'); setMoreOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <PlugsConnected size={14} /> Webhook de captura
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setFormOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"

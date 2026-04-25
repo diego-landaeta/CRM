@@ -24,4 +24,5 @@ export const updateProjectSchema = z.object({
   active: z.boolean().optional(),
   producto_label: z.string().max(50).optional(),
   producto_label_plural: z.string().max(50).optional(),
+  modules: z.record(z.string(), z.boolean()).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

@@ -21,6 +21,13 @@ router.patch('/:id', ctrl.update);
 router.post('/:id/payments', ctrl.addPayment);
 router.delete('/payments/:paymentId', roleGuard('admin', 'superadmin'), ctrl.removePayment);
 
+// Cuotas (CRM-183)
+router.get('/:id/installments', ctrl.listInstallments);
+router.post('/:id/installments/generate', ctrl.generateInstallments);
+router.patch('/installments/:instId', ctrl.updateInstallment);
+router.post('/installments/:instId/pay', ctrl.payInstallment);
+router.delete('/installments/:instId', ctrl.deleteInstallment);
+
 // Eliminar (solo admin/superadmin)
 router.delete('/:id', roleGuard('admin', 'superadmin'), ctrl.remove);
 

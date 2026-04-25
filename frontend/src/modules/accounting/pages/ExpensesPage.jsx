@@ -236,8 +236,8 @@ function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
                 <input type="number" step="0.01" min="0.01" value={form.importe} onChange={e => setForm({ ...form, importe: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Fecha</label>
-                <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
+                <label className="text-[11px] font-bold uppercase text-muted-foreground mb-1 block">Fecha *</label>
+                <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} required />
               </div>
             </div>
 

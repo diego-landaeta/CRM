@@ -225,7 +225,7 @@ function PayableDialog({ projectId, onClose, onSaved }) {
             <div></div>
             <div>
               <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Fecha factura</label>
-              <input type="date" value={data.fecha_factura} onChange={e => setData({ ...data, fecha_factura: e.target.value })} className={inputClass} />
+              <input type="date" value={data.fecha_factura} onChange={e => setData({ ...data, fecha_factura: e.target.value })} className={inputClass} required />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Vence</label>
@@ -287,7 +287,7 @@ function PaymentDialog({ payable, onClose, onSaved }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Fecha</label>
-                <input type="date" value={data.fecha_pago} onChange={e => setData({ ...data, fecha_pago: e.target.value })} className={inputClass} />
+                <input type="date" value={data.fecha_pago} onChange={e => setData({ ...data, fecha_pago: e.target.value })} className={inputClass} required />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Metodo</label>

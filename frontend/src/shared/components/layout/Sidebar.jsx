@@ -27,34 +27,35 @@ import { lazy, Suspense } from 'react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 
-// Cada item declara los roles que pueden verlo (omitir = todos)
+// Cada item declara: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
-  { label: 'Leads', to: '/leads', icon: Users },
-  { label: 'Clientes', to: '/clients', icon: UserCheck },
-  { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'] },
+  { label: 'Leads', to: '/leads', icon: Users, module: 'leads' },
+  { label: 'Clientes', to: '/clients', icon: UserCheck, module: 'clients' },
+  { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
   { label: 'Campanas', to: '/campaigns', icon: Megaphone, roles: ['superadmin', 'admin'] },
   {
     label: 'Contabilidad', icon: Calculator,
     children: [
-      { label: 'Dashboard', to: '/accounting', roles: ['superadmin', 'admin'] },
-      { label: 'Ingresos', to: '/accounting/income', roles: ['superadmin', 'admin'] },
-      { label: 'Egresos', to: '/accounting/expenses', roles: ['superadmin', 'admin'] },
-      { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'] },
-      { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'] },
-      { label: 'Comisiones', to: '/commissions' },
+      { label: 'Dashboard', to: '/accounting', roles: ['superadmin', 'admin'], module: 'accounting_income' },
+      { label: 'Ingresos', to: '/accounting/income', roles: ['superadmin', 'admin'], module: 'accounting_income' },
+      { label: 'Egresos', to: '/accounting/expenses', roles: ['superadmin', 'admin'], module: 'accounting_expenses' },
+      { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'], module: 'accounting_receivable' },
+      { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'], module: 'accounting_payable' },
+      { label: 'Comisiones', to: '/commissions', module: 'commissions' },
     ],
   },
-  { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'] },
+  { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
 ];
 
-function canSeeItem(item, role) {
-  if (!item.roles) return true;
-  return item.roles.includes(role);
+function canSeeItem(item, role, modules) {
+  if (item.roles && !item.roles.includes(role)) return false;
+  if (item.module && modules && modules[item.module] === false) return false;
+  return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, onNavigate }) {
-  const visible = children.filter((c) => !c.roles || c.roles.includes(role));
+function NavGroup({ icon: Icon, label, children, role, modules, onNavigate }) {
+  const visible = children.filter((c) => canSeeItem(c, role, modules));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
   const [open, setOpen] = useState(hasActiveChild);
@@ -214,9 +215,9 @@ export default function Sidebar({ onNavigate }) {
       {/* Navigation */}
       <nav className="space-y-0.5 flex-1">
         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-3 mb-2">Principal</p>
-        {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role)).map((item) =>
+        {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role, activeProject?.modules)).map((item) =>
           item.children ? (
-            <NavGroup key={item.label} {...item} role={user?.role} onNavigate={onNavigate} />
+            <NavGroup key={item.label} {...item} role={user?.role} modules={activeProject?.modules} onNavigate={onNavigate} />
           ) : (
             <NavItem key={item.to} {...item} onClick={onNavigate} />
           )

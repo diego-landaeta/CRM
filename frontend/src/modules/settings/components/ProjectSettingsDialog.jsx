@@ -9,16 +9,55 @@ import { toast } from '@/shared/hooks/useToast';
 
 const TABS = [
   { id: 'general', label: 'General', icon: Gear },
+  { id: 'modulos', label: 'Modulos', icon: Tag },
   { id: 'categorias', label: 'Categorias', icon: FolderOpen },
   { id: 'campos', label: 'Campos', icon: Notepad },
   { id: 'webhook', label: 'Webhook', icon: PlugsConnected },
   { id: 'apis', label: 'APIs', icon: Key },
 ];
 
+const MODULES_REGISTRY = {
+  comercial: {
+    label: 'Comercial',
+    items: [
+      { key: 'leads', label: 'Leads (captura + pipeline)' },
+      { key: 'clients', label: 'Clientes (convertidos)', requires: ['leads'] },
+      { key: 'products', label: 'Productos / Catalogo' },
+      { key: 'conversions', label: 'Conversiones (ventas)', requires: ['products'] },
+      { key: 'commissions', label: 'Comisiones', requires: ['products', 'conversions'] },
+      { key: 'matriculas', label: 'Matriculas (post-conversion)', requires: ['conversions'] },
+      { key: 'forms', label: 'Forms (editor de formularios)' },
+      { key: 'woocommerce', label: 'WooCommerce sync' },
+      { key: 'platform_users', label: 'Usuarios de plataforma (modo IA)' },
+    ],
+  },
+  contabilidad: {
+    label: 'Contabilidad',
+    items: [
+      { key: 'accounting_income', label: 'Ingresos' },
+      { key: 'accounting_expenses', label: 'Egresos' },
+      { key: 'accounting_receivable', label: 'Cuentas por cobrar' },
+      { key: 'accounting_payable', label: 'Cuentas por pagar' },
+    ],
+  },
+  equipo: {
+    label: 'Equipo',
+    items: [
+      { key: 'payroll', label: 'Nominas (fijo + horas + comisiones)' },
+    ],
+  },
+  reportes: {
+    label: 'Reportes',
+    items: [
+      { key: 'reports', label: 'Dashboards y reportes' },
+    ],
+  },
+};
+
 const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
-export default function ProjectSettingsDialog({ project, onClose, onSaved }) {
-  const [tab, setTab] = useState('general');
+export default function ProjectSettingsDialog({ project, onClose, onSaved, initialTab = 'general' }) {
+  const [tab, setTab] = useState(initialTab);
 
   return (
     <Portal>
@@ -58,6 +97,7 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved }) {
 
             <div className="flex-1 overflow-y-auto p-6">
               {tab === 'general' && <GeneralTab project={project} onSaved={onSaved} />}
+              {tab === 'modulos' && <ModulosTab project={project} onSaved={onSaved} />}
               {tab === 'categorias' && <CategoriesTab project={project} />}
               {tab === 'campos' && <FieldsTab project={project} />}
               {tab === 'webhook' && <WebhookTab project={project} />}
@@ -825,6 +865,93 @@ function Field({ label, hint, children }) {
       <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">{label}</label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+// ============================================================
+// MODULOS (CRM-178)
+// ============================================================
+function ModulosTab({ project, onSaved }) {
+  const [modules, setModules] = useState(project.modules || {});
+  const [saving, setSaving] = useState(false);
+
+  function toggle(key) {
+    setModules((m) => ({ ...m, [key]: !m[key] }));
+  }
+
+  function applyPreset(name) {
+    if (name === 'crm') {
+      setModules({ leads: true, clients: true, products: true, conversions: true, commissions: true, matriculas: false, forms: true, woocommerce: false, platform_users: false, accounting_income: true, accounting_expenses: true, accounting_receivable: true, accounting_payable: true, payroll: false, reports: true });
+    } else if (name === 'ia') {
+      setModules({ leads: false, clients: false, products: true, conversions: true, commissions: false, matriculas: false, forms: false, woocommerce: false, platform_users: true, accounting_income: true, accounting_expenses: true, accounting_receivable: false, accounting_payable: false, payroll: false, reports: true });
+    } else if (name === 'minimal') {
+      setModules({ leads: true, products: true, conversions: true, accounting_income: true, accounting_expenses: true, reports: true });
+    }
+  }
+
+  function isDisabled(item) {
+    if (!item.requires) return false;
+    return item.requires.some((r) => !modules[r]);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await client.patch(`/projects/${project.id}`, { modules });
+      toast({ title: 'Modulos actualizados', description: 'Recarga el navegador para ver el nuevo sidebar' });
+      onSaved?.();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="space-y-5 max-w-3xl">
+      <div>
+        <SectionTitle title="Modulos activos" subtitle="Define que secciones del CRM estan disponibles para este proyecto. El sidebar y los endpoints respetan estos toggles." />
+      </div>
+
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/30 border border-border">
+        <span className="text-[11px] font-bold uppercase text-muted-foreground">Presets:</span>
+        <button onClick={() => applyPreset('crm')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">CRM Formacion</button>
+        <button onClick={() => applyPreset('ia')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">Plataforma IA</button>
+        <button onClick={() => applyPreset('minimal')} className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs font-semibold hover:bg-muted">Minimal</button>
+      </div>
+
+      {Object.entries(MODULES_REGISTRY).map(([groupKey, group]) => (
+        <div key={groupKey} className="bg-muted/20 rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-2 border-b border-border bg-muted/40">
+            <p className="text-[11px] font-bold uppercase text-muted-foreground">{group.label}</p>
+          </div>
+          <div className="divide-y divide-border">
+            {group.items.map((item) => {
+              const disabled = isDisabled(item);
+              const checked = !!modules[item.key];
+              return (
+                <div key={item.key} className={`flex items-center justify-between px-4 py-3 ${disabled ? 'opacity-50' : ''}`}>
+                  <div>
+                    <p className="text-sm font-semibold">{item.label}</p>
+                    {item.requires && (
+                      <p className="text-[10px] text-muted-foreground">Requiere: {item.requires.join(', ')}</p>
+                    )}
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggle(item.key)} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-muted rounded-full peer peer-checked:bg-primary peer-checked:after:translate-x-5 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex justify-end pt-2">
+        <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
+          {saving ? 'Guardando...' : 'Guardar modulos'}
+        </button>
+      </div>
     </div>
   );
 }
