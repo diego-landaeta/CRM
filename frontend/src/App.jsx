@@ -42,6 +42,7 @@ const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
+const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 
 function App() {
   return (
@@ -78,6 +79,7 @@ function App() {
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/manual" element={<ManualPage />} />
+          <Route path="/preferences" element={<PreferencesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>

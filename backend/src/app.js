@@ -31,6 +31,9 @@ import audiencesModule from './modules/audiences/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
+import installationModule from './modules/installation/index.js';
+import { resolveActiveModules } from './bundles/manifest.js';
+import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 
@@ -72,9 +75,56 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule, audiencesModule, iaMonitorModule, reportsIaModule, claudeChatModule];
+// Mapeo modulo-name -> { module, name }. El nombre debe coincidir con el manifest de bundles.
+const ALL_MODULES = [
+  { name: 'auth', mod: authModule },
+  { name: 'users', mod: usersModule },
+  { name: 'leads', mod: leadsModule },
+  { name: 'products', mod: productsModule },
+  { name: 'dossiers', mod: dossiersModule },
+  { name: 'conversions', mod: conversionsModule },
+  { name: 'accounting', mod: accountingModule },
+  { name: 'field-definitions', mod: fieldDefsModule },
+  { name: 'credentials', mod: credentialsModule },
+  { name: 'projects', mod: projectsModule },
+  { name: 'accounts-payable', mod: accountsPayableModule },
+  { name: 'product-categories', mod: productCategoriesModule },
+  { name: 'commissions', mod: commissionsModule },
+  { name: 'reports', mod: reportsModule },
+  { name: 'matriculas', mod: matriculasModule },
+  { name: 'email-sequences', mod: emailSequencesModule },
+  { name: 'forms', mod: formsModule },
+  { name: 'payroll', mod: payrollModule },
+  { name: 'woocommerce', mod: woocommerceModule },
+  { name: 'webhook-tokens', mod: webhookTokensModule },
+  { name: 'audiences', mod: audiencesModule },
+  { name: 'ia-monitor', mod: iaMonitorModule },
+  { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'claude-chat', mod: claudeChatModule },
+];
 
-for (const mod of modules) {
+// installation siempre activo (necesario para gestionar bundles)
+app.use(installationModule.prefix, installationModule.router);
+logger.info(`Modulo registrado: ${installationModule.prefix} (siempre activo)`);
+
+async function loadActiveBundles() {
+  try {
+    const { rows } = await query(`SELECT active_bundles FROM installation_bundles WHERE id = 1`);
+    return rows[0]?.active_bundles || [];
+  } catch (err) {
+    logger.warn({ err: err.message }, 'No se pudo leer installation_bundles, registrando todos los modulos');
+    return null;  // null = registrar todos (compat)
+  }
+}
+
+const activeBundles = await loadActiveBundles();
+const allowedModuleNames = activeBundles ? resolveActiveModules(activeBundles) : null;
+
+for (const { name, mod } of ALL_MODULES) {
+  if (allowedModuleNames && !allowedModuleNames.has(name)) {
+    logger.info(`Modulo SKIP (bundle inactivo): ${mod.prefix}`);
+    continue;
+  }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
 }
