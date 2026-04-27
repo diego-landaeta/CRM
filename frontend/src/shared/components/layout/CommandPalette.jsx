@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { LEADS } from '@/shared/data/mock';
+import client from '@/shared/api/client';
 import {
   MagnifyingGlass,
   SquaresFour,
@@ -76,19 +76,33 @@ export default function CommandPalette() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const leads = LEADS[activeProject.id] || [];
+  const [leadResults, setLeadResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  const searchLeads = useCallback(async (q) => {
+    if (!q || !activeProject?.id) { setLeadResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(q)}&limit=5`);
+      setLeadResults(res.success ? (res.data || []) : []);
+    } catch {
+      setLeadResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, [activeProject?.id]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchLeads(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query, searchLeads]);
 
   const results = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (!q) return { sections: SECTIONS.slice(0, 8), leads: [] };
-
     const matchedSections = SECTIONS.filter((s) => s.label.toLowerCase().includes(q));
-    const matchedLeads = leads.filter((l) =>
-      l.nombre.toLowerCase().includes(q) || l.email.toLowerCase().includes(q)
-    ).slice(0, 5);
-
-    return { sections: matchedSections, leads: matchedLeads };
-  }, [query, leads]);
+    return { sections: matchedSections, leads: leadResults };
+  }, [query, leadResults]);
 
   const allResults = [
     ...results.sections.map((s) => ({ type: 'section', ...s })),
@@ -144,11 +158,13 @@ export default function CommandPalette() {
 
         {/* Results */}
         <div id="command-palette-results" role="listbox" className="max-h-[320px] overflow-y-auto p-2">
-          {allResults.length === 0 ? (
+          {searching ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Buscando...</div>
+          ) : allResults.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No se encontraron resultados para "{query}"
+              No se encontraron resultados para &quot;{query}&quot;
             </div>
-          ) : (
+          ) : !searching && (
             <>
               {results.sections.length > 0 && (
                 <div className="mb-1">
@@ -206,6 +222,7 @@ export default function CommandPalette() {
             </>
           )}
         </div>
+
 
         {/* Footer */}
         <div className="px-4 py-2.5 border-t border-border flex items-center gap-4 text-[10px] text-muted-foreground">

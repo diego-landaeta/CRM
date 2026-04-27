@@ -926,7 +926,7 @@ function SectionTitle({ title, subtitle }) {
   return (
     <div>
       <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && <p className="text-xs text-muted-foreground mt-0.5" dangerouslySetInnerHTML={{ __html: subtitle }} />}
+      {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
     </div>
   );
 }
