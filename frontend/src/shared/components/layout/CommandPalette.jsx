@@ -33,20 +33,21 @@ const SECTIONS = [
   { label: 'Crear audiencia', to: '/leads/audiences', icon: Export },
   { label: 'Clientes', to: '/clients', icon: UserCheck },
   { label: 'Productos', to: '/products', icon: Package },
-  { label: 'Campanas — Consolidado', to: '/campaigns', icon: Megaphone },
-  { label: 'Campanas — Meta Ads', to: '/campaigns/meta', icon: FacebookLogo },
-  { label: 'Campanas — Google Ads', to: '/campaigns/google', icon: GoogleLogo },
-  { label: 'Trafico organico (SEO)', to: '/seo', icon: MagnifyingGlass },
+  { label: 'Campañas — Consolidado', to: '/campaigns', icon: Megaphone },
+  { label: 'Campañas — Meta Ads', to: '/campaigns/meta', icon: FacebookLogo },
+  { label: 'Campañas — Google Ads', to: '/campaigns/google', icon: GoogleLogo },
+  { label: 'Tráfico orgánico (SEO)', to: '/seo', icon: MagnifyingGlass },
   { label: 'Dashboard IA', to: '/ia-dashboard', icon: Robot },
   { label: 'Reportes IA', to: '/reports-ia', icon: Sparkle },
   { label: 'Contabilidad', to: '/accounting', icon: Calculator },
   { label: 'Ingresos', to: '/accounting/income', icon: CurrencyEur },
+  { label: 'Conversiones y pagos', to: '/revenue', icon: CurrencyEur },
   { label: 'Egresos', to: '/accounting/expenses', icon: Receipt },
   { label: 'Cuentas por cobrar', to: '/accounting/receivable', icon: Wallet },
   { label: 'Cuentas por pagar', to: '/accounting/payable', icon: Wallet },
   { label: 'Comisiones', to: '/commissions', icon: Coins },
   { label: 'Reportes', to: '/reports', icon: ChartBar },
-  { label: 'Configuracion', to: '/settings', icon: Gear },
+  { label: 'Configuración', to: '/settings', icon: Gear },
 ];
 
 export default function CommandPalette() {
@@ -134,7 +135,7 @@ export default function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-label="Busqueda rapida" className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
+    <div role="dialog" aria-label="Búsqueda rápida" className="fixed inset-0 !m-0 z-[60] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div className="relative bg-card rounded-lg border border-border  w-full max-w-lg mx-4 overflow-hidden">
         {/* Search input */}

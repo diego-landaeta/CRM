@@ -16,6 +16,7 @@ import {
   CheckCircle,
   Trash,
 } from '@phosphor-icons/react';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 const CATEGORIES = ['salarios', 'alquiler', 'proveedores', 'software', 'publicidad', 'impuestos', 'servicios', 'mantenimiento', 'otros'];
 const ESTADOS = [
@@ -38,6 +39,7 @@ export default function AccountsPayablePage() {
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState('');
   const [dialog, setDialog] = useState(null); // 'new' | { type: 'pay', payable }
+  const [pendingDelete, setPendingDelete] = useState(null);
   const projId = activeProject?.id;
 
   async function load() {
@@ -61,13 +63,14 @@ export default function AccountsPayablePage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [projId, filterEstado]);
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar esta factura?')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await payableApi.remove(id);
+      await payableApi.remove(pendingDelete);
       toast({ title: 'Eliminada' });
       load();
     } catch (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); }
+    finally { setPendingDelete(null); }
   }
 
   return (
@@ -234,6 +237,7 @@ export default function AccountsPayablePage() {
 
       {dialog === 'new' && <PayableDialog projectId={projId} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); load(); }} />}
       {dialog?.type === 'pay' && <PaymentDialog payable={dialog.payable} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); load(); }} />}
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar factura?" message="Este registro será eliminado permanentemente." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </div>
   );
 }
@@ -268,8 +272,8 @@ function PayableDialog({ projectId, onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Nueva factura por pagar</h2>
@@ -328,8 +332,8 @@ function PaymentDialog({ payable, onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <div>

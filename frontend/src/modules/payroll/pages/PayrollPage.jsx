@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Coins, Plus, X, FloppyDisk, Calendar, Clock } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 const TABS = [
   { id: 'plans', label: 'Planes' },
@@ -38,6 +39,7 @@ function PlansTab({ project }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -61,9 +63,11 @@ function PlansTab({ project }) {
       setEditing(null); load();
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function handleDelete(p) {
-    if (!confirm('Eliminar plan?')) return;
-    await client.delete(`/payroll/plans/${p.id}`); load();
+  function handleDelete(p) { setPendingDelete(p); }
+  async function doDelete() {
+    try { await client.delete(`/payroll/plans/${pendingDelete.id}`); load(); }
+    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    finally { setPendingDelete(null); }
   }
 
   const usersWithoutPlan = users.filter(u => !plans.find(p => p.user_id === u.id));
@@ -110,6 +114,7 @@ function PlansTab({ project }) {
       )}
 
       {editing && <PlanEditor plan={editing} users={users} onSave={handleSave} onClose={() => setEditing(null)} />}
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar plan?" message="Se eliminará el plan de nómina de este usuario." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </div>
   );
 }
@@ -118,7 +123,7 @@ function PlanEditor({ plan, users, onSave, onClose }) {
   const [p, setP] = useState(plan);
   const usr = users.find(u => u.id === p.user_id);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">Plan: {usr?.nombre}</h3>
@@ -180,7 +185,7 @@ function PeriodsTab({ project }) {
   async function generateAll() {
     for (const u of users) {
       try { await client.post('/payroll/periods/generate', { project_id: project.id, user_id: u.user_id, year, month }); }
-      catch (err) { console.warn('Skip', u.user_nombre, err?.data?.error); }
+      catch { /* skip usuario si ya tiene periodo generado */ }
     }
     toast({ title: 'Periodos generados' });
     load();

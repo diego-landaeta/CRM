@@ -7,10 +7,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [loading, setLoading] = useState(true); // true hasta que verifiquemos sesion
+  const [loading, setLoading] = useState(true); // true hasta que verifiquemos sesión
   const initialized = useRef(false);
 
-  // Al montar, intentar restaurar sesion con refresh token (cookie httpOnly)
+  // Al montar, intentar restaurar sesión con refresh token (cookie httpOnly)
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -48,7 +48,7 @@ export function AuthProvider({ children }) {
           }
         }
       } catch {
-        // Sin sesion valida — no hacer nada
+        // Sin sesión valida — no hacer nada
       } finally {
         setLoading(false);
       }
@@ -71,7 +71,7 @@ export function AuthProvider({ children }) {
     const res = await client.post('/auth/login', { email, password });
 
     if (!res.success) {
-      throw new Error(res.error || 'Error al iniciar sesion');
+      throw new Error(res.error || 'Error al iniciar sesión');
     }
 
     const { accessToken: token, user: userData, projects: userProjects, activeProjectId: apiProjectId } = res.data;

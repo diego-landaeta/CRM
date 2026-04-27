@@ -7,6 +7,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import Portal from '@/shared/components/ui/portal';
 import { Plus, X, Receipt, Trash, PencilSimple } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 const CATEGORIAS = ['salarios', 'alquiler', 'proveedores', 'software', 'publicidad', 'impuestos', 'servicios', 'mantenimiento', 'otros'];
 const CAT_COLORS = {
@@ -37,6 +38,7 @@ export default function ExpensesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [filterCat, setFilterCat] = useState('');
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -53,15 +55,15 @@ export default function ExpensesPage() {
 
   useEffect(() => { load(); }, [activeProject?.id, filterCat]);
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar este egreso?')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await accountingApi.deleteExpense(id);
+      await accountingApi.deleteExpense(pendingDelete);
       toast({ title: 'Egreso eliminado' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setPendingDelete(null); }
   }
 
   const total = expenses.reduce((s, e) => s + Number(e.importe), 0);
@@ -142,6 +144,7 @@ export default function ExpensesPage() {
         activeProjectId={activeProject?.id}
         onSaved={() => load()}
       />
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar egreso?" message="Este registro será eliminado permanentemente." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </div>
   );
 }
@@ -216,8 +219,8 @@ function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
 
   return (
     <Portal>
-      <div role="dialog" className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div role="dialog" className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-md mx-4 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{expense ? 'Editar egreso' : 'Nuevo egreso'}</h2>

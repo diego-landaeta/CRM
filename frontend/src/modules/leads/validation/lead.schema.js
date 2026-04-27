@@ -23,7 +23,7 @@ export const PAIS_OPTIONS = [
 export const ORIGEN_OPTIONS = [
   { value: 'meta_ads', label: 'Meta Ads' },
   { value: 'google_ads', label: 'Google Ads' },
-  { value: 'organico', label: 'Organico' },
+  { value: 'organico', label: 'Orgánico' },
   { value: 'referido', label: 'Referido' },
   { value: 'directo', label: 'Directo' },
 ];

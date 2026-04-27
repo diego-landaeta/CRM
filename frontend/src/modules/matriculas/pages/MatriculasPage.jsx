@@ -6,6 +6,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { GraduationCap, CheckCircle, XCircle, Clock, Eye, Upload, X, PlugsConnected, Plus, Copy, Trash } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 const ESTADO_LABEL = {
   solicitud_admision: 'Solicitud admision',
@@ -64,7 +65,7 @@ export default function MatriculasPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader title="Matriculas" subtitle={`${stats.total || 0} matriculas en ${activeProject?.nombre || 'este proyecto'}`} />
+      <PageHeader title="Matrículas" subtitle={`${stats.total || 0} matrículas en ${activeProject?.nombre || 'este proyecto'}`} />
 
       <div className="flex border-b border-border">
         <button onClick={() => setTab('list')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 ${tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>
@@ -154,6 +155,7 @@ function WebhookTokensTab({ project }) {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -182,9 +184,11 @@ function WebhookTokensTab({ project }) {
       load();
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function handleDelete(t) {
-    if (!confirm('Eliminar webhook? Las solicitudes pendientes no se borraran.')) return;
-    await client.delete(`/webhook-tokens/${t.id}`); load();
+  function handleDelete(t) { setPendingDelete(t); }
+  async function doDelete() {
+    try { await client.delete(`/webhook-tokens/${pendingDelete.id}`); load(); }
+    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    finally { setPendingDelete(null); }
   }
 
   return (
@@ -205,6 +209,7 @@ function WebhookTokensTab({ project }) {
       {(creating || editing) && (
         <WebhookEditor token={editing} onSave={editing ? (d => handleUpdate(editing, d)) : handleCreate} onClose={() => { setCreating(false); setEditing(null); }} />
       )}
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar webhook?" message="Las solicitudes pendientes no se borrarán, pero el webhook dejará de aceptar nuevas." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </div>
   );
 }
@@ -289,7 +294,7 @@ function WebhookEditor({ token, onSave, onClose }) {
   const url = token?.token ? `${window.location.origin}/testeo_crm/api/webhook-tokens/receive/${token.token}` : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">{token ? 'Editar' : 'Nuevo'} webhook de admision</h3>
@@ -431,7 +436,7 @@ function MatriculaDetail({ matricula, onClose, onChange, onEstado }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>

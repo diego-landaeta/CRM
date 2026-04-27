@@ -147,8 +147,8 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Nuevo {projectLabel.toLowerCase()}</h3>
@@ -171,7 +171,7 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
               </select>
             </div>
             <textarea
-              placeholder="Descripcion (opcional)"
+              placeholder="Descripción (opcional)"
               value={data.descripcion} onChange={e => setData({ ...data, descripcion: e.target.value })}
               className={inputClass + ' h-20 py-2 resize-none'}
             />

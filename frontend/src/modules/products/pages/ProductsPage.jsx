@@ -69,8 +69,8 @@ export default function ProductsPage() {
       {/* Delete confirm */}
       {deleteTarget && (
         <Portal>
-        <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+        <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+          <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
           <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] text-center">
             <h2 className="text-lg font-semibold mb-2">Desactivar producto</h2>
             <p className="text-sm text-muted-foreground mb-6">

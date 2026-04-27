@@ -68,7 +68,7 @@ export default function WooCommercePage() {
         <div className="pt-3 border-t border-border space-y-2">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={form.auto_sync_enabled} onChange={e => setForm({ ...form, auto_sync_enabled: e.target.checked })} />
-            <strong>Sincronizacion automatica</strong>
+            <strong>Sincronización automática</strong>
           </label>
           {form.auto_sync_enabled && (
             <label className="block text-xs">

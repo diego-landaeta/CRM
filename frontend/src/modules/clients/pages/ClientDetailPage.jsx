@@ -1,0 +1,431 @@
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import client from '@/shared/api/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { conversionsApi } from '@/modules/conversions/api/conversions.api';
+import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
+import { toast } from '@/shared/hooks/useToast';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import {
+  ArrowLeft, WhatsappLogo, EnvelopeSimple, Phone, ArrowSquareOut,
+  ShoppingCart, CurrencyEur, Wallet, CheckCircle, WarningCircle,
+  Note, CalendarCheck, Users, MagnifyingGlass, Tag,
+  ChatCircleDots, User,
+} from '@phosphor-icons/react';
+import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+
+const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
+
+const AVATAR_COLORS = [
+  'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+  'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+];
+
+const INTERACTION_ICONS = { llamada: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo, nota: Note };
+const INTERACTION_COLORS = {
+  llamada:  'text-blue-600 bg-blue-50 dark:bg-blue-950/30',
+  email:    'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30',
+  whatsapp: 'text-green-600 bg-green-50 dark:bg-green-950/30',
+  nota:     'text-amber-600 bg-amber-50 dark:bg-amber-950/30',
+};
+
+function fmt(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtDateTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function cleanPhone(p) { return (p || '').replace(/[^\d+]/g, ''); }
+function getInitials(name) {
+  if (!name) return '??';
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function KpiCard({ label, value, color = 'default', icon: Icon }) {
+  const colors = {
+    default: 'text-foreground',
+    green: 'text-emerald-600 dark:text-emerald-400',
+    orange: 'text-orange-600 dark:text-orange-400',
+    blue: 'text-blue-600 dark:text-blue-400',
+  };
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        {Icon && <Icon size={12} weight="duotone" />}
+        {label}
+      </div>
+      <p className={`text-xl font-bold tabular-nums ${colors[color]}`}>{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, children }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-muted-foreground font-medium">{label}</span>
+      <div className="text-sm font-medium text-foreground">{children}</div>
+    </div>
+  );
+}
+
+export default function ClientDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { activeProject } = useProjectContext();
+
+  const [lead, setLead] = useState(null);
+  const [conversions, setConversions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [upsellOpen, setUpsellOpen] = useState(false);
+  const [tab, setTab] = useState('compras');
+
+  const canManage = user?.role === 'admin' || user?.role === 'superadmin';
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [leadRes, convRes] = await Promise.all([
+        client.get(`/leads/${id}`),
+        conversionsApi.byLead(id),
+      ]);
+      if (leadRes.success) setLead(leadRes.data);
+      if (convRes.success) setConversions(convRes.data || []);
+    } catch (err) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, [id]);
+
+  if (loading) {
+    return (
+      <div className="space-y-5 pb-8">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-24 bg-muted rounded-lg animate-pulse" />
+          <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+        </div>
+        <SkeletonTable rows={4} columns={3} />
+      </div>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <div className="py-16 text-center">
+        <WarningCircle size={36} className="text-muted-foreground mx-auto mb-3" weight="regular" />
+        <p className="text-sm text-muted-foreground">Cliente no encontrado</p>
+        <button onClick={() => navigate('/clients')} className="mt-4 text-sm text-primary hover:underline">
+          Volver a Clientes
+        </button>
+      </div>
+    );
+  }
+
+  const avatarColor = AVATAR_COLORS[lead.id % AVATAR_COLORS.length];
+  const initials = getInitials(lead.nombre);
+  const waPhone = cleanPhone(lead.telefono);
+
+  const totalFacturado = conversions.reduce((s, c) => s + Number(c.importe_total || 0), 0);
+  const totalPagado = conversions.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
+  const totalPendiente = totalFacturado - totalPagado;
+  const interacciones = lead.interactions || [];
+
+  return (
+    <div className="space-y-5 pb-8 max-w-[1100px]">
+
+      {/* Breadcrumb + back */}
+      <div className="flex items-center gap-2 text-sm">
+        <button
+          onClick={() => navigate('/clients')}
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft size={16} weight="bold" />
+          Clientes
+        </button>
+        <span className="text-muted-foreground/50">/</span>
+        <span className="text-foreground font-medium truncate">{lead.nombre}</span>
+      </div>
+
+      {/* Header card */}
+      <div className="bg-card border border-border rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-5">
+        {/* Avatar */}
+        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold flex-shrink-0 ${avatarColor}`}>
+          {initials}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-xl font-bold">{lead.nombre}</h1>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              <CheckCircle size={11} weight="fill" /> Cliente
+            </span>
+            {lead.origen && <ChannelBadge channel={lead.origen} />}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-sm text-muted-foreground">
+            {lead.email && <span>{lead.email}</span>}
+            {lead.telefono && <span>{lead.telefono}</span>}
+            {lead.responsable_nombre && (
+              <span className="flex items-center gap-1">
+                <User size={12} /> {lead.responsable_nombre}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Cliente desde {fmtDate(lead.created_at)}
+            {lead.last_interaction_at && ` · Último contacto ${fmtDate(lead.last_interaction_at)}`}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {waPhone && (
+            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener"
+              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium">
+              <WhatsappLogo size={15} weight="regular" />
+              <span className="hidden sm:inline">WhatsApp</span>
+            </a>
+          )}
+          {lead.email && (
+            <a href={`mailto:${lead.email}`}
+              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm font-medium">
+              <EnvelopeSimple size={15} weight="regular" />
+              <span className="hidden sm:inline">Email</span>
+            </a>
+          )}
+          <button
+            onClick={() => setUpsellOpen(true)}
+            className="h-9 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-2 text-sm font-semibold"
+          >
+            <ShoppingCart size={15} weight="bold" />
+            <span className="hidden sm:inline">Nueva venta</span>
+          </button>
+          <Link
+            to={`/leads/${lead.id}`}
+            className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
+            title="Ver ficha completa en Prospectos"
+          >
+            <ArrowSquareOut size={14} />
+            <span className="hidden sm:inline">Ficha completa</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* KPIs financieros */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="Total facturado" value={fmt(totalFacturado)} icon={CurrencyEur} />
+        <KpiCard label="Total cobrado" value={fmt(totalPagado)} color="green" icon={CheckCircle} />
+        <KpiCard label="Pendiente" value={fmt(totalPendiente)} color={totalPendiente > 0 ? 'orange' : 'default'} icon={Wallet} />
+        <KpiCard label="Compras" value={conversions.length} color="blue" icon={ShoppingCart} />
+      </div>
+
+      {/* Layout 2 cols */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* ── Columna izquierda (2/3) ── */}
+        <div className="lg:col-span-2 space-y-5">
+
+          {/* Tabs */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex border-b border-border px-4">
+              {[
+                { id: 'compras', label: 'Compras', icon: ShoppingCart },
+                { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
+              ].map(t => {
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all ${
+                      tab === t.id
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Icon size={14} weight={tab === t.id ? 'duotone' : 'regular'} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-5">
+              {tab === 'compras' && (
+                <ConversionsTab
+                  lead={lead}
+                  projectId={activeProject?.id || lead.project_id}
+                  canManage={canManage}
+                />
+              )}
+
+              {tab === 'interacciones' && (
+                <div>
+                  {interacciones.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <ChatCircleDots size={32} className="text-muted-foreground/40 mx-auto mb-2" weight="regular" />
+                      <p className="text-sm text-muted-foreground">Sin interacciones registradas</p>
+                      <Link to={`/leads/${lead.id}`} className="text-xs text-primary hover:underline mt-1 block">
+                        Añadir desde la ficha completa
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-[18px] top-0 bottom-0 w-px bg-border" />
+                      <div className="space-y-3">
+                        {interacciones.map((item) => {
+                          const Icon = INTERACTION_ICONS[item.tipo] || Note;
+                          const colorClass = INTERACTION_COLORS[item.tipo] || INTERACTION_COLORS.nota;
+                          return (
+                            <div key={item.id} className="flex gap-3 relative">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${colorClass}`}>
+                                <Icon size={16} weight="duotone" />
+                              </div>
+                              <div className="flex-1 bg-card border border-border rounded-lg p-3 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-0.5">
+                                  <span className="text-xs font-bold text-foreground capitalize">{item.tipo}</span>
+                                  <span className="text-[11px] text-muted-foreground flex-shrink-0">{fmtDateTime(item.fecha || item.created_at)}</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground leading-relaxed">{item.nota || '—'}</p>
+                                {item.usuario_nombre && (
+                                  <p className="text-[11px] text-muted-foreground/60 mt-1.5 flex items-center gap-1">
+                                    <User size={10} /> {item.usuario_nombre}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Columna derecha (1/3) ── */}
+        <div className="space-y-4">
+
+          {/* Datos de contacto */}
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-foreground">Datos de contacto</h3>
+            <div className="space-y-3 divide-y divide-border/60">
+              <InfoRow label="Email">
+                {lead.email ? (
+                  <a href={`mailto:${lead.email}`} className="text-primary hover:underline break-all">{lead.email}</a>
+                ) : <span className="text-muted-foreground">—</span>}
+              </InfoRow>
+              <div className="pt-3">
+                <InfoRow label="Teléfono">
+                  {lead.telefono ? (
+                    <a href={`tel:${lead.telefono}`} className="hover:text-primary transition-colors">{lead.telefono}</a>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </InfoRow>
+              </div>
+              <div className="pt-3">
+                <InfoRow label="Canal de origen">
+                  {lead.origen
+                    ? <ChannelBadge channel={lead.origen} />
+                    : <span className="text-muted-foreground">—</span>}
+                </InfoRow>
+              </div>
+              <div className="pt-3">
+                <InfoRow label="Responsable">
+                  {lead.responsable_nombre
+                    ? <span className="flex items-center gap-1.5"><User size={13} className="text-muted-foreground" />{lead.responsable_nombre}</span>
+                    : <span className="text-muted-foreground">Sin asignar</span>}
+                </InfoRow>
+              </div>
+            </div>
+          </div>
+
+          {/* Fechas clave */}
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-foreground">Fechas clave</h3>
+            <div className="space-y-3 divide-y divide-border/60">
+              <InfoRow label="Cliente desde">
+                {fmtDate(lead.created_at)}
+              </InfoRow>
+              {conversions[0] && (
+                <div className="pt-3">
+                  <InfoRow label="Primera compra">
+                    {fmtDate(conversions[conversions.length - 1]?.fecha_conversion || conversions[conversions.length - 1]?.created_at)}
+                  </InfoRow>
+                </div>
+              )}
+              {conversions[0] && conversions.length > 1 && (
+                <div className="pt-3">
+                  <InfoRow label="Última compra">
+                    {fmtDate(conversions[0]?.fecha_conversion || conversions[0]?.created_at)}
+                  </InfoRow>
+                </div>
+              )}
+              {lead.last_interaction_at && (
+                <div className="pt-3">
+                  <InfoRow label="Último contacto">
+                    {fmtDate(lead.last_interaction_at)}
+                  </InfoRow>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* UTMs si existen */}
+          {(lead.utm_source || lead.utm_medium || lead.utm_campaign) && (
+            <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+              <h3 className="text-sm font-bold text-foreground">Origen de tráfico</h3>
+              <div className="space-y-1.5">
+                {[
+                  { k: 'utm_source', v: lead.utm_source },
+                  { k: 'utm_medium', v: lead.utm_medium },
+                  { k: 'utm_campaign', v: lead.utm_campaign },
+                  { k: 'utm_content', v: lead.utm_content },
+                  { k: 'utm_term', v: lead.utm_term },
+                ].filter(u => u.v).map(u => (
+                  <div key={u.k} className="flex justify-between text-xs gap-2">
+                    <span className="text-muted-foreground font-mono">{u.k}</span>
+                    <span className="font-medium truncate text-right">{u.v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Link to full lead */}
+          <Link
+            to={`/leads/${lead.id}`}
+            className="flex items-center justify-between w-full p-3.5 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm text-muted-foreground hover:text-foreground group"
+          >
+            <span className="font-medium">Ver ficha completa en Prospectos</span>
+            <ArrowSquareOut size={15} className="group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Upsell dialog */}
+      <Suspense fallback={null}>
+        <ConversionDialog
+          open={upsellOpen}
+          onClose={() => setUpsellOpen(false)}
+          lead={lead}
+          projectId={activeProject?.id || lead.project_id}
+          onCreated={() => { setUpsellOpen(false); load(); toast({ title: 'Venta registrada' }); }}
+        />
+      </Suspense>
+    </div>
+  );
+}

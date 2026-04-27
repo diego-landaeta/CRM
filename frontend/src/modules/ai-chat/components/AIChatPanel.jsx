@@ -53,7 +53,7 @@ export default function AIChatPanel({ open, onClose }) {
   return createPortal(
     <>
       {/* Backdrop solo en mobile */}
-      <div className="fixed inset-0 z-[60] bg-black/40 md:hidden" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[60] bg-black/40 md:hidden" onClick={onClose} />
 
       {/* Panel */}
       <aside

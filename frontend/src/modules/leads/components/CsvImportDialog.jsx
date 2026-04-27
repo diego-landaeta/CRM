@@ -144,8 +144,8 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={step !== 3 ? onClose : undefined} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={step !== 3 ? onClose : undefined} />
         <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-2xl flex flex-col h-full sm:h-auto sm:max-h-[88vh]">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -315,7 +315,7 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
                   <Check size={28} weight="bold" />
                 </div>
                 <div>
-                  <p className="font-semibold text-lg">Importacion completada</p>
+                  <p className="font-semibold text-lg">Importación completada</p>
                   <p className="text-sm text-muted-foreground">
                     <span className="text-emerald-600 font-semibold">{progress.ok}</span> creados ·
                     <span className="text-red-600 font-semibold ml-2">{progress.fail}</span> errores

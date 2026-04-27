@@ -10,6 +10,7 @@ import {
   CurrencyEur, CheckCircle, Clock, ChartBar, Gear, X, Plus, Trash, PencilSimple,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -34,6 +35,7 @@ export default function CommissionsPage() {
   const [filterUser, setFilterUser] = useState('');
   const [users, setUsers] = useState([]);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [pendingPay, setPendingPay] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -62,13 +64,14 @@ export default function CommissionsPage() {
     })();
   }, [isAdmin]);
 
-  async function handlePay(id) {
-    if (!confirm('Marcar esta comision como pagada?')) return;
+  function handlePay(id) { setPendingPay(id); }
+  async function doPay() {
     try {
-      await commissionsApi.pay(id, { fecha_pago: new Date().toISOString().slice(0, 10) });
+      await commissionsApi.pay(pendingPay, { fecha_pago: new Date().toISOString().slice(0, 10) });
       toast({ title: 'Comision pagada' });
       load();
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    finally { setPendingPay(null); }
   }
 
   return (
@@ -211,6 +214,7 @@ export default function CommissionsPage() {
       </div>
 
       {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} onSaved={load} />}
+      <ConfirmDialog open={pendingPay !== null} title="¿Marcar como pagada?" message="Se registrará la comisión como pagada con la fecha de hoy." tone="default" confirmLabel="Confirmar" onConfirm={doPay} onCancel={() => setPendingPay(null)} />
     </div>
   );
 }
@@ -222,6 +226,7 @@ function RulesDialog({ onClose, onSaved }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newRule, setNewRule] = useState({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -266,12 +271,13 @@ function RulesDialog({ onClose, onSaved }) {
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar esta regla?')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await commissionsApi.deleteRule(id);
+      await commissionsApi.deleteRule(pendingDelete);
       await load();
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    finally { setPendingDelete(null); }
   }
 
   async function handleEditPct(rule, newPct) {
@@ -283,8 +289,8 @@ function RulesDialog({ onClose, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card sm:rounded-lg border border-border w-full max-w-3xl flex flex-col h-full sm:h-auto sm:max-h-[90vh]">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
@@ -361,6 +367,7 @@ function RulesDialog({ onClose, onSaved }) {
           </div>
         </div>
       </div>
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar regla?" message="Esta regla de comisión será eliminada permanentemente." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </Portal>
   );
 }

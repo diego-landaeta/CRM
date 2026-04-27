@@ -37,8 +37,9 @@ async function request(url, options = {}) {
     headers,
   });
 
-  // Refresh token on 401
-  if (res.status === 401 && !options._retry) {
+  // Refresh token on 401 — pero no para login/refresh (su 401 = credenciales incorrectas)
+  const isAuthEndpoint = url === '/auth/login' || url === '/auth/refresh';
+  if (res.status === 401 && !options._retry && !isAuthEndpoint) {
     try {
       const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
         method: 'POST',
@@ -62,7 +63,8 @@ async function request(url, options = {}) {
     : await res.text();
 
   if (!res.ok) {
-    throw new ApiError(data?.error || data?.message || `Error ${res.status}`, res.status, data);
+    const msg = data?.error || data?.message || (res.status === 401 ? 'Credenciales incorrectas' : `Error ${res.status}`);
+    throw new ApiError(msg, res.status, data);
   }
 
   return data;

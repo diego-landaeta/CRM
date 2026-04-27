@@ -7,7 +7,7 @@ const RULES = [
   { id: 'length', label: 'Minimo 8 caracteres', test: (v) => v.length >= 8 },
   { id: 'upper', label: 'Al menos una mayuscula', test: (v) => /[A-Z]/.test(v) },
   { id: 'number', label: 'Al menos un numero', test: (v) => /\d/.test(v) },
-  { id: 'match', label: 'Las contrasenas coinciden', test: (v, c) => v.length > 0 && v === c },
+  { id: 'match', label: 'Las contraseñas coinciden', test: (v, c) => v.length > 0 && v === c },
 ];
 
 export default function SetPasswordPage() {
@@ -48,10 +48,10 @@ export default function SetPasswordPage() {
         setSuccess(true);
         setTimeout(() => navigate('/login'), 2000);
       } else {
-        setError(res.error || 'Error al guardar la contrasena');
+        setError(res.error || 'Error al guardar la contraseña');
       }
     } catch (err) {
-      setError(err.message || 'Error al guardar la contrasena');
+      setError(err.message || 'Error al guardar la contraseña');
     } finally {
       setLoading(false);
     }
@@ -66,8 +66,8 @@ export default function SetPasswordPage() {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-md bg-emerald-600 text-white mb-4">
               <Package size={24} weight="regular" />
             </div>
-            <h1 className="text-xl font-semibold">Establece tu contrasena</h1>
-            <p className="text-muted-foreground text-sm mt-1">Crea una contrasena segura para acceder al CRM</p>
+            <h1 className="text-xl font-semibold">Establece tu contraseña</h1>
+            <p className="text-muted-foreground text-sm mt-1">Crea una contraseña segura para acceder al CRM</p>
           </div>
 
           {success ? (
@@ -75,7 +75,7 @@ export default function SetPasswordPage() {
               <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mx-auto mb-4">
                 <Check size={32} className="text-emerald-600" weight="bold" />
               </div>
-              <h2 className="text-lg font-semibold">Contrasena guardada</h2>
+              <h2 className="text-lg font-semibold">Contraseña guardada</h2>
               <p className="text-muted-foreground text-sm mt-2">Redirigiendo al login...</p>
             </div>
           ) : (
@@ -83,7 +83,7 @@ export default function SetPasswordPage() {
               {/* Password */}
               <div>
                 <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-                  Nueva contrasena
+                  Nueva contraseña
                 </label>
                 <div className="relative">
                   <input
@@ -106,14 +106,14 @@ export default function SetPasswordPage() {
               {/* Confirm */}
               <div>
                 <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-                  Confirmar contrasena
+                  Confirmar contraseña
                 </label>
                 <div className="relative">
                   <input
                     type={showConfirm ? 'text' : 'password'}
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    placeholder="Repite la contrasena"
+                    placeholder="Repite la contraseña"
                     className="w-full h-11 px-4 pr-11 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
                   />
                   <button
@@ -165,7 +165,7 @@ export default function SetPasswordPage() {
                     Guardando...
                   </span>
                 ) : (
-                  'Guardar contrasena'
+                  'Guardar contraseña'
                 )}
               </button>
             </form>
@@ -174,7 +174,7 @@ export default function SetPasswordPage() {
 
         {!token && (
           <p className="text-center text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-md px-4 py-2 mt-4 font-medium border border-amber-200 dark:border-amber-800">
-            Token no detectado — esta pagina normalmente se accede desde el email de invitacion.
+            Token no detectado — esta página normalmente se accede desde el email de invitación.
           </p>
         )}
       </div>

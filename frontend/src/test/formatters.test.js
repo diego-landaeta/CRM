@@ -9,9 +9,9 @@ function formatRelative(dateStr, { future = false } = {}) {
   const diffDays = Math.round(diffMs / 86400000);
   if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
   if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'manana' : 'ayer';
+  if (diffDays === 1) return future ? 'mañana' : 'ayer';
   if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)}sem` : `hace ${Math.round(diffDays / 7)}sem`;
+  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
@@ -34,8 +34,8 @@ describe('formatRelative', () => {
     expect(formatRelative(new Date(Date.now() - 86400000).toISOString())).toBe('ayer');
   });
 
-  it('devuelve "manana" para en 1 dia (future)', () => {
-    expect(formatRelative(new Date(Date.now() + 86400000).toISOString(), { future: true })).toBe('manana');
+  it('devuelve "mañana" para en 1 dia (future)', () => {
+    expect(formatRelative(new Date(Date.now() + 86400000).toISOString(), { future: true })).toBe('mañana');
   });
 
   it('devuelve "hace Nd" para fechas pasadas dentro de la semana', () => {
@@ -46,9 +46,9 @@ describe('formatRelative', () => {
     expect(formatRelative(new Date(Date.now() + 4 * 86400000).toISOString(), { future: true })).toBe('en 4d');
   });
 
-  it('devuelve "hace Nsem" para fechas pasadas entre 7 y 30 dias', () => {
+  it('devuelve "hace N sem" para fechas pasadas entre 7 y 30 dias', () => {
     const r = formatRelative(new Date(Date.now() - 14 * 86400000).toISOString());
-    expect(r).toMatch(/hace 2sem/);
+    expect(r).toMatch(/hace 2 sem/);
   });
 });
 

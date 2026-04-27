@@ -2,12 +2,35 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   X, Gear, FolderOpen, Notepad, PlugsConnected, Key, ArrowUp, ArrowDown, FloppyDisk,
   Plus, Copy, CheckCircle, Eye, EyeSlash, ArrowsClockwise, Tag, Table as TableIcon,
+  CreditCard, Users, TrendDown, WarningCircle as WarnIcon,
 } from '@phosphor-icons/react';
+import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
-const TABS = [
+const EMPTY_CONFIRM = { open: false, title: '', message: '', onConfirm: null, tone: 'destructive', confirmLabel: 'Eliminar' };
+function useConfirm() {
+  const [state, setState] = useState(EMPTY_CONFIRM);
+  const ask = (title, message, onConfirm, tone = 'destructive', confirmLabel = 'Eliminar') =>
+    setState({ open: true, title, message, onConfirm, tone, confirmLabel });
+  const close = () => setState(EMPTY_CONFIRM);
+  const dialog = (
+    <ConfirmDialog
+      open={state.open}
+      title={state.title}
+      message={state.message}
+      tone={state.tone}
+      confirmLabel={state.confirmLabel}
+      onConfirm={() => { close(); state.onConfirm?.(); }}
+      onCancel={close}
+    />
+  );
+  return { ask, dialog };
+}
+
+const TABS_BASE = [
   { id: 'general', label: 'General', icon: Gear },
   { id: 'modulos', label: 'Modulos', icon: Tag },
   { id: 'categorias', label: 'Categorias', icon: FolderOpen },
@@ -16,6 +39,7 @@ const TABS = [
   { id: 'webhook', label: 'Webhook', icon: PlugsConnected },
   { id: 'apis', label: 'APIs', icon: Key },
 ];
+const TAB_STRIPE = { id: 'stripe', label: 'Stripe', icon: CreditCard };
 
 const MODULES_REGISTRY = {
   comercial: {
@@ -45,7 +69,7 @@ const MODULES_REGISTRY = {
   equipo: {
     label: 'Equipo',
     items: [
-      { key: 'payroll', label: 'Nominas (fijo + horas + comisiones)' },
+      { key: 'payroll', label: 'Nóminas (fijo + horas + comisiones)' },
     ],
   },
   reportes: {
@@ -60,11 +84,12 @@ const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50
 
 export default function ProjectSettingsDialog({ project, onClose, onSaved, initialTab = 'general' }) {
   const [tab, setTab] = useState(initialTab);
+  const TABS = project.type === 'ia' ? [...TABS_BASE, TAB_STRIPE] : TABS_BASE;
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card sm:rounded-lg border border-border w-full max-w-4xl flex flex-col h-full sm:h-auto sm:max-h-[92vh]">
           <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
             <div className="flex items-center gap-3 min-w-0">
@@ -107,6 +132,7 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
               {tab === 'columnas' && <ColumnsTab project={project} onSaved={onSaved} />}
               {tab === 'webhook' && <WebhookTab project={project} />}
               {tab === 'apis' && <ApisTab project={project} />}
+              {tab === 'stripe' && <StripeTab project={project} />}
             </div>
           </div>
         </div>
@@ -119,6 +145,7 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
 // GENERAL
 // ============================================================
 function GeneralTab({ project, onSaved }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [form, setForm] = useState({
     nombre: project.nombre,
     type: project.type || 'crm',
@@ -161,14 +188,15 @@ function GeneralTab({ project, onSaved }) {
     }
   }
 
-  async function handleLogoDelete() {
-    if (!confirm('Eliminar el logo?')) return;
-    try {
-      await client.delete(`/projects/${project.id}/logo`);
-      toast({ title: 'Logo eliminado' });
-      setLogoVersion(Date.now());
-      onSaved?.();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  function handleLogoDelete() {
+    ask('Eliminar logo', '¿Eliminar el logo del proyecto? Se perderá definitivamente.', async () => {
+      try {
+        await client.delete(`/projects/${project.id}/logo`);
+        toast({ title: 'Logo eliminado' });
+        setLogoVersion(Date.now());
+        onSaved?.();
+      } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    });
   }
 
   const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
@@ -224,7 +252,7 @@ function GeneralTab({ project, onSaved }) {
         </div>
       </div>
 
-      <SectionTitle title="Informacion basica" />
+      <SectionTitle title="Información básica" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Nombre *">
           <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} required />
@@ -282,6 +310,7 @@ function GeneralTab({ project, onSaved }) {
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>
+      {confirmDialog}
     </form>
   );
 }
@@ -290,6 +319,7 @@ function GeneralTab({ project, onSaved }) {
 // CATEGORIAS
 // ============================================================
 function CategoriesTab({ project }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newCat, setNewCat] = useState({ nombre: '', parent_id: '' });
@@ -323,12 +353,13 @@ function CategoriesTab({ project }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar esta categoria? Los productos quedan sin categoria pero no se borran.')) return;
-    try {
-      await client.delete(`/product-categories/${id}`);
-      await load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  function handleDelete(id) {
+    ask('Eliminar categoría', `¿Eliminar esta categoría? Los ${productoLabel} quedan sin categoría pero no se borran.`, async () => {
+      try {
+        await client.delete(`/product-categories/${id}`);
+        await load();
+      } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    });
   }
 
   const parents = cats.filter(c => !c.parent_id);
@@ -405,6 +436,7 @@ function CategoriesTab({ project }) {
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -417,7 +449,7 @@ const FIELD_TYPES = [
   { v: 'textarea', label: 'Texto largo' },
   { v: 'number', label: 'Numero' },
   { v: 'date', label: 'Fecha' },
-  { v: 'select', label: 'Seleccion' },
+  { v: 'select', label: 'Selección' },
   { v: 'boolean', label: 'Si/No' },
 ];
 
@@ -430,6 +462,7 @@ const BASE_FIELDS = [
 ];
 
 function FieldsTab({ project, onSaved }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [baseConfig, setBaseConfig] = useState(project.lead_base_fields_config || {});
   const [savingBase, setSavingBase] = useState(false);
 
@@ -491,10 +524,11 @@ function FieldsTab({ project, onSaved }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar este campo?')) return;
-    try { await client.delete(`/field-definitions/${id}`); await load(); }
-    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  function handleDelete(id) {
+    ask('Eliminar campo', '¿Eliminar este campo personalizado? Esta acción no se puede deshacer.', async () => {
+      try { await client.delete(`/field-definitions/${id}`); await load(); }
+      catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    });
   }
 
   async function handleMove(idx, dir) {
@@ -597,7 +631,7 @@ function FieldsTab({ project, onSaved }) {
               <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={smallInput}>
                 {FIELD_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
               </select>
-              <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Seccion (opcional)" className={smallInput} />
+              <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Sección (opcional)" className={smallInput} />
               {newField.type === 'select' && (
                 <input value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={smallInput + ' col-span-2'} />
               )}
@@ -635,7 +669,7 @@ function FieldsTab({ project, onSaved }) {
                       {isEditing ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <input value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={smallInput + ' h-8'} />
-                          <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={smallInput + ' h-8'} placeholder="Seccion" />
+                          <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={smallInput + ' h-8'} placeholder="Sección" />
                           {f.type === 'select' && (
                             <input value={editBuf.options} onChange={e => setEditBuf({ ...editBuf, options: e.target.value })} className={smallInput + ' h-8 col-span-2'} placeholder="opciones,separadas" />
                           )}
@@ -700,6 +734,7 @@ function FieldsTab({ project, onSaved }) {
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -708,6 +743,7 @@ function FieldsTab({ project, onSaved }) {
 // WEBHOOK
 // ============================================================
 function WebhookTab({ project }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(null);
   const [apiKey, setApiKey] = useState(project.webhook_api_key);
@@ -718,16 +754,17 @@ function WebhookTab({ project }) {
     try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); } catch {}
   }
 
-  async function regenerate() {
-    if (!confirm('Regenerar API Key? La clave anterior dejara de funcionar de inmediato.')) return;
-    try {
-      const res = await client.post(`/projects/${project.id}/regenerate-webhook-key`);
-      if (res.success && res.data?.webhook_api_key) {
-        setApiKey(res.data.webhook_api_key);
-        setRevealed(true);
-        toast({ title: 'Clave regenerada', description: 'Actualiza las integraciones con la nueva clave' });
-      }
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  function regenerate() {
+    ask('Regenerar API Key', '¿Regenerar la API Key? La clave anterior dejará de funcionar de inmediato.', async () => {
+      try {
+        const res = await client.post(`/projects/${project.id}/regenerate-webhook-key`);
+        if (res.success && res.data?.webhook_api_key) {
+          setApiKey(res.data.webhook_api_key);
+          setRevealed(true);
+          toast({ title: 'Clave regenerada', description: 'Actualiza las integraciones con la nueva clave' });
+        }
+      } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    }, 'warning', 'Regenerar');
   }
 
   return (
@@ -768,18 +805,19 @@ function WebhookTab({ project }) {
           <p className="text-muted-foreground"><code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_source, utm_campaign, producto_interes</code></p>
         </div>
         <div className="p-3 rounded-lg bg-muted/40">
-          <p className="font-bold mb-1">2. Autenticacion</p>
+          <p className="font-bold mb-1">2. Autenticación</p>
           <p className="text-muted-foreground">Header <code className="font-mono text-[11px]">X-API-Key</code> o <code className="font-mono text-[11px]">Authorization: Bearer</code></p>
         </div>
         <div className="p-3 rounded-lg bg-muted/40">
-          <p className="font-bold mb-1">3. Asignacion automatica</p>
+          <p className="font-bold mb-1">3. Asignación automática</p>
           <p className="text-muted-foreground">Round-robin entre gestores activos del proyecto</p>
         </div>
         <div className="p-3 rounded-lg bg-muted/40">
-          <p className="font-bold mb-1">4. Notificacion</p>
+          <p className="font-bold mb-1">4. Notificación</p>
           <p className="text-muted-foreground">Email automatico via Brevo al gestor asignado (no bloquea la respuesta)</p>
         </div>
       </div>
+    {confirmDialog}
     </div>
   );
 }
@@ -799,6 +837,7 @@ function ApisTab({ project }) {
   const [credentials, setCredentials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogSvc, setDialogSvc] = useState(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -823,9 +862,10 @@ function ApisTab({ project }) {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Eliminar esta credencial?')) return;
-    try { await client.delete(`/credentials/${id}`); await load(); }
-    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    ask('¿Eliminar credencial?', 'La credencial será eliminada permanentemente.', async () => {
+      try { await client.delete(`/credentials/${id}`); await load(); }
+      catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    });
   }
 
   return (
@@ -868,6 +908,7 @@ function ApisTab({ project }) {
       )}
 
       {dialogSvc && <CredentialQuickDialog project={project} service={dialogSvc} existing={getCred(dialogSvc.service)} onClose={() => setDialogSvc(null)} onSaved={() => { setDialogSvc(null); load(); }} />}
+      {confirmDialog}
     </div>
   );
 }
@@ -891,8 +932,8 @@ function CredentialQuickDialog({ project, service, existing, onClose, onSaved })
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/60" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60" onClick={onClose} />
         <form onSubmit={handleSave} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">{existing ? 'Editar' : 'Configurar'} {service.name}</h3>
@@ -1053,6 +1094,7 @@ const AVAILABLE_EXTRA_COLUMNS = [
 ];
 
 function ColumnsTab({ project, onSaved }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const initial = Array.isArray(project.lead_columns) && project.lead_columns.length
     ? project.lead_columns
     : DEFAULT_COLUMNS;
@@ -1093,8 +1135,7 @@ function ColumnsTab({ project, onSaved }) {
   }
 
   function resetDefaults() {
-    if (!confirm('Restablecer columnas por defecto?')) return;
-    setCols(DEFAULT_COLUMNS);
+    ask('Restablecer columnas', '¿Restablecer las columnas a los valores por defecto? Se perderá la configuración actual.', () => setCols(DEFAULT_COLUMNS), 'warning', 'Restablecer');
   }
 
   async function handleSave() {
@@ -1176,6 +1217,85 @@ function ColumnsTab({ project, onSaved }) {
         <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 shadow disabled:opacity-50">
           {saving ? 'Guardando...' : 'Guardar columnas'}
         </button>
+      </div>
+      {confirmDialog}
+    </div>
+  );
+}
+
+// ============================================================
+// STRIPE (proyectos IA)
+// ============================================================
+function fmtMoneySt(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+}
+function fmtNumSt(n) { return new Intl.NumberFormat('es-ES').format(Number(n || 0)); }
+function fmtPctSt(n) { return `${(Number(n) || 0).toFixed(2)}%`; }
+
+function StripeTab({ project }) {
+  const { metrics, mrrDelta, subsDelta, churnTrend, loading, error } = useStripeMonitor(project.id);
+
+  if (loading) return (
+    <div className="grid grid-cols-2 gap-3">
+      {[1,2,3,4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-lg animate-pulse" />)}
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <WarnIcon size={28} className="text-red-500 mx-auto mb-2" weight="regular" />
+      <p className="text-red-600 font-semibold text-sm">No se pudieron cargar las métricas de Stripe</p>
+      <p className="text-xs text-muted-foreground mt-1">{error}</p>
+    </div>
+  );
+
+  if (!metrics || metrics.mrr === 0) return (
+    <div className="p-8 text-center space-y-2">
+      <CreditCard size={32} className="text-muted-foreground mx-auto" weight="regular" />
+      <p className="font-semibold text-sm">Sin datos de Stripe</p>
+      <p className="text-xs text-muted-foreground">
+        Aún no hay suscripciones en Stripe para este proyecto, o las credenciales no están configuradas en la pestaña APIs.
+      </p>
+    </div>
+  );
+
+  const kpis = [
+    { icon: CreditCard, label: 'MRR actual', value: fmtMoneySt(metrics.mrr), delta: mrrDelta, color: 'bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400' },
+    { icon: Users, label: 'Suscripciones activas', value: fmtNumSt(metrics.activeSubs), delta: subsDelta, color: 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400' },
+    { icon: TrendDown, label: 'Churn rate mensual', value: fmtPctSt(metrics.churnRate), color: metrics.churnRate > 5 ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400' : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' },
+    { icon: WarnIcon, label: 'Cobros fallidos', value: fmtNumSt(metrics.failedPayments), color: metrics.failedPayments > 0 ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' : 'bg-muted text-muted-foreground' },
+  ];
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <SectionTitle title="Monitor Stripe" subtitle="Métricas de suscripciones en tiempo real" />
+      <div className="grid grid-cols-2 gap-3">
+        {kpis.map(({ icon: Icon, label, value, delta, color }) => (
+          <div key={label} className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className={`w-8 h-8 rounded-md flex items-center justify-center ${color}`}>
+                <Icon size={16} weight="duotone" />
+              </div>
+              {delta && (
+                <span className={`text-[10px] font-bold ${delta.growing ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {delta.growing ? '↑' : '↓'} {Math.abs(delta.pct)}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-xl font-semibold tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-muted/30 rounded-lg p-4 border border-border text-center">
+          <p className="text-xs text-muted-foreground">Nuevas suscripciones (mes)</p>
+          <p className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 mt-1">+{metrics.newSubs}</p>
+        </div>
+        <div className="bg-muted/30 rounded-lg p-4 border border-border text-center">
+          <p className="text-xs text-muted-foreground">Cancelaciones (mes)</p>
+          <p className="text-2xl font-semibold tabular-nums text-red-700 dark:text-red-400 mt-1">−{metrics.cancelledSubs}</p>
+        </div>
       </div>
     </div>
   );
