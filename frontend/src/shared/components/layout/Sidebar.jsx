@@ -232,6 +232,7 @@ export default function Sidebar({ onNavigate }) {
               src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${activeProject.id}/logo`}
               alt=""
               className="w-8 h-8 rounded-lg object-contain bg-muted/50 flex-shrink-0"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
           ) : activeProject?.emoji ? (
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">

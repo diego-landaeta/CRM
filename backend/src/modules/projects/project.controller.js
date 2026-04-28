@@ -88,7 +88,13 @@ export async function getLogo(req, res, next) {
     if (!project?.logo_key) return res.status(404).end();
 
     const ext = project.logo_key.split('.').pop();
-    const { buffer, size } = await getLocal(project.logo_key);
+    let buffer, size;
+    try {
+      ({ buffer, size } = await getLocal(project.logo_key));
+    } catch (e) {
+      if (e.code === 'ENOENT') return res.status(404).end();
+      throw e;
+    }
     res.setHeader('Content-Type', extMime(ext));
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Content-Length', size);
