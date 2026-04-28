@@ -34,6 +34,7 @@ import claudeChatModule from './modules/claude-chat/index.js';
 import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
+import statusModule from './modules/status/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -108,9 +109,11 @@ const ALL_MODULES = [
   { name: 'permissions', mod: permissionsModule },
 ];
 
-// installation siempre activo (necesario para gestionar bundles)
+// Módulos siempre activos (fuera del sistema de bundles)
 app.use(installationModule.prefix, installationModule.router);
 logger.info(`Modulo registrado: ${installationModule.prefix} (siempre activo)`);
+app.use(statusModule.prefix, statusModule.router);
+logger.info(`Modulo registrado: ${statusModule.prefix} (siempre activo, incluye rutas publicas)`);
 
 async function loadActiveBundles() {
   try {
