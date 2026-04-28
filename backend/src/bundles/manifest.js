@@ -8,7 +8,7 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels'],
     requires: [],
   },
   leads: {
