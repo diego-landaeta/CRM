@@ -33,6 +33,7 @@ import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
+import permissionsModule from './modules/permissions/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -104,6 +105,7 @@ const ALL_MODULES = [
   { name: 'reports-ia', mod: reportsIaModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'project-channels', mod: projectChannelsModule },
+  { name: 'permissions', mod: permissionsModule },
 ];
 
 // installation siempre activo (necesario para gestionar bundles)

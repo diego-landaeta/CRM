@@ -3,7 +3,7 @@ import { query } from '../../shared/config/db.js';
 export async function findUserByEmail(email) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.password_hash, u.role, u.active, u.avatar_url,
-            u.set_password_token, u.set_password_expires
+            u.custom_role_id, u.set_password_token, u.set_password_expires
      FROM users u
      WHERE u.email = $1`,
     [email]
@@ -13,8 +13,10 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.avatar_url
+    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.avatar_url, u.custom_role_id,
+            cr.label AS custom_role_label
      FROM users u
+     LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id
      WHERE u.id = $1`,
     [id]
   );

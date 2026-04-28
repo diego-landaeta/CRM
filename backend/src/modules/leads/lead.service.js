@@ -264,3 +264,24 @@ export async function updateLead(leadId, data) {
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
   return updated;
 }
+
+export async function getLeadSequences(leadId, requestUser) {
+  const { rows } = await query(
+    `SELECT
+       r.id AS run_id,
+       r.status,
+       r.current_step,
+       r.next_send_at,
+       r.created_at AS enrolled_at,
+       s.id AS sequence_id,
+       s.nombre,
+       s.trigger_event,
+       COALESCE(jsonb_array_length(s.steps), 0) AS total_steps
+     FROM email_sequence_runs r
+     JOIN email_sequences s ON s.id = r.sequence_id
+     WHERE r.lead_id = $1
+     ORDER BY r.created_at DESC`,
+    [leadId]
+  );
+  return rows;
+}

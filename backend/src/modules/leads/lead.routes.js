@@ -35,6 +35,9 @@ router.post('/:id/interactions', leadController.addInteraction);
 router.post('/:id/reminders', leadController.addReminder);
 router.patch('/reminders/:reminderId/complete', leadController.completeReminder);
 
+// Secuencias de email del lead (para popup de detalle)
+router.get('/:id/sequences', leadController.getLeadSequences);
+
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
 
