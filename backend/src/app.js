@@ -32,10 +32,12 @@ import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import installationModule from './modules/installation/index.js';
+import projectChannelsModule from './modules/project-channels/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
+import { startReminderScheduler } from './jobs/reminderScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -101,6 +103,7 @@ const ALL_MODULES = [
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
   { name: 'claude-chat', mod: claudeChatModule },
+  { name: 'project-channels', mod: projectChannelsModule },
 ];
 
 // installation siempre activo (necesario para gestionar bundles)
@@ -138,6 +141,7 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info(`CRM API corriendo en puerto ${PORT}`);
     startEmailSequenceScheduler();
     startWooCommerceSyncScheduler();
+    startReminderScheduler();
   });
 }
 

@@ -1,7 +1,22 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
+import * as seqModel from '../email-sequences/sequence.model.js';
+import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+
+async function triggerSequences(triggerEvent, leadId, projectId) {
+  try {
+    const { rows: seqs } = await query(
+      `SELECT id FROM email_sequences WHERE project_id = $1 AND trigger_event = $2 AND active = true`,
+      [projectId, triggerEvent]
+    );
+    for (const seq of seqs) await seqModel.startRun(seq.id, leadId);
+    if (seqs.length) logger.info({ triggerEvent, leadId, count: seqs.length }, 'Email sequences disparadas');
+  } catch (err) {
+    logger.warn({ err: err.message, triggerEvent, leadId }, 'Error disparando email sequences');
+  }
+}
 
 export async function create(data, userId) {
   // Validar que el lead pertenece al project_id
@@ -9,10 +24,15 @@ export async function create(data, userId) {
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
 
   const conv = await conversionModel.create({ ...data, changed_by: userId });
+
   // Hook: crear comision automaticamente si hay regla
   commissionModel.createCommissionForConversion(conv.id).catch(err =>
     logger.warn({ err: err.message, conversionId: conv.id }, 'createCommission failed (non-blocking)')
   );
+
+  // Hook: disparar email sequences con trigger conversion_created
+  triggerSequences('conversion_created', data.lead_id, data.project_id);
+
   return conv;
 }
 
