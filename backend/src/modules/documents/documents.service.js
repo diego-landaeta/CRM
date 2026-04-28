@@ -336,6 +336,76 @@ export function buildInvoiceHtml(data) {
 </html>`;
 }
 
+// SVG compartido de ondas doradas (igual en ambas páginas del certificado)
+const CERT_WAVES_SVG = `
+<svg class="bg-waves" viewBox="0 0 1122 794" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="gTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#F9EDA0" stop-opacity="0.5"/>
+      <stop offset="35%"  stop-color="#D4AA50" stop-opacity="0.75"/>
+      <stop offset="70%"  stop-color="#C9A84C" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#A07828" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="gBot" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"   stop-color="#F9EDA0" stop-opacity="0.5"/>
+      <stop offset="35%"  stop-color="#D4AA50" stop-opacity="0.75"/>
+      <stop offset="70%"  stop-color="#C9A84C" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#A07828" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <!-- Grupo superior-izquierda: cintas fluidas -->
+  <path d="M-20 350 C80 200 280 60 560 -10 C800 -60 1050 20 1122 80
+           L1122 20 C1040 -20 790 -90 540 -40 C270 20 60 170 -20 330 Z"
+        fill="url(#gTop)" opacity="0.30"/>
+  <path d="M-20 230 C60 120 220 30 450 -10 C650 -45 880 30 1050 120
+           L1050 60 C870 -20 640 -90 430 -40 C200 20 50 110 -20 200 Z"
+        fill="url(#gTop)" opacity="0.55"/>
+  <path d="M-20 140 C50 60 170 0 360 -15 C520 -28 700 40 860 130
+           L860 70 C700 -20 510 -70 350 -50 C160 -28 40 40 -20 110 Z"
+        fill="url(#gTop)" opacity="0.75"/>
+  <path d="M-20 75 C30 20 130 -20 280 -20 C420 -20 560 50 680 110
+           L680 60 C560 0 415 -60 275 -55 C125 -48 25 10 -20 50 Z"
+        fill="url(#gTop)" opacity="0.90"/>
+  <!-- Grupo inferior-derecha: cintas fluidas (espejo) -->
+  <path d="M1142 444 C1062 594 862 734 582 804 C322 860 72 774 0 714
+           L0 774 C82 830 342 910 602 844 C882 774 1072 624 1142 474 Z"
+        fill="url(#gBot)" opacity="0.30"/>
+  <path d="M1142 564 C1082 674 922 764 692 804 C472 841 242 764 72 674
+           L72 734 C252 820 482 894 712 844 C942 784 1092 684 1142 604 Z"
+        fill="url(#gBot)" opacity="0.55"/>
+  <path d="M1142 654 C1092 734 952 794 762 814 C602 830 422 754 262 664
+           L262 724 C432 808 612 874 772 850 C962 820 1102 750 1142 684 Z"
+        fill="url(#gBot)" opacity="0.75"/>
+  <path d="M1142 719 C1112 774 992 814 842 814 C702 814 562 744 442 684
+           L442 734 C565 790 705 860 845 854 C998 844 1118 794 1142 749 Z"
+        fill="url(#gBot)" opacity="0.90"/>
+</svg>`;
+
+// SVG logo Psikoaprende (cerebro/neuronas circular, line art)
+const PSIKO_LOGO_SVG = `
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" style="width:14mm;height:14mm;display:block;margin:0 auto;">
+  <circle cx="40" cy="40" r="36" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="40" cy="22" r="4" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="55" cy="30" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="58" cy="46" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="48" cy="58" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="32" cy="58" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="22" cy="46" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="25" cy="30" r="3.5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="40" cy="40" r="5" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+  <line x1="40" y1="26" x2="40" y2="35" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="52" y1="33" x2="45" y2="37" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="54" y1="49" x2="45" y2="43" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="45" y1="54" x2="43" y2="45" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="35" y1="54" x2="37" y2="45" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="26" y1="49" x2="35" y2="43" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="28" y1="33" x2="35" y2="37" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="52" y1="33" x2="55" y2="43" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="25" y1="33" x2="22" y2="43" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="40" y1="22" x2="52" y2="30" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="40" y1="22" x2="28" y2="30" stroke="#1a1a1a" stroke-width="1"/>
+</svg>`;
+
 // ============================================================
 // TEMPLATE: CERTIFICADO página 1
 // ============================================================
@@ -354,213 +424,130 @@ export function buildCertP1Html(data) {
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Cormorant+Garamond:wght@300;400;500;600&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    width: 297mm;
-    height: 210mm;
-    font-family: 'Montserrat', sans-serif;
-    background: #fff;
-    overflow: hidden;
-  }
+  @import url('data:text/css,');
+  html, body { width:297mm; height:210mm; background:#fff; overflow:hidden; }
   .page {
-    width: 297mm;
-    height: 210mm;
-    position: relative;
-    background: #fff;
-    display: flex;
-    align-items: stretch;
+    width: 297mm; height: 210mm;
+    position: relative; background: #fff;
   }
-  /* Marco dorado exterior */
+  .bg-waves { position:absolute; inset:0; width:100%; height:100%; z-index:1; }
   .frame {
-    position: absolute;
-    inset: 5mm;
-    border: 3px solid #C9A84C;
-    box-shadow: inset 0 0 0 1.5px #E8D080, inset 0 0 0 3px #C9A84C;
-    pointer-events: none;
-    z-index: 10;
-  }
-  /* Cintas doradas — SVG decorativo */
-  .bg-waves {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
+    position: absolute; inset: 5mm; z-index: 10; pointer-events: none;
+    border: 2.5px solid #C9A84C;
+    box-shadow: inset 0 0 0 1px #E8D480;
   }
   .content {
-    position: relative;
-    z-index: 5;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 10mm 18mm 8mm;
+    position: relative; z-index: 5;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 0 18mm 8mm;
     text-align: center;
   }
+  /* Logo tab — arco blanco centrado en la parte superior */
   .logo-tab {
     background: #fff;
     border: 1.5px solid #C9A84C;
-    border-radius: 0 0 50% 50% / 0 0 20px 20px;
-    padding: 4mm 10mm 6mm;
-    margin-bottom: 5mm;
-    margin-top: -2mm;
-    text-align: center;
+    border-top: none;
+    border-radius: 0 0 60px 60px;
+    padding: 4mm 12mm 5mm;
+    display: inline-flex; flex-direction: column; align-items: center;
+    min-width: 42mm;
   }
-  .logo-icon { font-size: 20pt; color: #2a2a2a; line-height: 1; }
   .logo-brand {
-    font-size: 6.5pt;
-    letter-spacing: 2.5px;
-    font-weight: 700;
-    color: #2a2a2a;
-    margin-top: 2px;
-    display: block;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 6pt; letter-spacing: 3px; font-weight: 700;
+    color: #1a1a1a; margin-top: 2.5mm; display: block;
   }
+  /* Zona central */
+  .center-block { display:flex; flex-direction:column; align-items:center; gap:3mm; }
   .alumno-name {
-    font-family: 'Great Vibes', cursive;
-    font-size: 36pt;
-    color: #C9A84C;
-    line-height: 1.1;
-    margin-bottom: 3mm;
+    font-family: 'Brush Script MT', 'Comic Sans MS', cursive;
+    font-size: 38pt; color: #C9A84C; line-height: 1.1;
   }
   .subtitle {
-    font-size: 8.5pt;
-    color: #3a3a3a;
-    letter-spacing: 0.5px;
-    margin-bottom: 4mm;
-    font-weight: 400;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.5pt; color: #3a3a3a; letter-spacing: 0.3px;
   }
   .curso-nombre {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 22pt;
-    font-weight: 600;
-    color: #1a1a1a;
-    margin-bottom: 4mm;
-    line-height: 1.2;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 24pt; font-weight: 700;
+    color: #1a1a1a; line-height: 1.2;
   }
   .cuerpo {
-    font-size: 8.5pt;
-    color: #333;
-    line-height: 1.7;
-    max-width: 200mm;
-    margin-bottom: 3mm;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.5pt; color: #333; line-height: 1.75;
   }
   .aval {
-    font-size: 8.5pt;
-    font-weight: 700;
-    color: #222;
-    margin-bottom: 5mm;
-    line-height: 1.5;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.5pt; font-weight: 700; color: #1a1a1a;
   }
-  .firmas {
-    display: flex;
-    justify-content: space-around;
-    width: 100%;
-    margin-top: auto;
-    padding-top: 2mm;
-  }
-  .firma-col {
-    text-align: center;
-    width: 60mm;
-  }
-  .firma-img {
-    height: 14mm;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto 1mm;
-  }
+  /* Firmas */
+  .firmas { display:flex; justify-content:space-around; width:100%; }
+  .firma-col { text-align:center; width:60mm; }
+  .firma-img { height:13mm; object-fit:contain; display:block; margin:0 auto 1.5mm; }
   .firma-line {
-    border-top: 1px solid #333;
-    margin-bottom: 1.5mm;
-    width: 50mm;
-    margin-left: auto;
-    margin-right: auto;
+    border-top: 1px solid #555; width:50mm;
+    margin: 0 auto 1.5mm;
   }
   .firma-nombre {
-    font-size: 8pt;
-    font-weight: 600;
-    color: #222;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7.5pt; font-weight: 600; color: #222;
   }
   .firma-rol {
-    font-size: 7pt;
-    color: #555;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7pt; color: #555;
   }
 </style>
 </head>
 <body>
 <div class="page">
-  <!-- SVG background waves (decoración dorada) -->
-  <svg class="bg-waves" viewBox="0 0 1122 794" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-    <defs>
-      <linearGradient id="gA" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#F5E17A" stop-opacity="0.9"/>
-        <stop offset="40%" stop-color="#C9A84C" stop-opacity="0.85"/>
-        <stop offset="100%" stop-color="#8B6914" stop-opacity="0.7"/>
-      </linearGradient>
-      <linearGradient id="gB" x1="100%" y1="100%" x2="0%" y2="0%">
-        <stop offset="0%" stop-color="#F5E17A" stop-opacity="0.9"/>
-        <stop offset="40%" stop-color="#C9A84C" stop-opacity="0.85"/>
-        <stop offset="100%" stop-color="#8B6914" stop-opacity="0.7"/>
-      </linearGradient>
-    </defs>
-    <!-- Cintas superiores izquierda -->
-    <path d="M-20 160 Q120 20 320 -20 L340 20 Q140 60 0 200Z" fill="url(#gA)"/>
-    <path d="M-20 220 Q160 40 400 -20 L420 25 Q180 85 0 265Z" fill="url(#gA)" opacity="0.7"/>
-    <path d="M-20 100 Q80 10 200 -20 L215 15 Q95 45 0 135Z" fill="url(#gA)" opacity="0.5"/>
-    <!-- Cintas inferiores derecha -->
-    <path d="M1142 634 Q1002 774 802 814 L782 774 Q982 734 1122 594Z" fill="url(#gB)"/>
-    <path d="M1142 574 Q962 754 722 814 L702 769 Q942 709 1122 529Z" fill="url(#gB)" opacity="0.7"/>
-    <path d="M1142 694 Q1042 784 922 814 L907 779 Q1027 749 1122 659Z" fill="url(#gB)" opacity="0.5"/>
-  </svg>
-
-  <!-- Marco dorado -->
+  ${CERT_WAVES_SVG}
   <div class="frame"></div>
-
   <div class="content">
+
     <div class="logo-tab">
-      <div class="logo-icon">&#9774;</div>
+      ${PSIKO_LOGO_SVG}
       <span class="logo-brand">PSIKOAPRENDE</span>
     </div>
 
-    <div class="alumno-name">${alumno_nombre || ''}</div>
-
-    <div class="subtitle">con DNI: ${alumno_dni || ''}, ha superado con éxito los objetivos establecidos para el:</div>
-
-    <div class="curso-nombre">${curso_nombre || ''}</div>
-
-    <div class="cuerpo">
-      Por un total de <strong>${horas_total || ''} horas</strong> teórico prácticas.
-      Inicio el ${fecha_inicio || ''} y finalizado el ${fecha_fin || ''}.<br/>
-      ${ciudad}, ${pais} ${fecha_expedicion || ''}.
-    </div>
-
-    <div class="aval">
-      Este certificado ha sido expedido por Psiko Aprende y avalado por ISEIE Innovation School, e Hispamedic
+    <div class="center-block">
+      <div class="alumno-name">${alumno_nombre || ''}</div>
+      <div class="subtitle">con DNI: ${alumno_dni || ''}, ha superado con éxito los objetivos establecidos para el:</div>
+      <div class="curso-nombre">${curso_nombre || ''}</div>
+      <div class="cuerpo">
+        Por un total de <strong>${horas_total || ''} horas</strong> teórico prácticas.
+        Inicio el ${fecha_inicio || ''} y finalizado el ${fecha_fin || ''}.<br/>
+        ${ciudad}, ${pais} ${fecha_expedicion || ''}.
+      </div>
+      <div class="aval">
+        Este certificado ha sido expedido por Psiko Aprende y avalado por ISEIE Innovation School, e Hispamedic
+      </div>
     </div>
 
     <div class="firmas">
       <div class="firma-col">
-        ${firma_alumno_url ? `<img class="firma-img" src="${firma_alumno_url}"/>` : '<div style="height:14mm;"></div>'}
+        ${firma_alumno_url ? `<img class="firma-img" src="${firma_alumno_url}"/>` : '<div style="height:13mm;"></div>'}
         <div class="firma-line"></div>
         <div class="firma-nombre">${alumno_nombre || ''}</div>
         <div class="firma-rol">Alumno</div>
       </div>
       <div class="firma-col">
-        ${firma_director_url ? `<img class="firma-img" src="${firma_director_url}"/>` : '<div style="height:14mm;"></div>'}
+        ${firma_director_url ? `<img class="firma-img" src="${firma_director_url}"/>` : '<div style="height:13mm;"></div>'}
         <div class="firma-line"></div>
         <div class="firma-nombre">${director_nombre}</div>
         <div class="firma-rol">Director</div>
       </div>
       <div class="firma-col">
-        ${firma_resp_url ? `<img class="firma-img" src="${firma_resp_url}"/>` : '<div style="height:14mm;"></div>'}
+        ${firma_resp_url ? `<img class="firma-img" src="${firma_resp_url}"/>` : '<div style="height:13mm;"></div>'}
         <div class="firma-line"></div>
         <div class="firma-nombre">${resp_nombre}</div>
         <div class="firma-rol">Responsable de Formación</div>
       </div>
     </div>
+
   </div>
 </div>
 </body>
@@ -586,132 +573,63 @@ export function buildCertP2Html(data) {
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    width: 297mm;
-    height: 210mm;
-    font-family: 'Montserrat', sans-serif;
-    background: #fff;
-    overflow: hidden;
-  }
-  .page {
-    width: 297mm;
-    height: 210mm;
-    position: relative;
-    background: #fff;
-  }
+  html, body { width:297mm; height:210mm; background:#fff; overflow:hidden; font-family: Arial, Helvetica, sans-serif; }
+  .page { width:297mm; height:210mm; position:relative; background:#fff; }
+  .bg-waves { position:absolute; inset:0; width:100%; height:100%; z-index:1; }
   .frame {
-    position: absolute;
-    inset: 5mm;
-    border: 3px solid #C9A84C;
-    box-shadow: inset 0 0 0 1.5px #E8D080, inset 0 0 0 3px #C9A84C;
-    pointer-events: none;
-    z-index: 10;
-  }
-  .bg-waves {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
+    position:absolute; inset:5mm; z-index:10; pointer-events:none;
+    border: 2.5px solid #C9A84C;
+    box-shadow: inset 0 0 0 1px #E8D480;
   }
   .content {
-    position: relative;
-    z-index: 5;
-    padding: 10mm 18mm 8mm;
+    position:relative; z-index:5;
+    padding: 9mm 18mm 0;
+    height: calc(210mm - 32mm);
   }
   .curso-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 24pt;
-    font-weight: 400;
-    text-align: center;
-    color: #1a1a1a;
-    margin-bottom: 7mm;
+    font-size: 22pt; font-weight: 700;
+    text-align: center; color: #1a1a1a;
+    margin-bottom: 6mm;
   }
   .plan-title {
-    font-size: 11pt;
-    font-weight: 700;
-    color: #1a1a1a;
-    margin-bottom: 5mm;
+    font-size: 10.5pt; font-weight: 700;
+    color: #1a1a1a; margin-bottom: 4mm;
   }
   .plan-grid {
     display: grid;
-    grid-template-columns: 35mm 40mm 1fr;
-    gap: 0 6mm;
+    grid-template-columns: 32mm 38mm 1fr;
+    gap: 0 8mm;
+    align-items: start;
   }
-  .plan-label { font-size: 8.5pt; font-weight: 700; }
-  .plan-value { font-size: 8.5pt; font-weight: 400; }
+  .col-label { font-size: 8.5pt; font-weight: 700; color: #1a1a1a; margin-bottom: 2mm; }
+  .col-value { font-size: 8.5pt; color: #333; }
   .modulos-list {
-    list-style: disc;
-    padding-left: 5mm;
-    font-size: 7.8pt;
-    line-height: 1.65;
-    color: #222;
+    list-style: disc; padding-left: 4mm;
+    font-size: 7.8pt; line-height: 1.65; color: #222;
   }
   .logos-row {
-    position: absolute;
-    bottom: 12mm;
-    left: 18mm;
-    right: 18mm;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    z-index: 5;
-  }
-  .logo-item {
-    text-align: center;
-    font-size: 8pt;
-    font-weight: 700;
-    letter-spacing: 1px;
+    position: absolute; bottom: 10mm;
+    left: 18mm; right: 18mm; z-index: 5;
+    display: flex; justify-content: space-around; align-items: center;
   }
   .logo-hispamedic {
-    font-size: 16pt;
-    font-weight: 900;
-    letter-spacing: 2px;
-    color: #111;
-    font-family: 'Montserrat', sans-serif;
+    font-size: 14pt; font-weight: 900; letter-spacing: 2px; color: #111;
   }
   .logo-iseie {
-    width: 20mm;
-    height: 20mm;
-    border-radius: 50%;
+    width: 18mm; height: 18mm; border-radius: 50%;
     border: 2px solid #4a7abf;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    color: #4a7abf;
-    font-size: 6.5pt;
-    font-weight: 700;
-    text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; color: #4a7abf;
+    font-size: 5.5pt; font-weight: 700; text-align: center; line-height: 1.3;
   }
-  .logo-psiko { font-size: 7pt; letter-spacing: 2px; font-weight: 700; }
+  .logo-psiko { font-size: 6.5pt; letter-spacing: 2px; font-weight: 700; margin-top: 1mm; }
 </style>
 </head>
 <body>
 <div class="page">
-  <svg class="bg-waves" viewBox="0 0 1122 794" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-    <defs>
-      <linearGradient id="gA" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#F5E17A" stop-opacity="0.9"/>
-        <stop offset="40%" stop-color="#C9A84C" stop-opacity="0.85"/>
-        <stop offset="100%" stop-color="#8B6914" stop-opacity="0.7"/>
-      </linearGradient>
-      <linearGradient id="gB" x1="100%" y1="100%" x2="0%" y2="0%">
-        <stop offset="0%" stop-color="#F5E17A" stop-opacity="0.9"/>
-        <stop offset="40%" stop-color="#C9A84C" stop-opacity="0.85"/>
-        <stop offset="100%" stop-color="#8B6914" stop-opacity="0.7"/>
-      </linearGradient>
-    </defs>
-    <path d="M-20 160 Q120 20 320 -20 L340 20 Q140 60 0 200Z" fill="url(#gA)"/>
-    <path d="M-20 220 Q160 40 400 -20 L420 25 Q180 85 0 265Z" fill="url(#gA)" opacity="0.7"/>
-    <path d="M-20 100 Q80 10 200 -20 L215 15 Q95 45 0 135Z" fill="url(#gA)" opacity="0.5"/>
-    <path d="M1142 634 Q1002 774 802 814 L782 774 Q982 734 1122 594Z" fill="url(#gB)"/>
-    <path d="M1142 574 Q962 754 722 814 L702 769 Q942 709 1122 529Z" fill="url(#gB)" opacity="0.7"/>
-    <path d="M1142 694 Q1042 784 922 814 L907 779 Q1027 749 1122 659Z" fill="url(#gB)" opacity="0.5"/>
-  </svg>
+  ${CERT_WAVES_SVG}
   <div class="frame"></div>
 
   <div class="content">
@@ -719,32 +637,29 @@ export function buildCertP2Html(data) {
     <div class="plan-title">Distribución General del Plan de Estudios</div>
     <div class="plan-grid">
       <div>
-        <div class="plan-label">Modalidad:</div>
-        <div class="plan-value">${modalidad}</div>
+        <div class="col-label">Modalidad:</div>
+        <div class="col-value">${modalidad}</div>
       </div>
       <div>
-        <div class="plan-label">Horas de<br/>formación:</div>
-        <div class="plan-value">${horas_total || ''}</div>
+        <div class="col-label">Horas de formación:</div>
+        <div class="col-value">${horas_total || ''}</div>
       </div>
       <div>
-        <div class="plan-label">Programa formativo</div>
+        <div class="col-label">Programa formativo</div>
         <ul class="modulos-list">${modulosHtml}</ul>
       </div>
     </div>
   </div>
 
   <div class="logos-row">
-    <div class="logo-item logo-hispamedic">HISPAMEDIC</div>
-    <div class="logo-item">
-      <div class="logo-iseie">
-        <div>INSTITUCIÓN</div>
-        <div>SUPERIOR</div>
-        <div style="font-size:8pt;font-weight:900;">ISEIE</div>
-        <div>BG7799247</div>
-      </div>
+    <div class="logo-hispamedic">HISPAMEDIC</div>
+    <div class="logo-iseie">
+      <div>INSTITUCIÓN</div><div>SUPERIOR</div>
+      <div style="font-size:7pt;font-weight:900;">ISEIE</div>
+      <div>BG7799247</div>
     </div>
-    <div class="logo-item">
-      <div style="font-size:18pt; color:#C9A84C; margin-bottom:2px;">&#9774;</div>
+    <div style="text-align:center;">
+      ${PSIKO_LOGO_SVG.replace('width:14mm;height:14mm', 'width:11mm;height:11mm')}
       <div class="logo-psiko">PSIKOAPRENDE</div>
     </div>
   </div>
@@ -788,4 +703,52 @@ export async function generateCertificatePdf(data, filename) {
     await browser.close();
   }
   return filePath;
+}
+
+// Preview combinado certificado (ambas páginas en un HTML scrollable)
+export function buildCertPreviewHtml(data) {
+  const scale = 0.72; // escala A4 landscape (297mm) para caber en pantalla
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e5e7eb; padding: 20px; display: flex; flex-direction: column; gap: 20px; align-items: flex-start; font-family: sans-serif; }
+  .cert-page {
+    width: 297mm;
+    height: 210mm;
+    position: relative;
+    background: #fff;
+    overflow: hidden;
+    transform: scale(${scale});
+    transform-origin: top left;
+    margin-bottom: calc((210mm * ${scale}) - 210mm);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  }
+</style>
+</head>
+<body>
+  <div class="cert-page">${_certP1Body(data)}</div>
+  <div class="cert-page">${_certP2Body(data)}</div>
+</body>
+</html>`;
+}
+
+function _certP1Body(data) {
+  const html = buildCertP1Html(data);
+  const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+  const bodyMatch = html.match(/<body>([\s\S]*?)<\/body>/);
+  const styles = styleMatch ? `<style>${styleMatch[1]}</style>` : '';
+  const body = bodyMatch ? bodyMatch[1] : '';
+  return `${styles}${body}`;
+}
+
+function _certP2Body(data) {
+  const html = buildCertP2Html(data);
+  const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+  const bodyMatch = html.match(/<body>([\s\S]*?)<\/body>/);
+  const styles = styleMatch ? `<style>${styleMatch[1].replace(/html,\s*body\s*\{[^}]*\}/g, '')}</style>` : '';
+  const body = bodyMatch ? bodyMatch[1] : '';
+  return `${styles}${body}`;
 }

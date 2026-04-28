@@ -93,8 +93,8 @@ export async function remove(req, res, next) {
 export async function preview(req, res, next) {
   try {
     const { type, data } = req.body;
-    const { buildInvoiceHtml, buildCertP1Html } = await import('./documents.service.js');
-    const html = type === 'invoice' ? buildInvoiceHtml(data) : buildCertP1Html(data);
+    const { buildInvoiceHtml, buildCertPreviewHtml } = await import('./documents.service.js');
+    const html = type === 'invoice' ? buildInvoiceHtml(data) : buildCertPreviewHtml(data);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
