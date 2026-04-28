@@ -31,6 +31,7 @@ import audiencesModule from './modules/audiences/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
+import documentsModule from './modules/documents/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 
@@ -72,7 +73,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule, audiencesModule, iaMonitorModule, reportsIaModule, claudeChatModule];
+const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule, audiencesModule, iaMonitorModule, reportsIaModule, claudeChatModule, documentsModule];
 
 for (const mod of modules) {
   app.use(mod.prefix, mod.router);

@@ -94,6 +94,7 @@ const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
+const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 
 function App() {
@@ -136,6 +137,7 @@ function App() {
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/manual" element={<ManualPage />} />
+          <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>

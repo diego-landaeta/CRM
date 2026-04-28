@@ -29,6 +29,7 @@ import {
   Headset,
   ActivityIcon as Activity,
   Bell,
+  FilePdf,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -84,6 +85,7 @@ const NAV_ITEMS = [
   { label: 'Soporte', to: '/soporte', icon: Headset },
   { label: 'Status', to: '/status', icon: Activity },
   { label: 'Notificaciones', to: '/notificaciones', icon: Bell, roles: ['superadmin', 'admin'] },
+  { label: 'Documentos', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
   { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
 ];
 
