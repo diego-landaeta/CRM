@@ -94,7 +94,7 @@ export async function preview(req, res, next) {
   try {
     const { type, data } = req.body;
     const { buildInvoiceHtml, buildCertPreviewHtml } = await import('./documents.service.js');
-    const html = type === 'invoice' ? buildInvoiceHtml(data) : buildCertPreviewHtml(data);
+    const html = type === 'invoice' ? buildInvoiceHtml(data) : await buildCertPreviewHtml(data);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (err) {
