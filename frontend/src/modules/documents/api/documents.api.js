@@ -12,4 +12,7 @@ export const documentsApi = {
 
   remove: (id, projectId) =>
     client.delete(`/documents/${id}?projectId=${projectId}`),
+
+  preview: (type, data) =>
+    client.post('/documents/preview', { type, data }),
 };
