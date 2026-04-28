@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Folder,
 } from '@phosphor-icons/react';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 // Proyectos ahora vienen del AuthContext via ProjectContext
 
 const profileSchema = z.object({
@@ -29,7 +30,7 @@ const passwordSchema = z.object({
   current: z.string().min(1, 'Requerido'),
   nueva: z.string().min(8, 'Minimo 8 caracteres'),
   confirmar: z.string().min(1, 'Requerido'),
-}).refine((d) => d.nueva === d.confirmar, { message: 'Las contrasenas no coinciden', path: ['confirmar'] });
+}).refine((d) => d.nueva === d.confirmar, { message: 'Las contraseñas no coinciden', path: ['confirmar'] });
 
 const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
@@ -52,6 +53,7 @@ export default function ProfilePage() {
   const [showPassword, setShowPassword] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarVersion, setAvatarVersion] = useState(Date.now());
+  const [confirmDeleteAvatar, setConfirmDeleteAvatar] = useState(false);
   const fileInputRef = useRef(null);
 
   const userProjects = allProjects || [];
@@ -86,8 +88,7 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleAvatarDelete() {
-    if (!confirm('Eliminar foto de perfil?')) return;
+  async function doAvatarDelete() {
     try {
       await client.delete(`/users/${user.id}/avatar`);
       toast({ title: 'Foto eliminada' });
@@ -95,7 +96,7 @@ export default function ProfilePage() {
       refreshUser?.();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setConfirmDeleteAvatar(false); }
   }
 
   // Profile form
@@ -127,14 +128,14 @@ export default function ProfilePage() {
   async function onChangePassword(data) {
     await new Promise((r) => setTimeout(r, 500));
     resetPass();
-    toast({ title: 'Contrasena actualizada', description: 'Tu contrasena se ha cambiado correctamente' });
+    toast({ title: 'Contraseña actualizada', description: 'Tu contraseña se ha cambiado correctamente' });
   }
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-semibold">Mi Perfil</h1>
-        <p className="text-muted-foreground text-sm">Gestiona tu informacion personal y seguridad</p>
+        <p className="text-muted-foreground text-sm">Gestiona tu información personal y seguridad</p>
       </div>
 
       {/* Avatar + Info */}
@@ -168,7 +169,7 @@ export default function ProfilePage() {
               </span>
             </div>
             {avatarSrc && (
-              <button onClick={handleAvatarDelete} className="text-[11px] text-red-500 hover:underline mt-2">
+              <button onClick={() => setConfirmDeleteAvatar(true)} className="text-[11px] text-red-500 hover:underline mt-2">
                 Eliminar foto
               </button>
             )}
@@ -194,7 +195,7 @@ export default function ProfilePage() {
       <div className="bg-card p-6 rounded-lg border border-border">
         <div className="flex items-center gap-2 mb-5">
           <User size={18} weight="regular" className="text-primary" />
-          <h3 className="font-semibold">Informacion Personal</h3>
+          <h3 className="font-semibold">Información Personal</h3>
         </div>
         <form onSubmit={handleProfile(onSaveProfile)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -217,14 +218,14 @@ export default function ProfilePage() {
       <div className="bg-card p-6 rounded-lg border border-border">
         <div className="flex items-center gap-2 mb-5">
           <Lock size={18} weight="regular" className="text-primary" />
-          <h3 className="font-semibold">Cambiar Contrasena</h3>
+          <h3 className="font-semibold">Cambiar Contraseña</h3>
         </div>
         <form onSubmit={handlePass(onChangePassword)} className="space-y-4">
-          <Field label="Contrasena actual *" error={errPass.current?.message}>
-            <input {...regPass('current')} type="password" placeholder="Tu contrasena actual" className={inputClass} />
+          <Field label="Contraseña actual *" error={errPass.current?.message}>
+            <input {...regPass('current')} type="password" placeholder="Tu contraseña actual" className={inputClass} />
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Nueva contrasena *" error={errPass.nueva?.message}>
+            <Field label="Nueva contraseña *" error={errPass.nueva?.message}>
               <div className="relative">
                 <input {...regPass('nueva')} type={showPassword ? 'text' : 'password'} placeholder="Minimo 8 caracteres" className={inputClass + ' pr-11'} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -233,12 +234,12 @@ export default function ProfilePage() {
               </div>
             </Field>
             <Field label="Confirmar *" error={errPass.confirmar?.message}>
-              <input {...regPass('confirmar')} type="password" placeholder="Repite la contrasena" className={inputClass} />
+              <input {...regPass('confirmar')} type="password" placeholder="Repite la contraseña" className={inputClass} />
             </Field>
           </div>
           <div className="flex justify-end">
             <button type="submit" disabled={subPass} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {subPass ? 'Cambiando...' : 'Cambiar contrasena'}
+              {subPass ? 'Cambiando...' : 'Cambiar contraseña'}
             </button>
           </div>
         </form>
@@ -263,6 +264,7 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
+      <ConfirmDialog open={confirmDeleteAvatar} title="¿Eliminar foto de perfil?" message="Se eliminará tu foto de perfil y no podrá recuperarse." onConfirm={doAvatarDelete} onCancel={() => setConfirmDeleteAvatar(false)} />
     </div>
   );
 }

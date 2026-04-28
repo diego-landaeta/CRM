@@ -84,8 +84,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   return (
     <Portal>
-      <div role="dialog" className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div role="dialog" className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-lg mx-4 p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>

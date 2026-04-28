@@ -24,7 +24,7 @@ const CANAL_OPTIONS = [
   { v: 'meta_ads', label: 'Meta Ads' },
   { v: 'google_ads', label: 'Google Ads' },
   { v: 'tiktok_ads', label: 'TikTok Ads' },
-  { v: 'organico', label: 'Organico' },
+  { v: 'organico', label: 'Orgánico' },
   { v: 'directo', label: 'Directo' },
   { v: 'referido', label: 'Referido' },
 ];
@@ -42,7 +42,7 @@ const PRESETS = [
   { id: 'no-convertidos', label: 'No convertidos', desc: 'Ideal para retargeting', filter: { statuses: ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento'] } },
   { id: 'convertidos', label: 'Convertidos', desc: 'Excluir o upsell', filter: { statuses: ['convertido'] } },
   { id: 'paid', label: 'Solo pagado', desc: 'Meta + Google', filter: { canales: ['meta_ads', 'google_ads', 'tiktok_ads'] } },
-  { id: 'organico', label: 'Organico', desc: 'SEO + directo', filter: { canales: ['organico', 'directo'] } },
+  { id: 'organico', label: 'Orgánico', desc: 'SEO + directo', filter: { canales: ['organico', 'directo'] } },
 ];
 
 function fmtNum(n) { return new Intl.NumberFormat('es-ES').format(Number(n || 0)); }
@@ -112,7 +112,7 @@ export default function AudienceExportPage() {
         {/* SIDEBAR FILTROS — desktop fijo, mobile drawer */}
         <aside className={`
           lg:block lg:relative lg:bg-transparent lg:p-0 lg:inset-auto lg:z-auto
-          ${filtersOpen ? 'fixed inset-0 z-50 bg-black/40' : 'hidden'}
+          ${filtersOpen ? 'fixed inset-0 !m-0 z-50 bg-black/40' : 'hidden'}
         `}>
           <div className={`
             bg-card border border-border rounded-lg lg:rounded-lg

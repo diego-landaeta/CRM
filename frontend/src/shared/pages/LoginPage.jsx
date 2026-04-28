@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Esperando restauracion de sesion
+  // Esperando restauracion de sesión
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -63,7 +63,7 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} aria-label="Formulario de inicio de sesion" className="space-y-5">
+          <form onSubmit={handleSubmit} aria-label="Formulario de inicio de sesión" className="space-y-5">
             <div>
               <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
                 Email
@@ -81,7 +81,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <label className="text-xs text-muted-foreground text-muted-foreground">
-                  Contrasena
+                  Contraseña
                 </label>
               </div>
               <div className="relative">
@@ -89,14 +89,14 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Tu contrasena"
+                  placeholder="Tu contraseña"
                   autoComplete="current-password"
                   className="w-full h-11 px-4 pr-11 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  aria-label="Mostrar contrasena"
+                  aria-label="Mostrar contraseña"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-zinc-600 transition-colors"
                 >
                   {showPassword ? <EyeSlash size={18} /> : <Eye size={18} />}
@@ -118,10 +118,10 @@ export default function LoginPage() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Iniciando sesion...
+                  Iniciando sesión...
                 </span>
               ) : (
-                'Iniciar Sesion'
+                'Iniciar Sesión'
               )}
             </button>
           </form>

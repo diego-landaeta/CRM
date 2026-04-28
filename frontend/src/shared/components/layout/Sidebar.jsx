@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   SquaresFour,
@@ -26,12 +26,16 @@ import {
   Globe,
   ShoppingBag,
   BookOpen,
+  Headset,
+  ActivityIcon as Activity,
+  Bell,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
+import client from '@/shared/api/client';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 
@@ -39,36 +43,47 @@ const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/P
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/', icon: SquaresFour },
   { label: 'Prospectos', to: '/leads', icon: Users, module: 'leads' },
-  { label: 'Clientes', to: '/clients', icon: UserCheck, module: 'clients' },
-  { label: 'Productos', to: '/products', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-  { label: 'Matriculas', to: '/matriculas', icon: GraduationCap, module: 'matriculas' },
-  { label: 'Forms', to: '/forms', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
-  { label: 'Email seguimiento', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
-  { label: 'WooCommerce', to: '/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
   {
-    label: 'Campanas', icon: Megaphone, roles: ['superadmin', 'admin'],
+    label: 'Clientes', icon: UserCheck, module: 'clients',
+    children: [
+      { label: 'Listado', to: '/clients', module: 'clients' },
+      { label: 'Matrículas', to: '/matriculas', module: 'matriculas' },
+    ],
+  },
+  {
+    label: 'Productos', icon: Package, roles: ['superadmin', 'admin'],
+    children: [
+      { label: 'Catálogo', to: '/products', roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'WooCommerce', to: '/woocommerce', roles: ['superadmin', 'admin'], module: 'woocommerce' },
+    ],
+  },
+  { label: 'Email seguimiento', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
+  {
+    label: 'Campañas', icon: Megaphone, roles: ['superadmin', 'admin'],
     children: [
       { label: 'Consolidado', to: '/campaigns', roles: ['superadmin', 'admin'] },
       { label: 'Meta Ads', to: '/campaigns/meta', roles: ['superadmin', 'admin'] },
       { label: 'Google Ads', to: '/campaigns/google', roles: ['superadmin', 'admin'] },
+      { label: 'Tráfico orgánico', to: '/seo', roles: ['superadmin', 'admin'] },
     ],
   },
-  { label: 'Trafico organico', to: '/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
-  { label: 'Dashboard IA', to: '/ia-dashboard', icon: Robot, roles: ['superadmin', 'admin'] },
-  { label: 'Reportes IA', to: '/reports-ia', icon: Sparkle, roles: ['superadmin', 'admin'] },
   {
     label: 'Contabilidad', icon: Calculator,
     children: [
       { label: 'Dashboard', to: '/accounting', roles: ['superadmin', 'admin'], module: 'accounting_income' },
       { label: 'Ingresos', to: '/accounting/income', roles: ['superadmin', 'admin'], module: 'accounting_income' },
+      { label: 'Conversiones', to: '/revenue', roles: ['superadmin', 'admin'], module: 'accounting_income' },
       { label: 'Egresos', to: '/accounting/expenses', roles: ['superadmin', 'admin'], module: 'accounting_expenses' },
       { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'], module: 'accounting_receivable' },
       { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'], module: 'accounting_payable' },
       { label: 'Comisiones', to: '/commissions', module: 'commissions' },
-      { label: 'Nominas', to: '/payroll', roles: ['superadmin', 'admin'], module: 'payroll' },
+      { label: 'Nóminas', to: '/payroll', roles: ['superadmin', 'admin'], module: 'payroll' },
     ],
   },
   { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+  { label: 'Soporte', to: '/soporte', icon: Headset },
+  { label: 'Status', to: '/status', icon: Activity },
+  { label: 'Notificaciones', to: '/notificaciones', icon: Bell, roles: ['superadmin', 'admin'] },
   { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
 ];
 
@@ -170,6 +185,21 @@ export default function Sidebar({ onNavigate }) {
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
+  const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    let cancelled = false;
+    async function fetchBadge() {
+      try {
+        const res = await client.get(`/leads?projectId=${activeProject.id}&status=nuevo&limit=1`);
+        if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
+      } catch {}
+    }
+    fetchBadge();
+    const interval = setInterval(fetchBadge, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeProject?.id]);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
@@ -242,13 +272,18 @@ export default function Sidebar({ onNavigate }) {
       )}
 
       {/* Navigation */}
-      <nav className="space-y-0.5 flex-1">
+      <nav className="space-y-0.5 flex-1 overflow-y-auto min-h-0">
         <p className="text-xs font-medium text-muted-foreground px-3 mb-2">Principal</p>
         {NAV_ITEMS.filter((item) => canSeeItem(item, user?.role, activeProject?.modules)).map((item) =>
           item.children ? (
             <NavGroup key={item.label} {...item} role={user?.role} modules={activeProject?.modules} onNavigate={onNavigate} />
           ) : (
-            <NavItem key={item.to} {...item} onClick={onNavigate} />
+            <NavItem
+              key={item.to}
+              {...item}
+              badge={item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge : undefined}
+              onClick={onNavigate}
+            />
           )
         )}
 
@@ -282,7 +317,7 @@ export default function Sidebar({ onNavigate }) {
             )}
           >
             <Gear size={18} weight="regular" />
-            Configuracion
+            Configuración
           </NavLink>
         )}
 
@@ -297,7 +332,7 @@ export default function Sidebar({ onNavigate }) {
             <p className="text-xs font-bold text-foreground truncate">{user?.nombre}</p>
             <p className="text-[10px] text-muted-foreground">{rolLabel}</p>
           </div>
-          <button onClick={handleLogout} className="text-muted-foreground hover:text-red-500 transition-colors p-1" title="Cerrar sesion">
+          <button onClick={handleLogout} className="text-muted-foreground hover:text-red-500 transition-colors p-1" title="Cerrar sesión">
             <SignOut size={16} />
           </button>
         </div>

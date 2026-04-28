@@ -29,7 +29,7 @@ export const CHANNEL_LABELS = {
   meta_ads: 'Meta Ads',
   google_ads: 'Google Ads',
   tiktok_ads: 'TikTok Ads',
-  organico: 'Organico',
+  organico: 'Orgánico',
   chatgpt_ia: 'ChatGPT IA',
   directo: 'Directo',
   referido: 'Referido',

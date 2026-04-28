@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
+import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 import {
   Users,
   Sparkle,
@@ -9,6 +10,11 @@ import {
   ArrowRight,
   WarningCircle,
   ArrowClockwise,
+  CurrencyEur,
+  TrendDown,
+  ArrowUp as ArrowUpIcon,
+  ArrowDown as ArrowDownIcon,
+  CreditCard,
 } from '@phosphor-icons/react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,6 +52,74 @@ function CustomTooltip({ active, payload, label, suffix = 'leads' }) {
   return (
     <div className="bg-zinc-900 text-white text-xs font-semibold px-3 py-2 rounded-lg">
       {label}: <span className="text-blue-300">{payload[0].value} {suffix}</span>
+    </div>
+  );
+}
+
+function fmtMoney(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+}
+function fmtNum(n) { return new Intl.NumberFormat('es-ES').format(Number(n || 0)); }
+function fmtPct(n) { return `${(Number(n) || 0).toFixed(2)}%`; }
+
+function SaasMonitor({ projectId }) {
+  const { metrics, mrrDelta, subsDelta, churnTrend, loading } = useStripeMonitor(projectId);
+  if (loading) return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {[1,2,3,4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-lg animate-pulse" />)}
+    </div>
+  );
+  if (!metrics || metrics.mrr === 0) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <CreditCard size={16} className="text-violet-600" weight="duotone" />
+        <h2 className="font-semibold text-sm">Monitor SaaS — Stripe</h2>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: CurrencyEur, label: 'MRR actual', value: fmtMoney(metrics.mrr), delta: mrrDelta, color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/30' },
+          { icon: Users, label: 'Suscripciones activas', value: fmtNum(metrics.activeSubs), delta: subsDelta, color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30' },
+          { icon: TrendDown, label: 'Churn rate', value: fmtPct(metrics.churnRate), tone: metrics.churnRate > 5 ? 'red' : 'emerald', color: metrics.churnRate > 5 ? 'text-red-600 bg-red-50 dark:bg-red-950/30' : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
+          { icon: WarningCircle, label: 'Cobros fallidos', value: fmtNum(metrics.failedPayments), color: metrics.failedPayments > 0 ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' : 'text-muted-foreground bg-muted' },
+        ].map(({ icon: Icon, label, value, delta, color }) => (
+          <div key={label} className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className={`w-8 h-8 rounded-md flex items-center justify-center ${color}`}>
+                <Icon size={16} weight="duotone" />
+              </div>
+              {delta && (
+                <span className={`text-[10px] font-bold flex items-center gap-0.5 ${delta.growing ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {delta.growing ? <ArrowUpIcon size={10} /> : <ArrowDownIcon size={10} />}
+                  {Math.abs(delta.pct)}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-xl font-semibold tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <ArrowUpIcon size={14} weight="bold" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Nuevas suscripciones (mes)</p>
+            <p className="text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">+{metrics.newSubs}</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-md bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex items-center justify-center flex-shrink-0">
+            <ArrowDownIcon size={14} weight="bold" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Cancelaciones (mes)</p>
+            <p className="text-lg font-semibold tabular-nums text-red-700 dark:text-red-400">−{metrics.cancelledSubs}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -287,6 +361,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Monitor SaaS — solo proyectos IA */}
+      {activeProject?.type === 'ia' && <SaasMonitor projectId={activeProject.id} />}
+
       {/* Recent Leads */}
       <div className="bg-card rounded-lg border border-border overflow-x-auto">
         <div className="p-5 flex items-center justify-between">
@@ -312,7 +389,7 @@ export default function DashboardPage() {
                 onClick={() => navigate('/leads')}
                 className="text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 rounded"
               >
-                Ir a Gestion de Prospectos
+                Ir a Gestión de Prospectos
               </button>
             }
           />

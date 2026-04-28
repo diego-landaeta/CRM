@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Users,
   Folder,
@@ -23,7 +23,11 @@ import {
   ArrowDown,
   FloppyDisk,
   Gear,
+  Globe,
 } from '@phosphor-icons/react';
+
+const FormsPageEmbed = lazy(() => import('@/modules/forms/pages/FormsPage'));
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -36,6 +40,7 @@ import ProjectSettingsDialog from '../components/ProjectSettingsDialog';
 const TABS = [
   { id: 'projects', label: 'Proyectos', icon: Folder },
   { id: 'users', label: 'Usuarios', icon: Users },
+  { id: 'forms', label: 'Forms', icon: Globe },
   { id: 'apis', label: 'APIs globales', icon: Key },
   { id: 'security', label: 'Seguridad', icon: ShieldCheck },
 ];
@@ -249,7 +254,7 @@ function UsersTab() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold">Gestion de Usuarios</h2>
+          <h2 className="text-base font-semibold">Gestión de Usuarios</h2>
           <p className="text-[13px] text-muted-foreground mt-0.5">Administra los usuarios del CRM y sus roles</p>
         </div>
         <button
@@ -354,7 +359,7 @@ function UsersTab() {
                           </button>
                           {openMenuId === u.id && (
                             <>
-                              <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                              <div className="fixed inset-0 !m-0 z-40" onClick={() => setOpenMenuId(null)} />
                               <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-md border border-border py-1.5">
                                 <button
                                   onClick={() => handleOpenEdit(u)}
@@ -420,7 +425,7 @@ function UsersTab() {
                       </button>
                       {openMenuId === u.id && (
                         <>
-                          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                          <div className="fixed inset-0 !m-0 z-40" onClick={() => setOpenMenuId(null)} />
                           <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-md border border-border py-1.5">
                             <button onClick={() => handleOpenEdit(u)} className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] hover:bg-muted transition-colors">
                               <PencilSimple size={14} /> Editar rol
@@ -456,8 +461,8 @@ function UsersTab() {
       {/* Create User Dialog */}
       {showCreateDialog && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreateDialog(false)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreateDialog(false)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -490,7 +495,7 @@ function UsersTab() {
                 {projects.length > 0 && (
                   <div>
                     <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Proyectos asignados *</label>
-                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona al menos un proyecto al que tendra acceso</p>
+                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona al menos un proyecto al que tendrá acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
@@ -524,8 +529,8 @@ function UsersTab() {
       {/* Edit Role Dialog */}
       {editingUser && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingUser(null)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -560,7 +565,7 @@ function UsersTab() {
                 {projects.length > 0 && (
                   <div>
                     <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">Proyectos asignados</label>
-                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona los proyectos a los que tendra acceso</p>
+                    <p className="text-[11px] text-muted-foreground mb-2 px-1">Selecciona los proyectos a los que tendrá acceso</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {projects.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
@@ -656,7 +661,7 @@ function ProjectsTab() {
               </div>
               {canCreate && (
                 <div className="border-t border-border bg-muted/20 px-5 py-2.5 flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">Gestion completa del proyecto</span>
+                  <span className="text-[11px] text-muted-foreground">Gestión completa del proyecto</span>
                   <button onClick={() => setConfigProject(p)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 shadow">
                     <Gear size={13} weight="bold" /> Configurar
                   </button>
@@ -692,6 +697,7 @@ function CategoriesDialog({ project, onClose }) {
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newCat, setNewCat] = useState({ nombre: '', parent_id: '' });
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -721,14 +727,14 @@ function CategoriesDialog({ project, onClose }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar esta categoria? Los productos vinculados quedan sin categoria.')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await client.delete(`/product-categories/${id}`);
+      await client.delete(`/product-categories/${pendingDelete}`);
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setPendingDelete(null); }
   }
 
   const parents = cats.filter(c => !c.parent_id);
@@ -741,8 +747,8 @@ function CategoriesDialog({ project, onClose }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -801,6 +807,9 @@ function CategoriesDialog({ project, onClose }) {
           )}
         </div>
       </div>
+      <Suspense fallback={null}>
+        <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar categoría?" message="Los productos vinculados quedarán sin categoría." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
+      </Suspense>
     </Portal>
   );
 }
@@ -871,8 +880,8 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{existing ? 'Editar' : 'Nuevo'} proyecto</h2>
@@ -960,7 +969,7 @@ const FIELD_TYPES = [
   { v: 'textarea', label: 'Texto largo' },
   { v: 'number', label: 'Numero' },
   { v: 'date', label: 'Fecha' },
-  { v: 'select', label: 'Seleccion' },
+  { v: 'select', label: 'Selección' },
   { v: 'boolean', label: 'Si/No' },
 ];
 
@@ -971,6 +980,7 @@ function FieldDefsDialog({ project, onClose }) {
   const [editingId, setEditingId] = useState(null);
   const [editBuf, setEditBuf] = useState({});
   const [newField, setNewField] = useState({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1007,15 +1017,15 @@ function FieldDefsDialog({ project, onClose }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar este campo? Los datos existentes en prospectos se mantienen pero ya no se veran.')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await client.delete(`/field-definitions/${id}`);
+      await client.delete(`/field-definitions/${pendingDelete}`);
       toast({ title: 'Campo eliminado' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setPendingDelete(null); }
   }
 
   async function handleMove(idx, dir) {
@@ -1066,8 +1076,8 @@ function FieldDefsDialog({ project, onClose }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-3xl flex flex-col max-h-[92vh]">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -1097,7 +1107,7 @@ function FieldDefsDialog({ project, onClose }) {
                     <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={inputClass}>
                       {FIELD_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
                     </select>
-                    <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Seccion (opcional, ej: Academico)" className={inputClass} />
+                    <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Sección (opcional, ej: Académico)" className={inputClass} />
                     {newField.type === 'select' && (
                       <input value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={inputClass + ' col-span-2'} />
                     )}
@@ -1135,7 +1145,7 @@ function FieldDefsDialog({ project, onClose }) {
                             {isEditing ? (
                               <div className="grid grid-cols-2 gap-2">
                                 <input value={editBuf.label} onChange={e => setEditBuf({ ...editBuf, label: e.target.value })} className={inputClass + ' h-8'} placeholder="Etiqueta" />
-                                <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={inputClass + ' h-8'} placeholder="Seccion" />
+                                <input value={editBuf.grupo} onChange={e => setEditBuf({ ...editBuf, grupo: e.target.value })} className={inputClass + ' h-8'} placeholder="Sección" />
                                 {f.type === 'select' && (
                                   <input value={editBuf.options} onChange={e => setEditBuf({ ...editBuf, options: e.target.value })} className={inputClass + ' h-8 col-span-2'} placeholder="Opciones, separadas, por, coma" />
                                 )}
@@ -1219,6 +1229,9 @@ function FieldDefsDialog({ project, onClose }) {
           </div>
         </div>
       </div>
+      <Suspense fallback={null}>
+        <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar campo?" message="Los datos existentes en prospectos se mantienen pero ya no serán visibles." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
+      </Suspense>
     </Portal>
   );
 }
@@ -1272,7 +1285,7 @@ function WebhooksTab() {
             <p className="text-muted-foreground">Envia <code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_*</code> para crear un lead y asignarlo por round-robin automatico al gestor menos cargado.</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/40">
-            <p className="font-bold mb-1">Autenticacion</p>
+            <p className="font-bold mb-1">Autenticación</p>
             <p className="text-muted-foreground">Header <code className="font-mono text-[11px]">X-API-Key: &lt;clave&gt;</code> o <code className="font-mono text-[11px]">Authorization: Bearer &lt;clave&gt;</code>. Cada proyecto tiene su propia clave.</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/40">
@@ -1406,6 +1419,7 @@ function ApisTab() {
   const [loading, setLoading] = useState(true);
   const [dialogService, setDialogService] = useState(null);
   const [dialogProjectId, setDialogProjectId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -1435,15 +1449,15 @@ function ApisTab() {
     }
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Eliminar esta credencial?')) return;
+  function handleDelete(id) { setPendingDelete(id); }
+  async function doDelete() {
     try {
-      await client.delete(`/credentials/${id}`);
+      await client.delete(`/credentials/${pendingDelete}`);
       toast({ title: 'Credencial eliminada' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setPendingDelete(null); }
   }
 
   return (
@@ -1483,6 +1497,9 @@ function ApisTab() {
         existing={dialogService ? getCredFor(dialogService.service, dialogProjectId) : null}
         onSaved={load}
       />
+      <Suspense fallback={null}>
+        <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar credencial?" message="La credencial será eliminada permanentemente." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
+      </Suspense>
     </div>
   );
 }
@@ -1567,8 +1584,8 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-md p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -1641,12 +1658,12 @@ function SecurityTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-semibold">Seguridad</h2>
-        <p className="text-[13px] text-muted-foreground mt-0.5">Configuracion de seguridad del sistema</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">Configuración de seguridad del sistema</p>
       </div>
       <div className="space-y-3">
         {[
           { label: 'Encriptacion de credenciales API', value: 'AES-256-GCM', ok: true },
-          { label: 'Hash de contrasenas', value: 'bcrypt (cost factor 12)', ok: true },
+          { label: 'Hash de contraseñas', value: 'bcrypt (cost factor 12)', ok: true },
           { label: 'JWT Access Token TTL', value: '15 minutos', ok: true },
           { label: 'Refresh Token TTL', value: '30 dias (httpOnly cookie)', ok: true },
           { label: 'CORS', value: 'Por dominio de proyecto', ok: true },
@@ -1672,9 +1689,18 @@ function SecurityTab() {
   );
 }
 
+function FormsTab() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Cargando…</div>}>
+      <FormsPageEmbed />
+    </Suspense>
+  );
+}
+
 const TAB_CONTENT = {
   users: UsersTab,
   projects: ProjectsTab,
+  forms: FormsTab,
   apis: ApisTab,
   security: SecurityTab,
 };
@@ -1685,7 +1711,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Configuracion" subtitle="Ajustes del sistema y gestion de usuarios" />
+      <PageHeader title="Configuración" subtitle="Ajustes del sistema y gestión de usuarios" />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Sidebar */}

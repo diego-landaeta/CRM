@@ -3,8 +3,10 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 const TRIGGERS = [
   { v: 'lead_created', label: 'Cuando se crea un lead' },
@@ -18,6 +20,7 @@ export default function EmailSequencesPage() {
   const [sequences, setSequences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -43,10 +46,11 @@ export default function EmailSequencesPage() {
     try { await client.patch(`/email-sequences/${s.id}`, { active: !s.active }); load(); }
     catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function handleDelete(s) {
-    if (!confirm('Eliminar secuencia?')) return;
-    await client.delete(`/email-sequences/${s.id}`);
-    load();
+  function handleDelete(s) { setPendingDelete(s); }
+  async function doDelete() {
+    try { await client.delete(`/email-sequences/${pendingDelete.id}`); load(); }
+    catch (err) { /* silencioso */ }
+    finally { setPendingDelete(null); }
   }
 
   return (
@@ -61,7 +65,7 @@ export default function EmailSequencesPage() {
         }
       />
 
-      {loading ? <div className="text-center py-8 text-sm text-muted-foreground">Cargando...</div> :
+      {loading ? <SkeletonTable rows={3} columns={3} /> :
         sequences.length === 0 ? (
           <EmptyState icon={Envelope} title="Sin secuencias" description="Crea una para enviar emails de seguimiento automaticos" />
         ) : (
@@ -86,6 +90,7 @@ export default function EmailSequencesPage() {
         )}
 
       {editing && <SequenceEditor seq={editing} onSave={handleSave} onClose={() => setEditing(null)} />}
+      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar secuencia?" message="Se eliminará la secuencia y todos sus pasos." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
     </div>
   );
 }
@@ -102,7 +107,7 @@ function SequenceEditor({ seq, onSave, onClose }) {
   function removeStep(i) { setS({ ...s, steps: s.steps.filter((_, idx) => idx !== i) }); }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">{s.id ? 'Editar' : 'Nueva'} secuencia</h3>

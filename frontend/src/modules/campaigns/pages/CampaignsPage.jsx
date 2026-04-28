@@ -14,7 +14,7 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-6 pb-8">
       <PageHeader
-        title="Campanas Publicitarias"
+        title="Campañas Publicitarias"
         subtitle={activeProject ? `${activeProject.nombre} — Vista consolidada Meta + Google` : 'Selecciona un proyecto'}
       />
 

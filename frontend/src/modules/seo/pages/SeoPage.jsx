@@ -39,7 +39,7 @@ export default function SeoPage() {
   if (!activeProject) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Trafico organico" subtitle="Selecciona un proyecto para ver datos de Google Search Console" />
+        <PageHeader title="Tráfico orgánico" subtitle="Selecciona un proyecto para ver datos de Google Search Console" />
         <EmptyState icon={Globe} title="Sin proyecto" description="Elige un proyecto del selector lateral" />
       </div>
     );
@@ -48,7 +48,7 @@ export default function SeoPage() {
   return (
     <div className="space-y-6 pb-8">
       <PageHeader
-        title="Trafico organico"
+        title="Tráfico orgánico"
         subtitle={`${activeProject.nombre} — Google Search Console`}
       />
 
@@ -115,7 +115,7 @@ export default function SeoPage() {
           {/* Grafica consolidada: organico + pagado + leads */}
           <div className="bg-card border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-1 gap-3">
-              <h3 className="font-semibold">Trafico organico vs pagado vs leads</h3>
+              <h3 className="font-semibold">Tráfico orgánico vs pagado vs leads</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-4">Evolucion mensual ultimos 12 meses (organic GSC + paid Meta+Google)</p>
             {seo.consolidated.months.length === 0 ? (
@@ -130,7 +130,7 @@ export default function SeoPage() {
                   <Tooltip contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
                     formatter={(v, name) => [fmtNum(v), name]} labelFormatter={fmtMes} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                  <Line yAxisId="left" type="monotone" dataKey="organicTraffic" name="Organico" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="organicTraffic" name="Orgánico" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} />
                   <Line yAxisId="left" type="monotone" dataKey="paidTraffic" name="Pagado (Meta+Google)" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
                   <Line yAxisId="right" type="monotone" dataKey="totalLeads" name="Prospectos CRM" stroke="#8b5cf6" strokeWidth={2} dot={{ fill: '#8b5cf6', r: 3 }} strokeDasharray="4 3" />
                 </LineChart>

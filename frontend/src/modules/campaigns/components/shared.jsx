@@ -175,7 +175,7 @@ export function CampaignTable({ campaigns, statusStyles, statusLabel, getSubLabe
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-[11px] text-muted-foreground">
             <tr>
-              <th className="text-left px-4 py-2.5 font-bold">Campana</th>
+              <th className="text-left px-4 py-2.5 font-bold">Campaña</th>
               <th className="text-left px-4 py-2.5 font-bold">Estado</th>
               <th className="text-right px-4 py-2.5 font-bold">Gasto</th>
               <th className="text-right px-4 py-2.5 font-bold">Clicks</th>

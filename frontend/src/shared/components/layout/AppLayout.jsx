@@ -6,6 +6,9 @@ import CommandPalette from './CommandPalette';
 import { List, X } from '@phosphor-icons/react';
 
 const AIChatTrigger = lazy(() => import('@/modules/ai-chat/components/AIChatTrigger'));
+const ChannelPanel = lazy(() => import('./ChannelPanel'));
+const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
+const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -61,6 +64,15 @@ export default function AppLayout() {
       <CommandPalette />
       <Suspense fallback={null}>
         <AIChatTrigger />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ChannelPanel />
+      </Suspense>
+      <Suspense fallback={null}>
+        <PWAInstallPrompt />
+      </Suspense>
+      <Suspense fallback={null}>
+        <PWAUpdatePrompt />
       </Suspense>
     </div>
   );

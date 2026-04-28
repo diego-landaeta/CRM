@@ -31,6 +31,7 @@ import {
   PencilSimple,
   X,
   ArrowCounterClockwise,
+  DownloadSimple,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -75,14 +76,40 @@ function formatRelative(dateStr, { future = false } = {}) {
   const diffDays = Math.round(diffMs / 86400000);
   if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
   if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'manana' : 'ayer';
+  if (diffDays === 1) return future ? 'mañana' : 'ayer';
   if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)}sem` : `hace ${Math.round(diffDays / 7)}sem`;
+  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
 function cleanPhone(phone) {
   return (phone || '').replace(/[^\d]/g, '');
+}
+
+function exportLeadsCSV(leads, filename) {
+  const STATUS_LABELS_ES = { nuevo: 'Nuevo', por_contactar: 'Por contactar', contactado: 'Contactado', en_seguimiento: 'En seguimiento', convertido: 'Convertido', no_interesado: 'No interesado' };
+  const rows = [
+    ['Nombre', 'Email', 'Teléfono', 'Estado', 'Canal', 'Responsable', 'Producto interés', 'Notas', 'Creado', 'Último contacto', 'Próximo recordatorio'],
+    ...leads.map(l => [
+      l.nombre || '',
+      l.email || '',
+      l.telefono || '',
+      STATUS_LABELS_ES[l.estado] || l.estado || '',
+      l.canal || '',
+      l.responsable_nombre || '',
+      l.producto_interes || '',
+      l.notas || '',
+      l.created_at ? new Date(l.created_at).toLocaleDateString('es-ES') : '',
+      l.last_interaction_at ? new Date(l.last_interaction_at).toLocaleDateString('es-ES') : '',
+      l.next_reminder_at ? new Date(l.next_reminder_at).toLocaleDateString('es-ES') : '',
+    ]),
+  ];
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder, templates, projectName, onEditTemplates }) {
@@ -115,7 +142,7 @@ function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCr
           </button>
           {waMenuOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setWaMenuOpen(false)} />
+              <div className="fixed inset-0 !m-0 z-30" onClick={() => setWaMenuOpen(false)} />
               <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-md py-1 min-w-60 z-40" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}>
                 <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Plantillas</div>
                 <button
@@ -191,7 +218,7 @@ function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
 
   useEffect(() => {
     if (open) {
-      // Default: manana a las 10am
+      // Default: mañana a las 10am
       const tomorrow = new Date(Date.now() + 86400000);
       setFecha(tomorrow.toISOString().slice(0, 10));
       setHora('10:00');
@@ -218,8 +245,8 @@ function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
 
   return (
     <Suspense fallback={null}>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
             <div className="w-9 h-9 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
@@ -517,7 +544,6 @@ export default function LeadsPage() {
       refetch();
     } catch (err) {
       // Silent fail — el link igual abre, no queremos bloquear al usuario
-      console.warn('No se pudo registrar interaccion:', err);
     }
   }
 
@@ -604,7 +630,7 @@ export default function LeadsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold">Gestion de Prospectos</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold">Gestión de Prospectos</h1>
           <p className="text-muted-foreground text-sm">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -621,6 +647,16 @@ export default function LeadsPage() {
             <Export size={16} weight="bold" />
             Audiencias
           </button>
+          {filteredLeads.length > 0 && (
+            <button
+              onClick={() => exportLeadsCSV(filteredLeads, `prospectos-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}.csv`)}
+              title="Exportar CSV"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <DownloadSimple size={16} weight="bold" />
+              CSV
+            </button>
+          )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <div className="relative">
               <button
@@ -704,7 +740,7 @@ export default function LeadsPage() {
           <option value="meta_ads">Meta Ads</option>
           <option value="google_ads">Google Ads</option>
           <option value="tiktok_ads">TikTok Ads</option>
-          <option value="organico">Organico</option>
+          <option value="organico">Orgánico</option>
           <option value="chatgpt_ia">ChatGPT IA</option>
           <option value="referido">Referido</option>
           <option value="directo">Directo</option>
@@ -1152,7 +1188,7 @@ function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, pr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b">
           <div>

@@ -86,8 +86,8 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
 
   return (
     <Portal>
-    <div role="dialog" aria-label={isEdit ? `Editar ${productoLabel}` : `Nuevo ${productoLabel}`} className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+    <div role="dialog" aria-label={isEdit ? `Editar ${productoLabel}` : `Nuevo ${productoLabel}`} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+      <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-card rounded-lg border border-border w-full max-w-2xl mx-4 p-4 sm:p-7 overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -109,10 +109,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             </Field>
           </div>
 
-          <Field label="Descripcion" error={errors.descripcion?.message}>
+          <Field label="Descripción" error={errors.descripcion?.message}>
             <textarea
               {...register('descripcion')}
-              placeholder="Descripcion corta..."
+              placeholder="Descripción corta..."
               rows={2}
               className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
             />

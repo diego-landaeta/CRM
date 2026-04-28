@@ -1,10 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { Globe, Plus, Trash, Copy, X, FloppyDisk, Code, PlugsConnected, Ear, EarSlash, Users, GraduationCap, Power } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
 const KINDS = [
   { v: 'contacto_basico', label: 'Contacto basico (nombre + email + telefono)' },
@@ -14,7 +17,7 @@ const KINDS = [
 
 const DESTINATIONS = [
   { v: 'lead', label: 'Lead / Prospecto', icon: Users, desc: 'Crea un lead en el embudo (round-robin de gestores)' },
-  { v: 'matricula', label: 'Matricula', icon: GraduationCap, desc: 'Crea una solicitud de admision en estado pendiente de validacion' },
+  { v: 'matricula', label: 'Matrícula', icon: GraduationCap, desc: 'Crea una solicitud de admisión en estado pendiente de validación' },
 ];
 
 export default function FormsPage() {
@@ -24,6 +27,7 @@ export default function FormsPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [embedFor, setEmbedFor] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -45,8 +49,20 @@ export default function FormsPage() {
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
   async function handleDelete(f) {
-    if (!confirm('Eliminar form?')) return;
-    await client.delete(`/forms/${f.id}`); load();
+    setDeleteTarget(f);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      await client.delete(`/forms/${deleteTarget.id}`);
+      toast({ title: 'Eliminado' });
+      load();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   async function toggleListen(f) {
@@ -88,7 +104,7 @@ export default function FormsPage() {
         </button>
       </div>
 
-      {loading ? <div className="text-center py-8 text-sm text-muted-foreground">Cargando...</div> :
+      {loading ? <SkeletonTable rows={3} columns={3} /> :
         filtered.length === 0 ? (
           <EmptyState icon={tab === 'form' ? Globe : PlugsConnected} title={tab === 'form' ? 'Sin forms' : 'Sin webhooks'} description={tab === 'form' ? 'Crea uno y embebelo en tu landing' : 'Crea un webhook para recibir leads desde sistemas externos'} />
         ) : (
@@ -145,6 +161,17 @@ export default function FormsPage() {
 
       {editing && <FormEditor form={editing} onSave={handleSave} onClose={() => setEditing(null)} />}
       {embedFor && <EmbedDialog form={embedFor} onClose={() => setEmbedFor(null)} />}
+      <Suspense fallback={null}>
+        <ConfirmDialog
+          open={!!deleteTarget}
+          title="Eliminar form"
+          message={`¿Eliminar "${deleteTarget?.nombre}"? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar"
+          tone="destructive"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -208,7 +235,7 @@ function FormEditor({ form, onSave, onClose }) {
   const url = f.embed_id ? `${window.location.origin}/testeo_crm/api/forms/webhook/${f.embed_id}` : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">{f.id ? 'Editar' : 'Nuevo'} {isWebhook ? 'webhook' : 'form'}</h3>
@@ -342,7 +369,7 @@ function EmbedDialog({ form, onClose }) {
     const samplePayload = JSON.stringify({ nombre: 'Juan', email: 'juan@ej.com', telefono: '+34600000000' }, null, 2);
     const curlEx = `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify({ nombre: 'Juan', email: 'juan@ej.com' })}'`;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
         <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h3 className="font-extrabold">Webhook: {form.nombre}</h3>
@@ -379,7 +406,7 @@ function EmbedDialog({ form, onClose }) {
   const iframeHtml = `<iframe src="${iframeSrc}" width="100%" height="500" frameborder="0"></iframe>`;
   const scriptHtml = `<div id="crm-form-${form.embed_id}"></div>\n<script src="${window.location.origin}/embed/form.js" data-form-id="${form.embed_id}"></script>`;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">Embed: {form.nombre}</h3>
@@ -398,7 +425,7 @@ function EmbedDialog({ form, onClose }) {
             <p className="font-bold uppercase text-muted-foreground mb-1">Script (Shadow DOM)</p>
             <div className="flex gap-2"><code className="flex-1 p-2 bg-muted/40 rounded overflow-x-auto whitespace-pre">{scriptHtml}</code><button onClick={() => copy(scriptHtml)} className="p-2 rounded bg-muted"><Copy size={12} /></button></div>
           </div>
-          <p className="text-muted-foreground italic">Embed JS y pagina iframe pendientes; el endpoint API ya funciona y puedes integrarlo desde JS propio.</p>
+          <p className="text-muted-foreground italic">Embed JS y página iframe pendientes; el endpoint API ya funciona y puedes integrarlo desde JS propio.</p>
         </div>
       </div>
     </div>

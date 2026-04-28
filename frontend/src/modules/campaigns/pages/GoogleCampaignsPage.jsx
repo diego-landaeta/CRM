@@ -20,7 +20,7 @@ export default function GoogleCampaignsPage() {
   return (
     <div className="space-y-6 pb-8">
       <PageHeader
-        title="Campanas Google Ads"
+        title="Campañas Google Ads"
         subtitle={activeProject ? `${activeProject.nombre} — Search + PMax + Display` : 'Selecciona un proyecto'}
       />
 
@@ -44,8 +44,8 @@ export default function GoogleCampaignsPage() {
             {google.error ? (
               <ErrorState message={google.error} />
             ) : google.campaigns.length === 0 ? (
-              <EmptyState icon={GoogleLogo} title="Sin campanas Google"
-                description={activeProject ? `No hay campanas activas en este periodo para ${activeProject.nombre}` : 'Selecciona un proyecto'} />
+              <EmptyState icon={GoogleLogo} title="Sin campañas Google"
+                description={activeProject ? `No hay campañas activas en este periodo para ${activeProject.nombre}` : 'Selecciona un proyecto'} />
             ) : (
               <CampaignTable
                 campaigns={google.campaigns}

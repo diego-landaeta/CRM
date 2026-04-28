@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { LEADS } from '@/shared/data/mock';
+import client from '@/shared/api/client';
 import {
   MagnifyingGlass,
   SquaresFour,
@@ -33,20 +33,21 @@ const SECTIONS = [
   { label: 'Crear audiencia', to: '/leads/audiences', icon: Export },
   { label: 'Clientes', to: '/clients', icon: UserCheck },
   { label: 'Productos', to: '/products', icon: Package },
-  { label: 'Campanas — Consolidado', to: '/campaigns', icon: Megaphone },
-  { label: 'Campanas — Meta Ads', to: '/campaigns/meta', icon: FacebookLogo },
-  { label: 'Campanas — Google Ads', to: '/campaigns/google', icon: GoogleLogo },
-  { label: 'Trafico organico (SEO)', to: '/seo', icon: MagnifyingGlass },
+  { label: 'Campañas — Consolidado', to: '/campaigns', icon: Megaphone },
+  { label: 'Campañas — Meta Ads', to: '/campaigns/meta', icon: FacebookLogo },
+  { label: 'Campañas — Google Ads', to: '/campaigns/google', icon: GoogleLogo },
+  { label: 'Tráfico orgánico (SEO)', to: '/seo', icon: MagnifyingGlass },
   { label: 'Dashboard IA', to: '/ia-dashboard', icon: Robot },
   { label: 'Reportes IA', to: '/reports-ia', icon: Sparkle },
   { label: 'Contabilidad', to: '/accounting', icon: Calculator },
   { label: 'Ingresos', to: '/accounting/income', icon: CurrencyEur },
+  { label: 'Conversiones y pagos', to: '/revenue', icon: CurrencyEur },
   { label: 'Egresos', to: '/accounting/expenses', icon: Receipt },
   { label: 'Cuentas por cobrar', to: '/accounting/receivable', icon: Wallet },
   { label: 'Cuentas por pagar', to: '/accounting/payable', icon: Wallet },
   { label: 'Comisiones', to: '/commissions', icon: Coins },
   { label: 'Reportes', to: '/reports', icon: ChartBar },
-  { label: 'Configuracion', to: '/settings', icon: Gear },
+  { label: 'Configuración', to: '/settings', icon: Gear },
 ];
 
 export default function CommandPalette() {
@@ -76,19 +77,33 @@ export default function CommandPalette() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const leads = LEADS[activeProject.id] || [];
+  const [leadResults, setLeadResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  const searchLeads = useCallback(async (q) => {
+    if (!q || !activeProject?.id) { setLeadResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(q)}&limit=5`);
+      setLeadResults(res.success ? (res.data || []) : []);
+    } catch {
+      setLeadResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, [activeProject?.id]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchLeads(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query, searchLeads]);
 
   const results = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (!q) return { sections: SECTIONS.slice(0, 8), leads: [] };
-
     const matchedSections = SECTIONS.filter((s) => s.label.toLowerCase().includes(q));
-    const matchedLeads = leads.filter((l) =>
-      l.nombre.toLowerCase().includes(q) || l.email.toLowerCase().includes(q)
-    ).slice(0, 5);
-
-    return { sections: matchedSections, leads: matchedLeads };
-  }, [query, leads]);
+    return { sections: matchedSections, leads: leadResults };
+  }, [query, leadResults]);
 
   const allResults = [
     ...results.sections.map((s) => ({ type: 'section', ...s })),
@@ -120,7 +135,7 @@ export default function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-label="Busqueda rapida" className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
+    <div role="dialog" aria-label="Búsqueda rápida" className="fixed inset-0 !m-0 z-[60] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div className="relative bg-card rounded-lg border border-border  w-full max-w-lg mx-4 overflow-hidden">
         {/* Search input */}
@@ -144,11 +159,13 @@ export default function CommandPalette() {
 
         {/* Results */}
         <div id="command-palette-results" role="listbox" className="max-h-[320px] overflow-y-auto p-2">
-          {allResults.length === 0 ? (
+          {searching ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Buscando...</div>
+          ) : allResults.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No se encontraron resultados para "{query}"
+              No se encontraron resultados para &quot;{query}&quot;
             </div>
-          ) : (
+          ) : !searching && (
             <>
               {results.sections.length > 0 && (
                 <div className="mb-1">
@@ -206,6 +223,7 @@ export default function CommandPalette() {
             </>
           )}
         </div>
+
 
         {/* Footer */}
         <div className="px-4 py-2.5 border-t border-border flex items-center gap-4 text-[10px] text-muted-foreground">

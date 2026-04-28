@@ -4,6 +4,7 @@ import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle } from '@phosphor-icons/react';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 function formatCurrency(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -19,6 +20,8 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogConv, setPaymentDialogConv] = useState(null);
+  const [pendingPayment, setPendingPayment] = useState(null);
+  const [pendingConversion, setPendingConversion] = useState(null);
 
   async function load() {
     if (!lead?.id) return;
@@ -26,8 +29,8 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
     try {
       const res = await conversionsApi.byLead(lead.id);
       if (res.success) setConversions(res.data);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // silencioso — la tab mostrará estado vacío
     } finally {
       setLoading(false);
     }
@@ -35,26 +38,26 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
 
   useEffect(() => { load(); }, [lead?.id]);
 
-  async function handleDeletePayment(paymentId) {
-    if (!confirm('Eliminar este pago? Se recalculara el total.')) return;
+  function handleDeletePayment(paymentId) { setPendingPayment(paymentId); }
+  async function doDeletePayment() {
     try {
-      await conversionsApi.removePayment(paymentId);
+      await conversionsApi.removePayment(pendingPayment);
       toast({ title: 'Pago eliminado' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
-    }
+    } finally { setPendingPayment(null); }
   }
 
-  async function handleDeleteConversion(id) {
-    if (!confirm('Eliminar esta conversion y todos sus pagos? Esta accion no se puede deshacer.')) return;
+  function handleDeleteConversion(id) { setPendingConversion(id); }
+  async function doDeleteConversion() {
     try {
-      await conversionsApi.remove(id);
+      await conversionsApi.remove(pendingConversion);
       toast({ title: 'Conversion eliminada' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
-    }
+    } finally { setPendingConversion(null); }
   }
 
   if (loading) {
@@ -198,6 +201,8 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
         conversion={paymentDialogConv}
         onPaid={() => load()}
       />
+      <ConfirmDialog open={pendingPayment !== null} title="¿Eliminar pago?" message="Se recalculará el total de la conversión." onConfirm={doDeletePayment} onCancel={() => setPendingPayment(null)} />
+      <ConfirmDialog open={pendingConversion !== null} title="¿Eliminar conversión?" message="Se eliminarán todos sus pagos. Esta acción no se puede deshacer." onConfirm={doDeleteConversion} onCancel={() => setPendingConversion(null)} />
     </div>
   );
 }

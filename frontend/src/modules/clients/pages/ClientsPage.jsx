@@ -5,8 +5,33 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import {
-  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart,
+  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple,
 } from '@phosphor-icons/react';
+
+function exportCSV(clients, filename) {
+  const fmtNum = n => Number(n || 0).toFixed(2);
+  const rows = [
+    ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
+    ...clients.map(c => [
+      c.nombre || '',
+      c.email || '',
+      c.telefono || '',
+      c.responsable_nombre || '',
+      c.conversiones,
+      fmtNum(c.total_compras),
+      fmtNum(c.total_pagado),
+      fmtNum(c.pendiente),
+      c.ultima_compra ? new Date(c.ultima_compra).toLocaleDateString('es-ES') : '',
+      c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleDateString('es-ES') : '',
+    ]),
+  ];
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 import { toast } from '@/shared/hooks/useToast';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
@@ -23,9 +48,9 @@ function formatRelative(dateStr, { future = false } = {}) {
   const diffDays = Math.round(diffMs / 86400000);
   if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
   if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'manana' : 'ayer';
+  if (diffDays === 1) return future ? 'mañana' : 'ayer';
   if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)}sem` : `hace ${Math.round(diffDays / 7)}sem`;
+  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
@@ -164,14 +189,23 @@ export default function ClientsPage() {
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-border flex gap-2">
           <input
             type="search"
             placeholder="Buscar por nombre o email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary"
+            className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary"
           />
+          {filtered.length > 0 && (
+            <button
+              onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
+              title="Exportar CSV"
+              className="h-10 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
+            >
+              <DownloadSimple size={14} weight="bold" /> CSV
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -197,7 +231,7 @@ export default function ClientsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/leads/${c.id}`)}>
+                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{c.nombre}</div>
                         <div className="text-xs text-muted-foreground">{c.responsable_nombre || '—'}</div>
@@ -230,7 +264,7 @@ export default function ClientsPage() {
               {filtered.map((c) => (
                 <div
                   key={c.id}
-                  onClick={() => navigate(`/leads/${c.id}`)}
+                  onClick={() => navigate(`/clients/${c.id}`)}
                   className="p-4 space-y-2 cursor-pointer active:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">

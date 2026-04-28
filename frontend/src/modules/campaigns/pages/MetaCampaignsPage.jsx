@@ -20,7 +20,7 @@ export default function MetaCampaignsPage() {
   return (
     <div className="space-y-6 pb-8">
       <PageHeader
-        title="Campanas Meta Ads"
+        title="Campañas Meta Ads"
         subtitle={activeProject ? `${activeProject.nombre} — Facebook + Instagram Ads` : 'Selecciona un proyecto'}
       />
 
@@ -44,8 +44,8 @@ export default function MetaCampaignsPage() {
             {meta.error ? (
               <ErrorState message={meta.error} />
             ) : meta.campaigns.length === 0 ? (
-              <EmptyState icon={FacebookLogo} title="Sin campanas Meta"
-                description={activeProject ? `No hay campanas activas en este periodo para ${activeProject.nombre}` : 'Selecciona un proyecto'} />
+              <EmptyState icon={FacebookLogo} title="Sin campañas Meta"
+                description={activeProject ? `No hay campañas activas en este periodo para ${activeProject.nombre}` : 'Selecciona un proyecto'} />
             ) : (
               <CampaignTable
                 campaigns={meta.campaigns}

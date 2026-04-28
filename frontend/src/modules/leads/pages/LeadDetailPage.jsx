@@ -341,8 +341,8 @@ export default function LeadDetailPage() {
       {/* Dialog motivo perdida */}
       {lossOpen && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setLossOpen(false)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setLossOpen(false)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm p-6">
               <h2 className="text-lg font-semibold mb-1">Motivo de perdida</h2>
               <p className="text-muted-foreground text-sm mb-5">Este campo es obligatorio al marcar un lead como no interesado.</p>
@@ -375,8 +375,8 @@ export default function LeadDetailPage() {
       {/* Dialog reasignar gestor */}
       {reassignOpen && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setReassignOpen(false)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setReassignOpen(false)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md p-6">
               <div className="flex items-center justify-between mb-5">
                 <div>
@@ -420,8 +420,8 @@ export default function LeadDetailPage() {
       {/* Dialog nueva interaccion */}
       {interactionOpen && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setInteractionOpen(false)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setInteractionOpen(false)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md p-6">
               <h2 className="text-lg font-semibold mb-1">Nueva Interaccion</h2>
               <p className="text-muted-foreground text-sm mb-5">Registra un contacto con este lead</p>
@@ -472,8 +472,8 @@ export default function LeadDetailPage() {
       {/* Dialog nuevo recordatorio */}
       {reminderOpen && (
         <Portal>
-          <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setReminderOpen(false)} />
+          <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+            <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={() => setReminderOpen(false)} />
             <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-md p-6">
               <h2 className="text-lg font-semibold mb-1">Programar Recordatorio</h2>
               <p className="text-muted-foreground text-sm mb-5">Establece una fecha y nota para el recordatorio</p>
@@ -567,7 +567,7 @@ export default function LeadDetailPage() {
           {/* Info del Lead - Editable */}
           <div className="bg-card p-6 rounded-lg border border-border">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-semibold">Informacion del Lead</h3>
+              <h3 className="font-semibold">Información del Lead</h3>
               {!editMode ? (
                 <button
                   onClick={() => setEditMode(true)}
@@ -820,9 +820,9 @@ export default function LeadDetailPage() {
             </button>
           </div>
 
-          {/* Acciones rapidas */}
+          {/* Acciones rápidas */}
           <div className="bg-card p-5 rounded-lg border border-border">
-            <h3 className="text-[13px] font-semibold mb-3">Acciones rapidas</h3>
+            <h3 className="text-[13px] font-semibold mb-3">Acciones rápidas</h3>
             <div className="space-y-2">
               <button
                 onClick={() => setInteractionOpen(true)}

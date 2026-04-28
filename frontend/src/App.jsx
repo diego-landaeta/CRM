@@ -1,5 +1,55 @@
-import { Routes, Route } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+
+const ROUTE_TITLES = {
+  '/': 'Dashboard',
+  '/leads': 'Prospectos',
+  '/leads/pipeline': 'Pipeline',
+  '/leads/audiences': 'Audiencias',
+  '/clients': 'Clientes',
+  '/products': 'Productos',
+  '/campaigns': 'Campañas',
+  '/campaigns/meta': 'Meta Ads',
+  '/campaigns/google': 'Google Ads',
+  '/seo': 'Tráfico orgánico',
+  '/revenue': 'Conversiones',
+  '/soporte': 'Soporte',
+  '/status': 'Estado del sistema',
+  '/notificaciones': 'Notificaciones',
+  '/accounting': 'Contabilidad',
+  '/accounting/income': 'Ingresos',
+  '/accounting/expenses': 'Egresos',
+  '/accounting/receivable': 'Cuentas por cobrar',
+  '/accounting/payable': 'Cuentas por pagar',
+  '/commissions': 'Comisiones',
+  '/matriculas': 'Matrículas',
+  '/email-sequences': 'Email seguimiento',
+  '/forms': 'Forms y Webhooks',
+  '/payroll': 'Nóminas',
+  '/woocommerce': 'WooCommerce',
+  '/reports': 'Reportes',
+  '/manual': 'Manual',
+  '/settings': 'Configuración',
+  '/profile': 'Mi perfil',
+};
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
+function DocumentTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const base = 'MultiCRM';
+    const match = Object.keys(ROUTE_TITLES)
+      .sort((a, b) => b.length - a.length)
+      .find(k => pathname === k || pathname.startsWith(k + '/'));
+    document.title = match ? `${ROUTE_TITLES[match]} — ${base}` : base;
+  }, [pathname]);
+  return null;
+}
 
 // Layout
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -24,9 +74,10 @@ const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage
 const MetaCampaignsPage = lazy(() => import('./modules/campaigns/pages/MetaCampaignsPage'));
 const GoogleCampaignsPage = lazy(() => import('./modules/campaigns/pages/GoogleCampaignsPage'));
 const SeoPage = lazy(() => import('./modules/seo/pages/SeoPage'));
-const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
-const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
+const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
+const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
+const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
@@ -35,6 +86,7 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
+const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetailPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
@@ -43,11 +95,15 @@ const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
+const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 
 function App() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>}>
+      <ScrollToTop />
+      <DocumentTitle />
       <Routes>
+        <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -62,8 +118,6 @@ function App() {
           <Route path="/campaigns/meta" element={<MetaCampaignsPage />} />
           <Route path="/campaigns/google" element={<GoogleCampaignsPage />} />
           <Route path="/seo" element={<SeoPage />} />
-          <Route path="/ia-dashboard" element={<IADashboardPage />} />
-          <Route path="/reports-ia" element={<ReportsIAPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />
           <Route path="/accounting/income" element={<IncomePage />} />
@@ -71,6 +125,7 @@ function App() {
           <Route path="/accounting/receivable" element={<ReceivablePage />} />
           <Route path="/accounting/payable" element={<AccountsPayablePage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
           <Route path="/email-sequences" element={<EmailSequencesPage />} />
@@ -78,6 +133,9 @@ function App() {
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/soporte" element={<SoportePage />} />
+          <Route path="/status" element={<StatusPage />} />
+          <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
