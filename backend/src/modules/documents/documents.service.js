@@ -10,13 +10,29 @@ async function ensureDir() {
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
 }
 
+const CHROME_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-background-networking'];
+
+async function newPage(browser) {
+  const page = await browser.newPage();
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const url = req.url();
+    if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
+      req.abort();
+    } else {
+      req.continue();
+    }
+  });
+  return page;
+}
+
 async function htmlToPdf(html, filename) {
   await ensureDir();
   const filePath = path.join(UPLOAD_DIR, filename);
-  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: CHROME_ARGS });
   try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const page = await newPage(browser);
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.pdf({ path: filePath, printBackground: true, format: 'A4' });
   } finally {
     await browser.close();
@@ -27,10 +43,10 @@ async function htmlToPdf(html, filename) {
 async function htmlToPdfLandscape(html, filename) {
   await ensureDir();
   const filePath = path.join(UPLOAD_DIR, filename);
-  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: CHROME_ARGS });
   try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const page = await newPage(browser);
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.pdf({ path: filePath, printBackground: true, format: 'A4', landscape: true });
   } finally {
     await browser.close();
@@ -748,14 +764,14 @@ export async function generateInvoicePdf(data, filename) {
 export async function generateCertificatePdf(data, filename) {
   await ensureDir();
   const filePath = path.join(UPLOAD_DIR, filename);
-  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  const browser = await puppeteer.launch({ headless: 'new', executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: CHROME_ARGS });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     // Página 1
-    await page.setContent(buildCertP1Html(data), { waitUntil: 'networkidle0' });
+    await page.setContent(buildCertP1Html(data), { waitUntil: 'domcontentloaded', timeout: 15000 });
     const p1 = await page.pdf({ printBackground: true, format: 'A4', landscape: true });
     // Página 2
-    await page.setContent(buildCertP2Html(data), { waitUntil: 'networkidle0' });
+    await page.setContent(buildCertP2Html(data), { waitUntil: 'domcontentloaded', timeout: 15000 });
     const p2 = await page.pdf({ printBackground: true, format: 'A4', landscape: true });
 
     // Merge PDFs con pdf-lib

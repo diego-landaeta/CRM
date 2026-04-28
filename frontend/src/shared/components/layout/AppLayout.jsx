@@ -1,5 +1,5 @@
 import { useState, Suspense, lazy } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
 import CommandPalette from './CommandPalette';
@@ -12,6 +12,8 @@ const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
+  const hideFloating = pathname.startsWith('/documentos');
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,12 +64,16 @@ export default function AppLayout() {
 
       <Toaster />
       <CommandPalette />
-      <Suspense fallback={null}>
-        <AIChatTrigger />
-      </Suspense>
-      <Suspense fallback={null}>
-        <ChannelPanel />
-      </Suspense>
+      {!hideFloating && (
+        <Suspense fallback={null}>
+          <AIChatTrigger />
+        </Suspense>
+      )}
+      {!hideFloating && (
+        <Suspense fallback={null}>
+          <ChannelPanel />
+        </Suspense>
+      )}
       <Suspense fallback={null}>
         <PWAInstallPrompt />
       </Suspense>
