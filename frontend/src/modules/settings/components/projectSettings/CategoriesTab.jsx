@@ -1,0 +1,116 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, X, Tag } from '@phosphor-icons/react';
+import client from '@/shared/api/client';
+import { toast } from '@/shared/hooks/useToast';
+import { SectionTitle, useConfirm, inputClass } from './shared';
+
+export default function CategoriesTab({ project }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newCat, setNewCat] = useState({ nombre: '', parent_id: '' });
+  const productoLabel = project.producto_label_plural?.toLowerCase() || 'productos';
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get(`/product-categories/project/${project.id}`);
+      if (res.success) setCats(res.data || []);
+    } finally { setLoading(false); }
+  }, [project.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!newCat.nombre.trim()) return;
+    try {
+      await client.post('/product-categories', {
+        project_id: project.id,
+        parent_id: newCat.parent_id ? Number(newCat.parent_id) : null,
+        nombre: newCat.nombre.trim(),
+        orden: cats.length,
+      });
+      toast({ title: 'Categoria creada' });
+      setNewCat({ nombre: '', parent_id: '' });
+      await load();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    }
+  }
+
+  function handleDelete(id) {
+    ask('Eliminar categoría', `¿Eliminar esta categoría? Los ${productoLabel} quedan sin categoría pero no se borran.`, async () => {
+      try {
+        await client.delete(`/product-categories/${id}`);
+        await load();
+      } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    });
+  }
+
+  const parents = cats.filter(c => !c.parent_id);
+  const childrenByParent = cats.reduce((acc, c) => {
+    if (c.parent_id) (acc[c.parent_id] = acc[c.parent_id] || []).push(c);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <SectionTitle title="Categorias y subcategorias" subtitle={`Organiza ${productoLabel} en grupos (ej: Cursos, Presenciales, Talleres)`} />
+
+      <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
+        <p className="text-[11px] font-medium text-muted-foreground">Añadir categoría</p>
+        <div className="flex gap-2">
+          <input value={newCat.nombre} onChange={e => setNewCat({ ...newCat, nombre: e.target.value })} placeholder="Nombre" className={inputClass + ' flex-1'} required />
+          <select value={newCat.parent_id} onChange={e => setNewCat({ ...newCat, parent_id: e.target.value })} className={inputClass + ' flex-1'}>
+            <option value="">Categoria raiz</option>
+            {parents.map(p => <option key={p.id} value={p.id}>Subcategoria de: {p.nombre}</option>)}
+          </select>
+          <button type="submit" className="px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 flex items-center gap-1">
+            <Plus size={14} weight="bold" /> Añadir
+          </button>
+        </div>
+      </form>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : parents.length === 0 ? (
+        <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
+          <Tag size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
+          <p className="text-sm font-semibold">Sin categorias</p>
+          <p className="text-xs text-muted-foreground mt-1">Crea una categoria para empezar a organizar tus {productoLabel}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {parents.map(p => (
+            <div key={p.id} className="bg-card border border-border rounded-md p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tag size={14} className="text-primary" weight="fill" />
+                  <span className="font-bold text-sm">{p.nombre}</span>
+                  {childrenByParent[p.id]?.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      {childrenByParent[p.id].length} subcategoria{childrenByParent[p.id].length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => handleDelete(p.id)} aria-label="Eliminar" className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
+              </div>
+              {childrenByParent[p.id]?.length > 0 && (
+                <div className="mt-2 ml-5 space-y-1 border-l border-border pl-3">
+                  {childrenByParent[p.id].map(c => (
+                    <div key={c.id} className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>— {c.nombre}</span>
+                      <button onClick={() => handleDelete(c.id)} aria-label="Eliminar" className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {confirmDialog}
+    </div>
+  );
+}
