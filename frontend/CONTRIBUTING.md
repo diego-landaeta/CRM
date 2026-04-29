@@ -26,6 +26,7 @@ Workflow para añadir features sin romper convenciones.
 - Localiza el modulo correcto en `src/modules/<dominio>/`
 - ¿Existe ya una pagina/componente similar? Reusa el pattern
 - ¿Necesitas un componente UI nuevo? Mira primero `src/shared/components/ui/README.md`
+- ¿TypeScript? El repo soporta JS y TS lado a lado (`allowJs: true`). Mira la sección [TypeScript](#typescript) abajo antes de empezar un módulo nuevo.
 
 **Mientras codeas:**
 - Mantén componentes < 400 lineas. Si pasas, splittea
@@ -49,6 +50,7 @@ Checklist obligatorio:
 - [ ] No `console.log` ni codigo comentado quedando
 - [ ] No `window.location.reload()` ni `<a href>` interno
 - [ ] Toast de exito tras accion + toast de error tras fallo
+- [ ] Si trabajaste en `.ts/.tsx`: `npm run typecheck` pasa sin errores
 
 ### 5. Commit
 
@@ -143,6 +145,56 @@ Sigue el pattern de `useDashboard`: retorna `{ data, loading, error, refetch, ..
   <Plus size={14} weight="bold" /> Nuevo
 </button>
 ```
+
+## TypeScript
+
+El repo soporta JS y TS coexistiendo (`tsconfig.json` con `allowJs: true`,
+`strict: false`, `strictNullChecks: false`). Vite/esbuild transpila ambos sin
+configuración extra.
+
+**Cuándo usar TypeScript:**
+- Módulos nuevos: empieza directo en `.tsx` para tener tipos desde el inicio.
+- Refactors grandes: aprovecha para migrar el módulo completo.
+- Bugs sutiles de tipos: si un bug se hubiera evitado con tipos, migra el archivo.
+
+**Cuándo NO migrar todavía:**
+- Cambios menores en archivos `.jsx` existentes — déjalo en JS hasta que el módulo entero se migre.
+- Hooks utilitarios muy genéricos en `src/shared/hooks/` — espera al pattern del módulo piloto.
+
+**Cómo migrar un módulo:**
+
+1. Renombra archivos con `git mv` para preservar history:
+   ```bash
+   git mv src/modules/foo/pages/FooPage.jsx src/modules/foo/pages/FooPage.tsx
+   ```
+
+2. Importa los tipos compartidos desde `@/shared/types`:
+   ```ts
+   import type { Lead, Project, Conversion } from '@/shared/types';
+   ```
+
+3. Tipa el state principal:
+   ```ts
+   const [lead, setLead] = useState<Lead | null>(null);
+   const [items, setItems] = useState<Conversion[]>([]);
+   ```
+
+4. Tipa props de sub-componentes con `interface`:
+   ```ts
+   interface LeadHeaderProps {
+     lead: Lead;
+     onReassign: (id: number) => void;
+   }
+   function LeadHeader({ lead, onReassign }: LeadHeaderProps) { ... }
+   ```
+
+5. Run `npm run typecheck` (alias de `tsc --noEmit`) y resuelve errores. Si un componente UI compartido en `.jsx` causa errores por inferencia muy estricta, añade defaults a sus props (`actions = null`, `className = ''`) — ver el patrón ya aplicado en `PageHeader.jsx` y `EmptyState.jsx`.
+
+6. Si la migración completa de un archivo bloquea el progreso, usa `// @ts-nocheck` con un comentario que explique por qué (ej. depende de muchos componentes JSX aún sin migrar). **Esto es excepción, no regla.**
+
+**Tipos disponibles** en `src/shared/types/index.ts`: `Lead`, `LeadStatus`, `LeadOrigen`, `Project`, `ProjectType`, `User`, `UserRole`, `Client`, `Conversion`, `ConversionEstado`, `Interaction`, `Reminder`, `Utms`, `ApiResponse<T>`. Extiende este archivo cuando aparezcan tipos nuevos compartidos por varios módulos.
+
+**Módulo piloto:** [`src/modules/clients/`](src/modules/clients/). Sirve como referencia.
 
 ## Anti-patterns
 

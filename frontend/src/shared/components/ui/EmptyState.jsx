@@ -9,7 +9,7 @@ import { cn } from '@/shared/lib/utils';
  *  - description: texto secundario
  *  - action: nodo opcional (boton o link)
  */
-export default function EmptyState({ icon: Icon, title, description, action, className }) {
+export default function EmptyState({ icon: Icon, title, description, action = null, className = '' }) {
   return (
     <div className={cn('flex flex-col items-center justify-center py-16 text-center', className)}>
       {Icon && (

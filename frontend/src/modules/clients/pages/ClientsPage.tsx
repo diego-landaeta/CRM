@@ -8,9 +8,10 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import {
   UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple,
 } from '@phosphor-icons/react';
+import type { Client } from '@/shared/types';
 
-function exportCSV(clients, filename) {
-  const fmtNum = n => Number(n || 0).toFixed(2);
+function exportCSV(clients: Client[], filename: string): void {
+  const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
   const rows = [
     ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
     ...clients.map(c => [
@@ -37,15 +38,15 @@ import { toast } from '@/shared/hooks/useToast';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 
-function fmt(n) {
+function fmt(n: number | string): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
 
-function formatRelative(dateStr, { future = false } = {}) {
+function formatRelative(dateStr: string | null | undefined, { future = false }: { future?: boolean } = {}): string | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   const now = new Date();
-  const diffMs = future ? d - now : now - d;
+  const diffMs = future ? d.getTime() - now.getTime() : now.getTime() - d.getTime();
   const diffDays = Math.round(diffMs / 86400000);
   if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
   if (diffDays === 0) return 'hoy';
@@ -55,11 +56,16 @@ function formatRelative(dateStr, { future = false } = {}) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-function cleanPhone(phone) {
+function cleanPhone(phone: string | null | undefined): string {
   return (phone || '').replace(/[^\d]/g, '');
 }
 
-function QuickActions({ client: c, onUpsell }) {
+interface QuickActionsProps {
+  client: Client;
+  onUpsell?: (c: Client) => void;
+}
+
+function QuickActions({ client: c, onUpsell }: QuickActionsProps) {
   const wa = c.telefono ? cleanPhone(c.telefono) : null;
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
@@ -88,9 +94,9 @@ function QuickActions({ client: c, onUpsell }) {
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [search, setSearch] = useState<string>('');
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -135,13 +141,13 @@ export default function ClientsPage() {
       )
     : clients;
 
-  const totalFacturado = filtered.reduce((s, c) => s + c.total_compras, 0);
-  const totalCobrado = filtered.reduce((s, c) => s + c.total_pagado, 0);
-  const totalPendiente = filtered.reduce((s, c) => s + c.pendiente, 0);
+  const totalFacturado = filtered.reduce((s, c) => s + Number(c.total_compras), 0);
+  const totalCobrado = filtered.reduce((s, c) => s + Number(c.total_pagado), 0);
+  const totalPendiente = filtered.reduce((s, c) => s + Number(c.pendiente), 0);
 
-  const [upsellLead, setUpsellLead] = useState(null);
+  const [upsellLead, setUpsellLead] = useState<Client | null>(null);
 
-  function handleUpsell(c) {
+  function handleUpsell(c: Client): void {
     setUpsellLead(c);
   }
 
@@ -248,7 +254,7 @@ export default function ClientsPage() {
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(c.total_compras)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${c.pendiente > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>
+                      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>
                         {fmt(c.pendiente)}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -290,7 +296,7 @@ export default function ClientsPage() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Pendiente</div>
-                      <div className={`tabular-nums font-semibold ${c.pendiente > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>{fmt(c.pendiente)}</div>
+                      <div className={`tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>{fmt(c.pendiente)}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-border/60">
