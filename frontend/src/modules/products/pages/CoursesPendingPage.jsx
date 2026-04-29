@@ -43,7 +43,7 @@ export default function CoursesPendingPage() {
   const productoLabelPlural = activeProject?.producto_label_plural || 'Productos';
 
   const load = useCallback(async () => {
-    if (!activeProject?.id) return;
+    if (!activeProject?.id || !canManage) return;
     setLoading(true);
     setError(null);
     try {
@@ -69,7 +69,7 @@ export default function CoursesPendingPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeProject?.id]);
+  }, [activeProject?.id, canManage]);
 
   useEffect(() => {
     load();
