@@ -13,26 +13,35 @@ export const leadSchema = z.object({
   notas: z.string().optional(),
 });
 
-export const PAIS_OPTIONS = [
+export type LeadFormData = z.infer<typeof leadSchema>;
+export type LeadOrigenSchema = LeadFormData['origen'];
+export type LeadEstadoSchema = NonNullable<LeadFormData['estado']>;
+
+export const PAIS_OPTIONS: readonly string[] = [
   'Espana', 'Mexico', 'Colombia', 'Argentina', 'Chile', 'Peru',
   'Ecuador', 'Venezuela', 'Bolivia', 'Uruguay', 'Paraguay',
   'Costa Rica', 'Panama', 'Rep. Dominicana', 'Guatemala',
   'Portugal', 'Brasil', 'Estados Unidos', 'Alemania', 'Francia', 'Italia', 'Otro',
-];
+] as const;
 
-export const ORIGEN_OPTIONS = [
+export interface OptionLabel<T extends string = string> {
+  value: T;
+  label: string;
+}
+
+export const ORIGEN_OPTIONS: readonly OptionLabel<LeadOrigenSchema>[] = [
   { value: 'meta_ads', label: 'Meta Ads' },
   { value: 'google_ads', label: 'Google Ads' },
   { value: 'organico', label: 'Orgánico' },
   { value: 'referido', label: 'Referido' },
   { value: 'directo', label: 'Directo' },
-];
+] as const;
 
-export const ESTADO_OPTIONS = [
+export const ESTADO_OPTIONS: readonly OptionLabel<LeadEstadoSchema>[] = [
   { value: 'nuevo', label: 'Nuevo' },
   { value: 'por_contactar', label: 'Por contactar' },
   { value: 'contactado', label: 'Contactado' },
   { value: 'en_seguimiento', label: 'En seguimiento' },
   { value: 'convertido', label: 'Convertido' },
   { value: 'no_interesado', label: 'No interesado' },
-];
+] as const;

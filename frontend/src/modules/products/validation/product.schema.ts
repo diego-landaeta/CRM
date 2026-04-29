@@ -6,13 +6,17 @@ export const PAYMENT_LINK_TYPES = [
   { value: 'dos_cuotas', label: '2 cuotas' },
   { value: 'tres_cuotas', label: '3 cuotas' },
   { value: 'personalizado', label: 'Personalizado' },
-];
+] as const;
+
+export type PaymentLinkType = typeof PAYMENT_LINK_TYPES[number]['value'];
 
 export const paymentLinkSchema = z.object({
   label: z.string().min(1, 'Etiqueta requerida'),
   url: z.string().url('URL invalida'),
   tipo: z.enum(['completo', 'dos_cuotas', 'tres_cuotas', 'personalizado']),
 });
+
+export type PaymentLink = z.infer<typeof paymentLinkSchema>;
 
 export const productSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -26,3 +30,5 @@ export const productSchema = z.object({
   categoria_id: z.union([z.number(), z.string()]).optional().or(z.literal('')),
   subcategoria_id: z.union([z.number(), z.string()]).optional().or(z.literal('')),
 });
+
+export type ProductFormData = z.infer<typeof productSchema>;
