@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -6,17 +7,24 @@ import { Plus, PencilSimple, Trash, ArrowUp, ArrowDown, ListChecks, Users, Packa
 import { toast } from '@/shared/hooks/useToast';
 import useFieldDefinitions from '../hooks/useFieldDefinitions';
 import * as api from '../api/fields.api';
+import type { FieldDefinition, FieldEntity, FieldType, FieldOptions } from '../api/fields.api';
 import CustomFieldRenderer from '../components/CustomFieldRenderer';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
-const TABS = [
+interface TabDef {
+  key: FieldEntity;
+  label: string;
+  Icon: PhosphorIcon;
+}
+
+const TABS: ReadonlyArray<TabDef> = [
   { key: 'lead',    label: 'Prospectos', Icon: Users },
   { key: 'client',  label: 'Clientes',   Icon: UserCheck },
   { key: 'product', label: 'Productos',  Icon: Package },
 ];
 
-const TYPES = [
+const TYPES: ReadonlyArray<{ v: FieldType; label: string }> = [
   { v: 'text',     label: 'Texto' },
   { v: 'number',   label: 'Número' },
   { v: 'date',     label: 'Fecha' },
@@ -25,7 +33,19 @@ const TYPES = [
   { v: 'textarea', label: 'Texto largo' },
 ];
 
-function toSnake(label) {
+interface EditingField {
+  id?: number;
+  project_id?: number;
+  entity: FieldEntity;
+  field_key: string;
+  label: string;
+  type: FieldType;
+  options: FieldOptions | null;
+  required: boolean;
+  orden: number;
+}
+
+function toSnake(label: string): string {
   return (label || '')
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -36,13 +56,13 @@ function toSnake(label) {
 
 export default function FieldDefinitionsPage() {
   const { activeProject } = useProjectContext();
-  const [entity, setEntity] = useState('lead');
-  const [editing, setEditing] = useState(null); // null | { id?, field_key, label, type, options, required, ... }
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [entity, setEntity] = useState<FieldEntity>('lead');
+  const [editing, setEditing] = useState<EditingField | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FieldDefinition | null>(null);
 
   const { fields, loading, refetch } = useFieldDefinitions(activeProject?.id, entity);
 
-  function startCreate() {
+  function startCreate(): void {
     setEditing({
       project_id: activeProject?.id,
       entity,
@@ -55,11 +75,11 @@ export default function FieldDefinitionsPage() {
     });
   }
 
-  function startEdit(f) {
+  function startEdit(f: FieldDefinition): void {
     setEditing({ ...f, options: f.options || null });
   }
 
-  async function save() {
+  async function save(): Promise<void> {
     if (!editing) return;
     if (!editing.label.trim()) {
       toast({ title: 'Falta etiqueta', variant: 'destructive' }); return;
@@ -79,7 +99,7 @@ export default function FieldDefinitionsPage() {
           orden: editing.orden,
         });
         toast({ title: 'Campo actualizado' });
-      } else {
+      } else if (activeProject?.id) {
         await api.createField({
           project_id: activeProject.id,
           entity,
@@ -94,25 +114,26 @@ export default function FieldDefinitionsPage() {
       }
       setEditing(null);
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(): Promise<void> {
     if (!deleteTarget) return;
     try {
       await api.deleteField(deleteTarget.id);
       toast({ title: 'Campo eliminado' });
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);
     }
   }
 
-  async function move(field, direction) {
+  async function move(field: FieldDefinition, direction: 'up' | 'down'): Promise<void> {
+    if (!activeProject?.id) return;
     const idx = fields.findIndex((f) => f.id === field.id);
     const swapWith = direction === 'up' ? idx - 1 : idx + 1;
     if (swapWith < 0 || swapWith >= fields.length) return;
@@ -123,7 +144,7 @@ export default function FieldDefinitionsPage() {
     try {
       await api.reorderFields(activeProject.id, newOrder);
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     }
   }
@@ -273,12 +294,20 @@ export default function FieldDefinitionsPage() {
   );
 }
 
-function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }) {
-  function patch(diff) {
+interface FieldEditorDialogProps {
+  field: EditingField;
+  onChange: (next: EditingField) => void;
+  onSave: () => void | Promise<void>;
+  onClose: () => void;
+  isEdit: boolean;
+}
+
+function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }: FieldEditorDialogProps) {
+  function patch(diff: Partial<EditingField>): void {
     onChange({ ...field, ...diff });
   }
 
-  function setOptionsFromText(text) {
+  function setOptionsFromText(text: string): void {
     const choices = text.split('\n').map((s) => s.trim()).filter(Boolean);
     onChange({ ...field, options: choices.length ? { choices } : null });
   }
@@ -320,7 +349,7 @@ function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }) {
             <span className="text-xs font-bold text-muted-foreground">Tipo</span>
             <select
               value={field.type}
-              onChange={(e) => patch({ type: e.target.value, options: e.target.value === 'select' ? (field.options || { choices: [] }) : null })}
+              onChange={(e) => patch({ type: e.target.value as FieldType, options: e.target.value === 'select' ? (field.options || { choices: [] }) : null })}
               className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm"
             >
               {TYPES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}

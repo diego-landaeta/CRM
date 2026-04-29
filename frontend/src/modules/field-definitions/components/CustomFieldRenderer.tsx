@@ -1,10 +1,21 @@
+import type { FieldDefinition } from '../api/fields.api';
+
 const inputClass = 'w-full h-10 px-3 rounded-md border border-border bg-muted/30 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
-export default function CustomFieldRenderer({ field, value, onChange, disabled = false }) {
-  const id = `cf-${field.field_key}`;
-  const v = value ?? '';
+export type CustomFieldValue = string | number | boolean | null | undefined;
 
-  function set(next) {
+interface CustomFieldRendererProps {
+  field: FieldDefinition;
+  value: CustomFieldValue;
+  onChange?: (key: string, next: CustomFieldValue) => void;
+  disabled?: boolean;
+}
+
+export default function CustomFieldRenderer({ field, value, onChange, disabled = false }: CustomFieldRendererProps) {
+  const id = `cf-${field.field_key}`;
+  const v: CustomFieldValue = value ?? '';
+
+  function set(next: CustomFieldValue): void {
     onChange?.(field.field_key, next);
   }
 
@@ -18,6 +29,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
   );
 
   function renderInput() {
+    const stringValue = v === null || v === undefined ? '' : String(v);
     switch (field.type) {
       case 'number':
         return (
@@ -26,7 +38,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
             type="number"
             disabled={disabled}
             required={field.required}
-            value={v}
+            value={stringValue}
             onChange={(e) => set(e.target.value === '' ? '' : Number(e.target.value))}
             className={inputClass}
           />
@@ -38,7 +50,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
             type="date"
             disabled={disabled}
             required={field.required}
-            value={v}
+            value={stringValue}
             onChange={(e) => set(e.target.value)}
             className={inputClass}
           />
@@ -50,7 +62,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
             id={id}
             disabled={disabled}
             required={field.required}
-            value={v}
+            value={stringValue}
             onChange={(e) => set(e.target.value)}
             className={inputClass + ' appearance-none cursor-pointer'}
           >
@@ -81,7 +93,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
             id={id}
             disabled={disabled}
             required={field.required}
-            value={v}
+            value={stringValue}
             onChange={(e) => set(e.target.value)}
             rows={3}
             className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-sm outline-none resize-y focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
@@ -95,7 +107,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
             type="text"
             disabled={disabled}
             required={field.required}
-            value={v}
+            value={stringValue}
             onChange={(e) => set(e.target.value)}
             className={inputClass}
           />

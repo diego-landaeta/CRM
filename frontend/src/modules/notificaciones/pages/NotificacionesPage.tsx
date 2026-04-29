@@ -1,7 +1,17 @@
 import PageHeader from '@/shared/components/ui/PageHeader';
-import { Bell, BellRinging, EnvelopeSimple, DeviceMobile, Lightning, CheckCircle, Clock } from '@phosphor-icons/react';
+import { Bell, BellRinging, EnvelopeSimple, DeviceMobile, Lightning, Clock } from '@phosphor-icons/react';
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 
-const ROADMAP = [
+type RoadmapState = 'soon' | 'planned' | 'done';
+
+interface RoadmapItem {
+  title: string;
+  desc: string;
+  icon: PhosphorIcon;
+  state: RoadmapState;
+}
+
+const ROADMAP: ReadonlyArray<RoadmapItem> = [
   {
     title: 'Centro de notificaciones',
     desc: 'Todas las notificaciones agrupadas, con filtros por tipo y proyecto, y botón "Marcar todas leídas".',
@@ -28,7 +38,7 @@ const ROADMAP = [
   },
 ];
 
-const STATE_BADGE = {
+const STATE_BADGE: Record<RoadmapState, { label: string; class: string }> = {
   soon:    { label: 'Próximamente', class: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' },
   planned: { label: 'Planificado',  class: 'bg-muted text-muted-foreground' },
   done:    { label: 'Listo',        class: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
