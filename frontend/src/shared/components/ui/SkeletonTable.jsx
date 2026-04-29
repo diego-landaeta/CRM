@@ -7,7 +7,7 @@ import { cn } from '@/shared/lib/utils';
  *  - rows: numero de filas (default 8)
  *  - columns: numero de columnas (default 5)
  */
-export default function SkeletonTable({ rows = 8, columns = 5, className }) {
+export default function SkeletonTable({ rows = 8, columns = 5, className = '' }) {
   return (
     <div
       className={cn(
@@ -34,7 +34,7 @@ export default function SkeletonTable({ rows = 8, columns = 5, className }) {
   );
 }
 
-export function SkeletonCard({ className }) {
+export function SkeletonCard({ className = '' }) {
   return (
     <div
       className={cn(

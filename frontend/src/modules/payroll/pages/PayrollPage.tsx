@@ -7,8 +7,53 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { Coins, Plus, X, FloppyDisk, Calendar, Clock } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import type { Project, User } from '@/shared/types';
 
-const TABS = [
+type TabId = 'plans' | 'periods' | 'hours';
+
+interface PayrollPlan {
+  id?: number;
+  user_id: number;
+  user_nombre?: string;
+  user_email?: string;
+  modo_fijo: number | null | '';
+  modo_horas: number | null | '';
+  modo_comisiones: boolean;
+  active?: boolean;
+  notas?: string;
+}
+
+type PeriodEstado = 'abierto' | 'cerrado' | 'pagado';
+
+interface PayrollPeriod {
+  id: number;
+  user_id?: number;
+  user_nombre: string;
+  fijo: number | string;
+  monto_horas: number | string;
+  monto_comisiones: number | string;
+  ajustes: number | string;
+  total: number | string;
+  estado: PeriodEstado;
+}
+
+interface PayrollHour {
+  id: number;
+  user_id?: number;
+  user_nombre?: string;
+  fecha: string;
+  horas: number | string;
+  notas?: string;
+}
+
+interface HoursForm {
+  user_id: string;
+  fecha: string;
+  horas: string;
+  notas: string;
+}
+
+const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'plans', label: 'Planes' },
   { id: 'periods', label: 'Periodos' },
   { id: 'hours', label: 'Horas' },
@@ -16,7 +61,7 @@ const TABS = [
 
 export default function PayrollPage() {
   const { activeProject } = useProjectContext();
-  const [tab, setTab] = useState('plans');
+  const [tab, setTab] = useState<TabId>('plans');
 
   return (
     <div className="space-y-5 pb-8">
@@ -35,12 +80,16 @@ export default function PayrollPage() {
   );
 }
 
-function PlansTab({ project }) {
-  const [plans, setPlans] = useState([]);
-  const [users, setUsers] = useState([]);
+interface TabProps {
+  project: Project | null | undefined;
+}
+
+function PlansTab({ project }: TabProps) {
+  const [plans, setPlans] = useState<PayrollPlan[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const [editing, setEditing] = useState<PayrollPlan | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PayrollPlan | null>(null);
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -50,24 +99,26 @@ function PlansTab({ project }) {
         client.get(`/payroll/plans?projectId=${project.id}`),
         client.get(`/users`),
       ]);
-      if (pl.success) setPlans(pl.data);
-      if (us.success) setUsers(us.data);
+      if (pl.success) setPlans(pl.data as PayrollPlan[]);
+      if (us.success) setUsers(us.data as User[]);
     } finally { setLoading(false); }
   }, [project?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleSave(p) {
+  async function handleSave(p: PayrollPlan): Promise<void> {
+    if (!project?.id) return;
     try {
       await client.put('/payroll/plans', { ...p, project_id: project.id });
       toast({ title: 'Plan guardado' });
       setEditing(null); load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  function handleDelete(p) { setPendingDelete(p); }
-  async function doDelete() {
+  function handleDelete(p: PayrollPlan): void { setPendingDelete(p); }
+  async function doDelete(): Promise<void> {
+    if (!pendingDelete) return;
     try { await client.delete(`/payroll/plans/${pendingDelete.id}`); load(); }
-    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setPendingDelete(null); }
   }
 
@@ -102,8 +153,8 @@ function PlansTab({ project }) {
                 {plans.map(p => (
                   <tr key={p.id} className="border-b last:border-0">
                     <td className="px-4 py-3"><div className="font-semibold">{p.user_nombre}</div><div className="text-xs text-muted-foreground">{p.user_email}</div></td>
-                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_fijo != null ? Number(p.modo_fijo).toFixed(2) : '—'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_horas != null ? Number(p.modo_horas).toFixed(2) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_fijo != null && p.modo_fijo !== '' ? Number(p.modo_fijo).toFixed(2) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_horas != null && p.modo_horas !== '' ? Number(p.modo_horas).toFixed(2) : '—'}</td>
                     <td className="px-4 py-3 text-center">{p.modo_comisiones ? '✓' : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-xs font-bold mr-1">Editar</button>
@@ -123,8 +174,8 @@ function PlansTab({ project }) {
                   <p className="text-sm font-semibold truncate">{p.user_nombre}</p>
                   <p className="text-[11px] text-muted-foreground truncate">{p.user_email}</p>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px]">
-                    <span><span className="text-muted-foreground">Fijo:</span> <span className="tabular-nums font-semibold">{p.modo_fijo != null ? Number(p.modo_fijo).toFixed(2) + ' €' : '—'}</span></span>
-                    <span><span className="text-muted-foreground">€/h:</span> <span className="tabular-nums font-semibold">{p.modo_horas != null ? Number(p.modo_horas).toFixed(2) : '—'}</span></span>
+                    <span><span className="text-muted-foreground">Fijo:</span> <span className="tabular-nums font-semibold">{p.modo_fijo != null && p.modo_fijo !== '' ? Number(p.modo_fijo).toFixed(2) + ' €' : '—'}</span></span>
+                    <span><span className="text-muted-foreground">€/h:</span> <span className="tabular-nums font-semibold">{p.modo_horas != null && p.modo_horas !== '' ? Number(p.modo_horas).toFixed(2) : '—'}</span></span>
                     <span><span className="text-muted-foreground">Comis:</span> <span className="font-semibold">{p.modo_comisiones ? '✓' : '—'}</span></span>
                   </div>
                 </div>
@@ -144,8 +195,15 @@ function PlansTab({ project }) {
   );
 }
 
-function PlanEditor({ plan, users, onSave, onClose }) {
-  const [p, setP] = useState(plan);
+interface PlanEditorProps {
+  plan: PayrollPlan;
+  users: User[];
+  onSave: (p: PayrollPlan) => void | Promise<void>;
+  onClose: () => void;
+}
+
+function PlanEditor({ plan, users, onSave, onClose }: PlanEditorProps) {
+  const [p, setP] = useState<PayrollPlan>(plan);
   const usr = users.find(u => u.id === p.user_id);
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
@@ -167,7 +225,7 @@ function PlanEditor({ plan, users, onSave, onClose }) {
             <input type="checkbox" checked={!!p.modo_comisiones} onChange={e => setP({ ...p, modo_comisiones: e.target.checked })} />
             Cobra comisiones (calculadas en modulo de comisiones)
           </label>
-          {p.modo_fijo != null && p.modo_horas != null && (
+          {p.modo_fijo != null && p.modo_fijo !== '' && p.modo_horas != null && p.modo_horas !== '' && (
             <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">Combinacion fijo+horas es poco comun, asegurate de que es lo que quieres</p>
           )}
           <label className="block text-xs">
@@ -184,12 +242,12 @@ function PlanEditor({ plan, users, onSave, onClose }) {
   );
 }
 
-function PeriodsTab({ project }) {
+function PeriodsTab({ project }: TabProps) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
-  const [periods, setPeriods] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
+  const [users, setUsers] = useState<PayrollPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -200,14 +258,15 @@ function PeriodsTab({ project }) {
         client.get(`/payroll/periods?projectId=${project.id}&year=${year}&month=${month}`),
         client.get(`/payroll/plans?projectId=${project.id}`),
       ]);
-      if (p.success) setPeriods(p.data);
-      if (u.success) setUsers(u.data);
+      if (p.success) setPeriods(p.data as PayrollPeriod[]);
+      if (u.success) setUsers(u.data as PayrollPlan[]);
     } finally { setLoading(false); }
   }, [project?.id, year, month]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function generateAll() {
+  async function generateAll(): Promise<void> {
+    if (!project?.id) return;
     for (const u of users) {
       try { await client.post('/payroll/periods/generate', { project_id: project.id, user_id: u.user_id, year, month }); }
       catch { /* skip usuario si ya tiene periodo generado */ }
@@ -215,8 +274,8 @@ function PeriodsTab({ project }) {
     toast({ title: 'Periodos generados' });
     load();
   }
-  async function close(p) { await client.post(`/payroll/periods/${p.id}/close`); load(); }
-  async function pay(p) { await client.post(`/payroll/periods/${p.id}/pay`, { fecha_pago: new Date().toISOString().slice(0, 10) }); load(); }
+  async function close(p: PayrollPeriod): Promise<void> { await client.post(`/payroll/periods/${p.id}/close`); load(); }
+  async function pay(p: PayrollPeriod): Promise<void> { await client.post(`/payroll/periods/${p.id}/pay`, { fecha_pago: new Date().toISOString().slice(0, 10) }); load(); }
 
   return (
     <div className="space-y-3">
@@ -296,11 +355,11 @@ function PeriodsTab({ project }) {
   );
 }
 
-function HoursTab({ project }) {
-  const [hours, setHours] = useState([]);
-  const [users, setUsers] = useState([]);
+function HoursTab({ project }: TabProps) {
+  const [hours, setHours] = useState<PayrollHour[]>([]);
+  const [users, setUsers] = useState<PayrollPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ user_id: '', fecha: new Date().toISOString().slice(0, 10), horas: '', notas: '' });
+  const [form, setForm] = useState<HoursForm>({ user_id: '', fecha: new Date().toISOString().slice(0, 10), horas: '', notas: '' });
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -310,23 +369,24 @@ function HoursTab({ project }) {
         client.get(`/payroll/hours?projectId=${project.id}`),
         client.get(`/payroll/plans?projectId=${project.id}`),
       ]);
-      if (h.success) setHours(h.data);
-      if (p.success) setUsers(p.data.filter(x => x.modo_horas != null));
+      if (h.success) setHours(h.data as PayrollHour[]);
+      if (p.success) setUsers((p.data as PayrollPlan[]).filter(x => x.modo_horas != null && x.modo_horas !== ''));
     } finally { setLoading(false); }
   }, [project?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function add() {
+  async function add(): Promise<void> {
+    if (!project?.id) return;
     if (!form.user_id || !form.horas) { toast({ title: 'Usuario y horas requeridos', variant: 'destructive' }); return; }
     try {
       await client.post('/payroll/hours', { project_id: project.id, user_id: parseInt(form.user_id), fecha: form.fecha, horas: parseFloat(form.horas), notas: form.notas });
       toast({ title: 'Registrado' });
       setForm({ user_id: '', fecha: new Date().toISOString().slice(0, 10), horas: '', notas: '' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function del(h) { await client.delete(`/payroll/hours/${h.id}`); load(); }
+  async function del(h: PayrollHour): Promise<void> { await client.delete(`/payroll/hours/${h.id}`); load(); }
 
   return (
     <div className="space-y-3">
