@@ -11,7 +11,7 @@ function dispatch(toast) {
   return id;
 }
 
-export function toast({ title, description, variant = 'default', duration = 4000 }) {
+export function toast({ title, description = undefined, variant = 'default', duration = 4000 }) {
   return dispatch({ title, description, variant, duration });
 }
 

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { commissionsApi } from '../api/commissions.api';
+import { useEffect, useState, type FormEvent } from 'react';
+import { commissionsApi, type CommissionStats, type CommissionRule } from '../api/commissions.api';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -8,19 +8,22 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  CurrencyEur, CheckCircle, Clock, ChartBar, Gear, X, Plus, Trash, PencilSimple,
+  CurrencyEur, CheckCircle, Clock, ChartBar, Gear, X, Plus, Trash,
   DownloadSimple, CalendarBlank, Lock,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
-import { monthLabel, isInMonth, buildCommissionsCsv } from '../lib/period';
+import { monthLabel, isInMonth, buildCommissionsCsv, type CommissionRow } from '../lib/period';
+import type { User, Project } from '@/shared/types';
 
-function fmt(n) {
+function fmt(n: number | string | null | undefined): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
-function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'; }
+function formatDate(d: string | null | undefined): string {
+  return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--';
+}
 
-function exportCommissionsCsv(items, period) {
+function exportCommissionsCsv(items: CommissionRow[], period: string): void {
   const { csv, filename } = buildCommissionsCsv(items, period);
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -39,40 +42,42 @@ const ESTADOS = [
 
 const inputClass = 'h-9 px-3 rounded-lg border border-border bg-card text-sm';
 
+type PeriodMode = 'all' | 'month';
+
 export default function CommissionsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const [items, setItems] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [items, setItems] = useState<CommissionRow[]>([]);
+  const [stats, setStats] = useState<CommissionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState('');
   const [filterUser, setFilterUser] = useState('');
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [pendingPay, setPendingPay] = useState(null);
+  const [pendingPay, setPendingPay] = useState<number | null>(null);
   const [bulkPay, setBulkPay] = useState(false);
   const [closingMonth, setClosingMonth] = useState(false);
 
   // Filtro periodo (CRM-138). 'all' = sin filtro, 'month' = mes/año.
   const today = new Date();
-  const [periodMode, setPeriodMode] = useState('month');
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   // Selección múltiple para "marcar pagadas en lote" (CRM-138).
-  const [selected, setSelected] = useState(new Set());
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
-  async function load() {
+  async function load(): Promise<void> {
     setLoading(true);
     try {
-      const params = filterEstado ? { estado: filterEstado } : {};
+      const params: Record<string, string | number> = filterEstado ? { estado: filterEstado } : {};
       if (filterUser) params.userId = filterUser;
       const fn = isAdmin ? commissionsApi.list : commissionsApi.listMine;
       const fnStats = isAdmin ? commissionsApi.stats : commissionsApi.statsMine;
       const [listRes, statsRes] = await Promise.all([fn(params), fnStats(filterUser && isAdmin ? { userId: filterUser } : {})]);
       if (listRes.success) setItems(listRes.data || []);
-      if (statsRes.success) setStats(statsRes.data);
-    } catch (err) {
+      if (statsRes.success && statsRes.data) setStats(statsRes.data);
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }
@@ -89,19 +94,19 @@ export default function CommissionsPage() {
   const pendingInPeriod = filteredItems.filter((r) => r.estado === 'pendiente' && Number(r.importe_comision) > 0);
   const allPendingSelected = pendingInPeriod.length > 0 && pendingInPeriod.every((r) => selected.has(r.id));
 
-  function toggleSelect(id) {
+  function toggleSelect(id: number): void {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
-  function toggleSelectAll() {
+  function toggleSelectAll(): void {
     if (allPendingSelected) setSelected(new Set());
     else setSelected(new Set(pendingInPeriod.map((r) => r.id)));
   }
 
-  async function handleBulkPay() {
+  async function handleBulkPay(): Promise<void> {
     if (selected.size === 0) return;
     setBulkPay(false);
     const fechaPago = new Date().toISOString().slice(0, 10);
@@ -121,14 +126,14 @@ export default function CommissionsPage() {
     load();
   }
 
-  async function handleCloseMonth() {
+  async function handleCloseMonth(): Promise<void> {
     setClosingMonth(false);
     try {
       // Endpoint backend pendiente (CRM-138). Si no existe, mostrar info.
       await client.post('/commissions/close-month', { year, month });
       toast({ title: 'Mes cerrado', description: `${monthLabel(year, month)} marcado como inmutable.` });
       load();
-    } catch (err) {
+    } catch (err: any) {
       if (err?.status === 404 || err?.status === 405) {
         toast({
           title: 'Cierre no disponible',
@@ -141,7 +146,7 @@ export default function CommissionsPage() {
     }
   }
 
-  function handleExport() {
+  function handleExport(): void {
     if (filteredItems.length === 0) {
       toast({ title: 'Sin datos para exportar' });
       return;
@@ -154,18 +159,19 @@ export default function CommissionsPage() {
     (async () => {
       try {
         const r = await client.get('/users?role=gestor&active=true');
-        if (r.success) setUsers((r.data?.users || r.data || []).filter(u => u.role !== 'superadmin'));
+        if (r.success) setUsers(((r.data?.users || r.data || []) as User[]).filter((u) => u.role !== 'superadmin'));
       } catch {}
     })();
   }, [isAdmin]);
 
-  function handlePay(id) { setPendingPay(id); }
-  async function doPay() {
+  function handlePay(id: number): void { setPendingPay(id); }
+  async function doPay(): Promise<void> {
+    if (pendingPay === null) return;
     try {
       await commissionsApi.pay(pendingPay, { fecha_pago: new Date().toISOString().slice(0, 10) });
       toast({ title: 'Comision pagada' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setPendingPay(null); }
   }
 
@@ -257,8 +263,8 @@ export default function CommissionsPage() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard icon={ChartBar} label="Total generado" value={fmt(stats.total)} />
-          <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.pagado)} tone="success" />
-          <KpiCard icon={Clock} label="Pendiente" value={fmt(stats.pendiente)} tone="warning" />
+          <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.pagado)} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400" />
+          <KpiCard icon={Clock} label="Pendiente" value={fmt(stats.pendiente)} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400" />
           <KpiCard icon={CurrencyEur} label="Comisiones" value={stats.cantidad} />
         </div>
       )}
@@ -462,16 +468,34 @@ export default function CommissionsPage() {
   );
 }
 
-function RulesDialog({ onClose, onSaved }) {
-  const [rules, setRules] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [newRule, setNewRule] = useState({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
-  const [pendingDelete, setPendingDelete] = useState(null);
+interface RulesDialogProps {
+  onClose: () => void;
+  onSaved?: () => void;
+}
 
-  async function load() {
+interface ProductOption {
+  id: number;
+  nombre: string;
+}
+
+interface NewRuleForm {
+  project_id: string;
+  user_id: string;
+  product_id: string;
+  pct: string;
+  base_calc: 'cobrado' | 'vendido';
+}
+
+function RulesDialog({ onClose, onSaved }: RulesDialogProps) {
+  const [rules, setRules] = useState<CommissionRule[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newRule, setNewRule] = useState<NewRuleForm>({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+
+  async function load(): Promise<void> {
     setLoading(true);
     try {
       const [r, u, pj] = await Promise.all([
@@ -480,8 +504,8 @@ function RulesDialog({ onClose, onSaved }) {
         client.get('/projects'),
       ]);
       if (r.success) setRules(r.data || []);
-      if (u.success) setUsers((u.data?.users || u.data || []).filter(x => x.role === 'gestor' || x.role === 'admin'));
-      if (pj.success) setProjects(pj.data || []);
+      if (u.success) setUsers(((u.data?.users || u.data || []) as User[]).filter((x) => x.role === 'gestor' || x.role === 'admin'));
+      if (pj.success) setProjects((pj.data as Project[]) || []);
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
@@ -491,12 +515,12 @@ function RulesDialog({ onClose, onSaved }) {
     (async () => {
       try {
         const r = await client.get(`/products/${newRule.project_id}`);
-        if (r.success) setProducts(r.data || []);
+        if (r.success) setProducts((r.data as ProductOption[]) || []);
       } catch {}
     })();
   }, [newRule.project_id]);
 
-  async function handleAdd(e) {
+  async function handleAdd(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (!newRule.project_id || !newRule.user_id || newRule.pct === '') return;
     try {
@@ -511,23 +535,24 @@ function RulesDialog({ onClose, onSaved }) {
       setNewRule({ project_id: '', user_id: '', product_id: '', pct: '', base_calc: 'cobrado' });
       await load();
       onSaved?.();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  function handleDelete(id) { setPendingDelete(id); }
-  async function doDelete() {
+  function handleDelete(id: number): void { setPendingDelete(id); }
+  async function doDelete(): Promise<void> {
+    if (pendingDelete === null) return;
     try {
       await commissionsApi.deleteRule(pendingDelete);
       await load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setPendingDelete(null); }
   }
 
-  async function handleEditPct(rule, newPct) {
+  async function handleEditPct(rule: CommissionRule, newPct: string): Promise<void> {
     try {
       await commissionsApi.updateRule(rule.id, { pct: Number(newPct) });
       await load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
   return (
@@ -565,7 +590,7 @@ function RulesDialog({ onClose, onSaved }) {
                     <Plus size={12} weight="bold" />
                   </button>
                 </div>
-                <select value={newRule.base_calc} onChange={e => setNewRule({ ...newRule, base_calc: e.target.value })} className={inputClass + ' col-span-4'}>
+                <select value={newRule.base_calc} onChange={e => setNewRule({ ...newRule, base_calc: e.target.value as 'cobrado' | 'vendido' })} className={inputClass + ' col-span-4'}>
                   <option value="cobrado">Calcular sobre lo cobrado (cuando cliente paga)</option>
                   <option value="vendido">Calcular sobre lo vendido (al firmar venta)</option>
                 </select>

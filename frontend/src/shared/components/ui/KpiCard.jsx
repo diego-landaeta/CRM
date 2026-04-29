@@ -26,12 +26,12 @@ export default function KpiCard({
   iconBg = 'bg-primary/10 text-primary',
   label,
   value,
-  numericValue,
-  format,
-  badge,
+  numericValue = undefined,
+  format = null,
+  badge = null,
   badgeColor = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
   trend = 'up',
-  className,
+  className = '',
 }) {
   const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
   const showBadge = badge && badge !== '--';
