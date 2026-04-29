@@ -26,6 +26,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
+import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
+import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
 
 const STATUS_BAR_COLORS = {
   nuevo: '#3b82f6',
@@ -187,7 +189,7 @@ export default function DashboardPage() {
   const todayDate = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         title="Dashboard"
         subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
@@ -195,15 +197,15 @@ export default function DashboardPage() {
 
       {/* SECCION HOY */}
       {today && (
-        <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="font-semibold text-lg">Tu dia de hoy</h2>
+              <h2 className="font-semibold text-base">Tu dia de hoy</h2>
               <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del dia</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
             <button onClick={() => navigate('/leads?qf=urgent')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-orange-300 hover:bg-orange-50/30 dark:hover:bg-orange-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Pendientes</p>
@@ -276,7 +278,7 @@ export default function DashboardPage() {
       )}
 
       {/* Top KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           icon={Users}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
@@ -307,9 +309,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="bg-card p-5 rounded-lg border border-border">
+          <div className="mb-4">
             <h3 className="font-semibold">Prospectos por estado</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">Distribucion actual del pipeline</p>
           </div>
@@ -334,8 +336,8 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-card p-6 rounded-lg border border-border">
-          <div className="mb-6">
+        <div className="bg-card p-5 rounded-lg border border-border">
+          <div className="mb-4">
             <h3 className="font-semibold">Prospectos por canal</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">Origenes de los prospectos recientes</p>
           </div>
@@ -361,21 +363,32 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Embudo + Insights — content que acompana las graficas */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+        <div className="lg:col-span-3">
+          <ConversionFunnel stats={stats} total={total} />
+        </div>
+        <div className="lg:col-span-2">
+          <PerformanceInsights stats={stats} today={today} recentLeads={leadsRecientes} />
+        </div>
+      </div>
+
       {/* Monitor SaaS — solo proyectos IA */}
       {activeProject?.type === 'ia' && <SaasMonitor projectId={activeProject.id} />}
 
       {/* Recent Leads */}
       <div className="bg-card rounded-lg border border-border overflow-x-auto">
-        <div className="p-5 flex items-center justify-between">
+        <div className="p-4 flex items-center justify-between">
           <div>
             <h3 className="font-semibold">Prospectos recientes</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos 10 prospectos registrados</p>
           </div>
           <button
             onClick={() => navigate('/leads')}
-            className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 border border-border bg-card px-3 py-1.5 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            aria-label="Ver todos los prospectos"
+            className="h-9 text-xs font-semibold text-zinc-600 dark:text-zinc-300 border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
           >
-            Ver todos <ArrowRight size={12} weight="bold" />
+            <span className="hidden sm:inline">Ver todos</span> <ArrowRight size={12} weight="bold" />
           </button>
         </div>
 

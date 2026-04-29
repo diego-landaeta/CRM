@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 const FIELD_TYPES = ['text', 'number', 'date', 'select', 'boolean', 'textarea'];
+const ENTITIES = ['lead', 'client', 'product'];
 
 export const createFieldSchema = z.object({
   project_id: z.number().int().positive(),
+  entity: z.enum(ENTITIES).default('lead'),
   field_key: z.string().min(1).max(60).regex(/^[a-z][a-z0-9_]*$/, 'field_key debe ser snake_case'),
   label: z.string().min(1).max(150),
   type: z.enum(FIELD_TYPES).default('text'),

@@ -5,6 +5,7 @@ import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import EmptyState from '@/shared/components/ui/EmptyState';
 
 function formatCurrency(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -53,7 +54,7 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
   async function doDeleteConversion() {
     try {
       await conversionsApi.remove(pendingConversion);
-      toast({ title: 'Conversion eliminada' });
+      toast({ title: 'Conversión eliminada' });
       await load();
     } catch (err) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
@@ -61,7 +62,16 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
   }
 
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Cargando historial de compras...</div>;
+    return (
+      <div className="grid grid-cols-3 gap-4 animate-pulse" aria-busy="true">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-card border border-border rounded-md p-3">
+            <div className="h-3 w-24 bg-muted rounded mb-2" />
+            <div className="h-7 w-32 bg-muted rounded" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   const totalFacturado = conversions.reduce((acc, c) => acc + Number(c.importe_total), 0);
@@ -91,27 +101,31 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
       {canManage && (
         <button
           onClick={() => setDialogOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
         >
           <Plus size={16} weight="bold" />
-          Nueva conversion
+          Nueva conversión
         </button>
       )}
 
       {/* Lista de conversiones */}
       {conversions.length === 0 ? (
-        <div className="bg-card border border-border rounded-md p-8 text-center">
-          <Receipt size={32} weight="regular" className="mx-auto mb-3 text-muted-foreground" />
-          <div className="text-sm text-muted-foreground">Este lead aun no tiene compras registradas</div>
-          {canManage && (
-            <button
-              onClick={() => setDialogOpen(true)}
-              className="mt-3 text-sm text-primary hover:underline"
-            >
-              Registrar la primera conversion
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon={Receipt}
+          title="Aún no hay compras registradas"
+          description="Registra una conversión cuando este lead complete una compra."
+          action={
+            canManage && (
+              <button
+                onClick={() => setDialogOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                <Plus size={14} weight="bold" />
+                Registrar primera conversión
+              </button>
+            )
+          }
+        />
       ) : (
         <div className="space-y-3">
           {conversions.map((c) => {
@@ -216,7 +230,7 @@ function PaymentsList({ conversionId, onDelete, canManage }) {
     });
   }, [conversionId]);
 
-  if (!payments) return <div className="mt-2 text-muted-foreground">Cargando...</div>;
+  if (!payments) return <div className="mt-2 text-muted-foreground">Cargando…</div>;
 
   return (
     <ul className="mt-2 space-y-1">

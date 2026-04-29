@@ -27,20 +27,20 @@ export const USERS = [
 export const PRODUCTS = {
   1: [
     { id: 1, project_id: 1, nombre: 'Curso Psicologia Infantil', descripcion: 'Formacion intensiva en psicologia infantil y adolescente', precio: 1200, active: true, has_dossier: true, dossier_version: 2 },
-    { id: 2, project_id: 1, nombre: 'Master Neuroeducacion', descripcion: 'Master oficial en neuroeducacion aplicada', precio: 2400, active: true, has_dossier: true, dossier_version: 3 },
-    { id: 3, project_id: 1, nombre: 'Taller Mindfulness Educativo', descripcion: 'Taller practico de mindfulness para docentes', precio: 350, active: true, has_dossier: false },
+    { id: 2, project_id: 1, nombre: 'Máster Neuroeducación', descripcion: 'Máster oficial en neuroeducación aplicada', precio: 2400, active: true, has_dossier: true, dossier_version: 3 },
+    { id: 3, project_id: 1, nombre: 'Taller Mindfulness Educativo', descripcion: 'Taller práctico de mindfulness para docentes', precio: 350, active: true, has_dossier: false },
   ],
   2: [
-    { id: 4, project_id: 2, nombre: 'Grado Superior Educacion Infantil', descripcion: 'Ciclo formativo oficial de 2 anos', precio: 3800, active: true, has_dossier: true, dossier_version: 4 },
-    { id: 5, project_id: 2, nombre: 'Curso Atencion Temprana', descripcion: 'Especializacion en atencion temprana 0-6 anos', precio: 890, active: true, has_dossier: true, dossier_version: 1 },
+    { id: 4, project_id: 2, nombre: 'Grado Superior Educación Infantil', descripcion: 'Ciclo formativo oficial de 2 años', precio: 3800, active: true, has_dossier: true, dossier_version: 4 },
+    { id: 5, project_id: 2, nombre: 'Curso Atención Temprana', descripcion: 'Especialización en atención temprana 0-6 años', precio: 890, active: true, has_dossier: true, dossier_version: 1 },
   ],
   3: [
-    { id: 6, project_id: 3, nombre: 'Taller Logopedia Infantil', descripcion: 'Taller practico de logopedia para ninos', precio: 650, active: true, has_dossier: true, dossier_version: 2 },
-    { id: 7, project_id: 3, nombre: 'Curso Dislexia y Lectoescritura', descripcion: 'Intervencion en dificultades de lectoescritura', precio: 480, active: true, has_dossier: false },
-    { id: 8, project_id: 3, nombre: 'Master Terapia Miofuncional', descripcion: 'Master en terapia miofuncional orofacial', precio: 1950, active: false, has_dossier: true, dossier_version: 1 },
+    { id: 6, project_id: 3, nombre: 'Taller Logopedia Infantil', descripcion: 'Taller práctico de logopedia para niños', precio: 650, active: true, has_dossier: true, dossier_version: 2 },
+    { id: 7, project_id: 3, nombre: 'Curso Dislexia y Lectoescritura', descripcion: 'Intervención en dificultades de lectoescritura', precio: 480, active: true, has_dossier: false },
+    { id: 8, project_id: 3, nombre: 'Máster Terapia Miofuncional', descripcion: 'Máster en terapia miofuncional orofacial', precio: 1950, active: false, has_dossier: true, dossier_version: 1 },
   ],
   4: [
-    { id: 9, project_id: 4, nombre: 'Plan Basico', descripcion: 'Acceso a chatbot IA con 50 consultas/mes', precio: 9.99, active: true, has_dossier: false },
+    { id: 9, project_id: 4, nombre: 'Plan Básico', descripcion: 'Acceso a chatbot IA con 50 consultas/mes', precio: 9.99, active: true, has_dossier: false },
     { id: 10, project_id: 4, nombre: 'Plan Premium', descripcion: 'Consultas ilimitadas + seguimiento semanal', precio: 29.99, active: true, has_dossier: false },
   ],
   5: [

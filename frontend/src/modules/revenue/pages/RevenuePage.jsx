@@ -133,7 +133,7 @@ export default function RevenuePage() {
           <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos pagos registrados</p>
         </div>
         {loading ? (
-          <div className="px-5 py-10 text-center text-muted-foreground text-sm">Cargando...</div>
+          <div className="px-5 py-10 text-center text-muted-foreground text-sm">Cargando…</div>
         ) : recent.length === 0 ? (
           <div className="px-5 py-12 text-center text-muted-foreground">No hay conversiones para este proyecto aun.</div>
         ) : (

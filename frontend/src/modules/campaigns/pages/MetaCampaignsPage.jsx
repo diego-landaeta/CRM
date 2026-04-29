@@ -1,6 +1,7 @@
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
+import MetricLabel from '@/shared/components/ui/MetricLabel';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useCampaigns } from '../hooks/useCampaigns';
 import {
@@ -36,7 +37,7 @@ export default function MetaCampaignsPage() {
             <KpiCard icon={CurrencyEur} label="Inversion" value={fmtMoney(meta.totals.spend)} />
             <KpiCard icon={MouseSimple} label="Clicks" value={fmtNum(meta.totals.clicks)} />
             <KpiCard icon={Users} label="Prospectos CRM" value={fmtNum(meta.totals.crmLeads)} tone="success" />
-            <KpiCard icon={TrendUp} label="CPA real" value={fmtCpa(meta.totals.cpaReal)}
+            <KpiCard icon={TrendUp} label={<MetricLabel term="CPA">CPA real</MetricLabel>} value={fmtCpa(meta.totals.cpaReal)}
               tone={meta.totals.cpaReal > CPA_ALERT_THRESHOLD ? 'destructive' : 'default'} />
           </div>
 

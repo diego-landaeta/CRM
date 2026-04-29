@@ -6,7 +6,8 @@ export async function listByProject(req, res, next) {
   try {
     const projectId = parseInt(req.params.projectId);
     if (isNaN(projectId)) throw new AppError('projectId invalido', 400, 'INVALID_ID');
-    const fields = await model.listByProject(projectId);
+    const entity = ['lead', 'client', 'product'].includes(req.query.entity) ? req.query.entity : null;
+    const fields = await model.listByProject(projectId, entity);
     res.json({ success: true, data: fields });
   } catch (err) { next(err); }
 }
@@ -16,8 +17,8 @@ export async function create(req, res, next) {
     const parsed = createFieldSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
 
-    const exists = await model.keyExists(parsed.data.project_id, parsed.data.field_key);
-    if (exists) throw new AppError('Ya existe un campo con esa clave en el proyecto', 409, 'KEY_EXISTS');
+    const exists = await model.keyExists(parsed.data.project_id, parsed.data.entity, parsed.data.field_key);
+    if (exists) throw new AppError('Ya existe un campo con esa clave en esta entidad del proyecto', 409, 'KEY_EXISTS');
 
     const field = await model.create(parsed.data);
     res.status(201).json({ success: true, data: field });

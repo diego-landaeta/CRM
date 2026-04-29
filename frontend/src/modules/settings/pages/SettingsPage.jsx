@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   Users,
   Folder,
@@ -24,6 +25,10 @@ import {
   FloppyDisk,
   Gear,
   Globe,
+  ListChecks,
+  ArrowSquareOut,
+  ChatCircleText,
+  Lightning,
 } from '@phosphor-icons/react';
 
 const FormsPageEmbed = lazy(() => import('@/modules/forms/pages/FormsPage'));
@@ -38,11 +43,17 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import ProjectSettingsDialog from '../components/ProjectSettingsDialog';
 
 const TABS = [
-  { id: 'projects', label: 'Proyectos', icon: Folder },
-  { id: 'users', label: 'Usuarios', icon: Users },
-  { id: 'forms', label: 'Forms', icon: Globe },
-  { id: 'apis', label: 'APIs globales', icon: Key },
-  { id: 'security', label: 'Seguridad', icon: ShieldCheck },
+  { id: 'projects',     label: 'Proyectos',           icon: Folder },
+  { id: 'users',        label: 'Usuarios',            icon: Users },
+  { id: 'roles',        label: 'Roles y Permisos',    icon: ShieldCheck,    to: '/configuracion/roles' },
+  { id: 'fields',       label: 'Campos custom',       icon: ListChecks,     to: '/configuracion/campos' },
+  { id: 'channels',     label: 'Canales',             icon: ChatCircleText, to: '/configuracion/canales' },
+  { id: 'forms',        label: 'Formularios',         icon: Globe },
+  { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/webhooks' },
+  { id: 'sequences',    label: 'Email seguimiento',   icon: Envelope,       to: '/email-sequences' },
+  { id: 'shortcuts',    label: 'Atajos rápidos',      icon: Lightning,      to: '/configuracion/atajos' },
+  { id: 'apis',         label: 'APIs globales',       icon: Key },
+  { id: 'security',     label: 'Seguridad',           icon: ShieldCheck },
 ];
 
 const ROLE_STYLES = {
@@ -68,7 +79,7 @@ const AVATAR_COLORS = [
   'bg-teal-100 text-teal-700',
 ];
 
-const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
@@ -259,31 +270,33 @@ function UsersTab() {
         </div>
         <button
           onClick={() => { resetCreateForm(); setShowCreateDialog(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+          aria-label="Crear usuario"
+          className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
-          <Plus size={14} weight="bold" /> Crear Usuario
+          <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Crear Usuario</span>
         </button>
       </div>
 
-      {/* Filtro por proyecto */}
-      <div className="flex items-center gap-2 p-3 rounded-md border border-border bg-card">
+      {/* Filtro por proyecto — wraps on narrow widths */}
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-md border border-border bg-card">
         <span className="text-[11px] font-medium text-muted-foreground">Mostrar:</span>
         <button
           onClick={() => setProjectFilter('active')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'active' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'active' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
         >
           {activeProject?.nombre || 'Proyecto activo'}
         </button>
         <button
           onClick={() => setProjectFilter('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'all' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
         >
           Todos los proyectos
         </button>
         <select
           value={projectFilter !== 'active' && projectFilter !== 'all' ? projectFilter : ''}
           onChange={(e) => e.target.value && setProjectFilter(e.target.value)}
-          className="h-8 px-2 rounded-lg border border-border bg-muted/50 text-xs ml-auto"
+          aria-label="Filtrar por proyecto especifico"
+          className="h-8 px-2 rounded-lg border border-border bg-muted/50 text-xs ml-auto max-w-[180px]"
         >
           <option value="">Proyecto especifico...</option>
           {(projects || []).map((p) => (
@@ -293,19 +306,19 @@ function UsersTab() {
         <span className="text-[11px] text-muted-foreground">{users.length} usuario{users.length !== 1 ? 's' : ''}</span>
       </div>
 
-      {/* Users table */}
+      {/* Users table — solo en xl+; en pantallas mas chicas usa cards */}
       <div className="bg-card rounded-lg border border-border overflow-hidden">
-        <div className="hidden md:block">
+        <div className="hidden xl:block">
           <table className="w-full text-[13px]">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Usuario</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Rol</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyectos</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Ultima conexion</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
-                <th className="px-5 py-2.5 text-right text-xs text-muted-foreground">Acciones</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Usuario</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground hidden 2xl:table-cell">Email</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Rol</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Proyectos</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground hidden 2xl:table-cell">Última conexión</th>
+                <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
+                <th className="px-4 py-2.5 text-right text-xs text-muted-foreground">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -314,35 +327,38 @@ function UsersTab() {
                 const userName = u.nombre || u.name || 'Sin nombre';
                 return (
                   <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/50 transition-colors ${!isActive ? 'opacity-50' : ''}`}>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${AVATAR_COLORS[u.id % AVATAR_COLORS.length]}`}>
                           {getInitials(userName)}
                         </div>
-                        <span className="font-semibold">{userName}</span>
+                        <div className="min-w-0">
+                          <span className="font-semibold block truncate">{userName}</span>
+                          <span className="text-[11px] text-muted-foreground 2xl:hidden truncate block">{u.email}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
+                    <td className="px-4 py-3 text-muted-foreground hidden 2xl:table-cell truncate max-w-[200px]">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-muted-foreground max-w-[180px] truncate" title={formatProjectNames(u)}>
+                    <td className="px-4 py-3 text-muted-foreground max-w-[160px] truncate" title={formatProjectNames(u)}>
                       {formatProjectNames(u)}
                     </td>
-                    <td className="px-5 py-3.5 text-muted-foreground">
+                    <td className="px-4 py-3 text-muted-foreground hidden 2xl:table-cell">
                       {u.last_login_at ? (
                         <span className="flex items-center gap-1.5 text-[12px]">
                           <Clock size={12} weight="regular" />
-                          {new Date(u.last_login_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {new Date(u.last_login_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       ) : (
                         <span className="text-[12px] italic text-muted-foreground/60">Nunca</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         isActive ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-400'
                       }`}>
                         {isActive ? 'activo' : 'inactivo'}
@@ -400,8 +416,8 @@ function UsersTab() {
           </table>
         </div>
 
-        {/* Mobile cards */}
-        <div className="md:hidden divide-y">
+        {/* Cards (hasta lg) — mas legible que tabla en pantallas no muy anchas */}
+        <div className="xl:hidden divide-y">
           {users.map((u) => {
             const isActive = u.active !== false;
             const userName = u.nombre || u.name || 'Sin nombre';
@@ -443,18 +459,36 @@ function UsersTab() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>
                     {u.role}
                   </span>
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
-                    isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                    isActive ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-400'
                   }`}>
                     {isActive ? 'activo' : 'inactivo'}
                   </span>
+                  <span className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={formatProjectNames(u)}>
+                    {formatProjectNames(u)}
+                  </span>
+                  {u.last_login_at && (
+                    <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1 ml-auto">
+                      <Clock size={10} weight="regular" />
+                      {new Date(u.last_login_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                    </span>
+                  )}
+                  {!u.last_login_at && (
+                    <span className="text-[10px] text-muted-foreground/60 italic ml-auto">Nunca</span>
+                  )}
                 </div>
               </div>
             );
           })}
+          {users.length === 0 && (
+            <div className="p-12 text-center">
+              <Users size={40} className="text-muted-foreground/30 mx-auto mb-3" weight="regular" />
+              <p className="text-muted-foreground text-sm">No hay usuarios registrados</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -513,10 +547,10 @@ function UsersTab() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowCreateDialog(false)} className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                  <button type="button" onClick={() => setShowCreateDialog(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={createLoading} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  <button type="submit" disabled={createLoading} className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {createLoading ? 'Creando...' : 'Crear usuario'}
                   </button>
                 </div>
@@ -583,10 +617,10 @@ function UsersTab() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setEditingUser(null)} className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
+                  <button type="button" onClick={() => setEditingUser(null)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" disabled={editLoading} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  <button type="submit" disabled={editLoading} className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {editLoading ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 </div>
@@ -755,14 +789,14 @@ function CategoriesDialog({ project, onClose }) {
               <h2 className="text-lg font-semibold">Categorias y subcategorias</h2>
               <p className="text-xs text-muted-foreground">{project.nombre} &mdash; Organiza productos/{project.producto_label_plural?.toLowerCase() || 'formaciones'} en grupos</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
 
           <form onSubmit={handleAdd} className="grid grid-cols-2 gap-2 p-4 bg-muted/30 rounded-md mb-4">
             <input
               value={newCat.nombre}
               onChange={e => setNewCat({ ...newCat, nombre: e.target.value })}
-              placeholder="Nombre de categoria"
+              placeholder="Nombre de categoría"
               className={inputClass}
               required
             />
@@ -780,7 +814,7 @@ function CategoriesDialog({ project, onClose }) {
           </form>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando...</p>
+            <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : parents.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Sin categorias. Crea una para empezar.</p>
           ) : (
@@ -789,14 +823,14 @@ function CategoriesDialog({ project, onClose }) {
                 <div key={p.id} className="bg-muted/20 rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm">{p.nombre}</span>
-                    <button onClick={() => handleDelete(p.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
+                    <button onClick={() => handleDelete(p.id)} aria-label="Eliminar" className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
                   </div>
                   {childrenByParent[p.id]?.length > 0 && (
                     <div className="mt-2 ml-4 space-y-1 border-l border-border pl-3">
                       {childrenByParent[p.id].map(c => (
                         <div key={c.id} className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">— {c.nombre}</span>
-                          <button onClick={() => handleDelete(c.id)} className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
+                          <button onClick={() => handleDelete(c.id)} aria-label="Eliminar" className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
                         </div>
                       ))}
                     </div>
@@ -876,7 +910,7 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
     } finally { setSaving(false); }
   }
 
-  const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
+  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>
@@ -885,7 +919,7 @@ function ProjectDialog({ open, onClose, existing, onSaved }) {
         <div className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{existing ? 'Editar' : 'Nuevo'} proyecto</h2>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-3">
@@ -985,7 +1019,7 @@ function FieldDefsDialog({ project, onClose }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await client.get(`/field-definitions/project/${project.id}`);
+      const res = await client.get(`/field-definitions/project/${project.id}?entity=lead`);
       if (res.success) setFields(res.data);
     } finally { setLoading(false); }
   }, [project.id]);
@@ -1090,7 +1124,7 @@ function FieldDefsDialog({ project, onClose }) {
                 <button onClick={() => setView('editor')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'editor' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Editor</button>
                 <button onClick={() => setView('preview')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'preview' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Vista previa</button>
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+              <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
             </div>
           </div>
 
@@ -1125,11 +1159,11 @@ function FieldDefsDialog({ project, onClose }) {
 
                 {/* List */}
                 {loading ? (
-                  <p className="text-sm text-muted-foreground">Cargando...</p>
+                  <p className="text-sm text-muted-foreground">Cargando…</p>
                 ) : fields.length === 0 ? (
                   <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">
-                    Este proyecto aun no tiene campos custom.<br />
-                    <span className="text-xs">Los prospectos solo tendran los campos base (nombre, email, telefono...).</span>
+                    Este proyecto aún no tiene campos custom.<br />
+                    <span className="text-xs">Los prospectos solo tendrán los campos base (nombre, email, teléfono…).</span>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -1282,15 +1316,15 @@ function WebhooksTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
           <div className="p-3 rounded-lg bg-muted/40">
             <p className="font-bold mb-1">POST nuevo lead</p>
-            <p className="text-muted-foreground">Envia <code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_*</code> para crear un lead y asignarlo por round-robin automatico al gestor menos cargado.</p>
+            <p className="text-muted-foreground">Envía <code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_*</code> para crear un lead y asignarlo por round-robin automático al gestor menos cargado.</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/40">
             <p className="font-bold mb-1">Autenticación</p>
             <p className="text-muted-foreground">Header <code className="font-mono text-[11px]">X-API-Key: &lt;clave&gt;</code> o <code className="font-mono text-[11px]">Authorization: Bearer &lt;clave&gt;</code>. Cada proyecto tiene su propia clave.</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/40">
-            <p className="font-bold mb-1">Respuesta rapida</p>
-            <p className="text-muted-foreground">El endpoint responde en &lt;500ms. El email de notificacion al gestor se envia en segundo plano (no bloquea).</p>
+            <p className="font-bold mb-1">Respuesta rápida</p>
+            <p className="text-muted-foreground">El endpoint responde en &lt;500ms. El email de notificación al gestor se envía en segundo plano (no bloquea).</p>
           </div>
           <div className="p-3 rounded-lg bg-muted/40">
             <p className="font-bold mb-1">Duplicados y reincidentes</p>
@@ -1332,11 +1366,11 @@ function WebhooksTab() {
                     <input
                       readOnly
                       value={url}
-                      className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
+                      className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
                     />
                     <button
                       onClick={() => handleCopy(url, `url-${project.id}`)}
-                      className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                      className="h-9 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                     >
                       {copied === `url-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
                       Copiar
@@ -1352,18 +1386,18 @@ function WebhooksTab() {
                         readOnly
                         type={isRevealed ? 'text' : 'password'}
                         value={apiKey}
-                        className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
+                        className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/50 text-xs font-mono outline-none"
                       />
                       <button
                         onClick={() => toggleReveal(project.id)}
-                        className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                        className="h-9 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
                         {isRevealed ? <EyeSlash size={14} weight="bold" /> : <Eye size={14} weight="bold" />}
                         {isRevealed ? 'Ocultar' : 'Ver'}
                       </button>
                       <button
                         onClick={() => handleCopy(apiKey, `key-${project.id}`)}
-                        className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
+                        className="h-9 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
                         {copied === `key-${project.id}` ? <CheckCircle size={14} weight="bold" /> : <Copy size={14} weight="bold" />}
                         Copiar
@@ -1580,7 +1614,7 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
     }
   }
 
-  const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
+  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>
@@ -1592,7 +1626,7 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
               <h2 className="text-lg font-semibold">{existing ? 'Editar' : 'Configurar'} {service.name}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">{service.description}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-3">
@@ -1716,20 +1750,36 @@ export default function SettingsPage() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Sidebar */}
         <div className="w-full lg:w-52 flex lg:flex-col gap-1 overflow-x-auto flex-shrink-0">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-md text-[13px] whitespace-nowrap transition-all ${
-                activeTab === tab.id
-                  ? 'bg-primary/10 text-primary font-bold'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              <tab.icon size={16} weight={activeTab === tab.id ? 'duotone' : 'regular'} />
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            // Items con `to` navegan a paginas externas; el resto cambian la tab interna
+            if (tab.to) {
+              return (
+                <NavLink
+                  key={tab.id}
+                  to={tab.to}
+                  className="w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-md text-[13px] whitespace-nowrap transition-all text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <tab.icon size={16} weight="regular" />
+                  <span className="flex-1">{tab.label}</span>
+                  <ArrowSquareOut size={12} className="opacity-60" />
+                </NavLink>
+              );
+            }
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full lg:w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-md text-[13px] whitespace-nowrap transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-primary/10 text-primary font-bold'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <tab.icon size={16} weight={activeTab === tab.id ? 'duotone' : 'regular'} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Content */}

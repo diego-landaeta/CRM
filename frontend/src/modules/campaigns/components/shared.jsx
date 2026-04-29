@@ -1,5 +1,6 @@
 // Componentes y helpers compartidos entre las paginas de campanas (CRM-101 + CRM-104)
 import KpiCard from '@/shared/components/ui/KpiCard';
+import MetricLabel from '@/shared/components/ui/MetricLabel';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { PRESET_PERIODS } from '../hooks/useCampaigns';
 import {
@@ -179,10 +180,10 @@ export function CampaignTable({ campaigns, statusStyles, statusLabel, getSubLabe
               <th className="text-left px-4 py-2.5 font-bold">Estado</th>
               <th className="text-right px-4 py-2.5 font-bold">Gasto</th>
               <th className="text-right px-4 py-2.5 font-bold">Clicks</th>
-              <th className="text-right px-4 py-2.5 font-bold">CPC</th>
+              <th className="text-right px-4 py-2.5 font-bold"><MetricLabel term="CPC">CPC</MetricLabel></th>
               <th className="text-right px-4 py-2.5 font-bold">Prospectos CRM</th>
               <th className="text-right px-4 py-2.5 font-bold">Conv.</th>
-              <th className="text-right px-4 py-2.5 font-bold">CPA real</th>
+              <th className="text-right px-4 py-2.5 font-bold"><MetricLabel term="CPA">CPA real</MetricLabel></th>
             </tr>
           </thead>
           <tbody>
@@ -288,7 +289,7 @@ export function KeywordsTable({ keywords }) {
               <th className="text-left px-4 py-2.5 font-bold">Match</th>
               <th className="text-right px-4 py-2.5 font-bold">Impressions</th>
               <th className="text-right px-4 py-2.5 font-bold">Clicks</th>
-              <th className="text-right px-4 py-2.5 font-bold">CPC</th>
+              <th className="text-right px-4 py-2.5 font-bold"><MetricLabel term="CPC">CPC</MetricLabel></th>
               <th className="text-right px-4 py-2.5 font-bold">Quality</th>
             </tr>
           </thead>

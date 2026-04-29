@@ -7,6 +7,7 @@ import { conversionsApi } from '@/modules/conversions/api/conversions.api';
 import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
 import { toast } from '@/shared/hooks/useToast';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import EmptyState from '@/shared/components/ui/EmptyState';
 import {
   ArrowLeft, WhatsappLogo, EnvelopeSimple, Phone, ArrowSquareOut,
   ShoppingCart, CurrencyEur, Wallet, CheckCircle, WarningCircle,
@@ -111,7 +112,7 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-5 pb-8">
+      <div className="space-y-5 pb-8" aria-busy="true" aria-live="polite">
         <div className="flex items-center gap-3">
           <div className="h-9 w-24 bg-muted rounded-lg animate-pulse" />
           <div className="h-6 w-48 bg-muted rounded animate-pulse" />
@@ -123,13 +124,19 @@ export default function ClientDetailPage() {
 
   if (!lead) {
     return (
-      <div className="py-16 text-center">
-        <WarningCircle size={36} className="text-muted-foreground mx-auto mb-3" weight="regular" />
-        <p className="text-sm text-muted-foreground">Cliente no encontrado</p>
-        <button onClick={() => navigate('/clients')} className="mt-4 text-sm text-primary hover:underline">
-          Volver a Clientes
-        </button>
-      </div>
+      <EmptyState
+        icon={WarningCircle}
+        title="Cliente no encontrado"
+        description="Es posible que haya sido eliminado o no tengas acceso al proyecto."
+        action={
+          <button
+            onClick={() => navigate('/clients')}
+            className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
+          >
+            Volver a Clientes
+          </button>
+        }
+      />
     );
   }
 
@@ -149,7 +156,8 @@ export default function ClientDetailPage() {
       <div className="flex items-center gap-2 text-sm">
         <button
           onClick={() => navigate('/clients')}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Volver a Clientes"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
         >
           <ArrowLeft size={16} weight="bold" />
           Clientes
@@ -159,9 +167,9 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Header card */}
-      <div className="bg-card border border-border rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-5">
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
         {/* Avatar */}
-        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold flex-shrink-0 ${avatarColor}`}>
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${avatarColor}`}>
           {initials}
         </div>
 
@@ -192,30 +200,32 @@ export default function ClientDetailPage() {
         {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {waPhone && (
-            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener"
-              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium">
+            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener" aria-label="Abrir WhatsApp"
+              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
               <WhatsappLogo size={15} weight="regular" />
               <span className="hidden sm:inline">WhatsApp</span>
             </a>
           )}
           {lead.email && (
-            <a href={`mailto:${lead.email}`}
-              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm font-medium">
+            <a href={`mailto:${lead.email}`} aria-label="Enviar email"
+              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
               <EnvelopeSimple size={15} weight="regular" />
               <span className="hidden sm:inline">Email</span>
             </a>
           )}
           <button
             onClick={() => setUpsellOpen(true)}
-            className="h-9 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-2 text-sm font-semibold"
+            aria-label="Registrar nueva venta"
+            className="h-9 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <ShoppingCart size={15} weight="bold" />
             <span className="hidden sm:inline">Nueva venta</span>
           </button>
           <Link
             to={`/leads/${lead.id}`}
-            className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
+            className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
             title="Ver ficha completa en Prospectos"
+            aria-label="Ver ficha completa en Prospectos"
           >
             <ArrowSquareOut size={14} />
             <span className="hidden sm:inline">Ficha completa</span>
@@ -224,7 +234,7 @@ export default function ClientDetailPage() {
       </div>
 
       {/* KPIs financieros */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <KpiCard label="Total facturado" value={fmt(totalFacturado)} icon={CurrencyEur} />
         <KpiCard label="Total cobrado" value={fmt(totalPagado)} color="green" icon={CheckCircle} />
         <KpiCard label="Pendiente" value={fmt(totalPendiente)} color={totalPendiente > 0 ? 'orange' : 'default'} icon={Wallet} />
@@ -232,10 +242,10 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Layout 2 cols */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* ── Columna izquierda (2/3) ── */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-4">
 
           {/* Tabs */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -249,7 +259,8 @@ export default function ClientDetailPage() {
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all ${
+                    aria-pressed={tab === t.id}
+                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
                       tab === t.id
                         ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -262,7 +273,7 @@ export default function ClientDetailPage() {
               })}
             </div>
 
-            <div className="p-5">
+            <div className="p-4">
               {tab === 'compras' && (
                 <ConversionsTab
                   lead={lead}
@@ -274,13 +285,19 @@ export default function ClientDetailPage() {
               {tab === 'interacciones' && (
                 <div>
                   {interacciones.length === 0 ? (
-                    <div className="py-10 text-center">
-                      <ChatCircleDots size={32} className="text-muted-foreground/40 mx-auto mb-2" weight="regular" />
-                      <p className="text-sm text-muted-foreground">Sin interacciones registradas</p>
-                      <Link to={`/leads/${lead.id}`} className="text-xs text-primary hover:underline mt-1 block">
-                        Añadir desde la ficha completa
-                      </Link>
-                    </div>
+                    <EmptyState
+                      icon={ChatCircleDots}
+                      title="Sin interacciones registradas"
+                      description="Aún no se ha registrado ninguna llamada, email, WhatsApp o nota con este cliente."
+                      action={
+                        <Link
+                          to={`/leads/${lead.id}`}
+                          className="text-xs text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
+                        >
+                          Añadir desde la ficha completa
+                        </Link>
+                      }
+                    />
                   ) : (
                     <div className="relative">
                       <div className="absolute left-[18px] top-0 bottom-0 w-px bg-border" />
@@ -408,7 +425,7 @@ export default function ClientDetailPage() {
           {/* Link to full lead */}
           <Link
             to={`/leads/${lead.id}`}
-            className="flex items-center justify-between w-full p-3.5 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm text-muted-foreground hover:text-foreground group"
+            className="flex items-center justify-between w-full p-3.5 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm text-muted-foreground hover:text-foreground group focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <span className="font-medium">Ver ficha completa en Prospectos</span>
             <ArrowSquareOut size={15} className="group-hover:translate-x-0.5 transition-transform" />

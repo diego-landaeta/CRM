@@ -1,40 +1,31 @@
 import { useState, useEffect } from 'react';
 import { DeviceMobile, X, DownloadSimple } from '@phosphor-icons/react';
+import usePwaInstall from '@/shared/hooks/usePwaInstall';
 
 export default function PWAInstallPrompt() {
-  const [installEvent, setInstallEvent] = useState(null);
-  const [visible, setVisible] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const { canInstall, promptInstall } = usePwaInstall();
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('crm.pwa-install-dismissed') === '1';
+  });
 
+  // Re-check dismissed flag if it changes externally
   useEffect(() => {
-    const alreadyDismissed = localStorage.getItem('crm.pwa-install-dismissed');
-    if (alreadyDismissed) return;
-
-    const handler = (e) => {
-      e.preventDefault();
-      setInstallEvent(e);
-      setVisible(true);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    function onStorage(e) {
+      if (e.key === 'crm.pwa-install-dismissed') {
+        setDismissed(e.newValue === '1');
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  async function handleInstall() {
-    if (!installEvent) return;
-    installEvent.prompt();
-    const { outcome } = await installEvent.userChoice;
-    if (outcome === 'accepted') {
-      setVisible(false);
-    }
-  }
-
   function handleDismiss() {
-    setVisible(false);
     setDismissed(true);
     localStorage.setItem('crm.pwa-install-dismissed', '1');
   }
 
-  if (!visible || dismissed) return null;
+  if (!canInstall || dismissed) return null;
 
   return (
     <div
@@ -48,7 +39,7 @@ export default function PWAInstallPrompt() {
         <p className="text-sm font-semibold text-foreground">Instalar MultiCRM</p>
         <p className="text-xs text-muted-foreground mt-0.5">Accede más rápido desde tu escritorio o móvil.</p>
         <button
-          onClick={handleInstall}
+          onClick={promptInstall}
           className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
         >
           <DownloadSimple size={14} weight="bold" />

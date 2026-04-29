@@ -1,11 +1,26 @@
 import { query, getClient } from '../../shared/config/db.js';
 
-export async function listByProject(projectId) {
+const ENTITIES = ['lead', 'client', 'product'];
+function normalizeEntity(e) {
+  return ENTITIES.includes(e) ? e : 'lead';
+}
+
+export async function listByProject(projectId, entity = null) {
+  if (entity) {
+    const { rows } = await query(
+      `SELECT id, project_id, entity, field_key, label, type, options, required, orden, grupo, active, created_at
+         FROM project_field_definitions
+        WHERE project_id = $1 AND entity = $2 AND active = true
+        ORDER BY orden ASC, id ASC`,
+      [projectId, normalizeEntity(entity)]
+    );
+    return rows;
+  }
   const { rows } = await query(
-    `SELECT id, project_id, field_key, label, type, options, required, orden, grupo, active, created_at
-     FROM project_field_definitions
-     WHERE project_id = $1 AND active = true
-     ORDER BY orden ASC, id ASC`,
+    `SELECT id, project_id, entity, field_key, label, type, options, required, orden, grupo, active, created_at
+       FROM project_field_definitions
+      WHERE project_id = $1 AND active = true
+      ORDER BY entity ASC, orden ASC, id ASC`,
     [projectId]
   );
   return rows;
@@ -22,11 +37,13 @@ export async function findById(id) {
 export async function create(data) {
   const { rows } = await query(
     `INSERT INTO project_field_definitions
-       (project_id, field_key, label, type, options, required, orden, grupo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (project_id, entity, field_key, label, type, options, required, orden, grupo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
-      data.project_id, data.field_key, data.label, data.type,
+      data.project_id,
+      normalizeEntity(data.entity),
+      data.field_key, data.label, data.type,
       data.options ? JSON.stringify(data.options) : null,
       data.required, data.orden, data.grupo || null,
     ]
@@ -76,10 +93,10 @@ export async function reorder(projectId, items) {
   }
 }
 
-export async function keyExists(projectId, fieldKey) {
+export async function keyExists(projectId, entity, fieldKey) {
   const { rows } = await query(
-    `SELECT id FROM project_field_definitions WHERE project_id = $1 AND field_key = $2`,
-    [projectId, fieldKey]
+    `SELECT id FROM project_field_definitions WHERE project_id = $1 AND entity = $2 AND field_key = $3`,
+    [projectId, normalizeEntity(entity), fieldKey]
   );
   return rows.length > 0;
 }

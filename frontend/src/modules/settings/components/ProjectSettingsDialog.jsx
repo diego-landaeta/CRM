@@ -9,6 +9,7 @@ import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import { hasLocalLogo } from '@/shared/lib/projectLogos';
 
 const EMPTY_CONFIRM = { open: false, title: '', message: '', onConfirm: null, tone: 'destructive', confirmLabel: 'Eliminar' };
 function useConfirm() {
@@ -101,7 +102,7 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
                 <p className="text-xs text-muted-foreground truncate">{project.slug} &mdash; {project.type === 'crm' ? 'Proyecto CRM' : 'Proyecto IA'}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted flex-shrink-0"><X size={18} /></button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-md hover:bg-muted flex-shrink-0"><X size={18} /></button>
           </div>
 
           <div className="flex flex-col lg:flex-row flex-1 min-h-0">
@@ -145,12 +146,13 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
 // GENERAL
 // ============================================================
 function GeneralTab({ project, onSaved }) {
-  const { ask, dialog: confirmDialog } = useConfirm();
+  const { dialog: confirmDialog } = useConfirm();
   const [form, setForm] = useState({
     nombre: project.nombre,
     type: project.type || 'crm',
     dias_alerta_inactividad: project.dias_alerta_inactividad || 3,
     emoji: project.emoji || '',
+    logo_url: project.logo_url || '',
     meta_account_id: project.meta_account_id || '',
     google_account_id: project.google_account_id || '',
     gsc_property: project.gsc_property || '',
@@ -159,48 +161,6 @@ function GeneralTab({ project, onSaved }) {
     producto_label_plural: project.producto_label_plural || 'Productos',
   });
   const [saving, setSaving] = useState(false);
-  const [logoVersion, setLogoVersion] = useState(Date.now());
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const hasLogo = !!project.logo_key;
-
-  async function handleLogoUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Archivo muy grande', description: 'Maximo 5 MB', variant: 'destructive' });
-      return;
-    }
-    setUploadingLogo(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await client.post(`/projects/${project.id}/logo`, fd);
-      if (res.success) {
-        toast({ title: 'Logo actualizado' });
-        setLogoVersion(Date.now());
-        onSaved?.();
-      }
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
-    } finally {
-      setUploadingLogo(false);
-      e.target.value = '';
-    }
-  }
-
-  function handleLogoDelete() {
-    ask('Eliminar logo', '¿Eliminar el logo del proyecto? Se perderá definitivamente.', async () => {
-      try {
-        await client.delete(`/projects/${project.id}/logo`);
-        toast({ title: 'Logo eliminado' });
-        setLogoVersion(Date.now());
-        onSaved?.();
-      } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
-    });
-  }
-
-  const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
-  const logoSrc = hasLogo ? `${baseUrl}/api/projects/${project.id}/logo?v=${logoVersion}` : null;
 
   async function handleSave(e) {
     e.preventDefault();
@@ -211,6 +171,7 @@ function GeneralTab({ project, onSaved }) {
         type: form.type,
         dias_alerta_inactividad: Number(form.dias_alerta_inactividad),
         emoji: form.emoji || null,
+        logo_url: form.logo_url ? form.logo_url.trim() : null,
         meta_account_id: form.meta_account_id || null,
         google_account_id: form.google_account_id || null,
         gsc_property: form.gsc_property || null,
@@ -225,30 +186,36 @@ function GeneralTab({ project, onSaved }) {
     } finally { setSaving(false); }
   }
 
+  // Preview en vivo del logo segun lo que tenga form.logo_url
+  const logoPreviewSrc = form.logo_url?.trim() || null;
+
   return (
     <form onSubmit={handleSave} className="space-y-5 max-w-2xl">
-      <SectionTitle title="Logo del proyecto" subtitle="PNG, JPG, WEBP o SVG. Max 5 MB. Se usa en el sidebar y dashboard." />
-      <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-md border border-border">
-        <div className="w-20 h-20 rounded-md bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
-          {logoSrc ? (
-            <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+      <SectionTitle title="Logo del proyecto" subtitle="Pega la URL de la imagen (PNG, JPG, WEBP o SVG)." />
+      <div className="flex items-start gap-4 p-4 bg-muted/20 rounded-md border border-border">
+        <div className="w-16 h-16 rounded-md bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+          {logoPreviewSrc ? (
+            <img
+              src={logoPreviewSrc}
+              alt="Preview del logo"
+              className="w-full h-full object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
           ) : (
-            <span className="text-3xl">{form.emoji || '📁'}</span>
+            <span className="text-2xl">{form.emoji || '📁'}</span>
           )}
         </div>
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 cursor-pointer">
-              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleLogoUpload} disabled={uploadingLogo} className="hidden" />
-              {uploadingLogo ? 'Subiendo...' : hasLogo ? 'Cambiar logo' : 'Subir logo'}
-            </label>
-            {hasLogo && (
-              <button type="button" onClick={handleLogoDelete} className="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100">
-                Eliminar
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">Si no hay logo se muestra el emoji. El logo tiene prioridad.</p>
+        <div className="flex-1 space-y-1.5 min-w-0">
+          <input
+            type="url"
+            value={form.logo_url}
+            onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
+            placeholder="https://misitio.com/logo.png"
+            className={inputClass}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Si la dejas vacia se muestra el emoji. La URL debe ser publica y servir CORS para imagenes.
+          </p>
         </div>
       </div>
 
@@ -375,7 +342,7 @@ function CategoriesTab({ project }) {
       </div>
 
       <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
-        <p className="text-[11px] font-medium text-muted-foreground">Añadir categoria</p>
+        <p className="text-[11px] font-medium text-muted-foreground">Añadir categoría</p>
         <div className="flex gap-2">
           <input
             value={newCat.nombre}
@@ -399,7 +366,7 @@ function CategoriesTab({ project }) {
       </form>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Cargando...</p>
+        <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : parents.length === 0 ? (
         <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
           <Tag size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
@@ -420,14 +387,14 @@ function CategoriesTab({ project }) {
                     </span>
                   )}
                 </div>
-                <button onClick={() => handleDelete(p.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
+                <button onClick={() => handleDelete(p.id)} aria-label="Eliminar" className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
               </div>
               {childrenByParent[p.id]?.length > 0 && (
                 <div className="mt-2 ml-5 space-y-1 border-l border-border pl-3">
                   {childrenByParent[p.id].map(c => (
                     <div key={c.id} className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>— {c.nombre}</span>
-                      <button onClick={() => handleDelete(c.id)} className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
+                      <button onClick={() => handleDelete(c.id)} aria-label="Eliminar" className="p-0.5 rounded hover:bg-red-50 text-red-500"><X size={12} /></button>
                     </div>
                   ))}
                 </div>
@@ -456,8 +423,8 @@ const FIELD_TYPES = [
 const BASE_FIELDS = [
   { key: 'nombre', label: 'Nombre', alwaysRequired: true },
   { key: 'email', label: 'Email', alwaysRequired: true },
-  { key: 'telefono', label: 'Telefono', alwaysRequired: false },
-  { key: 'producto_interes_id', label: 'Producto de interes', alwaysRequired: false },
+  { key: 'telefono', label: 'Teléfono', alwaysRequired: false },
+  { key: 'producto_interes_id', label: 'Producto de interés', alwaysRequired: false },
   { key: 'notas', label: 'Notas', alwaysRequired: false },
 ];
 
@@ -648,7 +615,7 @@ function FieldsTab({ project, onSaved }) {
           </form>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Cargando...</p>
+            <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : fields.length === 0 ? (
             <div className="text-center py-10 border-2 border-dashed border-border rounded-md">
               <Notepad size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />
@@ -696,13 +663,13 @@ function FieldsTab({ project, onSaved }) {
                     <div className="flex items-center gap-1">
                       {isEditing ? (
                         <>
-                          <button onClick={() => saveEdit(f)} className="p-1.5 rounded hover:bg-green-50 text-green-600"><FloppyDisk size={14} weight="bold" /></button>
-                          <button onClick={() => setEditingId(null)} className="p-1.5 rounded hover:bg-muted"><X size={14} /></button>
+                          <button onClick={() => saveEdit(f)} aria-label="Guardar" className="p-1.5 rounded hover:bg-green-50 text-green-600"><FloppyDisk size={14} weight="bold" /></button>
+                          <button onClick={() => setEditingId(null)} aria-label="Cancelar edición" className="p-1.5 rounded hover:bg-muted"><X size={14} /></button>
                         </>
                       ) : (
                         <>
-                          <button onClick={() => startEdit(f)} className="p-1.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100"><Gear size={14} /></button>
-                          <button onClick={() => handleDelete(f.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500 opacity-0 group-hover:opacity-100"><X size={14} /></button>
+                          <button onClick={() => startEdit(f)} aria-label="Editar campo" className="p-1.5 rounded hover:bg-muted opacity-0 group-hover:opacity-100"><Gear size={14} /></button>
+                          <button onClick={() => handleDelete(f.id)} aria-label="Eliminar campo" className="p-1.5 rounded hover:bg-red-50 text-red-500 opacity-0 group-hover:opacity-100"><X size={14} /></button>
                         </>
                       )}
                     </div>
@@ -873,7 +840,7 @@ function ApisTab({ project }) {
       <SectionTitle title={`APIs de ${project.nombre}`} subtitle="Credenciales especificas de este proyecto, encriptadas con AES-256-GCM" />
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Cargando...</p>
+        <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <div className="space-y-2">
           {PROJECT_SERVICES.map(svc => {
@@ -896,7 +863,7 @@ function ApisTab({ project }) {
                     }`}>{cred.last_test_result || 'sin probar'}</span>
                     <button onClick={() => handleTest(cred.id)} className="text-[11px] px-2 py-1 rounded bg-blue-50 text-blue-600 font-semibold">Test</button>
                     <button onClick={() => setDialogSvc(svc)} className="text-[11px] px-2 py-1 rounded border border-border font-semibold">Editar</button>
-                    <button onClick={() => handleDelete(cred.id)} className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
+                    <button onClick={() => handleDelete(cred.id)} aria-label="Eliminar credencial" className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
                   </>
                 ) : (
                   <button onClick={() => setDialogSvc(svc)} className="text-[11px] px-3 py-1.5 rounded-lg bg-primary text-white font-semibold">Configurar</button>
@@ -937,7 +904,7 @@ function CredentialQuickDialog({ project, service, existing, onClose, onSaved })
         <form onSubmit={handleSave} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">{existing ? 'Editar' : 'Configurar'} {service.name}</h3>
-            <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+            <button type="button" onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <p className="text-xs text-muted-foreground">{service.description}</p>
           <div>
@@ -1077,7 +1044,7 @@ function ModulosTab({ project, onSaved }) {
 const DEFAULT_COLUMNS = [
   { key: 'nombre', label: 'Nombre', visible: true },
   { key: 'email', label: 'Email', visible: true },
-  { key: 'telefono', label: 'Telefono', visible: true },
+  { key: 'telefono', label: 'Teléfono', visible: true },
   { key: 'canal_detectado', label: 'Origen', visible: true },
   { key: 'status', label: 'Estado', visible: true },
   { key: 'responsable_nombre', label: 'Gestor', visible: true },
@@ -1087,8 +1054,8 @@ const DEFAULT_COLUMNS = [
 const AVAILABLE_EXTRA_COLUMNS = [
   { key: 'utm_source', label: 'UTM Source' },
   { key: 'utm_campaign', label: 'UTM Campaign' },
-  { key: 'dias_inactivo', label: 'Dias inactivo' },
-  { key: 'last_interaction_at', label: 'Ultima interaccion' },
+  { key: 'dias_inactivo', label: 'Días inactivo' },
+  { key: 'last_interaction_at', label: 'Última interacción' },
   { key: 'updated_at', label: 'Actualizado' },
   { key: 'reincidente', label: 'Reincidente' },
 ];
@@ -1172,8 +1139,8 @@ function ColumnsTab({ project, onSaved }) {
         ) : cols.map((c, idx) => (
           <div key={c.key} className="flex items-center gap-3 px-4 py-2.5">
             <div className="flex flex-col gap-0.5">
-              <button onClick={() => move(idx, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowUp size={12} /></button>
-              <button onClick={() => move(idx, 1)} disabled={idx === cols.length - 1} className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowDown size={12} /></button>
+              <button onClick={() => move(idx, -1)} disabled={idx === 0} aria-label="Subir" className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowUp size={12} /></button>
+              <button onClick={() => move(idx, 1)} disabled={idx === cols.length - 1} aria-label="Bajar" className="p-0.5 rounded hover:bg-muted disabled:opacity-20"><ArrowDown size={12} /></button>
             </div>
             <div className="flex-1 min-w-0">
               <input

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -6,7 +6,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
-import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
 const TRIGGERS = [
   { v: 'lead_created', label: 'Cuando se crea un lead' },
@@ -59,15 +60,19 @@ export default function EmailSequencesPage() {
         title="Secuencias de email"
         subtitle={`${sequences.length} secuencias en ${activeProject?.nombre || 'este proyecto'}`}
         actions={
-          <button onClick={() => setEditing({ nombre: '', trigger_event: 'lead_created', trigger_filter: {}, steps: [{ delay_hours: 0, subject: '', body: '' }], active: true })} className="flex items-center gap-1 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold">
-            <Plus size={14} weight="bold" /> Nueva secuencia
+          <button
+            onClick={() => setEditing({ nombre: '', trigger_event: 'lead_created', trigger_filter: {}, steps: [{ delay_hours: 0, subject: '', body: '' }], active: true })}
+            aria-label="Nueva secuencia"
+            className="flex items-center gap-1 h-9 px-3 sm:px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nueva secuencia</span>
           </button>
         }
       />
 
       {loading ? <SkeletonTable rows={3} columns={3} /> :
         sequences.length === 0 ? (
-          <EmptyState icon={Envelope} title="Sin secuencias" description="Crea una para enviar emails de seguimiento automaticos" />
+          <EmptyState icon={Envelope} title="Sin secuencias" description="Crea una para enviar emails de seguimiento automáticos" />
         ) : (
           <div className="grid gap-3">
             {sequences.map(s => (
@@ -79,18 +84,44 @@ export default function EmailSequencesPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{TRIGGERS.find(t => t.v === s.trigger_event)?.label || s.trigger_event} · {s.steps?.length || 0} pasos · {s.active_runs || 0} activas, {s.completed_runs || 0} completadas</p>
                 </div>
-                <button onClick={() => handleToggle(s)} className="p-2 rounded hover:bg-muted" title={s.active ? 'Pausar' : 'Reanudar'}>
+                <button
+                  onClick={() => handleToggle(s)}
+                  aria-label={s.active ? 'Pausar secuencia' : 'Reanudar secuencia'}
+                  title={s.active ? 'Pausar' : 'Reanudar'}
+                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
                   {s.active ? <Pause size={16} /> : <Play size={16} />}
                 </button>
-                <button onClick={() => setEditing(s)} className="px-3 py-1.5 rounded bg-muted text-xs font-bold">Editar</button>
-                <button onClick={() => handleDelete(s)} className="p-2 rounded hover:bg-red-50 text-red-500"><Trash size={14} /></button>
+                <button
+                  onClick={() => setEditing(s)}
+                  className="h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => handleDelete(s)}
+                  aria-label="Eliminar secuencia"
+                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                >
+                  <Trash size={14} />
+                </button>
               </div>
             ))}
           </div>
         )}
 
       {editing && <SequenceEditor seq={editing} onSave={handleSave} onClose={() => setEditing(null)} />}
-      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar secuencia?" message="Se eliminará la secuencia y todos sus pasos." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
+      <Suspense fallback={null}>
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          title="¿Eliminar secuencia?"
+          message="Se eliminará la secuencia y todos sus pasos."
+          confirmLabel="Eliminar"
+          tone="destructive"
+          onConfirm={doDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -111,11 +142,28 @@ function SequenceEditor({ seq, onSave, onClose }) {
       <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">{s.id ? 'Editar' : 'Nueva'} secuencia</h3>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar editor"
+            className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <X size={18} />
+          </button>
         </div>
         <div className="p-5 space-y-4">
-          <input value={s.nombre} onChange={e => setS({ ...s, nombre: e.target.value })} placeholder="Nombre de la secuencia" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
-          <select value={s.trigger_event} onChange={e => setS({ ...s, trigger_event: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm">
+          <input
+            value={s.nombre}
+            onChange={e => setS({ ...s, nombre: e.target.value })}
+            placeholder="Nombre de la secuencia"
+            aria-label="Nombre de la secuencia"
+            className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <select
+            value={s.trigger_event}
+            onChange={e => setS({ ...s, trigger_event: e.target.value })}
+            aria-label="Evento que dispara la secuencia"
+            className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
             {TRIGGERS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
           </select>
 
@@ -125,20 +173,63 @@ function SequenceEditor({ seq, onSave, onClose }) {
               <div key={i} className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold">Paso {i + 1}</span>
-                  <input type="number" min="0" value={step.delay_hours} onChange={e => updateStep(i, 'delay_hours', Number(e.target.value))} className="w-20 h-8 px-2 rounded border border-border bg-card text-xs" />
+                  <input
+                    type="number"
+                    min="0"
+                    value={step.delay_hours}
+                    onChange={e => updateStep(i, 'delay_hours', Number(e.target.value))}
+                    aria-label={`Horas de retraso del paso ${i + 1}`}
+                    className="w-20 h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
                   <span className="text-xs text-muted-foreground">horas tras anterior</span>
-                  {s.steps.length > 1 && <button onClick={() => removeStep(i)} className="ml-auto p-1 rounded hover:bg-red-50 text-red-500"><Trash size={12} /></button>}
+                  {s.steps.length > 1 && (
+                    <button
+                      onClick={() => removeStep(i)}
+                      aria-label={`Quitar paso ${i + 1}`}
+                      className="ml-auto p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                    >
+                      <Trash size={12} />
+                    </button>
+                  )}
                 </div>
-                <input value={step.subject || ''} onChange={e => updateStep(i, 'subject', e.target.value)} placeholder="Asunto" className="w-full h-8 px-2 rounded border border-border bg-card text-xs" />
-                <textarea value={step.body || ''} onChange={e => updateStep(i, 'body', e.target.value)} placeholder="Cuerpo HTML del email" rows={3} className="w-full px-2 py-1.5 rounded border border-border bg-card text-xs font-mono" />
+                <input
+                  value={step.subject || ''}
+                  onChange={e => updateStep(i, 'subject', e.target.value)}
+                  placeholder="Asunto"
+                  aria-label={`Asunto del paso ${i + 1}`}
+                  className="w-full h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <textarea
+                  value={step.body || ''}
+                  onChange={e => updateStep(i, 'body', e.target.value)}
+                  placeholder="Cuerpo HTML del email"
+                  rows={3}
+                  aria-label={`Cuerpo del paso ${i + 1}`}
+                  className="w-full px-2 py-1.5 rounded border border-border bg-card text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
               </div>
             ))}
-            <button onClick={addStep} className="flex items-center gap-1 px-3 py-1.5 rounded bg-muted text-xs font-bold"><Plus size={12} /> Añadir paso</button>
+            <button
+              onClick={addStep}
+              className="flex items-center gap-1 h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Plus size={12} /> Añadir paso
+            </button>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-bold">Cancelar</button>
-            <button onClick={() => onSave(s)} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold"><FloppyDisk size={14} weight="bold" /> Guardar</button>
+            <button
+              onClick={onClose}
+              className="h-9 px-4 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => onSave(s)}
+              className="flex items-center gap-1 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <FloppyDisk size={14} weight="bold" /> Guardar
+            </button>
           </div>
         </div>
       </div>

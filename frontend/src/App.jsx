@@ -12,6 +12,7 @@ const ROUTE_TITLES = {
   '/campaigns/meta': 'Meta Ads',
   '/campaigns/google': 'Google Ads',
   '/seo': 'Tráfico orgánico',
+  '/stripe': 'Stripe',
   '/revenue': 'Conversiones',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
@@ -24,7 +25,12 @@ const ROUTE_TITLES = {
   '/commissions': 'Comisiones',
   '/matriculas': 'Matrículas',
   '/email-sequences': 'Email seguimiento',
-  '/forms': 'Forms y Webhooks',
+  '/forms': 'Forms',
+  '/webhooks': 'Webhooks',
+  '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/roles': 'Roles y Permisos',
+  '/configuracion/canales': 'Canales del proyecto',
+  '/configuracion/atajos': 'Atajos rápidos',
   '/payroll': 'Nóminas',
   '/woocommerce': 'WooCommerce',
   '/reports': 'Reportes',
@@ -74,6 +80,7 @@ const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage
 const MetaCampaignsPage = lazy(() => import('./modules/campaigns/pages/MetaCampaignsPage'));
 const GoogleCampaignsPage = lazy(() => import('./modules/campaigns/pages/GoogleCampaignsPage'));
 const SeoPage = lazy(() => import('./modules/seo/pages/SeoPage'));
+const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
 const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
@@ -91,6 +98,12 @@ const CommissionsPage = lazy(() => import('./modules/commissions/pages/Commissio
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
+const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
+const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDetailPage'));
+const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
+const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
+const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
+const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
@@ -99,7 +112,7 @@ const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 
 function App() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>}>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-muted-foreground">Cargando…</div>}>
       <ScrollToTop />
       <DocumentTitle />
       <Routes>
@@ -118,6 +131,7 @@ function App() {
           <Route path="/campaigns/meta" element={<MetaCampaignsPage />} />
           <Route path="/campaigns/google" element={<GoogleCampaignsPage />} />
           <Route path="/seo" element={<SeoPage />} />
+          <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />
           <Route path="/accounting/income" element={<IncomePage />} />
@@ -130,6 +144,12 @@ function App() {
           <Route path="/matriculas" element={<MatriculasPage />} />
           <Route path="/email-sequences" element={<EmailSequencesPage />} />
           <Route path="/forms" element={<FormsPage />} />
+          <Route path="/webhooks" element={<WebhooksPage />} />
+          <Route path="/webhooks/:id" element={<WebhookDetailPage />} />
+          <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
+          <Route path="/configuracion/roles" element={<RolesPage />} />
+          <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
+          <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />

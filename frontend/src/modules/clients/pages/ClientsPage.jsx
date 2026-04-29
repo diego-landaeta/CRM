@@ -4,6 +4,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import {
   UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple,
 } from '@phosphor-icons/react';
@@ -63,20 +64,20 @@ function QuickActions({ client: c, onUpsell }) {
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp"
-          className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors">
+        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp" aria-label="Abrir WhatsApp"
+          className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <WhatsappLogo size={14} weight="regular" />
         </a>
       )}
       {c.email && (
-        <a href={`mailto:${c.email}`} title="Email"
-          className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors">
+        <a href={`mailto:${c.email}`} title="Email" aria-label="Enviar email"
+          className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <EnvelopeSimple size={14} weight="regular" />
         </a>
       )}
       {onUpsell && (
-        <button onClick={() => onUpsell(c)} title="Nueva venta / upsell"
-          className="p-1.5 rounded hover:bg-violet-100 dark:hover:bg-violet-950/40 text-muted-foreground hover:text-violet-700 dark:hover:text-violet-400 transition-colors">
+        <button onClick={() => onUpsell(c)} title="Nueva venta / upsell" aria-label="Registrar nueva venta o upsell"
+          className="p-1.5 rounded hover:bg-violet-100 dark:hover:bg-violet-950/40 text-muted-foreground hover:text-violet-700 dark:hover:text-violet-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <ShoppingCart size={14} weight="regular" />
         </button>
       )}
@@ -146,7 +147,7 @@ export default function ClientsPage() {
 
   async function handleUpsellCreated() {
     setUpsellLead(null);
-    toast({ title: 'Venta registrada', description: 'Se actualizo el historial del cliente' });
+    toast({ title: 'Venta registrada', description: 'Se actualizó el historial del cliente' });
     // Recargar datos del cliente
     if (activeProject?.id) {
       const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
@@ -173,45 +174,51 @@ export default function ClientsPage() {
         subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${filtered.length} clientes`}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs font-medium text-muted-foreground mb-1">Total facturado</p>
-          <p className="text-2xl font-semibold tabular-nums">{fmt(totalFacturado)}</p>
+          <p className="text-xl font-semibold tabular-nums">{fmt(totalFacturado)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs font-medium text-muted-foreground mb-1">Total cobrado</p>
-          <p className="text-2xl font-semibold tabular-nums text-green-600">{fmt(totalCobrado)}</p>
+          <p className="text-xl font-semibold tabular-nums text-green-600">{fmt(totalCobrado)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs font-medium text-muted-foreground mb-1">Pendiente de cobro</p>
-          <p className="text-2xl font-semibold tabular-nums text-orange-600">{fmt(totalPendiente)}</p>
+          <p className="text-xl font-semibold tabular-nums text-orange-600">{fmt(totalPendiente)}</p>
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-border flex gap-2">
+        <div className="p-3 border-b border-border flex gap-2">
           <input
             type="search"
-            placeholder="Buscar por nombre o email..."
+            placeholder="Buscar por nombre o email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 h-10 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary"
+            aria-label="Buscar clientes"
+            className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
           />
           {filtered.length > 0 && (
             <button
               onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
               title="Exportar CSV"
-              className="h-10 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
+              aria-label="Exportar clientes a CSV"
+              className="h-9 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <DownloadSimple size={14} weight="bold" /> CSV
+              <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
             </button>
           )}
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Cargando clientes...</div>
+          <SkeletonTable rows={5} columns={6} className="border-0 rounded-none" />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={UserCheck} title="Sin clientes" description="Los prospectos marcados como 'convertido' apareceran aqui con su historial de compras" />
+          <EmptyState
+            icon={UserCheck}
+            title="Sin clientes"
+            description="Los prospectos marcados como 'convertido' aparecerán aquí con su historial de compras"
+          />
         ) : (
           <>
             {/* Desktop table */}
@@ -224,8 +231,8 @@ export default function ClientsPage() {
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
                     <th className="text-right px-4 py-2.5 font-bold">Facturado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
-                    <th className="text-left px-4 py-2.5 font-bold">Ultima compra</th>
-                    <th className="text-left px-4 py-2.5 font-bold">Ultimo contacto</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Última compra</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Último contacto</th>
                     <th className="text-right px-4 py-2.5 font-bold pr-3">Acciones</th>
                   </tr>
                 </thead>

@@ -117,9 +117,9 @@ export default function SeoPage() {
             <div className="flex items-center justify-between mb-1 gap-3">
               <h3 className="font-semibold">Tráfico orgánico vs pagado vs leads</h3>
             </div>
-            <p className="text-xs text-muted-foreground mb-4">Evolucion mensual ultimos 12 meses (organic GSC + paid Meta+Google)</p>
+            <p className="text-xs text-muted-foreground mb-4">Evolución mensual últimos 12 meses (organic GSC + paid Meta+Google)</p>
             {seo.consolidated.months.length === 0 ? (
-              <EmptyState icon={ChartLineUp} title="Sin datos consolidados" description="Aun no hay historico mensual" />
+              <EmptyState icon={ChartLineUp} title="Sin datos consolidados" description="Aún no hay histórico mensual" />
             ) : (
               <ResponsiveContainer width="100%" height={260} minHeight={220}>
                 <LineChart data={seo.consolidated.months} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>

@@ -26,14 +26,14 @@ export default function ProductDetailPage() {
   if (!product) return <div className="p-8 text-destructive">Producto no encontrado.</div>;
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-5 max-w-3xl space-y-5">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/products"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to="/products" aria-label="Volver a productos"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold">{product.nombre}</h1>
-          {product.descripcion && <p className="text-muted-foreground">{product.descripcion}</p>}
+          <h1 className="text-lg sm:text-xl font-semibold">{product.nombre}</h1>
+          {product.descripcion && <p className="text-muted-foreground text-sm">{product.descripcion}</p>}
         </div>
       </div>
       <hr />

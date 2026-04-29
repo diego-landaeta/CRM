@@ -1,8 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import client from '@/shared/api/client';
 
 const PAGE_SIZE = 20;
+
+// Defaults para filtros persistidos en URL.
+// Solo valores != default aparecen en la URL — refresh-safe + URL compartible.
+const URL_DEFAULTS = {
+  q: '',          // search
+  estado: '',     // filterEstado
+  origen: '',     // filterOrigen
+  resp: '',       // filterResponsable
+  page: 1,
+};
 
 // Normaliza la respuesta del backend para mantener compatibilidad con la UI.
 // El backend devuelve `status` y `canal_detectado`, la UI usa `estado` y `origen`.
@@ -19,16 +30,25 @@ export function useLeads() {
   const { activeProject } = useProjectContext();
   const pid = activeProject?.id;
 
+  // Filtros sincronizados con URL — refresh y compartir mantienen el estado.
+  const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, page } = urlFilters;
+
+  // Setters compatibles con la API anterior (string -> nuevo valor)
+  const setSearch = useCallback((v) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
+  const setFilterEstado = useCallback((v) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
+  const setFilterOrigen = useCallback((v) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
+  const setFilterResponsable = useCallback((v) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
+  const setPage = useCallback((v) => {
+    const next = typeof v === 'function' ? v(page) : v;
+    setUrlFilters({ page: Number(next) || 1 });
+  }, [page, setUrlFilters]);
+
   const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState({});
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterEstado, setFilterEstado] = useState('');
-  const [filterOrigen, setFilterOrigen] = useState('');
-  const [filterResponsable, setFilterResponsable] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -38,7 +58,6 @@ export function useLeads() {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(search);
-      setPage(1);
     }, 350);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);

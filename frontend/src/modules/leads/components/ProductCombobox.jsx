@@ -152,7 +152,7 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
         <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-md p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Nuevo {projectLabel.toLowerCase()}</h3>
-            <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+            <button type="button" onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <div className="space-y-3">
             <input

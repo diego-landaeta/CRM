@@ -21,7 +21,8 @@ export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
-    res.json({ success: true, data: await model.findAll(projectId) });
+    const kind = req.query.kind === 'form' || req.query.kind === 'webhook' ? req.query.kind : null;
+    res.json({ success: true, data: await model.findAll(projectId, kind) });
   } catch (err) { next(err); }
 }
 export async function getById(req, res, next) {

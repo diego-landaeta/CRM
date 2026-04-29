@@ -17,9 +17,17 @@ export async function login(page, user = TEST_USER) {
   await page.waitForURL(/\/crm\/?$/, { timeout: 10_000 });
 }
 
-/** Cambia el proyecto activo via el select del sidebar */
+/**
+ * Cambia el proyecto activo via el dropdown custom del sidebar.
+ * Antes era un <select> nativo; ahora es un boton + popover (Portal).
+ */
 export async function switchProject(page, projectId) {
-  const select = page.locator('select').first();
-  await select.selectOption(String(projectId));
-  await page.waitForTimeout(500);
+  // Abrir el picker
+  await page.getByRole('button', { name: /selector de proyecto/i }).click();
+  // Esperar que el listbox aparezca
+  const listbox = page.getByRole('listbox', { name: /lista de proyectos/i });
+  await listbox.waitFor({ state: 'visible', timeout: 3000 });
+  // Click en el option correspondiente
+  await listbox.getByRole('option').nth(Number(projectId) - 1).click();
+  await page.waitForTimeout(300);
 }

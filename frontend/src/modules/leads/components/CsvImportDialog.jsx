@@ -9,7 +9,7 @@ import {
 const REQUIRED_FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true, hints: ['nombre', 'name', 'first name', 'lead', 'cliente'] },
   { key: 'email', label: 'Email', required: true, hints: ['email', 'correo', 'e-mail', 'mail'] },
-  { key: 'telefono', label: 'Telefono', required: false, hints: ['telefono', 'phone', 'movil', 'celular', 'whatsapp'] },
+  { key: 'telefono', label: 'Teléfono', required: false, hints: ['telefono', 'phone', 'movil', 'celular', 'whatsapp'] },
   { key: 'canal', label: 'Canal', required: false, hints: ['canal', 'origen', 'source', 'utm_source'] },
   { key: 'producto_interes', label: 'Producto', required: false, hints: ['producto', 'product', 'curso', 'master'] },
   { key: 'notas', label: 'Notas', required: false, hints: ['notas', 'notes', 'observacion', 'comentario'] },

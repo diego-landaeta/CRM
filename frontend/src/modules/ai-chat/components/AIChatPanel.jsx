@@ -9,9 +9,9 @@ import {
 } from '@phosphor-icons/react';
 
 const QUICK_QUESTIONS = [
-  { id: 'resumen', label: 'Resumen del mes', icon: ChartBar, prompt: 'Damelo un resumen del mes en curso con KPIs clave' },
-  { id: 'inactivos', label: 'Prospectos sin actividad', icon: UsersThree, prompt: 'Muestrame los prospectos sin actividad en los ultimos 14 dias' },
-  { id: 'campanas', label: 'Rendimiento campanas', icon: Megaphone, prompt: 'Como esta el rendimiento de las campanas Meta y Google?' },
+  { id: 'resumen', label: 'Resumen del mes', icon: ChartBar, prompt: 'Dame un resumen del mes en curso con KPIs clave' },
+  { id: 'inactivos', label: 'Prospectos sin actividad', icon: UsersThree, prompt: 'Muéstrame los prospectos sin actividad en los últimos 14 días' },
+  { id: 'campanas', label: 'Rendimiento campañas', icon: Megaphone, prompt: '¿Cómo está el rendimiento de las campañas Meta y Google?' },
 ];
 
 export default function AIChatPanel({ open, onClose }) {

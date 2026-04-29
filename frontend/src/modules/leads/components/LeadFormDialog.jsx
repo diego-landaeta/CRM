@@ -22,7 +22,7 @@ function Field({ label, error, hint, children }) {
   );
 }
 
-const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
@@ -59,7 +59,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
     if (!open || !activeProject?.id) return;
     (async () => {
       try {
-        const res = await client.get(`/field-definitions/project/${activeProject.id}`);
+        const res = await client.get(`/field-definitions/project/${activeProject.id}?entity=lead`);
         if (res.success) setCustomFields(res.data || []);
       } catch {}
     })();
@@ -112,19 +112,19 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
       <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Prospecto'} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh]">
-          <div className="flex items-center justify-between mb-6">
+        <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold">{isEdit ? 'Editar Lead' : 'Nuevo Prospecto'}</h2>
-              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la informacion del lead' : 'Registra un nuevo lead manualmente'}</p>
+              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del lead' : 'Registra un nuevo lead manualmente'}</p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
               <X size={18} weight="bold" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Nombre *" error={errors.nombre?.message}>
                 <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
               </Field>
@@ -151,8 +151,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Telefono" error={errors.telefono?.message}>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Teléfono" error={errors.telefono?.message}>
                 <input {...register('telefono')} placeholder="+34 600 000 000" className={inputClass} />
               </Field>
               <Field label="Origen *" error={errors.origen?.message}>
@@ -192,9 +192,9 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
             </div>
 
             {customFields.length > 0 && (
-              <div className="border-t border-border pt-4 mt-4 space-y-3">
+              <div className="border-t border-border pt-3 mt-3 space-y-3">
                 <p className="text-xs text-muted-foreground text-muted-foreground">Campos personalizados</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   {customFields.map(f => (
                     <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
                       <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
@@ -218,7 +218,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
                           {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                       ) : f.type === 'boolean' ? (
-                        <label className="flex items-center gap-2 h-11">
+                        <label className="flex items-center gap-2 h-9">
                           <input type="checkbox"
                             checked={!!customValues[f.field_key]}
                             onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.checked })}
@@ -251,10 +251,10 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose}
-                className="px-5 py-2.5 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
+                className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors"
               >Cancelar</button>
               <button type="submit" disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
               >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear lead'}</button>
             </div>
           </form>

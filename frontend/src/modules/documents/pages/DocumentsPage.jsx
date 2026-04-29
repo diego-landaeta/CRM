@@ -4,6 +4,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi } from '../api/documents.api';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceForm from '../components/InvoiceForm';
 import CertificateForm from '../components/CertificateForm';
 import client, { getAccessToken } from '@/shared/api/client';
@@ -77,14 +79,16 @@ function PreviewModal({ doc, onClose }) {
           <div className="flex items-center gap-2">
             <button
               onClick={openNewTab}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-border hover:bg-muted transition-colors"
+              aria-label="Abrir previsualización en pestaña nueva"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-xs font-medium border border-border hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
               title="Abrir en pestaña nueva"
             >
-              <ArrowsOut size={13} /> Pantalla completa
+              <ArrowsOut size={13} /> <span className="hidden sm:inline">Pantalla completa</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Cerrar previsualización"
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <X size={16} />
             </button>
@@ -170,22 +174,26 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Documentos</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Facturas y certificados de {activeProject?.nombre}</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setTab('invoice')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-            <Receipt size={15} /> Nueva Factura
-          </button>
-          <button onClick={() => setTab('certificate')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
-            <Certificate size={15} /> Nuevo Certificado
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Documentos"
+        subtitle={`Facturas y certificados de ${activeProject?.nombre || ''}`}
+        actions={
+          <>
+            <button
+              onClick={() => setTab('invoice')}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Receipt size={15} /> <span className="hidden sm:inline">Nueva</span> Factura
+            </button>
+            <button
+              onClick={() => setTab('certificate')}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Certificate size={15} /> <span className="hidden sm:inline">Nuevo</span> Certificado
+            </button>
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
@@ -209,72 +217,127 @@ export default function DocumentsPage() {
               <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : docs.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              <FilePdf size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Sin documentos aún</p>
-              <p className="text-sm mt-1">Genera tu primera factura o certificado</p>
-            </div>
+            <EmptyState
+              icon={FilePdf}
+              title="Sin documentos aún"
+              description="Genera tu primera factura o certificado para verlos aquí."
+            />
           ) : (
-            <div className="bg-card rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-muted/30">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Número</th>
-                    <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Tipo</th>
-                    <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Cliente / Alumno</th>
-                    <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Fecha</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {docs.map(doc => (
-                    <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold">{doc.number}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+            <>
+              {/* Desktop table */}
+              <div className="hidden md:block bg-card rounded-lg border border-border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-border bg-muted/30">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Número</th>
+                      <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Tipo</th>
+                      <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Cliente / Alumno</th>
+                      <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Fecha</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {docs.map(doc => (
+                      <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold">{doc.number}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                            doc.type === 'invoice'
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
+                              : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                          }`}>
+                            {doc.type === 'invoice' ? <Receipt size={11} /> : <Certificate size={11} />}
+                            {TYPE_LABEL[doc.type]}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{doc.client_nombre || '—'}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {new Date(doc.created_at).toLocaleDateString('es-ES')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => setPreviewing(doc)}
+                              aria-label={`Previsualizar ${doc.number}`}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                              title="Previsualizar"
+                            >
+                              <Eye size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDownload(doc)}
+                              disabled={downloading === doc.id}
+                              aria-label={`Descargar PDF ${doc.number}`}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                              title="Descargar PDF"
+                            >
+                              <Download size={14} />
+                            </button>
+                            <button
+                              onClick={() => setPendingDelete(doc)}
+                              aria-label={`Eliminar ${doc.number}`}
+                              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                              title="Eliminar"
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
+                {docs.map(doc => (
+                  <div key={doc.id} className="bg-card border border-border rounded-lg p-3 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           doc.type === 'invoice'
                             ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
                             : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
                         }`}>
-                          {doc.type === 'invoice' ? <Receipt size={11} /> : <Certificate size={11} />}
+                          {doc.type === 'invoice' ? <Receipt size={10} /> : <Certificate size={10} />}
                           {TYPE_LABEL[doc.type]}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{doc.client_nombre || '—'}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        <span className="font-mono text-[11px] font-semibold">{doc.number}</span>
+                      </div>
+                      <p className="text-sm truncate">{doc.client_nombre || '—'}</p>
+                      <p className="text-[11px] text-muted-foreground">
                         {new Date(doc.created_at).toLocaleDateString('es-ES')}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => setPreviewing(doc)}
-                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
-                            title="Previsualizar"
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(doc)}
-                            disabled={downloading === doc.id}
-                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                            title="Descargar PDF"
-                          >
-                            <Download size={14} />
-                          </button>
-                          <button
-                            onClick={() => setPendingDelete(doc)}
-                            className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => setPreviewing(doc)}
+                        aria-label={`Previsualizar ${doc.number}`}
+                        className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDownload(doc)}
+                        disabled={downloading === doc.id}
+                        aria-label={`Descargar PDF ${doc.number}`}
+                        className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground disabled:opacity-50"
+                      >
+                        <Download size={13} />
+                      </button>
+                      <button
+                        onClick={() => setPendingDelete(doc)}
+                        aria-label={`Eliminar ${doc.number}`}
+                        className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500"
+                      >
+                        <Trash size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}

@@ -2,10 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 
 // Templates por defecto si el proyecto aun no configura
 const DEFAULT_TEMPLATES = [
-  { id: 'saludo', label: 'Saludo inicial', text: 'Hola {nombre}, te escribimos desde {proyecto}. Vimos tu interes por {producto} y queremos ayudarte. ¿Tienes 2 minutos para una llamada rapida?' },
-  { id: 'seguimiento', label: 'Seguimiento', text: 'Hola {nombre}, ¿pudiste revisar la informacion sobre {producto} que te enviamos? Quedo atenta a tus dudas.' },
-  { id: 'oferta', label: 'Oferta limitada', text: 'Hola {nombre}, tenemos una oferta especial sobre {producto} hasta el viernes. ¿Te llamo para contartelo?' },
-  { id: 'inactividad', label: 'Reactivar lead', text: 'Hola {nombre}, hace dias que no hablamos sobre {producto}. ¿Sigue siendo de tu interes?' },
+  { id: 'saludo', label: 'Saludo inicial', text: 'Hola {nombre}, te escribimos desde {proyecto}. Vimos tu interés por {producto} y queremos ayudarte. ¿Tienes 2 minutos para una llamada rápida?' },
+  { id: 'seguimiento', label: 'Seguimiento', text: 'Hola {nombre}, ¿pudiste revisar la información sobre {producto} que te enviamos? Quedo atenta a tus dudas.' },
+  { id: 'oferta', label: 'Oferta limitada', text: 'Hola {nombre}, tenemos una oferta especial sobre {producto} hasta el viernes. ¿Te llamo para contártelo?' },
+  { id: 'inactividad', label: 'Reactivar lead', text: 'Hola {nombre}, hace días que no hablamos sobre {producto}. ¿Sigue siendo de tu interés?' },
 ];
 
 const STORAGE_KEY_PREFIX = 'crm.wa-templates.';

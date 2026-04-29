@@ -111,7 +111,7 @@ export default function CommissionsPage() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Cargando...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Cargando…</div>
         ) : items.length === 0 ? (
           <EmptyState icon={CurrencyEur} title="Sin comisiones" description={isAdmin ? 'Aun no se han generado comisiones. Asegurate de tener reglas creadas.' : 'No tienes comisiones aun. Cierra ventas para empezar a acumular.'} />
         ) : (
@@ -297,7 +297,7 @@ function RulesDialog({ onClose, onSaved }) {
               <h2 className="text-lg font-semibold">Reglas de comision</h2>
               <p className="text-xs text-muted-foreground">% que cobra cada gestor por cada producto/formacion</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
 
           <div className="overflow-y-auto p-6 space-y-5">
@@ -331,7 +331,7 @@ function RulesDialog({ onClose, onSaved }) {
             </form>
 
             {loading ? (
-              <p className="text-sm text-muted-foreground">Cargando...</p>
+              <p className="text-sm text-muted-foreground">Cargando…</p>
             ) : rules.length === 0 ? (
               <div className="text-center py-8 border-2 border-dashed border-border rounded-md">
                 <Gear size={32} className="text-muted-foreground/30 mx-auto mb-2" weight="regular" />

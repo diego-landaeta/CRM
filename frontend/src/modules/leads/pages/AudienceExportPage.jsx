@@ -74,7 +74,7 @@ export default function AudienceExportPage() {
   async function handleMetaUpload() {
     try {
       await meta.startUpload({ filters: wizard.filters });
-      toast({ title: 'Upload iniciado', description: 'La audiencia se esta procesando en Meta' });
+      toast({ title: 'Upload iniciado', description: 'La audiencia se está procesando en Meta' });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
@@ -94,11 +94,11 @@ export default function AudienceExportPage() {
         actions={
           <button
             onClick={() => setFiltersOpen(true)}
-            className="lg:hidden inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted"
+            className="lg:hidden inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <Funnel size={14} weight="bold" /> Filtros
             {(wizard.filters.statuses.length + wizard.filters.canales.length) > 0 && (
-              <span className="text-[10px] font-semibold bg-primary text-white rounded-full px-1.5 py-0.5">
+              <span className="text-[10px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
                 {wizard.filters.statuses.length + wizard.filters.canales.length}
               </span>
             )}
@@ -107,7 +107,7 @@ export default function AudienceExportPage() {
       />
 
       {/* Layout 2 cols desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
 
         {/* SIDEBAR FILTROS — desktop fijo, mobile drawer */}
         <aside className={`
@@ -122,7 +122,11 @@ export default function AudienceExportPage() {
             {/* Header drawer mobile */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border lg:hidden">
               <span className="font-semibold text-sm">Filtros</span>
-              <button onClick={() => setFiltersOpen(false)} className="p-1.5 rounded-md hover:bg-muted">
+              <button
+                onClick={() => setFiltersOpen(false)}
+                aria-label="Cerrar filtros"
+                className="p-1.5 rounded-md hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
                 <X size={16} />
               </button>
             </div>
@@ -136,7 +140,7 @@ export default function AudienceExportPage() {
                     <button
                       key={p.id}
                       onClick={() => applyPreset(p)}
-                      className="text-left p-2 rounded-md border border-border bg-muted/30 hover:bg-muted transition-colors"
+                      className="text-left p-2 rounded-md border border-border bg-muted/30 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
                     >
                       <div className="text-xs font-semibold">{p.label}</div>
                       <div className="text-[10px] text-muted-foreground mt-0.5">{p.desc}</div>
@@ -160,10 +164,12 @@ export default function AudienceExportPage() {
                 <div className="space-y-2">
                   <input type="date" value={wizard.filters.fechaDesde}
                     onChange={e => wizard.setFilter({ fechaDesde: e.target.value })}
-                    className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs" />
+                    aria-label="Fecha desde"
+                    className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40" />
                   <input type="date" value={wizard.filters.fechaHasta}
                     onChange={e => wizard.setFilter({ fechaHasta: e.target.value })}
-                    className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs" />
+                    aria-label="Fecha hasta"
+                    className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40" />
                 </div>
               </FilterSection>
 
@@ -172,7 +178,8 @@ export default function AudienceExportPage() {
                 <select
                   value={wizard.filters.productoId || ''}
                   onChange={e => wizard.setFilter({ productoId: e.target.value ? Number(e.target.value) : null })}
-                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs"
+                  aria-label="Filtrar por producto"
+                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                   <option value="">Cualquier producto</option>
                   {(products || []).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -180,13 +187,14 @@ export default function AudienceExportPage() {
               </FilterSection>
 
               {/* Importe */}
-              <FilterSection title="Importe minimo">
+              <FilterSection title="Importe mínimo">
                 <input
                   type="number" min="0" step="50"
                   value={wizard.filters.importeMinimo || ''}
                   onChange={e => wizard.setFilter({ importeMinimo: e.target.value ? Number(e.target.value) : null })}
                   placeholder="EUR"
-                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs"
+                  aria-label="Importe mínimo en euros"
+                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
               </FilterSection>
 
@@ -195,7 +203,7 @@ export default function AudienceExportPage() {
                 wizard.filters.productoId || wizard.filters.importeMinimo) && (
                 <button
                   onClick={wizard.resetFilters}
-                  className="w-full text-xs text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1 py-2 rounded-md border border-border hover:bg-muted"
+                  className="w-full text-xs text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1 py-2 rounded-md border border-border hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                   <X size={12} /> Limpiar todos
                 </button>
@@ -205,7 +213,7 @@ export default function AudienceExportPage() {
         </aside>
 
         {/* CONTENT */}
-        <div className="space-y-5 min-w-0">
+        <div className="space-y-4 min-w-0">
 
           {/* Resultado + acciones */}
           <ResultsHeader
@@ -251,13 +259,13 @@ export default function AudienceExportPage() {
 // ---------- Header con resultado + CTAs ----------
 function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onDownload, onMetaUpload, downloadLoading, metaInFlight }) {
   return (
-    <div className="bg-card border border-border rounded-lg p-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         {/* Cantidad + estado */}
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">Audiencia resultante</p>
           <div className="flex items-baseline gap-3 mt-1 flex-wrap">
-            <span className="text-3xl font-semibold tabular-nums">
+            <span className="text-2xl sm:text-3xl font-semibold tabular-nums">
               {loading ? <span className="text-muted-foreground">…</span> : fmtNum(totalCount)}
             </span>
             <span className="text-sm text-muted-foreground">leads</span>
@@ -268,7 +276,7 @@ function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onDownload
                 </span>
               ) : (
                 <span className="text-xs px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-semibold inline-flex items-center gap-1">
-                  <WarningCircle size={11} weight="fill" /> &lt; {MIN_AUDIENCE_SIZE} leads minimo
+                  <WarningCircle size={11} weight="fill" /> &lt; {MIN_AUDIENCE_SIZE} leads mínimo
                 </span>
               )
             )}
@@ -281,15 +289,18 @@ function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onDownload
           <button
             onClick={onDownload}
             disabled={!meetsMinimum || downloadLoading || loading}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap"
+            aria-label="Descargar CSV"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             {downloadLoading ? <CircleNotch size={14} weight="bold" className="animate-spin" /> : <Download size={14} weight="bold" />}
-            <span>{downloadLoading ? 'Generando...' : 'Descargar CSV'}</span>
+            <span className="hidden sm:inline">{downloadLoading ? 'Generando...' : 'Descargar CSV'}</span>
+            <span className="sm:hidden">{downloadLoading ? '...' : 'CSV'}</span>
           </button>
           <button
             onClick={onMetaUpload}
             disabled={!meetsMinimum || metaInFlight || loading}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+            aria-label="Subir audiencia a Meta"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           >
             {metaInFlight ? <CircleNotch size={14} weight="bold" className="animate-spin" /> : <CloudArrowUp size={14} weight="bold" />}
             <span className="hidden sm:inline">Subir a Meta</span>
@@ -324,7 +335,7 @@ function CheckList({ options, selected, onToggle }) {
         return (
           <label key={opt.v} className="flex items-center gap-2 cursor-pointer text-xs hover:text-foreground transition-colors">
             <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-              active ? 'bg-primary border-primary text-white' : 'border-border bg-card'
+              active ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card'
             }`}>
               {active && <Check size={10} weight="bold" />}
             </span>
@@ -342,7 +353,7 @@ function BreakdownCard({ title, data, colors }) {
   const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
   const entries = Object.entries(data).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   return (
-    <div className="bg-card border border-border rounded-lg p-5">
+    <div className="bg-card border border-border rounded-lg p-4">
       <h3 className="font-semibold mb-3 text-sm">{title}</h3>
       <div className="space-y-2.5">
         {entries.length === 0 ? (
@@ -371,7 +382,7 @@ function SampleTable({ sample, totalCount }) {
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
         <h3 className="font-semibold text-sm">Muestra ({sample.length} de {fmtNum(totalCount)})</h3>
-        <span className="text-[11px] text-muted-foreground">Email/telefono se hashean SHA-256 al exportar</span>
+        <span className="text-[11px] text-muted-foreground">Email/teléfono se hashean SHA-256 al exportar</span>
       </div>
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
@@ -379,7 +390,7 @@ function SampleTable({ sample, totalCount }) {
             <tr>
               <th className="text-left px-4 py-2 font-bold">Nombre</th>
               <th className="text-left px-4 py-2 font-bold">Email</th>
-              <th className="text-left px-4 py-2 font-bold">Telefono</th>
+              <th className="text-left px-4 py-2 font-bold">Teléfono</th>
               <th className="text-left px-4 py-2 font-bold">Estado</th>
               <th className="text-left px-4 py-2 font-bold">Canal</th>
             </tr>
@@ -426,7 +437,7 @@ function UploadStatusCard({ upload, onReset }) {
   const isDone = upload.status === 'completed';
 
   return (
-    <div className="bg-card border border-border rounded-lg p-5">
+    <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-9 h-9 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
           <FacebookLogo size={18} weight="bold" />
@@ -438,7 +449,11 @@ function UploadStatusCard({ upload, onReset }) {
           </p>
         </div>
         {isDone && (
-          <button onClick={onReset} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={onReset}
+            aria-label="Cerrar tarjeta de upload"
+            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
+          >
             <X size={12} /> Cerrar
           </button>
         )}
@@ -523,8 +538,8 @@ function MetaHistorySection({ history, loading }) {
                 <td className="px-4 py-2.5">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
                     h.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' :
-                    h.status === 'error' ? 'bg-red-100 text-red-700' :
-                    'bg-blue-100 text-blue-700'
+                    h.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' :
+                    'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                   }`}>{h.status}</span>
                 </td>
               </tr>
@@ -541,9 +556,9 @@ function MetaHistorySection({ history, loading }) {
                 <div className="text-[10px] text-muted-foreground font-mono">{h.audienceId}</div>
               </div>
               <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                h.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                h.status === 'error' ? 'bg-red-100 text-red-700' :
-                'bg-blue-100 text-blue-700'
+                h.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                h.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' :
+                'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
               }`}>{h.status}</span>
             </div>
             <div className="flex items-center gap-3 text-xs">

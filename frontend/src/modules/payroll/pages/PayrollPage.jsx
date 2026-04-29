@@ -83,34 +83,58 @@ function PlansTab({ project }) {
         )}
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando...</p> : plans.length === 0 ? (
+      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : plans.length === 0 ? (
         <EmptyState icon={Coins} title="Sin planes" description="Configura cuanto cobra cada usuario" />
       ) : (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
-              <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
-              <th className="text-right px-4 py-2.5 font-bold">Fijo €/mes</th>
-              <th className="text-right px-4 py-2.5 font-bold">€/hora</th>
-              <th className="text-center px-4 py-2.5 font-bold">Comisiones</th>
-              <th className="px-4 py-2.5"></th>
-            </tr></thead>
-            <tbody>
-              {plans.map(p => (
-                <tr key={p.id} className="border-b last:border-0">
-                  <td className="px-4 py-3"><div className="font-semibold">{p.user_nombre}</div><div className="text-xs text-muted-foreground">{p.user_email}</div></td>
-                  <td className="px-4 py-3 text-right tabular-nums">{p.modo_fijo != null ? Number(p.modo_fijo).toFixed(2) : '—'}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{p.modo_horas != null ? Number(p.modo_horas).toFixed(2) : '—'}</td>
-                  <td className="px-4 py-3 text-center">{p.modo_comisiones ? '✓' : '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-xs font-bold mr-1">Editar</button>
-                    <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block bg-card border border-border rounded-2xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
+                <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
+                <th className="text-right px-4 py-2.5 font-bold">Fijo €/mes</th>
+                <th className="text-right px-4 py-2.5 font-bold">€/hora</th>
+                <th className="text-center px-4 py-2.5 font-bold">Comisiones</th>
+                <th className="px-4 py-2.5"></th>
+              </tr></thead>
+              <tbody>
+                {plans.map(p => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="px-4 py-3"><div className="font-semibold">{p.user_nombre}</div><div className="text-xs text-muted-foreground">{p.user_email}</div></td>
+                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_fijo != null ? Number(p.modo_fijo).toFixed(2) : '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{p.modo_horas != null ? Number(p.modo_horas).toFixed(2) : '—'}</td>
+                    <td className="px-4 py-3 text-center">{p.modo_comisiones ? '✓' : '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-xs font-bold mr-1">Editar</button>
+                      <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2">
+            {plans.map(p => (
+              <div key={p.id} className="bg-card border border-border rounded-lg p-3 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{p.user_nombre}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{p.user_email}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px]">
+                    <span><span className="text-muted-foreground">Fijo:</span> <span className="tabular-nums font-semibold">{p.modo_fijo != null ? Number(p.modo_fijo).toFixed(2) + ' €' : '—'}</span></span>
+                    <span><span className="text-muted-foreground">€/h:</span> <span className="tabular-nums font-semibold">{p.modo_horas != null ? Number(p.modo_horas).toFixed(2) : '—'}</span></span>
+                    <span><span className="text-muted-foreground">Comis:</span> <span className="font-semibold">{p.modo_comisiones ? '✓' : '—'}</span></span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-[11px] font-bold w-full">Editar</button>
+                  <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-[11px] font-bold w-full">Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {editing && <PlanEditor plan={editing} users={users} onSave={handleSave} onClose={() => setEditing(null)} />}
@@ -127,7 +151,7 @@ function PlanEditor({ plan, users, onSave, onClose }) {
       <div className="bg-card rounded-2xl border border-border max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-extrabold">Plan: {usr?.nombre}</h3>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3">
           <label className="block text-xs">
@@ -202,42 +226,70 @@ function PeriodsTab({ project }) {
         </select>
         <button onClick={generateAll} className="ml-auto px-3 py-1.5 rounded bg-primary text-white text-xs font-bold">Generar/recalcular periodos</button>
       </div>
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando...</p> : periods.length === 0 ? (
+      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : periods.length === 0 ? (
         <EmptyState icon={Calendar} title="Sin periodos" description="Genera los periodos del mes" />
       ) : (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
-              <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
-              <th className="text-right px-4 py-2.5 font-bold">Fijo</th>
-              <th className="text-right px-4 py-2.5 font-bold">Horas</th>
-              <th className="text-right px-4 py-2.5 font-bold">Comisiones</th>
-              <th className="text-right px-4 py-2.5 font-bold">Ajustes</th>
-              <th className="text-right px-4 py-2.5 font-bold">Total</th>
-              <th className="text-center px-4 py-2.5 font-bold">Estado</th>
-              <th className="px-4 py-2.5"></th>
-            </tr></thead>
-            <tbody>
-              {periods.map(p => (
-                <tr key={p.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-semibold">{p.user_nombre}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{Number(p.fijo).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_horas).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_comisiones).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{Number(p.ajustes).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold">{Number(p.total).toFixed(2)} €</td>
-                  <td className="px-4 py-3 text-center">
+        <>
+          {/* Desktop table */}
+          <div className="hidden lg:block bg-card border border-border rounded-2xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
+                <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
+                <th className="text-right px-4 py-2.5 font-bold">Fijo</th>
+                <th className="text-right px-4 py-2.5 font-bold">Horas</th>
+                <th className="text-right px-4 py-2.5 font-bold">Comisiones</th>
+                <th className="text-right px-4 py-2.5 font-bold">Ajustes</th>
+                <th className="text-right px-4 py-2.5 font-bold">Total</th>
+                <th className="text-center px-4 py-2.5 font-bold">Estado</th>
+                <th className="px-4 py-2.5"></th>
+              </tr></thead>
+              <tbody>
+                {periods.map(p => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="px-4 py-3 font-semibold">{p.user_nombre}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Number(p.fijo).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_horas).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_comisiones).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Number(p.ajustes).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-bold">{Number(p.total).toFixed(2)} €</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-emerald-100 text-emerald-700' : p.estado === 'cerrado' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{p.estado}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-bold mr-1">Cerrar</button>}
+                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-bold">Pagar</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="lg:hidden space-y-2">
+            {periods.map(p => (
+              <div key={p.id} className="bg-card border border-border rounded-lg p-3 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-emerald-100 text-emerald-700' : p.estado === 'cerrado' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{p.estado}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-bold mr-1">Cerrar</button>}
-                    {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-bold">Pagar</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <span className="text-sm font-semibold truncate">{p.user_nombre}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] mt-1">
+                    <span><span className="text-muted-foreground">Fijo:</span> <span className="tabular-nums font-semibold">{Number(p.fijo).toFixed(2)}</span></span>
+                    <span><span className="text-muted-foreground">Horas:</span> <span className="tabular-nums font-semibold">{Number(p.monto_horas).toFixed(2)}</span></span>
+                    <span><span className="text-muted-foreground">Comis:</span> <span className="tabular-nums font-semibold">{Number(p.monto_comisiones).toFixed(2)}</span></span>
+                    <span><span className="text-muted-foreground">Ajustes:</span> <span className="tabular-nums font-semibold">{Number(p.ajustes).toFixed(2)}</span></span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-sm font-bold tabular-nums">{Number(p.total).toFixed(2)} €</span>
+                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-bold w-full">Cerrar</button>}
+                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-bold w-full">Pagar</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -288,31 +340,53 @@ function HoursTab({ project }) {
         <button onClick={add} className="h-10 px-4 rounded-lg bg-primary text-white text-sm font-bold flex items-center justify-center gap-1"><Plus size={14} weight="bold" /> Registrar</button>
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando...</p> : hours.length === 0 ? (
+      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : hours.length === 0 ? (
         <EmptyState icon={Clock} title="Sin horas registradas" description="Registra horas trabajadas para los usuarios con plan por hora" />
       ) : (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
-              <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
-              <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
-              <th className="text-right px-4 py-2.5 font-bold">Horas</th>
-              <th className="text-left px-4 py-2.5 font-bold">Notas</th>
-              <th className="px-4 py-2.5"></th>
-            </tr></thead>
-            <tbody>
-              {hours.map(h => (
-                <tr key={h.id} className="border-b last:border-0">
-                  <td className="px-4 py-3">{h.fecha}</td>
-                  <td className="px-4 py-3 font-semibold">{h.user_nombre}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{Number(h.horas).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{h.notas || ''}</td>
-                  <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block bg-card border border-border rounded-2xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground"><tr>
+                <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
+                <th className="text-left px-4 py-2.5 font-bold">Usuario</th>
+                <th className="text-right px-4 py-2.5 font-bold">Horas</th>
+                <th className="text-left px-4 py-2.5 font-bold">Notas</th>
+                <th className="px-4 py-2.5"></th>
+              </tr></thead>
+              <tbody>
+                {hours.map(h => (
+                  <tr key={h.id} className="border-b last:border-0">
+                    <td className="px-4 py-3">{h.fecha}</td>
+                    <td className="px-4 py-3 font-semibold">{h.user_nombre}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Number(h.horas).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{h.notas || ''}</td>
+                    <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2">
+            {hours.map(h => (
+              <div key={h.id} className="bg-card border border-border rounded-lg p-3 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground">{h.fecha}</span>
+                    <span className="text-sm font-semibold truncate">{h.user_nombre}</span>
+                  </div>
+                  {h.notas && <p className="text-[11px] text-muted-foreground truncate">{h.notas}</p>}
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-sm font-bold tabular-nums">{Number(h.horas).toFixed(2)} h</span>
+                  <button onClick={() => del(h)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-[11px] font-bold">Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

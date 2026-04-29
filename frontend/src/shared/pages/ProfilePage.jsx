@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -9,7 +9,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   User,
-  EnvelopeSimple,
   Lock,
   Eye,
   EyeSlash,
@@ -17,29 +16,34 @@ import {
   Moon,
   ShieldCheck,
   Folder,
+  Camera,
+  Trash,
 } from '@phosphor-icons/react';
-import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import PageHeader from '@/shared/components/ui/PageHeader';
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 // Proyectos ahora vienen del AuthContext via ProjectContext
 
 const profileSchema = z.object({
-  nombre: z.string().min(2, 'Minimo 2 caracteres'),
-  email: z.string().email('Email no valido'),
+  nombre: z.string().min(2, 'Mínimo 2 caracteres'),
+  email: z.string().email('Email no válido'),
 });
 
 const passwordSchema = z.object({
   current: z.string().min(1, 'Requerido'),
-  nueva: z.string().min(8, 'Minimo 8 caracteres'),
+  nueva: z.string().min(8, 'Mínimo 8 caracteres'),
   confirmar: z.string().min(1, 'Requerido'),
 }).refine((d) => d.nueva === d.confirmar, { message: 'Las contraseñas no coinciden', path: ['confirmar'] });
 
-const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:bg-card placeholder:text-muted-foreground';
+
+const primaryBtn = 'inline-flex items-center justify-center h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40';
 
 function Field({ label, error, children }) {
   return (
     <div>
-      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">{label}</label>
+      <label className="text-xs text-muted-foreground mb-1.5 block px-1">{label}</label>
       {children}
-      {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
+      {error && <p className="text-xs text-red-500 mt-1 px-1" role="alert">{error}</p>}
     </div>
   );
 }
@@ -67,7 +71,7 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      toast({ title: 'Imagen muy grande', description: 'Maximo 2 MB', variant: 'destructive' });
+      toast({ title: 'Imagen muy grande', description: 'Máximo 2 MB', variant: 'destructive' });
       return;
     }
     setUploadingAvatar(true);
@@ -132,16 +136,16 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-semibold">Mi Perfil</h1>
-        <p className="text-muted-foreground text-sm">Gestiona tu información personal y seguridad</p>
-      </div>
+    <div className="space-y-5 max-w-2xl">
+      <PageHeader
+        title="Mi Perfil"
+        subtitle="Gestiona tu información personal y seguridad"
+      />
 
-      {/* Avatar + Info */}
-      <div className="bg-card p-6 rounded-lg border border-border">
-        <div className="flex items-center gap-5">
-          <div className="relative group">
+      {/* Avatar card */}
+      <section className="bg-card p-5 rounded-lg border border-border">
+        <div className="flex items-center gap-4">
+          <div className="relative group shrink-0">
             <div className="w-20 h-20 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-2xl font-semibold overflow-hidden">
               {avatarSrc ? (
                 <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
@@ -152,25 +156,42 @@ export default function ProfilePage() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 rounded-lg transition-opacity"
+              aria-label={avatarSrc ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
+              className="absolute inset-0 flex items-center justify-center bg-black/60 text-primary-foreground text-[10px] font-bold opacity-0 group-hover:opacity-100 rounded-lg transition-opacity focus:outline-none focus:ring-2 focus:ring-primary/40 focus:opacity-100"
             >
-              {uploadingAvatar ? 'Subiendo...' : avatarSrc ? 'Cambiar' : 'Subir foto'}
+              {uploadingAvatar ? 'Subiendo…' : avatarSrc ? 'Cambiar' : 'Subir foto'}
             </button>
           </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold">{user?.nombre}</h2>
-            <p className="text-sm text-muted-foreground">{user?.email}</p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-primary/10 text-primary flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold truncate">{user?.nombre}</h2>
+            <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+            <div className="flex items-center flex-wrap gap-2 mt-2">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-primary/10 text-primary inline-flex items-center gap-1">
                 <ShieldCheck size={12} weight="regular" /> {ROLE_LABELS[user?.role] || user?.role}
               </span>
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
                 <Folder size={12} /> {userProjects.length} proyecto{userProjects.length !== 1 ? 's' : ''}
               </span>
             </div>
+          </div>
+          <div className="hidden sm:flex flex-col gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              aria-label={avatarSrc ? 'Cambiar foto de perfil' : 'Subir foto de perfil'}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Camera size={14} weight="regular" /> {avatarSrc ? 'Cambiar' : 'Subir foto'}
+            </button>
             {avatarSrc && (
-              <button onClick={() => setConfirmDeleteAvatar(true)} className="text-[11px] text-red-500 hover:underline mt-2">
-                Eliminar foto
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAvatar(true)}
+                aria-label="Eliminar foto de perfil"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+              >
+                <Trash size={14} weight="regular" /> Eliminar
               </button>
             )}
           </div>
@@ -178,8 +199,8 @@ export default function ProfilePage() {
 
         {/* Projects list */}
         {userProjects.length > 0 && (
-          <div className="mt-5 pt-4 border-t">
-            <p className="text-xs text-muted-foreground mb-2">Proyectos asignados</p>
+          <div className="mt-5 pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2 font-medium">Proyectos asignados</p>
             <div className="flex flex-wrap gap-2">
               {userProjects.map((p) => (
                 <span key={p.id} className="px-3 py-1.5 rounded-md bg-muted text-[12px] font-medium">
@@ -189,13 +210,13 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Edit profile */}
-      <div className="bg-card p-6 rounded-lg border border-border">
-        <div className="flex items-center gap-2 mb-5">
+      <section className="bg-card p-5 rounded-lg border border-border">
+        <div className="flex items-center gap-2 mb-4">
           <User size={18} weight="regular" className="text-primary" />
-          <h3 className="font-semibold">Información Personal</h3>
+          <h3 className="text-base font-semibold">Información personal</h3>
         </div>
         <form onSubmit={handleProfile(onSaveProfile)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -207,18 +228,18 @@ export default function ProfilePage() {
             </Field>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={subProfile} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {subProfile ? 'Guardando...' : 'Guardar cambios'}
+            <button type="submit" disabled={subProfile} className={primaryBtn}>
+              {subProfile ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
         </form>
-      </div>
+      </section>
 
       {/* Change password */}
-      <div className="bg-card p-6 rounded-lg border border-border">
-        <div className="flex items-center gap-2 mb-5">
+      <section className="bg-card p-5 rounded-lg border border-border">
+        <div className="flex items-center gap-2 mb-4">
           <Lock size={18} weight="regular" className="text-primary" />
-          <h3 className="font-semibold">Cambiar Contraseña</h3>
+          <h3 className="text-base font-semibold">Cambiar contraseña</h3>
         </div>
         <form onSubmit={handlePass(onChangePassword)} className="space-y-4">
           <Field label="Contraseña actual *" error={errPass.current?.message}>
@@ -227,9 +248,14 @@ export default function ProfilePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Nueva contraseña *" error={errPass.nueva?.message}>
               <div className="relative">
-                <input {...regPass('nueva')} type={showPassword ? 'text' : 'password'} placeholder="Minimo 8 caracteres" className={inputClass + ' pr-11'} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showPassword ? <EyeSlash size={18} /> : <Eye size={18} />}
+                <input {...regPass('nueva')} type={showPassword ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" className={inputClass + ' pr-10'} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </Field>
@@ -238,33 +264,46 @@ export default function ProfilePage() {
             </Field>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={subPass} className="px-5 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {subPass ? 'Cambiando...' : 'Cambiar contraseña'}
+            <button type="submit" disabled={subPass} className={primaryBtn}>
+              {subPass ? 'Cambiando…' : 'Cambiar contraseña'}
             </button>
           </div>
         </form>
-      </div>
+      </section>
 
-      {/* Preferences */}
-      <div className="bg-card p-6 rounded-lg border border-border">
-        <h3 className="font-semibold mb-4">Preferencias</h3>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {theme === 'dark' ? <Moon size={18} weight="regular" className="text-primary" /> : <Sun size={18} weight="regular" className="text-primary" />}
-            <div>
-              <p className="text-sm font-medium">Tema de la interfaz</p>
-              <p className="text-[12px] text-muted-foreground">{theme === 'dark' ? 'Modo oscuro activado' : 'Modo claro activado'}</p>
-            </div>
+      {/* Cuenta / Preferencias */}
+      <section className="bg-card p-5 rounded-lg border border-border">
+        <div className="flex items-center gap-2 mb-4">
+          {theme === 'dark' ? <Moon size={18} weight="regular" className="text-primary" /> : <Sun size={18} weight="regular" className="text-primary" />}
+          <h3 className="text-base font-semibold">Cuenta</h3>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Tema de la interfaz</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{theme === 'dark' ? 'Modo oscuro activado' : 'Modo claro activado'}</p>
           </div>
           <button
+            type="button"
             onClick={toggleTheme}
-            className="px-4 py-2 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+            aria-label={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+            className="inline-flex items-center justify-center h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 shrink-0"
           >
             {theme === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}
           </button>
         </div>
-      </div>
-      <ConfirmDialog open={confirmDeleteAvatar} title="¿Eliminar foto de perfil?" message="Se eliminará tu foto de perfil y no podrá recuperarse." onConfirm={doAvatarDelete} onCancel={() => setConfirmDeleteAvatar(false)} />
+      </section>
+
+      <Suspense fallback={null}>
+        <ConfirmDialog
+          open={confirmDeleteAvatar}
+          title="¿Eliminar foto de perfil?"
+          message="Se eliminará tu foto de perfil y no podrá recuperarse."
+          tone="destructive"
+          confirmLabel="Eliminar"
+          onConfirm={doAvatarDelete}
+          onCancel={() => setConfirmDeleteAvatar(false)}
+        />
+      </Suspense>
     </div>
   );
 }

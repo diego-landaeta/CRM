@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useStripeMonitor } from '../hooks/useStripeMonitor';
+import MetricLabel from '@/shared/components/ui/MetricLabel';
 import {
   CurrencyEur, Users, TrendUp, TrendDown, ArrowUp, ArrowDown,
   WarningCircle, CreditCard, UserMinus, Robot,
@@ -88,6 +89,7 @@ export default function IADashboardPage() {
             <KpiHero
               icon={CurrencyEur}
               label="MRR actual"
+              term="MRR"
               value={fmtMoney(metrics.mrr)}
               delta={mrrDelta}
               tone="primary"
@@ -102,6 +104,7 @@ export default function IADashboardPage() {
             <KpiHero
               icon={TrendDown}
               label="Churn rate mensual"
+              term="Churn"
               value={fmtPct(metrics.churnRate)}
               delta={churnTrend ? { pct: churnTrend.delta, growing: !churnTrend.improving, suffix: 'pp' } : null}
               tone={metrics.churnRate > 5 ? 'destructive' : 'default'}
@@ -171,7 +174,7 @@ export default function IADashboardPage() {
             {/* Churn rate evolution */}
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-baseline justify-between mb-1 gap-3">
-                <h3 className="font-semibold">Churn rate mensual</h3>
+                <h3 className="font-semibold"><MetricLabel term="Churn">Churn rate mensual</MetricLabel></h3>
                 {churnTrend && (
                   <span className={`text-xs font-semibold ${churnTrend.improving ? 'text-emerald-600' : 'text-red-600'}`}>
                     {churnTrend.improving ? '↓' : '↑'} {Math.abs(churnTrend.delta)} pp vs mes ant.
@@ -221,7 +224,7 @@ export default function IADashboardPage() {
   );
 }
 
-function KpiHero({ icon: Icon, label, value, delta, tone = 'default' }) {
+function KpiHero({ icon: Icon, label, term, value, delta, tone = 'default' }) {
   const iconBg = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -243,7 +246,9 @@ function KpiHero({ icon: Icon, label, value, delta, tone = 'default' }) {
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-sm">{label}</p>
+      <p className="text-muted-foreground text-sm">
+        {term ? <MetricLabel term={term}>{label}</MetricLabel> : label}
+      </p>
       <h3 className="text-2xl font-semibold mt-1 tabular-nums">{value}</h3>
     </div>
   );

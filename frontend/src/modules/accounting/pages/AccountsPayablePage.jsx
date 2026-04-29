@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { payableApi } from '../api/payable.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -16,7 +17,8 @@ import {
   CheckCircle,
   Trash,
 } from '@phosphor-icons/react';
-import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
 const CATEGORIES = ['salarios', 'alquiler', 'proveedores', 'software', 'publicidad', 'impuestos', 'servicios', 'mantenimiento', 'otros'];
 const ESTADOS = [
@@ -79,29 +81,55 @@ export default function AccountsPayablePage() {
         title="Cuentas por pagar"
         subtitle={`${activeProject ? activeProject.nombre + ' — ' : ''}Facturas y deudas con proveedores`}
         actions={
-          <button onClick={() => setDialog('new')} className="inline-flex items-center gap-2 h-10 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
-            <Plus size={14} weight="bold" /> Nueva factura
+          <button
+            onClick={() => setDialog('new')}
+            aria-label="Nueva factura"
+            className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nueva factura</span>
           </button>
         }
       />
 
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard icon={Receipt} label="Facturado" value={fmt(stats.total_facturado)} />
-          <KpiCard icon={CheckCircle} label="Pagado" value={fmt(stats.total_pagado)} tone="success" />
-          <KpiCard icon={Wallet} label="Pendiente" value={fmt(stats.total_pendiente)} tone="warning" />
-          <KpiCard icon={WarningCircle} label="Vencidas" value={stats.vencidas} tone={stats.vencidas > 0 ? 'destructive' : 'default'} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard
+            icon={Receipt}
+            iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+            label="Facturado"
+            value={fmt(stats.total_facturado)}
+          />
+          <KpiCard
+            icon={CheckCircle}
+            iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+            label="Pagado"
+            value={fmt(stats.total_pagado)}
+          />
+          <KpiCard
+            icon={Wallet}
+            iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+            label="Pendiente"
+            value={fmt(stats.total_pendiente)}
+          />
+          <KpiCard
+            icon={WarningCircle}
+            iconBg={stats.vencidas > 0
+              ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+              : 'bg-muted text-muted-foreground'}
+            label="Vencidas"
+            value={stats.vencidas}
+          />
         </div>
       )}
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-border overflow-x-auto">
+        <div className="p-3 border-b border-border overflow-x-auto">
           <div className="flex items-center gap-2 w-max">
             {ESTADOS.map(e => (
               <button
                 key={e.v}
                 onClick={() => setFilterEstado(e.v)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${filterEstado === e.v ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+                className={`h-9 px-3 rounded-md text-xs font-semibold transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 ${filterEstado === e.v ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
               >
                 {e.label}
               </button>
@@ -110,7 +138,9 @@ export default function AccountsPayablePage() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Cargando...</div>
+          <div className="p-4">
+            <SkeletonTable rows={5} columns={8} className="border-0" />
+          </div>
         ) : items.length === 0 ? (
           <EmptyState icon={Receipt} title="Sin facturas" description="No hay cuentas por pagar registradas" />
         ) : (
@@ -122,7 +152,7 @@ export default function AccountsPayablePage() {
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Proveedor</th>
                     <th className="text-left px-4 py-2.5 font-bold">Concepto</th>
-                    <th className="text-left px-4 py-2.5 font-bold">Categoria</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Categoría</th>
                     <th className="text-right px-4 py-2.5 font-bold">Total</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pagado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
@@ -141,11 +171,11 @@ export default function AccountsPayablePage() {
                       <td className="px-4 py-3">{r.concepto}</td>
                       <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted">{r.categoria}</span></td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_total)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-green-600">{fmt(r.importe_pagado)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-bold text-orange-600">{fmt(r.importe_pendiente)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{fmt(r.importe_pagado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold text-orange-600 dark:text-orange-400">{fmt(r.importe_pendiente)}</td>
                       <td className="px-4 py-3">
                         {r.fecha_compromiso_pago ? (
-                          <span className={r.vencido ? 'text-red-600 font-semibold' : ''}>
+                          <span className={r.vencido ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>
                             {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-1" />}
                             {formatDate(r.fecha_compromiso_pago)}
                           </span>
@@ -162,11 +192,21 @@ export default function AccountsPayablePage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {r.estado !== 'pagado' && r.estado !== 'cancelado' && (
-                            <button onClick={() => setDialog({ type: 'pay', payable: r })} className="p-1.5 rounded hover:bg-green-50 text-green-600" title="Registrar pago">
+                            <button
+                              onClick={() => setDialog({ type: 'pay', payable: r })}
+                              aria-label="Registrar pago"
+                              title="Registrar pago"
+                              className="p-1.5 rounded hover:bg-green-50 dark:hover:bg-green-950/30 text-green-600 dark:text-green-400 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            >
                               <CurrencyEur size={14} weight="bold" />
                             </button>
                           )}
-                          <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Eliminar">
+                          <button
+                            onClick={() => handleDelete(r.id)}
+                            aria-label="Eliminar factura"
+                            title="Eliminar"
+                            className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          >
                             <Trash size={14} />
                           </button>
                         </div>
@@ -200,18 +240,18 @@ export default function AccountsPayablePage() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Pagado</div>
-                      <div className="tabular-nums text-green-600">{fmt(r.importe_pagado)}</div>
+                      <div className="tabular-nums text-green-600 dark:text-green-400">{fmt(r.importe_pagado)}</div>
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Pendiente</div>
-                      <div className="tabular-nums font-semibold text-orange-600">{fmt(r.importe_pendiente)}</div>
+                      <div className="tabular-nums font-semibold text-orange-600 dark:text-orange-400">{fmt(r.importe_pendiente)}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs pt-1">
                     <div className="flex items-center gap-2 text-muted-foreground min-w-0">
                       <span className="px-2 py-0.5 rounded bg-muted text-[10px] font-medium flex-shrink-0">{r.categoria}</span>
                       {r.fecha_compromiso_pago && (
-                        <span className={r.vencido ? 'text-red-600 font-semibold' : ''}>
+                        <span className={r.vencido ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>
                           {r.vencido && <WarningCircle size={12} weight="fill" className="inline mr-0.5" />}
                           Vence {formatDate(r.fecha_compromiso_pago)}
                         </span>
@@ -219,11 +259,19 @@ export default function AccountsPayablePage() {
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {r.estado !== 'pagado' && r.estado !== 'cancelado' && (
-                        <button onClick={() => setDialog({ type: 'pay', payable: r })} className="p-1.5 rounded hover:bg-green-50 text-green-600">
+                        <button
+                          onClick={() => setDialog({ type: 'pay', payable: r })}
+                          aria-label="Registrar pago"
+                          className="p-1.5 rounded hover:bg-green-50 dark:hover:bg-green-950/30 text-green-600 dark:text-green-400 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        >
                           <CurrencyEur size={14} weight="bold" />
                         </button>
                       )}
-                      <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500">
+                      <button
+                        onClick={() => handleDelete(r.id)}
+                        aria-label="Eliminar factura"
+                        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 dark:text-red-400 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      >
                         <Trash size={14} />
                       </button>
                     </div>
@@ -237,7 +285,19 @@ export default function AccountsPayablePage() {
 
       {dialog === 'new' && <PayableDialog projectId={projId} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); load(); }} />}
       {dialog?.type === 'pay' && <PaymentDialog payable={dialog.payable} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); load(); }} />}
-      <ConfirmDialog open={pendingDelete !== null} title="¿Eliminar factura?" message="Este registro será eliminado permanentemente." onConfirm={doDelete} onCancel={() => setPendingDelete(null)} />
+      {pendingDelete !== null && (
+        <Suspense fallback={null}>
+          <ConfirmDialog
+            open={pendingDelete !== null}
+            title="¿Eliminar factura?"
+            message="Este registro será eliminado permanentemente."
+            tone="destructive"
+            confirmLabel="Eliminar"
+            onConfirm={doDelete}
+            onCancel={() => setPendingDelete(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -268,7 +328,7 @@ function PayableDialog({ projectId, onClose, onSaved }) {
     } finally { setSaving(false); }
   }
 
-  const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>
@@ -277,7 +337,14 @@ function PayableDialog({ projectId, onClose, onSaved }) {
         <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Nueva factura por pagar</h2>
-            <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <X size={18} />
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <input required placeholder="Proveedor" value={data.proveedor} onChange={e => setData({ ...data, proveedor: e.target.value })} className={inputClass} />
@@ -285,7 +352,7 @@ function PayableDialog({ projectId, onClose, onSaved }) {
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <input required placeholder="Concepto" value={data.concepto} onChange={e => setData({ ...data, concepto: e.target.value })} className={inputClass + ' col-span-2'} />
-            <input required type="number" step="0.01" placeholder="Importe total" value={data.importe_total} onChange={e => setData({ ...data, importe_total: e.target.value })} className={inputClass} />
+            <input required type="number" step="0.01" placeholder="Importe total" value={data.importe_total} onChange={e => setData({ ...data, importe_total: e.target.value })} className={inputClass + ' tabular-nums'} />
             <div></div>
             <div>
               <label className="text-[10px] font-medium text-muted-foreground block mb-1">Fecha factura</label>
@@ -298,8 +365,20 @@ function PayableDialog({ projectId, onClose, onSaved }) {
             <textarea placeholder="Notas (opcional)" value={data.notas} onChange={e => setData({ ...data, notas: e.target.value })} className={inputClass + ' col-span-2 h-20 py-2 resize-none'} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cancelar</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{saving ? 'Guardando...' : 'Crear factura'}</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 px-4 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              {saving ? 'Guardando...' : 'Crear factura'}
+            </button>
           </div>
         </form>
       </div>
@@ -328,7 +407,7 @@ function PaymentDialog({ payable, onClose, onSaved }) {
     } finally { setSaving(false); }
   }
 
-  const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>
@@ -339,14 +418,21 @@ function PaymentDialog({ payable, onClose, onSaved }) {
             <div>
               <h2 className="text-lg font-semibold">Registrar pago</h2>
               <p className="text-xs text-muted-foreground">{payable.proveedor} — {payable.concepto}</p>
-              <p className="text-xs text-orange-600 font-semibold mt-1">Pendiente: {fmt(pendiente)}</p>
+              <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold mt-1 tabular-nums">Pendiente: {fmt(pendiente)}</p>
             </div>
-            <button type="button" onClick={onClose} className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <X size={18} />
+            </button>
           </div>
           <div className="space-y-3">
             <div>
               <label className="text-[10px] font-medium text-muted-foreground block mb-1">Importe</label>
-              <input required type="number" step="0.01" max={pendiente} value={data.importe} onChange={e => setData({ ...data, importe: e.target.value })} className={inputClass} />
+              <input required type="number" step="0.01" max={pendiente} value={data.importe} onChange={e => setData({ ...data, importe: e.target.value })} className={inputClass + ' tabular-nums'} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -354,7 +440,7 @@ function PaymentDialog({ payable, onClose, onSaved }) {
                 <input type="date" value={data.fecha_pago} onChange={e => setData({ ...data, fecha_pago: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[10px] font-medium text-muted-foreground block mb-1">Metodo</label>
+                <label className="text-[10px] font-medium text-muted-foreground block mb-1">Método</label>
                 <select value={data.metodo} onChange={e => setData({ ...data, metodo: e.target.value })} className={inputClass}>
                   <option value="transferencia">Transferencia</option>
                   <option value="tarjeta">Tarjeta</option>
@@ -366,8 +452,20 @@ function PaymentDialog({ payable, onClose, onSaved }) {
             <input placeholder="Referencia (opcional)" value={data.referencia} onChange={e => setData({ ...data, referencia: e.target.value })} className={inputClass} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cancelar</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{saving ? 'Guardando...' : 'Registrar pago'}</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 px-4 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              {saving ? 'Guardando...' : 'Registrar pago'}
+            </button>
           </div>
         </form>
       </div>

@@ -38,9 +38,14 @@ const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/P
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
+const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
+const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import LeadsViewToggle from '../components/LeadsViewToggle';
+import usePermission from '@/shared/hooks/usePermission';
+import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 
 const AVATAR_COLORS = [
   'bg-rose-100 text-rose-700',
@@ -112,7 +117,7 @@ function exportLeadsCSV(leads, filename) {
   URL.revokeObjectURL(url);
 }
 
-function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder, templates, projectName, onEditTemplates }) {
+function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCreateReminder, onEnrollSequence, templates, projectName, onEditTemplates }) {
   const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
   const email = lead.email;
   const [waMenuOpen, setWaMenuOpen] = useState(false);
@@ -181,11 +186,14 @@ function QuickActions({ lead, onMarkContacted, onConvert, onLogInteraction, onCr
           )}
         </div>
       )}
-      {email && (
-        <a href={`mailto:${email}`} title="Email (registra interaccion)" onClick={handleEmail}
-          className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors">
+      {onEnrollSequence && (
+        <button
+          onClick={() => onEnrollSequence(lead)}
+          title="Enrolar en secuencia de email"
+          className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+        >
           <EnvelopeSimple size={14} weight="regular" />
-        </a>
+        </button>
       )}
       {onCreateReminder && (
         <button onClick={() => onCreateReminder(lead)} title="Programar siguiente contacto"
@@ -279,8 +287,8 @@ function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
             <div className="flex items-center gap-2 flex-wrap">
               {[
                 { label: 'En 2 horas', delta: 2 * 3600000 },
-                { label: 'Manana 10am', getDate: () => { const t = new Date(Date.now() + 86400000); t.setHours(10, 0, 0, 0); return t; } },
-                { label: 'En 3 dias', delta: 3 * 86400000 },
+                { label: 'Mañana 10am', getDate: () => { const t = new Date(Date.now() + 86400000); t.setHours(10, 0, 0, 0); return t; } },
+                { label: 'En 3 días', delta: 3 * 86400000 },
                 { label: 'En 1 semana', delta: 7 * 86400000 },
               ].map(p => (
                 <button key={p.label} type="button"
@@ -308,6 +316,16 @@ function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
         </div>
       </div>
     </Suspense>
+  );
+}
+
+function StatPill({ label, value, dot }) {
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-muted/40 flex-shrink-0">
+      {dot && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dot }} />}
+      <span className="text-[11px] text-muted-foreground whitespace-nowrap">{label}</span>
+      <span className="text-sm font-semibold tabular-nums">{value}</span>
+    </div>
   );
 }
 
@@ -355,6 +373,7 @@ function SkeletonRow() {
 export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermission();
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
@@ -377,6 +396,8 @@ export default function LeadsPage() {
   const [reminderLead, setReminderLead] = useState(null);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
+  const [drawerLeadId, setDrawerLeadId] = useState(null);
+  const [enrollLeadId, setEnrollLeadId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -537,10 +558,10 @@ export default function LeadsPage() {
     try {
       await client.post(`/leads/${lead.id}/interactions`, {
         tipo,
-        nota: tipo === 'whatsapp' ? 'Contacto por WhatsApp (acceso rapido)' : 'Email enviado (acceso rapido)',
+        nota: tipo === 'whatsapp' ? 'Contacto por WhatsApp (acceso rápido)' : 'Email enviado (acceso rápido)',
         fecha: new Date().toISOString(),
       });
-      toast({ title: 'Interaccion registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
+      toast({ title: 'Interacción registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
       refetch();
     } catch (err) {
       // Silent fail — el link igual abre, no queremos bloquear al usuario
@@ -557,7 +578,7 @@ export default function LeadsPage() {
       } catch {}
     }
     setConvertingLead(null);
-    toast({ title: 'Conversion registrada', description: lead.nombre });
+    toast({ title: 'Conversión registrada', description: lead.nombre });
     await refetch();
   }
 
@@ -627,70 +648,71 @@ export default function LeadsPage() {
         </Suspense>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold">Gestión de Prospectos</h1>
-          <p className="text-muted-foreground text-sm">Explora y gestiona tus clientes potenciales</p>
+          <h1 className="text-lg sm:text-xl font-semibold leading-tight">Prospectos</h1>
+          <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => navigate('/leads/pipeline')}
-            className="px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
-          >
-            Pipeline
-          </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <LeadsViewToggle active="list" />
           <button
             onClick={() => navigate('/leads/audiences')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+            title="Audiencias para Meta/Google"
+            aria-label="Audiencias"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <Export size={16} weight="bold" />
-            Audiencias
+            <Export size={14} weight="bold" />
+            <span className="hidden md:inline">Audiencias</span>
           </button>
-          {filteredLeads.length > 0 && (
+          {filteredLeads.length > 0 && can('leads.export') && (
             <button
               onClick={() => exportLeadsCSV(filteredLeads, `prospectos-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}.csv`)}
               title="Exportar CSV"
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+              aria-label="Exportar CSV"
+              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <DownloadSimple size={16} weight="bold" />
-              CSV
+              <DownloadSimple size={14} weight="bold" />
+              <span className="hidden md:inline">CSV</span>
             </button>
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <div className="relative">
               <button
                 onClick={() => setMoreOpen(!moreOpen)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+                className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-expanded={moreOpen}
               >
-                Configurar <CaretDown size={12} weight="bold" />
+                <span className="hidden md:inline">Configurar</span>
+                <span className="md:hidden">Más</span>
+                <CaretDown size={11} weight="bold" />
               </button>
               {moreOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg z-30 min-w-52 py-1">
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
                   <button
                     onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <UploadSimple size={14} /> Importar desde CSV
+                    <UploadSimple size={13} weight="regular" className="flex-shrink-0" /> Importar desde CSV
                   </button>
                   <div className="my-1 border-t border-border" />
                   <button
                     onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <Notepad size={14} /> Campos custom de prospectos
+                    <Notepad size={13} weight="regular" className="flex-shrink-0" /> Campos custom de prospectos
                   </button>
                   <button
                     onClick={() => { setConfigTab('webhook'); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <PlugsConnected size={14} /> Webhook de captura
+                    <PlugsConnected size={13} weight="regular" className="flex-shrink-0" /> Webhook de captura
                   </button>
                   <button
                     onClick={() => { setWaTemplatesOpen(true); setMoreOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <ChatCircleText size={14} /> Plantillas de WhatsApp
+                    <ChatCircleText size={13} weight="regular" className="flex-shrink-0" /> Plantillas de WhatsApp
                   </button>
                 </div>
               )}
@@ -698,97 +720,94 @@ export default function LeadsPage() {
           )}
           <button
             onClick={() => setFormOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap"
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
           >
-            <Plus size={16} weight="bold" />
-            <span className="hidden sm:inline">Nuevo Prospecto</span>
+            <Plus size={14} weight="bold" />
+            <span className="hidden sm:inline">Nuevo prospecto</span>
             <span className="sm:hidden">Nuevo</span>
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <MagnifyingGlass size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o email..."
-            className="w-full h-11 pl-10 pr-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
-          />
-        </div>
-        <select
-          value={filterEstado}
-          onChange={(e) => { setFilterEstado(e.target.value); setPage(1); }}
-          className="h-11 px-4 pr-9 rounded-md border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-        >
-          <option value="">Todos los estados</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          value={filterOrigen}
-          onChange={(e) => { setFilterOrigen(e.target.value); setPage(1); }}
-          className="h-11 px-4 pr-9 rounded-md border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-        >
-          <option value="">Todos los canales</option>
-          <option value="meta_ads">Meta Ads</option>
-          <option value="google_ads">Google Ads</option>
-          <option value="tiktok_ads">TikTok Ads</option>
-          <option value="organico">Orgánico</option>
-          <option value="chatgpt_ia">ChatGPT IA</option>
-          <option value="referido">Referido</option>
-          <option value="directo">Directo</option>
-        </select>
-        {(user?.role === 'superadmin' || user?.role === 'admin') && (
+      {/* Filters + Stats compactos */}
+      <div className="flex flex-col gap-2">
+        {/* Fila 1: search + filtros */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o email..."
+              aria-label="Buscar prospectos"
+              className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:bg-card placeholder:text-muted-foreground"
+            />
+          </div>
           <select
-            value={filterResponsable}
-            onChange={(e) => { setFilterResponsable(e.target.value); setPage(1); }}
-            className="h-11 px-4 pr-9 rounded-md border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+            value={filterEstado}
+            onChange={(e) => { setFilterEstado(e.target.value); setPage(1); }}
+            aria-label="Filtrar por estado"
+            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
           >
-            <option value="">Todos los responsables</option>
-            {gestores.map((g) => (
-              <option key={g.id} value={g.id}>{g.nombre}</option>
+            <option value="">Todos los estados</option>
+            {Object.entries(STATUS_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
             ))}
           </select>
+          <select
+            value={filterOrigen}
+            onChange={(e) => { setFilterOrigen(e.target.value); setPage(1); }}
+            aria-label="Filtrar por canal"
+            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+          >
+            <option value="">Todos los canales</option>
+            <option value="meta_ads">Meta Ads</option>
+            <option value="google_ads">Google Ads</option>
+            <option value="tiktok_ads">TikTok Ads</option>
+            <option value="organico">Orgánico</option>
+            <option value="chatgpt_ia">ChatGPT IA</option>
+            <option value="referido">Referido</option>
+            <option value="directo">Directo</option>
+          </select>
+          {(user?.role === 'superadmin' || user?.role === 'admin') && (
+            <select
+              value={filterResponsable}
+              onChange={(e) => { setFilterResponsable(e.target.value); setPage(1); }}
+              aria-label="Filtrar por gestor"
+              className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
+              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+            >
+              <option value="">Todos los gestores</option>
+              {gestores.map((g) => (
+                <option key={g.id} value={g.id}>{g.nombre}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Stats compactos en una sola tira horizontal */}
+        {stats && (
+          <div className="flex flex-wrap items-stretch gap-1.5 bg-card border border-border rounded-md p-1.5 overflow-x-auto">
+            <StatPill label="Total" value={stats.total || 0} />
+            <StatPill label="Nuevos" value={stats.nuevo || 0} dot="#3b82f6" />
+            <StatPill label="Por contactar" value={stats.por_contactar || 0} dot="#f59e0b" />
+            <StatPill label="Contactados" value={stats.contactado || 0} dot="#10b981" />
+            <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot="#eab308" />
+            <StatPill label="Convertidos" value={stats.convertido || 0} dot="#8b5cf6" />
+            <StatPill label="No interesado" value={stats.no_interesado || 0} dot="#ef4444" />
+          </div>
         )}
       </div>
-
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <div className="bg-card px-3 py-2.5 rounded-md border border-border">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-lg font-semibold mt-0.5 tabular-nums">{stats.total || 0}</p>
-          </div>
-          {[
-            { key: 'nuevo', label: 'Nuevos', color: '#3b82f6' },
-            { key: 'por_contactar', label: 'Por contactar', color: '#f59e0b' },
-            { key: 'contactado', label: 'Contactados', color: '#10b981' },
-            { key: 'en_seguimiento', label: 'En seguimiento', color: '#eab308' },
-            { key: 'convertido', label: 'Convertidos', color: '#8b5cf6' },
-            { key: 'no_interesado', label: 'No interesado', color: '#ef4444' },
-          ].map(({ key, label, color }) => (
-            <div key={key} className="bg-card px-3 py-2.5 rounded-md border border-border border-l-2" style={{ borderLeftColor: color }}>
-              <p className="text-xs text-muted-foreground truncate">{label}</p>
-              <p className="text-lg font-semibold mt-0.5 tabular-nums">{stats[key] || 0}</p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Filtros rapidos por accion (client-side) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <span className="text-xs text-muted-foreground flex-shrink-0">Mostrar</span>
         <QuickChip active={!quickFilter} onClick={() => setQuickFilter('')} label="Todos" />
         <QuickChip active={quickFilter === 'urgent'} onClick={() => setQuickFilter('urgent')}
-          label="Necesitan accion hoy" count={quickCounts.urgent} tone="danger" />
+          label="Necesitan acción hoy" count={quickCounts.urgent} tone="danger" />
         <QuickChip active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}
           label="Vencidos" count={quickCounts.overdue} tone="danger" />
         <QuickChip active={quickFilter === 'today'} onClick={() => setQuickFilter('today')}
@@ -810,7 +829,7 @@ export default function LeadsPage() {
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="bg-muted/50 border-b">
+            <thead className="bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b sticky top-0 z-10">
               <tr>
                 <th className="pl-5 pr-2 py-2.5 w-8">
                   <input
@@ -825,8 +844,8 @@ export default function LeadsPage() {
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Ultimo contacto</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proximo</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Último contacto</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Próximo</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
                 <th className="px-5 py-2.5 text-right text-xs text-muted-foreground pr-3">Acciones</th>
               </tr>
@@ -837,11 +856,15 @@ export default function LeadsPage() {
                   {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
                 </>
               )}
-              {!loading && filteredLeads.map((lead) => (
+              {!loading && filteredLeads.map((lead) => {
+                const priority = getLeadPriority(lead);
+                const pStyle = getPriorityStyle(priority);
+                return (
                 <tr
                   key={lead.id}
-                  onClick={() => navigate(`/leads/${lead.id}`)}
-                  className={`border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer ${selectedIds.includes(lead.id) ? 'bg-primary/5' : ''}`}
+                  onClick={() => setDrawerLeadId(lead.id)}
+                  title={`Prioridad: ${pStyle.label}`}
+                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${selectedIds.includes(lead.id) ? 'bg-primary/5' : ''}`}
                 >
                   <td className="pl-5 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
                     <input
@@ -859,7 +882,7 @@ export default function LeadsPage() {
                       </div>
                       <span className="font-semibold">{lead.nombre}</span>
                       {lead.reincidente && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya pregunto por este producto antes">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya preguntó por este producto antes">
                           Reincidente
                         </span>
                       )}
@@ -872,7 +895,7 @@ export default function LeadsPage() {
                        lead.dias_alerta_inactividad != null &&
                        lead.dias_inactivo > lead.dias_alerta_inactividad &&
                        !['convertido', 'no_interesado'].includes(lead.estado) && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} dias`}>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} días`}>
                           {lead.dias_inactivo}d
                         </span>
                       )}
@@ -897,10 +920,11 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
                   <td colSpan={9} className="px-5">
@@ -942,17 +966,17 @@ export default function LeadsPage() {
               <div className="flex items-center gap-2 flex-wrap text-[11px]">
                 <ChannelBadge channel={lead.origen} />
                 {lead.last_interaction_at && (
-                  <span className="text-muted-foreground">Ultimo: <span className="text-foreground">{formatRelative(lead.last_interaction_at)}</span></span>
+                  <span className="text-muted-foreground">Último: <span className="text-foreground">{formatRelative(lead.last_interaction_at)}</span></span>
                 )}
                 {lead.next_reminder_at && (
                   <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
-                    Proximo: <span className="font-medium">{formatRelative(lead.next_reminder_at, { future: true })}</span>
+                    Próximo: <span className="font-medium">{formatRelative(lead.next_reminder_at, { future: true })}</span>
                   </span>
                 )}
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}
@@ -1021,8 +1045,8 @@ export default function LeadsPage() {
           open={!!confirmingContact}
           tone="success"
           title="Marcar como contactado"
-          message={confirmingContact ? <>Vas a marcar a <strong className="text-foreground">{confirmingContact.nombre}</strong> como contactado. El estado del prospecto cambiara y se registrara la fecha actual.</> : null}
-          confirmLabel="Si, marcar contactado"
+          message={confirmingContact ? <>Vas a marcar a <strong className="text-foreground">{confirmingContact.nombre}</strong> como contactado. El estado del prospecto cambiará y se registrará la fecha actual.</> : null}
+          confirmLabel="Sí, marcar contactado"
           cancelLabel="Cancelar"
           onConfirm={confirmMarkContacted}
           onCancel={() => setConfirmingContact(null)}
@@ -1058,6 +1082,25 @@ export default function LeadsPage() {
           onClose={() => setCsvImportOpen(false)}
           projectId={activeProject?.id}
           onImported={({ ok }) => { if (ok > 0) refetch(); }}
+        />
+      </Suspense>
+
+      {/* Drawer detalle rapido */}
+      <Suspense fallback={null}>
+        <LeadDrawer
+          leadId={drawerLeadId}
+          open={drawerLeadId !== null}
+          onClose={() => setDrawerLeadId(null)}
+        />
+      </Suspense>
+
+      {/* Enrolar en secuencia */}
+      <Suspense fallback={null}>
+        <EnrollSequenceModal
+          leadId={enrollLeadId}
+          open={enrollLeadId !== null}
+          onClose={() => setEnrollLeadId(null)}
+          onEnrolled={() => setEnrollLeadId(null)}
         />
       </Suspense>
 
@@ -1195,7 +1238,7 @@ function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, pr
             <h2 className="text-base font-semibold">Plantillas de WhatsApp</h2>
             <p className="text-xs text-muted-foreground">Para {projectName || 'este proyecto'} - guardadas en este navegador</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
 
         <div className="px-5 py-3 text-xs text-muted-foreground bg-muted/30 border-b">
@@ -1232,14 +1275,14 @@ function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, pr
             </div>
           ))}
           {draft.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-6">No hay plantillas. Anade una para empezar.</p>
+            <p className="text-center text-sm text-muted-foreground py-6">No hay plantillas. Añade una para empezar.</p>
           )}
           <button
             type="button"
             onClick={addTemplate}
             className="w-full py-2 border border-dashed border-border rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center justify-center gap-1.5"
           >
-            <Plus size={14} weight="bold" /> Anadir plantilla
+            <Plus size={14} weight="bold" /> Añadir plantilla
           </button>
         </div>
 

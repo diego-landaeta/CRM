@@ -1,7 +1,15 @@
 import crypto from 'crypto';
 import { query } from '../../shared/config/db.js';
 
-export async function findAll(projectId) {
+export async function findAll(projectId, kind = null) {
+  if (kind) {
+    // COALESCE para tratar NULL legacy como 'form'
+    const { rows } = await query(
+      `SELECT * FROM form_templates WHERE project_id = $1 AND COALESCE(kind, 'form') = $2 ORDER BY created_at DESC`,
+      [projectId, kind]
+    );
+    return rows;
+  }
   const { rows } = await query(`SELECT * FROM form_templates WHERE project_id = $1 ORDER BY created_at DESC`, [projectId]);
   return rows;
 }

@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
+import LeadsViewToggle from '../components/LeadsViewToggle';
+import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { toast } from '@/shared/hooks/useToast';
 import { Plus, User, DotsSixVertical, Users } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
+
+const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 
 const COLUMNS = [
   { key: 'nuevo', label: 'Nuevo', color: '#3b82f6', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500', ring: 'ring-blue-400' },
@@ -45,6 +48,8 @@ function daysAgo(dateStr) {
 
 function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
   const canal = lead.canal_detectado || lead.origen;
+  const priority = getLeadPriority(lead);
+  const pStyle = getPriorityStyle(priority);
   return (
     <div
       draggable
@@ -53,7 +58,8 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
       onClick={() => onClick(lead.id)}
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onClick(lead.id); }}
-      className="bg-card border border-border rounded-lg p-3 space-y-2 cursor-grab active:cursor-grabbing hover:shadow-sm hover:border-primary/30 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1"
+      title={`Prioridad: ${pStyle.label}`}
+      className={`bg-card border border-border border-l-4 ${pStyle.borderClass} rounded-lg p-3 space-y-2 cursor-grab active:cursor-grabbing hover:shadow-sm hover:border-primary/30 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1`}
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -92,13 +98,13 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
 }
 
 export default function LeadsPipelinePage() {
-  const navigate = useNavigate();
   const { activeProject } = useProjectContext();
   const pid = activeProject?.id;
 
   const [allLeads, setAllLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [dragLead, setDragLead] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
 
@@ -218,7 +224,7 @@ export default function LeadsPipelinePage() {
       <div className="space-y-5">
         <div>
           <h1 className="text-2xl font-semibold">Pipeline de Prospectos</h1>
-          <p className="text-muted-foreground text-sm">Cargando...</p>
+          <p className="text-muted-foreground text-sm">Cargando…</p>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
@@ -249,28 +255,32 @@ export default function LeadsPipelinePage() {
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
 
       <PageHeader
-        title="Pipeline de Prospectos"
-        subtitle="Vista Kanban &mdash; arrastra una tarjeta para cambiar su estado"
+        title="Prospectos"
+        subtitle="Arrastra una tarjeta para cambiar su estado"
         actions={
           <>
-            <button
-              onClick={() => navigate('/leads')}
-              className="px-4 py-2.5 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
-            >
-              Vista tabla
-            </button>
+            <LeadsViewToggle active="kanban" />
             <button
               onClick={() => setFormOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+              aria-label="Nuevo prospecto"
+              className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
             >
-              <Plus size={16} weight="bold" /> Nuevo Prospecto
+              <Plus size={16} weight="bold" /> <span className="hidden sm:inline">Nuevo Prospecto</span>
             </button>
           </>
         }
       />
 
+      <Suspense fallback={null}>
+        <LeadDrawer
+          leadId={drawerLeadId}
+          open={drawerLeadId !== null}
+          onClose={() => setDrawerLeadId(null)}
+        />
+      </Suspense>
+
       {/* Pipeline columns */}
-      <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
+      <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
         {COLUMNS.map((col) => {
           const colLeads = grouped[col.key] || [];
           return (
@@ -286,7 +296,7 @@ export default function LeadsPipelinePage() {
               }`}
             >
               {/* Column header */}
-              <div className={`rounded-lg px-4 py-3 mb-3 ${col.bg}`}>
+              <div className={`rounded-lg px-3 py-2 mb-2 ${col.bg}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
@@ -311,7 +321,7 @@ export default function LeadsPipelinePage() {
                   <LeadCard
                     key={lead.id}
                     lead={lead}
-                    onClick={(id) => navigate(`/leads/${id}`)}
+                    onClick={(id) => setDrawerLeadId(id)}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   />
