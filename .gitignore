@@ -50,7 +50,9 @@ uploads/
 
 # Screenshots de validacion (transitorios, no commiteables)
 /*.png
+/*.jpeg
 .playwright-mcp/
+frontend/audit/
 
 # Scripts locales / sensibles (no commitear)
 reset-postgres-password.ps1
