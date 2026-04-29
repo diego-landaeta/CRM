@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { productSchema } from '../validation/product.schema';
-import { X, CurrencyEur, Link, Tag } from '@phosphor-icons/react';
+import { productSchema, PAYMENT_LINK_TYPES } from '../validation/product.schema';
+import { X, CurrencyEur, Link, Tag, Plus, Trash } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -30,6 +30,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   const [categories, setCategories] = useState([]);
   const [categoriaSel, setCategoriaSel] = useState('');
   const [subcategoriaSel, setSubcategoriaSel] = useState('');
+  // Enlaces de pago multiples (CRM-140). El primero queda como stripe_link
+  // legacy si el backend aún no soporta product_payment_links.
+  const [paymentLinks, setPaymentLinks] = useState([]);
+  const [linkErrors, setLinkErrors] = useState({});
 
   const {
     register,
@@ -65,6 +69,16 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       } : { nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '' });
       setCategoriaSel(product?.categoria_id ? String(product.categoria_id) : '');
       setSubcategoriaSel(product?.subcategoria_id ? String(product.subcategoria_id) : '');
+      // Sincronizar links: usa product.payment_links si viene del backend (CRM-140),
+      // sino bootstrap con stripe_link si existe.
+      if (Array.isArray(product?.payment_links) && product.payment_links.length > 0) {
+        setPaymentLinks(product.payment_links);
+      } else if (product?.stripe_link) {
+        setPaymentLinks([{ label: 'Pago completo', url: product.stripe_link, tipo: 'completo' }]);
+      } else {
+        setPaymentLinks([]);
+      }
+      setLinkErrors({});
     }
   }, [open, product, reset]);
 
@@ -73,12 +87,44 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   const parents = categories.filter(c => !c.parent_id);
   const subs = categories.filter(c => String(c.parent_id) === categoriaSel);
 
+  function addPaymentLink() {
+    setPaymentLinks((prev) => [...prev, { label: '', url: '', tipo: 'completo' }]);
+  }
+  function updatePaymentLink(idx, patch) {
+    setPaymentLinks((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+  function removePaymentLink(idx) {
+    setPaymentLinks((prev) => prev.filter((_, i) => i !== idx));
+    setLinkErrors((prev) => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+  }
+
+  function validateLinks() {
+    const errors = {};
+    paymentLinks.forEach((l, i) => {
+      if (!l.label?.trim()) errors[i] = 'Etiqueta requerida';
+      else {
+        try { new URL(l.url); } catch { errors[i] = 'URL inválida'; }
+      }
+    });
+    setLinkErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function handleFormSubmit(data) {
+    if (!validateLinks()) return;
+    const cleanLinks = paymentLinks.filter((l) => l.label?.trim() && l.url?.trim());
     const payload = {
       ...data,
       precio: data.precio === '' || data.precio === null || Number.isNaN(data.precio) ? null : Number(data.precio),
       categoria_id: categoriaSel ? Number(categoriaSel) : null,
       subcategoria_id: subcategoriaSel ? Number(subcategoriaSel) : null,
+      // Backwards compat: si solo hay 1 link "completo", también va como stripe_link.
+      stripe_link: cleanLinks[0]?.url || data.stripe_link || null,
+      payment_links: cleanLinks,
     };
     // Normalizar vacios a null
     ['stripe_link', 'sku', 'duracion', 'url_info'].forEach(k => { if (!payload[k]) payload[k] = null; });
@@ -156,12 +202,80 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 <input {...register('duracion')} placeholder="opcional" className={smallInput} />
               </Field>
             </div>
-            <Field label="Enlace de pago Stripe" error={errors.stripe_link?.message} hint="Payment Link o Checkout URL">
-              <input {...register('stripe_link')} placeholder="https://buy.stripe.com/..." className={smallInput} />
-            </Field>
             <Field label="URL de información / landing" error={errors.url_info?.message}>
               <input {...register('url_info')} placeholder="https://..." className={smallInput} />
             </Field>
+          </div>
+
+          {/* Enlaces de pago (CRM-140) — soporta múltiples Stripe Payment Links */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                <Link size={12} /> Enlaces de pago Stripe
+                {paymentLinks.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">{paymentLinks.length}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={addPaymentLink}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold"
+              >
+                <Plus size={11} weight="bold" /> Añadir enlace
+              </button>
+            </div>
+
+            {paymentLinks.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground italic px-1">
+                Sin enlaces. Añade al menos uno (pago completo, fraccionado, etc.) para que los gestores puedan compartirlo en la conversión.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {paymentLinks.map((link, idx) => (
+                  <div key={idx} className="p-3 rounded-md border border-border bg-card space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={link.label}
+                        onChange={(e) => updatePaymentLink(idx, { label: e.target.value })}
+                        placeholder="Etiqueta (ej: Pago único)"
+                        className={smallInput}
+                      />
+                      <select
+                        value={link.tipo}
+                        onChange={(e) => updatePaymentLink(idx, { tipo: e.target.value })}
+                        className={smallInput}
+                      >
+                        {PAYMENT_LINK_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <input
+                        value={link.url}
+                        onChange={(e) => updatePaymentLink(idx, { url: e.target.value })}
+                        placeholder="https://buy.stripe.com/..."
+                        className={smallInput + ' flex-1 font-mono text-xs'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePaymentLink(idx)}
+                        aria-label="Eliminar enlace"
+                        className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500"
+                      >
+                        <Trash size={14} weight="regular" />
+                      </button>
+                    </div>
+                    {linkErrors[idx] && (
+                      <p className="text-xs text-red-500">{linkErrors[idx]}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground px-1">
+              El primer enlace se guarda también como <code className="font-mono">stripe_link</code> por compatibilidad.
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

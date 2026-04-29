@@ -9,6 +9,7 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CurrencyEur, CheckCircle, Clock, ChartBar, Gear, X, Plus, Trash, PencilSimple,
+  DownloadSimple, CalendarBlank, Lock,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -17,6 +18,43 @@ function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'; }
+
+function exportCommissionsCsv(items, period) {
+  const sep = (row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+  const rows = [
+    [`Comisiones — ${period}`],
+    ['Fecha', 'Gestor', 'Cliente', 'Producto', 'Base cobrada (€)', '%', 'Comisión (€)', 'Estado', 'Fecha pago'],
+    ...items.map((r) => [
+      r.created_at ? new Date(r.created_at).toLocaleDateString('es-ES') : '',
+      r.user_nombre || '',
+      r.lead_nombre || '',
+      r.product_nombre || r.producto_contratado || '',
+      Number(r.importe_base || 0).toFixed(2),
+      r.pct ?? '',
+      Number(r.importe_comision || 0).toFixed(2),
+      r.estado || '',
+      r.fecha_pago ? new Date(r.fecha_pago).toLocaleDateString('es-ES') : '',
+    ]),
+  ];
+  const csv = rows.map(sep).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `comisiones-${period.replace(/\s+/g, '_').toLowerCase()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function monthLabel(year, month) {
+  return new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+}
+
+function isInMonth(dateStr, year, month) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  return d.getFullYear() === year && d.getMonth() + 1 === month;
+}
 
 const ESTADOS = [
   { v: '', label: 'Todas' },
@@ -37,6 +75,17 @@ export default function CommissionsPage() {
   const [users, setUsers] = useState([]);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [pendingPay, setPendingPay] = useState(null);
+  const [bulkPay, setBulkPay] = useState(false);
+  const [closingMonth, setClosingMonth] = useState(false);
+
+  // Filtro periodo (CRM-138). 'all' = sin filtro, 'month' = mes/año.
+  const today = new Date();
+  const [periodMode, setPeriodMode] = useState('month');
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1);
+
+  // Selección múltiple para "marcar pagadas en lote" (CRM-138).
+  const [selected, setSelected] = useState(new Set());
 
   async function load() {
     setLoading(true);
@@ -54,6 +103,76 @@ export default function CommissionsPage() {
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterEstado, filterUser]);
+  useEffect(() => { setSelected(new Set()); }, [periodMode, year, month, filterEstado, filterUser]);
+
+  // Aplicar filtro de mes en cliente (el backend aún no acepta el parámetro segun ticket).
+  const filteredItems = periodMode === 'month'
+    ? items.filter((r) => isInMonth(r.created_at, year, month))
+    : items;
+
+  const periodLabel = periodMode === 'month' ? monthLabel(year, month) : 'todo el histórico';
+  const pendingInPeriod = filteredItems.filter((r) => r.estado === 'pendiente' && Number(r.importe_comision) > 0);
+  const allPendingSelected = pendingInPeriod.length > 0 && pendingInPeriod.every((r) => selected.has(r.id));
+
+  function toggleSelect(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    if (allPendingSelected) setSelected(new Set());
+    else setSelected(new Set(pendingInPeriod.map((r) => r.id)));
+  }
+
+  async function handleBulkPay() {
+    if (selected.size === 0) return;
+    setBulkPay(false);
+    const fechaPago = new Date().toISOString().slice(0, 10);
+    let ok = 0, fail = 0;
+    for (const id of selected) {
+      try {
+        await commissionsApi.pay(id, { fecha_pago: fechaPago });
+        ok++;
+      } catch { fail++; }
+    }
+    toast({
+      title: `${ok} comisión${ok !== 1 ? 'es' : ''} pagada${ok !== 1 ? 's' : ''}`,
+      description: fail > 0 ? `${fail} fallaron — revisa errores` : undefined,
+      variant: fail > 0 ? 'destructive' : 'default',
+    });
+    setSelected(new Set());
+    load();
+  }
+
+  async function handleCloseMonth() {
+    setClosingMonth(false);
+    try {
+      // Endpoint backend pendiente (CRM-138). Si no existe, mostrar info.
+      await client.post('/commissions/close-month', { year, month });
+      toast({ title: 'Mes cerrado', description: `${monthLabel(year, month)} marcado como inmutable.` });
+      load();
+    } catch (err) {
+      if (err?.status === 404 || err?.status === 405) {
+        toast({
+          title: 'Cierre no disponible',
+          description: 'El endpoint de cierre mensual aún no está implementado en el backend (CRM-138).',
+          variant: 'destructive',
+        });
+      } else {
+        toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+      }
+    }
+  }
+
+  function handleExport() {
+    if (filteredItems.length === 0) {
+      toast({ title: 'Sin datos para exportar' });
+      return;
+    }
+    exportCommissionsCsv(filteredItems, periodLabel);
+  }
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -80,12 +199,85 @@ export default function CommissionsPage() {
       <PageHeader
         title={isAdmin ? 'Comisiones' : 'Mis comisiones'}
         subtitle={isAdmin ? 'Comisiones generadas a partir de las ventas (round-robin -> regla -> conversion)' : 'Tu acumulado por ventas'}
-        actions={isAdmin && user?.role === 'superadmin' ? (
-          <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-10 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
-            <Gear size={14} weight="bold" /> Reglas (% por gestor)
-          </button>
-        ) : null}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleExport}
+              aria-label="Exportar CSV"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-muted-foreground hover:text-foreground"
+            >
+              <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
+            </button>
+            {isAdmin && periodMode === 'month' && (
+              <button
+                onClick={() => setClosingMonth(true)}
+                aria-label="Cerrar mes"
+                title={`Cierra ${monthLabel(year, month)} para snapshot inmutable`}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/60"
+              >
+                <Lock size={14} weight="bold" /> <span className="hidden sm:inline">Cerrar mes</span>
+              </button>
+            )}
+            {isAdmin && user?.role === 'superadmin' && (
+              <button onClick={() => setRulesOpen(true)} className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+                <Gear size={14} weight="bold" /> <span className="hidden sm:inline">Reglas (% por gestor)</span><span className="sm:hidden">Reglas</span>
+              </button>
+            )}
+          </div>
+        }
       />
+
+      {/* Filtro de periodo (CRM-137 + CRM-138) */}
+      <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+        <CalendarBlank size={16} className="text-muted-foreground flex-shrink-0" weight="regular" />
+        <button
+          onClick={() => setPeriodMode('month')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'month' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+        >
+          Mes/año
+        </button>
+        <button
+          onClick={() => setPeriodMode('all')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${periodMode === 'all' ? 'bg-primary text-white' : 'bg-muted hover:bg-muted/80'}`}
+        >
+          Todo el histórico
+        </button>
+        {periodMode === 'month' && (
+          <>
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputClass}>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {new Date(2000, i, 1).toLocaleDateString('es-ES', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="2020"
+              max="2099"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              aria-label="Año"
+              className={inputClass + ' w-20'}
+            />
+            <button
+              onClick={() => { const d = new Date(); d.setMonth(d.getMonth() - 1); setMonth(d.getMonth() + 1); setYear(d.getFullYear()); }}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Mes anterior
+            </button>
+            <button
+              onClick={() => { const d = new Date(); setMonth(d.getMonth() + 1); setYear(d.getFullYear()); }}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Mes actual
+            </button>
+          </>
+        )}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {filteredItems.length} comisión{filteredItems.length !== 1 ? 'es' : ''} en {periodLabel}
+        </span>
+      </div>
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -111,10 +303,41 @@ export default function CommissionsPage() {
           )}
         </div>
 
+        {/* Bulk actions bar (CRM-138) */}
+        {isAdmin && selected.size > 0 && (
+          <div className="px-4 py-2 border-b border-border bg-primary/5 flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-primary">
+              {selected.size} seleccionada{selected.size !== 1 ? 's' : ''} para pagar
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+              >
+                Limpiar selección
+              </button>
+              <button
+                onClick={() => setBulkPay(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
+              >
+                <CheckCircle size={12} weight="bold" /> Marcar todas como pagadas
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <SkeletonTable rows={5} columns={6} className="border-0" />
-        ) : items.length === 0 ? (
-          <EmptyState icon={CurrencyEur} title="Sin comisiones" description={isAdmin ? 'Aun no se han generado comisiones. Asegurate de tener reglas creadas.' : 'No tienes comisiones aun. Cierra ventas para empezar a acumular.'} />
+        ) : filteredItems.length === 0 ? (
+          <EmptyState
+            icon={CurrencyEur}
+            title="Sin comisiones"
+            description={
+              periodMode === 'month'
+                ? `No hay comisiones en ${periodLabel}. Cambia el periodo o el filtro.`
+                : isAdmin ? 'Aun no se han generado comisiones. Asegurate de tener reglas creadas.' : 'No tienes comisiones aun. Cierra ventas para empezar a acumular.'
+            }
+          />
         ) : (
           <>
             {/* Desktop table */}
@@ -122,6 +345,19 @@ export default function CommissionsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
+                    {isAdmin && (
+                      <th className="px-3 py-2.5 w-9">
+                        {pendingInPeriod.length > 0 && (
+                          <input
+                            type="checkbox"
+                            checked={allPendingSelected}
+                            onChange={toggleSelectAll}
+                            aria-label="Seleccionar todas las pendientes"
+                            className="accent-primary cursor-pointer"
+                          />
+                        )}
+                      </th>
+                    )}
                     <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
                     {isAdmin && <th className="text-left px-4 py-2.5 font-bold">Gestor</th>}
                     <th className="text-left px-4 py-2.5 font-bold">Cliente / Producto</th>
@@ -133,8 +369,21 @@ export default function CommissionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map(r => (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                  {filteredItems.map(r => (
+                    <tr key={r.id} className={`border-b last:border-0 hover:bg-muted/30 ${selected.has(r.id) ? 'bg-primary/5' : ''}`}>
+                      {isAdmin && (
+                        <td className="px-3 py-3">
+                          {r.estado === 'pendiente' && Number(r.importe_comision) > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={selected.has(r.id)}
+                              onChange={() => toggleSelect(r.id)}
+                              aria-label={`Seleccionar comisión ${r.id}`}
+                              className="accent-primary cursor-pointer"
+                            />
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(r.created_at)}</td>
                       {isAdmin && <td className="px-4 py-3 font-semibold">{r.user_nombre}</td>}
                       <td className="px-4 py-3">
@@ -169,7 +418,7 @@ export default function CommissionsPage() {
 
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-border">
-              {items.map(r => (
+              {filteredItems.map(r => (
                 <div key={r.id} className="p-4 space-y-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -216,6 +465,24 @@ export default function CommissionsPage() {
 
       {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} onSaved={load} />}
       <ConfirmDialog open={pendingPay !== null} title="¿Marcar como pagada?" message="Se registrará la comisión como pagada con la fecha de hoy." tone="default" confirmLabel="Confirmar" onConfirm={doPay} onCancel={() => setPendingPay(null)} />
+      <ConfirmDialog
+        open={bulkPay}
+        title={`¿Marcar ${selected.size} comisión${selected.size !== 1 ? 'es' : ''} como pagadas?`}
+        message="Todas se marcarán con la fecha de hoy. Esta acción no se puede deshacer."
+        tone="default"
+        confirmLabel="Sí, marcar pagadas"
+        onConfirm={handleBulkPay}
+        onCancel={() => setBulkPay(false)}
+      />
+      <ConfirmDialog
+        open={closingMonth}
+        title={`¿Cerrar ${monthLabel(year, month)}?`}
+        message="Una vez cerrado, las comisiones de este mes serán inmutables. No podrás añadir, editar ni eliminar comisiones del periodo. Esta acción no se puede deshacer."
+        tone="warning"
+        confirmLabel="Cerrar mes"
+        onConfirm={handleCloseMonth}
+        onCancel={() => setClosingMonth(false)}
+      />
     </div>
   );
 }

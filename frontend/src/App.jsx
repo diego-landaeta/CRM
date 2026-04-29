@@ -9,6 +9,7 @@ const ROUTE_TITLES = {
   '/leads/audiences': 'Audiencias',
   '/clients': 'Clientes',
   '/products': 'Productos',
+  '/products/pending': 'Productos pendientes',
   '/campaigns': 'Campañas',
   '/campaigns/meta': 'Meta Ads',
   '/campaigns/google': 'Google Ads',
@@ -86,6 +87,7 @@ const AudienceExportPage = lazy(() => import('./modules/leads/pages/AudienceExpo
 const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage'));
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
+const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPendingPage'));
 const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage'));
 const MetaCampaignsPage = lazy(() => import('./modules/campaigns/pages/MetaCampaignsPage'));
 const GoogleCampaignsPage = lazy(() => import('./modules/campaigns/pages/GoogleCampaignsPage'));
@@ -142,6 +144,7 @@ function App() {
           <Route path="/leads/audiences" element={<AudienceExportPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/meta" element={<MetaCampaignsPage />} />

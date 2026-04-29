@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Portal from '@/shared/components/ui/portal';
-import { X } from '@phosphor-icons/react';
+import { X, Link as LinkIcon, Copy, CheckCircle } from '@phosphor-icons/react';
 import { conversionsApi } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { toast } from '@/shared/hooks/useToast';
@@ -17,6 +17,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   useEscapeKey(onClose, open);
   const { products } = useProducts(projectId);
   const [saving, setSaving] = useState(false);
+  const [selectedLinkIdx, setSelectedLinkIdx] = useState('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
+  const [customLink, setCustomLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
   const [form, setForm] = useState({
     producto_contratado: '',
     importe_total: '',
@@ -26,6 +29,43 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     fecha_conversion: new Date().toISOString().slice(0, 10),
     notas_pago: '',
   });
+
+  // Producto seleccionado por nombre exacto (CRM-140) — para mostrar sus enlaces de pago
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.nombre === form.producto_contratado),
+    [products, form.producto_contratado]
+  );
+  const productLinks = useMemo(() => {
+    if (!selectedProduct) return [];
+    if (Array.isArray(selectedProduct.payment_links) && selectedProduct.payment_links.length > 0) {
+      return selectedProduct.payment_links;
+    }
+    if (selectedProduct.stripe_link) {
+      return [{ label: 'Pago completo', url: selectedProduct.stripe_link, tipo: 'completo' }];
+    }
+    return [];
+  }, [selectedProduct]);
+
+  useEffect(() => {
+    setSelectedLinkIdx('-1');
+    setCustomLink('');
+  }, [form.producto_contratado]);
+
+  const activeLink = selectedLinkIdx === 'custom'
+    ? customLink
+    : selectedLinkIdx !== '-1' ? productLinks[Number(selectedLinkIdx)]?.url : '';
+
+  async function copyActiveLink() {
+    if (!activeLink) return;
+    try {
+      await navigator.clipboard.writeText(activeLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+      toast({ title: 'Enlace copiado', description: 'Pégalo en WhatsApp/Email del cliente' });
+    } catch {
+      toast({ title: 'No se pudo copiar', variant: 'destructive' });
+    }
+  }
 
   useEffect(() => {
     if (open && lead?.producto_nombre) {
@@ -145,6 +185,57 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha compromiso de pago pendiente</label>
                 <input type="date" value={form.fecha_compromiso_pago} onChange={e => update('fecha_compromiso_pago', e.target.value)} className={inputClass} />
+              </div>
+            )}
+
+            {/* Selector de enlace de pago Stripe (CRM-140) */}
+            {(productLinks.length > 0 || form.producto_contratado) && (
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 space-y-2">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-blue-800 dark:text-blue-300">
+                  <LinkIcon size={12} weight="bold" /> Enlace de pago para compartir
+                </div>
+                <select
+                  value={selectedLinkIdx}
+                  onChange={(e) => setSelectedLinkIdx(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="-1">Sin enlace</option>
+                  {productLinks.map((l, i) => (
+                    <option key={i} value={i}>
+                      {l.label} {l.tipo !== 'completo' && `(${l.tipo})`}
+                    </option>
+                  ))}
+                  <option value="custom">Personalizado…</option>
+                </select>
+                {selectedLinkIdx === 'custom' && (
+                  <input
+                    type="url"
+                    value={customLink}
+                    onChange={(e) => setCustomLink(e.target.value)}
+                    placeholder="https://buy.stripe.com/..."
+                    className={inputClass + ' font-mono text-xs'}
+                  />
+                )}
+                {activeLink && (
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate text-[11px] font-mono text-blue-700 dark:text-blue-300 bg-white/60 dark:bg-black/20 px-2 py-1.5 rounded">
+                      {activeLink}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyActiveLink}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 flex-shrink-0"
+                    >
+                      {linkCopied ? <CheckCircle size={12} weight="bold" /> : <Copy size={12} weight="bold" />}
+                      {linkCopied ? 'Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                )}
+                {productLinks.length === 0 && form.producto_contratado && (
+                  <p className="text-[10px] text-blue-700/70 dark:text-blue-300/70 italic">
+                    Este producto no tiene enlaces configurados. Añádelos editando el producto.
+                  </p>
+                )}
               </div>
             )}
 
