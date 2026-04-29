@@ -38,6 +38,7 @@ const ROUTE_TITLES = {
   '/manual': 'Manual',
   '/settings': 'Configuración',
   '/profile': 'Mi perfil',
+  '/dev/components': 'Catálogo UI',
 };
 
 function ScrollToTop() {
@@ -119,6 +120,12 @@ const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 
+// Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
+// en build de produccion Vite elimina la rama por dead-code elimination.
+const DevComponentsPage = import.meta.env.DEV
+  ? lazy(() => import('./modules/dev/pages/DevComponentsPage'))
+  : null;
+
 function App() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center text-muted-foreground">Cargando…</div>}>
@@ -169,6 +176,9 @@ function App() {
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          {DevComponentsPage && (
+            <Route path="/dev/components" element={<DevComponentsPage />} />
+          )}
           {/* Catch-all 404 dentro del layout (mantiene sidebar y header) */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
