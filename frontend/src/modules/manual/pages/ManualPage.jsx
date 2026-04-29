@@ -638,12 +638,13 @@ export default function ManualPage() {
         {/* ── ATAJOS ── */}
         <SectionHeader id="atajos" icon={Keyboard} label="Atajos de teclado" color="indigo"
           description="Navega el CRM sin levantar las manos del teclado" />
-        <div className="rounded-xl border border-border overflow-hidden my-3">
+        <p className="text-xs font-bold uppercase text-muted-foreground/60 mt-3 mb-1.5">Generales</p>
+        <div className="rounded-xl border border-border overflow-hidden mb-3">
           {[
-            { keys: ['Ctrl', 'K'], desc: 'Abre la paleta de búsqueda rápida — navega a cualquier sección o busca un prospecto por nombre o email' },
+            { keys: ['Ctrl', 'K'], desc: 'Abre la paleta de búsqueda rápida — navega a cualquier sección o busca un prospecto, cliente o producto' },
+            { keys: ['Ctrl', 'B'], desc: 'Contrae o expande la barra lateral — modo compacto solo iconos vs. modo expandido' },
+            { keys: ['?'], desc: 'Abre el modal de ayuda con todos los atajos de teclado disponibles' },
             { keys: ['Esc'], desc: 'Cierra la paleta de búsqueda o cualquier modal abierto' },
-            { keys: ['↑', '↓'], desc: 'Navega por los resultados de la paleta de búsqueda' },
-            { keys: ['↵'], desc: 'Selecciona el resultado resaltado y navega a esa sección o prospecto' },
           ].map((row, i) => (
             <div key={i} className={`flex items-center gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
               <div className="flex items-center gap-1 flex-shrink-0 w-28">
@@ -658,9 +659,57 @@ export default function ManualPage() {
             </div>
           ))}
         </div>
+
+        <p className="text-xs font-bold uppercase text-muted-foreground/60 mt-3 mb-1.5">Navegación rápida (pulsa G luego la tecla)</p>
+        <div className="rounded-xl border border-border overflow-hidden mb-3">
+          {[
+            { keys: ['G', 'D'], desc: 'Ir a Dashboard' },
+            { keys: ['G', 'L'], desc: 'Ir a Prospectos' },
+            { keys: ['G', 'C'], desc: 'Ir a Clientes' },
+            { keys: ['G', 'P'], desc: 'Ir a Productos' },
+            { keys: ['G', 'R'], desc: 'Ir a Reportes' },
+            { keys: ['G', 'A'], desc: 'Ir a Contabilidad' },
+            { keys: ['G', 'S'], desc: 'Ir a Configuración' },
+          ].map((row, i) => (
+            <div key={i} className={`flex items-center gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
+              <div className="flex items-center gap-1 flex-shrink-0 w-28">
+                {row.keys.map((k, j) => (
+                  <span key={j}>
+                    <Kbd>{k}</Kbd>
+                    {j < row.keys.length - 1 && <span className="text-[10px] text-muted-foreground mx-0.5">luego</span>}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{row.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs font-bold uppercase text-muted-foreground/60 mt-3 mb-1.5">Acciones contextuales</p>
+        <div className="rounded-xl border border-border overflow-hidden mb-3">
+          {[
+            { keys: ['N'], desc: 'Crear nuevo según la página actual (prospecto en /leads, producto en /products, etc.)' },
+            { keys: ['↑', '↓'], desc: 'Navega por los resultados de la paleta de búsqueda' },
+            { keys: ['↵'], desc: 'Selecciona el resultado resaltado y navega a esa sección o prospecto' },
+          ].map((row, i) => (
+            <div key={i} className={`flex items-center gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
+              <div className="flex items-center gap-1 flex-shrink-0 w-28">
+                {row.keys.map((k, j) => (
+                  <span key={j}>
+                    <Kbd>{k}</Kbd>
+                    {j < row.keys.length - 1 && <span className="text-[10px] text-muted-foreground mx-0.5">o</span>}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{row.desc}</p>
+            </div>
+          ))}
+        </div>
+
         <Callout type="tip">
-          La paleta de búsqueda (<Kbd>Ctrl</Kbd>+<Kbd>K</Kbd>) busca en tiempo real entre todas las secciones
-          y los prospectos del proyecto activo. Es la forma más rápida de llegar a cualquier lugar del CRM.
+          Los atajos <strong>sin modificadores</strong> (<Kbd>?</Kbd>, <Kbd>G</Kbd>, <Kbd>N</Kbd>) se desactivan
+          automáticamente cuando estás escribiendo en un campo de texto, así que escribir "necesario" no dispara "n".
+          Si te quedas atrapado en un input, pulsa <Kbd>Esc</Kbd> para volver a usar los atajos.
         </Callout>
 
         {/* Footer */}

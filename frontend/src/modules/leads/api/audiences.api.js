@@ -255,6 +255,15 @@ function pushHistory(item) {
   }
 }
 
+// Exports para tests unitarios (no usar en producción)
+export const _testing = {
+  mockPreview,
+  mockExportCsv,
+  mockMetaUploadStart,
+  mockMetaUploadStatus,
+  getMockMetaHistory,
+};
+
 function getMockMetaHistory(projectId) {
   // Garantizar al menos 2 entries para demos
   const arr = META_HISTORY.get(Number(projectId)) || [];

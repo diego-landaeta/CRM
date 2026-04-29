@@ -448,7 +448,7 @@ export default function LeadDetailPage() {
                     type="datetime-local"
                     value={interactionFecha}
                     onChange={(e) => setInteractionFecha(e.target.value)}
-                    className="w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">Por defecto es ahora. Edítala si la interacción ocurrió antes.</p>
                 </div>
@@ -491,7 +491,7 @@ export default function LeadDetailPage() {
                     type="date"
                     value={reminderFecha}
                     onChange={(e) => setReminderFecha(e.target.value)}
-                    className="w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
                     required
                   />
                 </div>
@@ -725,7 +725,7 @@ export default function LeadDetailPage() {
               <div className="space-y-3">
                 {interacciones.map((inter, idx) => {
                   const Icon = INTERACTION_ICONS[inter.tipo] || Note;
-                  const colorClass = INTERACTION_COLORS[inter.tipo] || 'text-zinc-600 bg-muted';
+                  const colorClass = INTERACTION_COLORS[inter.tipo] || 'text-muted-foreground bg-muted';
                   return (
                     <div key={inter.id || idx} className="flex items-start gap-3 p-3.5 rounded-md bg-muted/50">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>

@@ -4,7 +4,7 @@ import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-const inputClass = 'w-full h-11 px-4 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
 
 export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated }) {
   const [open, setOpen] = useState(false);

@@ -45,13 +45,14 @@ export default function ReceivablePage() {
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Pendientes"
-          value={items.length}
+          numericValue={items.length}
         />
         <KpiCard
           icon={Wallet}
           iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
           label="Total pendiente"
-          value={fmt(total)}
+          numericValue={total}
+          format={fmt}
         />
         <KpiCard
           icon={WarningCircle}
@@ -59,7 +60,7 @@ export default function ReceivablePage() {
             ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
             : 'bg-muted text-muted-foreground'}
           label="Vencidas"
-          value={vencidas}
+          numericValue={vencidas}
         />
       </div>
 

@@ -1,16 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { _testing } from '@/modules/leads/api/audiences.api';
 
-// Test directo del logica del mock (no de la API real)
-// Importamos via ruta que NO trigger React
-async function loadMock() {
-  const m = await import('@/modules/leads/api/audiences.api');
-  return m;
-}
+const { mockPreview, mockMetaUploadStart } = _testing;
 
 describe('audiences.api preview mock', () => {
-  it('devuelve totalCount + breakdown + sample', async () => {
-    const { previewAudience } = await loadMock();
-    const r = await previewAudience({ projectId: 1, filters: {} });
+  it('devuelve totalCount + breakdown + sample', () => {
+    const r = mockPreview({ projectId: 1, filters: {} });
     expect(r.success).toBe(true);
     expect(r.data.totalCount).toBeGreaterThan(0);
     expect(r.data.breakdown.status).toBeDefined();
@@ -18,10 +13,9 @@ describe('audiences.api preview mock', () => {
     expect(Array.isArray(r.data.sample)).toBe(true);
   });
 
-  it('reduce el count cuando se aplican filtros', async () => {
-    const { previewAudience } = await loadMock();
-    const sin = await previewAudience({ projectId: 1, filters: {} });
-    const con = await previewAudience({
+  it('reduce el count cuando se aplican filtros', () => {
+    const sin = mockPreview({ projectId: 1, filters: {} });
+    const con = mockPreview({
       projectId: 1,
       filters: { statuses: ['convertido'], canales: ['meta_ads'] },
     });
@@ -29,9 +23,8 @@ describe('audiences.api preview mock', () => {
   });
 
   it('respeta el limite minimo de 20 leads para meta', async () => {
-    const { uploadAudienceToMeta } = await loadMock();
-    // Aplicar filtros muy restrictivos
-    const r = await uploadAudienceToMeta({
+    // Aplicar filtros muy restrictivos para forzar count < 20
+    const r = await mockMetaUploadStart({
       projectId: 1,
       filters: {
         statuses: ['convertido'],

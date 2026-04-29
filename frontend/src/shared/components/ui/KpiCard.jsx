@@ -1,23 +1,33 @@
 import { TrendUp, TrendDown } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
+import useCountUp from '@/shared/hooks/useCountUp';
 
 /**
- * KpiCard - Tarjeta de KPI reutilizable.
+ * KpiCard - Tarjeta de KPI reutilizable con animación opt-in.
  *
  * props:
  *  - icon: Componente Phosphor
  *  - iconBg: clase Tailwind con bg + text para el cuadrado del icono
  *  - label: etiqueta superior
- *  - value: valor grande
+ *  - value: valor formateado (string) — backward compatible, sin animación
+ *  - numericValue: número crudo — habilita animación count-up
+ *  - format: función (n) => string para formatear el número animado
  *  - badge: texto en badge de tendencia (opcional)
  *  - badgeColor: clases Tailwind para el badge
  *  - trend: 'up' | 'down'
  */
+function AnimatedValue({ numericValue, format }) {
+  const animated = useCountUp(numericValue);
+  return <>{format ? format(animated) : Math.round(animated)}</>;
+}
+
 export default function KpiCard({
   icon: Icon,
   iconBg = 'bg-primary/10 text-primary',
   label,
   value,
+  numericValue,
+  format,
   badge,
   badgeColor = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
   trend = 'up',
@@ -25,6 +35,7 @@ export default function KpiCard({
 }) {
   const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
   const showBadge = badge && badge !== '--';
+  const useAnimation = typeof numericValue === 'number' && Number.isFinite(numericValue);
   return (
     <div
       className={cn(
@@ -51,7 +62,9 @@ export default function KpiCard({
         )}
       </div>
       <p className="text-muted-foreground text-sm">{label}</p>
-      <h3 className="text-2xl font-semibold mt-1 tabular-nums">{value}</h3>
+      <h3 className="text-2xl font-semibold mt-1 tabular-nums">
+        {useAnimation ? <AnimatedValue numericValue={numericValue} format={format} /> : value}
+      </h3>
     </div>
   );
 }

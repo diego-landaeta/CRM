@@ -3,12 +3,14 @@ import Portal from '@/shared/components/ui/portal';
 import { X } from '@phosphor-icons/react';
 import { conversionsApi } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
 function formatCurrency(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 }
 
 export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
+  useEscapeKey(onClose, open);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     importe: '',

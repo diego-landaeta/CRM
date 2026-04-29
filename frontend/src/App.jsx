@@ -1,5 +1,6 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
+import { useProjectContext } from './contexts/ProjectContext';
 
 const ROUTE_TITLES = {
   '/': 'Dashboard',
@@ -47,13 +48,20 @@ function ScrollToTop() {
 
 function DocumentTitle() {
   const { pathname } = useLocation();
+  const { activeProject: project } = useProjectContext();
   useEffect(() => {
     const base = 'MultiCRM';
     const match = Object.keys(ROUTE_TITLES)
       .sort((a, b) => b.length - a.length)
       .find(k => pathname === k || pathname.startsWith(k + '/'));
-    document.title = match ? `${ROUTE_TITLES[match]} — ${base}` : base;
-  }, [pathname]);
+    const route = match ? ROUTE_TITLES[match] : null;
+    const proj = project?.nombre;
+    // Formato: "Prospectos · Psiko Aprende — MultiCRM"
+    if (route && proj) document.title = `${route} · ${proj} — ${base}`;
+    else if (route) document.title = `${route} — ${base}`;
+    else if (proj) document.title = `${proj} — ${base}`;
+    else document.title = base;
+  }, [pathname, project?.nombre]);
   return null;
 }
 
@@ -68,6 +76,7 @@ const SetPasswordPage = lazy(() => import('./shared/pages/SetPasswordPage'));
 // Shared
 const DashboardPage = lazy(() => import('./shared/pages/DashboardPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
+const NotFoundPage = lazy(() => import('./shared/pages/NotFoundPage'));
 
 // Modules
 const LeadsPage = lazy(() => import('./modules/leads/pages/LeadsPage'));
@@ -160,6 +169,8 @@ function App() {
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          {/* Catch-all 404 dentro del layout (mantiene sidebar y header) */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </Suspense>

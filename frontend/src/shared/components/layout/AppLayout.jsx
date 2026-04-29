@@ -11,6 +11,7 @@ const FloatingDock = lazy(() => import('./FloatingDock'));
 const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
 const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'));
+const OfflineBanner = lazy(() => import('./OfflineBanner'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -138,6 +139,14 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-3 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-lg focus:font-semibold focus:text-sm"
+      >
+        Saltar al contenido
+      </a>
+
       {/* Mobile topbar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-30">
         <button
@@ -174,10 +183,12 @@ export default function AppLayout() {
 
       {/* Main content - Suspense interno para que el sidebar no se desmonte al lazy-cargar paginas */}
       <main
+        id="main-content"
         role="main"
         aria-label="Contenido principal"
+        tabIndex={-1}
         className={cn(
-          'p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8 transition-[margin] duration-200',
+          'p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8 transition-[margin] duration-200 focus:outline-none',
           collapsed ? 'lg:ml-16' : 'lg:ml-64'
         )}
       >
@@ -186,7 +197,10 @@ export default function AppLayout() {
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
         }>
-          <Outlet />
+          {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
+          <div key={pathname} className="animate-in fade-in duration-200">
+            <Outlet />
+          </div>
         </Suspense>
       </main>
 
@@ -205,6 +219,9 @@ export default function AppLayout() {
       </Suspense>
       <Suspense fallback={null}>
         <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <OfflineBanner />
       </Suspense>
     </div>
   );

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import {
   X, UploadSimple, FileCsv, Check, WarningCircle, ArrowRight, Trash, Download,
 } from '@phosphor-icons/react';
@@ -48,6 +49,7 @@ function autoMatchHeader(header, hints) {
 }
 
 export default function CsvImportDialog({ open, onClose, projectId, onImported }) {
+  useEscapeKey(onClose, open);
   const [step, setStep] = useState(1); // 1=upload, 2=mapping, 3=importing, 4=done
   const [file, setFile] = useState(null);
   const [parsed, setParsed] = useState({ headers: [], rows: [] });

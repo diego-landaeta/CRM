@@ -24,14 +24,13 @@ export function ProjectProvider({ children }) {
 
   // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
   useEffect(() => {
+    // El title lo construye App.jsx (ruta + proyecto + MultiCRM) — aquí solo favicon.
     if (activeProject?.logo_url) {
       setFavicon(`${BASE_URL}/api/projects/${activeProject.id}/logo`);
-      document.title = `${activeProject.nombre} - CRM`;
     } else {
       setFavicon(DEFAULT_FAVICON);
-      document.title = activeProject?.nombre ? `${activeProject.nombre} - CRM` : 'CRM MultiProyecto';
     }
-  }, [activeProject?.id, activeProject?.logo_url, activeProject?.nombre]);
+  }, [activeProject?.id, activeProject?.logo_url]);
 
   return (
     <ProjectContext.Provider value={{

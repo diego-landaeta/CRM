@@ -34,10 +34,10 @@ export default function MetaCampaignsPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <KpiCard icon={CurrencyEur} label="Inversion" value={fmtMoney(meta.totals.spend)} />
-            <KpiCard icon={MouseSimple} label="Clicks" value={fmtNum(meta.totals.clicks)} />
-            <KpiCard icon={Users} label="Prospectos CRM" value={fmtNum(meta.totals.crmLeads)} tone="success" />
-            <KpiCard icon={TrendUp} label={<MetricLabel term="CPA">CPA real</MetricLabel>} value={fmtCpa(meta.totals.cpaReal)}
+            <KpiCard icon={CurrencyEur} label="Inversion" numericValue={meta.totals.spend} format={fmtMoney} />
+            <KpiCard icon={MouseSimple} label="Clicks" numericValue={meta.totals.clicks} format={fmtNum} />
+            <KpiCard icon={Users} label="Prospectos CRM" numericValue={meta.totals.crmLeads} format={fmtNum} tone="success" />
+            <KpiCard icon={TrendUp} label={<MetricLabel term="CPA">CPA real</MetricLabel>} numericValue={meta.totals.cpaReal} format={fmtCpa}
               tone={meta.totals.cpaReal > CPA_ALERT_THRESHOLD ? 'destructive' : 'default'} />
           </div>
 

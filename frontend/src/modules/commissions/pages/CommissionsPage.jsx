@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -111,7 +112,7 @@ export default function CommissionsPage() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Cargando…</div>
+          <SkeletonTable rows={5} columns={6} className="border-0" />
         ) : items.length === 0 ? (
           <EmptyState icon={CurrencyEur} title="Sin comisiones" description={isAdmin ? 'Aun no se han generado comisiones. Asegurate de tener reglas creadas.' : 'No tienes comisiones aun. Cierra ventas para empezar a acumular.'} />
         ) : (

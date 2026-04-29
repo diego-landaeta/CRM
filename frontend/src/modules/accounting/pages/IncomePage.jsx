@@ -47,19 +47,21 @@ export default function IncomePage() {
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Ventas"
-          value={items.length}
+          numericValue={items.length}
         />
         <KpiCard
           icon={CurrencyEur}
           iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
           label="Facturado"
-          value={fmt(totalFacturado)}
+          numericValue={totalFacturado}
+          format={fmt}
         />
         <KpiCard
           icon={CheckCircle}
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
           label="Cobrado"
-          value={fmt(totalCobrado)}
+          numericValue={totalCobrado}
+          format={fmt}
         />
       </div>
 

@@ -92,7 +92,17 @@ export default function ReportsIAPage() {
             <span className="ml-auto text-xs text-muted-foreground">{reportsIA.reports.length}</span>
           </div>
           {reportsIA.loading ? (
-            <div className="p-4 text-sm text-muted-foreground">Cargando…</div>
+            <div className="p-3 space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                  <div className="w-8 h-8 rounded bg-muted flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 bg-muted rounded w-3/4" />
+                    <div className="h-2.5 bg-muted/60 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : reportsIA.reports.length === 0 ? (
             <div className="p-6 text-center">
               <FileText size={28} weight="regular" className="text-muted-foreground mx-auto mb-2" />

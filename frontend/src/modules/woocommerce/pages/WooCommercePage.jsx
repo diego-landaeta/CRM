@@ -3,6 +3,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { ShoppingBag, FloppyDisk, ArrowsClockwise, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -99,7 +100,7 @@ export default function WooCommercePage() {
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border"><h3 className="font-bold text-sm">Historial de imports</h3></div>
-        {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : runs.length === 0 ? (
+        {loading ? <SkeletonTable rows={4} columns={6} className="border-0" /> : runs.length === 0 ? (
           <EmptyState icon={ShoppingBag} title="Sin imports aún" description="Configura credenciales y dispara el primero" />
         ) : (
           <>

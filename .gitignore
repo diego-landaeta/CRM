@@ -51,3 +51,11 @@ uploads/
 # Screenshots de validacion (transitorios, no commiteables)
 /*.png
 .playwright-mcp/
+
+# Scripts locales / sensibles (no commitear)
+reset-postgres-password.ps1
+*.local.ps1
+*.secret
+
+# package-lock.json en raiz es huerfano (no hay package.json en raiz)
+/package-lock.json

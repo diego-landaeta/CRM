@@ -3,6 +3,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { Coins, Plus, X, FloppyDisk, Calendar, Clock } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -83,7 +84,7 @@ function PlansTab({ project }) {
         )}
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : plans.length === 0 ? (
+      {loading ? <SkeletonTable rows={4} columns={5} /> : plans.length === 0 ? (
         <EmptyState icon={Coins} title="Sin planes" description="Configura cuanto cobra cada usuario" />
       ) : (
         <>
@@ -226,7 +227,7 @@ function PeriodsTab({ project }) {
         </select>
         <button onClick={generateAll} className="ml-auto px-3 py-1.5 rounded bg-primary text-white text-xs font-bold">Generar/recalcular periodos</button>
       </div>
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : periods.length === 0 ? (
+      {loading ? <SkeletonTable rows={4} columns={8} /> : periods.length === 0 ? (
         <EmptyState icon={Calendar} title="Sin periodos" description="Genera los periodos del mes" />
       ) : (
         <>
@@ -340,7 +341,7 @@ function HoursTab({ project }) {
         <button onClick={add} className="h-10 px-4 rounded-lg bg-primary text-white text-sm font-bold flex items-center justify-center gap-1"><Plus size={14} weight="bold" /> Registrar</button>
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground p-6">Cargando…</p> : hours.length === 0 ? (
+      {loading ? <SkeletonTable rows={4} columns={5} /> : hours.length === 0 ? (
         <EmptyState icon={Clock} title="Sin horas registradas" description="Registra horas trabajadas para los usuarios con plan por hora" />
       ) : (
         <>

@@ -6,6 +6,7 @@ import { X, CurrencyEur, Link, Tag } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
@@ -22,6 +23,7 @@ function Field({ label, error, hint, children }) {
 }
 
 export default function ProductFormDialog({ open, onClose, product, onSubmit }) {
+  useEscapeKey(onClose, open);
   const { activeProject } = useProjectContext();
   const productoLabel = activeProject?.producto_label || 'Producto';
   const isEdit = !!product;

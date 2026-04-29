@@ -283,19 +283,19 @@ export default function DashboardPage() {
           icon={Users}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Total prospectos"
-          value={total}
+          numericValue={Number(total) || 0}
         />
         <KpiCard
           icon={Sparkle}
           iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
           label="Nuevos"
-          value={nuevos}
+          numericValue={Number(nuevos) || 0}
         />
         <KpiCard
           icon={CheckCircle}
           iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
           label="Convertidos"
-          value={convertidos}
+          numericValue={Number(convertidos) || 0}
           badge={`${tasa}%`}
           badgeColor="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
           trend="up"
@@ -303,8 +303,9 @@ export default function DashboardPage() {
         <KpiCard
           icon={ChartLineUp}
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-          label="Tasa conversion"
-          value={`${tasa}%`}
+          label="Tasa conversión"
+          numericValue={Number(tasa) || 0}
+          format={(n) => `${Math.round(n)}%`}
         />
       </div>
 
@@ -386,7 +387,7 @@ export default function DashboardPage() {
           <button
             onClick={() => navigate('/leads')}
             aria-label="Ver todos los prospectos"
-            className="h-9 text-xs font-semibold text-zinc-600 dark:text-zinc-300 border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
+            className="h-9 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
           >
             <span className="hidden sm:inline">Ver todos</span> <ArrowRight size={12} weight="bold" />
           </button>

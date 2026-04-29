@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -75,10 +77,10 @@ export default function RevenuePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Ingresos</h1>
-        <p className="text-muted-foreground text-sm">Conversiones, pagos y evolucion &mdash; {activeProject?.nombre}</p>
-      </div>
+      <PageHeader
+        title="Ingresos"
+        subtitle={`Conversiones, pagos y evolución${activeProject?.nombre ? ' — ' + activeProject.nombre : ''}`}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card p-6 rounded-lg border border-border">
@@ -133,7 +135,7 @@ export default function RevenuePage() {
           <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos pagos registrados</p>
         </div>
         {loading ? (
-          <div className="px-5 py-10 text-center text-muted-foreground text-sm">Cargando…</div>
+          <SkeletonTable rows={4} columns={5} className="border-0 rounded-none" />
         ) : recent.length === 0 ? (
           <div className="px-5 py-12 text-center text-muted-foreground">No hay conversiones para este proyecto aun.</div>
         ) : (

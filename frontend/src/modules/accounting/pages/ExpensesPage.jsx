@@ -3,6 +3,7 @@ import { accountingApi } from '../api/accounting.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
@@ -22,7 +23,7 @@ const CAT_COLORS = {
   impuestos: 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400',
   servicios: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-400',
   mantenimiento: 'bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400',
-  otros: 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-300',
+  otros: 'bg-muted text-muted-foreground',
 };
 
 function fmt(n) {
@@ -239,6 +240,7 @@ export default function ExpensesPage() {
 }
 
 function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
+  useEscapeKey(onClose, open);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     concepto: '',

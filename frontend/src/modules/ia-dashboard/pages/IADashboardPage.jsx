@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useStripeMonitor } from '../hooks/useStripeMonitor';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
+import useCountUp from '@/shared/hooks/useCountUp';
 import {
   CurrencyEur, Users, TrendUp, TrendDown, ArrowUp, ArrowDown,
   WarningCircle, CreditCard, UserMinus, Robot,
@@ -90,14 +91,16 @@ export default function IADashboardPage() {
               icon={CurrencyEur}
               label="MRR actual"
               term="MRR"
-              value={fmtMoney(metrics.mrr)}
+              numericValue={metrics.mrr}
+              format={fmtMoney}
               delta={mrrDelta}
               tone="primary"
             />
             <KpiHero
               icon={Users}
               label="Suscripciones activas"
-              value={fmtNum(metrics.activeSubs)}
+              numericValue={metrics.activeSubs}
+              format={fmtNum}
               delta={subsDelta}
               tone="success"
             />
@@ -105,14 +108,16 @@ export default function IADashboardPage() {
               icon={TrendDown}
               label="Churn rate mensual"
               term="Churn"
-              value={fmtPct(metrics.churnRate)}
+              numericValue={metrics.churnRate}
+              format={fmtPct}
               delta={churnTrend ? { pct: churnTrend.delta, growing: !churnTrend.improving, suffix: 'pp' } : null}
               tone={metrics.churnRate > 5 ? 'destructive' : 'default'}
             />
             <KpiHero
               icon={WarningCircle}
               label="Cobros fallidos"
-              value={fmtNum(metrics.failedPayments)}
+              numericValue={metrics.failedPayments}
+              format={fmtNum}
               tone={metrics.failedPayments > 0 ? 'warning' : 'default'}
             />
           </div>
@@ -224,7 +229,7 @@ export default function IADashboardPage() {
   );
 }
 
-function KpiHero({ icon: Icon, label, term, value, delta, tone = 'default' }) {
+function KpiHero({ icon: Icon, label, term, value, numericValue, format, delta, tone = 'default' }) {
   const iconBg = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
@@ -232,6 +237,12 @@ function KpiHero({ icon: Icon, label, term, value, delta, tone = 'default' }) {
     destructive: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
     default: 'bg-muted text-muted-foreground',
   }[tone] || 'bg-muted text-muted-foreground';
+
+  const useAnimation = typeof numericValue === 'number' && Number.isFinite(numericValue);
+  const animated = useCountUp(useAnimation ? numericValue : 0);
+  const display = useAnimation
+    ? (format ? format(animated) : Math.round(animated))
+    : value;
 
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
@@ -249,7 +260,7 @@ function KpiHero({ icon: Icon, label, term, value, delta, tone = 'default' }) {
       <p className="text-muted-foreground text-sm">
         {term ? <MetricLabel term={term}>{label}</MetricLabel> : label}
       </p>
-      <h3 className="text-2xl font-semibold mt-1 tabular-nums">{value}</h3>
+      <h3 className="text-2xl font-semibold mt-1 tabular-nums">{display}</h3>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { X } from '@phosphor-icons/react';
 import { conversionsApi } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { toast } from '@/shared/hooks/useToast';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
 const METODOS = [
   { value: 'tarjeta', label: 'Tarjeta' },
@@ -13,6 +14,7 @@ const METODOS = [
 ];
 
 export default function ConversionDialog({ open, onClose, lead, projectId, onCreated }) {
+  useEscapeKey(onClose, open);
   const { products } = useProducts(projectId);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({

@@ -8,6 +8,7 @@ import {
   ROLE_DEFAULT_PERMISSIONS,
 } from '@/shared/hooks/usePermission';
 import * as api from '../api/permissions.api';
+import { toast } from '@/shared/hooks/useToast';
 
 const COLOR_BG = {
   rose:    'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
@@ -51,7 +52,7 @@ export default function RolesPage() {
         actions={
           <button
             disabled={customRolesAvailable !== true}
-            onClick={() => alert('CRM-228 backend pendiente — sin esto no se pueden crear roles custom.')}
+            onClick={() => toast({ title: 'Roles custom pendientes', description: 'CRM-228 backend en otra rama. Por ahora solo se pueden ver los 4 roles fijos.' })}
             title={customRolesAvailable === false ? 'Pendiente CRM-228 (backend)' : ''}
             aria-label="Crear rol custom"
             className="flex items-center gap-1.5 h-9 px-3 sm:px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
