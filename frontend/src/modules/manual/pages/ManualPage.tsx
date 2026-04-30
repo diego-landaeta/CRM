@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import {
   BookOpen, SquaresFour, Users, UserCheck, Package, Megaphone,
@@ -27,11 +28,17 @@ const SECTIONS = [
 ];
 
 /* ─── Primitives ──────────────────────────────────────────── */
-function SectionAnchor({ id }) {
+function SectionAnchor({ id }: { id: string }) {
   return <div id={id} className="scroll-mt-4 absolute -top-4" />;
 }
 
-function SectionHeader({ id, icon: Icon, label, color = 'blue', description }) {
+function SectionHeader({ id, icon: Icon, label, color = 'blue', description }: {
+  id: string;
+  icon: React.ElementType;
+  label: string;
+  color?: string;
+  description?: string;
+}) {
   const colors = {
     blue:   'from-blue-500/10 to-blue-500/0 border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40',
     violet: 'from-violet-500/10 to-violet-500/0 border-violet-200 dark:border-violet-900 text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/40',
@@ -58,7 +65,7 @@ function SectionHeader({ id, icon: Icon, label, color = 'blue', description }) {
   );
 }
 
-function SubHeader({ id, children }) {
+function SubHeader({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
     <h3 id={id} className="scroll-mt-4 text-sm font-bold text-foreground mt-6 mb-2.5 flex items-center gap-2">
       <span className="w-1 h-4 rounded-full bg-primary inline-block" />
@@ -67,15 +74,20 @@ function SubHeader({ id, children }) {
   );
 }
 
-function P({ children }) {
+function P({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground leading-relaxed mb-3">{children}</p>;
 }
 
-function FeatureGrid({ children }) {
+function FeatureGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 my-3">{children}</div>;
 }
 
-function FeatureCard({ icon: Icon, title, children, color = 'default' }) {
+function FeatureCard({ icon: Icon, title, children, color = 'default' }: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  color?: string;
+}) {
   const colors = {
     default: 'border-border bg-card',
     blue: 'border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20',
@@ -101,7 +113,8 @@ function FeatureCard({ icon: Icon, title, children, color = 'default' }) {
   );
 }
 
-function Steps({ items }) {
+type Step = string | { title: string; desc: string };
+function Steps({ items }: { items: Step[] }) {
   return (
     <div className="my-3 space-y-2">
       {items.map((item, i) => (
@@ -121,7 +134,7 @@ function Steps({ items }) {
   );
 }
 
-function Callout({ type = 'info', children }) {
+function Callout({ type = 'info', children }: { type?: 'info' | 'warning' | 'success' | 'tip' | 'warn'; children: React.ReactNode }) {
   const cfg = {
     info: { icon: Info, bg: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900', text: 'text-blue-800 dark:text-blue-300', ic: 'text-blue-500' },
     tip:  { icon: CheckCircle, bg: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900', text: 'text-emerald-800 dark:text-emerald-300', ic: 'text-emerald-500' },
@@ -137,7 +150,7 @@ function Callout({ type = 'info', children }) {
   );
 }
 
-function Kbd({ children }) {
+function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted border border-border text-[11px] font-mono font-bold text-foreground mx-0.5">
       {children}
@@ -145,7 +158,7 @@ function Kbd({ children }) {
   );
 }
 
-function StatusBadge({ label, color }) {
+function StatusBadge({ label, color }: { label: string; color: string }) {
   const colors = {
     blue:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',

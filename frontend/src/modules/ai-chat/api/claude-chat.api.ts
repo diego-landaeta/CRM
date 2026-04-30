@@ -5,17 +5,32 @@ import { getAccessToken } from '@/shared/api/client';
 
 const USE_MOCKS = false;  // Backend listo (con fallback si falta ANTHROPIC_API_KEY)
 
+export type ChatEventType = 'start' | 'delta' | 'done' | 'error';
+
+export interface ChatEvent {
+  type: ChatEventType;
+  content?: string;
+  messageId?: string;
+  error?: string;
+  code?: string;
+  usage?: { promptTokens: number; completionTokens: number };
+}
+
+export interface StreamChatPayload {
+  message: string;
+  projectId: number;
+  signal?: AbortSignal;
+}
+
+export type ChatEventHandler = (event: ChatEvent) => void;
+
 /**
  * Inicia un chat streaming con Claude.
- * @param {{ message: string, projectId: number, signal?: AbortSignal }} payload
- * @param {(event: { type: 'start'|'delta'|'done'|'error', content?: string, messageId?: string, error?: string }) => void} onEvent
- * @returns {Promise<void>}
  */
-export async function streamChatMessage({ message, projectId, signal }, onEvent) {
+export async function streamChatMessage({ message, projectId, signal }: StreamChatPayload, onEvent: ChatEventHandler): Promise<void> {
   if (USE_MOCKS) {
     return mockStream({ message, projectId, signal }, onEvent);
   }
-  // Real: usar fetch con response body reader (mas flexible que EventSource para POST + headers)
   const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
   const res = await fetch(`${baseUrl}/api/claude/chat`, {
     method: 'POST',
@@ -31,6 +46,7 @@ export async function streamChatMessage({ message, projectId, signal }, onEvent)
     onEvent({ type: 'error', error: err.error || 'Error', code: err.code });
     return;
   }
+  if (!res.body) return;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -43,20 +59,20 @@ export async function streamChatMessage({ message, projectId, signal }, onEvent)
     for (const line of lines) {
       if (!line.startsWith('data:')) continue;
       try {
-        const ev = JSON.parse(line.slice(5).trim());
+        const ev = JSON.parse(line.slice(5).trim()) as ChatEvent;
         onEvent(ev);
       } catch {}
     }
   }
 }
 
-function getToken() {
+function getToken(): string {
   return getAccessToken() || '';
 }
 
 // =============== MOCK ===============
 
-const SAMPLE_RESPONSES = {
+const SAMPLE_RESPONSES: Record<string, string> = {
   resumen: `Aqui tienes el **resumen del mes en curso**:
 
 - **Leads nuevos:** 68 (+12% vs mes anterior)
@@ -99,7 +115,7 @@ Para darte una respuesta precisa, necesito acceder a los datos del CRM, las camp
 - Pulsa **Rendimiento campanas** para analizar Meta + Google`,
 };
 
-function getMockResponse(message) {
+function getMockResponse(message: string): string {
   const m = message.toLowerCase();
   if (/resumen|mes|kpi/i.test(m)) return SAMPLE_RESPONSES.resumen;
   if (/inactiv|sin actividad|seguimiento/i.test(m)) return SAMPLE_RESPONSES.inactivos;
@@ -107,17 +123,16 @@ function getMockResponse(message) {
   return SAMPLE_RESPONSES.default.replace('%MSG%', message);
 }
 
-function mockStream({ message, signal }, onEvent) {
+function mockStream({ message, signal }: StreamChatPayload, onEvent: ChatEventHandler): Promise<void> {
   return new Promise((resolve) => {
     const text = getMockResponse(message);
     const messageId = 'msg_' + Math.random().toString(36).slice(2, 9);
     onEvent({ type: 'start', messageId });
 
-    // Streamear por chunks de palabras (~30ms cada uno)
     const tokens = text.match(/\S+\s*/g) || [];
     let i = 0;
 
-    function emit() {
+    function emit(): void {
       if (signal?.aborted) {
         onEvent({ type: 'error', error: 'Cancelado' });
         return resolve();
@@ -126,7 +141,6 @@ function mockStream({ message, signal }, onEvent) {
         onEvent({ type: 'done', messageId, usage: { promptTokens: 1200, completionTokens: tokens.length } });
         return resolve();
       }
-      // Streamear de 1 a 3 tokens a la vez para naturalidad
       const chunkSize = 1 + Math.floor(Math.random() * 2);
       const chunk = tokens.slice(i, i + chunkSize).join('');
       i += chunkSize;
