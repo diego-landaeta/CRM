@@ -2,16 +2,40 @@ import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Plus, Trash, Download } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
-import { documentsApi } from '../api/documents.api';
+import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
-export default function CertificateForm({ onGenerated }) {
+interface ModuloField {
+  nombre: string;
+}
+
+interface CertificateFormValues {
+  alumno_nombre: string;
+  alumno_dni: string;
+  curso_nombre: string;
+  horas_total: string;
+  modalidad: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  fecha_expedicion: string;
+  ciudad: string;
+  pais: string;
+  director_nombre: string;
+  resp_nombre: string;
+  modulos: ModuloField[];
+}
+
+interface CertificateFormProps {
+  onGenerated?: (doc: CrmDocument) => void;
+}
+
+export default function CertificateForm({ onGenerated }: CertificateFormProps) {
   const { activeProject } = useProjectContext();
   const [loading, setLoading] = useState(false);
 
-  const { register, control, handleSubmit } = useForm({
+  const { register, control, handleSubmit } = useForm<CertificateFormValues>({
     defaultValues: {
       alumno_nombre: '',
       alumno_dni: '',
@@ -31,7 +55,8 @@ export default function CertificateForm({ onGenerated }) {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'modulos' });
 
-  async function onSubmit(data) {
+  async function onSubmit(data: CertificateFormValues): Promise<void> {
+    if (!activeProject?.id) return;
     setLoading(true);
     try {
       const payload = {
@@ -39,11 +64,11 @@ export default function CertificateForm({ onGenerated }) {
         modulos: data.modulos.map(m => m.nombre).filter(Boolean),
       };
       const res = await documentsApi.generate(activeProject.id, 'certificate', payload);
-      if (res.success) {
+      if (res.success && res.data) {
         toast({ title: 'Certificado generado', description: `Nº ${res.data.number}` });
         onGenerated?.(res.data);
       }
-    } catch (e) {
+    } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }

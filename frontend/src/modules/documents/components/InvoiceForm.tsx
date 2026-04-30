@@ -2,10 +2,34 @@ import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Plus, Trash, Download } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
-import { documentsApi } from '../api/documents.api';
+import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
+
+interface InvoiceLine {
+  descripcion: string;
+  cantidad: number | string;
+  precio: number | string;
+}
+
+interface InvoiceFormValues {
+  emisor_nombre: string;
+  emisor_nif: string;
+  emisor_direccion: string;
+  emisor_telefono: string;
+  fecha: string;
+  iva_pct: number | string;
+  cliente_nombre: string;
+  cliente_dni: string;
+  cliente_direccion: string;
+  notas: string;
+  lineas: InvoiceLine[];
+}
+
+interface InvoiceFormProps {
+  onGenerated?: (doc: CrmDocument) => void;
+}
 
 const EMISOR_DEFAULT = {
   emisor_nombre: 'MIREIA JAREÑO MORAGA',
@@ -14,10 +38,10 @@ const EMISOR_DEFAULT = {
   emisor_telefono: '644 10 59 19',
 };
 
-export default function InvoiceForm({ onGenerated }) {
+export default function InvoiceForm({ onGenerated }: InvoiceFormProps) {
   const { activeProject } = useProjectContext();
   const [loading, setLoading] = useState(false);
-  const { register, control, handleSubmit, watch } = useForm({
+  const { register, control, handleSubmit, watch } = useForm<InvoiceFormValues>({
     defaultValues: {
       ...EMISOR_DEFAULT,
       fecha: new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'2-digit' }).replace(/\//g,'-'),
@@ -31,21 +55,22 @@ export default function InvoiceForm({ onGenerated }) {
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'lineas' });
   const lineas = watch('lineas');
-  const ivaPct = parseFloat(watch('iva_pct')) || 21;
-  const subtotal = lineas.reduce((s, l) => s + (parseFloat(l.precio || 0) * parseInt(l.cantidad || 1)), 0);
+  const ivaPct = parseFloat(String(watch('iva_pct'))) || 21;
+  const subtotal = lineas.reduce((s, l) => s + (parseFloat(String(l.precio || 0)) * parseInt(String(l.cantidad || 1))), 0);
   const iva = subtotal * (ivaPct / 100);
   const total = subtotal + iva;
-  const fmt = n => n.toFixed(2) + ' €';
+  const fmt = (n: number): string => n.toFixed(2) + ' €';
 
-  async function onSubmit(data) {
+  async function onSubmit(data: InvoiceFormValues): Promise<void> {
+    if (!activeProject?.id) return;
     setLoading(true);
     try {
-      const res = await documentsApi.generate(activeProject.id, 'invoice', data);
-      if (res.success) {
+      const res = await documentsApi.generate(activeProject.id, 'invoice', data as unknown as Record<string, unknown>);
+      if (res.success && res.data) {
         toast({ title: 'Factura generada', description: `Nº ${res.data.number}` });
         onGenerated?.(res.data);
       }
-    } catch (e) {
+    } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }

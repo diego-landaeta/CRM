@@ -2,25 +2,32 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
-import { documentsApi } from '../api/documents.api';
+import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceForm from '../components/InvoiceForm';
 import CertificateForm from '../components/CertificateForm';
-import client, { getAccessToken } from '@/shared/api/client';
+import { getAccessToken } from '@/shared/api/client';
 
-const TABS = [
+type TabKey = 'list' | 'invoice' | 'certificate';
+
+const TABS: ReadonlyArray<{ key: TabKey; label: string }> = [
   { key: 'list', label: 'Historial' },
   { key: 'invoice', label: 'Nueva Factura' },
   { key: 'certificate', label: 'Nuevo Certificado' },
 ];
 
-const TYPE_LABEL = { invoice: 'Factura', certificate: 'Certificado' };
+const TYPE_LABEL: Record<DocumentType, string> = { invoice: 'Factura', certificate: 'Certificado' };
+
+interface PreviewModalProps {
+  doc: CrmDocument;
+  onClose: () => void;
+}
 
 // ─── Modal de previsualización ────────────────────────────────────────────────
-function PreviewModal({ doc, onClose }) {
-  const iframeRef = useRef(null);
+function PreviewModal({ doc, onClose }: PreviewModalProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [html, setHtml] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +58,8 @@ function PreviewModal({ doc, onClose }) {
   useEffect(() => {
     if (!html || !iframeRef.current) return;
     const iframe = iframeRef.current;
-    const doc2 = iframe.contentDocument || iframe.contentWindow.document;
+    const doc2 = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc2) return;
     doc2.open();
     doc2.write(html);
     doc2.close();
@@ -117,20 +125,20 @@ function PreviewModal({ doc, onClose }) {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function DocumentsPage() {
   const { activeProject } = useProjectContext();
-  const [tab, setTab] = useState('list');
-  const [docs, setDocs] = useState([]);
+  const [tab, setTab] = useState<TabKey>('list');
+  const [docs, setDocs] = useState<CrmDocument[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [downloading, setDownloading] = useState(null);
-  const [previewing, setPreviewing] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState<CrmDocument | null>(null);
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const [previewing, setPreviewing] = useState<CrmDocument | null>(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
       const res = await documentsApi.list(activeProject.id);
-      if (res.success) setDocs(res.data);
-    } catch (err) {
+      if (res.success) setDocs((res.data as CrmDocument[]) || []);
+    } catch (err: any) {
       toast({
         title: 'Error cargando documentos',
         description: err?.data?.error || err.message || 'No se pudo conectar con el servidor.',
@@ -142,11 +150,12 @@ export default function DocumentsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleDownload(doc) {
+  async function handleDownload(doc: CrmDocument): Promise<void> {
+    if (!activeProject?.id) return;
     setDownloading(doc.id);
     try {
       const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
-      const token = client.defaults?.headers?.common?.Authorization?.replace('Bearer ', '') || '';
+      const token = getAccessToken() || '';
       const res = await fetch(`${baseUrl}/api/documents/${doc.id}/download?projectId=${activeProject.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -163,7 +172,8 @@ export default function DocumentsPage() {
     } finally { setDownloading(null); }
   }
 
-  async function doDelete() {
+  async function doDelete(): Promise<void> {
+    if (!pendingDelete || !activeProject?.id) return;
     try {
       await documentsApi.remove(pendingDelete.id, activeProject.id);
       toast({ title: 'Documento eliminado' });
@@ -173,7 +183,7 @@ export default function DocumentsPage() {
     } finally { setPendingDelete(null); }
   }
 
-  function onGenerated() {
+  function onGenerated(): void {
     setTab('list');
     load();
   }
