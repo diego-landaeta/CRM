@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useLocation } from 'react-router-dom';
 import { toast } from '@/shared/hooks/useToast';
+import Portal from '@/shared/components/ui/portal';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 import {
@@ -58,7 +59,7 @@ export default function TicketsLauncher() {
   const unread = tickets.filter((t) => t.status === 'open').length;
 
   return (
-    <>
+    <Portal>
       <button
         onClick={() => { setOpen((v) => !v); setView('list'); }}
         title="Tickets de soporte"
@@ -132,7 +133,7 @@ export default function TicketsLauncher() {
           </aside>
         </>
       )}
-    </>
+    </Portal>
   );
 }
 
