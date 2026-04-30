@@ -212,7 +212,7 @@ function TicketCard({ ticket }) {
       {ticket.attachments?.length > 0 && (
         <div className="flex gap-1 mt-2 flex-wrap">
           {ticket.attachments.slice(0, 4).map((a, i) => (
-            <img key={i} src={a.dataUrl} alt={a.name} className="w-12 h-12 rounded object-cover border border-border" />
+            <img key={i} src={a.dataUrl} alt={a.name} width={48} height={48} loading="lazy" decoding="async" className="w-12 h-12 rounded object-cover border border-border" />
           ))}
           {ticket.attachments.length > 4 && (
             <div className="w-12 h-12 rounded bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
@@ -463,7 +463,7 @@ function CreateTicketForm({ onSubmitted }) {
           <div className="grid grid-cols-4 gap-2 mt-2">
             {attachments.map((a, i) => (
               <div key={i} className="relative group">
-                <img src={a.dataUrl} alt={a.name} className="w-full h-16 object-cover rounded border border-border" />
+                <img src={a.dataUrl} alt={a.name} loading="lazy" decoding="async" className="w-full h-16 object-cover rounded border border-border" />
                 <button
                   type="button"
                   onClick={() => removeAttachment(i)}

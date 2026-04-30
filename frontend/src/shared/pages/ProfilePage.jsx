@@ -148,7 +148,7 @@ export default function ProfilePage() {
           <div className="relative group shrink-0">
             <div className="w-20 h-20 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-2xl font-semibold overflow-hidden">
               {avatarSrc ? (
-                <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+                <img src={avatarSrc} alt="" width={80} height={80} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               ) : initials}
             </div>
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleAvatarUpload} className="hidden" />

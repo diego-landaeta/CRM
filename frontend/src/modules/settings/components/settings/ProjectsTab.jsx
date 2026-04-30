@@ -49,7 +49,7 @@ export default function ProjectsTab() {
               <div className="p-5 flex items-start gap-4">
                 <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
                   {p.logo_url ? (
-                    <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${p.id}/logo`} alt="" className="w-full h-full object-contain" />
+                    <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${p.id}/logo`} alt="" width={48} height={48} loading="lazy" decoding="async" className="w-full h-full object-contain" />
                   ) : (p.emoji || '📁')}
                 </div>
                 <div className="flex-1 min-w-0">

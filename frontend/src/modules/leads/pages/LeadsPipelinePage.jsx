@@ -112,7 +112,10 @@ export default function LeadsPipelinePage() {
     if (!pid) return;
     setLoading(true);
     try {
-      const res = await client.get(`/leads?projectId=${pid}&limit=500&includeConverted=1`);
+      // Limitamos a 200 leads por pipeline para mantener render fluido
+      // (sin virtualización). Si se necesita más, hay que paginar por columna
+      // o introducir react-window. Ver issue #virtualization.
+      const res = await client.get(`/leads?projectId=${pid}&limit=200&includeConverted=1`);
       if (res.success) {
         // Backend devuelve status, frontend usa estado - normalizar
         setAllLeads((res.data || []).map(l => ({

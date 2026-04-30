@@ -287,6 +287,10 @@ function ProjectAvatar({ project, size = 'md' }) {
       <img
         src={src}
         alt=""
+        width={24}
+        height={24}
+        loading="lazy"
+        decoding="async"
         className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
         onError={(e) => { e.currentTarget.style.display = 'none'; }}
       />
@@ -300,6 +304,10 @@ function ProjectAvatar({ project, size = 'md' }) {
       <img
         src={localSrc}
         alt={project.nombre || ''}
+        width={24}
+        height={24}
+        loading="lazy"
+        decoding="async"
         className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
         onError={(e) => { e.currentTarget.style.display = 'none'; }}
       />
@@ -699,7 +707,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         >
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs flex-shrink-0 overflow-hidden">
             {user?.avatar_url ? (
-              <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/users/${user.id}/avatar`} alt="" className="w-full h-full object-cover" />
+              <img src={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/users/${user.id}/avatar`} alt="" width={36} height={36} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : initials}
           </div>
           {!collapsed && (

@@ -110,6 +110,7 @@ export default defineConfig({
           'vendor-recharts': ['recharts'],
           'vendor-ui': ['@phosphor-icons/react', 'class-variance-authority', 'clsx', 'tailwind-merge'],
           'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'vendor-uploads': ['react-dropzone'],
         },
       },
     },
