@@ -9,7 +9,30 @@ import { toast } from '@/shared/hooks/useToast';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
-const KINDS = [
+type TemplateKind = 'contacto_basico' | 'lead_con_producto' | 'custom';
+
+interface FormConfig {
+  color?: string;
+  button_label?: string;
+  success_msg?: string;
+  redirect_url?: string;
+}
+
+interface FormDef {
+  id?: number;
+  project_id?: number;
+  nombre: string;
+  kind: 'form';
+  template_kind: TemplateKind;
+  config: FormConfig;
+  schema?: Record<string, unknown>;
+  field_mapping?: Record<string, unknown>;
+  active: boolean;
+  embed_id?: string;
+  submissions_count?: number;
+}
+
+const KINDS: ReadonlyArray<{ v: TemplateKind; label: string }> = [
   { v: 'contacto_basico', label: 'Contacto básico (nombre + email + teléfono)' },
   { v: 'lead_con_producto', label: 'Lead con producto de interés' },
   { v: 'custom', label: 'Custom (campos manuales)' },
@@ -17,54 +40,55 @@ const KINDS = [
 
 export default function FormsPage() {
   const { activeProject } = useProjectContext();
-  const [forms, setForms] = useState([]);
+  const [forms, setForms] = useState<FormDef[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [embedFor, setEmbedFor] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editing, setEditing] = useState<FormDef | null>(null);
+  const [embedFor, setEmbedFor] = useState<FormDef | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FormDef | null>(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
       const res = await client.get(`/forms?projectId=${activeProject.id}&kind=form`);
-      if (res.success) setForms(res.data);
+      if (res.success) setForms((res.data as FormDef[]) || []);
     } finally { setLoading(false); }
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleSave(f) {
+  async function handleSave(f: FormDef): Promise<void> {
+    if (!activeProject?.id) return;
     try {
       if (f.id) await client.patch(`/forms/${f.id}`, f);
       else await client.post('/forms', { ...f, project_id: activeProject.id });
       toast({ title: 'Guardado' });
       setEditing(null); load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function handleDelete(f) {
+  function handleDelete(f: FormDef): void {
     setDeleteTarget(f);
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(): Promise<void> {
     if (!deleteTarget) return;
     try {
       await client.delete(`/forms/${deleteTarget.id}`);
       toast({ title: 'Eliminado' });
       load();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);
     }
   }
 
-  async function toggleActive(f) {
+  async function toggleActive(f: FormDef): Promise<void> {
     try {
       await client.patch(`/forms/${f.id}`, { active: !f.active });
       toast({ title: f.active ? 'Form apagado' : 'Form encendido' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
   return (
@@ -135,10 +159,16 @@ export default function FormsPage() {
   );
 }
 
-function FormEditor({ form, onSave, onClose }) {
-  const [f, setF] = useState({ ...form, kind: 'form', config: form.config || {} });
+interface FormEditorProps {
+  form: FormDef;
+  onSave: (f: FormDef) => void | Promise<void>;
+  onClose: () => void;
+}
 
-  function saveAndClose() {
+function FormEditor({ form, onSave, onClose }: FormEditorProps) {
+  const [f, setF] = useState<FormDef>({ ...form, kind: 'form', config: form.config || {} });
+
+  function saveAndClose(): void {
     onSave({ ...f, kind: 'form' });
   }
 
@@ -152,7 +182,7 @@ function FormEditor({ form, onSave, onClose }) {
         <div className="p-5 space-y-3">
           <input value={f.nombre} onChange={e => setF({ ...f, nombre: e.target.value })} placeholder="Nombre interno" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
 
-          <select value={f.template_kind} onChange={e => setF({ ...f, template_kind: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm">
+          <select value={f.template_kind} onChange={e => setF({ ...f, template_kind: e.target.value as TemplateKind })} className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm">
             {KINDS.map(k => <option key={k.v} value={k.v}>{k.label}</option>)}
           </select>
 
@@ -190,8 +220,13 @@ function FormEditor({ form, onSave, onClose }) {
   );
 }
 
-function EmbedDialog({ form, onClose }) {
-  function copy(text) { navigator.clipboard.writeText(text); toast({ title: 'Copiado' }); }
+interface EmbedDialogProps {
+  form: FormDef;
+  onClose: () => void;
+}
+
+function EmbedDialog({ form, onClose }: EmbedDialogProps) {
+  function copy(text: string): void { navigator.clipboard.writeText(text); toast({ title: 'Copiado' }); }
 
   const apiBase = `${window.location.origin}/testeo_crm/api/forms/public/${form.embed_id}`;
   const iframeSrc = `${window.location.origin}/embed/form/${form.embed_id}`;

@@ -1,13 +1,33 @@
 import { useEffect, useState } from 'react';
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import {
-  CheckCircle, WarningCircle, XCircle, ArrowClockwise,
-  EnvelopeSimple, ChartBar, MagnifyingGlass, CreditCard, ShoppingBag, Robot,
+  CheckCircle, WarningCircle, ArrowClockwise,
+  EnvelopeSimple, ChartBar, MagnifyingGlass, CreditCard, ShoppingBag,
 } from '@phosphor-icons/react';
 
-const INTEGRATIONS = [
+type ServiceKey = 'brevo' | 'meta' | 'google_ads' | 'gsc' | 'stripe' | 'woocommerce';
+type Status = 'ok' | 'missing' | 'loading';
+
+interface Integration {
+  service: ServiceKey;
+  name: string;
+  desc: string;
+  icon: PhosphorIcon;
+  color: string;
+}
+
+interface Credential {
+  service: ServiceKey | string;
+}
+
+interface WooCredential {
+  store_url?: string | null;
+}
+
+const INTEGRATIONS: ReadonlyArray<Integration> = [
   { service: 'brevo', name: 'Brevo', desc: 'Email transaccional y notificaciones', icon: EnvelopeSimple, color: 'text-blue-500' },
   { service: 'meta', name: 'Meta Marketing', desc: 'Meta Ads API — campañas y estadísticas', icon: ChartBar, color: 'text-blue-600' },
   { service: 'google_ads', name: 'Google Ads', desc: 'Google Ads API — campañas y métricas', icon: ChartBar, color: 'text-amber-500' },
@@ -16,7 +36,7 @@ const INTEGRATIONS = [
   { service: 'woocommerce', name: 'WooCommerce', desc: 'Sincronización de productos e importación', icon: ShoppingBag, color: 'text-orange-500' },
 ];
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }: { status: Status }) {
   if (status === 'ok') return (
     <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-2.5 py-1 rounded-full">
       <CheckCircle size={13} weight="fill" /> Configurado
@@ -36,27 +56,27 @@ function StatusBadge({ status }) {
 
 export default function StatusPage() {
   const { activeProject } = useProjectContext();
-  const [credentials, setCredentials] = useState([]);
-  const [woo, setWoo] = useState(null);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [woo, setWoo] = useState<WooCredential | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  async function load(): Promise<void> {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
       const [credRes, wooRes] = await Promise.all([
         client.get(`/credentials?projectId=${activeProject.id}`),
-        client.get(`/woocommerce/credentials?projectId=${activeProject.id}`).catch(() => ({ success: false })),
+        client.get(`/woocommerce/credentials?projectId=${activeProject.id}`).catch(() => ({ success: false, data: null })),
       ]);
-      if (credRes.success) setCredentials(credRes.data || []);
-      if (wooRes.success) setWoo(wooRes.data);
+      if (credRes.success) setCredentials((credRes.data as Credential[]) || []);
+      if (wooRes.success) setWoo((wooRes as { data?: WooCredential }).data || null);
     } catch {}
     finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, [activeProject?.id]);
 
-  function getStatus(service) {
+  function getStatus(service: ServiceKey): Status {
     if (service === 'woocommerce') return woo?.store_url ? 'ok' : 'missing';
     return credentials.find(c => c.service === service) ? 'ok' : 'missing';
   }

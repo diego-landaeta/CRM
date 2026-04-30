@@ -1,9 +1,26 @@
 import { useAuth } from '@/contexts/AuthContext';
+import type { UserRole } from '@/shared/types';
+
+export type PermissionKey = string;
+export type PermissionMap = Record<PermissionKey, boolean>;
+
+export interface PermissionResource {
+  key: string;
+  label: string;
+  actions: string[];
+}
+
+export interface FixedRole {
+  key: UserRole;
+  label: string;
+  desc: string;
+  color: 'rose' | 'violet' | 'sky' | 'emerald';
+}
 
 // Permisos por rol fijo del sistema. Cuando CRM-228 (backend custom_roles)
 // este desplegado, `user.permissions` vendra del backend y sobreescribira
 // estos defaults. Mientras tanto, esta tabla cubre los 4 roles base.
-export const ROLE_DEFAULT_PERMISSIONS = {
+export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
   superadmin: { '*': true },
   soporte:    { '*': true },
   admin: {
@@ -29,7 +46,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
   },
 };
 
-export const PERMISSION_RESOURCES = [
+export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
   { key: 'leads',       label: 'Prospectos',  actions: ['read', 'create', 'update', 'delete', 'export', 'reassign'] },
   { key: 'clients',     label: 'Clientes',    actions: ['read', 'create', 'update', 'delete'] },
   { key: 'products',    label: 'Productos',   actions: ['read', 'create', 'update', 'delete'] },
@@ -42,17 +59,23 @@ export const PERMISSION_RESOURCES = [
   { key: 'accounting',  label: 'Contabilidad', actions: ['read', 'update'] },
 ];
 
-export const FIXED_ROLES = [
+export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
   { key: 'admin',      label: 'Admin',      desc: 'Acceso operativo completo, no gestiona usuarios.', color: 'violet' },
   { key: 'gestor',     label: 'Gestor',     desc: 'Solo proyectos asignados, solo sus leads.', color: 'sky' },
   { key: 'soporte',    label: 'Soporte',    desc: 'Acceso de solo lectura para soporte técnico.', color: 'emerald' },
 ];
 
-export default function usePermission() {
+export interface UsePermissionResult {
+  can: (permission: PermissionKey) => boolean;
+  role: UserRole | undefined;
+  isAdmin: boolean;
+}
+
+export default function usePermission(): UsePermissionResult {
   const { user } = useAuth();
 
-  function can(permission) {
+  function can(permission: PermissionKey): boolean {
     if (!user) return false;
     // bypass para roles privilegiados
     if (user.role === 'superadmin' || user.role === 'soporte') return true;
@@ -61,7 +84,7 @@ export default function usePermission() {
       return user.permissions[permission] === true || user.permissions['*'] === true;
     }
     // fallback: defaults por rol
-    const defaults = ROLE_DEFAULT_PERMISSIONS[user.role] || {};
+    const defaults = ROLE_DEFAULT_PERMISSIONS[user.role as UserRole] || {};
     return defaults[permission] === true || defaults['*'] === true;
   }
 

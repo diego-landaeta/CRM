@@ -6,22 +6,36 @@ import {
   FIXED_ROLES,
   PERMISSION_RESOURCES,
   ROLE_DEFAULT_PERMISSIONS,
+  type FixedRole,
 } from '@/shared/hooks/usePermission';
+import type { UserRole } from '@/shared/types';
 import * as api from '../api/permissions.api';
+import type { CustomRole } from '../api/permissions.api';
 import { toast } from '@/shared/hooks/useToast';
 
-const COLOR_BG = {
+type RoleColor = 'rose' | 'violet' | 'sky' | 'emerald' | 'amber';
+
+const COLOR_BG: Record<RoleColor, string> = {
   rose:    'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
   violet:  'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
   sky:     'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
   emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  amber:   'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
 };
+
+interface RoleEntry {
+  key: string;
+  label: string;
+  desc: string;
+  color: RoleColor;
+  custom?: CustomRole;
+}
 
 export default function RolesPage() {
   const { activeProject } = useProjectContext();
-  const [selectedRole, setSelectedRole] = useState('superadmin');
-  const [customRoles, setCustomRoles] = useState([]);
-  const [customRolesAvailable, setCustomRolesAvailable] = useState(null);
+  const [selectedRole, setSelectedRole] = useState<string>('superadmin');
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
+  const [customRolesAvailable, setCustomRolesAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -41,8 +55,11 @@ export default function RolesPage() {
     return () => { cancelled = true; };
   }, [activeProject?.id]);
 
-  const role = [...FIXED_ROLES, ...customRoles.map((r) => ({ key: `custom:${r.id}`, label: r.nombre, custom: r, color: 'amber', desc: r.descripcion || '' }))]
-    .find((r) => r.key === selectedRole);
+  const allRoles: RoleEntry[] = [
+    ...FIXED_ROLES.map((r): RoleEntry => ({ key: r.key, label: r.label, desc: r.desc, color: r.color })),
+    ...customRoles.map((r): RoleEntry => ({ key: `custom:${r.id}`, label: r.nombre, custom: r, color: 'amber', desc: r.descripcion || '' })),
+  ];
+  const role = allRoles.find((r) => r.key === selectedRole);
 
   return (
     <div className="space-y-5 pb-8">
@@ -162,9 +179,9 @@ export default function RolesPage() {
                   </thead>
                   <tbody>
                     {PERMISSION_RESOURCES.map((res) => {
-                      const perms = ROLE_DEFAULT_PERMISSIONS[role.key] || {};
+                      const perms = ROLE_DEFAULT_PERMISSIONS[role.key as UserRole] || {};
                       const all = perms['*'] === true;
-                      const has = (a) => all || perms[`${res.key}.${a}`] === true;
+                      const has = (a: string): boolean => all || perms[`${res.key}.${a}`] === true;
                       const others = res.actions.filter((a) => !['read', 'create', 'update', 'delete'].includes(a));
                       return (
                         <tr key={res.key} className="border-b border-border last:border-0">
@@ -199,11 +216,11 @@ export default function RolesPage() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-2">
                 {PERMISSION_RESOURCES.map((res) => {
-                  const perms = ROLE_DEFAULT_PERMISSIONS[role.key] || {};
+                  const perms = ROLE_DEFAULT_PERMISSIONS[role.key as UserRole] || {};
                   const all = perms['*'] === true;
-                  const has = (a) => all || perms[`${res.key}.${a}`] === true;
+                  const has = (a: string): boolean => all || perms[`${res.key}.${a}`] === true;
                   const others = res.actions.filter((a) => !['read', 'create', 'update', 'delete'].includes(a));
-                  const actionLabels = { read: 'Leer', create: 'Crear', update: 'Editar', delete: 'Eliminar' };
+                  const actionLabels: Record<string, string> = { read: 'Leer', create: 'Crear', update: 'Editar', delete: 'Eliminar' };
                   return (
                     <div key={res.key} className="bg-muted/30 border border-border rounded-lg p-3">
                       <p className="text-sm font-semibold mb-2">{res.label}</p>

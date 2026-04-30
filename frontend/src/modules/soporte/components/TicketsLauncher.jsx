@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useLocation } from 'react-router-dom';
 import { toast } from '@/shared/hooks/useToast';
+
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 import {
   Ticket, Plus, X, Bug, Lightning, Question, Trash, ClockCounterClockwise,
   Image as ImageIcon, ArrowLeft, PaperPlaneRight,
@@ -169,6 +171,7 @@ function TicketCard({ ticket }) {
   const severity = TICKET_SEVERITY[ticket.severity] || TICKET_SEVERITY.low;
   const kind = TICKET_KIND[ticket.kind] || TICKET_KIND.question;
   const KindIcon = KIND_ICON[ticket.kind] || Question;
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   function cycleStatus() {
     const order = ['open', 'in_review', 'resolved', 'closed'];
@@ -179,7 +182,11 @@ function TicketCard({ ticket }) {
   }
 
   function handleDelete() {
-    if (!confirm('¿Eliminar este ticket? No se puede recuperar.')) return;
+    setConfirmOpen(true);
+  }
+
+  function doDelete() {
+    setConfirmOpen(false);
     deleteTicket(ticket.id);
     toast({ title: 'Ticket eliminado' });
   }
@@ -219,6 +226,17 @@ function TicketCard({ ticket }) {
         {ticket.projectName && <><span>·</span><span>{ticket.projectName}</span></>}
         {ticket.url && <><span>·</span><span className="truncate max-w-[120px]" title={ticket.url}>{ticket.url}</span></>}
       </div>
+      <Suspense fallback={null}>
+        <ConfirmDialog
+          open={confirmOpen}
+          title="Eliminar ticket"
+          message="¿Eliminar este ticket? No se puede recuperar."
+          confirmLabel="Eliminar"
+          tone="destructive"
+          onConfirm={doDelete}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      </Suspense>
     </article>
   );
 }

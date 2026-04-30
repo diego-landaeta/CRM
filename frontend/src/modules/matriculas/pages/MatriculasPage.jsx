@@ -6,6 +6,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { GraduationCap, CheckCircle, XCircle, Clock, Eye, Upload, X, PlugsConnected, Plus, Copy, Trash } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import PromptDialog from '@/shared/components/ui/PromptDialog';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -33,6 +34,7 @@ export default function MatriculasPage() {
   const [filterEstado, setFilterEstado] = useState('');
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState(null);
+  const [rechazoTarget, setRechazoTarget] = useState(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -51,14 +53,25 @@ export default function MatriculasPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleEstado(m, estado) {
-    let motivo = null;
     if (estado === 'rechazada') {
-      motivo = prompt('Motivo del rechazo:');
-      if (!motivo) return;
+      setRechazoTarget(m);
+      return;
     }
     try {
-      await client.post(`/matriculas/${m.id}/estado`, { estado, motivo_rechazo: motivo });
-      toast({ title: estado === 'validada' ? 'Validada' : 'Rechazada' });
+      await client.post(`/matriculas/${m.id}/estado`, { estado, motivo_rechazo: null });
+      toast({ title: 'Validada' });
+      load();
+      if (detail?.id === m.id) setDetail(null);
+    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  }
+
+  async function confirmRechazo(motivo) {
+    if (!rechazoTarget || !motivo) return;
+    const m = rechazoTarget;
+    setRechazoTarget(null);
+    try {
+      await client.post(`/matriculas/${m.id}/estado`, { estado: 'rechazada', motivo_rechazo: motivo });
+      toast({ title: 'Rechazada' });
       load();
       if (detail?.id === m.id) setDetail(null);
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
@@ -202,6 +215,16 @@ export default function MatriculasPage() {
       </>}
 
       {detail && <MatriculaDetail matricula={detail} onClose={() => setDetail(null)} onChange={load} onEstado={handleEstado} />}
+      <PromptDialog
+        open={!!rechazoTarget}
+        title="Rechazar matrícula"
+        message="Indica el motivo del rechazo para que el solicitante pueda recibirlo."
+        placeholder="Ej: documentación incompleta o ilegible…"
+        multiline
+        confirmLabel="Rechazar"
+        onConfirm={confirmRechazo}
+        onCancel={() => setRechazoTarget(null)}
+      />
     </div>
   );
 }
@@ -342,6 +365,7 @@ function WebhookEditor({ token, onSave, onClose }) {
   const [mapping, setMapping] = useState(token?.field_mapping || {});
   const [samplePayload, setSamplePayload] = useState(token?.sample_payload || null);
   const [listening, setListening] = useState(false);
+  const [mapPath, setMapPath] = useState(null);
   const pollRef = useState({ current: null })[0];
 
   // Si es nuevo (sin id), crearlo en draft y abrir listen
@@ -436,12 +460,7 @@ function WebhookEditor({ token, onSave, onClose }) {
               <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">Payload capturado · Click en un campo para mapearlo</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="border border-border rounded-xl p-3 bg-muted/10 max-h-64 overflow-y-auto">
-                  <PayloadTree obj={samplePayload} path="" onSelect={(path) => {
-                    const target = prompt(`Mapea "${path}" a qué campo CRM?\nOpciones: ${MATRICULA_TARGETS.map(t => t.key).join(', ')}`);
-                    if (target && MATRICULA_TARGETS.find(t => t.key === target)) {
-                      setMapping({ ...mapping, [target]: path });
-                    }
-                  }} mapping={mapping} />
+                  <PayloadTree obj={samplePayload} path="" onSelect={(path) => setMapPath(path)} mapping={mapping} />
                 </div>
                 <div className="border border-border rounded-xl p-3 space-y-2">
                   <p className="text-[11px] font-bold uppercase text-muted-foreground">Mapping CRM</p>
@@ -480,6 +499,20 @@ function WebhookEditor({ token, onSave, onClose }) {
           </div>
         </div>
       </div>
+      <PromptDialog
+        open={!!mapPath}
+        title="Mapear campo del payload"
+        message={mapPath ? <>Selecciona a qué campo del CRM mapear <code className="font-mono text-foreground">{mapPath}</code>.</> : null}
+        options={MATRICULA_TARGETS.map(t => ({ value: t.key, label: t.label }))}
+        confirmLabel="Mapear"
+        onConfirm={(target) => {
+          if (target && MATRICULA_TARGETS.find(t => t.key === target)) {
+            setMapping({ ...mapping, [target]: mapPath });
+          }
+          setMapPath(null);
+        }}
+        onCancel={() => setMapPath(null)}
+      />
     </div>
   );
 }

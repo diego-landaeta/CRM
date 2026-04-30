@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Copy, FloppyDisk, Power, Users, GraduationCap, Trash,
@@ -8,6 +8,8 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import ListenModePanel from '../components/ListenModePanel';
 import PayloadMapper from '../components/PayloadMapper';
+
+const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
 const DESTINATIONS = [
   { v: 'lead', label: 'Lead / Prospecto', Icon: Users, desc: 'Crea un lead en el embudo (round-robin de gestores)' },
@@ -24,6 +26,7 @@ export default function WebhookDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,8 +94,12 @@ export default function WebhookDetailPage() {
     } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  async function remove() {
-    if (!confirm(`Eliminar "${webhook.nombre}"? Esta acción no se puede deshacer.`)) return;
+  function remove() {
+    setConfirmDelete(true);
+  }
+
+  async function doRemove() {
+    setConfirmDelete(false);
     try {
       await client.delete(`/forms/${id}`);
       toast({ title: 'Eliminado' });
@@ -258,6 +265,18 @@ export default function WebhookDetailPage() {
           <Trash size={12} weight="bold" /> Eliminar webhook
         </button>
       </section>
+
+      <Suspense fallback={null}>
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Eliminar webhook"
+          message={`¿Eliminar "${webhook?.nombre}"? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar"
+          tone="destructive"
+          onConfirm={doRemove}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      </Suspense>
     </div>
   );
 }

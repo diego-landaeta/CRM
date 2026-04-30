@@ -6,21 +6,44 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const TIPO_STYLES = {
+type TipoPago = 'pago_completo' | 'abono_parcial' | string;
+
+interface Conversion {
+  id: number;
+  lead_nombre?: string | null;
+  lead?: string | null;
+  producto_contratado?: string | null;
+  importe_total: number | string;
+  tipo_pago?: TipoPago | null;
+  fecha_conversion: string;
+}
+
+interface MonthlyPoint {
+  mes: string;
+  ingresos: number;
+}
+
+const TIPO_STYLES: Record<string, string> = {
   pago_completo: 'bg-emerald-50 text-emerald-600',
   abono_parcial: 'bg-amber-50 text-amber-600',
 };
 
-function fmt(n) {
+function fmt(n: number | string | null | undefined): string {
   return Number(n || 0).toLocaleString('es-ES');
 }
 
-function fmtDate(d) {
+function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function CustomTooltip({ active, payload, label }) {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-zinc-900 text-white text-xs font-semibold px-3 py-2 rounded-lg">
@@ -31,14 +54,14 @@ function CustomTooltip({ active, payload, label }) {
 
 export default function RevenuePage() {
   const { activeProject } = useProjectContext();
-  const [conversions, setConversions] = useState([]);
+  const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!activeProject?.id) return;
     setLoading(true);
     client.get(`/conversions?projectId=${activeProject.id}&limit=100`)
-      .then(res => { if (res.success) setConversions(res.data || []); })
+      .then(res => { if (res.success) setConversions((res.data as Conversion[]) || []); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [activeProject?.id]);
@@ -57,8 +80,8 @@ export default function RevenuePage() {
     return { ingresosMes, convertidoMes, ticketMedio };
   }, [conversions]);
 
-  const monthly = useMemo(() => {
-    const map = {};
+  const monthly = useMemo<MonthlyPoint[]>(() => {
+    const map: Record<string, MonthlyPoint> = {};
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);

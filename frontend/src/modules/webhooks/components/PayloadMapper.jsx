@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { X } from '@phosphor-icons/react';
+import PromptDialog from '@/shared/components/ui/PromptDialog';
 
 const TARGETS_BY_DEST = {
   lead: [
@@ -62,6 +64,7 @@ export function PayloadTree({ obj, path = '', onSelect, mapping }) {
 
 export default function PayloadMapper({ payload, mapping, destination = 'lead', onChange }) {
   const targets = TARGETS_BY_DEST[destination] || TARGETS_BY_DEST.lead;
+  const [mapPath, setMapPath] = useState(null);
 
   function setMapping(target, source) {
     onChange({ ...mapping, [target]: source });
@@ -73,12 +76,6 @@ export default function PayloadMapper({ payload, mapping, destination = 'lead', 
     onChange(next);
   }
 
-  function handleSelect(path) {
-    const opts = targets.map((t) => t.key).join(', ');
-    const target = window.prompt(`Mapea "${path}" a qué campo CRM?\nOpciones: ${opts}`);
-    if (target && targets.find((t) => t.key === target)) setMapping(target, path);
-  }
-
   return (
     <div>
       <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">
@@ -86,7 +83,7 @@ export default function PayloadMapper({ payload, mapping, destination = 'lead', 
       </p>
       <div className="grid grid-cols-2 gap-3">
         <div className="border border-border rounded-xl p-3 bg-muted/10 max-h-72 overflow-y-auto">
-          <PayloadTree obj={payload} mapping={mapping} onSelect={handleSelect} />
+          <PayloadTree obj={payload} mapping={mapping} onSelect={setMapPath} />
         </div>
         <div className="border border-border rounded-xl p-3 space-y-1.5">
           <p className="text-[11px] font-bold uppercase text-muted-foreground">
@@ -109,6 +106,18 @@ export default function PayloadMapper({ payload, mapping, destination = 'lead', 
           ))}
         </div>
       </div>
+      <PromptDialog
+        open={!!mapPath}
+        title="Mapear campo del payload"
+        message={mapPath ? <>Selecciona a qué campo del CRM mapear <code className="font-mono text-foreground">{mapPath}</code>.</> : null}
+        options={targets.map(t => ({ value: t.key, label: t.label + (t.required ? ' *' : '') }))}
+        confirmLabel="Mapear"
+        onConfirm={(target) => {
+          if (target && targets.find((t) => t.key === target)) setMapping(target, mapPath);
+          setMapPath(null);
+        }}
+        onCancel={() => setMapPath(null)}
+      />
     </div>
   );
 }

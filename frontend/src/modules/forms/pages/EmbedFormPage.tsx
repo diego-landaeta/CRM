@@ -1,9 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 
 const API_BASE = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
 
-const FIELDS_BY_KIND = {
+type TemplateKind = 'contacto_basico' | 'lead_con_producto' | 'custom';
+
+interface FormField {
+  key: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  required: boolean;
+}
+
+interface FormMeta {
+  nombre: string;
+  template_kind: TemplateKind;
+  config?: {
+    color?: string;
+    button_label?: string;
+    success_msg?: string;
+    redirect_url?: string;
+  };
+  project?: { nombre?: string };
+}
+
+const FIELDS_BY_KIND: Record<TemplateKind, FormField[]> = {
   contacto_basico: [
     { key: 'nombre', label: 'Nombre', type: 'text', required: true },
     { key: 'email', label: 'Email', type: 'email', required: true },
@@ -19,10 +40,10 @@ const FIELDS_BY_KIND = {
 };
 
 export default function EmbedFormPage() {
-  const { embedId } = useParams();
-  const [meta, setMeta] = useState(null);
-  const [error, setError] = useState(null);
-  const [values, setValues] = useState({});
+  const { embedId } = useParams<{ embedId: string }>();
+  const [meta, setMeta] = useState<FormMeta | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -44,7 +65,7 @@ export default function EmbedFormPage() {
     ? (FIELDS_BY_KIND[meta.template_kind] || FIELDS_BY_KIND.contacto_basico)
     : [];
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     setSubmitting(true);
     try {
@@ -55,7 +76,7 @@ export default function EmbedFormPage() {
       });
       const json = await res.json();
       if (json.success) {
-        if (meta?.config?.redirect_url) {
+        if (meta?.config?.redirect_url && window.top) {
           window.top.location.href = meta.config.redirect_url;
         } else {
           setSubmitted(true);
@@ -70,7 +91,7 @@ export default function EmbedFormPage() {
     }
   }
 
-  const style = {
+  const style: CSSProperties = {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     minHeight: '100vh',
     display: 'flex',

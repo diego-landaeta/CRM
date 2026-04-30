@@ -7,11 +7,45 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { ShoppingBag, FloppyDisk, ArrowsClockwise, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
+interface WooCredentials {
+  store_url: string;
+  consumer_key: string;
+  consumer_secret?: string;
+  auto_sync_enabled?: boolean;
+  sync_interval_minutes?: number;
+}
+
+interface WooForm {
+  store_url: string;
+  consumer_key: string;
+  consumer_secret: string;
+  auto_sync_enabled: boolean;
+  sync_interval_minutes: number;
+}
+
+type RunStatus = 'success' | 'error' | 'running' | string;
+
+interface WooRun {
+  id: number;
+  started_at: string;
+  status: RunStatus;
+  total_fetched: number;
+  total_created: number;
+  total_updated: number;
+  total_skipped: number;
+  error_message?: string | null;
+}
+
+interface WooPreview {
+  count: number;
+  sample: Array<{ name: string }>;
+}
+
 export default function WooCommercePage() {
   const { activeProject } = useProjectContext();
-  const [creds, setCreds] = useState(null);
-  const [form, setForm] = useState({ store_url: '', consumer_key: '', consumer_secret: '', auto_sync_enabled: false, sync_interval_minutes: 30 });
-  const [runs, setRuns] = useState([]);
+  const [creds, setCreds] = useState<WooCredentials | null>(null);
+  const [form, setForm] = useState<WooForm>({ store_url: '', consumer_key: '', consumer_secret: '', auto_sync_enabled: false, sync_interval_minutes: 30 });
+  const [runs, setRuns] = useState<WooRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
 
@@ -24,36 +58,43 @@ export default function WooCommercePage() {
         client.get(`/woocommerce/runs?projectId=${activeProject.id}`),
       ]);
       if (c.success) {
-        setCreds(c.data);
-        if (c.data) setForm({ store_url: c.data.store_url, consumer_key: c.data.consumer_key, consumer_secret: '', auto_sync_enabled: c.data.auto_sync_enabled || false, sync_interval_minutes: c.data.sync_interval_minutes || 30 });
+        const data = c.data as WooCredentials | null;
+        setCreds(data);
+        if (data) setForm({ store_url: data.store_url, consumer_key: data.consumer_key, consumer_secret: '', auto_sync_enabled: data.auto_sync_enabled || false, sync_interval_minutes: data.sync_interval_minutes || 30 });
       }
-      if (r.success) setRuns(r.data);
+      if (r.success) setRuns((r.data as WooRun[]) || []);
     } finally { setLoading(false); }
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function saveCreds() {
+  async function saveCreds(): Promise<void> {
+    if (!activeProject?.id) return;
     try {
       await client.put('/woocommerce/credentials', { project_id: activeProject.id, ...form });
       toast({ title: 'Credenciales guardadas' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function importNow() {
+  async function importNow(): Promise<void> {
+    if (!activeProject?.id) return;
     setImporting(true);
     try {
       await client.post(`/woocommerce/runs/start?projectId=${activeProject.id}`);
       toast({ title: 'Import iniciado en background' });
       setTimeout(load, 3000);
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setImporting(false); }
   }
-  async function preview() {
+  async function preview(): Promise<void> {
+    if (!activeProject?.id) return;
     try {
       const res = await client.get(`/woocommerce/preview?projectId=${activeProject.id}`);
-      if (res.success) toast({ title: `${res.data.count} productos en la tienda`, description: `Sample: ${res.data.sample.map(s => s.name).join(', ')}` });
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+      if (res.success && res.data) {
+        const data = res.data as WooPreview;
+        toast({ title: `${data.count} productos en la tienda`, description: `Sample: ${data.sample.map(s => s.name).join(', ')}` });
+      }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
   return (

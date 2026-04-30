@@ -9,7 +9,27 @@ import { toast } from '@/shared/hooks/useToast';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
-const TRIGGERS = [
+type TriggerEvent = 'lead_created' | 'status_changed' | 'conversion_created' | 'manual';
+
+interface SequenceStep {
+  delay_hours: number;
+  subject: string;
+  body: string;
+}
+
+interface EmailSequence {
+  id?: number;
+  project_id?: number;
+  nombre: string;
+  trigger_event: TriggerEvent;
+  trigger_filter?: Record<string, unknown>;
+  steps: SequenceStep[];
+  active: boolean;
+  active_runs?: number;
+  completed_runs?: number;
+}
+
+const TRIGGERS: ReadonlyArray<{ v: TriggerEvent; label: string }> = [
   { v: 'lead_created', label: 'Cuando se crea un lead' },
   { v: 'status_changed', label: 'Cuando cambia el estado' },
   { v: 'conversion_created', label: 'Cuando se convierte' },
@@ -18,39 +38,41 @@ const TRIGGERS = [
 
 export default function EmailSequencesPage() {
   const { activeProject } = useProjectContext();
-  const [sequences, setSequences] = useState([]);
+  const [sequences, setSequences] = useState<EmailSequence[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const [editing, setEditing] = useState<EmailSequence | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<EmailSequence | null>(null);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
       const res = await client.get(`/email-sequences?projectId=${activeProject.id}`);
-      if (res.success) setSequences(res.data);
+      if (res.success) setSequences((res.data as EmailSequence[]) || []);
     } finally { setLoading(false); }
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleSave(seq) {
+  async function handleSave(seq: EmailSequence): Promise<void> {
+    if (!activeProject?.id) return;
     try {
       if (seq.id) await client.patch(`/email-sequences/${seq.id}`, seq);
       else await client.post('/email-sequences', { ...seq, project_id: activeProject.id });
       toast({ title: 'Guardado' });
       setEditing(null);
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  async function handleToggle(s) {
+  async function handleToggle(s: EmailSequence): Promise<void> {
     try { await client.patch(`/email-sequences/${s.id}`, { active: !s.active }); load(); }
-    catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
-  function handleDelete(s) { setPendingDelete(s); }
-  async function doDelete() {
+  function handleDelete(s: EmailSequence): void { setPendingDelete(s); }
+  async function doDelete(): Promise<void> {
+    if (!pendingDelete) return;
     try { await client.delete(`/email-sequences/${pendingDelete.id}`); load(); }
-    catch (err) { /* silencioso */ }
+    catch { /* silencioso */ }
     finally { setPendingDelete(null); }
   }
 
@@ -126,16 +148,22 @@ export default function EmailSequencesPage() {
   );
 }
 
-function SequenceEditor({ seq, onSave, onClose }) {
-  const [s, setS] = useState({ ...seq, steps: seq.steps?.length ? seq.steps : [{ delay_hours: 0, subject: '', body: '' }] });
+interface SequenceEditorProps {
+  seq: EmailSequence;
+  onSave: (seq: EmailSequence) => void | Promise<void>;
+  onClose: () => void;
+}
 
-  function updateStep(i, field, value) {
+function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
+  const [s, setS] = useState<EmailSequence>({ ...seq, steps: seq.steps?.length ? seq.steps : [{ delay_hours: 0, subject: '', body: '' }] });
+
+  function updateStep(i: number, field: keyof SequenceStep, value: string | number): void {
     const next = [...s.steps];
     next[i] = { ...next[i], [field]: value };
     setS({ ...s, steps: next });
   }
-  function addStep() { setS({ ...s, steps: [...s.steps, { delay_hours: 24, subject: '', body: '' }] }); }
-  function removeStep(i) { setS({ ...s, steps: s.steps.filter((_, idx) => idx !== i) }); }
+  function addStep(): void { setS({ ...s, steps: [...s.steps, { delay_hours: 24, subject: '', body: '' }] }); }
+  function removeStep(i: number): void { setS({ ...s, steps: s.steps.filter((_, idx) => idx !== i) }); }
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
@@ -160,7 +188,7 @@ function SequenceEditor({ seq, onSave, onClose }) {
           />
           <select
             value={s.trigger_event}
-            onChange={e => setS({ ...s, trigger_event: e.target.value })}
+            onChange={e => setS({ ...s, trigger_event: e.target.value as TriggerEvent })}
             aria-label="Evento que dispara la secuencia"
             className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
