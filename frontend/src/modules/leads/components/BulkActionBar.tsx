@@ -2,14 +2,30 @@ import { useState } from 'react';
 import { CheckCircle, Users, Export, CaretDown } from '@phosphor-icons/react';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 
+interface Gestor {
+  id: number;
+  nombre: string;
+}
+
+interface Props {
+  count: number;
+  onClear: () => void;
+  onChangeStatus: (status: string) => void;
+  onReassign: (gestorId: number) => void;
+  onExport: () => void;
+  gestores: Gestor[];
+  isAdmin: boolean;
+  loading?: boolean;
+}
+
 /**
  * Barra flotante de acciones bulk (cambio de estado, reasignación, export)
  * que aparece cuando hay leads seleccionados.
  */
 export default function BulkActionBar({
   count, onClear, onChangeStatus, onReassign, onExport, gestores, isAdmin, loading,
-}) {
-  const [openMenu, setOpenMenu] = useState(null); // null | 'status' | 'reassign'
+}: Props) {
+  const [openMenu, setOpenMenu] = useState<'status' | 'reassign' | null>(null);
 
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-card border border-border rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-[95vw]" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>

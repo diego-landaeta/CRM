@@ -6,14 +6,31 @@ import { toast } from '@/shared/hooks/useToast';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
 
-export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated }) {
+interface ProductOption {
+  id: number;
+  nombre: string;
+  categoria_nombre?: string | null;
+}
+
+interface Props {
+  value: string | undefined | null;
+  onChange: (value: string) => void;
+  products: ProductOption[];
+  projectId: number | null | undefined;
+  projectLabel?: string;
+  onProductCreated?: (p: ProductOption) => void;
+}
+
+export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [newOpen, setNewOpen] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
@@ -107,9 +124,23 @@ export default function ProductCombobox({ value, onChange, products, projectId, 
   );
 }
 
-function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, onCreated }) {
+interface Category {
+  id: number;
+  nombre: string;
+  parent_id?: number | null;
+}
+
+interface NewProductDialogProps {
+  projectId: number | null | undefined;
+  projectLabel: string;
+  initialName?: string;
+  onClose: () => void;
+  onCreated: (p: ProductOption) => void;
+}
+
+function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, onCreated }: NewProductDialogProps) {
   const [data, setData] = useState({ nombre: initialName, descripcion: '', categoria_id: '', subcategoria_id: '' });
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -124,7 +155,7 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
   const parentCategories = categories.filter(c => !c.parent_id);
   const subcategories = categories.filter(c => String(c.parent_id) === String(data.categoria_id));
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!data.nombre.trim()) return;
     setSaving(true);

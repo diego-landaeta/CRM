@@ -1,6 +1,7 @@
 import { Check, X, FacebookLogo, CircleNotch, ClockCounterClockwise } from '@phosphor-icons/react';
+import type { MetaUpload, MetaUploadHistoryItem } from '../api/audiences.api';
 
-const fmtNum = (n) => new Intl.NumberFormat('es-ES').format(Number(n || 0));
+const fmtNum = (n: number | string | null | undefined) => new Intl.NumberFormat('es-ES').format(Number(n || 0));
 
 const UPLOAD_STAGES = [
   { id: 'preparing', label: 'Preparando' },
@@ -9,7 +10,7 @@ const UPLOAD_STAGES = [
   { id: 'completed', label: 'Completado' },
 ];
 
-export function UploadStatusCard({ upload, onReset }) {
+export function UploadStatusCard({ upload, onReset }: { upload: MetaUpload; onReset: () => void }) {
   const currentIdx = UPLOAD_STAGES.findIndex(s => s.id === upload.status);
   const isDone = upload.status === 'completed';
 
@@ -76,7 +77,7 @@ export function UploadStatusCard({ upload, onReset }) {
   );
 }
 
-export function MetaHistorySection({ history, loading }) {
+export function MetaHistorySection({ history, loading }: { history: MetaUploadHistoryItem[]; loading: boolean }) {
   if (loading || !history || history.length === 0) return null;
 
   return (

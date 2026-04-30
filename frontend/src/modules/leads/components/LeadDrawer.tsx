@@ -21,24 +21,30 @@ const TABS = [
   { key: 'emails', label: 'Emails' },
 ];
 
-function fmtDate(d) {
+function fmtDate(d: string | null | undefined): string {
   if (!d) return '--';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function fmtDateTime(d) {
+function fmtDateTime(d: string | null | undefined): string {
   if (!d) return '--';
   return new Date(d).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function getInitials(name) {
+function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-export default function LeadDrawer({ leadId, open, onClose }) {
+interface Props {
+  leadId: number | string | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function LeadDrawer({ leadId, open, onClose }: Props) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('resumen');
+  const [tab, setTab] = useState<string>('resumen');
   const [enrollOpen, setEnrollOpen] = useState(false);
 
   const { lead, timeline, interacciones, reminders, loading, error, refetch } = useLeadDetail(open ? leadId : null);
@@ -49,7 +55,7 @@ export default function LeadDrawer({ leadId, open, onClose }) {
   // Cerrar con Esc
   useEffect(() => {
     if (!open) return;
-    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);

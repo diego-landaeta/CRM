@@ -45,7 +45,10 @@ export const STATUS_KEYS = [
   'no_interesado',
 ];
 
-export default function StatusBadge({ status, showIcon = false, className }) {
+/**
+ * @param {{ status: string; showIcon?: boolean; className?: string }} props
+ */
+export default function StatusBadge({ status, showIcon = false, className = '' }) {
   const style = STATUS_STYLES[status] || 'bg-muted text-muted-foreground';
   const label = STATUS_LABELS[status] || status;
   const Icon = STATUS_ICONS[status];

@@ -5,11 +5,27 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled }) {
+interface Sequence {
+  id: number;
+  nombre: string;
+  active: boolean;
+  steps?: unknown[];
+  steps_count?: number;
+  trigger_event?: string | null;
+}
+
+interface Props {
+  leadId: number | string | null;
+  open: boolean;
+  onClose: () => void;
+  onEnrolled?: () => void;
+}
+
+export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled }: Props) {
   const { activeProject } = useProjectContext();
-  const [sequences, setSequences] = useState([]);
+  const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [enrolling, setEnrolling] = useState(false);
 
   useEffect(() => {
@@ -34,7 +50,7 @@ export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled 
 
   useEffect(() => {
     if (!open) return;
-    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);

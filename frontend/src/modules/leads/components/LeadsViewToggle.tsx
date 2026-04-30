@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ListBullets, Kanban } from '@phosphor-icons/react';
 
-export default function LeadsViewToggle({ active }) {
+export default function LeadsViewToggle({ active }: { active: 'list' | 'kanban' }) {
   const baseClass = 'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors';
   const activeClass = 'bg-card text-foreground shadow-sm';
   const inactiveClass = 'text-muted-foreground hover:text-foreground';

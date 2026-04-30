@@ -81,6 +81,7 @@ export interface Lead {
   producto_nombre?: string | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
+  pais?: string | null;
   fecha_solicitud?: string | null;
   created_at: string;
   updated_at?: string;

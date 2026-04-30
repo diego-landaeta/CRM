@@ -7,7 +7,40 @@ import {
   X, UploadSimple, FileCsv, Check, WarningCircle, ArrowRight, Trash, Download,
 } from '@phosphor-icons/react';
 
-const REQUIRED_FIELDS = [
+type FieldKey = 'nombre' | 'email' | 'telefono' | 'canal' | 'producto_interes' | 'notas';
+
+interface FieldDef {
+  key: FieldKey;
+  label: string;
+  required: boolean;
+  hints: string[];
+}
+
+interface ParseResult {
+  headers: string[];
+  rows: string[][];
+}
+
+interface ImportError {
+  line: number;
+  error: string;
+}
+
+interface ImportProgress {
+  done: number;
+  ok: number;
+  fail: number;
+  errors: ImportError[];
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  projectId: number | null | undefined;
+  onImported?: (result: { ok: number; fail: number }) => void;
+}
+
+const REQUIRED_FIELDS: FieldDef[] = [
   { key: 'nombre', label: 'Nombre', required: true, hints: ['nombre', 'name', 'first name', 'lead', 'cliente'] },
   { key: 'email', label: 'Email', required: true, hints: ['email', 'correo', 'e-mail', 'mail'] },
   { key: 'telefono', label: 'Teléfono', required: false, hints: ['telefono', 'phone', 'movil', 'celular', 'whatsapp'] },
@@ -19,7 +52,7 @@ const REQUIRED_FIELDS = [
 const MAX_ROWS = 200;
 
 // Parser CSV simple (no maneja casos extremos de comillas anidadas pero ok para 95% de CSVs)
-function parseCsv(text) {
+function parseCsv(text: string): ParseResult {
   const lines = text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim());
   if (!lines.length) return { headers: [], rows: [] };
   const headers = parseLine(lines[0]);
@@ -27,8 +60,8 @@ function parseCsv(text) {
   return { headers, rows };
 }
 
-function parseLine(line) {
-  const out = [];
+function parseLine(line: string): string[] {
+  const out: string[] = [];
   let cur = '';
   let inQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -42,21 +75,21 @@ function parseLine(line) {
   return out;
 }
 
-function autoMatchHeader(header, hints) {
-  const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+function autoMatchHeader(header: string, hints: string[]): boolean {
+  const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
   const h = norm(header);
   return hints.some(hint => h.includes(norm(hint)));
 }
 
-export default function CsvImportDialog({ open, onClose, projectId, onImported }) {
+export default function CsvImportDialog({ open, onClose, projectId, onImported }: Props) {
   useEscapeKey(onClose, open);
-  const [step, setStep] = useState(1); // 1=upload, 2=mapping, 3=importing, 4=done
-  const [file, setFile] = useState(null);
-  const [parsed, setParsed] = useState({ headers: [], rows: [] });
-  const [mapping, setMapping] = useState({}); // { fieldKey: headerIndex }
-  const [progress, setProgress] = useState({ done: 0, ok: 0, fail: 0, errors: [] });
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1=upload, 2=mapping, 3=importing, 4=done
+  const [file, setFile] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<ParseResult>({ headers: [], rows: [] });
+  const [mapping, setMapping] = useState<Partial<Record<FieldKey, number>>>({});
+  const [progress, setProgress] = useState<ImportProgress>({ done: 0, ok: 0, fail: 0, errors: [] });
   const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -65,12 +98,12 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
     }
   }, [open]);
 
-  function handleFile(f) {
+  function handleFile(f: File | undefined) {
     if (!f) return;
     setFile(f);
     const reader = new FileReader();
     reader.onload = (e) => {
-      const data = parseCsv(e.target.result);
+      const data = parseCsv(String(e.target?.result || ''));
       if (!data.headers.length) {
         toast({ title: 'CSV vacio o invalido', variant: 'destructive' });
         return;
@@ -80,7 +113,7 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
       }
       setParsed({ headers: data.headers, rows: data.rows.slice(0, MAX_ROWS) });
       // Auto-match headers
-      const m = {};
+      const m: Partial<Record<FieldKey, number>> = {};
       REQUIRED_FIELDS.forEach(field => {
         const idx = data.headers.findIndex(h => autoMatchHeader(h, field.hints));
         if (idx !== -1) m[field.key] = idx;
@@ -95,10 +128,10 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
     if (!projectId) return;
     setStep(3);
     let ok = 0, fail = 0;
-    const errors = [];
+    const errors: ImportError[] = [];
     for (let i = 0; i < parsed.rows.length; i++) {
       const row = parsed.rows[i];
-      const data = {};
+      const data: Partial<Record<FieldKey, string>> = {};
       REQUIRED_FIELDS.forEach(field => {
         const idx = mapping[field.key];
         if (idx != null && row[idx]) data[field.key] = row[idx];
@@ -120,7 +153,7 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
         });
         if (res.success) ok++;
         else { fail++; errors.push({ line: i + 2, error: res.error || 'Error desconocido' }); }
-      } catch (err) {
+      } catch (err: any) {
         fail++;
         errors.push({ line: i + 2, error: err?.data?.error || err.message });
       }

@@ -51,7 +51,10 @@ const CHANNEL_ICONS = {
   otro: DotsThree,
 };
 
-export default function ChannelBadge({ channel, showIcon = true, className }) {
+/**
+ * @param {{ channel: string | null | undefined; showIcon?: boolean; className?: string }} props
+ */
+export default function ChannelBadge({ channel, showIcon = true, className = '' }) {
   const key = channel || 'otro';
   const style = CHANNEL_STYLES[key] || CHANNEL_STYLES.otro;
   const label = CHANNEL_LABELS[key] || key;

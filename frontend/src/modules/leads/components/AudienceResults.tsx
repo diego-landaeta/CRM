@@ -1,9 +1,21 @@
 import { Check, Download, WarningCircle, CloudArrowUp, CircleNotch } from '@phosphor-icons/react';
 import { MIN_AUDIENCE_SIZE } from '../hooks/useAudienceWizard';
+import type { AudienceLeadSample } from '../api/audiences.api';
 
-const fmtNum = (n) => new Intl.NumberFormat('es-ES').format(Number(n || 0));
+const fmtNum = (n: number | string | null | undefined) => new Intl.NumberFormat('es-ES').format(Number(n || 0));
 
-export function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onDownload, onMetaUpload, downloadLoading, metaInFlight }) {
+interface ResultsHeaderProps {
+  totalCount: number;
+  loading: boolean;
+  meetsMinimum: boolean;
+  filename: string;
+  onDownload: () => void;
+  onMetaUpload: () => void;
+  downloadLoading: boolean;
+  metaInFlight: boolean;
+}
+
+export function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onDownload, onMetaUpload, downloadLoading, metaInFlight }: ResultsHeaderProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -56,7 +68,13 @@ export function ResultsHeader({ totalCount, loading, meetsMinimum, filename, onD
   );
 }
 
-export function BreakdownCard({ title, data, colors }) {
+interface BreakdownCardProps {
+  title: string;
+  data: Record<string, number>;
+  colors?: Record<string, string> | null;
+}
+
+export function BreakdownCard({ title, data, colors }: BreakdownCardProps) {
   const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
   const entries = Object.entries(data).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   return (
@@ -83,7 +101,7 @@ export function BreakdownCard({ title, data, colors }) {
   );
 }
 
-export function SampleTable({ sample, totalCount }) {
+export function SampleTable({ sample, totalCount }: { sample: AudienceLeadSample[]; totalCount: number }) {
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">

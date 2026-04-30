@@ -3,11 +3,24 @@ import { CalendarPlus } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
+interface LeadLite {
+  id: number;
+  nombre?: string;
+  email?: string;
+}
+
+interface Props {
+  open: boolean;
+  lead: LeadLite | null;
+  onClose: () => void;
+  onSaved?: () => void;
+}
+
 /**
  * Mini-dialog inline para crear un recordatorio rápido sobre un lead.
  * Pre-rellena fecha = mañana 10:00 al abrirse.
  */
-export default function ReminderQuickDialog({ open, lead, onClose, onSaved }) {
+export default function ReminderQuickDialog({ open, lead, onClose, onSaved }: Props) {
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('10:00');
   const [nota, setNota] = useState('');

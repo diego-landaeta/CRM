@@ -5,6 +5,31 @@ import {
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
 import { cleanPhone } from '../lib/leadFormat';
 
+interface LeadLite {
+  id: number;
+  nombre?: string;
+  telefono?: string | null;
+  estado?: string;
+}
+
+interface WhatsappTemplate {
+  id: string | number;
+  label: string;
+  text: string;
+}
+
+interface Props {
+  lead: LeadLite;
+  onMarkContacted?: (lead: LeadLite) => void;
+  onConvert?: (lead: LeadLite) => void;
+  onLogInteraction?: (lead: LeadLite, kind: string) => void;
+  onCreateReminder?: (lead: LeadLite) => void;
+  onEnrollSequence?: (lead: LeadLite) => void;
+  templates?: WhatsappTemplate[];
+  projectName?: string;
+  onEditTemplates?: () => void;
+}
+
 /**
  * Iconos de acción rápida en cada fila/card de lead. Mantiene su propio
  * estado para el menú desplegable de plantillas WhatsApp.
@@ -19,11 +44,11 @@ export default function QuickActions({
   templates,
   projectName,
   onEditTemplates,
-}) {
+}: Props) {
   const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
   const [waMenuOpen, setWaMenuOpen] = useState(false);
 
-  function openWhatsappWithTemplate(tpl) {
+  function openWhatsappWithTemplate(tpl: WhatsappTemplate | null) {
     const text = tpl ? fillTemplate(tpl.text, { lead, projectName }) : '';
     const url = `https://wa.me/${wa}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
     window.open(url, '_blank', 'noopener');

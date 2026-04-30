@@ -2,12 +2,27 @@ import { useEffect, useState } from 'react';
 import { X, Plus, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
+interface Template {
+  id: string | number;
+  label: string;
+  text: string;
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  templates?: Template[];
+  onSave: (templates: Template[]) => void;
+  onReset?: () => void;
+  projectName?: string;
+}
+
 /**
  * Editor de plantillas WhatsApp por proyecto. Persistencia en localStorage
  * vía useWhatsappTemplates hook (el dueño le pasa onSave/onReset).
  */
-export default function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, projectName }) {
-  const [draft, setDraft] = useState([]);
+export default function WhatsappTemplatesDialog({ open, onClose, templates, onSave, onReset, projectName }: Props) {
+  const [draft, setDraft] = useState<Template[]>([]);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -19,7 +34,7 @@ export default function WhatsappTemplatesDialog({ open, onClose, templates, onSa
 
   if (!open) return null;
 
-  function updateField(idx, field, value) {
+  function updateField(idx: number, field: keyof Template, value: string) {
     setDraft((d) => d.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
     setDirty(true);
   }
@@ -27,7 +42,7 @@ export default function WhatsappTemplatesDialog({ open, onClose, templates, onSa
     setDraft((d) => [...d, { id: `tpl_${Date.now()}`, label: 'Nueva plantilla', text: 'Hola {nombre}, ' }]);
     setDirty(true);
   }
-  function removeTemplate(idx) {
+  function removeTemplate(idx: number) {
     setDraft((d) => d.filter((_, i) => i !== idx));
     setDirty(true);
   }

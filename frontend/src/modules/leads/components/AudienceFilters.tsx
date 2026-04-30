@@ -1,6 +1,11 @@
 import { Check } from '@phosphor-icons/react';
 
-export function FilterSection({ title, count, children }) {
+interface CheckListOption {
+  v: string;
+  label: string;
+}
+
+export function FilterSection({ title, count = 0, children }: { title: string; count?: number; children: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -14,7 +19,7 @@ export function FilterSection({ title, count, children }) {
   );
 }
 
-export function CheckList({ options, selected, onToggle }) {
+export function CheckList({ options, selected, onToggle }: { options: CheckListOption[]; selected: string[]; onToggle: (v: string) => void }) {
   return (
     <div className="space-y-1.5">
       {options.map(opt => {

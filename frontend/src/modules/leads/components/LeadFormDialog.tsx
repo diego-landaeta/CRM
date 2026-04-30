@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS } from '../validation/lead.schema';
+import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
@@ -9,8 +9,34 @@ import Portal from '@/shared/components/ui/portal';
 import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import type { Lead } from '@/shared/types';
 
-function Field({ label, error, hint, children }) {
+interface CustomFieldDef {
+  id: number;
+  field_key: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'textarea' | 'select' | 'boolean';
+  required?: boolean;
+  options?: string[];
+}
+
+interface DuplicateLead {
+  id: number;
+  nombre: string;
+  email: string;
+  status?: string;
+  estado?: string;
+  created_at: string;
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  lead: Lead | null;
+  onSubmit: (data: LeadFormData & { custom_fields: Record<string, unknown> }) => Promise<void> | void;
+}
+
+function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
@@ -27,16 +53,16 @@ const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 
 const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
 const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
-export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
+export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
   const { activeProject } = useProjectContext();
   const { products, refetch: refetchProducts } = useProducts(activeProject?.id);
   const isEdit = !!lead;
   const productoLabel = activeProject?.producto_label || 'Producto';
 
-  const [customFields, setCustomFields] = useState([]);
-  const [customValues, setCustomValues] = useState({});
-  const [duplicates, setDuplicates] = useState([]);
+  const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
+  const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
 
   const {
     register,
@@ -46,7 +72,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
     control,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm({
+  } = useForm<LeadFormData>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
       nombre: '', email: '', telefono: '',
@@ -74,24 +100,24 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
         nombre: lead.nombre || '',
         email: lead.email || '',
         telefono: lead.telefono || '',
-        origen: lead.origen?.toLowerCase().replace(' ', '_') || 'directo',
+        origen: ((lead.origen as string)?.toLowerCase().replace(' ', '_') || 'directo') as LeadFormData['origen'],
         pais: lead.pais || '',
         producto_interes: lead.producto_interes || '',
         notas: '',
       } : {
         nombre: '', email: '', telefono: '', origen: 'directo', producto_interes: '', notas: '',
       });
-      setCustomValues(lead?.custom_fields || {});
+      setCustomValues((lead?.custom_fields as Record<string, unknown>) || {});
     }
   }, [open, lead, reset]);
 
   // Deteccion de duplicado debounce
-  const checkDuplicates = useCallback(async (email) => {
+  const checkDuplicates = useCallback(async (email: string | undefined): Promise<void> => {
     if (!email || !email.includes('@') || !activeProject?.id || isEdit) { setDuplicates([]); return; }
     try {
       const res = await client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(email)}&limit=5`);
       if (res.success) {
-        const matches = (res.data || []).filter(l => (l.email || '').toLowerCase() === email.toLowerCase());
+        const matches = ((res.data as DuplicateLead[]) || []).filter((l) => (l.email || '').toLowerCase() === email.toLowerCase());
         setDuplicates(matches);
       }
     } catch { setDuplicates([]); }
@@ -104,7 +130,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
 
   if (!open) return null;
 
-  async function handleFormSubmit(data) {
+  async function handleFormSubmit(data: LeadFormData): Promise<void> {
     await onSubmit({ ...data, custom_fields: customValues });
     onClose();
   }
@@ -204,14 +230,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
                       </label>
                       {f.type === 'textarea' ? (
                         <textarea
-                          value={customValues[f.field_key] || ''}
+                          value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
                           required={f.required}
                           className={inputClass + ' h-20 py-2 resize-none'}
                         />
                       ) : f.type === 'select' ? (
                         <select
-                          value={customValues[f.field_key] || ''}
+                          value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
                           required={f.required}
                           className={selectClass} style={selectBg}
@@ -230,7 +256,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }) {
                       ) : (
                         <input
                           type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                          value={customValues[f.field_key] || ''}
+                          value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
                           required={f.required}
                           className={inputClass}
