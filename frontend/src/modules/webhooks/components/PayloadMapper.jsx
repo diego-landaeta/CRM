@@ -20,12 +20,18 @@ const TARGETS_BY_DEST = {
   ],
 };
 
-export function PayloadTree({ obj, path = '', onSelect, mapping }) {
+// Límites para evitar freezes con payloads adversariales o muy grandes
+const MAX_DEPTH = 6;
+const MAX_OBJECT_KEYS = 50;
+const MAX_ARRAY_ITEMS = 5;
+
+export function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }) {
   if (obj === null || obj === undefined) return <span className="text-muted-foreground italic">null</span>;
   if (typeof obj !== 'object') {
     const usedAs = Object.entries(mapping || {}).find(([, v]) => v === path)?.[0];
     return (
       <button
+        type="button"
         onClick={() => onSelect(path)}
         className={`text-left px-1.5 py-0.5 rounded text-[11px] font-mono hover:bg-primary/10 ${usedAs ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : ''}`}
         title={usedAs ? `Mapeado a: ${usedAs}` : 'Click para mapear'}
@@ -34,30 +40,40 @@ export function PayloadTree({ obj, path = '', onSelect, mapping }) {
       </button>
     );
   }
+  if (depth >= MAX_DEPTH) {
+    return <span className="text-[10px] text-muted-foreground italic">… (profundidad máx alcanzada)</span>;
+  }
   if (Array.isArray(obj)) {
     return (
       <ul className="ml-3 space-y-0.5">
-        {obj.slice(0, 5).map((v, i) => (
+        {obj.slice(0, MAX_ARRAY_ITEMS).map((v, i) => (
           <li key={i} className="text-[11px]">
             <span className="text-muted-foreground">[{i}]:</span>{' '}
-            <PayloadTree obj={v} path={`${path}.${i}`.replace(/^\./, '')} onSelect={onSelect} mapping={mapping} />
+            <PayloadTree obj={v} path={`${path}.${i}`.replace(/^\./, '')} onSelect={onSelect} mapping={mapping} depth={depth + 1} />
           </li>
         ))}
-        {obj.length > 5 && <li className="text-[10px] text-muted-foreground italic">... +{obj.length - 5} más</li>}
+        {obj.length > MAX_ARRAY_ITEMS && <li className="text-[10px] text-muted-foreground italic">... +{obj.length - MAX_ARRAY_ITEMS} más</li>}
       </ul>
     );
   }
+  const entries = Object.entries(obj);
+  const visible = entries.slice(0, MAX_OBJECT_KEYS);
   return (
     <ul className="space-y-0.5">
-      {Object.entries(obj).map(([k, v]) => {
+      {visible.map(([k, v]) => {
         const childPath = path ? `${path}.${k}` : k;
         return (
           <li key={k} className="text-[11px]">
             <span className="font-bold text-foreground">{k}:</span>{' '}
-            <PayloadTree obj={v} path={childPath} onSelect={onSelect} mapping={mapping} />
+            <PayloadTree obj={v} path={childPath} onSelect={onSelect} mapping={mapping} depth={depth + 1} />
           </li>
         );
       })}
+      {entries.length > MAX_OBJECT_KEYS && (
+        <li className="text-[10px] text-muted-foreground italic">
+          ... +{entries.length - MAX_OBJECT_KEYS} keys más (límite {MAX_OBJECT_KEYS})
+        </li>
+      )}
     </ul>
   );
 }

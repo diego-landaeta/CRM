@@ -242,6 +242,8 @@ function WebhookTokensTab({ project }) {
     try {
       const res = await client.get(`/webhook-tokens?projectId=${project.id}&kind=matriculas`);
       if (res.success) setTokens(res.data);
+    } catch (err) {
+      toast({ title: 'Error cargando webhooks de admisión', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }, [project?.id]);
 

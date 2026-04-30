@@ -312,13 +312,25 @@ function PayableDialog({ projectId, onClose, onSaved }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!data.proveedor || !data.concepto || !data.importe_total) return;
+    if (!data.proveedor?.trim()) {
+      toast({ title: 'Proveedor requerido', variant: 'destructive' });
+      return;
+    }
+    if (!data.concepto?.trim()) {
+      toast({ title: 'Concepto requerido', variant: 'destructive' });
+      return;
+    }
+    const importe = Number(data.importe_total);
+    if (!data.importe_total || isNaN(importe) || importe <= 0) {
+      toast({ title: 'Importe inválido', description: 'Debe ser mayor que 0.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       await payableApi.create({
         ...data,
         project_id: projectId || null,
-        importe_total: Number(data.importe_total),
+        importe_total: importe,
         fecha_compromiso_pago: data.fecha_compromiso_pago || null,
       });
       toast({ title: 'Factura creada' });

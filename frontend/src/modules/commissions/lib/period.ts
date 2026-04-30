@@ -23,6 +23,16 @@ export function monthLabel(year: number, month: number): string {
 
 export function isInMonth(dateStr: string | null | undefined, year: number, month: number): boolean {
   if (!dateStr) return false;
+  // Si viene como ISO con T (timestamp) parsear solo la parte de fecha (YYYY-MM-DD).
+  // Esto evita que un "2026-01-31T23:30:00Z" se desplace a febrero por timezone local.
+  const datePart = String(dateStr).split('T')[0];
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    return y === year && mo === month;
+  }
+  // Fallback: parseo Date estándar (formatos no-ISO)
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return false;
   return d.getFullYear() === year && d.getMonth() + 1 === month;

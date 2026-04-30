@@ -46,6 +46,18 @@ describe('CommissionsPage period helpers (CRM-138)', () => {
       // T12:00 evita el flake por timezone (UTC midnight retrocedería un día en TZ negativos)
       expect(isInMonth('2026-04-01T12:00:00', 2026, 4)).toBe(true);
     });
+
+    it('UTC tarde-noche del último día NO se desplaza al siguiente mes', () => {
+      // Bug previo: "2026-01-31T23:30:00Z" parseado en Spain (UTC+1) cae en feb 1.
+      // Con el fix, parsea solo la parte de fecha (2026-01-31) → enero.
+      expect(isInMonth('2026-01-31T23:30:00Z', 2026, 1)).toBe(true);
+      expect(isInMonth('2026-01-31T23:30:00Z', 2026, 2)).toBe(false);
+    });
+
+    it('formato YYYY-MM-DD plano sigue funcionando', () => {
+      expect(isInMonth('2026-04-15', 2026, 4)).toBe(true);
+      expect(isInMonth('2026-12-31', 2026, 12)).toBe(true);
+    });
   });
 
   describe('buildCommissionsCsv', () => {

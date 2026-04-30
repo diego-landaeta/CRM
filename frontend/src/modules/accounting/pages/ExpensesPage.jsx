@@ -53,6 +53,8 @@ export default function ExpensesPage() {
       if (filterCat) params.categoria = filterCat;
       const res = await accountingApi.listExpenses(params);
       if (res.success) setExpenses(res.data);
+    } catch (err) {
+      toast({ title: 'Error cargando egresos', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }

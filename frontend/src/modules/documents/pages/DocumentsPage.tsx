@@ -44,6 +44,12 @@ function PreviewModal({ doc, onClose }: PreviewModalProps) {
           },
           body: JSON.stringify({ type: doc.type, data: doc.data }),
         });
+        if (!res.ok) {
+          // Backend respondió error — NO inyectamos el body (puede ser HTML/JSON
+          // y se renderizaría en el iframe con riesgo XSS).
+          setHtml(`<p style="padding:2rem;color:#dc2626;font-family:sans-serif">Error ${res.status} al generar la previsualización.</p>`);
+          return;
+        }
         const text = await res.text();
         setHtml(text);
       } catch {

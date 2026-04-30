@@ -44,6 +44,18 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }) {
 
   async function handleSave(e) {
     e.preventDefault();
+    if (!form.nombre?.trim()) {
+      toast({ title: 'Nombre requerido', variant: 'destructive' });
+      return;
+    }
+    if (!existing && !form.slug?.trim()) {
+      toast({ title: 'Slug requerido', description: 'Identificador único del proyecto.', variant: 'destructive' });
+      return;
+    }
+    if (!existing && !/^[a-z0-9-]+$/.test(form.slug.trim())) {
+      toast({ title: 'Slug inválido', description: 'Solo minúsculas, números y guiones.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const payload = {

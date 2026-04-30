@@ -116,7 +116,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (!lead) return;
+    if (!lead?.id) {
+      toast({ title: 'Lead inválido', description: 'No se pudo identificar el lead asociado.', variant: 'destructive' });
+      return;
+    }
     const importe = Number(form.importe_total);
     if (!form.producto_contratado?.trim()) {
       toast({ title: 'Producto requerido', variant: 'destructive' });

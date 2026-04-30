@@ -61,7 +61,19 @@ export default function UsersTab() {
 
   async function handleCreateUser(e) {
     e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) return;
+    if (!newName.trim()) {
+      toast({ title: 'Nombre requerido', variant: 'destructive' });
+      return;
+    }
+    if (!newEmail.trim()) {
+      toast({ title: 'Email requerido', variant: 'destructive' });
+      return;
+    }
+    // Validación básica de email (HTML5 type="email" no garantiza forma)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+      toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
+      return;
+    }
     if (newProjects.length === 0) {
       toast({ title: 'Error', description: 'Debes asignar al menos un proyecto', variant: 'destructive' });
       return;

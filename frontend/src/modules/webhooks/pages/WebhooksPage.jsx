@@ -25,6 +25,8 @@ export default function WebhooksPage() {
     try {
       const res = await client.get(`/forms?projectId=${activeProject.id}&kind=webhook`);
       if (res.success) setWebhooks(res.data);
+    } catch (err) {
+      toast({ title: 'Error cargando webhooks', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }

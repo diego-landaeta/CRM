@@ -49,6 +49,8 @@ export default function EmailSequencesPage() {
     try {
       const res = await client.get(`/email-sequences?projectId=${activeProject.id}`);
       if (res.success) setSequences((res.data as EmailSequence[]) || []);
+    } catch (err: any) {
+      toast({ title: 'Error cargando secuencias', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }, [activeProject?.id]);
 

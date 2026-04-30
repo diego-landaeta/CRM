@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountingApi } from '../api/accounting.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { toast } from '@/shared/hooks/useToast';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -49,6 +50,8 @@ export default function AccountingDashboardPage() {
           to: range.to,
         });
         if (res.success) setData(res.data);
+      } catch (err) {
+        toast({ title: 'Error cargando dashboard', description: err?.data?.error || err.message, variant: 'destructive' });
       } finally {
         setLoading(false);
       }
