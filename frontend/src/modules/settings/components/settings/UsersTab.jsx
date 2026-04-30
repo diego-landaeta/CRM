@@ -406,7 +406,7 @@ export default function UsersTab() {
 function UserActionsMenu({ isActive, isOpen, onToggle, onClose, onEdit, onToggleActive }) {
   return (
     <div className="relative inline-block">
-      <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+      <button onClick={onToggle} aria-label="Acciones de usuario" aria-haspopup="menu" aria-expanded={isOpen} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40">
         <DotsThreeVertical size={18} weight="bold" />
       </button>
       {isOpen && (

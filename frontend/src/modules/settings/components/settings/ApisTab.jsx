@@ -119,7 +119,7 @@ function CredentialCard({ service, projectName, credential, onConfigure, onTest,
           }`}>{credential.last_test_result || 'sin probar'}</span>
           <button onClick={onTest} className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-xs font-semibold">Test</button>
           <button onClick={onConfigure} className="px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted">Editar</button>
-          <button onClick={onDelete} className="p-2 rounded-lg hover:bg-red-50 text-red-500"><X size={14} /></button>
+          <button onClick={onDelete} aria-label="Eliminar credencial" className="p-2 rounded-lg hover:bg-red-50 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"><X size={14} /></button>
         </>
       ) : (
         <>
