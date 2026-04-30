@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
@@ -69,6 +69,11 @@ export default function LeadDetailPage() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [lossOpen, setLossOpen] = useState(false);
   const [gestores, setGestores] = useState([]);
+  const scrollTimeoutRef = useRef(null);
+
+  useEffect(() => () => {
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+  }, []);
 
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
@@ -97,7 +102,8 @@ export default function LeadDetailPage() {
         title: 'Registra la compra',
         description: 'Ve al apartado "Historial de compras" más abajo y registra la conversión con importe y método de pago.',
       });
-      setTimeout(() => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
         document.querySelector('[data-section="compras"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 100);
       return;

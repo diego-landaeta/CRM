@@ -207,9 +207,9 @@ function PlanEditor({ plan, users, onSave, onClose }: PlanEditorProps) {
   const usr = users.find(u => u.id === p.user_id);
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="plan-editor-title" className="bg-card rounded-2xl border border-border max-w-md w-full" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-extrabold">Plan: {usr?.nombre}</h3>
+          <h3 id="plan-editor-title" className="font-extrabold">Plan: {usr?.nombre}</h3>
           <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3">

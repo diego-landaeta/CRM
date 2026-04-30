@@ -167,9 +167,9 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="seq-editor-title" className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-extrabold">{s.id ? 'Editar' : 'Nueva'} secuencia</h3>
+          <h3 id="seq-editor-title" className="font-extrabold">{s.id ? 'Editar' : 'Nueva'} secuencia</h3>
           <button
             onClick={onClose}
             aria-label="Cerrar editor"

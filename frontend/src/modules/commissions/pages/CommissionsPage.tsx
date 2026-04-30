@@ -15,13 +15,7 @@ import client from '@/shared/api/client';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { monthLabel, isInMonth, buildCommissionsCsv, type CommissionRow } from '../lib/period';
 import type { User, Project } from '@/shared/types';
-
-function fmt(n: number | string | null | undefined): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
-}
-function formatDate(d: string | null | undefined): string {
-  return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--';
-}
+import { formatCurrencyShort as fmt, formatDate } from '@/shared/lib/format';
 
 function exportCommissionsCsv(items: CommissionRow[], period: string): void {
   const { csv, filename } = buildCommissionsCsv(items, period);

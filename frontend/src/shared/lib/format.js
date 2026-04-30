@@ -1,0 +1,77 @@
+// Formatters compartidos. Antes había ~16 copias de formatCurrency,
+// ~5 de formatNumber y ~18 de formatDate desperdigadas por el código.
+// Centralizar aquí evita drift de formato entre páginas.
+
+const LOCALE = 'es-ES';
+
+const eurFormatter = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'EUR' });
+const eurNoDecFormatter = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const numberFormatter = new Intl.NumberFormat(LOCALE);
+
+/**
+ * Importe en EUR con dos decimales: "1.234,56 €"
+ * @param {number|string|null|undefined} n
+ */
+export function formatCurrency(n) {
+  return eurFormatter.format(Number(n || 0));
+}
+
+/**
+ * Importe en EUR sin decimales: "1.234 €" (KPIs grandes, dashboards).
+ * @param {number|string|null|undefined} n
+ */
+export function formatCurrencyShort(n) {
+  return eurNoDecFormatter.format(Number(n || 0));
+}
+
+/**
+ * Número entero con separadores: "1.234".
+ * @param {number|string|null|undefined} n
+ */
+export function formatNumber(n) {
+  return numberFormatter.format(Number(n || 0));
+}
+
+/**
+ * Fecha corta es-ES: "15 mar." (sin año).
+ * @param {string|Date|null|undefined} d
+ */
+export function formatDateShort(d) {
+  if (!d) return '--';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short' });
+}
+
+/**
+ * Fecha media es-ES: "15 mar. 2024" — la variante más usada en el CRM.
+ * @param {string|Date|null|undefined} d
+ */
+export function formatDate(d) {
+  if (!d) return '--';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Fecha numérica completa: "15/03/2024".
+ * @param {string|Date|null|undefined} d
+ */
+export function formatDateNumeric(d) {
+  if (!d) return '--';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString(LOCALE);
+}
+
+/**
+ * Fecha + hora: "15 mar. 2024, 14:30".
+ * @param {string|Date|null|undefined} d
+ */
+export function formatDateTime(d) {
+  if (!d) return '--';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}

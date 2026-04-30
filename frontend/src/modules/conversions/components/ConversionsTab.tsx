@@ -6,6 +6,8 @@ import PaymentDialog from './PaymentDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import { formatCurrency, formatDate } from '@/shared/lib/format';
+
 interface ConversionsTabTarget {
   id: number;
   nombre?: string;
@@ -16,15 +18,6 @@ interface ConversionsTabProps {
   lead: ConversionsTabTarget | null | undefined;
   projectId: number;
   canManage?: boolean;
-}
-
-function formatCurrency(n: number | string | null | undefined): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
-}
-
-function formatDate(d: string | null | undefined): string {
-  if (!d) return '--';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function ConversionsTab({ lead, projectId, canManage }: ConversionsTabProps) {

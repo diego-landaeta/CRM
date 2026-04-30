@@ -408,9 +408,9 @@ function WebhookEditor({ token, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="webhook-editor-title" className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-extrabold">{token ? 'Editar' : 'Nuevo'} webhook de admisión</h3>
+          <h3 id="webhook-editor-title" className="font-extrabold">{token ? 'Editar' : 'Nuevo'} webhook de admisión</h3>
           <button
             onClick={onClose}
             aria-label="Cerrar editor"
@@ -582,10 +582,10 @@ function MatriculaDetail({ matricula, onClose, onChange, onEstado }) {
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="matricula-detail-title" className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
-            <h3 className="font-extrabold">{m.lead_nombre}</h3>
+            <h3 id="matricula-detail-title" className="font-extrabold">{m.lead_nombre}</h3>
             <p className="text-xs text-muted-foreground">{m.producto_contratado} · {m.lead_email}</p>
           </div>
           <button

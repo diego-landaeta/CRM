@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 let toastId = 0;
 let listeners = [];
@@ -17,14 +17,23 @@ export function toast({ title, description = undefined, variant = 'default', dur
 
 export function useToast() {
   const [toasts, setToasts] = useState([]);
+  // Track de timeouts activos para limpiarlos al desmontar
+  const timeoutsRef = useRef(new Set());
+
+  useEffect(() => () => {
+    timeoutsRef.current.forEach((t) => clearTimeout(t));
+    timeoutsRef.current.clear();
+  }, []);
 
   const addListener = useCallback(() => {
     const handler = (newToast) => {
       setToasts((prev) => [...prev, newToast]);
       if (newToast.duration > 0) {
-        setTimeout(() => {
-          setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
+        const t = setTimeout(() => {
+          setToasts((prev) => prev.filter((x) => x.id !== newToast.id));
+          timeoutsRef.current.delete(t);
         }, newToast.duration);
+        timeoutsRef.current.add(t);
       }
     };
     listeners.push(handler);

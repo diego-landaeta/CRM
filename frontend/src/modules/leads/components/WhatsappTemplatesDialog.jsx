@@ -44,10 +44,10 @@ export default function WhatsappTemplatesDialog({ open, onClose, templates, onSa
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="wa-templates-title" className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b">
           <div>
-            <h2 className="text-base font-semibold">Plantillas de WhatsApp</h2>
+            <h2 id="wa-templates-title" className="text-base font-semibold">Plantillas de WhatsApp</h2>
             <p className="text-xs text-muted-foreground">Para {projectName || 'este proyecto'} - guardadas en este navegador</p>
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} /></button>

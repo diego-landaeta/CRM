@@ -4,6 +4,7 @@ import { X } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import { formatCurrency } from '@/shared/lib/format';
 
 interface PaymentForm {
   importe: string;
@@ -16,10 +17,6 @@ interface PaymentDialogProps {
   onClose: () => void;
   conversion: Conversion | null;
   onPaid?: () => void;
-}
-
-function formatCurrency(n: number | string | null | undefined): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 }
 
 export default function PaymentDialog({ open, onClose, conversion, onPaid }: PaymentDialogProps) {
@@ -84,7 +81,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
               <h2 className="text-lg font-semibold">Registrar abono</h2>
               <p className="text-xs text-muted-foreground mt-0.5">{conversion.producto_contratado}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
+            <button type="button" onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted">
               <X size={18} weight="bold" />
             </button>
           </div>
@@ -123,7 +120,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
 
             <div>
               <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha</label>
-              <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
+              <input type="date" aria-label="Fecha del abono" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className={inputClass} />
             </div>
 
             <div>

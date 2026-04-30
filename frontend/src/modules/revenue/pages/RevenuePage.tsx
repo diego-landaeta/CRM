@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatNumber } from '@/shared/lib/format';
 
 type TipoPago = 'pago_completo' | 'abono_parcial' | string;
 
@@ -29,7 +30,7 @@ const TIPO_STYLES: Record<string, string> = {
 };
 
 function fmt(n: number | string | null | undefined): string {
-  return Number(n || 0).toLocaleString('es-ES');
+  return formatNumber(n);
 }
 
 function fmtDate(d: string | null | undefined): string {

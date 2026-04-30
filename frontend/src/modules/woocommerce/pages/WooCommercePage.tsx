@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -48,6 +48,11 @@ export default function WooCommercePage() {
   const [runs, setRuns] = useState<WooRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const reloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
+  }, []);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -82,7 +87,8 @@ export default function WooCommercePage() {
     try {
       await client.post(`/woocommerce/runs/start?projectId=${activeProject.id}`);
       toast({ title: 'Import iniciado en background' });
-      setTimeout(load, 3000);
+      if (reloadTimeoutRef.current) clearTimeout(reloadTimeoutRef.current);
+      reloadTimeoutRef.current = setTimeout(load, 3000);
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setImporting(false); }
   }

@@ -174,9 +174,9 @@ function FormEditor({ form, onSave, onClose }: FormEditorProps) {
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="form-editor-title" className="bg-card rounded-2xl border border-border max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-extrabold">{f.id ? 'Editar' : 'Nuevo'} form</h3>
+          <h3 id="form-editor-title" className="font-extrabold">{f.id ? 'Editar' : 'Nuevo'} form</h3>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-muted" aria-label="Cerrar"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3">
@@ -234,9 +234,9 @@ function EmbedDialog({ form, onClose }: EmbedDialogProps) {
   const scriptHtml = `<div id="crm-form-${form.embed_id}"></div>\n<script src="${window.location.origin}/embed/form.js" data-form-id="${form.embed_id}"></script>`;
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="form-embed-title" className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-extrabold">Embed: {form.nombre}</h3>
+          <h3 id="form-embed-title" className="font-extrabold">Embed: {form.nombre}</h3>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-muted" aria-label="Cerrar"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-3 text-xs">

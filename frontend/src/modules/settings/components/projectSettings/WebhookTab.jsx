@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Copy, CheckCircle, Eye, EyeSlash, ArrowsClockwise } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
@@ -9,11 +9,21 @@ export default function WebhookTab({ project }) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(null);
   const [apiKey, setApiKey] = useState(project.webhook_api_key);
+  const copiedTimeoutRef = useRef(null);
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
   const url = `${baseUrl}/leads/webhooks/${project.slug}`;
 
+  useEffect(() => () => {
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+  }, []);
+
   async function doCopy(text, key) {
-    try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); } catch {}
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = setTimeout(() => setCopied(null), 2000);
+    } catch {}
   }
 
   function regenerate() {

@@ -53,9 +53,10 @@ export function useFocusTrap(containerRef, enabled = true) {
     previouslyFocused.current = document.activeElement;
     const container = containerRef.current;
     const focusables = container.querySelectorAll(FOCUSABLE_SELECTOR);
+    let focusTimeout = null;
     if (focusables.length > 0) {
       // Pequeño delay para que el DOM termine de renderizar
-      setTimeout(() => focusables[0].focus(), 0);
+      focusTimeout = setTimeout(() => focusables[0].focus(), 0);
     }
 
     function onKeyDown(e) {
@@ -75,6 +76,7 @@ export function useFocusTrap(containerRef, enabled = true) {
     container.addEventListener('keydown', onKeyDown);
 
     return () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
       container.removeEventListener('keydown', onKeyDown);
       // Restaurar foco al elemento previo
       if (previouslyFocused.current && typeof previouslyFocused.current.focus === 'function') {

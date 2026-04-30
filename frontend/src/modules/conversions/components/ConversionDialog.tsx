@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import { X, Link as LinkIcon, Copy, CheckCircle } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
@@ -50,6 +50,11 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [selectedLinkIdx, setSelectedLinkIdx] = useState<string>('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+  }, []);
   const [form, setForm] = useState<ConversionForm>({
     producto_contratado: '',
     importe_total: '',
@@ -90,7 +95,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     try {
       await navigator.clipboard.writeText(activeLink);
       setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
       toast({ title: 'Enlace copiado', description: 'Pégalo en WhatsApp/Email del cliente' });
     } catch {
       toast({ title: 'No se pudo copiar', variant: 'destructive' });
