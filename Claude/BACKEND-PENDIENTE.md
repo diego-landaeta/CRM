@@ -468,3 +468,42 @@ Por cada modulo terminado:
 ```
 
 No hacen falta cambios adicionales — todos los shapes de respuesta ya estan acordados.
+
+---
+
+## 8. Notificaciones push (frontend listo, falta backend)
+
+**Estado frontend:** UI completa en `/notificaciones` con permisos del navegador,
+preferencias por tipo de evento y canal (in-app / push / email), modo "no molestar"
+y horas silencio. Hoy las preferencias se guardan en `localStorage` y las
+notificaciones de prueba funcionan localmente vía `Notification` API + Service Worker.
+
+**Falta backend** para enviar push reales desde el servidor:
+
+| Endpoint | Metodo | Roles | Que hace |
+|----------|--------|-------|----------|
+| `/api/push-subscriptions` | POST | autenticado | Guarda subscription del navegador (endpoint, p256dh, auth) por user_id |
+| `/api/push-subscriptions/:id` | DELETE | propio user | Borra suscripcion al desactivar |
+| `/api/notification-preferences` | GET | autenticado | Devuelve preferencias del user |
+| `/api/notification-preferences` | PUT | autenticado | Actualiza preferencias (mismo shape que `frontend/src/modules/notificaciones/lib/preferences.ts`) |
+
+**Stack recomendado:**
+
+- Generar VAPID keys con `web-push generate-vapid-keys` y exponer la public key como env (`VITE_VAPID_PUBLIC_KEY`).
+- Backend usa `web-push` npm para enviar.
+- Tabla `push_subscriptions(id, user_id, endpoint UNIQUE, keys jsonb, user_agent, created_at)`.
+- Tabla `notification_preferences(user_id PK, preferences jsonb)` con shape de `NotificationPreferences`.
+
+**Disparadores (eventos que generan notificación):**
+
+- `lead.assigned` → al gestor asignado por round-robin
+- `reminder.due_soon` (cron 5 min) → owner si quedan <60 min
+- `reminder.overdue` (cron 5 min) → owner cuando ya pasó
+- `conversion.created` → admin/superadmin del proyecto
+- `payment.received` → admin/superadmin
+- `matricula.pending` → roles con permiso `matriculas.read`
+- `system.alert` → broadcast a admin/superadmin (siempre se entrega, ignora DnD)
+
+**Frontend ya envía** la subscription al endpoint cuando exista — ver
+`frontend/src/modules/notificaciones/hooks/useNotifications.ts:72`. Los toasts
+in-app de la campana del header siguen funcionando sin push.
