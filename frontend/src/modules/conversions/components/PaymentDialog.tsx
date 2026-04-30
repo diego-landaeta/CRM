@@ -1,18 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import { X } from '@phosphor-icons/react';
-import { conversionsApi } from '../api/conversions.api';
+import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
-function formatCurrency(n) {
+interface PaymentForm {
+  importe: string;
+  fecha: string;
+  notas: string;
+}
+
+interface PaymentDialogProps {
+  open: boolean;
+  onClose: () => void;
+  conversion: Conversion | null;
+  onPaid?: () => void;
+}
+
+function formatCurrency(n: number | string | null | undefined): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 }
 
-export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
+export default function PaymentDialog({ open, onClose, conversion, onPaid }: PaymentDialogProps) {
   useEscapeKey(onClose, open);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<PaymentForm>({
     importe: '',
     fecha: new Date().toISOString().slice(0, 10),
     notas: '',
@@ -28,8 +41,9 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
 
   const pendiente = Number(conversion.importe_total) - Number(conversion.importe_pagado);
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    if (!conversion) return;
     const importe = Number(form.importe);
     if (!importe || importe <= 0) {
       toast({ title: 'Importe invalido', variant: 'destructive' });
@@ -51,7 +65,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }) {
         onPaid?.();
         onClose();
       }
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally {
       setSaving(false);

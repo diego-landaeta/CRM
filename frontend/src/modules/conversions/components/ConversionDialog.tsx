@@ -1,26 +1,56 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import { X, Link as LinkIcon, Copy, CheckCircle } from '@phosphor-icons/react';
-import { conversionsApi } from '../api/conversions.api';
+import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+interface PaymentLink {
+  label: string;
+  url: string;
+  tipo: string;
+}
 
-const METODOS = [
+interface ConversionForm {
+  producto_contratado: string;
+  importe_total: string;
+  importe_pagado: string;
+  metodo_pago: MetodoPago;
+  fecha_compromiso_pago: string;
+  fecha_conversion: string;
+  notas_pago: string;
+}
+
+// Acepta tanto Lead como Client; solo necesita id, nombre y opcional producto_nombre
+interface ConversionDialogTarget {
+  id: number;
+  nombre?: string;
+  producto_nombre?: string;
+}
+
+interface ConversionDialogProps {
+  open: boolean;
+  onClose: () => void;
+  lead: ConversionDialogTarget | null | undefined;
+  projectId: number;
+  onCreated?: (data: Conversion) => void;
+}
+
+const METODOS: ReadonlyArray<{ value: MetodoPago; label: string }> = [
   { value: 'tarjeta', label: 'Tarjeta' },
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
-export default function ConversionDialog({ open, onClose, lead, projectId, onCreated }) {
+export default function ConversionDialog({ open, onClose, lead, projectId, onCreated }: ConversionDialogProps) {
   useEscapeKey(onClose, open);
   const { products } = useProducts(projectId);
   const [saving, setSaving] = useState(false);
-  const [selectedLinkIdx, setSelectedLinkIdx] = useState('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
+  const [selectedLinkIdx, setSelectedLinkIdx] = useState<string>('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ConversionForm>({
     producto_contratado: '',
     importe_total: '',
     importe_pagado: '0',
@@ -32,13 +62,13 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   // Producto seleccionado por nombre exacto (CRM-140) — para mostrar sus enlaces de pago
   const selectedProduct = useMemo(
-    () => products.find((p) => p.nombre === form.producto_contratado),
+    () => products.find((p: { nombre?: string }) => p.nombre === form.producto_contratado),
     [products, form.producto_contratado]
   );
-  const productLinks = useMemo(() => {
+  const productLinks = useMemo<PaymentLink[]>(() => {
     if (!selectedProduct) return [];
     if (Array.isArray(selectedProduct.payment_links) && selectedProduct.payment_links.length > 0) {
-      return selectedProduct.payment_links;
+      return selectedProduct.payment_links as PaymentLink[];
     }
     if (selectedProduct.stripe_link) {
       return [{ label: 'Pago completo', url: selectedProduct.stripe_link, tipo: 'completo' }];
@@ -75,10 +105,12 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   if (!open) return null;
 
-  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const update = <K extends keyof ConversionForm>(k: K, v: ConversionForm[K]): void =>
+    setForm(f => ({ ...f, [k]: v }));
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    if (!lead) return;
     const importe = Number(form.importe_total);
     if (!form.producto_contratado?.trim()) {
       toast({ title: 'Producto requerido', variant: 'destructive' });
@@ -105,12 +137,12 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         fecha_conversion: form.fecha_conversion,
         notas_pago: form.notas_pago || null,
       });
-      if (res.success) {
+      if (res.success && res.data) {
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
         onCreated?.(res.data);
         onClose();
       }
-    } catch (err) {
+    } catch (err: any) {
       toast({
         title: 'Error al registrar conversion',
         description: err?.data?.error || err?.message || 'Error desconocido',
@@ -171,7 +203,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Metodo de pago</label>
-                <select value={form.metodo_pago} onChange={e => update('metodo_pago', e.target.value)} className={selectClass}>
+                <select value={form.metodo_pago} onChange={e => update('metodo_pago', e.target.value as MetodoPago)} className={selectClass}>
                   {METODOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>

@@ -3,7 +3,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 
 // Normaliza un lead del listado: backend devuelve `status` y `canal_detectado`
-function normalizeLead(lead) {
+export function normalizeLead(lead) {
   if (!lead) return lead;
   return {
     ...lead,
@@ -13,7 +13,7 @@ function normalizeLead(lead) {
 }
 
 // El backend devuelve plurales (nuevos, contactados, ...) — convertir a singulares
-function normalizeStats(raw) {
+export function normalizeStats(raw) {
   const d = raw || {};
   const total = Number(d.total) || 0;
   const convertido = Number(d.convertidos) || 0;

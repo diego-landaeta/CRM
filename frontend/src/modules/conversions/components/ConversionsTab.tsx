@@ -1,35 +1,46 @@
 import { useState, useEffect } from 'react';
-import { conversionsApi } from '../api/conversions.api';
+import { conversionsApi, type Conversion, type Payment } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
+interface ConversionsTabTarget {
+  id: number;
+  nombre?: string;
+  producto_nombre?: string;
+}
 
-function formatCurrency(n) {
+interface ConversionsTabProps {
+  lead: ConversionsTabTarget | null | undefined;
+  projectId: number;
+  canManage?: boolean;
+}
+
+function formatCurrency(n: number | string | null | undefined): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 }
 
-function formatDate(d) {
+function formatDate(d: string | null | undefined): string {
   if (!d) return '--';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function ConversionsTab({ lead, projectId, canManage }) {
-  const [conversions, setConversions] = useState([]);
+export default function ConversionsTab({ lead, projectId, canManage }: ConversionsTabProps) {
+  const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [paymentDialogConv, setPaymentDialogConv] = useState(null);
-  const [pendingPayment, setPendingPayment] = useState(null);
-  const [pendingConversion, setPendingConversion] = useState(null);
+  const [paymentDialogConv, setPaymentDialogConv] = useState<Conversion | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<number | null>(null);
+  const [pendingConversion, setPendingConversion] = useState<number | null>(null);
 
-  async function load() {
+  async function load(): Promise<void> {
     if (!lead?.id) return;
     setLoading(true);
     try {
       const res = await conversionsApi.byLead(lead.id);
-      if (res.success) setConversions(res.data);
+      if (res.success) setConversions((res.data as Conversion[]) || []);
     } catch {
       // silencioso — la tab mostrará estado vacío
     } finally {
@@ -39,24 +50,26 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
 
   useEffect(() => { load(); }, [lead?.id]);
 
-  function handleDeletePayment(paymentId) { setPendingPayment(paymentId); }
-  async function doDeletePayment() {
+  function handleDeletePayment(paymentId: number): void { setPendingPayment(paymentId); }
+  async function doDeletePayment(): Promise<void> {
+    if (pendingPayment === null) return;
     try {
       await conversionsApi.removePayment(pendingPayment);
       toast({ title: 'Pago eliminado' });
       await load();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally { setPendingPayment(null); }
   }
 
-  function handleDeleteConversion(id) { setPendingConversion(id); }
-  async function doDeleteConversion() {
+  function handleDeleteConversion(id: number): void { setPendingConversion(id); }
+  async function doDeleteConversion(): Promise<void> {
+    if (pendingConversion === null) return;
     try {
       await conversionsApi.remove(pendingConversion);
       toast({ title: 'Conversión eliminada' });
       await load();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally { setPendingConversion(null); }
   }
@@ -221,12 +234,18 @@ export default function ConversionsTab({ lead, projectId, canManage }) {
   );
 }
 
-function PaymentsList({ conversionId, onDelete, canManage }) {
-  const [payments, setPayments] = useState(null);
+interface PaymentsListProps {
+  conversionId: number;
+  onDelete: (id: number) => void;
+  canManage?: boolean;
+}
+
+function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) {
+  const [payments, setPayments] = useState<Payment[] | null>(null);
 
   useEffect(() => {
     conversionsApi.getById(conversionId).then(res => {
-      if (res.success) setPayments(res.data.payments || []);
+      if (res.success && res.data) setPayments(res.data.payments || []);
     });
   }, [conversionId]);
 
