@@ -64,7 +64,7 @@ export default function TicketsLauncher() {
         title="Tickets de soporte"
         aria-label="Abrir panel de tickets"
         aria-expanded={open}
-        className={`fixed bottom-5 right-5 z-40 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ${
+        className={`fixed bottom-5 right-5 z-50 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ${
           open
             ? 'bg-foreground text-background scale-95'
             : 'bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 hover:scale-105'

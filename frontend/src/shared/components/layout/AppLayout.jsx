@@ -206,7 +206,7 @@ export default function AppLayout() {
 
       <Toaster />
       <CommandPalette />
-      {!hideFloating && (
+      {!hideFloating && !mobileOpen && (
         <Suspense fallback={null}>
           <FloatingDock />
         </Suspense>
