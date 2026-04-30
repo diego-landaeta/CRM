@@ -25,7 +25,7 @@ export default function ReceivablePage() {
       try {
         const params = activeProject?.id ? { projectId: activeProject.id } : {};
         const res = await accountingApi.dashboard({ ...params, from: '2000-01-01', to: new Date().toISOString().slice(0, 10) });
-        if (res.success && res.data) setItems((res.data as any).cuentas_por_cobrar || []);
+        if (res.success && res.data) setItems(res.data.cuentas_por_cobrar || []);
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id]);

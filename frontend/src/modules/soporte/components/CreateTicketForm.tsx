@@ -112,7 +112,7 @@ export default function CreateTicketForm({ onSubmitted }: { onSubmitted?: () => 
             className="w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm"
           >
             {Object.entries(TICKET_SEVERITY).map(([k, v]) => (
-              <option key={k} value={k}>{(v as any).label}</option>
+              <option key={k} value={k}>{v.label}</option>
             ))}
           </select>
         </label>

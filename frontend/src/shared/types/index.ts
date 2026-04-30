@@ -87,8 +87,15 @@ export interface Lead {
   notas?: string | null;
   lead_duplicado_de?: number | null;
   custom_fields?: Record<string, unknown>;
-  statusHistory?: Array<{ from: string; to: string; date: string }>;
+  statusHistory?: Array<{
+    id?: number | string;
+    status_nuevo?: string;
+    status_anterior?: string;
+    changed_by_nombre?: string;
+    changed_at?: string;
+  }>;
   last_interaction_at?: string | null;
+  utms?: Utms | null;
   // UTMs pueden venir embebidos directamente en el lead segun endpoint
   utm_source?: string | null;
   utm_medium?: string | null;

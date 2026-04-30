@@ -29,7 +29,7 @@ export default function MatriculasPage() {
   const { activeProject } = useProjectContext();
   const [tab, setTab] = useState('list');
   const [data, setData] = useState([]);
-  const [stats, setStats] = useState({ total: 0, pendientes: 0, validadas: 0, rechazadas: 0 });
+  const [stats, setStats] = useState<{ total: number; pendientes: number; validadas: number; rechazadas: number }>({ total: 0, pendientes: 0, validadas: 0, rechazadas: 0 });
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState('');
   const [search, setSearch] = useState('');
@@ -44,7 +44,11 @@ export default function MatriculasPage() {
       if (filterEstado) params.set('estado', filterEstado);
       if (search) params.set('search', search);
       const res = await client.get(`/matriculas?${params}`);
-      if (res.success) { setData(res.data || []); setStats((res.stats as any) || {}); }
+      if (res.success) {
+        setData(res.data || []);
+        const s = (res.stats || {}) as Partial<typeof stats>;
+        setStats({ total: s.total ?? 0, pendientes: s.pendientes ?? 0, validadas: s.validadas ?? 0, rechazadas: s.rechazadas ?? 0 });
+      }
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally { setLoading(false); }

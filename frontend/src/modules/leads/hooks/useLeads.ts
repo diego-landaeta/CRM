@@ -236,11 +236,11 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
     fetchLead();
   }, [fetchLead]);
 
-  const interacciones = (lead as any)?.interactions || [];
-  const reminders = (lead as any)?.reminders || [];
+  const interacciones = lead?.interactions || [];
+  const reminders = lead?.reminders || [];
   const recordatorio = reminders[0] || null;
-  const utms = (lead as any)?.utms || null;
-  const statusHistory = (lead as any)?.statusHistory || [];
+  const utms = lead?.utms || null;
+  const statusHistory = lead?.statusHistory || [];
 
   const timeline: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
     id: h.id || i,

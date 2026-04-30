@@ -17,6 +17,16 @@ export interface Expense {
   created_at?: string;
 }
 
+export interface ReceivableItem {
+  id: number;
+  cliente_nombre?: string;
+  producto_nombre?: string;
+  importe_pendiente: number | string;
+  fecha_compromiso_pago?: string | null;
+  vencido?: boolean;
+  conversion_id?: number;
+}
+
 export interface AccountingDashboardData {
   totals?: {
     income?: number;
@@ -27,9 +37,8 @@ export interface AccountingDashboardData {
   };
   byMonth?: Array<{ month: string; income: number; expenses: number }>;
   byCategory?: Array<{ categoria: string; total: number }>;
-  // Campos adicionales del backend (cuentas_por_cobrar, etc) — accesibles
-  // por nombre dinámico hasta tipar el contrato completo cuando madure el endpoint.
-  [key: string]: unknown;
+  cuentas_por_cobrar?: ReceivableItem[];
+  cuentas_por_pagar?: Array<Record<string, unknown>>;
 }
 
 type Params = Record<string, string | number | undefined> | undefined;

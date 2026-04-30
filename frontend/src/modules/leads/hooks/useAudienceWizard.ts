@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { previewAudience, exportAudienceCsv } from '../api/audiences.api';
+import {
+  previewAudience,
+  exportAudienceCsv,
+  type AudienceFilters,
+  type AudiencePreview,
+} from '../api/audiences.api';
 
-// Minimo de leads para Meta Custom Audience
 export const MIN_AUDIENCE_SIZE = 20;
 
-const DEFAULT_FILTERS = {
+const DEFAULT_FILTERS: AudienceFilters = {
   statuses: [],
   canales: [],
   fechaDesde: '',
@@ -13,18 +17,43 @@ const DEFAULT_FILTERS = {
   importeMinimo: null,
 };
 
+export interface DownloadResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface UseAudienceWizardResult {
+  step: number;
+  next: () => void;
+  prev: () => void;
+  goTo: (i: number) => void;
+  filters: AudienceFilters;
+  setFilter: (patch: Partial<AudienceFilters>) => void;
+  toggleStatus: (status: string) => void;
+  toggleCanal: (canal: string) => void;
+  resetFilters: () => void;
+  preview: AudiencePreview | null;
+  previewLoading: boolean;
+  previewError: string | null;
+  totalCount: number;
+  meetsMinimum: boolean;
+  filename: string;
+  downloadCsv: () => Promise<DownloadResult | undefined>;
+  downloadLoading: boolean;
+}
+
 /**
- * Wizard 3 pasos:
- * 0 = Filtros
- * 1 = Preview
- * 2 = Descarga
+ * Wizard 3 pasos: 0 = Filtros, 1 = Preview, 2 = Descarga.
  */
-export function useAudienceWizard(projectId, projectSlug) {
+export function useAudienceWizard(
+  projectId: number | null | undefined,
+  projectSlug: string | null | undefined,
+): UseAudienceWizardResult {
   const [step, setStep] = useState(0);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [preview, setPreview] = useState(null);
+  const [filters, setFilters] = useState<AudienceFilters>(DEFAULT_FILTERS);
+  const [preview, setPreview] = useState<AudiencePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
 
   // Reset al cambiar de proyecto
@@ -34,10 +63,7 @@ export function useAudienceWizard(projectId, projectSlug) {
     setPreview(null);
   }, [projectId]);
 
-  // Preview en tiempo real con debounce + AbortController para cancelar
-  // requests viejas si el user sigue cambiando filtros antes de que llegue
-  // la respuesta. Sin esto, una respuesta tardía podía pisar a una nueva
-  // = race condition con count incorrecto.
+  // Preview en tiempo real con debounce + AbortController.
   useEffect(() => {
     if (!projectId) return;
     const controller = new AbortController();
@@ -47,10 +73,10 @@ export function useAudienceWizard(projectId, projectSlug) {
       previewAudience({ projectId, filters, signal: controller.signal })
         .then(r => {
           if (controller.signal.aborted) return;
-          if (r.success) setPreview(r.data);
-          else setPreviewError(r.error);
+          if (r.success && r.data) setPreview(r.data);
+          else setPreviewError(r.error || null);
         })
-        .catch(err => {
+        .catch((err: any) => {
           if (err?.name === 'AbortError' || controller.signal.aborted) return;
           setPreviewError(err?.message || String(err));
         })
@@ -62,28 +88,34 @@ export function useAudienceWizard(projectId, projectSlug) {
       clearTimeout(t);
       controller.abort();
     };
-  }, [projectId, JSON.stringify(filters)]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, JSON.stringify(filters)]);
 
-  function setFilter(patch) {
+  function setFilter(patch: Partial<AudienceFilters>): void {
     setFilters(prev => ({ ...prev, ...patch }));
   }
-  function toggleStatus(status) {
+
+  function toggleStatus(status: string): void {
     setFilters(prev => ({
       ...prev,
-      statuses: prev.statuses.includes(status)
+      statuses: prev.statuses?.includes(status)
         ? prev.statuses.filter(s => s !== status)
-        : [...prev.statuses, status],
+        : [...(prev.statuses || []), status],
     }));
   }
-  function toggleCanal(canal) {
+
+  function toggleCanal(canal: string): void {
     setFilters(prev => ({
       ...prev,
-      canales: prev.canales.includes(canal)
+      canales: prev.canales?.includes(canal)
         ? prev.canales.filter(c => c !== canal)
-        : [...prev.canales, canal],
+        : [...(prev.canales || []), canal],
     }));
   }
-  function resetFilters() { setFilters(DEFAULT_FILTERS); }
+
+  function resetFilters(): void {
+    setFilters(DEFAULT_FILTERS);
+  }
 
   const totalCount = preview?.totalCount ?? 0;
   const meetsMinimum = totalCount >= MIN_AUDIENCE_SIZE;
@@ -94,7 +126,7 @@ export function useAudienceWizard(projectId, projectSlug) {
     return `audiencia_${slugSafe}_${today}.csv`;
   }, [projectSlug]);
 
-  async function downloadCsv() {
+  async function downloadCsv(): Promise<DownloadResult | undefined> {
     if (!projectId || !meetsMinimum) return;
     setDownloadLoading(true);
     try {
@@ -108,16 +140,16 @@ export function useAudienceWizard(projectId, projectSlug) {
       a.remove();
       URL.revokeObjectURL(url);
       return { success: true };
-    } catch (err) {
+    } catch (err: any) {
       return { success: false, error: err?.message || 'Error generando CSV' };
     } finally {
       setDownloadLoading(false);
     }
   }
 
-  function next() { setStep(s => Math.min(2, s + 1)); }
-  function prev() { setStep(s => Math.max(0, s - 1)); }
-  function goTo(i) { setStep(Math.max(0, Math.min(2, i))); }
+  function next(): void { setStep(s => Math.min(2, s + 1)); }
+  function prev(): void { setStep(s => Math.max(0, s - 1)); }
+  function goTo(i: number): void { setStep(Math.max(0, Math.min(2, i))); }
 
   return {
     step, next, prev, goTo,
