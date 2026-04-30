@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut } from '@phosphor-icons/react';
+import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut, Copy } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import InvoiceForm from '../components/InvoiceForm';
+import InvoiceForm, { type InvoiceFormValues } from '../components/InvoiceForm';
 import CertificateForm from '../components/CertificateForm';
 import { getAccessToken } from '@/shared/api/client';
 
@@ -137,6 +137,26 @@ export default function DocumentsPage() {
   const [pendingDelete, setPendingDelete] = useState<CrmDocument | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [previewing, setPreviewing] = useState<CrmDocument | null>(null);
+  const [duplicateSeed, setDuplicateSeed] = useState<Partial<InvoiceFormValues> | null>(null);
+
+  function handleDuplicate(doc: CrmDocument): void {
+    if (doc.type !== 'invoice') {
+      toast({ title: 'Sólo se pueden duplicar facturas por ahora' });
+      return;
+    }
+    // El doc.data tiene shape arbitrario — extraemos los campos del form
+    const d = doc.data as Record<string, unknown>;
+    setDuplicateSeed({
+      cliente_nombre: (d.cliente_nombre as string) || (d.client_nombre as string) || '',
+      cliente_dni: (d.cliente_dni as string) || (d.client_dni as string) || '',
+      cliente_direccion: (d.cliente_direccion as string) || (d.client_direccion as string) || '',
+      lineas: (d.lineas as InvoiceFormValues['lineas']) || [{ descripcion: '', cantidad: 1, precio: '' }],
+      iva_pct: (d.iva_pct as number) ?? 21,
+      // fecha no se duplica (siempre se usa hoy)
+    });
+    setTab('invoice');
+    toast({ title: `Duplicando ${doc.number}`, description: 'Revisa los datos y genera la nueva factura' });
+  }
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -191,6 +211,7 @@ export default function DocumentsPage() {
 
   function onGenerated(): void {
     setTab('list');
+    setDuplicateSeed(null);
     load();
   }
 
@@ -220,7 +241,13 @@ export default function DocumentsPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => {
+              setTab(t.key);
+              if (t.key !== 'invoice') setDuplicateSeed(null);
+            }}
             className={`px-4 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px ${
               tab === t.key
                 ? 'border-primary text-primary'
@@ -295,6 +322,17 @@ export default function DocumentsPage() {
                             >
                               <Download size={14} />
                             </button>
+                            {doc.type === 'invoice' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicate(doc)}
+                                aria-label={`Duplicar ${doc.number}`}
+                                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                title="Duplicar como nueva factura"
+                              >
+                                <Copy size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => setPendingDelete(doc)}
                               aria-label={`Eliminar ${doc.number}`}
@@ -334,6 +372,7 @@ export default function DocumentsPage() {
                     </div>
                     <div className="flex flex-col gap-1 flex-shrink-0">
                       <button
+                        type="button"
                         onClick={() => setPreviewing(doc)}
                         aria-label={`Previsualizar ${doc.number}`}
                         className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
@@ -341,6 +380,7 @@ export default function DocumentsPage() {
                         <Eye size={13} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDownload(doc)}
                         disabled={downloading === doc.id}
                         aria-label={`Descargar PDF ${doc.number}`}
@@ -348,7 +388,18 @@ export default function DocumentsPage() {
                       >
                         <Download size={13} />
                       </button>
+                      {doc.type === 'invoice' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicate(doc)}
+                          aria-label={`Duplicar ${doc.number}`}
+                          className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-primary"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      )}
                       <button
+                        type="button"
                         onClick={() => setPendingDelete(doc)}
                         aria-label={`Eliminar ${doc.number}`}
                         className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500"
@@ -364,7 +415,7 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {tab === 'invoice' && <InvoiceForm onGenerated={onGenerated} />}
+      {tab === 'invoice' && <InvoiceForm onGenerated={onGenerated} initialValues={duplicateSeed || undefined} />}
       {tab === 'certificate' && <CertificateForm onGenerated={onGenerated} />}
 
       {/* Modal preview */}
