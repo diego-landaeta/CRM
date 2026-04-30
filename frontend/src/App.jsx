@@ -98,6 +98,8 @@ const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
 const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
+const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
+const AIChatPage = lazy(() => import('./modules/ai-chat/pages/AIChatPage'));
 const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'));
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
 const ExpensesPage = lazy(() => import('./modules/accounting/pages/ExpensesPage'));
@@ -172,6 +174,8 @@ function App() {
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/ia" element={<ReportsIAPage />} />
+          <Route path="/ai-chat" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />

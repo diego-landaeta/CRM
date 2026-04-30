@@ -38,6 +38,7 @@ import {
   EyeSlash,
   CaretLeft,
   CreditCard,
+  ChatCircleText,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -100,6 +101,7 @@ const NAV_SECTIONS = [
         label: 'Productos', icon: Package, roles: ['superadmin', 'admin'],
         children: [
           { label: 'Catálogo', to: '/products', roles: ['superadmin', 'admin'], module: 'products' },
+          { label: 'Cursos pendientes', to: '/products/pending', roles: ['superadmin', 'admin'], module: 'products' },
           { label: 'WooCommerce', to: '/woocommerce', roles: ['superadmin', 'admin'], module: 'woocommerce' },
         ],
       },
@@ -130,6 +132,8 @@ const NAV_SECTIONS = [
     label: 'Análisis',
     items: [
       { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+      { label: 'Análisis IA', to: '/reports/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Chat IA', to: '/ai-chat', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
