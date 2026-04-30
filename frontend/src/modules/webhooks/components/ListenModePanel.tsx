@@ -3,15 +3,27 @@ import { Ear, EarSlash } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-export default function ListenModePanel({ webhookId, listening, onPayloadCaptured, onListeningChange }) {
+interface ListenModePanelProps {
+  webhookId: number | null | undefined;
+  listening?: boolean;
+  onPayloadCaptured?: (payload: Record<string, unknown>) => void;
+  onListeningChange?: (listening: boolean) => void;
+}
+
+export default function ListenModePanel({
+  webhookId,
+  listening,
+  onPayloadCaptured,
+  onListeningChange,
+}: ListenModePanelProps) {
   const [polling, setPolling] = useState(false);
-  const pollRef = useRef(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
   }, []);
 
-  async function startListening() {
+  async function startListening(): Promise<void> {
     if (!webhookId) {
       toast({ title: 'Guarda primero el webhook para iniciar la escucha', variant: 'destructive' });
       return;
@@ -23,21 +35,21 @@ export default function ListenModePanel({ webhookId, listening, onPayloadCapture
       pollRef.current = setInterval(async () => {
         try {
           const r = await client.get(`/forms/${webhookId}/status`);
-          if (r.success && r.data.sample_payload) {
-            clearInterval(pollRef.current);
+          if (r.success && r.data?.sample_payload) {
+            if (pollRef.current) clearInterval(pollRef.current);
             setPolling(false);
             onListeningChange?.(false);
-            onPayloadCaptured?.(r.data.sample_payload);
+            onPayloadCaptured?.(r.data.sample_payload as Record<string, unknown>);
             toast({ title: 'Payload recibido', description: 'Click en cualquier campo del árbol para mapearlo.' });
           }
         } catch {}
       }, 2000);
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     }
   }
 
-  async function stopListening() {
+  async function stopListening(): Promise<void> {
     if (webhookId) await client.post(`/forms/${webhookId}/listen/stop`);
     if (pollRef.current) clearInterval(pollRef.current);
     setPolling(false);

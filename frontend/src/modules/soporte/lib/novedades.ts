@@ -1,7 +1,18 @@
 // Changelog del CRM. Cuando exista /api/news este archivo se reemplaza por
 // fetch al backend. Mantengo la estructura para migrar sin tocar la UI.
 
-export const NOVEDADES = [
+export type NovedadType = 'release' | 'feature' | 'fix' | 'breaking';
+
+export interface Novedad {
+  id: string;
+  version: string;
+  date: string;
+  title: string;
+  type: NovedadType;
+  highlights: string[];
+}
+
+export const NOVEDADES: ReadonlyArray<Novedad> = [
   {
     id: 'v0.1.0',
     version: '0.1.0',
@@ -59,7 +70,7 @@ export const NOVEDADES = [
   },
 ];
 
-export const NOVEDAD_TYPE = {
+export const NOVEDAD_TYPE: Record<NovedadType, { label: string; tone: string }> = {
   release: { label: 'Release',   tone: 'violet' },
   feature: { label: 'Feature',   tone: 'blue' },
   fix:     { label: 'Fix',       tone: 'emerald' },

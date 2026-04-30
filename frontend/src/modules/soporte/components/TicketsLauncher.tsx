@@ -174,7 +174,7 @@ function TicketCard({ ticket }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   function cycleStatus() {
-    const order = ['open', 'in_review', 'resolved', 'closed'];
+    const order: Array<'open' | 'in_review' | 'resolved' | 'closed'> = ['open', 'in_review', 'resolved', 'closed'];
     const idx = order.indexOf(ticket.status);
     const next = order[(idx + 1) % order.length];
     updateTicketStatus(ticket.id, next);
@@ -244,7 +244,17 @@ function TicketCard({ ticket }) {
 function CreateTicketForm({ onSubmitted }) {
   const { activeProject } = useProjectContext();
   const location = useLocation();
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    kind: 'bug' | 'feature' | 'question';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    title: string;
+    description: string;
+    steps: string;
+    expected: string;
+    actual: string;
+    whyItMatters: string;
+    url: string;
+  }>({
     kind: 'bug',
     severity: 'medium',
     title: '',

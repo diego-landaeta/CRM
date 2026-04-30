@@ -9,7 +9,7 @@ import { cn } from '@/shared/lib/utils';
  *  - actions: nodo React con botones a la derecha
  *  - breadcrumbs: nodo opcional arriba del titulo
  */
-export default function PageHeader({ title, subtitle, actions = null, breadcrumbs = null, className = '' }) {
+export default function PageHeader({ title, subtitle = null, actions = null, breadcrumbs = null, className = '' }) {
   return (
     <div className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
       <div className="min-w-0">

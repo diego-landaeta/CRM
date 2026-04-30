@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
+import type { WebhookDestination, WebhookFieldMapping, WebhookTarget } from '../lib/types';
 
-const TARGETS_BY_DEST = {
+const TARGETS_BY_DEST: Record<WebhookDestination, WebhookTarget[]> = {
   lead: [
     { key: 'nombre', label: 'Nombre', required: true },
     { key: 'email', label: 'Email', required: true },
@@ -25,7 +26,15 @@ const MAX_DEPTH = 6;
 const MAX_OBJECT_KEYS = 50;
 const MAX_ARRAY_ITEMS = 5;
 
-export function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }) {
+interface PayloadTreeProps {
+  obj: unknown;
+  path?: string;
+  onSelect: (path: string) => void;
+  mapping?: WebhookFieldMapping;
+  depth?: number;
+}
+
+export function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }: PayloadTreeProps) {
   if (obj === null || obj === undefined) return <span className="text-muted-foreground italic">null</span>;
   if (typeof obj !== 'object') {
     const usedAs = Object.entries(mapping || {}).find(([, v]) => v === path)?.[0];
@@ -78,15 +87,22 @@ export function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }) {
   );
 }
 
-export default function PayloadMapper({ payload, mapping, destination = 'lead', onChange }) {
-  const targets = TARGETS_BY_DEST[destination] || TARGETS_BY_DEST.lead;
-  const [mapPath, setMapPath] = useState(null);
+interface PayloadMapperProps {
+  payload: unknown;
+  mapping: WebhookFieldMapping;
+  destination?: WebhookDestination;
+  onChange: (next: WebhookFieldMapping) => void;
+}
 
-  function setMapping(target, source) {
+export default function PayloadMapper({ payload, mapping, destination = 'lead', onChange }: PayloadMapperProps) {
+  const targets = TARGETS_BY_DEST[destination] || TARGETS_BY_DEST.lead;
+  const [mapPath, setMapPath] = useState<string | null>(null);
+
+  function setMapping(target: string, source: string): void {
     onChange({ ...mapping, [target]: source });
   }
 
-  function removeMapping(target) {
+  function removeMapping(target: string): void {
     const next = { ...mapping };
     delete next[target];
     onChange(next);
@@ -128,8 +144,8 @@ export default function PayloadMapper({ payload, mapping, destination = 'lead', 
         message={mapPath ? <>Selecciona a qué campo del CRM mapear <code className="font-mono text-foreground">{mapPath}</code>.</> : null}
         options={targets.map(t => ({ value: t.key, label: t.label + (t.required ? ' *' : '') }))}
         confirmLabel="Mapear"
-        onConfirm={(target) => {
-          if (target && targets.find((t) => t.key === target)) setMapping(target, mapPath);
+        onConfirm={(target: string) => {
+          if (target && mapPath && targets.find((t) => t.key === target)) setMapping(target, mapPath);
           setMapPath(null);
         }}
         onCancel={() => setMapPath(null)}

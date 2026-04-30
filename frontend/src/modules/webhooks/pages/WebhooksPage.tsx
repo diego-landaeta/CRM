@@ -8,15 +8,18 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import WebhookCard from '../components/WebhookCard';
+import type { Webhook } from '../lib/types';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
+
+type WebhookListItem = Webhook & { awaiting_sample?: boolean };
 
 export default function WebhooksPage() {
   const { activeProject } = useProjectContext();
   const navigate = useNavigate();
-  const [webhooks, setWebhooks] = useState([]);
+  const [webhooks, setWebhooks] = useState<WebhookListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<WebhookListItem | null>(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -24,8 +27,8 @@ export default function WebhooksPage() {
     setLoading(true);
     try {
       const res = await client.get(`/forms?projectId=${activeProject.id}&kind=webhook`);
-      if (res.success) setWebhooks(res.data);
-    } catch (err) {
+      if (res.success) setWebhooks((res.data as WebhookListItem[]) || []);
+    } catch (err: any) {
       toast({ title: 'Error cargando webhooks', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -34,7 +37,7 @@ export default function WebhooksPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function createNew() {
+  async function createNew(): Promise<void> {
     if (!activeProject?.id || creating) return;
     setCreating(true);
     try {
@@ -47,40 +50,40 @@ export default function WebhooksPage() {
         field_mapping: {},
         active: true,
       });
-      if (res.success) {
+      if (res.success && res.data) {
         toast({ title: 'Webhook creado' });
         navigate(`/webhooks/${res.data.id}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally {
       setCreating(false);
     }
   }
 
-  async function toggleActive(w) {
+  async function toggleActive(w: WebhookListItem): Promise<void> {
     try {
       await client.patch(`/forms/${w.id}`, { active: !w.active });
       toast({ title: w.active ? 'Webhook apagado' : 'Webhook encendido' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  async function toggleListen(w) {
+  async function toggleListen(w: WebhookListItem): Promise<void> {
     try {
       if (w.awaiting_sample) await client.post(`/forms/${w.id}/listen/stop`);
       else await client.post(`/forms/${w.id}/listen`);
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(): Promise<void> {
     if (!deleteTarget) return;
     try {
       await client.delete(`/forms/${deleteTarget.id}`);
       toast({ title: 'Eliminado' });
       load();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);

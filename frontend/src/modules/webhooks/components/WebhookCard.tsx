@@ -1,12 +1,26 @@
 import { Link } from 'react-router-dom';
 import { Power, Ear, EarSlash, Trash, GraduationCap, Users, ArrowRight } from '@phosphor-icons/react';
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
+import type { Webhook, WebhookDestination } from '../lib/types';
 
-const DEST_META = {
+interface DestMeta { Icon: PhosphorIcon; label: string; }
+
+const DEST_META: Record<WebhookDestination, DestMeta> = {
   lead: { Icon: Users, label: 'Lead' },
   matricula: { Icon: GraduationCap, label: 'Matrícula' },
 };
 
-export default function WebhookCard({ webhook, onToggleActive, onToggleListen, onDelete }) {
+// La card recibe webhook con un campo extra `awaiting_sample` derivado en server
+type WebhookCardItem = Webhook & { awaiting_sample?: boolean };
+
+interface WebhookCardProps {
+  webhook: WebhookCardItem;
+  onToggleActive: (w: WebhookCardItem) => void;
+  onToggleListen: (w: WebhookCardItem) => void;
+  onDelete: (w: WebhookCardItem) => void;
+}
+
+export default function WebhookCard({ webhook, onToggleActive, onToggleListen, onDelete }: WebhookCardProps) {
   const dest = DEST_META[webhook.destination] || DEST_META.lead;
   const DestIcon = dest.Icon;
   const mappedCount = Object.keys(webhook.field_mapping || {}).length;

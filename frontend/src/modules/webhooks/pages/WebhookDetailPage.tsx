@@ -3,25 +3,36 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Copy, FloppyDisk, Power, Users, GraduationCap, Trash,
 } from '@phosphor-icons/react';
+import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import ListenModePanel from '../components/ListenModePanel';
 import PayloadMapper from '../components/PayloadMapper';
+import type { Webhook, WebhookDestination, WebhookFieldMapping } from '../lib/types';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
-const DESTINATIONS = [
+interface DestinationOption {
+  v: WebhookDestination;
+  label: string;
+  Icon: PhosphorIcon;
+  desc: string;
+}
+
+const DESTINATIONS: ReadonlyArray<DestinationOption> = [
   { v: 'lead', label: 'Lead / Prospecto', Icon: Users, desc: 'Crea un lead en el embudo (round-robin de gestores)' },
   { v: 'matricula', label: 'Matrícula', Icon: GraduationCap, desc: 'Crea una solicitud de admisión en estado pendiente' },
 ];
 
+type WebhookDetail = Webhook & { awaiting_sample?: boolean };
+
 export default function WebhookDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [webhook, setWebhook] = useState(null);
-  const [mapping, setMapping] = useState({});
-  const [samplePayload, setSamplePayload] = useState(null);
+  const [webhook, setWebhook] = useState<WebhookDetail | null>(null);
+  const [mapping, setMapping] = useState<WebhookFieldMapping>({});
+  const [samplePayload, setSamplePayload] = useState<Record<string, unknown> | null>(null);
   const [listening, setListening] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,8 +43,8 @@ export default function WebhookDetailPage() {
     setLoading(true);
     try {
       const res = await client.get(`/forms/${id}`);
-      if (res.success) {
-        const w = res.data;
+      if (res.success && res.data) {
+        const w = res.data as WebhookDetail;
         if (w.kind !== 'webhook') {
           toast({ title: 'No es un webhook', variant: 'destructive' });
           navigate('/webhooks', { replace: true });
@@ -41,11 +52,11 @@ export default function WebhookDetailPage() {
         }
         setWebhook(w);
         setMapping(w.field_mapping || {});
-        setSamplePayload(w.sample_payload || null);
+        setSamplePayload((w.sample_payload as Record<string, unknown>) || null);
         setListening(w.awaiting_sample || false);
         setDirty(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -54,17 +65,17 @@ export default function WebhookDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  function patch(changes) {
-    setWebhook((w) => ({ ...w, ...changes }));
+  function patch(changes: Partial<WebhookDetail>): void {
+    setWebhook((w) => (w ? { ...w, ...changes } : w));
     setDirty(true);
   }
 
-  function patchMapping(next) {
+  function patchMapping(next: WebhookFieldMapping): void {
     setMapping(next);
     setDirty(true);
   }
 
-  async function save() {
+  async function save(): Promise<void> {
     if (!webhook) return;
     setSaving(true);
     try {
@@ -79,35 +90,36 @@ export default function WebhookDetailPage() {
         setDirty(false);
         load();
       }
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   }
 
-  async function toggleActive() {
+  async function toggleActive(): Promise<void> {
+    if (!webhook) return;
     try {
       await client.patch(`/forms/${id}`, { active: !webhook.active });
       toast({ title: webhook.active ? 'Apagado' : 'Encendido' });
       load();
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
   function remove() {
     setConfirmDelete(true);
   }
 
-  async function doRemove() {
+  async function doRemove(): Promise<void> {
     setConfirmDelete(false);
     try {
       await client.delete(`/forms/${id}`);
       toast({ title: 'Eliminado' });
       navigate('/webhooks');
-    } catch (err) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  function copy(text) {
+  function copy(text: string): void {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copiado al portapapeles' });
   }
