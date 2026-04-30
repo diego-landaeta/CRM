@@ -5,11 +5,23 @@ import { cn } from '@/shared/lib/utils';
 
 const Accordion = AccordionPrimitive.Root;
 
+/**
+ * @type {React.ForwardRefExoticComponent<
+ *   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item> &
+ *   React.RefAttributes<React.ElementRef<typeof AccordionPrimitive.Item>>
+ * >}
+ */
 const AccordionItem = React.forwardRef(({ className, ...props }, ref) => (
   <AccordionPrimitive.Item ref={ref} className={cn('border-b', className)} {...props} />
 ));
 AccordionItem.displayName = 'AccordionItem';
 
+/**
+ * @type {React.ForwardRefExoticComponent<
+ *   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> &
+ *   React.RefAttributes<React.ElementRef<typeof AccordionPrimitive.Trigger>>
+ * >}
+ */
 const AccordionTrigger = React.forwardRef(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
     <AccordionPrimitive.Trigger
@@ -27,6 +39,12 @@ const AccordionTrigger = React.forwardRef(({ className, children, ...props }, re
 ));
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 
+/**
+ * @type {React.ForwardRefExoticComponent<
+ *   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content> &
+ *   React.RefAttributes<React.ElementRef<typeof AccordionPrimitive.Content>>
+ * >}
+ */
 const AccordionContent = React.forwardRef(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Content
     ref={ref}

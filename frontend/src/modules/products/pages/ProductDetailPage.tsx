@@ -16,7 +16,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!projectId || !id) return;
     setLoading(true);
-    getProduct(id, projectId)
+    getProduct(Number(id), projectId)
       .then(setProduct)
       .finally(() => setLoading(false));
   }, [id, projectId]);
