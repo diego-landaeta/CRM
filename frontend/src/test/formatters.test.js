@@ -1,23 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { formatRelative, cleanPhone } from '@/modules/leads/lib/leadFormat';
 
-// Helpers re-exportados para test (copiamos la logica del modulo, evita dependencias react)
-function formatRelative(dateStr, { future = false } = {}) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = future ? d - now : now - d;
-  const diffDays = Math.round(diffMs / 86400000);
-  if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
-  if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'mañana' : 'ayer';
-  if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-}
-
-function cleanPhone(phone) {
-  return (phone || '').replace(/[^\d]/g, '');
-}
+// NOTA: estos tests importan los helpers REALES del módulo leads/lib.
+// Anteriormente eran una copia inline (test fantasma) — si leadFormat
+// cambiaba, los tests seguían verdes. Ahora protegen el módulo de verdad.
 
 describe('formatRelative', () => {
   it('devuelve null si no hay fecha', () => {

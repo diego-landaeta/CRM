@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { Bell, BellRinging, EnvelopeSimple, DeviceMobile, Lightning, Clock } from '@phosphor-icons/react';
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
@@ -107,8 +108,8 @@ export default function NotificacionesPage() {
           <div className="text-sm text-muted-foreground">
             <p className="font-semibold text-foreground mb-1">Mientras llega...</p>
             <p>
-              Si necesitas alertas urgentes, configura un <a href="/crm/email-sequences" className="text-primary font-medium hover:underline">flujo de email</a> o
-              revisa periódicamente la campana <Bell size={12} weight="bold" className="inline mx-0.5" /> en la barra superior. La página <a href="/crm/" className="text-primary font-medium hover:underline">Dashboard</a> también
+              Si necesitas alertas urgentes, configura un <Link to="/email-sequences" className="text-primary font-medium hover:underline">flujo de email</Link> o
+              revisa periódicamente la campana <Bell size={12} weight="bold" className="inline mx-0.5" /> en la barra superior. La página <Link to="/" className="text-primary font-medium hover:underline">Dashboard</Link> también
               muestra los pendientes del día y los insights más relevantes.
             </p>
           </div>

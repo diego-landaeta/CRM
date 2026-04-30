@@ -130,7 +130,13 @@ export default function DocumentsPage() {
     try {
       const res = await documentsApi.list(activeProject.id);
       if (res.success) setDocs(res.data);
-    } catch {}
+    } catch (err) {
+      toast({
+        title: 'Error cargando documentos',
+        description: err?.data?.error || err.message || 'No se pudo conectar con el servidor.',
+        variant: 'destructive',
+      });
+    }
     finally { setLoading(false); }
   }, [activeProject?.id]);
 
