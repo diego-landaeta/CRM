@@ -64,9 +64,19 @@ export function useLeads() {
     };
   }, [search]);
 
+  // AbortController para cancelar requests en vuelo cuando los filtros
+  // cambian rápido (typing en el search, paginación rápida). Sin esto,
+  // una respuesta vieja podía pisar a una nueva = race condition.
+  const abortRef = useRef(null);
+
   // Fetch leads
   const fetchLeads = useCallback(async () => {
     if (!pid) return;
+    // Cancelar request anterior si sigue en vuelo
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
     try {
@@ -79,7 +89,8 @@ export function useLeads() {
       if (filterOrigen) params.set('canal', filterOrigen);
       if (filterResponsable) params.set('responsableId', filterResponsable);
 
-      const res = await client.get(`/leads?${params.toString()}`);
+      const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (res.success) {
         setLeads((res.data || []).map(normalizeLead));
         if (res.pagination) {
@@ -88,12 +99,19 @@ export function useLeads() {
         }
       }
     } catch (err) {
+      // Ignorar errores por abort (es esperado al cancelar)
+      if (err.name === 'AbortError') return;
       setError(err.message);
       setLeads([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable]);
+
+  // Cleanup al desmontar
+  useEffect(() => () => {
+    if (abortRef.current) abortRef.current.abort();
+  }, []);
 
   // Fetch stats
   const fetchStats = useCallback(async () => {

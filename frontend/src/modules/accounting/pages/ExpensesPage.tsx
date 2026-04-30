@@ -48,7 +48,7 @@ export default function ExpensesPage() {
   async function load() {
     setLoading(true);
     try {
-      const params = {};
+      const params: Record<string, string | number> = {};
       if (activeProject?.id) params.projectId = activeProject.id;
       if (filterCat) params.categoria = filterCat;
       const res = await accountingApi.listExpenses(params);

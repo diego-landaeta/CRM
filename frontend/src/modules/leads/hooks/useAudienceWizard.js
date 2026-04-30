@@ -34,18 +34,34 @@ export function useAudienceWizard(projectId, projectSlug) {
     setPreview(null);
   }, [projectId]);
 
-  // Preview en tiempo real con debounce
+  // Preview en tiempo real con debounce + AbortController para cancelar
+  // requests viejas si el user sigue cambiando filtros antes de que llegue
+  // la respuesta. Sin esto, una respuesta tardía podía pisar a una nueva
+  // = race condition con count incorrecto.
   useEffect(() => {
     if (!projectId) return;
+    const controller = new AbortController();
     const t = setTimeout(() => {
       setPreviewLoading(true);
       setPreviewError(null);
-      previewAudience({ projectId, filters })
-        .then(r => r.success ? setPreview(r.data) : setPreviewError(r.error))
-        .catch(err => setPreviewError(err?.message || String(err)))
-        .finally(() => setPreviewLoading(false));
+      previewAudience({ projectId, filters, signal: controller.signal })
+        .then(r => {
+          if (controller.signal.aborted) return;
+          if (r.success) setPreview(r.data);
+          else setPreviewError(r.error);
+        })
+        .catch(err => {
+          if (err?.name === 'AbortError' || controller.signal.aborted) return;
+          setPreviewError(err?.message || String(err));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPreviewLoading(false);
+        });
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [projectId, JSON.stringify(filters)]); // eslint-disable-line
 
   function setFilter(patch) {

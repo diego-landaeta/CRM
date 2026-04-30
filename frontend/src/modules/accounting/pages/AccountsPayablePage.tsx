@@ -47,7 +47,7 @@ export default function AccountsPayablePage() {
   async function load() {
     setLoading(true);
     try {
-      const params = {};
+      const params: Record<string, string | number> = {};
       if (projId) params.projectId = projId;
       if (filterEstado) params.estado = filterEstado;
       const [listRes, statsRes] = await Promise.all([
@@ -400,7 +400,13 @@ function PayableDialog({ projectId, onClose, onSaved }) {
 
 function PaymentDialog({ payable, onClose, onSaved }) {
   const pendiente = Number(payable.importe_pendiente || 0);
-  const [data, setData] = useState({
+  const [data, setData] = useState<{
+    importe: number | string;
+    fecha_pago: string;
+    metodo: string;
+    referencia: string;
+    notas: string;
+  }>({
     importe: pendiente, fecha_pago: new Date().toISOString().slice(0, 10),
     metodo: 'transferencia', referencia: '', notas: '',
   });
@@ -444,7 +450,7 @@ function PaymentDialog({ payable, onClose, onSaved }) {
           <div className="space-y-3">
             <div>
               <label className="text-[10px] font-medium text-muted-foreground block mb-1">Importe</label>
-              <input required type="number" step="0.01" max={pendiente} value={data.importe} onChange={e => setData({ ...data, importe: e.target.value })} className={inputClass + ' tabular-nums'} />
+              <input required type="number" step="0.01" max={String(pendiente)} value={data.importe} onChange={e => setData({ ...data, importe: e.target.value })} className={inputClass + ' tabular-nums'} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

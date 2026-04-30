@@ -12,15 +12,15 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 /**
  * POST /api/audiences/preview
  * Devuelve count + breakdown + sample para preview en wizard.
- * @param {{ projectId: number, filters: AudienceFilters }} payload
+ * @param {{ projectId: number, filters: AudienceFilters, signal?: AbortSignal }} payload
  * @returns {Promise<{ success, data: { totalCount, breakdown: { status, canal }, sample: Lead[] } }>}
  */
-export async function previewAudience({ projectId, filters }) {
+export async function previewAudience({ projectId, filters, signal }) {
   if (USE_MOCKS) {
     await delay(400);
     return mockPreview({ projectId, filters });
   }
-  return client.post('/audiences/preview', { projectId, filters });
+  return client.post('/audiences/preview', { projectId, filters }, { signal });
 }
 
 /**

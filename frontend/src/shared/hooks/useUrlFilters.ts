@@ -20,12 +20,20 @@ import { useSearchParams } from 'react-router-dom';
  *  - Valor === default → no aparece en la URL (URLs limpias).
  *  - Cambios via setFilters() reemplazan el history entry actual (replace=true) — refresh-safe.
  */
-export default function useUrlFilters(defaults) {
+
+export type UrlFilterDefaults = Record<string, string | number>;
+
+export interface UrlFilterSetter<T extends UrlFilterDefaults> {
+  (patch: Partial<T>): void;
+  reset: () => void;
+}
+
+export default function useUrlFilters<T extends UrlFilterDefaults>(defaults: T): [T, UrlFilterSetter<T>] {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Estado actual leído del URL, con defaults
   const filters = useMemo(() => {
-    const out = {};
+    const out = {} as Record<string, string | number>;
     for (const [key, def] of Object.entries(defaults)) {
       const fromUrl = searchParams.get(key);
       if (fromUrl == null) {
@@ -37,15 +45,15 @@ export default function useUrlFilters(defaults) {
         out[key] = fromUrl;
       }
     }
-    return out;
+    return out as T;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, JSON.stringify(defaults)]);
 
   // Setter parcial: aplica patch y omite los que igualan default
-  const setFilters = useCallback((patch) => {
+  const setFilters = useCallback((patch: Partial<T>): void => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      const merged = { ...filters, ...patch };
+      const merged = { ...filters, ...patch } as Record<string, string | number>;
       for (const [key, def] of Object.entries(defaults)) {
         const value = merged[key];
         const isDefault = value === def || value === '' || value == null;
@@ -59,7 +67,7 @@ export default function useUrlFilters(defaults) {
     }, { replace: true });
   }, [filters, setSearchParams, defaults]);
 
-  setFilters.reset = useCallback(() => {
+  const reset = useCallback((): void => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       for (const key of Object.keys(defaults)) next.delete(key);
@@ -67,5 +75,9 @@ export default function useUrlFilters(defaults) {
     }, { replace: true });
   }, [setSearchParams, defaults]);
 
-  return [filters, setFilters];
+  // Composición setFilters + reset como función con propiedad
+  const setter = setFilters as UrlFilterSetter<T>;
+  setter.reset = reset;
+
+  return [filters, setter];
 }
