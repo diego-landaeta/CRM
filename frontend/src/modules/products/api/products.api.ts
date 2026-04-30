@@ -37,31 +37,7 @@ export interface Product {
   updated_at?: string;
 }
 
-interface ParamsWithProjectId {
-  params: { projectId: number };
-}
-
-export async function getProducts(projectId: number): Promise<Product[]> {
-  const { data } = await (client as any).get('/products', { params: { projectId } } as ParamsWithProjectId);
-  return data.data;
-}
-
 export async function getProduct(id: number, projectId: number): Promise<Product> {
-  const { data } = await (client as any).get(`/products/${id}`, { params: { projectId } } as ParamsWithProjectId);
-  return data.data;
-}
-
-export async function createProduct(projectId: number, payload: Partial<Product>): Promise<Product> {
-  const { data } = await (client as any).post('/products', { ...payload, projectId });
-  return data.data;
-}
-
-export async function updateProduct(id: number, projectId: number, payload: Partial<Product>): Promise<Product> {
-  const { data } = await (client as any).patch(`/products/${id}`, payload, { params: { projectId } } as ParamsWithProjectId);
-  return data.data;
-}
-
-export async function deactivateProduct(id: number, projectId: number): Promise<Product> {
-  const { data } = await (client as any).delete(`/products/${id}`, { params: { projectId } } as ParamsWithProjectId);
+  const { data } = await client.get(`/products/${id}`, { params: { projectId } });
   return data.data;
 }

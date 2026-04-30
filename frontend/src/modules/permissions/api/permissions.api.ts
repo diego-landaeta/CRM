@@ -18,27 +18,3 @@ export async function listCustomRoles(projectId: number): Promise<CustomRole[]> 
   const res = await client.get(`/permissions/custom-roles?projectId=${projectId}`);
   return (res.data as CustomRole[]) || [];
 }
-
-export async function createCustomRole(payload: Partial<CustomRole>): Promise<CustomRole> {
-  const res = await client.post('/permissions/custom-roles', payload);
-  return res.data as CustomRole;
-}
-
-export async function updateCustomRole(id: number, payload: Partial<CustomRole>): Promise<CustomRole> {
-  const res = await client.patch(`/permissions/custom-roles/${id}`, payload);
-  return res.data as CustomRole;
-}
-
-export async function deleteCustomRole(id: number): Promise<void> {
-  await client.delete(`/permissions/custom-roles/${id}`);
-}
-
-export async function getUserPermissions(userId: number): Promise<PermissionMap> {
-  const res = await client.get(`/users/${userId}/permissions`);
-  return (res.data as PermissionMap) || {};
-}
-
-export async function setUserPermissions(userId: number, overrides: PermissionMap): Promise<PermissionMap> {
-  const res = await client.put(`/users/${userId}/permissions`, { overrides });
-  return res.data as PermissionMap;
-}

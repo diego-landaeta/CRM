@@ -21,7 +21,6 @@ vi.mock('@/shared/api/client', () => ({
 
 vi.mock('@/shared/hooks/useDialogA11y', () => ({
   useEscapeKey: () => {},
-  useFocusTrap: () => {},
 }));
 
 // Portal renderiza inline para testear sin document.body shenanigans

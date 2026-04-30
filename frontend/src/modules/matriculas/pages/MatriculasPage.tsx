@@ -44,7 +44,7 @@ export default function MatriculasPage() {
       if (filterEstado) params.set('estado', filterEstado);
       if (search) params.set('search', search);
       const res = await client.get(`/matriculas?${params}`);
-      if (res.success) { setData(res.data || []); setStats(res.stats || {}); }
+      if (res.success) { setData(res.data || []); setStats((res.stats as any) || {}); }
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally { setLoading(false); }

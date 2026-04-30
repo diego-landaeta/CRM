@@ -7,7 +7,7 @@ import { Info } from '@phosphor-icons/react';
  * Glosario centralizado: añade aquí cualquier sigla técnica para que su explicación
  * sea consistente en toda la app.
  */
-export const METRIC_GLOSSARY = {
+const METRIC_GLOSSARY = {
   MRR: 'Monthly Recurring Revenue: ingresos recurrentes mensuales normalizados (suscripciones anuales / 12).',
   ARR: 'Annual Recurring Revenue: MRR × 12.',
   CTR: 'Click-Through Rate: clics / impresiones × 100. Mide qué tan llamativo es el anuncio.',

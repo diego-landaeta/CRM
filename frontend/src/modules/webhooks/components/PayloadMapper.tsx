@@ -34,7 +34,7 @@ interface PayloadTreeProps {
   depth?: number;
 }
 
-export function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }: PayloadTreeProps) {
+function PayloadTree({ obj, path = '', onSelect, mapping, depth = 0 }: PayloadTreeProps) {
   if (obj === null || obj === undefined) return <span className="text-muted-foreground italic">null</span>;
   if (typeof obj !== 'object') {
     const usedAs = Object.entries(mapping || {}).find(([, v]) => v === path)?.[0];

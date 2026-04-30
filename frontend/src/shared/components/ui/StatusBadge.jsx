@@ -27,7 +27,7 @@ export const STATUS_LABELS = {
   no_interesado: 'No interesado',
 };
 
-export const STATUS_ICONS = {
+const STATUS_ICONS = {
   nuevo: Circle,
   por_contactar: Clock,
   contactado: Phone,

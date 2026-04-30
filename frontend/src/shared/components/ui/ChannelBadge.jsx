@@ -12,7 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 
-export const CHANNEL_STYLES = {
+const CHANNEL_STYLES = {
   meta_ads: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
   google_ads: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-500',
   tiktok_ads: 'bg-pink-50 text-pink-600 dark:bg-pink-950/30 dark:text-pink-400',
@@ -38,7 +38,7 @@ export const CHANNEL_LABELS = {
   otro: 'Otro',
 };
 
-export const CHANNEL_ICONS = {
+const CHANNEL_ICONS = {
   meta_ads: FacebookLogo,
   google_ads: GoogleLogo,
   tiktok_ads: TiktokLogo,

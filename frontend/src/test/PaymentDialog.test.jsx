@@ -8,7 +8,6 @@ vi.mock('@/shared/components/ui/portal', () => ({
 
 vi.mock('@/shared/hooks/useDialogA11y', () => ({
   useEscapeKey: () => {},
-  useFocusTrap: () => {},
 }));
 
 const addPaymentMock = vi.fn();

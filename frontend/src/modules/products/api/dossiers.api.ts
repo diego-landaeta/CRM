@@ -36,7 +36,7 @@ export async function uploadDossier(
   formData.append('file', file);
   formData.append('productId', String(productId));
 
-  const { data } = await (client as any).post('/dossiers/upload', formData, {
+  const { data } = await client.post('/dossiers/upload', formData, {
     params: { projectId },
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: onProgress,
@@ -45,11 +45,11 @@ export async function uploadDossier(
 }
 
 export async function getDossierUrl(id: number, projectId: number): Promise<{ url: string; expiresAt?: string }> {
-  const { data } = await (client as any).get(`/dossiers/${id}/url`, { params: { projectId } });
+  const { data } = await client.get(`/dossiers/${id}/url`, { params: { projectId } });
   return data.data;
 }
 
 export async function getDossierHistory(productId: number, projectId: number): Promise<Dossier[]> {
-  const { data } = await (client as any).get(`/dossiers/product/${productId}/history`, { params: { projectId } });
+  const { data } = await client.get(`/dossiers/product/${productId}/history`, { params: { projectId } });
   return data.data;
 }

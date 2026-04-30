@@ -96,4 +96,3 @@ const client = {
 };
 
 export default client;
-export { ApiError };

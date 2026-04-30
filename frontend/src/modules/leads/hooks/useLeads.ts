@@ -2,58 +2,85 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import client from '@/shared/api/client';
+import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-// Defaults para filtros persistidos en URL.
-// Solo valores != default aparecen en la URL — refresh-safe + URL compartible.
-const URL_DEFAULTS = {
-  q: '',          // search
-  estado: '',     // filterEstado
-  origen: '',     // filterOrigen
-  resp: '',       // filterResponsable
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; page: number } = {
+  q: '',
+  estado: '',
+  origen: '',
+  resp: '',
   page: 1,
 };
 
-// Normaliza la respuesta del backend para mantener compatibilidad con la UI.
-// El backend devuelve `status` y `canal_detectado`, la UI usa `estado` y `origen`.
-function normalizeLead(lead) {
+export interface LeadStats {
+  total: number;
+  nuevo: number;
+  por_contactar: number;
+  contactado: number;
+  en_seguimiento: number;
+  convertido: number;
+  no_interesado: number;
+}
+
+export interface UseLeadsResult {
+  leads: Lead[];
+  stats: Partial<LeadStats>;
+  total: number;
+  page: number;
+  totalPages: number;
+  setPage: (v: number | ((prev: number) => number)) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  filterEstado: string;
+  setFilterEstado: (v: string) => void;
+  filterOrigen: string;
+  setFilterOrigen: (v: string) => void;
+  filterResponsable: string;
+  setFilterResponsable: (v: string) => void;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+// Backend devuelve `status` y `canal_detectado`; UI usa `estado` y `origen`.
+function normalizeLead<T extends Partial<Lead>>(lead: T): T {
   if (!lead) return lead;
   return {
     ...lead,
-    estado: lead.status || lead.estado,
-    origen: lead.canal_detectado || lead.origen || 'directo',
+    estado: (lead.status as LeadStatus | undefined) || (lead.estado as LeadStatus | undefined),
+    origen: (lead.canal_detectado as LeadOrigen | undefined) || (lead.origen as LeadOrigen | undefined) || ('directo' as LeadOrigen),
   };
 }
 
-export function useLeads() {
+export function useLeads(): UseLeadsResult {
   const { activeProject } = useProjectContext();
   const pid = activeProject?.id;
 
-  // Filtros sincronizados con URL — refresh y compartir mantienen el estado.
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, page } = urlFilters;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, page } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; page: number;
+  };
 
-  // Setters compatibles con la API anterior (string -> nuevo valor)
-  const setSearch = useCallback((v) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
-  const setFilterEstado = useCallback((v) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
-  const setFilterOrigen = useCallback((v) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
-  const setFilterResponsable = useCallback((v) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
-  const setPage = useCallback((v) => {
+  const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
+  const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
+  const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
+  const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
+  const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
   }, [page, setUrlFilters]);
 
-  const [leads, setLeads] = useState([]);
-  const [stats, setStats] = useState({});
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<Partial<LeadStats>>({});
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Debounce para search (350ms)
-  const searchTimerRef = useRef(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
@@ -64,15 +91,10 @@ export function useLeads() {
     };
   }, [search]);
 
-  // AbortController para cancelar requests en vuelo cuando los filtros
-  // cambian rápido (typing en el search, paginación rápida). Sin esto,
-  // una respuesta vieja podía pisar a una nueva = race condition.
-  const abortRef = useRef(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Fetch leads
-  const fetchLeads = useCallback(async () => {
+  const fetchLeads = useCallback(async (): Promise<void> => {
     if (!pid) return;
-    // Cancelar request anterior si sigue en vuelo
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -81,9 +103,9 @@ export function useLeads() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set('projectId', pid);
-      params.set('page', page);
-      params.set('limit', PAGE_SIZE);
+      params.set('projectId', String(pid));
+      params.set('page', String(page));
+      params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (filterEstado) params.set('status', filterEstado);
       if (filterOrigen) params.set('canal', filterOrigen);
@@ -92,34 +114,30 @@ export function useLeads() {
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (res.success) {
-        setLeads((res.data || []).map(normalizeLead));
+        setLeads(((res.data as Lead[]) || []).map(normalizeLead));
         if (res.pagination) {
           setTotal(res.pagination.total || 0);
           setTotalPages(res.pagination.totalPages || 1);
         }
       }
-    } catch (err) {
-      // Ignorar errores por abort (es esperado al cancelar)
-      if (err.name === 'AbortError') return;
-      setError(err.message);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      setError(err?.message || String(err));
       setLeads([]);
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
   }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable]);
 
-  // Cleanup al desmontar
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
   }, []);
 
-  // Fetch stats
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (): Promise<void> => {
     if (!pid) return;
     try {
       const res = await client.get(`/leads/stats?projectId=${pid}`);
       if (res.success) {
-        // Backend devuelve nuevos, contactados, etc — mapear a singular
         const d = res.data || {};
         setStats({
           total: Number(d.total) || 0,
@@ -165,12 +183,39 @@ export function useLeads() {
   };
 }
 
-export function useLeadDetail(id) {
-  const [lead, setLead] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export interface TimelineItem {
+  id: string | number;
+  action: string;
+  date: string;
+  source: string;
+  color: string;
+}
 
-  const fetchLead = useCallback(async () => {
+export interface UseLeadDetailResult {
+  lead: Lead | null;
+  timeline: TimelineItem[];
+  interacciones: any[];
+  reminders: any[];
+  recordatorio: any;
+  utms: any;
+  statusHistory: any[];
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+  updateStatus: (status: string, motivo?: string) => Promise<any>;
+  addInteraction: (tipo: string, nota: string, fecha?: string) => Promise<any>;
+  addReminder: (fecha_recordatorio: string, nota: string) => Promise<any>;
+  completeReminder: (reminderId: number) => Promise<any>;
+  reassign: (responsable_id: number) => Promise<any>;
+  updateLead: (fields: Partial<Lead>) => Promise<any>;
+}
+
+export function useLeadDetail(id: number | string | null | undefined): UseLeadDetailResult {
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLead = useCallback(async (): Promise<void> => {
     if (!id) return;
     setLoading(true);
     setError(null);
@@ -179,8 +224,8 @@ export function useLeadDetail(id) {
       if (res.success) {
         setLead(normalizeLead(res.data));
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (err: any) {
+      setError(err?.message || String(err));
       setLead(null);
     } finally {
       setLoading(false);
@@ -191,15 +236,13 @@ export function useLeadDetail(id) {
     fetchLead();
   }, [fetchLead]);
 
-  // Datos del lead
-  const interacciones = lead?.interactions || [];
-  const reminders = lead?.reminders || [];
+  const interacciones = (lead as any)?.interactions || [];
+  const reminders = (lead as any)?.reminders || [];
   const recordatorio = reminders[0] || null;
-  const utms = lead?.utms || null;
-  const statusHistory = lead?.statusHistory || [];
+  const utms = (lead as any)?.utms || null;
+  const statusHistory = (lead as any)?.statusHistory || [];
 
-  // Construir timeline del sistema desde history
-  const timeline = statusHistory.map((h, i) => ({
+  const timeline: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
     id: h.id || i,
     action: `Estado cambiado a ${h.status_nuevo}${h.changed_by_nombre ? ' por ' + h.changed_by_nombre : ''}`,
     date: h.changed_at ? new Date(h.changed_at).toLocaleString('es-ES') : '',
@@ -217,40 +260,39 @@ export function useLeadDetail(id) {
     });
   }
 
-  // Funciones de accion
-  const updateStatus = useCallback(async (status, motivo) => {
-    const body = { status };
+  const updateStatus = useCallback(async (status: string, motivo?: string): Promise<any> => {
+    const body: { status: string; motivo?: string } = { status };
     if (motivo) body.motivo = motivo;
     const res = await client.patch(`/leads/${id}/status`, body);
     if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
-  const addInteraction = useCallback(async (tipo, nota, fecha) => {
+  const addInteraction = useCallback(async (tipo: string, nota: string, fecha?: string): Promise<any> => {
     const res = await client.post(`/leads/${id}/interactions`, { tipo, nota, fecha: fecha || undefined });
     if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
-  const addReminder = useCallback(async (fecha_recordatorio, nota) => {
+  const addReminder = useCallback(async (fecha_recordatorio: string, nota: string): Promise<any> => {
     const res = await client.post(`/leads/${id}/reminders`, { fecha_recordatorio, nota });
     if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
-  const completeReminder = useCallback(async (reminderId) => {
+  const completeReminder = useCallback(async (reminderId: number): Promise<any> => {
     const res = await client.patch(`/leads/reminders/${reminderId}/complete`);
     if (res.success) await fetchLead();
     return res;
   }, [fetchLead]);
 
-  const reassign = useCallback(async (responsable_id) => {
+  const reassign = useCallback(async (responsable_id: number): Promise<any> => {
     const res = await client.patch(`/leads/${id}/reassign`, { responsable_id });
     if (res.success) await fetchLead();
     return res;
   }, [id, fetchLead]);
 
-  const updateLead = useCallback(async (fields) => {
+  const updateLead = useCallback(async (fields: Partial<Lead>): Promise<any> => {
     const res = await client.patch(`/leads/${id}`, fields);
     if (res.success) await fetchLead();
     return res;

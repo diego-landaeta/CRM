@@ -59,7 +59,7 @@ export const documentsApi = {
     client.post('/documents/generate', { projectId, type, data }),
 
   download: (id: number, projectId: number): Promise<Blob> =>
-    client.get(`/documents/${id}/download?projectId=${projectId}`, { responseType: 'blob' }),
+    client.get(`/documents/${id}/download?projectId=${projectId}`, { responseType: 'blob' }) as unknown as Promise<Blob>,
 
   remove: (id: number, projectId: number): Promise<ApiResponse<void>> =>
     client.delete(`/documents/${id}?projectId=${projectId}`),

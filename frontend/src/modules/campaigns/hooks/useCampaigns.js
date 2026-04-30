@@ -96,19 +96,3 @@ export function useCampaigns(projectId) {
     loading: meta.loading || google.loading,
   };
 }
-
-// Backward-compat: la version anterior solo exponía Meta
-export function useMetaCampaigns(projectId) {
-  const all = useCampaigns(projectId);
-  return {
-    campaigns: all.meta.campaigns,
-    totals: all.meta.totals,
-    loading: all.meta.loading,
-    error: all.meta.error,
-    preset: all.preset,
-    setPreset: all.setPreset,
-    customRange: all.customRange,
-    setCustomRange: all.setCustomRange,
-    range: all.range,
-  };
-}
