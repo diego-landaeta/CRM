@@ -14,14 +14,14 @@ export const PRESET_PERIODS = {
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 
-function rangeFromPreset(preset) {
+export function rangeFromPreset(preset) {
   const days = PRESET_PERIODS[preset]?.days ?? 30;
   const hasta = new Date();
   const desde = new Date(Date.now() - days * 86400000);
   return { fechaDesde: isoDate(desde), fechaHasta: isoDate(hasta) };
 }
 
-function computeTotals(list) {
+export function computeTotals(list) {
   const t = list.reduce((acc, c) => ({
     spend: acc.spend + (c.metrics?.spend || 0),
     clicks: acc.clicks + (c.metrics?.clicks || 0),

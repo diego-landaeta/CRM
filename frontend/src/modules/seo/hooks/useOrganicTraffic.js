@@ -10,10 +10,10 @@ export const PRESET_PERIODS = {
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 
-function rangeFromPreset(preset) {
+export function rangeFromPreset(preset, now = Date.now()) {
   // GSC tiene retraso de 3 dias — fechaHasta es 3 dias antes de hoy
   const days = PRESET_PERIODS[preset]?.days ?? 28;
-  const hasta = new Date(Date.now() - 3 * 86400000);
+  const hasta = new Date(now - 3 * 86400000);
   const desde = new Date(hasta.getTime() - days * 86400000);
   return { fechaDesde: isoDate(desde), fechaHasta: isoDate(hasta) };
 }
