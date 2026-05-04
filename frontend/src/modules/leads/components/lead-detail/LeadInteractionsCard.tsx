@@ -3,22 +3,25 @@ import { Phone, EnvelopeSimple, WhatsappLogo, Note } from '@phosphor-icons/react
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { selectClass, selectBg } from './InfoField';
+import type { Interaction } from '@/shared/types';
 
-const ICONS = { llamada: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo, nota: Note };
-const COLORS = {
+type InteractionTipo = Interaction['tipo'];
+
+const ICONS: Record<InteractionTipo, typeof Phone> = { llamada: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo, nota: Note };
+const COLORS: Record<InteractionTipo, string> = {
   llamada: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30',
   email: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30',
   whatsapp: 'text-green-600 bg-green-50 dark:bg-green-950/30',
   nota: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30',
 };
 
-function defaultDateTimeLocal() {
+function defaultDateTimeLocal(): string {
   const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function LeadInteractionsCard({ interacciones, onOpen }) {
+export default function LeadInteractionsCard({ interacciones, onOpen }: { interacciones: Interaction[]; onOpen: () => void }) {
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
@@ -62,15 +65,21 @@ export default function LeadInteractionsCard({ interacciones, onOpen }) {
   );
 }
 
-export function InteractionDialog({ open, onClose, onSubmit }) {
-  const [tipo, setTipo] = useState('llamada');
+interface InteractionDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (tipo: InteractionTipo, nota: string, fechaIso?: string) => Promise<void> | void;
+}
+
+export function InteractionDialog({ open, onClose, onSubmit }: InteractionDialogProps) {
+  const [tipo, setTipo] = useState<InteractionTipo>('llamada');
   const [nota, setNota] = useState('');
-  const [fecha, setFecha] = useState(defaultDateTimeLocal);
+  const [fecha, setFecha] = useState<string>(defaultDateTimeLocal);
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!nota.trim() && tipo !== 'llamada') return;
     setLoading(true);
@@ -82,8 +91,8 @@ export function InteractionDialog({ open, onClose, onSubmit }) {
       setTipo('llamada');
       setFecha(defaultDateTimeLocal());
       onClose();
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -99,7 +108,7 @@ export function InteractionDialog({ open, onClose, onSubmit }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Tipo</label>
-              <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={selectClass} style={selectBg}>
+              <select value={tipo} onChange={(e) => setTipo(e.target.value as InteractionTipo)} className={selectClass} style={selectBg}>
                 <option value="llamada">Llamada</option>
                 <option value="email">Email</option>
                 <option value="whatsapp">WhatsApp</option>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import type { LeadStatus } from '@/shared/types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
@@ -65,7 +66,7 @@ export default function LeadDetailPage() {
     updateStatus, addInteraction, addReminder, completeReminder, reassign, updateLead,
   } = useLeadDetail(id);
 
-  const [selectedEstado, setSelectedEstado] = useState('');
+  const [selectedEstado, setSelectedEstado] = useState<LeadStatus | ''>('');
   const [statusLoading, setStatusLoading] = useState(false);
   const [lossOpen, setLossOpen] = useState(false);
   const [gestores, setGestores] = useState([]);

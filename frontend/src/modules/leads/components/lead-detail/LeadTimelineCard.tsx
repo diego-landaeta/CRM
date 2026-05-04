@@ -1,4 +1,12 @@
-export default function LeadTimelineCard({ timeline }) {
+export interface TimelineEvent {
+  id: number | string;
+  action: string;
+  date: string;
+  source: string;
+  color: string;
+}
+
+export default function LeadTimelineCard({ timeline }: { timeline: TimelineEvent[] }) {
   if (!timeline.length) return null;
   return (
     <div className="bg-card p-5 rounded-lg border border-border">

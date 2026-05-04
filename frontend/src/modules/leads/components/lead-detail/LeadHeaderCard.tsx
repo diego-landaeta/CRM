@@ -3,8 +3,16 @@ import { ArrowLeft, CaretRight, Lightning, WarningCircle, Link as LinkIcon } fro
 import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
 import { avatarColor, getInitials } from './InfoField';
+import type { Lead } from '@/shared/types';
 
-export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }) {
+interface LeadHeaderCardProps {
+  lead: Lead;
+  isAdmin: boolean;
+  onReassign: () => void;
+  onBack: () => void;
+}
+
+export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: LeadHeaderCardProps) {
   return (
     <>
       {lead.lead_duplicado_de && (

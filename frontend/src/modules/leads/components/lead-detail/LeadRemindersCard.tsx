@@ -2,14 +2,21 @@ import { useState } from 'react';
 import { CalendarCheck, Check } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
+import type { Reminder } from '@/shared/types';
 
-export default function LeadRemindersCard({ reminders, onOpen, onComplete }) {
-  async function handleComplete(remId) {
+interface LeadRemindersCardProps {
+  reminders: Reminder[];
+  onOpen: () => void;
+  onComplete: (remId: number) => Promise<void> | void;
+}
+
+export default function LeadRemindersCard({ reminders, onOpen, onComplete }: LeadRemindersCardProps) {
+  async function handleComplete(remId: number) {
     try {
       await onComplete(remId);
       toast({ title: 'Recordatorio completado' });
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     }
   }
 
@@ -62,14 +69,20 @@ export default function LeadRemindersCard({ reminders, onOpen, onComplete }) {
   );
 }
 
-export function ReminderDialog({ open, onClose, onSubmit }) {
+interface ReminderDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (fecha: string, nota: string) => Promise<void> | void;
+}
+
+export function ReminderDialog({ open, onClose, onSubmit }: ReminderDialogProps) {
   const [fecha, setFecha] = useState('');
   const [nota, setNota] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!fecha) return;
     setLoading(true);
@@ -79,8 +92,8 @@ export function ReminderDialog({ open, onClose, onSubmit }) {
       setFecha('');
       setNota('');
       onClose();
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }

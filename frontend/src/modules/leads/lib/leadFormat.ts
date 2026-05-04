@@ -1,7 +1,8 @@
 // Helpers de formato y avatar para LeadsPage. Extraídos de la página
 // para facilitar su test unitario y aliviar el archivo principal.
+import type { Lead } from '@/shared/types';
 
-const AVATAR_COLORS = [
+const AVATAR_COLORS: ReadonlyArray<string> = [
   'bg-rose-100 text-rose-700',
   'bg-sky-100 text-sky-700',
   'bg-emerald-100 text-emerald-700',
@@ -12,26 +13,29 @@ const AVATAR_COLORS = [
   'bg-indigo-100 text-indigo-700',
 ];
 
-export function getInitials(name) {
+export function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-export function getAvatarColor(id) {
+export function getAvatarColor(id: number): string {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
-export function formatDate(dateStr) {
+export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '--';
   const d = new Date(dateStr);
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-export function formatRelative(dateStr, { future = false } = {}) {
+export function formatRelative(
+  dateStr: string | null | undefined,
+  { future = false }: { future?: boolean } = {},
+): string | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   const now = new Date();
-  const diffMs = future ? d - now : now - d;
+  const diffMs = future ? d.getTime() - now.getTime() : now.getTime() - d.getTime();
   const diffDays = Math.round(diffMs / 86400000);
   if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
   if (diffDays === 0) return 'hoy';
@@ -41,11 +45,11 @@ export function formatRelative(dateStr, { future = false } = {}) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-export function cleanPhone(phone) {
+export function cleanPhone(phone: string | null | undefined): string {
   return (phone || '').replace(/[^\d]/g, '');
 }
 
-const STATUS_LABELS_ES = {
+const STATUS_LABELS_ES: Record<string, string> = {
   nuevo: 'Nuevo',
   por_contactar: 'Por contactar',
   contactado: 'Contactado',
@@ -54,7 +58,7 @@ const STATUS_LABELS_ES = {
   no_interesado: 'No interesado',
 };
 
-export function exportLeadsCSV(leads, filename) {
+export function exportLeadsCSV(leads: Lead[], filename: string): void {
   const rows = [
     ['Nombre', 'Email', 'Teléfono', 'Estado', 'Canal', 'Responsable', 'Producto interés', 'Notas', 'Creado', 'Último contacto', 'Próximo recordatorio'],
     ...leads.map((l) => [
@@ -71,7 +75,7 @@ export function exportLeadsCSV(leads, filename) {
       l.next_reminder_at ? new Date(l.next_reminder_at).toLocaleDateString('es-ES') : '',
     ]),
   ];
-  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows.map((r) => r.map((v: unknown) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

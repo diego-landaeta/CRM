@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, type DragEvent } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -8,8 +8,11 @@ import { toast } from '@/shared/hooks/useToast';
 import { Plus, User, DotsSixVertical, Users } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import type { Lead, LeadStatus } from '@/shared/types';
 
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
+
+type PipelineLead = Lead & { gestor?: string; fecha?: string };
 
 const COLUMNS = [
   { key: 'nuevo', label: 'Nuevo', color: '#3b82f6', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500', ring: 'ring-blue-400' },
@@ -26,18 +29,12 @@ const AVATAR_COLORS = [
   'bg-violet-100 text-violet-700', 'bg-teal-100 text-teal-700',
 ];
 
-function getInitials(name) {
+function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '--';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-}
-
-function daysAgo(dateStr) {
+function daysAgo(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   const diff = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
@@ -46,7 +43,14 @@ function daysAgo(dateStr) {
   return `hace ${diff}d`;
 }
 
-function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
+interface LeadCardProps {
+  lead: PipelineLead;
+  onClick: (id: number) => void;
+  onDragStart: (e: DragEvent<HTMLDivElement>, lead: PipelineLead) => void;
+  onDragEnd: () => void;
+}
+
+function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
   const canal = lead.canal_detectado || lead.origen;
   const priority = getLeadPriority(lead);
   const pStyle = getPriorityStyle(priority);
@@ -86,7 +90,7 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }) {
           {(lead.responsable_nombre || lead.gestor) && (
             <>
               <User size={10} weight="regular" />
-              <span className="truncate max-w-[60px]">{(lead.responsable_nombre || lead.gestor).split(' ')[0]}</span>
+              <span className="truncate max-w-[60px]">{(lead.responsable_nombre || lead.gestor || '').split(' ')[0]}</span>
               <span className="text-muted-foreground/60">&bull;</span>
             </>
           )}
@@ -101,12 +105,12 @@ export default function LeadsPipelinePage() {
   const { activeProject } = useProjectContext();
   const pid = activeProject?.id;
 
-  const [allLeads, setAllLeads] = useState([]);
+  const [allLeads, setAllLeads] = useState<PipelineLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
-  const [drawerLeadId, setDrawerLeadId] = useState(null);
-  const [dragLead, setDragLead] = useState(null);
-  const [dragOverCol, setDragOverCol] = useState(null);
+  const [drawerLeadId, setDrawerLeadId] = useState<number | null>(null);
+  const [dragLead, setDragLead] = useState<PipelineLead | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<LeadStatus | null>(null);
 
   const fetchAllLeads = useCallback(async () => {
     if (!pid) return;
@@ -115,17 +119,17 @@ export default function LeadsPipelinePage() {
       // Limitamos a 200 leads por pipeline para mantener render fluido
       // (sin virtualización). Si se necesita más, hay que paginar por columna
       // o introducir react-window. Ver issue #virtualization.
-      const res = await client.get(`/leads?projectId=${pid}&limit=200&includeConverted=1`);
+      const res = await client.get<PipelineLead[]>(`/leads?projectId=${pid}&limit=200&includeConverted=1`);
       if (res.success) {
         // Backend devuelve status, frontend usa estado - normalizar
-        setAllLeads((res.data || []).map(l => ({
+        setAllLeads((res.data || []).map((l: PipelineLead) => ({
           ...l,
-          estado: l.status || l.estado,
+          estado: (l.status || l.estado) as LeadStatus,
           origen: l.canal_detectado || l.origen || 'directo',
         })));
       }
-    } catch (err) {
-      toast({ title: 'Error cargando leads', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error cargando leads', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -136,7 +140,7 @@ export default function LeadsPipelinePage() {
   }, [fetchAllLeads]);
 
   // Agrupa leads por estado
-  const grouped = {};
+  const grouped: Record<string, PipelineLead[]> = {};
   for (const col of COLUMNS) {
     grouped[col.key] = [];
   }
@@ -146,12 +150,12 @@ export default function LeadsPipelinePage() {
     }
   }
 
-  function handleDragStart(e, lead) {
+  function handleDragStart(e: DragEvent<HTMLDivElement>, lead: PipelineLead) {
     setDragLead(lead);
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  function handleDragOver(e, colKey) {
+  function handleDragOver(e: DragEvent<HTMLDivElement>, colKey: LeadStatus) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverCol !== colKey) setDragOverCol(colKey);
@@ -164,7 +168,7 @@ export default function LeadsPipelinePage() {
     setDragOverCol(null);
   }
 
-  async function handleDrop(e, targetEstado) {
+  async function handleDrop(e: DragEvent<HTMLDivElement>, targetEstado: LeadStatus) {
     e.preventDefault();
     setDragOverCol(null);
     if (!dragLead || dragLead.estado === targetEstado) {
@@ -185,23 +189,23 @@ export default function LeadsPipelinePage() {
       setAllLeads((prev) =>
         prev.map((l) => l.id === dragLead.id ? { ...l, estado: targetEstado, status: targetEstado } : l)
       );
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message || String(err), variant: 'destructive' });
     }
     setDragLead(null);
   }
 
-  async function handleCreateLead(data) {
+  async function handleCreateLead(data: any) {
     if (!pid) return;
     try {
-      let productoInteresId = null;
+      let productoInteresId: number | null = null;
       if (data.producto_interes) {
         try {
-          const pr = await client.get(`/products/${pid}`);
+          const pr = await client.get<Array<{ id: number; nombre: string }>>(`/products/${pid}`);
           const list = pr.success ? (pr.data || []) : [];
           const prod = list.find(p => p.nombre === data.producto_interes);
           productoInteresId = prod?.id || null;
-        } catch {}
+        } catch { /* ignore */ }
       }
       const res = await client.post('/leads', {
         project_id: pid,
@@ -217,8 +221,8 @@ export default function LeadsPipelinePage() {
         toast({ title: 'Lead creado' });
         await fetchAllLeads();
       }
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message || String(err), variant: 'destructive' });
     }
   }
 
@@ -255,7 +259,7 @@ export default function LeadsPipelinePage() {
 
   return (
     <div className="space-y-5">
-      <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
+      <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} lead={null} />
 
       <PageHeader
         title="Prospectos"
@@ -289,9 +293,9 @@ export default function LeadsPipelinePage() {
           return (
             <div
               key={col.key}
-              onDragOver={(e) => handleDragOver(e, col.key)}
+              onDragOver={(e) => handleDragOver(e, col.key as LeadStatus)}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, col.key)}
+              onDrop={(e) => handleDrop(e, col.key as LeadStatus)}
               className={`flex-shrink-0 w-[280px] flex flex-col rounded-lg transition-all ${
                 dragOverCol === col.key && dragLead?.estado !== col.key
                   ? `ring-2 ${col.ring} bg-muted/30`

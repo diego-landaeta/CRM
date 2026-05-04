@@ -1,7 +1,17 @@
 // Calcula la prioridad visual de un lead segun su estado, recordatorios y dias inactivos.
 // Resultado: { tone, label, dotClass, borderClass }
+import type { Lead } from '@/shared/types';
 
-const PRIORITY_STYLES = {
+export type Priority = 'overdue' | 'urgent' | 'fresh' | 'inProgress' | 'won' | 'lost' | 'normal';
+
+export interface PriorityStyle {
+  label: string;
+  dotClass: string;
+  borderClass: string;
+  rowBgClass: string;
+}
+
+const PRIORITY_STYLES: Record<Priority, PriorityStyle> = {
   overdue: {
     label: 'Vencido',
     dotClass: 'bg-red-500',
@@ -46,14 +56,14 @@ const PRIORITY_STYLES = {
   },
 };
 
-export function getLeadPriority(lead) {
+export function getLeadPriority(lead: Partial<Lead> | null | undefined): Priority {
   if (!lead) return 'normal';
   const estado = lead.estado || lead.status;
 
   // Recordatorio vencido tiene prioridad maxima
   if (lead.next_reminder_at) {
     const due = new Date(lead.next_reminder_at);
-    if (!isNaN(due) && due < new Date()) return 'overdue';
+    if (!isNaN(due.getTime()) && due < new Date()) return 'overdue';
   }
 
   // Estados terminales
@@ -72,6 +82,6 @@ export function getLeadPriority(lead) {
   return 'normal';
 }
 
-export function getPriorityStyle(priority) {
-  return PRIORITY_STYLES[priority] || PRIORITY_STYLES.normal;
+export function getPriorityStyle(priority: Priority | string): PriorityStyle {
+  return PRIORITY_STYLES[priority as Priority] || PRIORITY_STYLES.normal;
 }

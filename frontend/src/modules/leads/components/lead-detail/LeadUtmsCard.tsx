@@ -1,8 +1,9 @@
 import { Compass } from '@phosphor-icons/react';
 import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import InfoField from './InfoField';
+import type { Utms, LeadOrigen } from '@/shared/types';
 
-export default function LeadUtmsCard({ utms, leadOrigen }) {
+export default function LeadUtmsCard({ utms, leadOrigen }: { utms?: Utms | null; leadOrigen?: LeadOrigen | null }) {
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center gap-3 mb-4">
@@ -19,7 +20,7 @@ export default function LeadUtmsCard({ utms, leadOrigen }) {
           <InfoField label="UTM Content">{utms.utm_content || '--'}</InfoField>
           <InfoField label="UTM Term">{utms.utm_term || '--'}</InfoField>
           <InfoField label="Canal detectado">
-            <span className="font-semibold">{CHANNEL_LABELS[utms.canal_detectado] || utms.canal_detectado}</span>
+            <span className="font-semibold">{(utms.canal_detectado && CHANNEL_LABELS[utms.canal_detectado]) || utms.canal_detectado || '--'}</span>
           </InfoField>
           {utms.landing_url && (
             <div className="sm:col-span-2">

@@ -2,7 +2,14 @@ import { useState } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import { selectClass, selectBg } from './InfoField';
 
-export default function LeadLossDialog({ open, onClose, onConfirm, loading }) {
+interface LeadLossDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  loading?: boolean;
+}
+
+export default function LeadLossDialog({ open, onClose, onConfirm, loading }: LeadLossDialogProps) {
   const [reason, setReason] = useState('');
   if (!open) return null;
   return (

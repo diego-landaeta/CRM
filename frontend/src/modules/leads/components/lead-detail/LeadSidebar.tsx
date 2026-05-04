@@ -2,12 +2,27 @@ import { Funnel, Lightning, ChartPieSlice, Phone, CalendarCheck, Users } from '@
 import { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBadge';
 import { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import { selectClass, selectBg } from './InfoField';
+import type { Lead, Interaction, Reminder, LeadStatus } from '@/shared/types';
+
+interface LeadSidebarProps {
+  lead: Lead;
+  interacciones: Interaction[];
+  reminders: Reminder[];
+  isAdmin: boolean;
+  selectedEstado: LeadStatus | '';
+  onSelectedEstadoChange: (s: LeadStatus | '') => void;
+  statusLoading: boolean;
+  onEstadoUpdate: () => void;
+  onOpenInteraction: () => void;
+  onOpenReminder: () => void;
+  onOpenReassign: () => void;
+}
 
 export default function LeadSidebar({
   lead, interacciones, reminders, isAdmin,
   selectedEstado, onSelectedEstadoChange, statusLoading, onEstadoUpdate,
   onOpenInteraction, onOpenReminder, onOpenReassign,
-}) {
+}: LeadSidebarProps) {
   return (
     <div className="space-y-3">
       <div className="bg-card p-4 rounded-lg border border-border">
@@ -16,7 +31,7 @@ export default function LeadSidebar({
         </h3>
         <select
           value={selectedEstado}
-          onChange={(e) => onSelectedEstadoChange(e.target.value)}
+          onChange={(e) => onSelectedEstadoChange(e.target.value as LeadStatus)}
           className={selectClass}
           style={selectBg}
         >
@@ -80,7 +95,7 @@ export default function LeadSidebar({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Canal</span>
-            <span className="font-semibold">{CANAL_LABELS[lead.origen] || lead.origen || '—'}</span>
+            <span className="font-semibold">{(lead.origen && CANAL_LABELS[lead.origen]) || lead.origen || '—'}</span>
           </div>
         </div>
       </div>

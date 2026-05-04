@@ -4,7 +4,20 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { selectClass, selectBg } from './InfoField';
 
-export default function LeadReassignDialog({ open, gestores, onClose, onSubmit }) {
+export interface ReassignGestor {
+  id: number;
+  nombre: string;
+  role: string;
+}
+
+interface LeadReassignDialogProps {
+  open: boolean;
+  gestores: ReassignGestor[];
+  onClose: () => void;
+  onSubmit: (id: number) => Promise<void> | void;
+}
+
+export default function LeadReassignDialog({ open, gestores, onClose, onSubmit }: LeadReassignDialogProps) {
   const [reassignId, setReassignId] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,8 +31,8 @@ export default function LeadReassignDialog({ open, gestores, onClose, onSubmit }
       toast({ title: 'Lead reasignado correctamente' });
       setReassignId('');
       onClose();
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }

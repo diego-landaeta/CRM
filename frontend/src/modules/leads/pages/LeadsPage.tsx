@@ -59,7 +59,7 @@ import {
 } from '../lib/leadFormat';
 
 
-function StatPill({ label, value, dot }) {
+function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
   return (
     <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-muted/40 flex-shrink-0">
       {dot && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dot }} />}
@@ -69,13 +69,15 @@ function StatPill({ label, value, dot }) {
   );
 }
 
-function QuickChip({ active, onClick, label, count, tone = 'default' }) {
-  const toneActive = {
+type ChipTone = 'default' | 'danger' | 'warning';
+
+function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
+  const toneActive: string = {
     default: 'bg-primary text-white',
     danger: 'bg-red-600 text-white',
     warning: 'bg-amber-600 text-white',
   }[tone];
-  const toneIdleCount = {
+  const toneIdleCount: string = {
     default: 'bg-primary/15 text-primary',
     danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
     warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
@@ -377,13 +379,14 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-6">
-      <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} />
+      <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} lead={null} />
       {configTab && activeProject && (
         <Suspense fallback={null}>
           <ProjectSettingsDialog
             project={activeProject}
             initialTab={configTab}
             onClose={() => setConfigTab(null)}
+            onSaved={() => { /* refrescado por contexto */ }}
           />
         </Suspense>
       )}

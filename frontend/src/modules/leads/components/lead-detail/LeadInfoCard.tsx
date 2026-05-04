@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react';
 import { PencilSimple, X, Check } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import InfoField, { inputClass } from './InfoField';
+import type { Lead } from '@/shared/types';
 
-export default function LeadInfoCard({ lead, onUpdate }) {
+interface LeadInfoCardProps {
+  lead: Lead;
+  onUpdate: (fields: Partial<Lead>) => Promise<void> | void;
+}
+
+export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
   const [editMode, setEditMode] = useState(false);
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -21,7 +27,7 @@ export default function LeadInfoCard({ lead, onUpdate }) {
   async function handleSave() {
     setLoading(true);
     try {
-      const fields = {};
+      const fields: Partial<Lead> = {};
       if (nombre !== lead.nombre) fields.nombre = nombre.trim();
       if ((telefono || '') !== (lead.telefono || '')) fields.telefono = telefono.trim() || null;
       if ((notas || '') !== (lead.notas || '')) fields.notas = notas.trim() || null;
@@ -32,8 +38,8 @@ export default function LeadInfoCard({ lead, onUpdate }) {
       await onUpdate(fields);
       toast({ title: 'Lead actualizado' });
       setEditMode(false);
-    } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }

@@ -75,6 +75,7 @@ export interface Lead {
   estado: LeadStatus;
   status?: LeadStatus;
   origen?: LeadOrigen | null;
+  canal?: LeadOrigen | string | null;
   canal_detectado?: LeadOrigen | null;
   producto_interes?: string | null;
   producto_interes_id?: number | null;
@@ -96,6 +97,11 @@ export interface Lead {
     changed_at?: string;
   }>;
   last_interaction_at?: string | null;
+  next_reminder_at?: string | null;
+  dias_inactivo?: number | null;
+  dias_alerta_inactividad?: number | null;
+  reincidente?: boolean | null;
+  gestor?: string | null;
   utms?: Utms | null;
   // UTMs pueden venir embebidos directamente en el lead segun endpoint
   utm_source?: string | null;
