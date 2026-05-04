@@ -202,3 +202,12 @@ export async function reassign(req, res, next) {
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
+
+export async function getLeadSequences(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const result = await leadService.getLeadSequences(id, req.user);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}

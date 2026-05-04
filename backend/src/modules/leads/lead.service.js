@@ -1,8 +1,25 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from './lead.model.js';
+import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
+
+// Dispara secuencias de email activas que tengan el trigger indicado
+async function triggerSequences(triggerEvent, leadId, projectId) {
+  try {
+    const { rows: seqs } = await query(
+      `SELECT id FROM email_sequences WHERE project_id = $1 AND trigger_event = $2 AND active = true`,
+      [projectId, triggerEvent]
+    );
+    for (const seq of seqs) {
+      await seqModel.startRun(seq.id, leadId);
+    }
+    if (seqs.length) logger.info({ triggerEvent, leadId, count: seqs.length }, 'Email sequences disparadas');
+  } catch (err) {
+    logger.warn({ err: err.message, triggerEvent, leadId }, 'Error disparando email sequences');
+  }
+}
 
 // ============================================================
 // DETECCION DE CANAL POR UTMs
@@ -76,6 +93,9 @@ export async function processWebhook(slug, apiKey, leadData) {
     },
   });
 
+  // Disparar email sequences con trigger lead_created (async)
+  triggerSequences('lead_created', lead.id, project.id);
+
   // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
   if (lead.responsableId) {
     (async () => {
@@ -138,6 +158,10 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
   if (lead.status === newStatus) throw new AppError('El lead ya tiene ese status', 400, 'SAME_STATUS');
 
   await leadModel.updateStatus(leadId, newStatus, lead.status, userId);
+
+  // Disparar email sequences con trigger status_changed (async)
+  triggerSequences('status_changed', leadId, lead.project_id);
+
   return { previous: lead.status, current: newStatus };
 }
 
@@ -219,6 +243,9 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     customFields: custom_fields,
   });
 
+  // Disparar email sequences con trigger lead_created (async)
+  triggerSequences('lead_created', lead.id, project_id);
+
   return {
     lead_id: lead.id,
     responsable_id: lead.responsableId,
@@ -236,4 +263,25 @@ export async function updateLead(leadId, data) {
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
   return updated;
+}
+
+export async function getLeadSequences(leadId, requestUser) {
+  const { rows } = await query(
+    `SELECT
+       r.id AS run_id,
+       r.status,
+       r.current_step,
+       r.next_send_at,
+       r.created_at AS enrolled_at,
+       s.id AS sequence_id,
+       s.nombre,
+       s.trigger_event,
+       COALESCE(jsonb_array_length(s.steps), 0) AS total_steps
+     FROM email_sequence_runs r
+     JOIN email_sequences s ON s.id = r.sequence_id
+     WHERE r.lead_id = $1
+     ORDER BY r.created_at DESC`,
+    [leadId]
+  );
+  return rows;
 }

@@ -32,8 +32,15 @@ import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
+import installationModule from './modules/installation/index.js';
+import projectChannelsModule from './modules/project-channels/index.js';
+import permissionsModule from './modules/permissions/index.js';
+import statusModule from './modules/status/index.js';
+import { resolveActiveModules } from './bundles/manifest.js';
+import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
+import { startReminderScheduler } from './jobs/reminderScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -73,9 +80,61 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Registro automatico de modulos
-const modules = [authModule, usersModule, leadsModule, productsModule, dossiersModule, conversionsModule, accountingModule, fieldDefsModule, credentialsModule, projectsModule, accountsPayableModule, productCategoriesModule, commissionsModule, reportsModule, matriculasModule, emailSequencesModule, formsModule, payrollModule, woocommerceModule, webhookTokensModule, audiencesModule, iaMonitorModule, reportsIaModule, claudeChatModule, documentsModule];
+// Mapeo modulo-name -> { module, name }. El nombre debe coincidir con el manifest de bundles.
+const ALL_MODULES = [
+  { name: 'auth', mod: authModule },
+  { name: 'users', mod: usersModule },
+  { name: 'leads', mod: leadsModule },
+  { name: 'products', mod: productsModule },
+  { name: 'dossiers', mod: dossiersModule },
+  { name: 'conversions', mod: conversionsModule },
+  { name: 'accounting', mod: accountingModule },
+  { name: 'field-definitions', mod: fieldDefsModule },
+  { name: 'credentials', mod: credentialsModule },
+  { name: 'projects', mod: projectsModule },
+  { name: 'accounts-payable', mod: accountsPayableModule },
+  { name: 'product-categories', mod: productCategoriesModule },
+  { name: 'commissions', mod: commissionsModule },
+  { name: 'reports', mod: reportsModule },
+  { name: 'matriculas', mod: matriculasModule },
+  { name: 'email-sequences', mod: emailSequencesModule },
+  { name: 'forms', mod: formsModule },
+  { name: 'payroll', mod: payrollModule },
+  { name: 'woocommerce', mod: woocommerceModule },
+  { name: 'webhook-tokens', mod: webhookTokensModule },
+  { name: 'audiences', mod: audiencesModule },
+  { name: 'ia-monitor', mod: iaMonitorModule },
+  { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'claude-chat', mod: claudeChatModule },
+  { name: 'documents', mod: documentsModule },
+  { name: 'project-channels', mod: projectChannelsModule },
+  { name: 'permissions', mod: permissionsModule },
+];
 
-for (const mod of modules) {
+// Módulos siempre activos (fuera del sistema de bundles)
+app.use(installationModule.prefix, installationModule.router);
+logger.info(`Modulo registrado: ${installationModule.prefix} (siempre activo)`);
+app.use(statusModule.prefix, statusModule.router);
+logger.info(`Modulo registrado: ${statusModule.prefix} (siempre activo, incluye rutas publicas)`);
+
+async function loadActiveBundles() {
+  try {
+    const { rows } = await query(`SELECT active_bundles FROM installation_bundles WHERE id = 1`);
+    return rows[0]?.active_bundles || [];
+  } catch (err) {
+    logger.warn({ err: err.message }, 'No se pudo leer installation_bundles, registrando todos los modulos');
+    return null;  // null = registrar todos (compat)
+  }
+}
+
+const activeBundles = await loadActiveBundles();
+const allowedModuleNames = activeBundles ? resolveActiveModules(activeBundles) : null;
+
+for (const { name, mod } of ALL_MODULES) {
+  if (allowedModuleNames && !allowedModuleNames.has(name)) {
+    logger.info(`Modulo SKIP (bundle inactivo): ${mod.prefix}`);
+    continue;
+  }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
 }
@@ -89,6 +148,7 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info(`CRM API corriendo en puerto ${PORT}`);
     startEmailSequenceScheduler();
     startWooCommerceSyncScheduler();
+    startReminderScheduler();
   });
 }
 

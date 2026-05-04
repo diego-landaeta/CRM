@@ -1,11 +1,21 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import * as authController from './auth.controller.js';
 
 const router = Router();
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.', code: 'RATE_LIMITED' },
+});
+
 // POST /api/auth/login — email + password → accessToken + refreshToken cookie
-router.post('/login', authController.login);
+router.post('/login', loginLimiter, authController.login);
 
 // POST /api/auth/refresh — refreshToken cookie → nuevo accessToken + rotacion cookie
 router.post('/refresh', authController.refresh);

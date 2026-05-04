@@ -3,6 +3,7 @@ import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import { loginSchema, setPasswordSchema } from './auth.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { buildPermissionsMap } from '../permissions/permissions.service.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -114,12 +115,24 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const projects = await authModel.getUserProjects(user.id);
+    const [projects, permissions] = await Promise.all([
+      authModel.getUserProjects(user.id),
+      buildPermissionsMap(user.id, user.role, user.custom_role_id),
+    ]);
 
     res.json({
       success: true,
       data: {
-        user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url },
+        user: {
+          id: user.id,
+          nombre: user.nombre,
+          email: user.email,
+          role: user.role,
+          avatar_url: user.avatar_url,
+          custom_role_id: user.custom_role_id,
+          custom_role_label: user.custom_role_label,
+        },
+        permissions,
         projects: sanitizeProjects(projects, user.role),
       },
     });
