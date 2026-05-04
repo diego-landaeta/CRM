@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Users, CurrencyEur, ChartLineUp, TrendUp, Plus, X, Sparkle, FilePdf, WarningCircle,
   Heart, Star, Lock, Bell,
@@ -16,10 +16,10 @@ import { Progress } from '@/shared/components/ui/progress';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/shared/components/ui/accordion';
 import { toast } from '@/shared/hooks/useToast';
 
-const fmtMoney = (n) => `${Math.round(n).toLocaleString('es-ES')} €`;
-const fmtNum = (n) => Math.round(n).toLocaleString('es-ES');
+const fmtMoney = (n: number) => `${Math.round(n).toLocaleString('es-ES')} €`;
+const fmtNum = (n: number) => Math.round(n).toLocaleString('es-ES');
 
-function Section({ title, description, children }) {
+function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
       <header>
@@ -31,7 +31,7 @@ function Section({ title, description, children }) {
   );
 }
 
-function Demo({ label, children }) {
+function Demo({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
       <p className="text-[11px] font-bold uppercase text-muted-foreground">{label}</p>

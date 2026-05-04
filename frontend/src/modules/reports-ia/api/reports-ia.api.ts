@@ -1,54 +1,71 @@
 // Reports IA API client (CRM-113)
 // Contrato: docs/03-api-endpoints.md > Reports
 
-import client from '@/shared/api/client';
+import client, { type ApiResponse } from '@/shared/api/client';
 import { reportsListMock, reportDetailMock, generateReportMock } from '../mocks/reports-ia.mock';
 
 const USE_MOCKS = false;  // Backend listo (con fallback si falta ANTHROPIC_API_KEY)
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-/**
- * GET /api/reports/:projectId?periodo=YYYY-MM
- */
-export async function listReports(projectId, params = {}) {
+export interface ReportMetadata {
+  leadsAnalizados: number;
+  conversionesAnalizadas: number;
+  facturacionTotal: number;
+  fuentesDatos: string[];
+}
+
+export interface ReportSummary {
+  id: string;
+  projectId: number;
+  projectName: string;
+  periodo: string;
+  metadata: ReportMetadata;
+  generadoPor: { id: number; nombre: string };
+  createdAt: string;
+  pdfUrl?: string | null;
+  pdfGeneratedAt?: string | null;
+}
+
+export interface Report extends ReportSummary {
+  content: string;
+}
+
+export interface ListReportsParams {
+  periodo?: string;
+}
+
+export async function listReports(projectId: string | number, params: ListReportsParams = {}): Promise<ApiResponse<ReportSummary[]>> {
   if (USE_MOCKS) { await delay(250); return { success: true, data: reportsListMock(projectId, params) }; }
-  const qs = new URLSearchParams(params).toString();
-  return client.get(`/reports-ia/${projectId}${qs ? '?' + qs : ''}`);
+  const qs = new URLSearchParams(params as Record<string, string>).toString();
+  return client.get<ReportSummary[]>(`/reports-ia/${projectId}${qs ? '?' + qs : ''}`);
 }
 
-/**
- * GET /api/reports/detail/:id
- */
-export async function getReport(id) {
-  if (USE_MOCKS) { await delay(250); return { success: true, data: reportDetailMock(id) }; }
-  return client.get(`/reports-ia/detail/${id}`);
+export async function getReport(id: string): Promise<ApiResponse<Report>> {
+  if (USE_MOCKS) { await delay(250); return { success: true, data: reportDetailMock(id) as Report }; }
+  return client.get<Report>(`/reports-ia/detail/${id}`);
 }
 
-/**
- * POST /api/reports/:projectId/generate
- */
-export async function generateReport(projectId, periodo) {
+export async function generateReport(projectId: string | number, periodo?: string): Promise<ApiResponse<Report>> {
   if (USE_MOCKS) { await delay(2000); return { success: true, data: generateReportMock(projectId, periodo) }; }
-  return client.post(`/reports-ia/${projectId}/generate`, { periodo });
+  return client.post<Report>(`/reports-ia/${projectId}/generate`, { periodo });
 }
 
 /**
  * POST /api/reports/:id/export-pdf  (CRM-121)
- * Genera y descarga el PDF directamente. Usa doc.save() de jsPDF para evitar
- * el bug de Chrome que ignora `a.download` con blob URLs en algunos casos.
- *
  * Mock: render del markdown a PDF en cliente con jsPDF.
- * Real (cuando backend este listo): pedir blob al endpoint y usar saveAs.
+ * Real: pide blob al endpoint y dispara descarga via data URL.
  */
-export async function exportReportPdf(id, { filename } = {}) {
+export async function exportReportPdf(id: string, opts: { filename?: string } = {}): Promise<Blob> {
+  const { filename } = opts;
   if (USE_MOCKS) {
     await delay(800);
     const md = await getReport(id);
+    if (!md.data) throw new Error('Reporte no encontrado');
     return buildPdfFromMarkdown(md.data, filename);
   }
   // Real: backend devuelve blob → guardar via jsPDF utility o saveAs
-  const blob = await client.post(`/reports-ia/${id}/export-pdf`, {}, { responseType: 'blob' });
+  const blob = await client.post<Blob>(`/reports-ia/${id}/export-pdf`, {}, { responseType: 'blob' }) as unknown as Blob;
   triggerDownload(blob, filename || 'reporte.pdf');
   return blob;
 }
@@ -57,11 +74,11 @@ export async function exportReportPdf(id, { filename } = {}) {
  * Descarga garantizada de un blob. Usa data URL (no blob:) para que Chrome
  * respete el atributo download.
  */
-function triggerDownload(blob, filename) {
+function triggerDownload(blob: Blob, filename: string) {
   const reader = new FileReader();
   reader.onloadend = () => {
     const a = document.createElement('a');
-    a.href = reader.result;
+    a.href = reader.result as string;
     a.download = filename;
     a.style.display = 'none';
     document.body.appendChild(a);
@@ -75,9 +92,9 @@ function triggerDownload(blob, filename) {
  * Genera un PDF real (estructura PDF valida) a partir del markdown del reporte.
  * Renderiza headings, paragrafos, listas, tablas, blockquotes, hr.
  */
-async function buildPdfFromMarkdown(report, filenameOverride) {
+async function buildPdfFromMarkdown(report: Report, filenameOverride?: string): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const doc: any = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const PAGE_W = 210;
   const PAGE_H = 297;
@@ -85,23 +102,23 @@ async function buildPdfFromMarkdown(report, filenameOverride) {
   const CONTENT_W = PAGE_W - MARGIN * 2;
   let y = MARGIN;
 
-  function addPageIfNeeded(needed = 10) {
+  function addPageIfNeeded(needed = 10): void {
     if (y + needed > PAGE_H - MARGIN) {
       doc.addPage();
       y = MARGIN;
     }
   }
 
-  function setStyle(size, weight = 'normal', color = '#0f172a') {
+  function setStyle(size: number, weight: string = 'normal', color: string = '#0f172a'): void {
     doc.setFont('helvetica', weight);
     doc.setFontSize(size);
     doc.setTextColor(color);
   }
 
-  function writeWrapped(text, size, weight, color = '#0f172a', indent = 0) {
+  function writeWrapped(text: string, size: number, weight: string, color: string = '#0f172a', indent: number = 0): void {
     setStyle(size, weight, color);
-    const lines = doc.splitTextToSize(text, CONTENT_W - indent);
-    lines.forEach(line => {
+    const lines: string[] = doc.splitTextToSize(text, CONTENT_W - indent);
+    lines.forEach((line: string) => {
       addPageIfNeeded(size * 0.45);
       doc.text(line, MARGIN + indent, y);
       y += size * 0.45;
@@ -139,7 +156,7 @@ async function buildPdfFromMarkdown(report, filenameOverride) {
   // === Render del markdown ===
   const lines = (report.content || '').split('\n');
   let inTable = false;
-  let tableRows = [];
+  let tableRows: string[][] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -229,7 +246,7 @@ async function buildPdfFromMarkdown(report, filenameOverride) {
   return doc.output('blob');
 }
 
-function renderTable(doc, rows, x, startY, width, ensureSpace, onAdvance) {
+function renderTable(doc: any, rows: string[][], x: number, startY: number, width: number, ensureSpace: (n: number) => void, onAdvance: (newY: number) => void): void {
   if (!rows.length) return;
   const colCount = rows[0].length;
   const colW = width / colCount;
@@ -241,10 +258,10 @@ function renderTable(doc, rows, x, startY, width, ensureSpace, onAdvance) {
     const lineHeight = 5;
     // Calcular altura maxima por celda
     let maxH = lineHeight;
-    cells.forEach(c => {
+    cells.forEach((c: string) => {
       doc.setFont('helvetica', isHeader ? 'bold' : 'normal');
       doc.setFontSize(9);
-      const lines = doc.splitTextToSize(c, colW - padding * 2);
+      const lines: string[] = doc.splitTextToSize(c, colW - padding * 2);
       maxH = Math.max(maxH, lines.length * 4.5);
     });
     ensureSpace(maxH + 2);
@@ -260,12 +277,12 @@ function renderTable(doc, rows, x, startY, width, ensureSpace, onAdvance) {
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.1);
     doc.rect(x, y, width, maxH + 2);
-    cells.forEach((c, ci) => {
+    cells.forEach((c: string, ci: number) => {
       doc.setFont('helvetica', isHeader ? 'bold' : 'normal');
       doc.setFontSize(isHeader ? 8 : 9);
       doc.setTextColor(isHeader ? '#475569' : '#0f172a');
-      const lines = doc.splitTextToSize(c, colW - padding * 2);
-      lines.forEach((l, li) => {
+      const lines: string[] = doc.splitTextToSize(c, colW - padding * 2);
+      lines.forEach((l: string, li: number) => {
         doc.text(l, x + ci * colW + padding, y + 4 + li * 4.5);
       });
     });
@@ -274,7 +291,7 @@ function renderTable(doc, rows, x, startY, width, ensureSpace, onAdvance) {
   onAdvance(y + 3);
 }
 
-function stripMd(text) {
+function stripMd(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
@@ -282,7 +299,7 @@ function stripMd(text) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 }
 
-function formatPeriodo(periodo) {
+function formatPeriodo(periodo?: string): string {
   if (!periodo) return '';
   const [y, m] = periodo.split('-');
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });

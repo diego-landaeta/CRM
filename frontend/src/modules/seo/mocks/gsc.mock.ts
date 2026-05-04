@@ -1,6 +1,12 @@
 // Mock data realista para CRM-106 (Google Search Console)
+import type { GscMetrics, GscConsolidated, GscMetricsParams, GscRow } from '../api/gsc.api';
 
-const SAMPLE_METRICS = {
+interface SampleProjectMetrics {
+  totals: { clicks: number; impressions: number; ctr: number; position: number };
+  queries: GscRow[];
+}
+
+const SAMPLE_METRICS: Record<string | number, SampleProjectMetrics> = {
   // Psiko Aprende
   1: {
     totals: { clicks: 12_480, impressions: 358_400, ctr: 3.48, position: 12.4 },
@@ -60,11 +66,13 @@ const SAMPLE_METRICS = {
   default: { totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 }, queries: [] },
 };
 
-const SAMPLE_CONSOLIDATED = {
+interface ConsolidatedMonthSample { mes: string; organicTraffic: number; paidTraffic: number; totalLeads: number }
+
+const SAMPLE_CONSOLIDATED: { default: ConsolidatedMonthSample[] } = {
   // 12 meses, organic + paid + leads — Psiko (proyecto activo del usuario)
   default: (() => {
     const now = new Date();
-    const months = [];
+    const months: ConsolidatedMonthSample[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -80,11 +88,11 @@ const SAMPLE_CONSOLIDATED = {
   })(),
 };
 
-export function gscMetricsMock(projectId, params = {}) {
+export function gscMetricsMock(projectId: string | number, params: GscMetricsParams = {}): GscMetrics {
   const data = SAMPLE_METRICS[projectId] || SAMPLE_METRICS.default;
   const desde = params.fechaDesde ? new Date(params.fechaDesde) : new Date(Date.now() - 28 * 86400000);
   const hasta = params.fechaHasta ? new Date(params.fechaHasta) : new Date(Date.now() - 3 * 86400000);
-  const days = Math.max(1, Math.round((hasta - desde) / 86400000));
+  const days = Math.max(1, Math.round((hasta.getTime() - desde.getTime()) / 86400000));
   const factor = Math.min(1, days / 28);
 
   // Ultima actualizacion = ayer hace 3 dias (delay GSC)
@@ -106,7 +114,7 @@ export function gscMetricsMock(projectId, params = {}) {
   };
 }
 
-export function gscConsolidatedMock(projectId) {
+export function gscConsolidatedMock(projectId: string | number): GscConsolidated {
   // Para todos los proyectos usamos la misma curva (escalada por id)
   const factor = projectId == 1 ? 1 : projectId == 2 ? 0.65 : 0.32;
   return {

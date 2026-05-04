@@ -7,28 +7,30 @@ import { useStripeMonitor } from '../hooks/useStripeMonitor';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
 import useCountUp from '@/shared/hooks/useCountUp';
 import {
-  CurrencyEur, Users, TrendUp, TrendDown, ArrowUp, ArrowDown,
-  WarningCircle, CreditCard, UserMinus, Robot,
+  CurrencyEur, Users, TrendDown, ArrowUp, ArrowDown,
+  WarningCircle, CreditCard, Robot, type Icon,
 } from '@phosphor-icons/react';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts';
 
-function fmtMoney(n) {
+type Numeric = number | null | undefined;
+
+function fmtMoney(n: Numeric): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
-function fmtMoney2(n) {
+function fmtMoney2(n: Numeric): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(Number(n || 0));
 }
-function fmtNum(n) {
+function fmtNum(n: Numeric): string {
   return new Intl.NumberFormat('es-ES').format(Number(n || 0));
 }
-function fmtPct(n) {
+function fmtPct(n: Numeric): string {
   return `${(Number(n) || 0).toFixed(2)}%`;
 }
-function fmtMes(s) {
+function fmtMes(s: string | null | undefined): string {
   const [y, m] = (s || '').split('-');
-  if (!y) return s;
+  if (!y) return String(s ?? '');
   const d = new Date(Number(y), Number(m) - 1, 1);
   return d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
 }
@@ -168,8 +170,8 @@ export default function IADashboardPage() {
                   <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v} />
                   <Tooltip
                     contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
-                    formatter={(v) => fmtMoney2(v)}
-                    labelFormatter={fmtMes}
+                    formatter={(v) => fmtMoney2(Number(v))}
+                    labelFormatter={(v) => fmtMes(String(v))}
                   />
                   <Line type="monotone" dataKey="mrr" name="MRR" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} activeDot={{ r: 5 }} />
                 </LineChart>
@@ -195,8 +197,8 @@ export default function IADashboardPage() {
                   <Tooltip
                     cursor={{ fill: '#f9fafb' }}
                     contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
-                    formatter={(v) => fmtPct(v)}
-                    labelFormatter={fmtMes}
+                    formatter={(v) => fmtPct(Number(v))}
+                    labelFormatter={(v) => fmtMes(String(v))}
                   />
                   <ReferenceLine y={5} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'Alerta 5%', position: 'right', fill: '#ef4444', fontSize: 10 }} />
                   <Bar dataKey="churnRate" name="Churn" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={28} />
@@ -216,8 +218,8 @@ export default function IADashboardPage() {
                 <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
                   contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
-                  formatter={(v) => fmtNum(v)}
-                  labelFormatter={fmtMes}
+                  formatter={(v) => fmtNum(Number(v))}
+                  labelFormatter={(v) => fmtMes(String(v))}
                 />
                 <Line type="monotone" dataKey="activeSubs" name="Subs activas" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} />
               </LineChart>
@@ -229,7 +231,20 @@ export default function IADashboardPage() {
   );
 }
 
-function KpiHero({ icon: Icon, label, term, value, numericValue, format, delta, tone = 'default' }) {
+type Tone = 'primary' | 'success' | 'warning' | 'destructive' | 'default';
+
+interface KpiHeroProps {
+  icon: Icon;
+  label: string;
+  term?: string;
+  value?: string | number;
+  numericValue?: number;
+  format?: (n: number) => string;
+  delta?: { pct: number; growing: boolean; suffix?: string } | null;
+  tone?: Tone;
+}
+
+function KpiHero({ icon: Icon, label, term, value, numericValue, format, delta, tone = 'default' }: KpiHeroProps) {
   const iconBg = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',

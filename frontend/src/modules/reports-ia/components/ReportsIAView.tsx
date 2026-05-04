@@ -10,13 +10,24 @@ import { exportReportPdf } from '../api/reports-ia.api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-function fmtPeriodo(p) {
+interface Project {
+  id: string | number;
+  slug?: string;
+  nombre?: string;
+}
+
+interface ReportsIAViewProps {
+  project: Project | null | undefined;
+  showGenerateButton?: boolean;
+}
+
+function fmtPeriodo(p: string | null | undefined): string {
   if (!p) return '';
   const [y, m] = p.split('-');
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 }
 
-function fmtDateIA(s) {
+function fmtDateIA(s: string | null | undefined): string {
   if (!s) return '';
   return new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -28,7 +39,7 @@ function fmtDateIA(s) {
  * Responsive: grid se colapsa a 1 columna en <lg, max-h del historial se
  * adapta al viewport.
  */
-export default function ReportsIAView({ project, showGenerateButton = true }) {
+export default function ReportsIAView({ project, showGenerateButton = true }: ReportsIAViewProps) {
   const { user } = useAuth();
   const reportsIA = useReportsIA(project?.id);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -38,8 +49,8 @@ export default function ReportsIAView({ project, showGenerateButton = true }) {
     try {
       await reportsIA.generate();
       toast({ title: 'Reporte generado', description: 'Claude AI analizó los datos del periodo' });
-    } catch (err) {
-      toast({ title: 'Error generando reporte', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error generando reporte', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     }
   }
 
@@ -51,8 +62,8 @@ export default function ReportsIAView({ project, showGenerateButton = true }) {
       const filename = `reporte-${slug}-${reportsIA.selected.periodo}.pdf`;
       await exportReportPdf(reportsIA.selected.id, { filename });
       toast({ title: 'PDF descargado', description: filename });
-    } catch (err) {
-      toast({ title: 'Error generando PDF', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Error generando PDF', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setPdfLoading(false);
     }

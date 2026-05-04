@@ -1,8 +1,9 @@
 // Mock data CRM-113 — reportes IA mensuales en markdown
+import type { Report, ReportSummary, ListReportsParams } from '../api/reports-ia.api';
 
-const PROJECT_NAMES = { 1: 'Psiko Aprende', 2: 'ISEIH', 3: 'Fono Aprende', 4: 'Psicologo IA', 5: 'Nutricionista IA', 6: 'Tarot IA' };
+const PROJECT_NAMES: Record<number, string> = { 1: 'Psiko Aprende', 2: 'ISEIH', 3: 'Fono Aprende', 4: 'Psicologo IA', 5: 'Nutricionista IA', 6: 'Tarot IA' };
 
-function buildSampleMarkdown(projectName, periodo) {
+function buildSampleMarkdown(projectName: string, periodo: string): string {
   const [year, month] = periodo.split('-');
   const monthName = new Date(Number(year), Number(month) - 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 
@@ -75,7 +76,7 @@ Durante ${monthName}, ${projectName} registro **68 leads nuevos** (+12% vs mes a
 }
 
 const SAMPLES = (() => {
-  const map = new Map();
+  const map = new Map<string, Report>();
   // Generar reportes mensuales de los ultimos 6 meses para todos los proyectos
   for (const projectId of [1, 2, 3, 4, 5, 6]) {
     for (let i = 0; i < 6; i++) {
@@ -83,7 +84,7 @@ const SAMPLES = (() => {
       d.setMonth(d.getMonth() - 1 - i); // mes anterior y atras
       const periodo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const id = `rep_${projectId}_${periodo}`;
-      const projectName = PROJECT_NAMES[projectId] || 'Proyecto';
+      const projectName = PROJECT_NAMES[projectId as number] || 'Proyecto';
       const createdAt = new Date(d.getFullYear(), d.getMonth() + 1, 1, 8, 0, 0);
       map.set(id, {
         id,
@@ -107,7 +108,7 @@ const SAMPLES = (() => {
   return map;
 })();
 
-export function reportsListMock(projectId, params = {}) {
+export function reportsListMock(projectId: string | number, params: ListReportsParams = {}): ReportSummary[] {
   let arr = [...SAMPLES.values()].filter(r => r.projectId === Number(projectId));
   if (params.periodo) arr = arr.filter(r => r.periodo === params.periodo);
   return arr
@@ -115,18 +116,18 @@ export function reportsListMock(projectId, params = {}) {
     .map(({ content, ...rest }) => rest); // listado sin content
 }
 
-export function reportDetailMock(id) {
+export function reportDetailMock(id: string): Report | null {
   return SAMPLES.get(id) || null;
 }
 
-export function generateReportMock(projectId, periodo) {
+export function generateReportMock(projectId: string | number, periodo?: string): Report {
   const d = periodo ? new Date(periodo + '-01') : new Date(new Date().setMonth(new Date().getMonth() - 1));
   const periodoStr = periodo || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const id = `rep_${projectId}_${periodoStr}`;
-  const projectName = PROJECT_NAMES[projectId] || 'Proyecto';
-  const report = {
+  const projectName = PROJECT_NAMES[Number(projectId)] || 'Proyecto';
+  const report: Report = {
     id,
-    projectId,
+    projectId: Number(projectId),
     projectName,
     periodo: periodoStr,
     content: buildSampleMarkdown(projectName, periodoStr),

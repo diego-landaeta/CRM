@@ -2,7 +2,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import { useOrganicTraffic, PRESET_PERIODS } from '../hooks/useOrganicTraffic';
+import { useOrganicTraffic, PRESET_PERIODS, type Preset } from '../hooks/useOrganicTraffic';
 import {
   MagnifyingGlass, MouseSimple, ChartLineUp, Ranking, Info, Globe, WarningCircle,
 } from '@phosphor-icons/react';
@@ -10,24 +10,24 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 
-function fmtNum(n) {
+function fmtNum(n: number | null | undefined): string {
   return new Intl.NumberFormat('es-ES').format(Number(n || 0));
 }
-function fmtPct(n) {
+function fmtPct(n: number | null | undefined): string {
   return `${(Number(n) || 0).toFixed(2)}%`;
 }
-function fmtPos(n) {
+function fmtPos(n: number | null | undefined): string {
   return Number(n || 0).toFixed(1);
 }
-function fmtDate(s) {
+function fmtDate(s: string | null | undefined): string {
   if (!s) return '';
   const d = new Date(s);
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
-function fmtMes(s) {
+function fmtMes(s: string | null | undefined): string {
   // "2026-04" -> "abr 26"
   const [y, m] = (s || '').split('-');
-  if (!y) return s;
+  if (!y) return String(s ?? '');
   const d = new Date(Number(y), Number(m) - 1, 1);
   return d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
 }
@@ -73,7 +73,7 @@ export default function SeoPage() {
         {Object.entries(PRESET_PERIODS).map(([k, v]) => (
           <button
             key={k}
-            onClick={() => { seo.setCustomRange(null); seo.setPreset(k); }}
+            onClick={() => { seo.setCustomRange(null); seo.setPreset(k as Preset); }}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
               seo.preset === k && !seo.customRange ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
             }`}
@@ -128,7 +128,7 @@ export default function SeoPage() {
                   <YAxis yAxisId="left" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${v/1000}k` : v} />
                   <YAxis yAxisId="right" orientation="right" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }}
-                    formatter={(v, name) => [fmtNum(v), name]} labelFormatter={fmtMes} />
+                    formatter={(v, name) => [fmtNum(Number(v)), String(name)]} labelFormatter={(v) => fmtMes(String(v))} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                   <Line yAxisId="left" type="monotone" dataKey="organicTraffic" name="Orgánico" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} />
                   <Line yAxisId="left" type="monotone" dataKey="paidTraffic" name="Pagado (Meta+Google)" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
@@ -211,7 +211,7 @@ export default function SeoPage() {
   );
 }
 
-function PositionBadge({ value }) {
+function PositionBadge({ value }: { value: number | null | undefined }) {
   const v = Number(value || 0);
   let color = 'bg-muted text-muted-foreground';
   if (v > 0 && v <= 3) color = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400';

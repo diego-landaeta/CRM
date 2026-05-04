@@ -1,9 +1,10 @@
 // Mock data realista para CRM-108 (Stripe Monitor / Dashboard IA)
+import type { StripeMetrics, StripeEvolutionPoint } from '../api/stripe.api';
 
 // Generador de evolucion 12 meses con tendencia + estacionalidad
-function generateEvolution(baseMrr, baseSubs, growth) {
+function generateEvolution(baseMrr: number, baseSubs: number, growth: number): StripeEvolutionPoint[] {
   const now = new Date();
-  const months = [];
+  const months: StripeEvolutionPoint[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -20,7 +21,7 @@ function generateEvolution(baseMrr, baseSubs, growth) {
   return months;
 }
 
-const SAMPLE = {
+const SAMPLE: Record<string | number, StripeMetrics> = {
   // Psicologo IA
   4: (() => {
     const evo = generateEvolution(6_800, 220, 1.18);
@@ -66,11 +67,11 @@ const SAMPLE = {
 };
 
 // Default para proyectos no IA: datos vacios para que el frontend muestre empty state
-const EMPTY = {
+const EMPTY: StripeMetrics = {
   mrr: 0, activeSubs: 0, newSubs: 0, cancelledSubs: 0, failedPayments: 0, churnRate: 0,
   evolution12Months: [],
 };
 
-export function stripeMetricsMock(projectId) {
+export function stripeMetricsMock(projectId: string | number): StripeMetrics {
   return SAMPLE[projectId] || EMPTY;
 }
