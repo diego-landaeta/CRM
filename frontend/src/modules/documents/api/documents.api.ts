@@ -55,8 +55,8 @@ export const documentsApi = {
   list: (projectId: number, type?: DocumentType): Promise<ApiResponse<CrmDocument[]>> =>
     client.get(`/documents?projectId=${projectId}${type ? `&type=${type}` : ''}`),
 
-  generate: (projectId: number, type: DocumentType, data: DocumentData): Promise<ApiResponse<CrmDocument>> =>
-    client.post('/documents/generate', { projectId, type, data }),
+  generate: (projectId: number, type: DocumentType, data: DocumentData, numeroOverride?: number): Promise<ApiResponse<CrmDocument>> =>
+    client.post('/documents/generate', { projectId, type, data, numero_override: numeroOverride }),
 
   download: (id: number, projectId: number): Promise<Blob> =>
     client.get(`/documents/${id}/download?projectId=${projectId}`, { responseType: 'blob' }) as unknown as Promise<Blob>,
@@ -66,4 +66,13 @@ export const documentsApi = {
 
   preview: (type: DocumentType, data: DocumentData): Promise<ApiResponse<PreviewResult>> =>
     client.post('/documents/preview', { type, data }),
+
+  // Peek: siguiente numero sin incrementar el contador. Para mostrar en el form.
+  nextNumber: (projectId: number, type: DocumentType): Promise<ApiResponse<{ number: number; formatted: string }>> =>
+    client.get(`/documents/next-number?projectId=${projectId}&type=${type}`),
+
+  // Reposiciona el contador (ajustes de "inicio de factura"). El proximo numero
+  // generado sera exactamente `value`, y la sucesion continuara desde ahi.
+  setNumber: (projectId: number, type: DocumentType, value: number): Promise<ApiResponse<{ next: number }>> =>
+    client.post('/documents/set-number', { projectId, type, value }),
 };

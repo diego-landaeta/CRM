@@ -152,6 +152,7 @@ export default function DocumentsPage() {
       cliente_direccion: (d.cliente_direccion as string) || (d.client_direccion as string) || '',
       lineas: (d.lineas as InvoiceFormValues['lineas']) || [{ descripcion: '', cantidad: 1, precio: '' }],
       iva_pct: (d.iva_pct as number) ?? 21,
+      iva_exento: (d.iva_exento as boolean) ?? true,
       // fecha no se duplica (siempre se usa hoy)
     });
     setTab('invoice');
@@ -223,12 +224,14 @@ export default function DocumentsPage() {
         actions={
           <>
             <button
+              type="button"
               onClick={() => setTab('invoice')}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <Receipt size={15} /> <span className="hidden sm:inline">Nueva</span> Factura
             </button>
             <button
+              type="button"
               onClick={() => setTab('certificate')}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
@@ -282,7 +285,7 @@ export default function DocumentsPage() {
                       <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Tipo</th>
                       <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Cliente / Alumno</th>
                       <th className="text-left px-4 py-3 font-semibold text-xs text-muted-foreground uppercase tracking-wide">Fecha</th>
-                      <th className="px-4 py-3" />
+                      <th className="px-4 py-3"><span className="sr-only">Acciones</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -306,6 +309,7 @@ export default function DocumentsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
                             <button
+                              type="button"
                               onClick={() => setPreviewing(doc)}
                               aria-label={`Previsualizar ${doc.number}`}
                               className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -314,6 +318,7 @@ export default function DocumentsPage() {
                               <Eye size={14} />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDownload(doc)}
                               disabled={downloading === doc.id}
                               aria-label={`Descargar PDF ${doc.number}`}
@@ -334,6 +339,7 @@ export default function DocumentsPage() {
                               </button>
                             )}
                             <button
+                              type="button"
                               onClick={() => setPendingDelete(doc)}
                               aria-label={`Eliminar ${doc.number}`}
                               className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
