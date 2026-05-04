@@ -1,7 +1,8 @@
 // Mock data realista para CRM-104 (Google Ads campaigns)
 // Estructura espejo del contrato Google Ads API + extension cross-CRM definido en CRM-104.md
+import type { GoogleCampaignsData, GoogleCampaignsParams } from '../api/google.api';
 
-const SAMPLE_CAMPAIGNS = {
+const SAMPLE_CAMPAIGNS: Record<string | number, GoogleCampaignsData> = {
   // project_id 1 (Psiko Aprende)
   1: {
     campaigns: [
@@ -57,11 +58,11 @@ const SAMPLE_CAMPAIGNS = {
   default: { campaigns: [], keywords: [] },
 };
 
-export function googleCampaignsMock(projectId, params = {}) {
+export function googleCampaignsMock(projectId: string | number, params: GoogleCampaignsParams = {}): GoogleCampaignsData {
   const data = SAMPLE_CAMPAIGNS[projectId] || SAMPLE_CAMPAIGNS.default;
   const desde = params.fechaDesde ? new Date(params.fechaDesde) : new Date(Date.now() - 30 * 86400000);
   const hasta = params.fechaHasta ? new Date(params.fechaHasta) : new Date();
-  const days = Math.max(1, Math.round((hasta - desde) / 86400000));
+  const days = Math.max(1, Math.round((hasta.getTime() - desde.getTime()) / 86400000));
   const factor = Math.min(1, days / 30);
   return {
     campaigns: data.campaigns.map(c => ({

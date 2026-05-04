@@ -62,7 +62,7 @@ export default function ApisTab() {
       </div>
 
       {loading ? (
-        <SkeletonTable rows={6} cols={1} />
+        <SkeletonTable rows={6} columns={1} />
       ) : (
         <div className="space-y-3">
           {SERVICES_CATALOG.filter(s => s.global).map((svc) => {

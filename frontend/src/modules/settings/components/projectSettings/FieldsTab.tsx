@@ -25,12 +25,33 @@ export default function FieldsTab({ project, onSaved }) {
     saveBase({ ...baseConfig, [key]: { ...cur, [prop]: !cur[prop] } });
   }
 
-  const [fields, setFields] = useState([]);
+  interface FieldDef {
+    id: number;
+    project_id: number;
+    field_key: string;
+    label: string;
+    type: string;
+    required: boolean;
+    orden: number;
+    grupo?: string | null;
+    options?: string[] | null;
+  }
+
+  interface NewField {
+    field_key: string;
+    label: string;
+    type: string;
+    required: boolean;
+    grupo: string;
+    options: string;
+  }
+
+  const [fields, setFields] = useState<FieldDef[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('editor');
-  const [editingId, setEditingId] = useState(null);
-  const [editBuf, setEditBuf] = useState({});
-  const [newField, setNewField] = useState({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
+  const [view, setView] = useState<'editor' | 'preview'>('editor');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editBuf, setEditBuf] = useState<{ label?: string; required?: boolean; grupo?: string; options?: string }>({});
+  const [newField, setNewField] = useState<NewField>({ field_key: '', label: '', type: 'text', required: false, grupo: '', options: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,7 +67,7 @@ export default function FieldsTab({ project, onSaved }) {
     e.preventDefault();
     if (!newField.field_key || !newField.label) return;
     try {
-      const payload = {
+      const payload: Partial<FieldDef> = {
         project_id: project.id,
         field_key: newField.field_key,
         label: newField.label,
@@ -93,9 +114,9 @@ export default function FieldsTab({ project, onSaved }) {
     setEditBuf({ label: f.label, required: f.required, grupo: f.grupo || '', options: Array.isArray(f.options) ? f.options.join(', ') : '' });
   }
 
-  async function saveEdit(f) {
+  async function saveEdit(f: FieldDef) {
     try {
-      const payload = { label: editBuf.label, required: editBuf.required, grupo: editBuf.grupo || null };
+      const payload: Partial<FieldDef> = { label: editBuf.label, required: editBuf.required, grupo: editBuf.grupo || null };
       if (f.type === 'select' && editBuf.options !== undefined) {
         payload.options = editBuf.options.split(',').map(s => s.trim()).filter(Boolean);
       }
@@ -106,7 +127,7 @@ export default function FieldsTab({ project, onSaved }) {
   }
 
   const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
-  const groups = fields.reduce((acc, f) => {
+  const groups = fields.reduce<Record<string, FieldDef[]>>((acc, f) => {
     const g = f.grupo || 'General';
     (acc[g] = acc[g] || []).push(f);
     return acc;

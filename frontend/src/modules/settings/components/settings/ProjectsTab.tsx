@@ -41,7 +41,7 @@ export default function ProjectsTab() {
       </div>
 
       {loading ? (
-        <SkeletonTable rows={3} cols={1} />
+        <SkeletonTable rows={3} columns={1} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {projects.map((p) => (

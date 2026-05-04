@@ -52,7 +52,7 @@ export default function MetaCampaignsPage() {
                 campaigns={meta.campaigns}
                 statusStyles={STATUS_STYLES_META}
                 statusLabel={STATUS_LABEL_META}
-                getSubLabel={c => c.objective}
+                getSubLabel={(c) => (c as { objective?: string }).objective || ''}
               />
             )}
           </div>

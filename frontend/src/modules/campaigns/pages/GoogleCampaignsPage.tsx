@@ -51,7 +51,10 @@ export default function GoogleCampaignsPage() {
                 campaigns={google.campaigns}
                 statusStyles={STATUS_STYLES_GOOGLE}
                 statusLabel={STATUS_LABEL_GOOGLE}
-                getSubLabel={c => TYPE_LABEL_GOOGLE[c.type] || c.type}
+                getSubLabel={(c) => {
+                  const g = c as { type?: string };
+                  return (g.type && TYPE_LABEL_GOOGLE[g.type as keyof typeof TYPE_LABEL_GOOGLE]) || g.type || '';
+                }}
               />
             )}
           </div>

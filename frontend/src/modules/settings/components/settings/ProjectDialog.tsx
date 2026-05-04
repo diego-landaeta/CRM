@@ -6,8 +6,22 @@ import { toast } from '@/shared/hooks/useToast';
 
 const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
-export default function ProjectDialog({ open, onClose, existing, onSaved }) {
-  const [form, setForm] = useState({
+interface ProjectForm {
+  nombre: string;
+  slug: string;
+  type: string;
+  dias_alerta_inactividad: number;
+  meta_account_id: string;
+  google_account_id: string;
+  gsc_property: string;
+  emoji: string;
+  active: boolean;
+  producto_label?: string;
+  producto_label_plural?: string;
+}
+
+export default function ProjectDialog({ open, onClose, existing, onSaved }: { open: boolean; onClose: () => void; existing?: any; onSaved?: () => void }) {
+  const [form, setForm] = useState<ProjectForm>({
     nombre: '', slug: '', type: 'crm', dias_alerta_inactividad: 3,
     meta_account_id: '', google_account_id: '', gsc_property: '', emoji: '', active: true,
   });
@@ -58,7 +72,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }) {
     }
     setSaving(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         nombre: form.nombre,
         type: form.type,
         dias_alerta_inactividad: Number(form.dias_alerta_inactividad),
@@ -80,8 +94,8 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }) {
       }
       onSaved?.();
       onClose();
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -117,7 +131,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }) {
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
-                <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: e.target.value })} className={inputClass} />
+                <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: Number(e.target.value) })} className={inputClass} />
               </div>
             </div>
 

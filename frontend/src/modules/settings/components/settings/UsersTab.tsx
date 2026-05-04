@@ -110,12 +110,12 @@ export default function UsersTab() {
     setOpenMenuId(null);
   }
 
-  async function handleSaveEdit(e) {
+  async function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingUser) return;
     setEditLoading(true);
     try {
-      const payload = { role: editRole };
+      const payload: { role: string; projectIds?: number[] } = { role: editRole };
       if (editProjects.length > 0) payload.projectIds = editProjects;
       await client.patch(`/users/${editingUser.id}`, payload);
       toast({ title: 'Usuario actualizado', description: `${editingUser.nombre || editingUser.name} actualizado` });
@@ -254,7 +254,6 @@ export default function UsersTab() {
                     <td className="px-5 py-3.5 text-right">
                       {u.role !== 'superadmin' && (
                         <UserActionsMenu
-                          user={u}
                           isActive={isActive}
                           isOpen={openMenuId === u.id}
                           onToggle={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
@@ -293,7 +292,6 @@ export default function UsersTab() {
                   </div>
                   {u.role !== 'superadmin' && (
                     <UserActionsMenu
-                      user={u}
                       isActive={isActive}
                       isOpen={openMenuId === u.id}
                       onToggle={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
@@ -395,6 +393,7 @@ export default function UsersTab() {
               projects={projects}
               selected={editProjects}
               onToggle={(id) => handleToggleProject(id, editProjects, setEditProjects)}
+              required={false}
             />
           )}
         </UserDialog>

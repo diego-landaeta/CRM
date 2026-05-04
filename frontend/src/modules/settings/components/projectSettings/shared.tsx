@@ -1,13 +1,24 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
 export const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
-const EMPTY_CONFIRM = { open: false, title: '', message: '', onConfirm: null, tone: 'destructive', confirmLabel: 'Eliminar' };
+type ConfirmTone = 'destructive' | 'default' | 'warning';
+
+interface ConfirmState {
+  open: boolean;
+  title: string;
+  message: string;
+  onConfirm: (() => void) | null;
+  tone: ConfirmTone;
+  confirmLabel: string;
+}
+
+const EMPTY_CONFIRM: ConfirmState = { open: false, title: '', message: '', onConfirm: null, tone: 'destructive', confirmLabel: 'Eliminar' };
 
 export function useConfirm() {
-  const [state, setState] = useState(EMPTY_CONFIRM);
-  const ask = (title, message, onConfirm, tone = 'destructive', confirmLabel = 'Eliminar') =>
+  const [state, setState] = useState<ConfirmState>(EMPTY_CONFIRM);
+  const ask = (title: string, message: string, onConfirm: () => void, tone: ConfirmTone = 'destructive', confirmLabel: string = 'Eliminar') =>
     setState({ open: true, title, message, onConfirm, tone, confirmLabel });
   const close = () => setState(EMPTY_CONFIRM);
   const dialog = (
@@ -24,7 +35,7 @@ export function useConfirm() {
   return { ask, dialog };
 }
 
-export function SectionTitle({ title, subtitle }) {
+export function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div>
       <h3 className="text-sm font-semibold">{title}</h3>
@@ -33,7 +44,7 @@ export function SectionTitle({ title, subtitle }) {
   );
 }
 
-export function Field({ label, hint, children }) {
+export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
       <label className="text-xs text-muted-foreground mb-1 block">{label}</label>

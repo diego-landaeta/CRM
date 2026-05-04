@@ -1,7 +1,8 @@
 // Mock data realista para CRM-101 (Meta Ads campaigns)
 // Estructura espejo del contrato Meta Marketing API definido en docs/03-api-endpoints.md
+import type { MetaCampaign, MetaCampaignsParams } from '../api/meta.api';
 
-const SAMPLE_CAMPAIGNS = {
+const SAMPLE_CAMPAIGNS: Record<string | number, MetaCampaign[]> = {
   // project_id 1 (Psiko Aprende)
   1: [
     { campaignId: '120201234567890123', campaignName: 'Psiko Master Otono 2026 - Conversion', status: 'ACTIVE', objective: 'LEAD_GENERATION',
@@ -39,12 +40,12 @@ const SAMPLE_CAMPAIGNS = {
   default: [],
 };
 
-export function metaCampaignsMock(projectId, params = {}) {
+export function metaCampaignsMock(projectId: string | number, params: MetaCampaignsParams = {}): MetaCampaign[] {
   const list = SAMPLE_CAMPAIGNS[projectId] || SAMPLE_CAMPAIGNS.default;
   // Reflejamos el filtro de fechas dividiendo proporcionalmente las metricas
   const desde = params.fechaDesde ? new Date(params.fechaDesde) : new Date(Date.now() - 30 * 86400000);
   const hasta = params.fechaHasta ? new Date(params.fechaHasta) : new Date();
-  const days = Math.max(1, Math.round((hasta - desde) / 86400000));
+  const days = Math.max(1, Math.round((hasta.getTime() - desde.getTime()) / 86400000));
   const factor = Math.min(1, days / 30);
   return list.map(c => ({
     ...c,

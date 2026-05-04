@@ -2,51 +2,57 @@
 import KpiCard from '@/shared/components/ui/KpiCard';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import { PRESET_PERIODS } from '../hooks/useCampaigns';
+import { PRESET_PERIODS, type Preset } from '../hooks/useCampaigns';
+import type { useCampaigns, CampaignTotals } from '../hooks/useCampaigns';
+import type { MetaCampaign, MetaStatus } from '../api/meta.api';
+import type { GoogleCampaign, GoogleKeyword, GoogleStatus, GoogleType } from '../api/google.api';
 import {
   CurrencyEur, MouseSimple, Users, TrendUp, FacebookLogo, GoogleLogo, ChartBar, WarningCircle,
+  type Icon,
 } from '@phosphor-icons/react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 
-export const STATUS_STYLES_META = {
+export const STATUS_STYLES_META: Record<MetaStatus, string> = {
   ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
   PAUSED: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
   COMPLETED: 'bg-muted text-muted-foreground',
 };
-export const STATUS_LABEL_META = { ACTIVE: 'Activa', PAUSED: 'Pausada', COMPLETED: 'Finalizada' };
+export const STATUS_LABEL_META: Record<MetaStatus, string> = { ACTIVE: 'Activa', PAUSED: 'Pausada', COMPLETED: 'Finalizada' };
 
-export const STATUS_STYLES_GOOGLE = {
+export const STATUS_STYLES_GOOGLE: Record<GoogleStatus, string> = {
   ENABLED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
   PAUSED: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
   REMOVED: 'bg-muted text-muted-foreground',
 };
-export const STATUS_LABEL_GOOGLE = { ENABLED: 'Activa', PAUSED: 'Pausada', REMOVED: 'Eliminada' };
-export const TYPE_LABEL_GOOGLE = { SEARCH: 'Search', DISPLAY: 'Display', VIDEO: 'Video', SHOPPING: 'Shopping', PERFORMANCE_MAX: 'Performance Max' };
+export const STATUS_LABEL_GOOGLE: Record<GoogleStatus, string> = { ENABLED: 'Activa', PAUSED: 'Pausada', REMOVED: 'Eliminada' };
+export const TYPE_LABEL_GOOGLE: Record<GoogleType, string> = { SEARCH: 'Search', DISPLAY: 'Display', VIDEO: 'Video', SHOPPING: 'Shopping', PERFORMANCE_MAX: 'Performance Max' };
 
 export const CPA_ALERT_THRESHOLD = 100;
 
-export function fmtMoney(n) {
+export function fmtMoney(n: number | null | undefined): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
-export function fmtNum(n) {
+export function fmtNum(n: number | null | undefined): string {
   return new Intl.NumberFormat('es-ES').format(Number(n || 0));
 }
-export function fmtCpa(n) {
+export function fmtCpa(n: number | null | undefined): string {
   if (!n || n === Infinity) return '—';
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
 }
 
+type CampaignsHook = ReturnType<typeof useCampaigns>;
+
 // ---------- Period Selector compartido ----------
-export function PeriodSelector({ all }) {
+export function PeriodSelector({ all }: { all: CampaignsHook }) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1">
       <span className="text-xs text-muted-foreground flex-shrink-0">Periodo</span>
       {Object.entries(PRESET_PERIODS).map(([k, v]) => (
         <button
           key={k}
-          onClick={() => { all.setCustomRange(null); all.setPreset(k); }}
+          onClick={() => { all.setCustomRange(null); all.setPreset(k as Preset); }}
           className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
             all.preset === k && !all.customRange ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
           }`}
@@ -68,7 +74,14 @@ export function PeriodSelector({ all }) {
 }
 
 // ---------- Consolidado ----------
-export function ConsolidatedView({ data, project }) {
+interface ConsolidatedData {
+  totals: CampaignTotals;
+  breakdown: { meta: CampaignTotals; google: CampaignTotals };
+}
+
+interface ProjectLite { nombre?: string; id?: number | string }
+
+export function ConsolidatedView({ data, project }: { data: ConsolidatedData; project: ProjectLite | null | undefined }) {
   const { totals, breakdown } = data;
 
   const chartData = [
@@ -115,7 +128,16 @@ export function ConsolidatedView({ data, project }) {
   );
 }
 
-function PlatformBarChart({ title, subtitle, chartData, dataKey, name, valueFormatter }) {
+interface PlatformBarChartProps {
+  title: string;
+  subtitle: string;
+  chartData: Array<Record<string, unknown>>;
+  dataKey: string;
+  name: string;
+  valueFormatter?: (v: number) => string;
+}
+
+function PlatformBarChart({ title, subtitle, chartData, dataKey, name, valueFormatter }: PlatformBarChartProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-5">
       <h3 className="font-semibold mb-1">{title}</h3>
@@ -127,7 +149,7 @@ function PlatformBarChart({ title, subtitle, chartData, dataKey, name, valueForm
           <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false}
             tickFormatter={v => v >= 1000 ? `${v/1000}k` : v} />
           <Tooltip cursor={{ fill: '#f9fafb' }}
-            formatter={v => valueFormatter ? valueFormatter(v) : fmtNum(v)}
+            formatter={(v) => valueFormatter ? valueFormatter(Number(v)) : fmtNum(Number(v))}
             contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
           <Bar dataKey={dataKey} name={name} radius={[4, 4, 0, 0]} maxBarSize={64}>
             <Cell fill="#3b82f6" />
@@ -139,7 +161,7 @@ function PlatformBarChart({ title, subtitle, chartData, dataKey, name, valueForm
   );
 }
 
-function PlatformRow({ icon: Icon, color, label, data }) {
+function PlatformRow({ icon: Icon, color, label, data }: { icon: Icon; color: string; label: string; data: CampaignTotals }) {
   return (
     <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-5 gap-3 items-center">
       <div className="flex items-center gap-2 col-span-2 md:col-span-1">
@@ -169,7 +191,16 @@ function PlatformRow({ icon: Icon, color, label, data }) {
 }
 
 // ---------- Tabla campañas reutilizable ----------
-export function CampaignTable({ campaigns, statusStyles, statusLabel, getSubLabel }) {
+type AnyCampaign = MetaCampaign | GoogleCampaign;
+
+interface CampaignTableProps {
+  campaigns: AnyCampaign[];
+  statusStyles: Record<string, string>;
+  statusLabel: Record<string, string>;
+  getSubLabel: (c: AnyCampaign) => string;
+}
+
+export function CampaignTable({ campaigns, statusStyles, statusLabel, getSubLabel }: CampaignTableProps) {
   return (
     <>
       <div className="hidden md:block overflow-x-auto">
@@ -262,7 +293,7 @@ export function CampaignTable({ campaigns, statusStyles, statusLabel, getSubLabe
   );
 }
 
-export function ErrorState({ message }) {
+export function ErrorState({ message }: { message: string }) {
   return (
     <div className="p-8 text-center text-sm">
       <WarningCircle size={28} className="text-red-500 mx-auto mb-2" weight="regular" />
@@ -273,7 +304,7 @@ export function ErrorState({ message }) {
 }
 
 // ---------- KeywordsTable (Google) ----------
-export function KeywordsTable({ keywords }) {
+export function KeywordsTable({ keywords }: { keywords?: GoogleKeyword[] | null }) {
   if (!keywords?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
