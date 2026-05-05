@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import * as model from './wc.model.js';
+import * as catModel from '../product-categories/category.model.js';
+import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -113,6 +115,158 @@ async function syncCategories(projectId, wcCategories) {
   return wcMap;
 }
 
+// ============================================================
+// Parser del menú HTML del sitio público — extrae jerarquía N niveles
+// ============================================================
+
+// Parsea un fragmento HTML <ul>...</ul> de menú WP y devuelve árbol jerárquico
+// Cada nodo: { label, href, children: [] }
+function parseMenuHtml(html) {
+  // Encuentra el primer <ul class="menu" ...> o <ul id="menu-..."> o el más grande
+  const ulMatch = html.match(/<ul[^>]*(?:class="[^"]*menu[^"]*"|id="menu-[^"]+")[^>]*>([\s\S]*?)<\/ul>(?=\s*(?:<\/nav>|<\/div>|<nav))/i)
+    || html.match(/<ul[^>]*menu[^>]*>([\s\S]*)/i);
+  const startHtml = ulMatch ? ulMatch[1] : html;
+
+  // State machine: avanza por <li>...</li> con anidamiento de <ul>
+  function extractItems(s) {
+    const items = [];
+    let i = 0;
+    while (i < s.length) {
+      const liStart = s.indexOf('<li', i);
+      if (liStart === -1) break;
+      const liOpen = s.indexOf('>', liStart);
+      if (liOpen === -1) break;
+
+      // Buscar </li> respetando <li> anidados
+      let depth = 1;
+      let j = liOpen + 1;
+      while (j < s.length && depth > 0) {
+        const nextOpen = s.indexOf('<li', j);
+        const nextClose = s.indexOf('</li>', j);
+        if (nextClose === -1) break;
+        if (nextOpen !== -1 && nextOpen < nextClose) {
+          depth++;
+          j = s.indexOf('>', nextOpen) + 1;
+        } else {
+          depth--;
+          if (depth === 0) {
+            const inner = s.substring(liOpen + 1, nextClose);
+            // Extraer label y href del primer <a> directo (no anidado en otro li/ul)
+            const aMatch = inner.match(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+            if (aMatch) {
+              const href = aMatch[1];
+              const label = aMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+              // Sub-menú: el primer <ul> dentro del li (después del </a>)
+              const afterA = inner.substring(inner.indexOf('</a>') + 4);
+              const subUl = afterA.match(/<ul[^>]*sub-menu[^>]*>([\s\S]*)<\/ul>/i);
+              const children = subUl ? extractItems(subUl[1]) : [];
+              if (label && href) items.push({ label, href, children });
+            }
+            i = nextClose + 5;
+            break;
+          }
+          j = nextClose + 5;
+        }
+      }
+      if (depth > 0) break;
+    }
+    return items;
+  }
+  return extractItems(startHtml);
+}
+
+async function fetchMenuTree(storeUrl) {
+  const url = storeUrl.replace(/\/$/, '');
+  const r = await fetch(url, { headers: { 'User-Agent': 'CRM-ISEIH-Bot/1.0' } });
+  if (!r.ok) return [];
+  const html = await r.text();
+  // Buscar el <nav> principal (más grande)
+  const navs = [...html.matchAll(/<nav[^>]*>([\s\S]*?)<\/nav>/gi)].map(m => m[1]);
+  const navHtml = navs.length ? navs.reduce((a, b) => a.length > b.length ? a : b) : html;
+  return parseMenuHtml(navHtml);
+}
+
+async function fetchPageProductSlugs(pageUrl) {
+  try {
+    const r = await fetch(pageUrl, { headers: { 'User-Agent': 'CRM-ISEIH-Bot/1.0' } });
+    if (!r.ok) return new Set();
+    const html = await r.text();
+    const slugs = new Set();
+    const re = /href="([^"]+)"/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const u = m[1];
+      // Sólo URLs del mismo dominio que apunten a productos (no a otras landings)
+      const slugMatch = u.match(/^https?:\/\/[^/]+\/([a-z0-9][a-z0-9-]+)\/?$/i);
+      if (slugMatch && /(curso|master|máster|diplomado|programa|formacion|formación)/i.test(slugMatch[1])) {
+        slugs.add(slugMatch[1]);
+      }
+    }
+    return slugs;
+  } catch { return new Set(); }
+}
+
+// Recorre árbol del menú, crea categorías N niveles, devuelve lista plana de hojas con su URL
+async function syncMenuAsCategories(projectId, menuTree) {
+  const leaves = [];  // categorías hoja con external_url para luego scrapear
+
+  async function recurse(items, parentLocalId, depth) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      // external_id = combinación href+label (estable entre re-syncs)
+      const externalId = `menu:${item.href}`;
+      const localId = await catModel.upsertExternal({
+        project_id: projectId,
+        parent_id: parentLocalId,
+        nombre: item.label,
+        source: 'wp_menu',
+        external_id: externalId,
+        external_url: item.href,
+        orden: i,
+      });
+      if (item.children?.length > 0) {
+        await recurse(item.children, localId, depth + 1);
+      } else {
+        leaves.push({ localId, url: item.href, label: item.label });
+      }
+    }
+  }
+
+  await recurse(menuTree, null, 0);
+  return leaves;
+}
+
+// Asigna producto a categoría hoja basado en match de slug (permalink WC == slug en URL del menú)
+async function assignProductsToMenuCategories(projectId, leaves) {
+  // Mapa local: slug → product.id
+  const { rows: prods } = await query(
+    `SELECT id, wc_meta->>'slug' AS slug, wc_meta->>'permalink' AS permalink
+     FROM products WHERE project_id = $1 AND wc_product_id IS NOT NULL`,
+    [projectId]
+  );
+  const slugToProduct = new Map();
+  for (const p of prods) {
+    if (p.slug) slugToProduct.set(p.slug, p.id);
+  }
+
+  let assigned = 0;
+  for (const leaf of leaves) {
+    const slugs = await fetchPageProductSlugs(leaf.url);
+    for (const slug of slugs) {
+      const productId = slugToProduct.get(slug);
+      if (productId) {
+        await query(
+          `UPDATE products SET categoria_id = $1, updated_at = NOW()
+           WHERE id = $2 AND project_id = $3`,
+          [leaf.localId, productId, projectId]
+        );
+        assigned++;
+      }
+    }
+  }
+  return assigned;
+}
+
 // Mapea producto WC → datos para insertar
 function mapWcProduct(wp, categoryMap) {
   // Tipo de programa: meta `_cpt_sync_level` (cursos/masters/diplomados) si existe
@@ -183,6 +337,23 @@ export const importNow = async (req, res, next) => {
           if (r.action === 'created') created++;
           else if (r.action === 'updated') updated++;
         }
+        // 4. Pasada extra: parsear menú HTML del sitio público (jerarquía N niveles)
+        let menuLeaves = [];
+        let assignedFromMenu = 0;
+        try {
+          logger.info({ projectId }, 'WC: scrapeo menú HTML del sitio público');
+          const menuTree = await fetchMenuTree(creds.store_url);
+          if (menuTree.length > 0) {
+            menuLeaves = await syncMenuAsCategories(projectId, menuTree);
+            logger.info({ projectId, menuItems: menuTree.length, hojas: menuLeaves.length }, 'WC: menú sincronizado como categorías');
+            // 5. Por cada hoja del menú, scrapear su landing y asignar productos
+            assignedFromMenu = await assignProductsToMenuCategories(projectId, menuLeaves);
+            logger.info({ projectId, assignedFromMenu }, 'WC: productos asignados a categorías del menú');
+          }
+        } catch (menuErr) {
+          logger.warn({ err: menuErr.message, projectId }, 'WC: scrap del menú falló (no bloquea import)');
+        }
+
         await model.finishRun(run.id, {
           status: 'success',
           total_fetched: wcProducts.length,
@@ -190,7 +361,7 @@ export const importNow = async (req, res, next) => {
           total_updated: updated,
           total_skipped: skipped,
         });
-        logger.info({ projectId, created, updated, skipped, total: wcProducts.length }, 'WC import OK');
+        logger.info({ projectId, created, updated, skipped, total: wcProducts.length, menuLeaves: menuLeaves.length, assignedFromMenu }, 'WC import OK');
       } catch (err) {
         logger.error({ err: err.message, runId: run.id }, 'WC import error');
         await model.finishRun(run.id, { status: 'error', error_message: err.message?.slice(0, 1000) });

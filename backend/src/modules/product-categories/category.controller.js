@@ -36,6 +36,13 @@ export async function update(req, res, next) {
   try {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Invalid', 400, 'VALIDATION_ERROR');
+
+    // Anti-ciclo: si se está cambiando parent_id, validar que el nuevo padre no sea descendiente
+    if (parsed.data.parent_id !== undefined && parsed.data.parent_id !== null) {
+      const cycle = await model.isDescendant(Number(req.params.id), parsed.data.parent_id);
+      if (cycle) throw new AppError('No se puede asignar como padre una categoría descendiente (ciclo)', 400, 'CYCLE_DETECTED');
+    }
+
     const c = await model.update(Number(req.params.id), parsed.data);
     if (!c) throw new AppError('No encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: c });
@@ -46,5 +53,23 @@ export async function remove(req, res, next) {
   try {
     await model.remove(Number(req.params.id));
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+// GET /api/product-categories/tree?projectId=X — árbol jerárquico con N niveles
+export async function getTree(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    const tree = await model.getTree(projectId);
+    res.json({ success: true, data: tree });
+  } catch (err) { next(err); }
+}
+
+// GET /api/product-categories/:id/ancestors — breadcrumb desde raíz hasta esta cat
+export async function getAncestors(req, res, next) {
+  try {
+    const ancestors = await model.getAncestors(Number(req.params.id));
+    res.json({ success: true, data: ancestors });
   } catch (err) { next(err); }
 }
