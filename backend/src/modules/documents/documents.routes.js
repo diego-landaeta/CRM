@@ -1,23 +1,39 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import * as ctrl from './documents.controller.js';
 
 const router = Router();
 
 router.use(verifyToken);
 
-// Lecturas (cualquier usuario autenticado puede ver y descargar documentos
-// existentes; el guard de proyecto se hace dentro del controller via projectId).
-router.get('/',             ctrl.list);
-router.get('/:id/download', ctrl.download);
+// Rate limit para /generate y /regenerate — puppeteer es heavy (~3-5s + RAM).
+// Limita a 20 generaciones por usuario en 5 min para evitar abuso/DoS.
+const heavyGenLimit = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `doc-gen-${req.user?.id || req.ip}`,
+  message: { success: false, error: 'Demasiadas generaciones de PDF. Intenta de nuevo en unos minutos.', code: 'RATE_LIMIT' },
+});
 
-// Operaciones de creacion/modificacion — solo superadmin y admin. El peek del
-// numero esta detras del mismo guard porque solo se usa al editar/generar
-// documentos, accion exclusiva de admins.
-router.get('/next-number',  roleGuard('superadmin', 'admin'), ctrl.peekNumber);
-router.post('/set-number',  roleGuard('superadmin', 'admin'), ctrl.setNumber);
-router.post('/preview',     roleGuard('superadmin', 'admin'), ctrl.preview);
-router.post('/generate',    roleGuard('superadmin', 'admin'), ctrl.generate);
-router.delete('/:id',       roleGuard('superadmin', 'admin'), ctrl.remove);
+// Lecturas con projectAccess — gestor solo ve docs de proyectos asignados.
+router.get('/',                 projectAccess, ctrl.list);
+router.get('/:id/download',     projectAccess, ctrl.download);
+
+// Audit log de un documento — solo superadmin (expone IPs/user agents).
+router.get('/:id/audit',        roleGuard('superadmin'), projectAccess, ctrl.audit);
+
+// Operaciones de creacion/modificacion — solo superadmin/admin + projectAccess.
+// Preview no usa projectAccess porque no toca DB (solo renderiza HTML); su rol
+// guard ya garantiza que solo admins puedan generar previews.
+router.get('/next-number',      roleGuard('superadmin', 'admin'), projectAccess, ctrl.peekNumber);
+router.post('/set-number',      roleGuard('superadmin', 'admin'), projectAccess, ctrl.setNumber);
+router.post('/preview',         roleGuard('superadmin', 'admin'), ctrl.preview);
+router.post('/generate',        roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.generate);
+router.post('/:id/regenerate',  roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.regenerate);
+router.delete('/:id',           roleGuard('superadmin', 'admin'), projectAccess, ctrl.remove);
 
 export default router;

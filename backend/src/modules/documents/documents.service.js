@@ -64,7 +64,7 @@ async function newPage(browser) {
   return page;
 }
 
-async function htmlToPdf(html, filename) {
+async function htmlToPdf(html, filename, opts = {}) {
   await ensureDir();
   const filePath = path.join(UPLOAD_DIR, filename);
   // En prod (Linux) puede pasarse CHROME_PATH en env; en local Windows
@@ -75,11 +75,53 @@ async function htmlToPdf(html, filename) {
   try {
     const page = await newPage(browser);
     await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.pdf({ path: filePath, printBackground: true, format: 'A4' });
+    const pdfOpts = {
+      path: filePath,
+      printBackground: true,
+      format: 'A4',
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      ...opts,
+    };
+    await page.pdf(pdfOpts);
   } finally {
     await browser.close();
   }
   return filePath;
+}
+
+// Footer template para puppeteer.pdf (multi-pagina). Reproduce la banda
+// rosa-palo del Canva original con email + LOPD info en blanco. Caveats de
+// puppeteer: font-size default es 0 (hay que setearlo explicito), y ciertos
+// bg colors necesitan -webkit-print-color-adjust para imprimirse.
+function buildInvoiceFooterTemplate() {
+  return `
+<style>
+  .footer-tpl {
+    width: 100%;
+    height: 40.8mm;
+    background: #DBC4C3 !important;
+    color: #fff;
+    padding: 2.5mm 6mm 2mm;
+    box-sizing: border-box;
+    text-align: center;
+    font-family: 'Plus Jakarta Sans', Helvetica, Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .footer-tpl .email { font-weight: 700; font-size: 14pt; letter-spacing: 0.3pt; margin-bottom: 2.5mm; }
+  .footer-tpl .lopd-title { font-weight: 700; font-size: 8.5pt; letter-spacing: 0.5pt; margin-bottom: 1mm; }
+  .footer-tpl .lopd-text { font-size: 8pt; line-height: 1.4; padding: 0 2mm; }
+  .footer-tpl .lopd-text p { margin: 0 0 1mm 0; }
+  .footer-tpl .lopd-text p:last-child { margin-bottom: 0; }
+</style>
+<div class="footer-tpl">
+  <div class="email">facturacion@psikoaprende.com</div>
+  <div class="lopd-title">INFORMACIÓN SOBRE PROTECCIÓN DE DATOS</div>
+  <div class="lopd-text">
+    <p>Los datos personales tratados para gestionar la relación contractual y, en su caso, para enviar información comercial por medios electrónicos, se conservarán hasta la finalización de la relación, la baja comercial o durante los plazos de retención legalmente establecidos.</p>
+    <p>Puede ejercer sus derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad enviando su solicitud a la dirección postal del responsable o al correo electrónico info@psikoaprende.com</p>
+  </div>
+</div>`;
 }
 
 async function htmlToPdfLandscape(html, filename) {
@@ -416,6 +458,27 @@ export function buildInvoiceHtml(data) {
   }
   .lopd-text p { margin-bottom: 1mm; }
   .lopd-text p:last-child { margin-bottom: 0; }
+
+  /* ── Modo PDF (puppeteer auto-emula print): activa flujo natural multi-pagina.
+     Para el navegador (preview del modal) se mantiene el layout single-page
+     con position:absolute. La footer-band inline se oculta porque puppeteer
+     la inyecta via footerTemplate en cada pagina. ── */
+  @page { size: A4; margin: 0; }
+  @media print {
+    .page { height: auto; min-height: 297mm; overflow: visible; }
+    .content-area {
+      position: static;
+      margin: 130mm 14.3mm 0 14.5mm;
+      padding-bottom: 6mm;
+    }
+    .footer-band { display: none; }
+    .items-table thead { display: table-header-group; }
+    .items-table tr { page-break-inside: avoid; }
+    .bottom-row { page-break-inside: avoid; }
+    /* En modo flow no necesitamos margin-top:auto para empujar el bottom-row;
+       fluye naturalmente despues de la tabla. */
+    .bottom-row { margin-top: 6mm; }
+  }
 </style>
 </head>
 <body>
@@ -814,7 +877,15 @@ export async function buildCertP2Html(data) {
 // ============================================================
 export async function generateInvoicePdf(data, filename) {
   const html = buildInvoiceHtml(data);
-  return htmlToPdf(html, filename);
+  // Multi-pagina: las @media print rules del template activan flow natural.
+  // El footer rosa-palo (email + LOPD) lo inyecta puppeteer en cada pagina
+  // via footerTemplate; reservamos 41mm bottom para que body no se solape.
+  return htmlToPdf(html, filename, {
+    displayHeaderFooter: true,
+    headerTemplate: '<div></div>',
+    footerTemplate: buildInvoiceFooterTemplate(),
+    margin: { top: '0', right: '0', bottom: '41mm', left: '0' },
+  });
 }
 
 export async function generateCertificatePdf(data, filename) {

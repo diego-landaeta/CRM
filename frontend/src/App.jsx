@@ -33,6 +33,7 @@ const ROUTE_TITLES = {
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
+  '/configuracion/documentos': 'Numeración de documentos',
   '/payroll': 'Nóminas',
   '/woocommerce': 'WooCommerce',
   '/reports': 'Reportes',
@@ -122,6 +123,7 @@ const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
+const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 
@@ -172,6 +174,7 @@ function App() {
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
+          <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />

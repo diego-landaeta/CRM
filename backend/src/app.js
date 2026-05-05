@@ -41,6 +41,7 @@ import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
+import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -149,6 +150,7 @@ if (process.env.NODE_ENV !== 'test') {
     startEmailSequenceScheduler();
     startWooCommerceSyncScheduler();
     startReminderScheduler();
+    startDocumentOrphanScheduler();
   });
 }
 

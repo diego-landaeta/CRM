@@ -11,6 +11,7 @@ import { useProducts } from '@/modules/products/hooks/useProducts';
 import type { Product } from '@/modules/products/api/products.api';
 import { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
+import { downloadDoc } from '../lib/downloadDoc';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -140,12 +141,19 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     setPreviewing(true);
     try {
       const data = watch();
+      // Inyectar el numero que se usaria al generar — backend solo lo asigna
+      // en /generate, pero el preview necesita verlo en el pill rosa-palo.
+      const overrideN = parseInt(numeroOverride, 10);
+      const previewData = {
+        ...data,
+        numero: Number.isFinite(overrideN) && overrideN >= 1 ? overrideN : (nextNumber ?? ''),
+      };
       const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
       const token = getAccessToken() || '';
       const res = await fetch(`${baseUrl}/api/documents/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ type: 'invoice', data }),
+        body: JSON.stringify({ type: 'invoice', data: previewData }),
       });
       if (!res.ok) {
         toast({ title: 'Error generando preview', variant: 'destructive' });
@@ -184,8 +192,10 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
           iva_pct: parseFloat(String(data.iva_pct)) || 21,
           notas: data.notas,
         });
-        toast({ title: 'Factura generada', description: `Nº ${res.data.number}` });
+        toast({ title: 'Factura generada', description: `Nº ${res.data.number} — descargando PDF…` });
         onGenerated?.(res.data);
+        // Auto-descarga del PDF recien generado
+        downloadDoc(res.data, activeProject.id).catch(() => {/* silencioso */});
         // Refrescar el siguiente numero para la proxima factura
         await loadNextNumber();
       }
@@ -421,7 +431,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         <button
           type="button"
           onClick={() => setEmisorOpen(o => !o)}
-          aria-expanded={emisorOpen}
+          aria-expanded={emisorOpen ? true : undefined}
           className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <div>

@@ -6,6 +6,7 @@ import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
+import { downloadDoc } from '../lib/downloadDoc';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -98,8 +99,12 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
       };
       const res = await documentsApi.generate(activeProject.id, 'certificate', payload);
       if (res.success && res.data) {
-        toast({ title: 'Certificado generado', description: `Nº ${res.data.number}` });
+        toast({ title: 'Certificado generado', description: `Nº ${res.data.number} — descargando PDF…` });
         onGenerated?.(res.data);
+        // Auto-descarga del PDF recien generado
+        if (activeProject?.id) {
+          downloadDoc(res.data, activeProject.id).catch(() => {/* silencioso */});
+        }
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -176,7 +181,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <button
           type="button"
           onClick={() => setFixedDataOpen(o => !o)}
-          aria-expanded={fixedDataOpen}
+          aria-expanded={fixedDataOpen ? true : undefined}
           className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <div>

@@ -75,4 +75,9 @@ export const documentsApi = {
   // generado sera exactamente `value`, y la sucesion continuara desde ahi.
   setNumber: (projectId: number, type: DocumentType, value: number): Promise<ApiResponse<{ next: number }>> =>
     client.post('/documents/set-number', { projectId, type, value }),
+
+  // Regenera el PDF de un documento existente desde su `data` con el template
+  // actual. Mantiene el `number`. Util tras cambios visuales del template.
+  regenerate: (id: number, projectId: number): Promise<ApiResponse<{ id: number; number: string; file_path: string }>> =>
+    client.post(`/documents/${id}/regenerate?projectId=${projectId}`, {}),
 };
