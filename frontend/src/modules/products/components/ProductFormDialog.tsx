@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema, PAYMENT_LINK_TYPES } from '../validation/product.schema';
-import { X, CurrencyEur, Link, Tag, Plus, Trash } from '@phosphor-icons/react';
+import { X, CurrencyEur, Link, Tag, Plus, Trash, Image as ImageIcon, UploadSimple } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
+import { toast } from '@/shared/hooks/useToast';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
@@ -34,6 +36,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   // legacy si el backend aún no soporta product_payment_links.
   const [paymentLinks, setPaymentLinks] = useState([]);
   const [linkErrors, setLinkErrors] = useState({});
+  // Estado de imagen — visible solo en modo edicion (necesita product.id para subir).
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     register,
@@ -81,6 +87,61 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       setLinkErrors({});
     }
   }, [open, product, reset]);
+
+  // Cargar URL firmada de imagen al abrir/cambiar producto.
+  useEffect(() => {
+    if (!open || !product?.id || !activeProject?.id) {
+      setImageUrl(null);
+      return;
+    }
+    if (product.image_url_signed) {
+      setImageUrl(product.image_url_signed);
+      return;
+    }
+    if (!product.image_url) {
+      setImageUrl(null);
+      return;
+    }
+    let cancelled = false;
+    getProductImageUrl(product.id, activeProject.id)
+      .then(url => { if (!cancelled) setImageUrl(url); })
+      .catch(() => { if (!cancelled) setImageUrl(null); });
+    return () => { cancelled = true; };
+  }, [open, product?.id, product?.image_url, product?.image_url_signed, activeProject?.id]);
+
+  async function handleImageUpload(file: File) {
+    if (!product?.id || !activeProject?.id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Imagen demasiado grande', description: 'Máximo 5 MB', variant: 'destructive' });
+      return;
+    }
+    setImageUploading(true);
+    try {
+      const updated = await uploadProductImage(product.id, activeProject.id, file);
+      setImageUrl(updated.image_url_signed || null);
+      toast({ title: 'Imagen subida' });
+    } catch (e: any) {
+      toast({ title: 'Error subiendo imagen', description: e?.response?.data?.error || e.message, variant: 'destructive' });
+    } finally {
+      setImageUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleImageRemove() {
+    if (!product?.id || !activeProject?.id) return;
+    if (!confirm('¿Eliminar la imagen del producto?')) return;
+    setImageUploading(true);
+    try {
+      await deleteProductImage(product.id, activeProject.id);
+      setImageUrl(null);
+      toast({ title: 'Imagen eliminada' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.response?.data?.error || e.message, variant: 'destructive' });
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   if (!open) return null;
 
@@ -180,6 +241,63 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 {subs.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* CRM-149: Imagen del producto */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+              <ImageIcon size={12} /> Imagen
+            </div>
+            {!isEdit ? (
+              <p className="text-[11px] text-muted-foreground italic px-1">
+                Crea el {productoLabel.toLowerCase()} primero y luego edítalo para añadir la imagen.
+              </p>
+            ) : (
+              <div className="flex items-start gap-3">
+                <div className="w-24 h-24 shrink-0 rounded-md border border-border bg-muted/40 overflow-hidden flex items-center justify-center">
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={product?.nombre || 'Producto'} className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon size={28} className="text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={imageUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      <UploadSimple size={12} weight="bold" />
+                      {imageUploading ? 'Subiendo…' : imageUrl ? 'Reemplazar' : 'Subir imagen'}
+                    </button>
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        disabled={imageUploading}
+                        onClick={handleImageRemove}
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-card text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
+                      >
+                        <Trash size={12} weight="regular" /> Eliminar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    aria-label="Subir imagen del producto"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleImageUpload(f);
+                    }}
+                  />
+                  <p className="text-[10px] text-muted-foreground">PNG, JPG, WEBP o SVG · máx. 5 MB</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">

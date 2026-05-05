@@ -31,7 +31,8 @@ export async function create({ projectId, nombre, descripcion, categoria_id, sub
 
 export async function update(id, data) {
   const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id',
-                   'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info'];
+                   'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info',
+                   'image_url'];
   const fields = [];
   const values = [];
   let idx = 1;

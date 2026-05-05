@@ -127,9 +127,15 @@ export default function ProductsPage() {
           {products.map((product) => (
             <div key={product.id} className={`bg-card p-5 rounded-lg border border-border  transition-all ${!product.active ? 'opacity-50' : ''}`}>
               <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                  <Package size={20} weight="regular" />
-                </div>
+                {product.image_url_signed ? (
+                  <div className="w-10 h-10 rounded-md overflow-hidden border border-border bg-muted">
+                    <img src={product.image_url_signed} alt={product.nombre} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                    <Package size={20} weight="regular" />
+                  </div>
+                )}
                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${product.active ? 'bg-emerald-50 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                   {product.active ? 'Activo' : 'Inactivo'}
                 </span>

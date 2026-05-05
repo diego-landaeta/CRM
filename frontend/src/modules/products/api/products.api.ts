@@ -33,6 +33,11 @@ export interface Product {
   dossier_version?: number | null;
   dossier_versiones_count?: number;
   has_dossier?: boolean;
+  // CRM-149: imagen de producto. `image_url` puede ser una URL externa o un
+  // identificador interno `r2://...`; el backend devuelve `image_url_signed`
+  // (presigned URL) si aplica.
+  image_url?: string | null;
+  image_url_signed?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -40,4 +45,29 @@ export interface Product {
 export async function getProduct(id: number, projectId: number): Promise<Product> {
   const { data } = await client.get(`/products/${id}`, { params: { projectId } });
   return data.data;
+}
+
+export async function uploadProductImage(
+  id: number,
+  projectId: number,
+  file: File,
+): Promise<Product> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const { data } = await client.post(`/products/${id}/image`, formData, {
+    params: { projectId },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data.data;
+}
+
+export async function deleteProductImage(id: number, projectId: number): Promise<Product> {
+  const { data } = await client.delete(`/products/${id}/image`, { params: { projectId } });
+  return data.data;
+}
+
+export async function getProductImageUrl(id: number, projectId: number): Promise<string | null> {
+  const { data } = await client.get(`/products/${id}/image-url`, { params: { projectId } });
+  return data.data?.url || null;
 }
