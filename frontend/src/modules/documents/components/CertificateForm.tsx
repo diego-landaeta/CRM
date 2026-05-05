@@ -17,6 +17,7 @@ interface ModuloField {
 interface CertificateFormValues {
   alumno_nombre: string;
   alumno_dni: string;
+  alumno_email: string;
   curso_nombre: string;
   horas_total: string;
   modalidad: string;
@@ -45,6 +46,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
     defaultValues: {
       alumno_nombre: '',
       alumno_dni: '',
+      alumno_email: '',
       curso_nombre: '',
       horas_total: '',
       modalidad: 'Online',
@@ -125,6 +127,15 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">DNI/NIE *</label>
             <input {...register('alumno_dni', { required: true })} className={inp} placeholder="12345678A"/>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input
+              type="email"
+              {...register('alumno_email')}
+              className={inp}
+              placeholder="alumno@ejemplo.com"
+            />
           </div>
         </div>
       </div>

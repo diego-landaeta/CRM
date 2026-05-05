@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut, Copy, ArrowsClockwise, ListMagnifyingGlass } from '@phosphor-icons/react';
+import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut, Copy, ArrowsClockwise, ListMagnifyingGlass, EnvelopeSimple } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -142,6 +142,7 @@ export default function DocumentsPage() {
   const [pendingDelete, setPendingDelete] = useState<CrmDocument | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [regenerating, setRegenerating] = useState<number | null>(null);
+  const [resending, setResending] = useState<number | null>(null);
   const [auditing, setAuditing] = useState<CrmDocument | null>(null);
   const [previewing, setPreviewing] = useState<CrmDocument | null>(null);
   const [duplicateSeed, setDuplicateSeed] = useState<Partial<InvoiceFormValues> | null>(null);
@@ -204,6 +205,20 @@ export default function DocumentsPage() {
     } catch {
       toast({ title: 'Error al descargar', variant: 'destructive' });
     } finally { setDownloading(null); }
+  }
+
+  async function handleResendEmail(doc: CrmDocument): Promise<void> {
+    if (!activeProject?.id) return;
+    setResending(doc.id);
+    try {
+      const res = await documentsApi.resendEmail(doc.id, activeProject.id);
+      if (res.success && res.data) {
+        toast({ title: 'Email enviado', description: res.data.to });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo enviar';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally { setResending(null); }
   }
 
   async function handleRegenerate(doc: CrmDocument): Promise<void> {
@@ -369,6 +384,16 @@ export default function DocumentsPage() {
                               title="Regenerar PDF desde datos guardados"
                             >
                               <ArrowsClockwise size={14} className={regenerating === doc.id ? 'animate-spin' : ''} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleResendEmail(doc)}
+                              disabled={resending === doc.id}
+                              aria-label={`Reenviar por email ${doc.number}`}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                              title="Reenviar por email al cliente/alumno"
+                            >
+                              <EnvelopeSimple size={14} className={resending === doc.id ? 'animate-pulse' : ''} />
                             </button>
                             {isSuperadmin && (
                               <button

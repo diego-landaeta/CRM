@@ -207,6 +207,41 @@ export async function remove(req, res, next) {
   }
 }
 
+// Reenvia el documento por email al cliente/alumno (manual). El email
+// destino se toma de doc.data.cliente_email / alumno_email; si no existe
+// devolvemos 400 para que el frontend muestre un error claro.
+export async function resendEmail(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(projectId) || !Number.isFinite(id)) {
+      throw new AppError('projectId y id requeridos', 400);
+    }
+    const doc = await model.getDocument(id, projectId);
+    if (!doc) throw new AppError('Documento no encontrado', 404);
+
+    const data = doc.data || {};
+    const recipient = doc.type === 'invoice'
+      ? (data.cliente_email || data.client_email)
+      : (data.alumno_email || data.student_email);
+    if (!recipient) {
+      throw new AppError('El documento no tiene email del destinatario', 400, 'NO_RECIPIENT');
+    }
+
+    const r = await sendDocumentEmail({ doc, data, projectId });
+    if (r.sent) {
+      await model.logAudit(auditCtx(req, doc.id, 'emailed', {
+        messageId: r.messageId, to: recipient, manual: true,
+      }));
+      res.json({ success: true, data: { sent: true, to: recipient, messageId: r.messageId } });
+    } else {
+      throw new AppError(`No se envió: ${r.reason || 'desconocido'}`, 502, r.reason || 'EMAIL_FAILED');
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function preview(req, res, next) {
   try {
     const { type, data } = parse(previewSchema, req.body);

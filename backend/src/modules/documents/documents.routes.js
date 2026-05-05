@@ -34,6 +34,7 @@ router.post('/set-number',      roleGuard('superadmin', 'admin'), projectAccess,
 router.post('/preview',         roleGuard('superadmin', 'admin'), ctrl.preview);
 router.post('/generate',        roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.generate);
 router.post('/:id/regenerate',  roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.regenerate);
+router.post('/:id/resend-email', roleGuard('superadmin', 'admin'), projectAccess, ctrl.resendEmail);
 router.delete('/:id',           roleGuard('superadmin', 'admin'), projectAccess, ctrl.remove);
 
 export default router;

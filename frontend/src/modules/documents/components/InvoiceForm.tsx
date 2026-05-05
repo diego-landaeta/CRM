@@ -32,6 +32,7 @@ export interface InvoiceFormValues {
   cliente_nombre: string;
   cliente_dni: string;
   cliente_direccion: string;
+  cliente_email: string;
   notas: string;
   lineas: InvoiceLine[];
 }
@@ -73,6 +74,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
       cliente_nombre: '',
       cliente_dni: '',
       cliente_direccion: '',
+      cliente_email: '',
       notas: defaults.notas,
       lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
       ...initialValues,
@@ -94,6 +96,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         cliente_nombre: '',
         cliente_dni: '',
         cliente_direccion: '',
+        cliente_email: '',
         lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
         ...initialValues,
       });
@@ -122,6 +125,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     setValue('cliente_nombre', c.nombre, { shouldDirty: true });
     if (c.dni) setValue('cliente_dni', c.dni, { shouldDirty: true });
     if (c.direccion) setValue('cliente_direccion', c.direccion, { shouldDirty: true });
+    if (c.email) setValue('cliente_email', c.email, { shouldDirty: true });
   }
 
   function handleSaveDefaults() {
@@ -288,6 +292,15 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
             <input {...register('cliente_dni')} className={inp} />
           </div>
           <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input
+              type="email"
+              {...register('cliente_email')}
+              className={inp}
+              placeholder="cliente@ejemplo.com"
+            />
+          </div>
+          <div className="sm:col-span-2">
             <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
             <input {...register('cliente_direccion')} className={inp} />
           </div>

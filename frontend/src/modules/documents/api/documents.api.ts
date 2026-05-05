@@ -85,6 +85,11 @@ export const documentsApi = {
   // (generated/downloaded/regenerated/deleted/number_overridden/emailed).
   audit: (id: number, projectId: number): Promise<ApiResponse<AuditEntry[]>> =>
     client.get(`/documents/${id}/audit?projectId=${projectId}`),
+
+  // Reenvía el documento por email al cliente/alumno. El destinatario sale
+  // del campo cliente_email/alumno_email guardado en doc.data.
+  resendEmail: (id: number, projectId: number): Promise<ApiResponse<{ sent: boolean; to: string; messageId: string }>> =>
+    client.post(`/documents/${id}/resend-email?projectId=${projectId}`, {}),
 };
 
 export interface AuditEntry {
