@@ -214,33 +214,89 @@ async function fetchPageProductSlugs(pageUrl) {
 }
 
 // Recorre árbol del menú, crea categorías N niveles, devuelve lista plana de hojas con su URL
-async function syncMenuAsCategories(projectId, menuTree) {
-  const leaves = [];  // categorías hoja con external_url para luego scrapear
-
-  async function recurse(items, parentLocalId, depth) {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      // external_id = combinación href+label (estable entre re-syncs)
-      const externalId = `menu:${item.href}`;
-      const localId = await catModel.upsertExternal({
-        project_id: projectId,
-        parent_id: parentLocalId,
-        nombre: item.label,
-        source: 'wp_menu',
-        external_id: externalId,
-        external_url: item.href,
-        orden: i,
-      });
+// Anota árbol del menú con productos detectados por rama. PODA: descarta ramas sin productos.
+async function annotateMenuWithProducts(menuTree, slugToProduct) {
+  async function annotate(items) {
+    const result = [];
+    for (const item of items) {
+      const productIds = new Set();
+      let children = [];
       if (item.children?.length > 0) {
-        await recurse(item.children, localId, depth + 1);
+        children = await annotate(item.children);
+        for (const c of children) for (const pid of c.productIds) productIds.add(pid);
       } else {
-        leaves.push({ localId, url: item.href, label: item.label });
+        // Hoja: visitar landing y match slugs
+        const slugs = await fetchPageProductSlugs(item.href);
+        for (const slug of slugs) {
+          const pid = slugToProduct.get(slug);
+          if (pid) productIds.add(pid);
+        }
+      }
+      // Descartar ramas vacías (Blog, Contacto, Inicio, etc.)
+      if (productIds.size === 0) continue;
+      result.push({ ...item, children, productIds });
+    }
+    return result;
+  }
+  return annotate(menuTree);
+}
+
+// Crea solo categorías de ramas con productos, asigna productos a hojas
+async function syncAnnotatedTree(projectId, annotated, parentLocalId = null) {
+  let cats = 0;
+  let assigned = 0;
+  for (let i = 0; i < annotated.length; i++) {
+    const item = annotated[i];
+    const externalId = `menu:${item.href}`;
+    const localId = await catModel.upsertExternal({
+      project_id: projectId,
+      parent_id: parentLocalId,
+      nombre: item.label,
+      source: 'wp_menu',
+      external_id: externalId,
+      external_url: item.href,
+      orden: i,
+    });
+    cats++;
+    if (item.children?.length > 0) {
+      const r = await syncAnnotatedTree(projectId, item.children, localId);
+      cats += r.cats;
+      assigned += r.assigned;
+    } else {
+      for (const pid of item.productIds) {
+        await query(
+          `UPDATE products SET categoria_id = $1, updated_at = NOW() WHERE id = $2 AND project_id = $3`,
+          [localId, pid, projectId]
+        );
+        assigned++;
       }
     }
   }
+  return { cats, assigned };
+}
 
-  await recurse(menuTree, null, 0);
-  return leaves;
+// Soft-borra categorías wp_menu que ya no aparecen en el sync (basura de runs anteriores)
+async function pruneStaleMenuCategories(projectId, validExternalIds) {
+  if (validExternalIds.size === 0) return 0;
+  const ids = [...validExternalIds];
+  const { rowCount } = await query(
+    `UPDATE product_categories SET active = false, updated_at = NOW()
+     WHERE project_id = $1 AND source = 'wp_menu' AND external_id NOT IN (SELECT unnest($2::text[]))`,
+    [projectId, ids]
+  );
+  return rowCount;
+}
+
+// Recolecta todos los external_id del árbol anotado (para pruning)
+function collectExternalIds(items) {
+  const ids = new Set();
+  for (const item of items) {
+    ids.add(`menu:${item.href}`);
+    if (item.children?.length > 0) {
+      for (const id of collectExternalIds(item.children)) ids.add(id);
+    }
+  }
+  return ids;
 }
 
 // Normaliza slug WC para matchear con permalinks del frontend
@@ -257,42 +313,20 @@ function slugVariants(slug) {
   return [...variants];
 }
 
-// Asigna producto a categoría hoja basado en match de slug
-async function assignProductsToMenuCategories(projectId, leaves) {
+// Construye el mapa slug → product.id a partir de productos en DB
+async function buildSlugToProductMap(projectId) {
   const { rows: prods } = await query(
-    `SELECT id, wc_meta->>'slug' AS slug, wc_meta->>'permalink' AS permalink
-     FROM products WHERE project_id = $1 AND wc_product_id IS NOT NULL`,
+    `SELECT id, wc_meta->>'slug' AS slug FROM products
+     WHERE project_id = $1 AND wc_product_id IS NOT NULL`,
     [projectId]
   );
-
-  // Mapa: cualquier variante de slug → product.id
-  const slugToProduct = new Map();
+  const map = new Map();
   for (const p of prods) {
     for (const v of slugVariants(p.slug)) {
-      // No sobrescribir si ya hay match de variante más larga
-      if (!slugToProduct.has(v)) slugToProduct.set(v, p.id);
+      if (!map.has(v)) map.set(v, p.id);
     }
   }
-
-  let assigned = 0;
-  let attempted = 0;
-  for (const leaf of leaves) {
-    const slugs = await fetchPageProductSlugs(leaf.url);
-    for (const slug of slugs) {
-      attempted++;
-      const productId = slugToProduct.get(slug);
-      if (productId) {
-        await query(
-          `UPDATE products SET categoria_id = $1, updated_at = NOW()
-           WHERE id = $2 AND project_id = $3`,
-          [leaf.localId, productId, projectId]
-        );
-        assigned++;
-      }
-    }
-  }
-  logger.info({ projectId, attempted, assigned }, 'assignProductsToMenuCategories');
-  return assigned;
+  return map;
 }
 
 // Mapea producto WC → datos para insertar
@@ -365,18 +399,19 @@ export const importNow = async (req, res, next) => {
           if (r.action === 'created') created++;
           else if (r.action === 'updated') updated++;
         }
-        // 4. Pasada extra: parsear menú HTML del sitio público (jerarquía N niveles)
-        let menuLeaves = [];
-        let assignedFromMenu = 0;
+        // 4. Pasada extra: scrap del menú HTML — solo crea ramas con productos
+        let menuStats = { cats: 0, assigned: 0, pruned: 0 };
         try {
-          logger.info({ projectId }, 'WC: scrapeo menú HTML del sitio público');
+          logger.info({ projectId }, 'WC: scrapeo menú HTML');
           const menuTree = await fetchMenuTree(creds.store_url);
           if (menuTree.length > 0) {
-            menuLeaves = await syncMenuAsCategories(projectId, menuTree);
-            logger.info({ projectId, menuItems: menuTree.length, hojas: menuLeaves.length }, 'WC: menú sincronizado como categorías');
-            // 5. Por cada hoja del menú, scrapear su landing y asignar productos
-            assignedFromMenu = await assignProductsToMenuCategories(projectId, menuLeaves);
-            logger.info({ projectId, assignedFromMenu }, 'WC: productos asignados a categorías del menú');
+            const slugMap = await buildSlugToProductMap(projectId);
+            const annotated = await annotateMenuWithProducts(menuTree, slugMap);
+            const validIds = collectExternalIds(annotated);
+            const r = await syncAnnotatedTree(projectId, annotated);
+            const pruned = await pruneStaleMenuCategories(projectId, validIds);
+            menuStats = { cats: r.cats, assigned: r.assigned, pruned };
+            logger.info({ projectId, ...menuStats }, 'WC: menú sincronizado (poda + asignación)');
           }
         } catch (menuErr) {
           logger.warn({ err: menuErr.message, projectId }, 'WC: scrap del menú falló (no bloquea import)');
@@ -389,7 +424,7 @@ export const importNow = async (req, res, next) => {
           total_updated: updated,
           total_skipped: skipped,
         });
-        logger.info({ projectId, created, updated, skipped, total: wcProducts.length, menuLeaves: menuLeaves.length, assignedFromMenu }, 'WC import OK');
+        logger.info({ projectId, created, updated, skipped, total: wcProducts.length, menu: menuStats }, 'WC import OK');
       } catch (err) {
         logger.error({ err: err.message, runId: run.id }, 'WC import error');
         await model.finishRun(run.id, { status: 'error', error_message: err.message?.slice(0, 1000) });
