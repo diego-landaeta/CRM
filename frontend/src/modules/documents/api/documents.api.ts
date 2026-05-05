@@ -80,4 +80,20 @@ export const documentsApi = {
   // actual. Mantiene el `number`. Util tras cambios visuales del template.
   regenerate: (id: number, projectId: number): Promise<ApiResponse<{ id: number; number: string; file_path: string }>> =>
     client.post(`/documents/${id}/regenerate?projectId=${projectId}`, {}),
+
+  // Audit log de un documento — solo superadmin. Lista de eventos
+  // (generated/downloaded/regenerated/deleted/number_overridden/emailed).
+  audit: (id: number, projectId: number): Promise<ApiResponse<AuditEntry[]>> =>
+    client.get(`/documents/${id}/audit?projectId=${projectId}`),
 };
+
+export interface AuditEntry {
+  id: number;
+  action: 'generated' | 'downloaded' | 'regenerated' | 'deleted' | 'number_overridden' | 'emailed';
+  user_id: number | null;
+  user_nombre: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}

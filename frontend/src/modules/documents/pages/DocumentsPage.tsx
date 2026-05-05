@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut, Copy } from '@phosphor-icons/react';
+import { FilePdf, Receipt, Certificate, Download, Trash, Eye, X, ArrowsOut, Copy, ArrowsClockwise, ListMagnifyingGlass } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -8,6 +9,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceForm, { type InvoiceFormValues } from '../components/InvoiceForm';
 import CertificateForm from '../components/CertificateForm';
+import AuditDrawer from '../components/AuditDrawer';
 import { getAccessToken } from '@/shared/api/client';
 
 type TabKey = 'list' | 'invoice' | 'certificate';
@@ -131,11 +133,16 @@ function PreviewModal({ doc, onClose }: PreviewModalProps) {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function DocumentsPage() {
   const { activeProject } = useProjectContext();
+  const { user } = useAuth();
+  const role = (user as { role?: string } | null)?.role;
+  const isSuperadmin = role === 'superadmin';
   const [tab, setTab] = useState<TabKey>('list');
   const [docs, setDocs] = useState<CrmDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<CrmDocument | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
+  const [regenerating, setRegenerating] = useState<number | null>(null);
+  const [auditing, setAuditing] = useState<CrmDocument | null>(null);
   const [previewing, setPreviewing] = useState<CrmDocument | null>(null);
   const [duplicateSeed, setDuplicateSeed] = useState<Partial<InvoiceFormValues> | null>(null);
 
@@ -197,6 +204,21 @@ export default function DocumentsPage() {
     } catch {
       toast({ title: 'Error al descargar', variant: 'destructive' });
     } finally { setDownloading(null); }
+  }
+
+  async function handleRegenerate(doc: CrmDocument): Promise<void> {
+    if (!activeProject?.id) return;
+    setRegenerating(doc.id);
+    try {
+      const res = await documentsApi.regenerate(doc.id, activeProject.id);
+      if (res.success) {
+        toast({ title: 'PDF regenerado', description: doc.number });
+        load();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo regenerar';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally { setRegenerating(null); }
   }
 
   async function doDelete(): Promise<void> {
@@ -340,6 +362,27 @@ export default function DocumentsPage() {
                             )}
                             <button
                               type="button"
+                              onClick={() => handleRegenerate(doc)}
+                              disabled={regenerating === doc.id}
+                              aria-label={`Regenerar PDF ${doc.number}`}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-amber-500 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                              title="Regenerar PDF desde datos guardados"
+                            >
+                              <ArrowsClockwise size={14} className={regenerating === doc.id ? 'animate-spin' : ''} />
+                            </button>
+                            {isSuperadmin && (
+                              <button
+                                type="button"
+                                onClick={() => setAuditing(doc)}
+                                aria-label={`Ver auditoría de ${doc.number}`}
+                                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                title="Ver historial de auditoría"
+                              >
+                                <ListMagnifyingGlass size={14} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
                               onClick={() => setPendingDelete(doc)}
                               aria-label={`Eliminar ${doc.number}`}
                               className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
@@ -427,6 +470,11 @@ export default function DocumentsPage() {
       {/* Modal preview */}
       {previewing && (
         <PreviewModal doc={previewing} onClose={() => setPreviewing(null)} />
+      )}
+
+      {/* Audit drawer (solo superadmin) */}
+      {auditing && isSuperadmin && activeProject?.id && (
+        <AuditDrawer doc={auditing} projectId={activeProject.id} onClose={() => setAuditing(null)} />
       )}
 
       <ConfirmDialog
