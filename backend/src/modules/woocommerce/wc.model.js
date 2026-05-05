@@ -38,6 +38,19 @@ export async function listRuns(projectId) {
   const { rows } = await query(`SELECT * FROM wc_import_runs WHERE project_id = $1 ORDER BY started_at DESC LIMIT 50`, [projectId]);
   return rows;
 }
+
+// Run más reciente (en curso si hay uno corriendo, o el último finalizado)
+export async function getCurrentRun(projectId) {
+  const { rows } = await query(
+    `SELECT id, status, total_fetched, total_created, total_updated, total_skipped,
+            error_message, started_at, finished_at,
+            EXTRACT(EPOCH FROM (COALESCE(finished_at, NOW()) - started_at))::int AS elapsed_seconds
+     FROM wc_import_runs WHERE project_id = $1
+     ORDER BY started_at DESC LIMIT 1`,
+    [projectId]
+  );
+  return rows[0] || null;
+}
 export async function startRun(projectId, userId) {
   const { rows } = await query(`INSERT INTO wc_import_runs (project_id, triggered_by) VALUES ($1, $2) RETURNING *`, [projectId, userId]);
   return rows[0];
@@ -79,20 +92,39 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
 
 // Upsert categoría WC → product_categories. Devuelve id local.
 export async function upsertCategoryByWcId(projectId, wcCategoryId, nombre, parentLocalId) {
-  // Buscar por nombre dentro del scope del proyecto y mismo parent (UNIQUE constraint)
-  const existing = await query(
+  // Buscar primero por external_id+source (idempotente entre re-syncs)
+  const externalId = String(wcCategoryId);
+  const ex = await query(
     `SELECT id FROM product_categories
-     WHERE project_id = $1 AND nombre = $2
-       AND parent_id IS NOT DISTINCT FROM $3
-     LIMIT 1`,
+     WHERE project_id = $1 AND source = 'wc' AND external_id = $2 LIMIT 1`,
+    [projectId, externalId]
+  );
+  if (ex.rows[0]) {
+    await query(
+      `UPDATE product_categories SET nombre = $1, parent_id = $2, active = true, updated_at = NOW() WHERE id = $3`,
+      [nombre, parentLocalId || null, ex.rows[0].id]
+    );
+    return ex.rows[0].id;
+  }
+
+  // Fallback: por nombre+parent (compat con categorías legacy sin external_id)
+  const byName = await query(
+    `SELECT id FROM product_categories
+     WHERE project_id = $1 AND nombre = $2 AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1`,
     [projectId, nombre, parentLocalId]
   );
-  if (existing.rows[0]) return existing.rows[0].id;
+  if (byName.rows[0]) {
+    await query(
+      `UPDATE product_categories SET source = 'wc', external_id = $1, updated_at = NOW() WHERE id = $2`,
+      [externalId, byName.rows[0].id]
+    );
+    return byName.rows[0].id;
+  }
 
   const { rows } = await query(
-    `INSERT INTO product_categories (project_id, nombre, parent_id)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [projectId, nombre, parentLocalId]
+    `INSERT INTO product_categories (project_id, nombre, parent_id, source, external_id)
+     VALUES ($1, $2, $3, 'wc', $4) RETURNING id`,
+    [projectId, nombre, parentLocalId || null, externalId]
   );
   return rows[0].id;
 }

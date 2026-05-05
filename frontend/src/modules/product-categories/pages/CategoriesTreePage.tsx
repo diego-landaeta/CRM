@@ -5,7 +5,10 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  getCurrentSyncStatus,
+  startWcSync,
   type CategoryNode,
+  type WcRunStatus,
 } from '../api/categories.api';
 import {
   CaretDown,
@@ -16,6 +19,9 @@ import {
   Trash,
   X,
   MagnifyingGlass,
+  ArrowsClockwise,
+  CheckCircle,
+  WarningCircle,
 } from '@phosphor-icons/react';
 
 type SourceFilter = 'all' | 'manual' | 'wc' | 'wp_menu';
@@ -236,6 +242,44 @@ export default function CategoriesTreePage() {
   const [form, setForm] = useState<CategoryFormState | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Sync status (polling)
+  const [sync, setSync] = useState<WcRunStatus | null>(null);
+  const [syncStarting, setSyncStarting] = useState(false);
+
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    let cancel = false;
+    async function tick() {
+      try {
+        const s = await getCurrentSyncStatus(activeProject!.id);
+        if (cancel) return;
+        setSync(s);
+        // Si terminó (success/error) y antes estaba running → recargar árbol
+        if (s && s.status !== 'running' && sync?.status === 'running') {
+          await reload();
+        }
+      } catch { /* silencioso */ }
+    }
+    tick();
+    const interval = setInterval(tick, sync?.status === 'running' ? 3000 : 30000);
+    return () => { cancel = true; clearInterval(interval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id, sync?.status]);
+
+  async function handleStartSync() {
+    if (!activeProject?.id) return;
+    setSyncStarting(true);
+    try {
+      await startWcSync(activeProject.id);
+      const s = await getCurrentSyncStatus(activeProject.id);
+      setSync(s);
+    } catch (e) {
+      alert(`No se pudo iniciar el sync: ${(e as Error).message}`);
+    } finally {
+      setSyncStarting(false);
+    }
+  }
+
   async function reload() {
     if (!activeProject?.id) return;
     setLoading(true);
@@ -324,13 +368,56 @@ export default function CategoriesTreePage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={openCreateRoot}
-          className="px-3 py-2 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 flex items-center gap-2"
-        >
-          <Plus size={16} /> Categoría raíz
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleStartSync}
+            disabled={syncStarting || sync?.status === 'running'}
+            className="px-3 py-2 text-sm border rounded hover:bg-muted flex items-center gap-2 disabled:opacity-50"
+          >
+            <ArrowsClockwise size={16} className={sync?.status === 'running' ? 'animate-spin' : ''} />
+            {sync?.status === 'running' ? 'Sincronizando…' : 'Sincronizar WC'}
+          </button>
+          <button
+            onClick={openCreateRoot}
+            className="px-3 py-2 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 flex items-center gap-2"
+          >
+            <Plus size={16} /> Categoría raíz
+          </button>
+        </div>
       </div>
+
+      {/* Banner de progreso del sync */}
+      {sync && (
+        <div className={`mb-4 p-3 rounded-lg border text-sm flex items-center gap-3 ${
+          sync.status === 'running' ? 'bg-blue-500/10 border-blue-500/30' :
+          sync.status === 'success' ? 'bg-emerald-500/10 border-emerald-500/30' :
+          'bg-destructive/10 border-destructive/30'
+        }`}>
+          {sync.status === 'running' && <ArrowsClockwise size={18} className="animate-spin text-blue-500" />}
+          {sync.status === 'success' && <CheckCircle size={18} className="text-emerald-500" />}
+          {sync.status === 'error' && <WarningCircle size={18} className="text-destructive" />}
+          <div className="flex-1">
+            {sync.status === 'running' && (
+              <span>
+                Sincronización en curso · <strong>{sync.elapsed_seconds}s</strong> transcurridos
+                {sync.total_fetched ? ` · ${sync.total_fetched} traídos / ${sync.total_created} nuevos / ${sync.total_updated} actualizados` : ''}
+              </span>
+            )}
+            {sync.status === 'success' && (
+              <span>
+                Última sync OK · <strong>{sync.total_fetched}</strong> productos
+                ({sync.total_created} nuevos, {sync.total_updated} actualizados, {sync.total_skipped} omitidos)
+                · {sync.elapsed_seconds}s · finalizó {new Date(sync.finished_at!).toLocaleTimeString()}
+              </span>
+            )}
+            {sync.status === 'error' && (
+              <span>
+                Error en última sync: <strong>{sync.error_message || 'desconocido'}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3 mb-4 p-3 border rounded-lg bg-muted/30">

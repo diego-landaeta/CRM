@@ -52,6 +52,13 @@ export const listRuns = async (req, res, next) => {
   try { res.json({ success: true, data: await model.listRuns(pid(req)) }); } catch (e) { next(e); }
 };
 
+export const getCurrentRun = async (req, res, next) => {
+  try {
+    const run = await model.getCurrentRun(pid(req));
+    res.json({ success: true, data: run });
+  } catch (e) { next(e); }
+};
+
 // ============================================================
 // Helpers WC API con paginación y categorías
 // ============================================================
@@ -236,23 +243,43 @@ async function syncMenuAsCategories(projectId, menuTree) {
   return leaves;
 }
 
-// Asigna producto a categoría hoja basado en match de slug (permalink WC == slug en URL del menú)
+// Normaliza slug WC para matchear con permalinks del frontend
+// Ej: "curso-en-psicogerontologia-2105-2" → ["curso-en-psicogerontologia-2105-2", "curso-en-psicogerontologia-2105", "curso-en-psicogerontologia"]
+function slugVariants(slug) {
+  if (!slug) return [];
+  const variants = new Set([slug]);
+  // Quitar sufijo -N y -N-N final iterativamente
+  let s = slug;
+  while (/-\d+$/.test(s)) {
+    s = s.replace(/-\d+$/, '');
+    variants.add(s);
+  }
+  return [...variants];
+}
+
+// Asigna producto a categoría hoja basado en match de slug
 async function assignProductsToMenuCategories(projectId, leaves) {
-  // Mapa local: slug → product.id
   const { rows: prods } = await query(
     `SELECT id, wc_meta->>'slug' AS slug, wc_meta->>'permalink' AS permalink
      FROM products WHERE project_id = $1 AND wc_product_id IS NOT NULL`,
     [projectId]
   );
+
+  // Mapa: cualquier variante de slug → product.id
   const slugToProduct = new Map();
   for (const p of prods) {
-    if (p.slug) slugToProduct.set(p.slug, p.id);
+    for (const v of slugVariants(p.slug)) {
+      // No sobrescribir si ya hay match de variante más larga
+      if (!slugToProduct.has(v)) slugToProduct.set(v, p.id);
+    }
   }
 
   let assigned = 0;
+  let attempted = 0;
   for (const leaf of leaves) {
     const slugs = await fetchPageProductSlugs(leaf.url);
     for (const slug of slugs) {
+      attempted++;
       const productId = slugToProduct.get(slug);
       if (productId) {
         await query(
@@ -264,6 +291,7 @@ async function assignProductsToMenuCategories(projectId, leaves) {
       }
     }
   }
+  logger.info({ projectId, attempted, assigned }, 'assignProductsToMenuCategories');
   return assigned;
 }
 
