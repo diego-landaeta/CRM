@@ -67,16 +67,24 @@ export async function generate(req, res, next) {
       ? await generateInvoicePdf(data, filename)
       : await generateCertificatePdf(data, filename);
 
-    // F4-003: subir a R2 (best-effort). Si falla, queda en FS local — log
-    // warning + alerta SA via audit.
+    // F4-003: subir a R2 (best-effort). Skip si las credenciales son
+    // placeholder (e.g. "test" en dev) — evita 3min de retries del AWS SDK
+    // contra un host que no resuelve. En prod las credenciales reales hacen
+    // que esta condicion sea false y se intente el upload.
     let r2Key = null;
-    try {
-      const buf = await fs.readFile(filePath);
-      r2Key = `documents/${projectId}/${filename}`;
-      await uploadToR2(r2Key, buf, 'application/pdf');
-    } catch (err) {
-      logger.warn({ err: err.message, filename }, 'R2 upload fallo — PDF queda solo en FS');
-      r2Key = null;
+    const r2Configured = process.env.CLOUDFLARE_R2_ACCOUNT_ID
+      && process.env.CLOUDFLARE_R2_ACCOUNT_ID !== 'test'
+      && process.env.CLOUDFLARE_R2_ACCESS_KEY
+      && process.env.CLOUDFLARE_R2_ACCESS_KEY !== 'test';
+    if (r2Configured) {
+      try {
+        const buf = await fs.readFile(filePath);
+        r2Key = `documents/${projectId}/${filename}`;
+        await uploadToR2(r2Key, buf, 'application/pdf');
+      } catch (err) {
+        logger.warn({ err: err.message, filename }, 'R2 upload fallo — PDF queda solo en FS');
+        r2Key = null;
+      }
     }
 
     const doc = await model.createDocument({

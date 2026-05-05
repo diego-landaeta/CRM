@@ -458,27 +458,6 @@ export function buildInvoiceHtml(data) {
   }
   .lopd-text p { margin-bottom: 1mm; }
   .lopd-text p:last-child { margin-bottom: 0; }
-
-  /* ── Modo PDF (puppeteer auto-emula print): activa flujo natural multi-pagina.
-     Para el navegador (preview del modal) se mantiene el layout single-page
-     con position:absolute. La footer-band inline se oculta porque puppeteer
-     la inyecta via footerTemplate en cada pagina. ── */
-  @page { size: A4; margin: 0; }
-  @media print {
-    .page { height: auto; min-height: 297mm; overflow: visible; }
-    .content-area {
-      position: static;
-      margin: 130mm 14.3mm 0 14.5mm;
-      padding-bottom: 6mm;
-    }
-    .footer-band { display: none; }
-    .items-table thead { display: table-header-group; }
-    .items-table tr { page-break-inside: avoid; }
-    .bottom-row { page-break-inside: avoid; }
-    /* En modo flow no necesitamos margin-top:auto para empujar el bottom-row;
-       fluye naturalmente despues de la tabla. */
-    .bottom-row { margin-top: 6mm; }
-  }
 </style>
 </head>
 <body>
@@ -877,15 +856,12 @@ export async function buildCertP2Html(data) {
 // ============================================================
 export async function generateInvoicePdf(data, filename) {
   const html = buildInvoiceHtml(data);
-  // Multi-pagina: las @media print rules del template activan flow natural.
-  // El footer rosa-palo (email + LOPD) lo inyecta puppeteer en cada pagina
-  // via footerTemplate; reservamos 41mm bottom para que body no se solape.
-  return htmlToPdf(html, filename, {
-    displayHeaderFooter: true,
-    headerTemplate: '<div></div>',
-    footerTemplate: buildInvoiceFooterTemplate(),
-    margin: { top: '0', right: '0', bottom: '41mm', left: '0' },
-  });
+  // Single-page con layout absoluto del Canva original. El footer-band va
+  // inline en el body absolute al `bottom: 0` de `.page`. Multi-página real
+  // (puppeteer footerTemplate) se intentó pero rompía la posición de los
+  // absolutos; en su lugar los modos `compact`/`dense` del template
+  // comprimen filas para acomodar hasta ~22 items en 1 página.
+  return htmlToPdf(html, filename);
 }
 
 export async function generateCertificatePdf(data, filename) {
