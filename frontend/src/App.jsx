@@ -86,6 +86,7 @@ const LeadsPipelinePage = lazy(() => import('./modules/leads/pages/LeadsPipeline
 const AudienceExportPage = lazy(() => import('./modules/leads/pages/AudienceExportPage'));
 const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage'));
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
+const ProductsTreePage = lazy(() => import('./modules/products/pages/ProductsTreePage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
 const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPendingPage'));
 const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage'));
@@ -148,6 +149,7 @@ function App() {
           <Route path="/leads/audiences" element={<AudienceExportPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/products/arbol" element={<ProductsTreePage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />

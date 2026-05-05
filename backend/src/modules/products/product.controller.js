@@ -4,7 +4,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 
 export async function list(req, res, next) {
   try {
-    const products = await ProductService.listByProject(req.projectId);
+    const categoryId = req.query.categoryId ? parseInt(req.query.categoryId) : null;
+    const products = await ProductService.listByProject(req.projectId, { categoryId });
     res.json({ success: true, data: products });
   } catch (err) { next(err); }
 }

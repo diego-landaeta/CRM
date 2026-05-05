@@ -1,8 +1,8 @@
 import * as ProductModel from './product.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
-export async function listByProject(projectId) {
-  return ProductModel.findByProject(projectId);
+export async function listByProject(projectId, opts = {}) {
+  return ProductModel.findByProject(projectId, opts);
 }
 
 export async function getById(id, projectId) {
