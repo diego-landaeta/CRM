@@ -20,6 +20,8 @@ interface ShortcutItem {
   icon: string;
   route?: string;
   action?: string;
+  // CRM-147: roles autorizados. Vacio o ausente = visible para todos.
+  roles?: string[];
 }
 
 const ICON_MAP: Record<string, Icon> = {
@@ -41,11 +43,18 @@ function iconFor(name: string): Icon {
 
 export default function ShortcutsFAB() {
   const navigate = useNavigate();
-  const { activeProject } = useAuth() as unknown as { activeProject: { shortcuts?: ShortcutItem[] | null } | null };
-  const shortcuts = useMemo<ShortcutItem[]>(
-    () => Array.isArray(activeProject?.shortcuts) ? activeProject.shortcuts : [],
-    [activeProject?.shortcuts]
-  );
+  const auth = useAuth() as unknown as {
+    activeProject: { shortcuts?: ShortcutItem[] | null } | null;
+    user: { role?: string } | null;
+  };
+  const userRole = auth.user?.role;
+  // CRM-147: filtrado por rol. Si el shortcut no declara `roles`, es visible
+  // para todos (compat hacia atras con configs anteriores al cambio).
+  const shortcuts = useMemo<ShortcutItem[]>(() => {
+    const all = Array.isArray(auth.activeProject?.shortcuts) ? auth.activeProject.shortcuts : [];
+    if (!userRole) return all;
+    return all.filter(s => !s.roles || s.roles.length === 0 || s.roles.includes(userRole));
+  }, [auth.activeProject?.shortcuts, userRole]);
   const [open, setOpen] = useState(false);
 
   // Cerrar con Escape

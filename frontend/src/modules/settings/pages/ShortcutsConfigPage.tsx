@@ -17,6 +17,8 @@ interface ShortcutCatalogItem {
   icon: string;
   route?: string;
   action?: string;
+  // CRM-147: roles autorizados. Vacio = todos.
+  roles?: string[];
 }
 
 interface ProjectWithShortcuts {
@@ -24,6 +26,14 @@ interface ProjectWithShortcuts {
   nombre: string;
   shortcuts?: ShortcutCatalogItem[] | null;
 }
+
+// CRM-147: roles disponibles para el filtrado por proyecto.
+const ROLES = [
+  { id: 'superadmin', label: 'Sup', full: 'Superadmin' },
+  { id: 'admin',      label: 'Adm', full: 'Admin'      },
+  { id: 'gestor',     label: 'Ges', full: 'Gestor'     },
+  { id: 'soporte',    label: 'Sop', full: 'Soporte'    },
+] as const;
 
 // Mapa de string-de-backend → componente Icon de phosphor.
 // El backend devuelve nombres de icono como strings (e.g. 'Webhook'); los
@@ -52,7 +62,10 @@ export default function ShortcutsConfigPage() {
   const isAdmin = role === 'superadmin' || role === 'admin';
 
   const [catalog, setCatalog] = useState<ShortcutCatalogItem[] | null>(null);
-  const [projectShortcuts, setProjectShortcuts] = useState<Map<number, Set<string>>>(new Map());
+  // CRM-147: ahora la estructura es projectId -> (shortcutId -> roles[]).
+  // Si un shortcutId esta presente en el inner map, esta activo. Sus `roles`
+  // pueden estar vacias (= todos los roles) o contener una lista explicita.
+  const [projectShortcuts, setProjectShortcuts] = useState<Map<number, Map<string, string[]>>>(new Map());
   const [dirty, setDirty] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
@@ -73,10 +86,13 @@ export default function ShortcutsConfigPage() {
         if (cancelled) return;
         if (catRes.success && catRes.data) setCatalog(catRes.data);
         if (projRes.success && projRes.data) {
-          const map = new Map<number, Set<string>>();
+          const map = new Map<number, Map<string, string[]>>();
           for (const p of projRes.data) {
-            const ids = new Set<string>((p.shortcuts || []).map(s => s.id));
-            map.set(p.id, ids);
+            const inner = new Map<string, string[]>();
+            for (const s of p.shortcuts || []) {
+              inner.set(s.id, Array.isArray(s.roles) ? s.roles : []);
+            }
+            map.set(p.id, inner);
           }
           setProjectShortcuts(map);
         }
@@ -92,10 +108,31 @@ export default function ShortcutsConfigPage() {
   function toggle(projectId: number, shortcutId: string): void {
     setProjectShortcuts(prev => {
       const next = new Map(prev);
-      const set = new Set(next.get(projectId) || []);
-      if (set.has(shortcutId)) set.delete(shortcutId);
-      else set.add(shortcutId);
-      next.set(projectId, set);
+      const inner = new Map(next.get(projectId) || []);
+      if (inner.has(shortcutId)) inner.delete(shortcutId);
+      else inner.set(shortcutId, []); // por defecto: todos los roles
+      next.set(projectId, inner);
+      return next;
+    });
+    setDirty(prev => new Set(prev).add(projectId));
+  }
+
+  // CRM-147: toggle de un rol especifico para un shortcut activo.
+  // Si el shortcut no esta activo, lo activamos primero con solo ese rol.
+  function toggleRole(projectId: number, shortcutId: string, role: string): void {
+    setProjectShortcuts(prev => {
+      const next = new Map(prev);
+      const inner = new Map(next.get(projectId) || []);
+      const current = inner.get(shortcutId);
+      if (!current) {
+        inner.set(shortcutId, [role]);
+      } else if (current.includes(role)) {
+        const filtered = current.filter(r => r !== role);
+        inner.set(shortcutId, filtered);
+      } else {
+        inner.set(shortcutId, [...current, role]);
+      }
+      next.set(projectId, inner);
       return next;
     });
     setDirty(prev => new Set(prev).add(projectId));
@@ -105,11 +142,17 @@ export default function ShortcutsConfigPage() {
     if (!catalog) return;
     setSaving(projectId);
     try {
-      const activeIds = projectShortcuts.get(projectId) || new Set();
-      // Mantenemos el orden del catálogo y enviamos el item completo (label/icon/route)
+      const inner = projectShortcuts.get(projectId) || new Map<string, string[]>();
+      // Mantenemos el orden del catálogo y enviamos el item completo (label/icon/route + roles)
       const payload = catalog
-        .filter(c => activeIds.has(c.id))
-        .map(c => ({ id: c.id, label: c.label, icon: c.icon, route: c.route, action: c.action }));
+        .filter(c => inner.has(c.id))
+        .map(c => {
+          const roles = inner.get(c.id) || [];
+          return {
+            id: c.id, label: c.label, icon: c.icon, route: c.route, action: c.action,
+            ...(roles.length > 0 ? { roles } : {}),
+          };
+        });
       const res = await client.put(`/projects/${projectId}/shortcuts`, { shortcuts: payload });
       if ((res as ApiResponse<unknown>).success) {
         setDirty(prev => {
@@ -170,7 +213,7 @@ export default function ShortcutsConfigPage() {
       {!loading && catalog && (
         <div className="grid gap-4 md:grid-cols-2">
           {adminProjects.map(p => {
-            const active = projectShortcuts.get(p.id) || new Set();
+            const inner = projectShortcuts.get(p.id) || new Map<string, string[]>();
             const isDirty = dirty.has(p.id);
             const isSaving = saving === p.id;
             return (
@@ -178,18 +221,21 @@ export default function ShortcutsConfigPage() {
                 <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
                   <h3 className="font-semibold text-sm truncate">{p.nombre}</h3>
                   <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                    {active.size} / {catalog.length} activos
+                    {inner.size} / {catalog.length} activos
                   </span>
                 </div>
                 <ul className="divide-y divide-border">
                   {catalog.map(item => {
                     const Icon = iconFor(item.icon);
-                    const isOn = active.has(item.id);
+                    const itemRoles = inner.get(item.id);
+                    const isOn = itemRoles !== undefined;
+                    const showAll = isOn && (!itemRoles || itemRoles.length === 0);
                     return (
-                      <li key={item.id}>
-                        <label className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors">
+                      <li key={item.id} className="px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
                           <input
                             type="checkbox"
+                            aria-label={`${item.label} en ${p.nombre}`}
                             checked={isOn}
                             onChange={() => toggle(p.id, item.id)}
                             className="h-4 w-4 cursor-pointer accent-primary shrink-0"
@@ -205,7 +251,33 @@ export default function ShortcutsConfigPage() {
                               {item.route || item.action || ''}
                             </div>
                           </div>
-                        </label>
+                        </div>
+                        {isOn && (
+                          <div className="mt-2 ml-7 pl-3 flex items-center flex-wrap gap-1.5 border-l border-border/60">
+                            <span className="text-[10px] text-muted-foreground mr-0.5">Visible para:</span>
+                            {ROLES.map(r => {
+                              const checked = showAll || (itemRoles?.includes(r.id) ?? false);
+                              return (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => toggleRole(p.id, item.id, r.id)}
+                                  title={`${r.full}${showAll ? ' (todos seleccionados — clic restringe solo a este)' : ''}`}
+                                  className={`text-[10px] font-semibold h-5 px-1.5 rounded border transition-all ${
+                                    checked
+                                      ? 'bg-primary/15 border-primary/40 text-primary'
+                                      : 'bg-muted border-border text-muted-foreground hover:border-primary/40'
+                                  }`}
+                                >
+                                  {r.label}
+                                </button>
+                              );
+                            })}
+                            {showAll && (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 ml-1">todos</span>
+                            )}
+                          </div>
+                        )}
                       </li>
                     );
                   })}
@@ -239,12 +311,17 @@ export default function ShortcutsConfigPage() {
 
       <section className="bg-muted/40 border border-border rounded-xl p-5 flex items-start gap-3">
         <Check size={18} weight="regular" className="text-emerald-500 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-muted-foreground">
-          <p className="font-semibold text-foreground mb-1">Cómo aparecen</p>
+        <div className="text-sm text-muted-foreground space-y-1.5">
+          <p className="font-semibold text-foreground">Cómo aparecen</p>
           <p>
             Los atajos activos se mostrarán en el botón flotante (FAB) de cada proyecto y en el
             panel lateral. Los cambios surten efecto al cambiar de proyecto activo o tras un
             refresh de la página.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Visibilidad por rol:</span>{' '}
+            si todas las casillas de rol están en gris/marcadas, el atajo aparece para todos los
+            roles. Marca solo los roles específicos para restringir su visibilidad.
           </p>
         </div>
       </section>
