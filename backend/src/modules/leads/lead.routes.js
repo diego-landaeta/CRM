@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as leadController from './lead.controller.js';
+import * as leadEmailsController from './lead-emails.controller.js';
 
 const router = Router();
 
@@ -37,6 +38,10 @@ router.patch('/reminders/:reminderId/complete', leadController.completeReminder)
 
 // Secuencias de email del lead (para popup de detalle)
 router.get('/:id/sequences', leadController.getLeadSequences);
+
+// Envío manual de email + historial (CRM-231)
+router.post('/:id/send-email', leadEmailsController.sendLeadEmail);
+router.get('/:id/emails', leadEmailsController.listLeadEmails);
 
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
