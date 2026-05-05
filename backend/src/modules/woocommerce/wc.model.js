@@ -53,17 +53,46 @@ export async function findProductByWcId(projectId, wcId) {
   const { rows } = await query(`SELECT id FROM products WHERE project_id = $1 AND wc_product_id = $2`, [projectId, wcId]);
   return rows[0] || null;
 }
-export async function upsertProductFromWc({ projectId, wcId, data, meta }) {
+export async function upsertProductFromWc({ projectId, wcId, data }) {
   const existing = await findProductByWcId(projectId, wcId);
+  const meta = data.meta || {};
   if (existing) {
     const { rows } = await query(
-      `UPDATE products SET nombre=$1, precio=$2, descripcion=$3, wc_meta=$4, updated_at=NOW() WHERE id = $5 RETURNING id`,
-      [data.nombre, data.precio, data.descripcion || null, JSON.stringify(meta || {}), existing.id]);
+      `UPDATE products
+       SET nombre=$1, precio=$2, descripcion=$3, sku=$4,
+           categoria_id=$5, subcategoria_id=$6, wc_meta=$7, updated_at=NOW()
+       WHERE id = $8 RETURNING id`,
+      [data.nombre, data.precio, data.descripcion || null, data.sku || null,
+       data.categoria_id || null, data.subcategoria_id || null,
+       JSON.stringify(meta), existing.id]);
     return { action: 'updated', id: rows[0].id };
   }
   const { rows } = await query(
-    `INSERT INTO products (project_id, nombre, precio, descripcion, wc_product_id, wc_meta)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [projectId, data.nombre, data.precio, data.descripcion || null, wcId, JSON.stringify(meta || {})]);
+    `INSERT INTO products (project_id, nombre, precio, descripcion, sku,
+                           categoria_id, subcategoria_id, wc_product_id, wc_meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+    [projectId, data.nombre, data.precio, data.descripcion || null, data.sku || null,
+     data.categoria_id || null, data.subcategoria_id || null,
+     wcId, JSON.stringify(meta)]);
   return { action: 'created', id: rows[0].id };
+}
+
+// Upsert categoría WC → product_categories. Devuelve id local.
+export async function upsertCategoryByWcId(projectId, wcCategoryId, nombre, parentLocalId) {
+  // Buscar por nombre dentro del scope del proyecto y mismo parent (UNIQUE constraint)
+  const existing = await query(
+    `SELECT id FROM product_categories
+     WHERE project_id = $1 AND nombre = $2
+       AND parent_id IS NOT DISTINCT FROM $3
+     LIMIT 1`,
+    [projectId, nombre, parentLocalId]
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+
+  const { rows } = await query(
+    `INSERT INTO product_categories (project_id, nombre, parent_id)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [projectId, nombre, parentLocalId]
+  );
+  return rows[0].id;
 }

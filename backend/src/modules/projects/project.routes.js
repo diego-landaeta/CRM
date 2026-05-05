@@ -28,4 +28,7 @@ router.delete('/:id/logo', roleGuard('admin', 'superadmin'), ctrl.deleteLogo);
 // Atajos — guardar configuración (admin/superadmin)
 router.put('/:id/shortcuts', roleGuard('admin', 'superadmin'), shortcutsCtrl.saveShortcuts);
 
+// Round-robin: estado de la cola de gestores (cualquier autenticado)
+router.get('/:id/queue-state', shortcutsCtrl.getQueueState);
+
 export default router;
