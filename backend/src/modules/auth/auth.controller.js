@@ -3,7 +3,7 @@ import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import { loginSchema, setPasswordSchema } from './auth.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { buildPermissionsMap } from '../permissions/permissions.service.js';
+import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -115,9 +115,10 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const [projects, permissions] = await Promise.all([
+    const [projects, permissions, view] = await Promise.all([
       authModel.getUserProjects(user.id),
       buildPermissionsMap(user.id, user.role, user.custom_role_id),
+      resolveUserView(user.id, user.role, user.custom_role_id),
     ]);
 
     res.json({
@@ -133,6 +134,7 @@ export async function me(req, res, next) {
           custom_role_label: user.custom_role_label,
         },
         permissions,
+        view,
         projects: sanitizeProjects(projects, user.role),
       },
     });

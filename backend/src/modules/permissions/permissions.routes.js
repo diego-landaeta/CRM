@@ -20,4 +20,8 @@ router.delete('/custom-roles/:id', roleGuard('superadmin'), ctrl.deleteCustomRol
 router.get('/users/:userId/permissions', roleGuard('admin', 'superadmin'), ctrl.getUserPermissions);
 router.put('/users/:userId/permissions', roleGuard('admin', 'superadmin'), ctrl.saveUserPermissions);
 
+// Vistas por rol (sidebar/dashboard/landing)
+router.get('/role-views/:roleKey', ctrl.getRoleView);
+router.put('/role-views/:roleKey', roleGuard('admin', 'superadmin'), ctrl.setRoleView);
+
 export default router;
