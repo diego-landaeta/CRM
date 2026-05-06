@@ -703,7 +703,7 @@ export default function LeadsPage() {
           {!loading && filteredLeads.map((lead) => (
             <div
               key={lead.id}
-              onClick={() => navigate(`/leads/${lead.id}`)}
+              onClick={() => setDrawerLeadId(lead.id)}
               className="p-4 space-y-2.5 cursor-pointer active:bg-muted/50 transition-colors"
             >
               <div className="flex items-center justify-between gap-2">

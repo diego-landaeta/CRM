@@ -1,7 +1,10 @@
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
+
+const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
 import {
   Users,
   Sparkle,
@@ -130,6 +133,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
   const { kpis, stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
+  const [drawerLeadId, setDrawerLeadId] = useState(null);
 
   if (loading) {
     return (
@@ -246,7 +250,7 @@ export default function DashboardPage() {
                 {today.reminders_pendientes.slice(0, 5).map((r) => (
                   <button
                     key={r.id}
-                    onClick={() => navigate(`/leads/${r.lead_id}`)}
+                    onClick={() => setDrawerLeadId(r.lead_id)}
                     className="w-full text-left bg-card border border-border rounded-md p-3 hover:bg-muted/30 transition-colors flex items-center gap-3"
                   >
                     <div className={`w-2 h-10 rounded-full ${r.vencido ? 'bg-red-500' : 'bg-orange-500'}`} />
@@ -425,7 +429,7 @@ export default function DashboardPage() {
                     <tr
                       key={lead.id}
                       className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/leads/${lead.id}`)}
+                      onClick={() => setDrawerLeadId(lead.id)}
                     >
                       <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
                       <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
@@ -443,7 +447,7 @@ export default function DashboardPage() {
                 <div
                   key={lead.id}
                   className="p-4 space-y-2 cursor-pointer active:bg-muted/50 transition-colors"
-                  onClick={() => navigate(`/leads/${lead.id}`)}
+                  onClick={() => setDrawerLeadId(lead.id)}
                 >
                   <p className="text-[13px] font-semibold">{lead.nombre}</p>
                   <p className="text-[13px] text-muted-foreground">{lead.email}</p>
@@ -458,6 +462,14 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      <Suspense fallback={null}>
+        <LeadDrawer
+          leadId={drawerLeadId}
+          open={drawerLeadId !== null}
+          onClose={() => setDrawerLeadId(null)}
+        />
+      </Suspense>
     </div>
   );
 }
