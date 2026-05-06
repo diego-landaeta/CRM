@@ -15,7 +15,11 @@ const credsSchema = z.object({
   sync_interval_minutes: z.number().int().min(5).max(1440).optional(),
 });
 
-function pid(req) { const p = parseInt(req.query.projectId); if (!p) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED'); return p; }
+function pid(req) {
+  const p = parseInt(req.query.projectId);
+  if (isNaN(p) || p <= 0) throw new AppError('projectId requerido (entero positivo)', 400, 'PROJECT_REQUIRED');
+  return p;
+}
 
 export const getCreds = async (req, res, next) => {
   try {

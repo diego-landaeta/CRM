@@ -9,9 +9,9 @@ router.use(verifyToken);
 // Defaults del sistema — cualquier usuario autenticado puede ver
 router.get('/system-defaults', ctrl.getSystemDefaults);
 
-// Roles custom — solo admin/superadmin gestionan
-router.get('/custom-roles', ctrl.listCustomRoles);
-router.get('/custom-roles/:id', ctrl.getCustomRole);
+// Roles custom — solo admin/superadmin pueden ver/gestionar (info sensible)
+router.get('/custom-roles', roleGuard('admin', 'superadmin'), ctrl.listCustomRoles);
+router.get('/custom-roles/:id', roleGuard('admin', 'superadmin'), ctrl.getCustomRole);
 router.post('/custom-roles', roleGuard('admin', 'superadmin'), ctrl.createCustomRole);
 router.put('/custom-roles/:id', roleGuard('admin', 'superadmin'), ctrl.updateCustomRole);
 router.delete('/custom-roles/:id', roleGuard('superadmin'), ctrl.deleteCustomRole);

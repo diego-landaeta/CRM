@@ -70,6 +70,7 @@ export async function deleteCustomRole(req, res, next) {
 export async function getUserPermissions(req, res, next) {
   try {
     const userId = parseInt(req.params.userId);
+    if (isNaN(userId) || userId <= 0) throw new AppError('userId inválido', 400, 'INVALID_ID');
     const { rows } = await query(
       `SELECT id, nombre, role, custom_role_id FROM users WHERE id = $1`,
       [userId]
@@ -96,6 +97,7 @@ export async function getUserPermissions(req, res, next) {
 export async function saveUserPermissions(req, res, next) {
   try {
     const userId = parseInt(req.params.userId);
+    if (isNaN(userId) || userId <= 0) throw new AppError('userId inválido', 400, 'INVALID_ID');
     const parsed = overridesSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
 
