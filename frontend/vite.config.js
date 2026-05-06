@@ -7,13 +7,16 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       injectRegister: 'auto',
       base: '/crm/',
       scope: '/crm/',
       manifest: false,
       includeAssets: ['offline.html', 'favicon.jpeg', 'favicon.svg', 'icons/*.png'],
       workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/crm/offline.html',
         navigateFallbackDenylist: [/^\/crm\/api\//, /^\/crm\/embed\//],
