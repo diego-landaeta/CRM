@@ -34,6 +34,7 @@ const ROUTE_TITLES = {
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
   '/configuracion/documentos': 'Numeración de documentos',
+  '/configuracion/email-templates': 'Plantillas de email',
   '/payroll': 'Nóminas',
   '/woocommerce': 'WooCommerce',
   '/reports': 'Reportes',
@@ -119,6 +120,7 @@ const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/page
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
+const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
@@ -175,6 +177,7 @@ function App() {
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
+          <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />

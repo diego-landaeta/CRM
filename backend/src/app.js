@@ -32,6 +32,7 @@ import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
+import emailTemplatesModule from './modules/email-templates/index.js';
 import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
@@ -108,6 +109,7 @@ const ALL_MODULES = [
   { name: 'reports-ia', mod: reportsIaModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
+  { name: 'email-templates', mod: emailTemplatesModule },
   { name: 'project-channels', mod: projectChannelsModule },
   { name: 'permissions', mod: permissionsModule },
 ];

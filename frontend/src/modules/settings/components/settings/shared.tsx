@@ -1,6 +1,6 @@
 import {
   Users, Folder, Key, Envelope, ShieldCheck, PlugsConnected, Globe, ListChecks,
-  ChatCircleText, Lightning, Receipt, type Icon,
+  ChatCircleText, Lightning, Receipt, EnvelopeOpen, type Icon,
 } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 
@@ -20,6 +20,7 @@ export const TABS: SettingsTab[] = [
   { id: 'forms',        label: 'Formularios',         icon: Globe },
   { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/webhooks' },
   { id: 'sequences',    label: 'Email seguimiento',   icon: Envelope,       to: '/email-sequences' },
+  { id: 'templates',    label: 'Plantillas email',    icon: EnvelopeOpen,   to: '/configuracion/email-templates' },
   { id: 'shortcuts',    label: 'Atajos rápidos',      icon: Lightning,      to: '/configuracion/atajos' },
   { id: 'documents',    label: 'Numeración docs',     icon: Receipt,        to: '/configuracion/documentos' },
   { id: 'apis',         label: 'APIs globales',       icon: Key },

@@ -44,7 +44,7 @@ export const BUNDLES = {
   marketing: {
     label: 'Marketing avanzado',
     description: 'Meta Ads, Google Ads, GSC organico, email seguimiento',
-    modules: ['email-sequences'],  // meta-ads, google-ads, gsc pendientes implementar
+    modules: ['email-sequences', 'email-templates'],  // meta-ads, google-ads, gsc pendientes implementar
     requires: ['core', 'leads'],
   },
   ecommerce: {

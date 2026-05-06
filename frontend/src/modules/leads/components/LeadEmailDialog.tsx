@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { X, EnvelopeSimple, PaperPlaneTilt } from '@phosphor-icons/react';
+import { X, EnvelopeSimple, PaperPlaneTilt, FileText } from '@phosphor-icons/react';
 import { leadEmailsApi } from '../api/lead-emails.api';
 import { toast } from '@/shared/hooks/useToast';
+import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
+import { useProjectContext } from '@/contexts/ProjectContext';
 
 interface LeadEmailDialogProps {
   open: boolean;
@@ -15,17 +17,47 @@ interface LeadEmailDialogProps {
 export default function LeadEmailDialog({
   open, leadId, leadName, leadEmail, onClose, onSent,
 }: LeadEmailDialogProps) {
+  const { activeProject } = useProjectContext();
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  // CRM-185 fase 2: plantillas. Se cargan al abrir; al elegir una se renderiza
+  // server-side con los datos del lead y se prefilla asunto/cuerpo.
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
+  const [renderingTemplate, setRenderingTemplate] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSubject('');
       setBody('');
       setSending(false);
+      setSelectedTemplateId('');
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !activeProject?.id) return;
+    let cancelled = false;
+    emailTemplatesApi.list(activeProject.id, false)
+      .then(res => { if (!cancelled && res.success && res.data) setTemplates(res.data); })
+      .catch(() => { /* silencioso, seccion opcional */ });
+    return () => { cancelled = true; };
+  }, [open, activeProject?.id]);
+
+  async function applyTemplate(templateId: number) {
+    if (!activeProject?.id) return;
+    setRenderingTemplate(true);
+    try {
+      const res = await emailTemplatesApi.render(templateId, activeProject.id, leadId);
+      if (res.success && res.data) {
+        setSubject(res.data.subject);
+        setBody(res.data.body_html);
+      }
+    } catch {
+      toast({ title: 'Error aplicando plantilla', variant: 'destructive' });
+    } finally { setRenderingTemplate(false); }
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -100,6 +132,30 @@ export default function LeadEmailDialog({
           {!leadEmail && (
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-md p-3 text-xs text-amber-700 dark:text-amber-400">
               Este lead no tiene email. Edita la ficha y añade uno antes de enviar.
+            </div>
+          )}
+          {templates.length > 0 && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                <FileText size={11} /> Usar plantilla
+              </label>
+              <select
+                aria-label="Plantilla de email"
+                value={selectedTemplateId}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : '';
+                  setSelectedTemplateId(id);
+                  if (id) applyTemplate(id);
+                }}
+                disabled={renderingTemplate || sending || !leadEmail}
+                className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
+              >
+                <option value="">— Seleccionar plantilla —</option>
+                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {renderingTemplate && (
+                <p className="text-[10px] text-muted-foreground mt-1">Aplicando plantilla…</p>
+              )}
             </div>
           )}
           <div>
