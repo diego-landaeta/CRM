@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PlugsConnected, Plus } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
@@ -36,6 +36,21 @@ export default function WebhooksPage() {
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // CRM-147: quick-add via ?new=1 — crea un webhook y navega a su detalle.
+  // Usamos un ref para no doble-disparar en StrictMode.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const quickAddFiredRef = useRef(false);
+  useEffect(() => {
+    if (searchParams.get('new') === '1' && !quickAddFiredRef.current) {
+      quickAddFiredRef.current = true;
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+      // createNew necesita activeProject.id, lo haremos cuando esté listo.
+      if (activeProject?.id) createNew();
+    }
+  }, [searchParams, setSearchParams, activeProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function createNew(): Promise<void> {
     if (!activeProject?.id || creating) return;

@@ -154,6 +154,16 @@ export default function LeadsPage() {
     else setSearchParams({}, { replace: true });
   }
 
+  // CRM-147: quick-add via ?new=1 (lo dispara el FAB de atajos).
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   // Filtros rapidos client-side (sobre los leads ya cargados)
   const filteredLeads = useMemo(() => {
     if (!quickFilter) return leads;

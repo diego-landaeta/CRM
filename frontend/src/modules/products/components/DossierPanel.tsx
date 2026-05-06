@@ -5,7 +5,8 @@ import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { Progress } from '@/shared/components/ui/progress';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/shared/components/ui/accordion';
-import { UploadSimple, FileText, DownloadSimple, WarningCircle } from '@phosphor-icons/react';
+import { UploadSimple, FileText, DownloadSimple, WarningCircle, Eye, EyeSlash } from '@phosphor-icons/react';
+import { getDossierUrl } from '../api/dossiers.api';
 
 function formatBytes(bytes) {
   if (!bytes) return '—';
@@ -29,6 +30,26 @@ export default function DossierPanel({ productId, projectId }) {
 
   const [pendingFile, setPendingFile] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  // CRM-149: preview inline del PDF activo (presigned URL en iframe).
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  async function togglePreview() {
+    if (previewUrl) {
+      setPreviewUrl(null);
+      return;
+    }
+    if (!activeDossier) return;
+    setPreviewLoading(true);
+    try {
+      const { url } = await getDossierUrl(activeDossier.id, projectId);
+      setPreviewUrl(url);
+    } catch {
+      setUploadError('No se pudo generar la previsualizacion');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
     setUploadError(null);
@@ -64,18 +85,33 @@ export default function DossierPanel({ productId, projectId }) {
       <h3 className="text-lg font-semibold">Dossier PDF</h3>
 
       {activeDossier && (
-        <div className="flex items-center gap-3 rounded-lg border p-4">
-          <FileText className="h-8 w-8 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate">{activeDossier.filename_original}</p>
-            <p className="text-sm text-muted-foreground">
-              v{activeDossier.version} &middot; {formatBytes(activeDossier.size_bytes)} &middot;
-              Subido por {activeDossier.subido_por_nombre} el {formatDate(activeDossier.created_at)}
-            </p>
+        <div className="rounded-lg border overflow-hidden">
+          <div className="flex items-center gap-3 p-4">
+            <FileText className="h-8 w-8 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{activeDossier.filename_original}</p>
+              <p className="text-sm text-muted-foreground">
+                v{activeDossier.version} &middot; {formatBytes(activeDossier.size_bytes)} &middot;
+                Subido por {activeDossier.subido_por_nombre} el {formatDate(activeDossier.created_at)}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={togglePreview} disabled={previewLoading}>
+              {previewUrl
+                ? <><EyeSlash className="mr-1 h-4 w-4" /> Ocultar</>
+                : <><Eye className="mr-1 h-4 w-4" /> {previewLoading ? 'Cargando…' : 'Ver'}</>
+              }
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => download(activeDossier.id)}>
+              <DownloadSimple className="mr-1 h-4 w-4" /> Descargar
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => download(activeDossier.id)}>
-            <DownloadSimple className="mr-1 h-4 w-4" /> Descargar
-          </Button>
+          {previewUrl && (
+            <iframe
+              src={previewUrl}
+              title={`Preview ${activeDossier.filename_original}`}
+              className="w-full h-[60vh] border-t bg-muted/40"
+            />
+          )}
         </div>
       )}
 

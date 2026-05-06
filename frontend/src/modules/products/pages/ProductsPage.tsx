@@ -1,5 +1,5 @@
-import { useState, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import { useProject } from '@/shared/hooks/useProject';
 import ProductFormDialog from '../components/ProductFormDialog';
@@ -13,6 +13,7 @@ const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'))
 
 export default function ProductsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject } = useProject();
   const projectId = activeProject?.id;
   const { products, loading, error, create, update, deactivate } = useProducts(projectId);
@@ -20,6 +21,18 @@ export default function ProductsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // CRM-147: quick-add via ?new=1. Cuando el FAB navega aquí con ese param,
+  // abrimos el modal de creación y limpiamos el query para no re-disparar.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditingProduct(null);
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   function openCreate() {
     setEditingProduct(null);
