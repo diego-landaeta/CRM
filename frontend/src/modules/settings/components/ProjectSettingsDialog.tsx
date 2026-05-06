@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
-  X, Gear, FolderOpen, Notepad, PlugsConnected, Key, Tag, Table as TableIcon, CreditCard,
+  X, Gear, FolderOpen, Notepad, PlugsConnected, Key, Tag, Table as TableIcon, CreditCard, Globe, TextT,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import { useAuth } from '@/contexts/AuthContext';
 import GeneralTab from './projectSettings/GeneralTab';
 import ModulosTab from './projectSettings/ModulosTab';
 import CategoriesTab from './projectSettings/CategoriesTab';
@@ -11,6 +12,8 @@ import ColumnsTab from './projectSettings/ColumnsTab';
 import WebhookTab from './projectSettings/WebhookTab';
 import ApisTab from './projectSettings/ApisTab';
 import StripeTab from './projectSettings/StripeTab';
+import ExternalPanelsTab from './projectSettings/ExternalPanelsTab';
+import SidebarLabelsTab from './projectSettings/SidebarLabelsTab';
 
 const TABS_BASE = [
   { id: 'general', label: 'General', icon: Gear },
@@ -18,14 +21,22 @@ const TABS_BASE = [
   { id: 'categorias', label: 'Categorias', icon: FolderOpen },
   { id: 'campos', label: 'Campos', icon: Notepad },
   { id: 'columnas', label: 'Columnas', icon: TableIcon },
+  { id: 'paneles', label: 'Paneles externos', icon: Globe },
   { id: 'webhook', label: 'Webhook', icon: PlugsConnected },
   { id: 'apis', label: 'APIs', icon: Key },
 ];
+const TAB_SIDEBAR_LABELS = { id: 'etiquetas', label: 'Etiquetas sidebar', icon: TextT };
 const TAB_STRIPE = { id: 'stripe', label: 'Stripe', icon: CreditCard };
 
 export default function ProjectSettingsDialog({ project, onClose, onSaved, initialTab = 'general' }) {
   const [tab, setTab] = useState(initialTab);
-  const TABS = project.type === 'ia' ? [...TABS_BASE, TAB_STRIPE] : TABS_BASE;
+  const auth = useAuth() as unknown as { user: { role?: string } | null };
+  const isSuperadmin = auth.user?.role === 'superadmin';
+  const TABS = [
+    ...TABS_BASE,
+    ...(isSuperadmin ? [TAB_SIDEBAR_LABELS] : []),
+    ...(project.type === 'ia' ? [TAB_STRIPE] : []),
+  ];
 
   return (
     <Portal>
@@ -71,6 +82,8 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
               {tab === 'categorias' && <CategoriesTab project={project} />}
               {tab === 'campos' && <FieldsTab project={project} onSaved={onSaved} />}
               {tab === 'columnas' && <ColumnsTab project={project} onSaved={onSaved} />}
+              {tab === 'paneles' && <ExternalPanelsTab project={project} onSaved={onSaved} />}
+              {tab === 'etiquetas' && isSuperadmin && <SidebarLabelsTab project={project} onSaved={onSaved} />}
               {tab === 'webhook' && <WebhookTab project={project} />}
               {tab === 'apis' && <ApisTab project={project} />}
               {tab === 'stripe' && <StripeTab project={project} />}

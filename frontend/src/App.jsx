@@ -128,6 +128,7 @@ const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage
 const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
+const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
@@ -189,6 +190,7 @@ function App() {
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           {DevComponentsPage && (
