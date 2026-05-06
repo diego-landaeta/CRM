@@ -84,7 +84,24 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
 
   if (!open) return null;
 
-  const parents = categories.filter(c => !c.parent_id);
+  // CRM-247 fix temporal: el modelo viejo asumía 2 niveles. Ahora el árbol es N niveles
+  // (Cursos > Para Profesionales > Psicología Org. > Trauma > ...). Mostramos TODAS las
+  // categorías en el primer selector con su path completo, e ignoramos subcategoria_id.
+  function pathOf(c: any): string {
+    const parts = [c.nombre];
+    let cur = c;
+    let safety = 0;
+    while (cur.parent_id && safety++ < 10) {
+      const parent = categories.find((x: any) => x.id === cur.parent_id);
+      if (!parent) break;
+      parts.unshift(parent.nombre);
+      cur = parent;
+    }
+    return parts.join(' › ');
+  }
+  const allCategoriesWithPath = categories
+    .map((c: any) => ({ id: c.id, label: pathOf(c), nombre: c.nombre, parent_id: c.parent_id }))
+    .sort((a: any, b: any) => a.label.localeCompare(b.label));
   const subs = categories.filter(c => String(c.parent_id) === categoriaSel);
 
   function addPaymentLink() {
@@ -173,7 +190,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="grid grid-cols-2 gap-3">
               <select value={categoriaSel} onChange={e => { setCategoriaSel(e.target.value); setSubcategoriaSel(''); }} className={smallInput}>
                 <option value="">Sin categoría</option>
-                {parents.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                {allCategoriesWithPath.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
               <select value={subcategoriaSel} onChange={e => setSubcategoriaSel(e.target.value)} className={smallInput} disabled={!subs.length}>
                 <option value="">{subs.length ? 'Sin subcategoría' : '—'}</option>
