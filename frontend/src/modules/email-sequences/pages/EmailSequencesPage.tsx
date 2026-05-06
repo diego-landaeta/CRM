@@ -4,8 +4,9 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk } from '@phosphor-icons/react';
+import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk, FileText } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -15,6 +16,9 @@ interface SequenceStep {
   delay_hours: number;
   subject: string;
   body: string;
+  // CRM-185 fase 3: si se elige una plantilla, el scheduler la renderiza
+  // con datos del lead. subject/body inline se ignoran si template_id esta.
+  template_id?: number | null;
 }
 
 interface EmailSequence {
@@ -157,9 +161,21 @@ interface SequenceEditorProps {
 }
 
 function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
+  const { activeProject } = useProjectContext();
   const [s, setS] = useState<EmailSequence>({ ...seq, steps: seq.steps?.length ? seq.steps : [{ delay_hours: 0, subject: '', body: '' }] });
+  // CRM-185 fase 3: lista de plantillas activas del proyecto para el selector.
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
 
-  function updateStep(i: number, field: keyof SequenceStep, value: string | number): void {
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    let cancelled = false;
+    emailTemplatesApi.list(activeProject.id, false)
+      .then(res => { if (!cancelled && res.success && res.data) setTemplates(res.data); })
+      .catch(() => { /* silencioso, plantillas son opcionales */ });
+    return () => { cancelled = true; };
+  }, [activeProject?.id]);
+
+  function updateStep(i: number, field: keyof SequenceStep, value: string | number | null): void {
     const next = [...s.steps];
     next[i] = { ...next[i], [field]: value };
     setS({ ...s, steps: next });
@@ -199,7 +215,9 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
 
           <div className="space-y-3 pt-2 border-t border-border">
             <p className="text-xs font-bold uppercase text-muted-foreground">Pasos</p>
-            {s.steps.map((step, i) => (
+            {s.steps.map((step, i) => {
+              const usingTemplate = step.template_id != null && step.template_id > 0;
+              return (
               <div key={i} className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold">Paso {i + 1}</span>
@@ -222,23 +240,40 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
                     </button>
                   )}
                 </div>
+                {templates.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <FileText size={11} className="text-muted-foreground" />
+                    <select
+                      value={step.template_id ?? ''}
+                      onChange={e => updateStep(i, 'template_id', e.target.value ? Number(e.target.value) : null)}
+                      aria-label={`Plantilla del paso ${i + 1}`}
+                      className="flex-1 h-7 px-2 rounded border border-border bg-card text-[11px] focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    >
+                      <option value="">— Sin plantilla (usar texto manual) —</option>
+                      {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <input
                   value={step.subject || ''}
                   onChange={e => updateStep(i, 'subject', e.target.value)}
-                  placeholder="Asunto"
+                  placeholder={usingTemplate ? 'Ignorado — la plantilla provee el asunto' : 'Asunto'}
+                  disabled={usingTemplate}
                   aria-label={`Asunto del paso ${i + 1}`}
-                  className="w-full h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  className="w-full h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-40"
                 />
                 <textarea
                   value={step.body || ''}
                   onChange={e => updateStep(i, 'body', e.target.value)}
-                  placeholder="Cuerpo HTML del email"
+                  placeholder={usingTemplate ? 'Ignorado — la plantilla provee el cuerpo' : 'Cuerpo HTML del email'}
+                  disabled={usingTemplate}
                   rows={3}
                   aria-label={`Cuerpo del paso ${i + 1}`}
-                  className="w-full px-2 py-1.5 rounded border border-border bg-card text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  className="w-full px-2 py-1.5 rounded border border-border bg-card text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-40"
                 />
               </div>
-            ))}
+              );
+            })}
             <button
               onClick={addStep}
               className="flex items-center gap-1 h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
