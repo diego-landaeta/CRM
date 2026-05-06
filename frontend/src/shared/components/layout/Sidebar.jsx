@@ -164,7 +164,7 @@ export function getSidebarLabelCatalog() {
 }
 
 // Aplica el override (si existe) y deja el original en otro caso.
-function applyLabel(original, overrides) {
+export function applyLabel(original, overrides) {
   if (!overrides || typeof overrides !== 'object') return original;
   const o = overrides[original];
   return typeof o === 'string' && o.trim().length > 0 ? o : original;
