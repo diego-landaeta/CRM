@@ -112,7 +112,7 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
           <div className="overflow-y-auto p-6 space-y-5">
             <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
               <p className="text-[11px] font-medium text-muted-foreground">Nueva regla</p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <select value={newRule.project_id} onChange={e => setNewRule({ ...newRule, project_id: e.target.value, product_id: '' })} className={inputClass} required>
                   <option value="">Proyecto</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}

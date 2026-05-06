@@ -69,7 +69,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 
   if (loading) {
     return (
-      <div className="grid grid-cols-3 gap-4 animate-pulse" aria-busy="true">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-pulse" aria-busy="true">
         {[1, 2, 3].map((i) => (
           <div key={i} className="bg-card border border-border rounded-md p-3">
             <div className="h-3 w-24 bg-muted rounded mb-2" />
@@ -88,7 +88,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
     <div className="space-y-4">
       {/* Header con stats */}
       <div className="flex items-start justify-between">
-        <div className="grid grid-cols-3 gap-4 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
           <div className="bg-card border border-border rounded-md p-3">
             <div className="text-[10px] text-muted-foreground font-bold mb-1">Total facturado</div>
             <div className="text-xl font-semibold tabular-nums">{formatCurrency(totalFacturado)}</div>
@@ -177,7 +177,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                 </div>
 
                 {/* Importes */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                   <div className="bg-muted/50 rounded-lg p-2">
                     <div className="text-[9px] text-muted-foreground font-bold">Total</div>
                     <div className="text-sm font-semibold tabular-nums">{formatCurrency(c.importe_total)}</div>

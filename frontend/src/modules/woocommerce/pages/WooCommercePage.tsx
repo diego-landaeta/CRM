@@ -189,7 +189,7 @@ export default function WooCommercePage() {
                     <span className="text-xs text-muted-foreground">{new Date(r.started_at).toLocaleString('es-ES')}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${r.status === 'success' ? 'bg-emerald-100 text-emerald-700' : r.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{r.status}</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div><div className="text-muted-foreground">Fetched</div><div className="tabular-nums">{r.total_fetched}</div></div>
                     <div><div className="text-muted-foreground">Created</div><div className="tabular-nums text-emerald-600">{r.total_created}</div></div>
                     <div><div className="text-muted-foreground">Updated</div><div className="tabular-nums text-blue-600">{r.total_updated}</div></div>

@@ -122,20 +122,22 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
                 {labels.map(({ label, type }) => {
                   const override = overrides[label];
                   return (
-                    <div key={`${section}-${label}-${type}`} className="px-4 py-2 flex items-center gap-3 text-sm">
-                      <span className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 flex-shrink-0 ${
-                        type === 'group' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
-                        type === 'child' ? 'bg-muted text-muted-foreground' :
-                        'bg-primary/10 text-primary'
-                      }`}>
-                        {TYPE_LABEL[type] || 'Item'}
-                      </span>
-                      <span className="font-medium w-44 flex-shrink-0 truncate" title={label}>{label}</span>
+                    <div key={`${section}-${label}-${type}`} className="px-4 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm">
+                      <div className="flex items-center gap-2 sm:gap-3 sm:contents">
+                        <span className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 flex-shrink-0 ${
+                          type === 'group' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
+                          type === 'child' ? 'bg-muted text-muted-foreground' :
+                          'bg-primary/10 text-primary'
+                        }`}>
+                          {TYPE_LABEL[type] || 'Item'}
+                        </span>
+                        <span className="font-medium w-full sm:w-44 flex-shrink-0 truncate" title={label}>{label}</span>
+                      </div>
                       <input
                         value={override || ''}
                         onChange={(e) => setOne(label, e.target.value)}
                         placeholder={label}
-                        className={inputClass + ' h-8 flex-1'}
+                        className={inputClass + ' h-8 flex-1 min-w-0'}
                         maxLength={80}
                       />
                       {override && (
@@ -143,7 +145,7 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
                           type="button"
                           onClick={() => clearOne(label)}
                           aria-label={`Restaurar etiqueta de ${label}`}
-                          className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0"
+                          className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0 self-start sm:self-auto"
                         >
                           <ArrowCounterClockwise size={11} weight="bold" /> reset
                         </button>

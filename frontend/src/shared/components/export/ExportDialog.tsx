@@ -172,7 +172,7 @@ export default function ExportDialog<T>({
             {/* Formato */}
             <section>
               <p className="text-xs font-medium text-muted-foreground mb-2">Formato</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {(Object.keys(FORMAT_META) as ExportFormat[]).map((f) => {
                   const meta = FORMAT_META[f];
                   const Icon = meta.icon;

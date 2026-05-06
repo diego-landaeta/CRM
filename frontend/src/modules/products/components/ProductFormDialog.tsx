@@ -304,7 +304,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <CurrencyEur size={12} /> Precio y venta
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Precio" error={errors.precio?.message}>
                 <input {...register('precio')} type="number" step="0.01" min="0" placeholder="0.00" className={smallInput} />
               </Field>
