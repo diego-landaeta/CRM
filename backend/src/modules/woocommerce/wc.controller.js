@@ -241,13 +241,16 @@ async function annotateMenuWithProducts(menuTree, slugToProduct) {
   return annotate(menuTree);
 }
 
-// Crea solo categorías de ramas con productos, asigna productos a hojas
-async function syncAnnotatedTree(projectId, annotated, parentLocalId = null) {
+// Crea solo categorías de ramas con productos, asigna productos a hojas.
+// pathPrefix garantiza external_id único aunque dos items del menú tengan mismo href (ej: "Cursos" y "Todos los cursos" → /?page_id=116)
+async function syncAnnotatedTree(projectId, annotated, parentLocalId = null, pathPrefix = '') {
   let cats = 0;
   let assigned = 0;
   for (let i = 0; i < annotated.length; i++) {
     const item = annotated[i];
-    const externalId = `menu:${item.href}`;
+    // Path único por posición en árbol → previene self-loops por colisión de href
+    const path = `${pathPrefix}/${i}:${item.label.slice(0, 40)}`;
+    const externalId = `menu:${path}`;
     const localId = await catModel.upsertExternal({
       project_id: projectId,
       parent_id: parentLocalId,
@@ -259,7 +262,7 @@ async function syncAnnotatedTree(projectId, annotated, parentLocalId = null) {
     });
     cats++;
     if (item.children?.length > 0) {
-      const r = await syncAnnotatedTree(projectId, item.children, localId);
+      const r = await syncAnnotatedTree(projectId, item.children, localId, path);
       cats += r.cats;
       assigned += r.assigned;
     } else {
@@ -273,6 +276,26 @@ async function syncAnnotatedTree(projectId, annotated, parentLocalId = null) {
     }
   }
   return { cats, assigned };
+}
+
+// Limpia TODAS las categorías (cualquier source) sin productos directos ni descendientes con productos
+// Recursivo: tras borrar hojas vacías, padres pueden quedar también vacíos
+async function pruneEmptyCategories(projectId) {
+  let total = 0;
+  while (true) {
+    const { rowCount } = await query(
+      `DELETE FROM product_categories WHERE project_id = $1 AND id IN (
+         SELECT c.id FROM product_categories c
+         WHERE c.project_id = $1 AND c.active = true
+           AND NOT EXISTS (SELECT 1 FROM products p WHERE p.categoria_id = c.id AND p.active = true)
+           AND NOT EXISTS (SELECT 1 FROM product_categories cc WHERE cc.parent_id = c.id)
+       )`,
+      [projectId]
+    );
+    if (!rowCount || rowCount === 0) break;
+    total += rowCount;
+  }
+  return total;
 }
 
 // Soft-borra categorías wp_menu que ya no aparecen en el sync (basura de runs anteriores)
@@ -407,14 +430,21 @@ export const importNow = async (req, res, next) => {
           if (menuTree.length > 0) {
             const slugMap = await buildSlugToProductMap(projectId);
             const annotated = await annotateMenuWithProducts(menuTree, slugMap);
-            const validIds = collectExternalIds(annotated);
             const r = await syncAnnotatedTree(projectId, annotated);
-            const pruned = await pruneStaleMenuCategories(projectId, validIds);
-            menuStats = { cats: r.cats, assigned: r.assigned, pruned };
-            logger.info({ projectId, ...menuStats }, 'WC: menú sincronizado (poda + asignación)');
+            menuStats = { cats: r.cats, assigned: r.assigned };
+            logger.info({ projectId, ...menuStats }, 'WC: menú sincronizado');
           }
         } catch (menuErr) {
           logger.warn({ err: menuErr.message, projectId }, 'WC: scrap del menú falló (no bloquea import)');
+        }
+
+        // 5. Pasada final: borrar categorías huérfanas (cualquier source, sin productos ni descendientes)
+        try {
+          const pruned = await pruneEmptyCategories(projectId);
+          menuStats.pruned = pruned;
+          logger.info({ projectId, pruned }, 'WC: categorías vacías eliminadas');
+        } catch (e) {
+          logger.warn({ err: e.message, projectId }, 'WC: pruneEmpty falló');
         }
 
         await model.finishRun(run.id, {
