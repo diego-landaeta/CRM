@@ -1,6 +1,7 @@
 // Helpers de formato y avatar para LeadsPage. Extraídos de la página
 // para facilitar su test unitario y aliviar el archivo principal.
 import type { Lead } from '@/shared/types';
+import type { ExportColumn } from '@/shared/lib/export';
 
 const AVATAR_COLORS: ReadonlyArray<string> = [
   'bg-rose-100 text-rose-700',
@@ -57,6 +58,25 @@ const STATUS_LABELS_ES: Record<string, string> = {
   convertido: 'Convertido',
   no_interesado: 'No interesado',
 };
+
+// Columnas para el export universal (CRM-196). Usado por ExportDialog.
+export function getLeadExportColumns(): ExportColumn<Lead>[] {
+  return [
+    { key: 'nombre', label: 'Nombre', type: 'string', value: (l) => l.nombre || '', width: 24 },
+    { key: 'email', label: 'Email', type: 'string', value: (l) => l.email || '', width: 28 },
+    { key: 'telefono', label: 'Teléfono', type: 'string', value: (l) => l.telefono || '', width: 16 },
+    { key: 'estado', label: 'Estado', type: 'string', value: (l) => STATUS_LABELS_ES[l.estado] || l.estado || '' },
+    { key: 'canal', label: 'Canal', type: 'string', value: (l) => l.canal || l.canal_detectado || '' },
+    { key: 'origen', label: 'Origen', type: 'string', value: (l) => l.origen || '' },
+    { key: 'responsable', label: 'Responsable', type: 'string', value: (l) => l.responsable_nombre || '' },
+    { key: 'producto_interes', label: 'Producto interés', type: 'string', value: (l) => l.producto_interes || '' },
+    { key: 'pais', label: 'País', type: 'string', value: (l) => l.pais || '' },
+    { key: 'notas', label: 'Notas', type: 'string', value: (l) => l.notas || '' },
+    { key: 'created_at', label: 'Creado', type: 'date', value: (l) => l.created_at || null },
+    { key: 'last_interaction_at', label: 'Último contacto', type: 'date', value: (l) => l.last_interaction_at || null },
+    { key: 'next_reminder_at', label: 'Próximo recordatorio', type: 'date', value: (l) => l.next_reminder_at || null },
+  ];
+}
 
 export function exportLeadsCSV(leads: Lead[], filename: string): void {
   const rows = [
