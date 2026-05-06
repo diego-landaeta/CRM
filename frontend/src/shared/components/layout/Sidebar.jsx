@@ -101,7 +101,6 @@ const NAV_SECTIONS = [
         label: 'Productos', icon: Package, roles: ['superadmin', 'admin'],
         children: [
           { label: 'Catálogo', to: '/products', roles: ['superadmin', 'admin'], module: 'products' },
-          { label: 'Por categoría', to: '/products/arbol', roles: ['superadmin', 'admin'], module: 'products' },
           { label: 'Cursos pendientes', to: '/products/pending', roles: ['superadmin', 'admin'], module: 'products' },
           { label: 'WooCommerce', to: '/woocommerce', roles: ['superadmin', 'admin'], module: 'woocommerce' },
         ],
