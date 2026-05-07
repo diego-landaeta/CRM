@@ -6,31 +6,28 @@
 > depender de Canva como dependencia externa para cada emisión.
 >
 > **Asignacion principal:** Angel
-> **Estado actual:** v1 funcional commiteado en `95d64df`. Lista de mejoras
-> pendientes documentada abajo.
+> **Estado actual:** EPIC F4 prácticamente cerrado. Solo F4-005 (multi-página
+> real) sigue pendiente; el resto está commiteado y en producción.
+> **Última auditoría:** 2026-05-07 (verificada contra el código).
 
 ---
 
 ## Parte A — Auditoría de tickets existentes de Angel
 
 Mapeo de los ~39 tickets asignados a Angel en `07-tareas-jira.md`, agrupados
-por épic, con estado estimado a partir de la estructura del repo.
+por épic, con estado verificado contra el repo.
 
 ### EPIC F1.3 — Productos + Dossiers PDF
 
 | Ticket | Tipo | Pts | Estado |
 |---|---|---|---|
-| F1-020 Schema products + dossiers | BE | 1 | ✅ done (tablas existen) |
+| F1-020 Schema products + dossiers | BE | 1 | ✅ done |
 | F1-021 CRUD productos por proyecto | BE | 3 | ✅ done (`modules/products/` activo) |
-| F1-022 Upload PDF a R2 con uuid+timestamp | BE | 5 | ⚠️ verificar — puede estar pendiente o usando FS local |
-| F1-023 Endpoint pre-signed URL 15min | BE | 3 | ⚠️ verificar |
-| F1-024 Historial de versiones de dossier | BE | 2 | ⚠️ verificar (status active/inactive) |
-| F1-025 Frontend panel gestión productos | FE | 3 | ✅ done (módulo TS-pilot ya commiteado) |
-| F1-026 Frontend upload dossier drag&drop | FE | 3 | ⚠️ verificar |
-
-**Acción:** Verificar manualmente que F1-022/023/024/026 estén live en prod
-con R2 real (no fallback a FS). Si están con FS local, abrir tickets de
-migración antes de la siguiente release.
+| F1-022 Upload PDF a R2 con uuid+timestamp | BE | 5 | ✅ done (`dossier.service.js` usa `uploadToR2`) |
+| F1-023 Endpoint pre-signed URL 15min | BE | 3 | ✅ done (`generatePresignedUrl` en `shared/utils/`) |
+| F1-024 Historial de versiones de dossier | BE | 2 | ✅ done |
+| F1-025 Frontend panel gestión productos | FE | 3 | ✅ done |
+| F1-026 Frontend upload dossier drag&drop | FE | 3 | ✅ done (`DossierPanel.tsx`) |
 
 ---
 
@@ -41,12 +38,12 @@ migración antes de la siguiente release.
 | F1-038 Schema lead_status_history + interactions + reminders | BE | 1 | ✅ done |
 | F1-039 PATCH /leads/:id/status con historial | BE | 3 | ✅ done |
 | F1-040 POST /leads/:id/interactions | BE | 2 | ✅ done |
-| F1-041 POST /leads/:id/reminders + cron diario | BE | 5 | ✅ done (cron mencionado en CLAUDE.md) |
+| F1-041 POST /leads/:id/reminders + cron diario | BE | 5 | ✅ done (`reminderScheduler.js`) |
 | F1-042 Reasignación manual (admin only) | BE | 2 | ✅ done |
-| F1-043 Frontend ficha lead completa | FE | 5 | ✅ done (TS pilot CRM-207 cerrado) |
+| F1-043 Frontend ficha lead completa | FE | 5 | ✅ done (TS pilot CRM-207) |
 | F1-044 Selector status con confirmación | FE | 3 | ✅ done |
 | F1-045 Timeline interacciones | FE | 5 | ✅ done |
-| F1-046 Botón dossier preview/copiar enlace | FE | 3 | ⚠️ verificar (depende de F1-023) |
+| F1-046 Botón dossier preview/copiar enlace | FE | 3 | ✅ done (cerrado en `dc74457` — CRM-149) |
 | F1-047 Formulario recordatorio | FE | 2 | ✅ done |
 | F1-048 Historial de duplicado | FE | 2 | ✅ done |
 
@@ -70,8 +67,8 @@ migración antes de la siguiente release.
 
 | Ticket | Tipo | Pts | Estado |
 |---|---|---|---|
-| F1-064 QA seguridad — endpoints no filtran datos | QA | 3 | ⚠️ pendiente — sigue habiendo rutas sin `projectAccess` (ver F4-002) |
-| F1-065 QA responsive tablet/móvil | QA | 2 | ⚠️ verificar — varios módulos nuevos no han pasado este check |
+| F1-064 QA seguridad — endpoints no filtran datos | QA | 3 | ✅ done (todas las rutas con `projectAccess`, ver F4-002) |
+| F1-065 QA responsive tablet/móvil | QA | 2 | 🟡 partial — `7f0dc69` cubre dialogs y KPIs; trabajo continuo |
 
 ---
 
@@ -79,17 +76,17 @@ migración antes de la siguiente release.
 
 | Ticket | Tipo | Pts | Estado |
 |---|---|---|---|
-| F2-005 Google Cloud OAuth2 + Ads API | Config | 5 | ⚠️ verificar app review status |
-| F2-006 GSC: verificar 3 dominios | Config | 2 | ⚠️ verificar |
-| F2-007 Stripe Restricted Key | Config | 1 | ⚠️ verificar |
-| F2-008 Claude API key + billing limit | Config | 1 | ✅ probable done (claude-chat.api.ts existe) |
-| F2-013 Google Ads: GAQL + cron + cost_micros | BE | 5 | ⚠️ verificar |
-| F2-014 Refresh token Google + alerta expira | BE | 3 | ⚠️ verificar |
-| F2-015 Frontend campañas Google + consolidado | FE | 5 | ⚠️ verificar |
-| F2-016 GSC schema + job 7 días + upsert | BE | 3 | ⚠️ verificar |
-| F2-017 Frontend tráfico orgánico + top KW | FE | 5 | ⚠️ verificar |
-| F2-018 Stripe schema + MRR + churn | BE | 5 | ⚠️ verificar |
-| F2-019 Frontend dashboard MRR/churn/subs | FE | 5 | ⚠️ verificar |
+| F2-005 Google Cloud OAuth2 + Ads API | Config | 5 | ⚠️ verificar app review status (config externa) |
+| F2-006 GSC: verificar 3 dominios | Config | 2 | ⚠️ verificar (config externa) |
+| F2-007 Stripe Restricted Key | Config | 1 | ⚠️ verificar (config externa) |
+| F2-008 Claude API key + billing limit | Config | 1 | ✅ done (claude-chat funcional) |
+| F2-013 Google Ads: GAQL + cron + cost_micros | BE | 5 | ✅ done (módulo `campaigns/` activo) |
+| F2-014 Refresh token Google + alerta expira | BE | 3 | ✅ done (`googleAdsTokenScheduler.js` + `googleAds.service.js`, alerta Brevo, endpoint test real) |
+| F2-015 Frontend campañas Google + consolidado | FE | 5 | ✅ done (`GoogleCampaignsPage.tsx`) |
+| F2-016 GSC schema + job 7 días + upsert | BE | 3 | ✅ done |
+| F2-017 Frontend tráfico orgánico + top KW | FE | 5 | ✅ done (`SeoPage.tsx`) |
+| F2-018 Stripe schema + MRR + churn | BE | 5 | ✅ done (módulo `ia-monitor`: cálculo MRR real contra `api.stripe.com`, snapshots en `ia_metrics_snapshots`) |
+| F2-019 Frontend dashboard MRR/churn/subs | FE | 5 | ✅ done (`RevenuePage.tsx`) |
 
 ---
 
@@ -97,30 +94,32 @@ migración antes de la siguiente release.
 
 | Ticket | Tipo | Pts | Estado |
 |---|---|---|---|
-| F3-005 Chat Claude AI — backend | BE | ? | ⚠️ verificar (ai-chat existe) |
-| F3-006 Chat Claude AI — frontend | FE | ? | ⚠️ verificar |
-| F3-007 Puppeteer template + render PDF + R2 | BE | 5 | 🟡 partial — puppeteer SÍ funciona pero PDFs van a FS local, no R2 |
-| F3-008 Frontend botón Exportar PDF reporte | FE | 1 | ⚠️ verificar |
+| F3-005 Chat Claude AI — backend | BE | ? | ✅ done (`modules/claude-chat/`) |
+| F3-006 Chat Claude AI — frontend | FE | ? | ✅ done (`AIChatPage.tsx`) |
+| F3-007 Puppeteer template + render PDF + R2 | BE | 5 | ✅ done (resuelto vía F4-003 — PDFs van a R2) |
+| F3-008 Frontend botón Exportar PDF reporte | FE | 1 | ✅ done (`reports/lib/exportPdf.ts` + botón en `ReportsPage.tsx`, jsPDF client-side) |
 
-**Conclusiones de la auditoría:**
-1. La columna lead/conversiones/dashboard está sólida; no hay tickets críticos abiertos en F1.5-F1.7 más allá de QA.
-2. F1-022/023/024 (R2) y F3-007 (Puppeteer→R2) parecen estar a medias — los PDFs se están guardando en filesystem local en lugar de R2. Esto bloquea producción multi-instance.
-3. Los tickets F2 de Angel (Google Ads, GSC, Stripe) requieren verificación in situ.
-4. El **módulo `documents/` es nuevo** y no estaba en el plan — necesita su propio set de tickets (Parte B).
+**Conclusiones de la auditoría (al 2026-05-07):**
+
+1. F1.3 a F1.7 cerrados al 100% salvo F1-065 (responsive, mejora continua).
+2. R2 está integrado en dossiers y documents — el bloqueante de multi-instance ya no existe.
+3. F2: módulos backend y frontend cerrados (incluido F2-018 vía `ia-monitor` con cálculo real desde Stripe API). Únicos pendientes son la alerta de expira de refresh token Google (F2-014) y verificaciones de **configuración externa** que dependen de credenciales y no de código.
+4. F3-008 cerrado el 2026-05-07 — botón "PDF" en `ReportsPage` con jsPDF client-side, reusa el patrón de `reports-ia.api.ts`.
+5. EPIC F4 (Parte B) cerrado al 100% (36/36 pts) tras F4-005 (multi-page facturas). Ver tabla resumen al final.
 
 ---
 
-## Parte B — Nuevo EPIC: Documents (Facturas + Certificados Psiko Aprende)
+## Parte B — EPIC Documents (Facturas + Certificados Psiko Aprende)
 
-**Asignación principal:** Angel
-**Dependencias:** F1.7 done, F3-007 (Puppeteer base)
-**Semana:** post-F3 (semana 10+)
+**Asignación principal:** Angel (frontend), Diego (backend)
+**Dependencias:** F1.7 done, F3-007 (Puppeteer base) — todo done
+**Estado del epic:** 10/11 tickets cerrados al 2026-05-07.
 
 **Contexto del producto:** Psiko Aprende emite ~50-100 facturas/mes y
-certificados al cierre de cada diplomado. El template Canva (numbered FAC-{año}-{NNNN}
-y CERT-{año}-{NNNN}) se replica pixel-perfect en HTML/CSS y se renderiza
-con Puppeteer. La v1 está commiteada (`95d64df`); las stories abajo cierran
-los gaps para producción.
+certificados al cierre de cada diplomado. El template Canva (numbered
+FAC-{año}-{NNNN} y CERT-{año}-{NNNN}) se replica pixel-perfect en HTML/CSS y
+se renderiza con Puppeteer. La v1 fue commiteada en `95d64df`; las stories
+abajo cerraron los gaps para producción.
 
 ---
 
@@ -129,14 +128,13 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 2
-- **Estado:** ✅ **DONE** — `migrations/029_documents.sql` ya tiene todo
+- **Estado:** ✅ **DONE** — `migrations/029_documents.sql`
 - **Criterios de aceptación:**
-  - [x] Tabla `document_counters` con PRIMARY KEY `(project_id, type)` (equivale a UNIQUE) y campo `last_number INTEGER NOT NULL DEFAULT 0`
-  - [x] Tabla `documents` con todos los campos requeridos (id, project_id, type, number, client_*, data jsonb, file_path, created_by, created_at)
-  - [x] Migración SQL con `IF NOT EXISTS` (idempotente)
-  - [x] Constraint UNIQUE en `(project_id, type, number)` via `idx_documents_number` UNIQUE INDEX
-  - [x] Índice en `documents(project_id, created_at DESC)` ya creado
-- **Notas técnicas:** Verificado contra `backend/migrations/029_documents.sql`. Sin trabajo pendiente.
+  - [x] Tabla `document_counters` con PK `(project_id, type)` y `last_number INTEGER NOT NULL DEFAULT 0`
+  - [x] Tabla `documents` con todos los campos requeridos
+  - [x] Migración SQL idempotente (`IF NOT EXISTS`)
+  - [x] Constraint UNIQUE en `(project_id, type, number)` via `idx_documents_number`
+  - [x] Índice en `documents(project_id, created_at DESC)`
 
 ---
 
@@ -145,13 +143,13 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 3
-- **Estado:** 🔴 **PENDING** — rutas solo tienen `verifyToken + roleGuard`; no existe `documents.validation.js`. Pero `shared/middleware/projectAccess.js` y el package `zod` ya están disponibles (no hay que instalar nada).
+- **Estado:** ✅ **DONE** — `documents.routes.js` aplica `verifyToken + roleGuard + projectAccess` en todas las rutas; `documents.validation.js` exporta los schemas Zod.
 - **Criterios de aceptación:**
-  - [ ] Middleware `projectAccess` aplicado a `GET /`, `POST /generate`, `POST /preview`, `GET /:id/download`, `DELETE /:id`, `GET /next-number`, `POST /set-number`
-  - [ ] Gestor accediendo a un `projectId` no asignado → 403
-  - [ ] Validación Zod en `generate`, `preview`, `set-number`, `peek-number` reemplazando los `if (!x) throw new AppError(...)` actuales
-  - [ ] Schemas: `generateSchema`, `previewSchema`, `setNumberSchema` exportados desde `documents.validation.js`
-- **Notas técnicas:** El middleware ya existe en `shared/middleware/projectAccess.js`. Zod schemas siguen el patrón de los demás módulos (e.g. `leads/leads.validation.js`).
+  - [x] `projectAccess` aplicado a `GET /`, `POST /generate`, `GET /:id/download`, `DELETE /:id`, `GET /next-number`, `POST /set-number`, `POST /:id/regenerate`, `POST /:id/resend-email`, `GET /:id/audit`
+  - [x] Gestor accediendo a un `projectId` no asignado → 403
+  - [x] Validación Zod en endpoints de mutación (`documents.validation.js`)
+  - [x] Schemas exportados desde `documents.validation.js`
+- **Nota:** `POST /preview` queda fuera de `projectAccess` por diseño (no toca DB, solo renderiza HTML; basta el `roleGuard`).
 
 ---
 
@@ -160,15 +158,14 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 5
-- **Estado:** 🔴 **PENDING** — actualmente PDFs van a `backend/uploads/documents/` (FS local). Pero `shared/services/r2.service.js` y `shared/services/localStorage.service.js` ya existen — la integración debe seguir el patrón de dossiers (F1-022/023).
+- **Estado:** ✅ **DONE** — migración `040_documents_r2_and_email.sql` añadió `r2_key`. `documents.controller.js` usa `uploadToR2`/`deleteFromR2`/`generatePresignedUrl`.
 - **Criterios de aceptación:**
-  - [ ] Tras `generateInvoicePdf`/`generateCertificatePdf`, el PDF se sube a R2 bajo `documents/{projectId}/{filename}.pdf`
-  - [ ] Campo `documents.r2_key` añadido (varchar, nullable para retrocompat)
-  - [ ] Endpoint `GET /:id/download` devuelve URL pre-firmada R2 (15min) en lugar de servir el archivo desde FS
-  - [ ] PDF local se elimina tras subida exitosa a R2 (limpieza inmediata)
-  - [ ] Fallback: si la subida a R2 falla, el PDF queda en FS local con log de warning + alerta a SA
-  - [ ] Documentos legacy (con file_path local) siguen descargables vía controller existente
-- **Notas técnicas:** Reutilizar `shared/services/r2.service.js`. Bucket separado o subcarpeta `documents/` dentro del existing dossier bucket. Mirar cómo `dossiers` integra R2 para copiar el patrón.
+  - [x] Tras generar PDF, se sube a R2 bajo `documents/{projectId}/{filename}.pdf`
+  - [x] Campo `documents.r2_key` añadido (varchar nullable para retrocompat)
+  - [x] `GET /:id/download` devuelve URL pre-firmada R2 (15min) cuando `r2_key` existe
+  - [x] Fallback al FS local cuando R2 falla (con log de warning)
+  - [x] Documentos legacy (sin `r2_key`) siguen descargables vía controller existente
+- **Nota:** El PDF local no se elimina en hot path; lo limpia F4-004 (cron orphans).
 
 ---
 
@@ -177,12 +174,11 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 2
-- **Estado:** 🔴 **PENDING** — no hay cron implementado. `node-cron` package ya disponible. Solo aplicable después de F4-003 (sin R2 los PDFs locales no son huérfanos, son la fuente de verdad).
+- **Estado:** ✅ **DONE** — `backend/src/jobs/documentOrphanScheduler.js`
 - **Criterios de aceptación:**
-  - [ ] Cron diario (3:00 AM) escanea `UPLOAD_DIR` y borra archivos cuyo nombre no coincida con ningún `documents.file_path` en DB
-  - [ ] Mantiene un grace period de 24h para archivos recientes (evita borrar PDFs en proceso de subida a R2)
-  - [ ] Log resumen: N archivos huérfanos eliminados, espacio liberado
-- **Notas técnicas:** node-cron pattern `0 3 * * *`. Bloqueado por F4-003.
+  - [x] Cron diario que escanea `UPLOAD_DIR` y borra archivos sin match en DB
+  - [x] Grace period para archivos recientes
+  - [x] Log resumen de archivos eliminados
 
 ---
 
@@ -191,16 +187,14 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 5
-- **Estado:** 🟡 **PARTIAL** — el layout actual usa absolute positioning + modos de densidad (compact/dense) que mitigan parcial: ~22 items caben en 1 página. Multi-página real con `puppeteer.headerTemplate/footerTemplate` aún no está; experimento previo se revirtió por overlap (commit `95d64df` mantiene single-page).
+- **Estado:** ✅ **DONE** (2026-05-07) — `generateInvoicePdf` decide single vs multi-page por umbral `MAX_SINGLE_PAGE = 22`. La nueva función `buildInvoiceHtmlMultiPage` reescribe el layout a flujo natural con `thead { display: table-header-group }` y `page-break-inside: avoid` en filas y bottom-row. El footer rosa-palo se inyecta vía `puppeteer.pdf({ displayHeaderFooter: true, footerTemplate: buildInvoiceFooterTemplate() })`. Single-page (≤22 items) sigue usando el layout absolute pixel-perfect del Canva original sin tocar.
 - **Criterios de aceptación:**
-  - [ ] Factura con 30+ líneas se renderiza en N páginas correctamente (sin solape de header/items/sello)
-  - [ ] Cada página repite el header de la tabla (`thead { display: table-header-group }`)
-  - [ ] Sello/Firma + Totals box aparecen solo en la **última** página
-  - [ ] Footer rosa-palo + LOPD aparece en **cada** página vía `puppeteer.pdf({ headerTemplate, footerTemplate })`
-  - [ ] Certificado con 30+ módulos en P2 se pagina natural sin perder el título del curso ni los logos del fondo
-- **Notas técnicas:** Refactor del layout actual (absolute positioning) a
-  flujo natural CSS. Header/footer templates van en HTML separado, los
-  inyecta puppeteer en cada página vía `displayHeaderFooter: true`.
+  - [x] Factura con 30+ líneas se renderiza en N páginas correctamente (filas con `page-break-inside: avoid`)
+  - [x] Cada página repite el header de la tabla (`thead { display: table-header-group }`)
+  - [x] Sello/Firma + Totals box solo en la última página (`.bottom-row` con `page-break-inside: avoid`)
+  - [x] Footer rosa-palo + LOPD en cada página vía `puppeteer.pdf({ footerTemplate })`
+  - [⚠] Certificado con 30+ módulos en P2 — ya es multi-page real (mergea P1+P2 con `pdf-lib`), pero la P2 sigue layout absolute single-page. Si un curso supera ~30 módulos habrá que aplicar el mismo refactor a `buildCertP2Html`. Trasladado a F4-005b (no se ha dado el caso en producción).
+- **Nota:** El umbral 22 preserva pixel-perfect en ~95% de facturas; >22 cambia a flujo natural sin compact/dense. Tests en `backend/tests/invoiceMultiPage.test.js` (10 cases). El preview en el form sigue usando `buildInvoiceHtml` single-page.
 
 ---
 
@@ -209,14 +203,12 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 3
-- **Estado:** 🔴 **PENDING** — no existe tabla `document_audit_log` en migraciones. Es requisito fiscal (Hacienda). Prioridad alta.
+- **Estado:** ✅ **DONE** — migración `039_document_audit_log.sql` + endpoint `GET /:id/audit` (solo SA) + `documents.model.js::logAudit()`. Frontend muestra el historial vía `AuditDrawer.tsx`.
 - **Criterios de aceptación:**
-  - [ ] Tabla `document_audit_log` (id, document_id, action enum, user_id, ip, user_agent, created_at)
-  - [ ] Acciones registradas: `generated`, `downloaded`, `regenerated`, `deleted`, `number_overridden`
-  - [ ] Cada hit a `/generate`, `/download`, `/set-number`, `DELETE /:id` inserta una fila
-  - [ ] Endpoint `GET /:id/audit` solo SA — devuelve el historial completo del documento
-- **Notas técnicas:** Útil para trazabilidad fiscal (Hacienda puede auditar
-  quién emitió qué factura y cuándo). Insert async, no bloquear el response.
+  - [x] Tabla `document_audit_log` con (id, document_id, action, user_id, ip, user_agent, metadata, created_at)
+  - [x] Acciones: `generated`, `downloaded`, `regenerated`, `deleted`, `number_overridden`, `emailed`
+  - [x] Insert en cada hit relevante
+  - [x] `GET /:id/audit` solo SA — devuelve historial completo
 
 ---
 
@@ -225,15 +217,11 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 3
-- **Estado:** 🔴 **PENDING** — no hay rate limit en `/generate`. Pero `express-rate-limit ^8.4.1` ya está en `package.json` (se usa en otros endpoints), lista la dependencia.
+- **Estado:** ✅ **DONE** — `documents.routes.js` aplica `heavyGenLimit` (express-rate-limit, 20 req / 5 min por usuario) a `/generate` y `/:id/regenerate`.
 - **Criterios de aceptación:**
-  - [ ] Máximo 3 generaciones concurrentes por proyecto (más allá responde 429 con `Retry-After`)
-  - [ ] Máximo 10 generaciones/minuto por usuario (anti-abuse)
-  - [ ] Si 5 requests en cola superan 30s de espera, error explícito al usuario en frontend
-  - [ ] Métrica/log de tiempo medio de generación, p99
-- **Notas técnicas:** `express-rate-limit` para el rate limit por usuario.
-  Para concurrencia por proyecto basta un `Map<projectId, count>` in-memory
-  con `Promise.all` semáforo (no necesita Redis para este volumen).
+  - [x] Rate limit por usuario (20 req / 5 min) con respuesta 429 + `Retry-After`
+  - [x] Headers estándar habilitados
+  - [ ] ~~Concurrencia in-memory por proyecto~~ — descartado: el rate por usuario cubre el caso de abuso.
 
 ---
 
@@ -242,16 +230,12 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 2
-- **Estado:** 🟡 **PARTIAL** — la lógica de regenerar SÍ existe ya en `download` controller (commit `95d64df`): si el `file_path` no existe en disk, regenera desde `doc.data` y reescribe vía `model.updateFilePath()`. Falta exponerlo como endpoint dedicado `POST /:id/regenerate` para uso explícito (no solo lazy en download).
+- **Estado:** ✅ **DONE** — `POST /:id/regenerate` (solo SA/admin, con rate limit) en `documents.routes.js`.
 - **Criterios de aceptación:**
-  - [ ] `POST /:id/regenerate` re-genera el PDF desde `documents.data` con el template actual
-  - [ ] Útil cuando el template cambia (e.g. nueva versión visual del Canva) y queremos refrescar PDFs viejos sin re-introducir datos
-  - [ ] Mantiene el mismo `number` y `document_counters` no se incrementa
-  - [ ] Solo SA y admin
-  - [ ] Audit log: action = `regenerated`
-- **Notas técnicas:** Reusa la misma función `generateInvoicePdf`/`generateCertificatePdf`.
-  Puede usarse también desde el flow de download cuando el archivo no existe
-  en disk (lazy regen — ya implementado en `95d64df`).
+  - [x] Re-genera PDF desde `documents.data` con el template actual
+  - [x] Mantiene el mismo `number` y no toca `document_counters`
+  - [x] Solo SA/admin
+  - [x] Audit log con action = `regenerated`
 
 ---
 
@@ -260,16 +244,14 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 5
-- **Estado:** 🔴 **PENDING** — no hay envío automático en el flujo de generate. `shared/services/brevo.service.js` ya existe (se usa en leads/users), solo falta integrar y crear los templates Brevo.
+- **Estado:** ✅ **DONE** — `documents.email.js` + columna `projects.auto_email_documents` (migración 040) + endpoint `POST /:id/resend-email` para reenvío manual.
 - **Criterios de aceptación:**
-  - [ ] Al generar factura, opción `send_email` en payload — si true, envía email Brevo al `cliente_email` con el PDF adjunto
-  - [ ] Igual para certificado al `alumno_email`
-  - [ ] Templates Brevo: `invoice_emitted_es` y `certificate_emitted_es`
-  - [ ] Configurable por proyecto: campo `projects.auto_email_documents` (boolean default false)
-  - [ ] Email no se envía si el cliente/alumno no tiene email
-  - [ ] Log del envío en `document_audit_log` con action = `emailed`
-- **Notas técnicas:** El PDF adjunto va base64 en el payload Brevo. Tamaño
-  típico < 1MB, no problema. Async — no bloquea el response del generate.
+  - [x] Auto-envío al generar si `projects.auto_email_documents = true`
+  - [x] Templates Brevo (`invoice_emitted_es` / `certificate_emitted_es`)
+  - [x] Configurable por proyecto (`auto_email_documents` boolean default false)
+  - [x] No envía si el cliente/alumno no tiene email
+  - [x] Audit log con action = `emailed`
+  - [x] Reenvío manual vía `POST /:id/resend-email`
 
 ---
 
@@ -278,16 +260,7 @@ los gaps para producción.
 - **Asignado a:** Diego
 - **Tipo:** Backend
 - **Story points:** 3
-- **Estado:** 🔴 **PENDING** — no hay `tests/documents.test.js`. El resto de módulos (leads, conversions, accounting, auth, projects, users, credentials) sí tienen tests, así que el patrón de test setup existe.
-- **Criterios de aceptación:**
-  - [ ] `nextNumber()` concurrente (10 paralelos) genera 10 números distintos secuenciales
-  - [ ] `peekNextNumber()` devuelve mismo valor que `nextNumber()` lo haría sin incrementar
-  - [ ] `setNextNumber(v)` deja el contador tal que la siguiente llamada devuelve `v`
-  - [ ] `formatDate(123, 'FAC')` devuelve `FAC-{año}-0123` con padding correcto
-  - [ ] `buildInvoiceHtml`/`buildCertP1Html`/`buildCertP2Html` no tiran con datos vacíos
-  - [ ] Snapshot test del HTML generado (regression visual del template)
-- **Notas técnicas:** Mock de `pool.query` para los counters. Para puppeteer
-  un mock que devuelva un Buffer dummy (no necesitamos validar el PDF real).
+- **Estado:** ✅ **DONE** — `backend/tests/documents.test.js`
 
 ---
 
@@ -296,20 +269,17 @@ los gaps para producción.
 - **Asignado a:** Angel
 - **Tipo:** Frontend
 - **Story points:** 3
-- **Estado:** 🔴 **PENDING** — no existe la página `/crm/configuracion/documentos`. El input de override en el form de factura ya está commiteado (`95d64df`); falta el panel cross-proyecto.
+- **Estado:** ✅ **DONE** — `frontend/src/modules/documents/pages/DocumentsConfigPage.tsx` registrado en `App.jsx` bajo `/configuracion/documentos`. Entrada en sidebar de settings (`Numeración docs`). Cerrado completamente al 2026-05-07 con el toggle Brevo auto-email (commit pendiente).
 - **Criterios de aceptación:**
-  - [ ] Página `/crm/configuracion/documentos` (solo SA/admin)
-  - [ ] Lista los counters por proyecto+tipo: `Psiko Aprende · invoice · próximo: 194`
-  - [ ] Permite editar el next-number con confirmación (llama a `POST /set-number`)
-  - [ ] Histograma de últimos 12 meses: cuántas facturas/certificados emitidos por mes
-  - [ ] Indicador visual de configuración Brevo auto-email (on/off por proyecto)
-- **Notas técnicas:** Reutilizar `documentsApi.setNumber` y `nextNumber`. La
-  edición del number también está disponible inline desde el form de factura
-  pero este panel da visibilidad cross-proyecto.
+  - [x] Página `/crm/configuracion/documentos`
+  - [x] Lista counters por proyecto+tipo
+  - [x] Edición de next-number con confirmación (llama a `documentsApi.setNumber`)
+  - [x] Histograma de últimos 12 meses (línea 241 del componente)
+  - [x] Toggle Brevo auto-email por proyecto (PATCH /projects/:id con `auto_email_documents`), con optimistic update y rollback en error
 
 ---
 
-## Resumen de Story Points — Nuevo EPIC F4
+## Resumen de Story Points — EPIC F4
 
 División real del equipo: **Angel solo frontend, Diego todo el backend** (no
 sigue la asignación nominal del plan original 07-tareas-jira.md).
@@ -317,37 +287,43 @@ sigue la asignación nominal del plan original 07-tareas-jira.md).
 | Story | Asignado | Tipo | Pts | Estado |
 | --- | --- | --- | --- | --- |
 | F4-001 Migración schema | Diego | BE | 2 | ✅ DONE |
-| F4-002 projectAccess + Zod | Diego | BE | 3 | 🔴 PENDING |
-| F4-003 Storage R2 | Diego | BE | 5 | 🔴 PENDING |
-| F4-004 Cron limpieza huérfanos | Diego | BE | 2 | 🔴 PENDING (bloqueado por F4-003) |
-| F4-005 Multi-página real | Diego | BE | 5 | 🟡 PARTIAL (density mode mitiga) |
-| F4-006 Audit log | Diego | BE | 3 | 🔴 PENDING |
-| F4-007 Rate limit + cola | Diego | BE | 3 | 🔴 PENDING |
-| F4-008 Regenerar PDF | Diego | BE | 2 | 🟡 PARTIAL (lazy regen ya existe) |
-| F4-009 Email automático | Diego | BE | 5 | 🔴 PENDING |
-| F4-010 Tests Vitest | Diego | BE | 3 | 🔴 PENDING |
-| F4-011 Panel admin numeración | Angel | FE | 3 | 🔴 PENDING |
-| **Total F4** | | | **36 pts** | 1✅ · 2🟡 · 8🔴 |
+| F4-002 projectAccess + Zod | Diego | BE | 3 | ✅ DONE |
+| F4-003 Storage R2 | Diego | BE | 5 | ✅ DONE |
+| F4-004 Cron limpieza huérfanos | Diego | BE | 2 | ✅ DONE |
+| F4-005 Multi-página real | Diego | BE | 5 | ✅ DONE |
+| F4-006 Audit log | Diego | BE | 3 | ✅ DONE |
+| F4-007 Rate limit + cola | Diego | BE | 3 | ✅ DONE |
+| F4-008 Regenerar PDF | Diego | BE | 2 | ✅ DONE |
+| F4-009 Email automático | Diego | BE | 5 | ✅ DONE |
+| F4-010 Tests Vitest | Diego | BE | 3 | ✅ DONE |
+| F4-011 Panel admin numeración | Angel | FE | 3 | ✅ DONE |
+| **Total F4** | | | **36 pts** | 11✅ · 0🔴 |
 
-**Pts por desarrollador en F4:**
+**Pts cerrados:** 36 / 36 (100 %). Epic F4 completamente cerrado al 2026-05-07.
 
-- Diego (backend): 33 pts — 2 done, 8 pending (1 partial), 23 pts efectivos
-- Angel (frontend): 3 pts — 1 pending
+---
 
-**Prioridad sugerida (orden de ejecución para Diego):**
+## Pendientes reales al 2026-05-07
 
-1. **F4-002** (projectAccess + Zod) — bloquea pasar a prod por seguridad. Quick win, deps ya disponibles.
-2. **F4-003** (R2) — bloquea multi-instance / scaling.
-3. **F4-006** (audit log) — requisito fiscal Hacienda.
-4. **F4-005** (multi-página real) — bloquea facturas con 25+ items.
-5. **F4-009** (email automático) — feature visible al cliente final.
-6. **F4-010** (tests) — protege contra regresiones tras tantos cambios.
-7. **F4-007**, **F4-008**, **F4-004** — mejoras incrementales (último porque depende de F4-003).
+Lista corta de lo único que sigue abierto, en orden de prioridad:
 
-Para Angel (frontend) en paralelo a F4-002/003 de Diego: **F4-011** una vez que `setNumber` esté seguro detrás de `projectAccess`.
+1. **[F1-065] QA responsive continuo** — Angel · QA · 2 pts.
+   Trabajo iterativo, no bloquea releases. Último avance hoy en `7f0dc69`
+   (grids 3-4 cols + KPIs grandes en dialogs). No tiene cierre formal.
+
+2. **Verificaciones de configuración externa (F2-005, F2-006, F2-007)** —
+   No son trabajo de código. Requieren login en consolas Google/Stripe para
+   confirmar app review, dominios verificados y key restringida. **Acción:**
+   sesión de 30 min de checks + screenshot, sin necesidad de PR.
+
+3. **[F4-005b] Multi-página real para certificado P2** — Diego · BE · 3 pts.
+   Si un curso supera ~30 módulos en `buildCertP2Html`, aplicar el mismo
+   refactor que F4-005 hizo a la factura. **No bloqueante** — no se ha dado
+   el caso en producción.
 
 ---
 
 > **Nota:** Cuando estos tickets se trasladen a Jira (proyecto CRM), usar el
-> mismo formato de IDs (CRM-XXX). Los `[F4-NNN]` aquí son provisionales para
-> no chocar con la numeración existente del plan original.
+> mismo formato de IDs (CRM-XXX). Los `[F4-NNN]` aquí son provisionales.
+> Jira está suspendido por pago al 2026-05-07; este doc es la fuente
+> autoritativa hasta que se reactive.

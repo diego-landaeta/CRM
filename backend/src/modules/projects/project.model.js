@@ -5,7 +5,7 @@ export async function findAll({ active }) {
   const where = active === undefined ? '' : `WHERE active = ${active === 'true' || active === true}`;
   const { rows } = await query(
     `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
-            modules, shortcuts, external_panels, sidebar_labels,
+            modules, shortcuts, external_panels, sidebar_labels, theme_color, auto_email_documents,
             webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at
      FROM projects ${where}
@@ -17,7 +17,7 @@ export async function findAll({ active }) {
 export async function findById(id) {
   const { rows } = await query(
     `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
-            modules, shortcuts, external_panels, sidebar_labels,
+            modules, shortcuts, external_panels, sidebar_labels, theme_color, auto_email_documents,
             webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at
      FROM projects WHERE id = $1`,
@@ -63,7 +63,8 @@ export async function update(id, fields) {
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
                    'producto_label', 'producto_label_plural', 'logo_url', 'logo_key', 'modules',
-                   'lead_base_fields_config', 'lead_columns', 'external_panels', 'sidebar_labels'];
+                   'lead_base_fields_config', 'lead_columns', 'external_panels', 'sidebar_labels',
+                   'theme_color', 'auto_email_documents'];
   const sets = [];
   const params = [];
   let idx = 1;

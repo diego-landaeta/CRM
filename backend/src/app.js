@@ -43,6 +43,7 @@ import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
+import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -153,6 +154,7 @@ if (process.env.NODE_ENV !== 'test') {
     startWooCommerceSyncScheduler();
     startReminderScheduler();
     startDocumentOrphanScheduler();
+    startGoogleAdsTokenScheduler();
   });
 }
 

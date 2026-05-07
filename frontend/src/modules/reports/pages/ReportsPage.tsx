@@ -7,9 +7,10 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import {
   Users, CurrencyEur, Wallet, TrendUp, ChartBar, Package, Megaphone, UserList, DownloadSimple,
-  ChartLineUp, Sparkle,
+  FilePdf, ChartLineUp, Sparkle,
 } from '@phosphor-icons/react';
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
+import { exportReportPDF } from '../lib/exportPdf';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -158,14 +159,32 @@ export default function ReportsPage() {
                 className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
               {data && (
-                <button
-                  onClick={() => exportReportCSV(data, activeProject?.nombre, range)}
-                  aria-label="Exportar reporte a CSV"
-                  title="Exportar CSV"
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => exportReportCSV(data, activeProject?.nombre, range)}
+                    aria-label="Exportar reporte a CSV"
+                    title="Exportar CSV"
+                    className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await exportReportPDF(data, activeProject?.nombre, range);
+                      } catch (err) {
+                        toast({ title: 'Error generando PDF', description: err?.message || 'Inesperado', variant: 'destructive' });
+                      }
+                    }}
+                    aria-label="Exportar reporte a PDF"
+                    title="Exportar PDF"
+                    className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <FilePdf size={14} weight="bold" /> <span className="hidden sm:inline">PDF</span>
+                  </button>
+                </>
               )}
             </div>
           ) : null

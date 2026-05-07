@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Receipt, Certificate as CertificateIcon, PencilSimple, ShieldWarning, ChartBar, X, Check } from '@phosphor-icons/react';
+import { Receipt, Certificate as CertificateIcon, PencilSimple, ShieldWarning, ChartBar, X, Check, EnvelopeSimple } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import { toast } from '@/shared/hooks/useToast';
+import client from '@/shared/api/client';
 
 interface Project {
   id: number;
   nombre: string;
+  auto_email_documents?: boolean;
 }
 
 interface CounterRow {
@@ -58,8 +60,36 @@ export default function DocumentsConfigPage() {
   const [editing, setEditing] = useState<CounterRow | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [autoEmail, setAutoEmail] = useState<Record<number, boolean>>({});
+  const [emailSaving, setEmailSaving] = useState<Record<number, boolean>>({});
 
   const projectList = (projects || []) as Project[];
+
+  // Sincroniza auto_email_documents desde el contexto cada vez que cambian los proyectos
+  useEffect(() => {
+    const map: Record<number, boolean> = {};
+    projectList.forEach((p) => { map[p.id] = p.auto_email_documents === true; });
+    setAutoEmail(map);
+  }, [projectList]);
+
+  async function toggleAutoEmail(projectId: number, next: boolean): Promise<void> {
+    setAutoEmail(prev => ({ ...prev, [projectId]: next }));
+    setEmailSaving(prev => ({ ...prev, [projectId]: true }));
+    try {
+      const res = await client.patch(`/projects/${projectId}`, { auto_email_documents: next });
+      if (!res.success) throw new Error(res.error || 'No se pudo actualizar');
+      toast({
+        title: next ? 'Email automático activado' : 'Email automático desactivado',
+        description: next ? 'Las facturas y certificados se enviarán al cliente al generarse.' : 'Los documentos solo se generarán; el envío será manual.',
+      });
+    } catch (e: unknown) {
+      setAutoEmail(prev => ({ ...prev, [projectId]: !next }));
+      const msg = e instanceof Error ? e.message : 'Error desconocido';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setEmailSaving(prev => ({ ...prev, [projectId]: false }));
+    }
+  }
 
   // Carga peek + lista de docs por (proyecto × tipo)
   useEffect(() => {
@@ -227,6 +257,30 @@ export default function DocumentsConfigPage() {
                       </div>
                     );
                   })}
+                  <div className="px-4 py-3 flex items-center gap-3 bg-muted/20">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <EnvelopeSimple size={16} weight="duotone" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-muted-foreground">Email automático</div>
+                      <div className="text-[11px] text-muted-foreground/80">
+                        {autoEmail[p.id]
+                          ? 'Envía la factura/certificado al cliente al generarse.'
+                          : 'Solo se genera el PDF; el envío será manual.'}
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={!!autoEmail[p.id]}
+                        disabled={!!emailSaving[p.id]}
+                        onChange={(e) => toggleAutoEmail(p.id, e.target.checked)}
+                        aria-label={`Email automático para ${p.nombre}`}
+                      />
+                      <div className="w-10 h-5 bg-muted rounded-full peer peer-checked:bg-emerald-500 peer-checked:after:translate-x-5 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all" />
+                    </label>
+                  </div>
                 </div>
               </article>
             );
@@ -325,6 +379,8 @@ function EditCounterDialog({ row, value, onChange, saving, onCancel, onSave }: E
                 onChange={(e) => onChange(e.target.value)}
                 disabled={saving}
                 autoFocus
+                aria-label="Próximo número"
+                placeholder="194"
                 className="w-32 h-9 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums font-semibold text-center outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50"
               />
             </div>

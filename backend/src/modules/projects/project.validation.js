@@ -42,4 +42,6 @@ export const updateProjectSchema = z.object({
     open_in: z.enum(['iframe', 'tab']).optional(),
   })).max(20).optional(),
   sidebar_labels: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
+  theme_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Hex inválido (#rrggbb)').nullable().optional(),
+  auto_email_documents: z.boolean().optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

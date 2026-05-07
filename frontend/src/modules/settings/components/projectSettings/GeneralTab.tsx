@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { isValidHexColor } from '@/shared/lib/color';
 import { SectionTitle, Field, inputClass, useConfirm } from './shared';
 
 export default function GeneralTab({ project, onSaved }) {
@@ -11,6 +12,7 @@ export default function GeneralTab({ project, onSaved }) {
     dias_alerta_inactividad: project.dias_alerta_inactividad || 3,
     emoji: project.emoji || '',
     logo_url: project.logo_url || '',
+    theme_color: project.theme_color || '',
     meta_account_id: project.meta_account_id || '',
     google_account_id: project.google_account_id || '',
     gsc_property: project.gsc_property || '',
@@ -22,6 +24,12 @@ export default function GeneralTab({ project, onSaved }) {
 
   async function handleSave(e) {
     e.preventDefault();
+    // Validar color si está definido
+    const trimmedColor = form.theme_color.trim();
+    if (trimmedColor && !isValidHexColor(trimmedColor)) {
+      toast({ title: 'Color inválido', description: 'Usa formato #rrggbb (ej. #3b82f6)', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       await client.patch(`/projects/${project.id}`, {
@@ -30,6 +38,7 @@ export default function GeneralTab({ project, onSaved }) {
         dias_alerta_inactividad: Number(form.dias_alerta_inactividad),
         emoji: form.emoji || null,
         logo_url: form.logo_url ? form.logo_url.trim() : null,
+        theme_color: trimmedColor || null,
         meta_account_id: form.meta_account_id || null,
         google_account_id: form.google_account_id || null,
         gsc_property: form.gsc_property || null,
@@ -93,6 +102,34 @@ export default function GeneralTab({ project, onSaved }) {
         <Field label="Alerta inactividad" hint="Dias sin contacto para avisar">
           <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: e.target.value })} className={inputClass} />
         </Field>
+      </div>
+
+      <SectionTitle title="Color de marca" subtitle="Se aplica al sidebar, botones y acentos al activar este proyecto. Vacío = color por defecto." />
+      <div className="flex items-center gap-3 p-4 bg-muted/20 rounded-md border border-border">
+        <input
+          type="color"
+          value={isValidHexColor(form.theme_color) ? form.theme_color : '#3b56e0'}
+          onChange={(e) => setForm({ ...form, theme_color: e.target.value })}
+          aria-label="Color de marca"
+          className="w-12 h-10 rounded border border-border cursor-pointer flex-shrink-0"
+        />
+        <input
+          type="text"
+          value={form.theme_color}
+          onChange={(e) => setForm({ ...form, theme_color: e.target.value })}
+          placeholder="#3b82f6"
+          className={inputClass + ' font-mono text-sm flex-1'}
+          maxLength={7}
+        />
+        {form.theme_color && (
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, theme_color: '' })}
+            className="text-xs text-muted-foreground hover:text-foreground flex-shrink-0"
+          >
+            Quitar
+          </button>
+        )}
       </div>
 
       <SectionTitle title="Terminologia del proyecto" subtitle="Como se llaman &quot;productos&quot; aqui (ej Formacion, Plan, Servicio)" />

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { hexToHslTriplet } from '@/shared/lib/color';
 
 const ProjectContext = createContext(null);
 
@@ -19,6 +20,21 @@ function setFavicon(href) {
   if (apple) apple.href = href;
 }
 
+// CRM-191: aplica el color primario del proyecto a las CSS vars que usan
+// shadcn/Tailwind. Si theme_color es null o inválido, restaura el default
+// quitando el override inline (el index.css recupera el control).
+function applyThemeColor(hex) {
+  const root = document.documentElement;
+  const triplet = hexToHslTriplet(hex);
+  if (triplet) {
+    root.style.setProperty('--primary', triplet);
+    root.style.setProperty('--ring', triplet);
+  } else {
+    root.style.removeProperty('--primary');
+    root.style.removeProperty('--ring');
+  }
+}
+
 export function ProjectProvider({ children }) {
   const { activeProject, projects, switchProject } = useAuth();
 
@@ -31,6 +47,12 @@ export function ProjectProvider({ children }) {
       setFavicon(DEFAULT_FAVICON);
     }
   }, [activeProject?.id, activeProject?.logo_url]);
+
+  // Branding por proyecto (CRM-191): inyecta --primary/--ring del activeProject.
+  useEffect(() => {
+    applyThemeColor(activeProject?.theme_color);
+    return () => applyThemeColor(null); // limpia al desmontar (logout)
+  }, [activeProject?.id, activeProject?.theme_color]);
 
   return (
     <ProjectContext.Provider value={{

@@ -530,6 +530,267 @@ export function buildInvoiceHtml(data) {
 </html>`;
 }
 
+// ============================================================
+// TEMPLATE: FACTURA MULTI-PAGINA (F4-005)
+// ============================================================
+// Variante para facturas con >22 lineas. Reescribe el layout para que el
+// flujo natural pagine en N paginas:
+//  - Pagina 1: header completo (logo, factura, emisor, fecha, cliente) +
+//    inicio de tabla.
+//  - Paginas 2..N-1: solo continuacion de tabla con thead repetido.
+//  - Pagina N: ultimo bloque de tabla + sello/firma + totales.
+//  - Footer rosa-palo + LOPD: en cada pagina via puppeteer footerTemplate.
+//
+// Comparte estilos con buildInvoiceHtml en lo posible. Diferencias clave:
+//  - .page no tiene height fijo ni overflow:hidden.
+//  - .content-area usa margin (no absolute) y deja al flujo paginar.
+//  - .items-table thead { display: table-header-group } + tr/td con
+//    page-break-inside: avoid.
+//  - .bottom-row con page-break-inside: avoid + break-before: avoid para
+//    no separarse de la ultima fila si cabe junto.
+//  - No hay .footer-band inline; lo inyecta puppeteer.
+export function buildInvoiceHtmlMultiPage(data) {
+  const {
+    numero, fecha,
+    emisor_nombre, emisor_nif, emisor_direccion, emisor_telefono,
+    cliente_nombre, cliente_dni, cliente_direccion,
+    lineas = [],
+    iva_pct = 21,
+    iva_exento = false,
+  } = data;
+
+  const subtotal = lineas.reduce((s, l) => s + (parseFloat(l.precio) * parseInt(l.cantidad || 1)), 0);
+  const iva = iva_exento ? 0 : subtotal * (iva_pct / 100);
+  const total = subtotal + iva;
+  const clienteDocLabel = detectDocType(cliente_dni);
+
+  function formatFecha(iso) {
+    if (!iso) return '';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso);
+  }
+  const fechaFmt = formatFecha(fecha);
+  const fmtEur = n => n.toFixed(2).replace('.', ',') + ' €';
+
+  const lineasHtml = lineas.map((l) => {
+    const precio = parseFloat(l.precio || 0);
+    const cantidad = parseInt(l.cantidad || 0) || (l.descripcion ? 1 : '');
+    const totalLinea = precio && cantidad ? fmtEur(precio * cantidad) : '';
+    return `<tr>
+      <td class="col-desc">${l.descripcion || ''}</td>
+      <td class="col-num">${cantidad || ''}</td>
+      <td class="col-num">${precio ? fmtEur(precio) : ''}</td>
+      <td class="col-num">${totalLinea}</td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  ${INVOICE_FONTS_CSS}
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: A4; margin: 0; }
+  html, body {
+    width: 210mm;
+    font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
+    color: #000;
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page { width: 210mm; position: relative; background: #fff; }
+
+  /* Cabecera de la factura — visible solo en pagina 1 (flujo natural).
+     Conserva el bloque absolute del template single-page para mantener el
+     pixel-perfect del Canva, pero envuelta en un wrapper de altura fija
+     que ocupa los primeros 130mm del flujo de la pagina 1. */
+  .header-zone { position: relative; height: 130mm; flex-shrink: 0; }
+  .top-band {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 20mm; background: #DBC4C3;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .logo-drop {
+    position: absolute; top: 0; left: 125.8mm;
+    width: 58.7mm; height: 75.2mm;
+    background: #F2E6E5;
+    clip-path: polygon(0 0, 100% 0, 100% 86%, 50% 100%, 0 86%);
+    text-align: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .logo-drop img { width: 36mm; height: auto; margin: 6mm auto 0; display: block; object-fit: contain; }
+  .numero-label {
+    position: absolute; top: 40.2mm; left: 125.8mm; width: 58.7mm;
+    text-align: center; font-size: 13pt; font-weight: 700;
+    letter-spacing: 1.27pt; color: #1a1a1a;
+  }
+  .numero-pill {
+    position: absolute; top: 49.1mm; left: 132.2mm;
+    width: 45.9mm; height: 10.9mm;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10.4pt;
+  }
+  .factura-title {
+    position: absolute; top: 32mm; left: 14.3mm;
+    font-size: 23.9pt; font-weight: 700; letter-spacing: 2.34pt; color: #000;
+  }
+  .emisor-name {
+    position: absolute; top: 50.7mm; left: 15.5mm;
+    font-size: 11pt; letter-spacing: 1.07pt; text-transform: uppercase;
+  }
+  .emisor-info {
+    position: absolute; top: 57.1mm; left: 14.3mm;
+    width: 90mm; font-size: 10.4pt; line-height: 1.45; letter-spacing: 1pt;
+  }
+  .emisor-info > div { margin-bottom: 0.6mm; }
+  .fecha-line {
+    position: absolute; top: 82.7mm; left: 134mm;
+    font-size: 10.4pt; letter-spacing: 1pt;
+  }
+  .cliente-label {
+    position: absolute; top: 87mm; left: 15.5mm;
+    font-size: 10.4pt; font-weight: 700; letter-spacing: 1pt;
+  }
+  .cliente-info {
+    position: absolute; top: 93.8mm; left: 17.9mm;
+    width: 130mm; font-size: 10.4pt; line-height: 1.45; letter-spacing: 1pt;
+  }
+  .cliente-info > div { margin-bottom: 0.6mm; }
+
+  /* Zona de contenido (tabla + sello/totales). Flujo natural — pagina sola. */
+  .content-zone { padding: 0 14.3mm 0 14.5mm; }
+  .items-table {
+    width: 100%; border-collapse: collapse; table-layout: fixed;
+  }
+  .items-table colgroup col:nth-child(1) { width: 72.4mm; }
+  .items-table colgroup col:nth-child(2) { width: 21.2mm; }
+  .items-table colgroup col:nth-child(3) { width: 44.2mm; }
+  .items-table colgroup col:nth-child(4) { width: 43.9mm; }
+  /* table-header-group hace que el thead se repita en cada pagina nueva. */
+  .items-table thead { display: table-header-group; }
+  .items-table thead th {
+    background: #DBC4C3;
+    padding: 3mm 0;
+    font-size: 10pt; font-weight: 700; text-align: center;
+    color: #000; letter-spacing: 0.3pt; border: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table tbody td {
+    border: 1px solid #737373; border-top: none;
+    padding: 2.5mm 4mm; font-size: 10.4pt; color: #6B6B6B;
+    font-weight: 400; vertical-align: middle; height: 9mm;
+  }
+  .items-table tbody tr:first-child td { border-top: 1px solid #737373; }
+  .items-table tbody tr { page-break-inside: avoid; }
+  .items-table .col-desc { text-align: left; }
+  .items-table .col-num { text-align: center; }
+
+  /* Sello + totales — bloque indivisible. El page-break-inside: avoid
+     fuerza que entren juntos en la ultima pagina (sin partirse). */
+  .bottom-row {
+    margin-top: 6mm;
+    display: flex;
+    gap: 7mm;
+    align-items: flex-start;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .sello-box {
+    flex: 1; height: 55mm;
+    background: #F2E6E5; border: 1px solid #686868;
+    position: relative;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sello-box::after {
+    content: "Sello / Firma";
+    position: absolute; bottom: 3mm; right: 4mm;
+    font-size: 8pt; color: #b4969a; font-style: italic;
+  }
+  .totals-wrapper { width: 88mm; flex-shrink: 0; }
+  .totals-box {
+    width: 100%;
+    background: #F2E6E5; border: 1px solid #686868;
+    padding: 2mm 3mm; font-size: 12pt; color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .totals-row { display: flex; justify-content: space-between; padding: 0.4mm 1mm; }
+  .totals-row.total { font-weight: 700; }
+  .iva-exento-note {
+    margin-top: 2mm; font-size: 7.5pt; font-style: italic;
+    color: #555; line-height: 1.3;
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="header-zone">
+      <div class="top-band"></div>
+      <div class="logo-drop">
+        <img src="${PSIKO_LOGO_DATAURL}" alt="Psikoaprende"/>
+      </div>
+      <div class="numero-label">FACTURA NÚMERO</div>
+      <div class="numero-pill">${numero || ''}</div>
+
+      <div class="factura-title">FACTURA</div>
+      <div class="emisor-name">${emisor_nombre || ''}</div>
+      <div class="emisor-info">
+        ${emisor_nif ? `<div>${emisor_nif}</div>` : ''}
+        ${(emisor_direccion || '').split('\n').filter(Boolean).map(l => `<div>${l}</div>`).join('')}
+        ${emisor_telefono ? `<div>Tel: ${emisor_telefono}</div>` : ''}
+      </div>
+
+      <div class="fecha-line">FECHA: ${fechaFmt}</div>
+
+      <div class="cliente-label">DATOS DEL CLIENTE</div>
+      <div class="cliente-info">
+        ${cliente_nombre ? `<div>Nombre o Razón Social: ${cliente_nombre}</div>` : ''}
+        ${cliente_dni ? `<div>${clienteDocLabel}: ${cliente_dni}</div>` : ''}
+        ${cliente_direccion ? `<div>Dirección: ${cliente_direccion}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="content-zone">
+      <table class="items-table">
+        <colgroup><col/><col/><col/><col/></colgroup>
+        <thead>
+          <tr>
+            <th>DESCRIPCIÓN</th>
+            <th>CANTIDAD</th>
+            <th>PRECIO</th>
+            <th>TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lineasHtml}
+        </tbody>
+      </table>
+
+      <div class="bottom-row">
+        <div class="sello-box"></div>
+        <div class="totals-wrapper">
+          <div class="totals-box">
+            <div class="totals-row"><span>Sub Total</span><span>${fmtEur(subtotal)}</span></div>
+            <div class="totals-row"><span>${iva_exento ? 'IVA (exento)' : `IVA (${iva_pct}%)`}</span><span>${fmtEur(iva)}</span></div>
+            <div class="totals-row total"><span>Total</span><span>${fmtEur(total)}</span></div>
+          </div>
+          ${iva_exento ? `<div class="iva-exento-note">Operación exenta de IVA conforme al Art. 20.1.9° de la Ley 37/1992 del IVA (servicios educativos).</div>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // Preview factura: lienzo A4 centrado sobre fondo gris (paridad con cert preview).
 // La pagina A4 (210x297mm) puede no caber en iframes estrechos, asi que un
 // script inline auto-ajusta el scale para que la pagina entera quepa siempre
@@ -852,16 +1113,30 @@ export async function buildCertP2Html(data) {
 }
 
 // ============================================================
-// Generar PDF multi-página certificado (p1 + p2)
+// Generar PDF factura — single-page o multi-page segun cantidad de lineas
 // ============================================================
+// F4-005: cuando lineas <= MAX_SINGLE_PAGE (22) seguimos con el layout
+// absolute pixel-perfect del Canva. Cuando hay mas items, el HTML se
+// reestructura a flujo natural: la tabla pagina sola con `thead` repetido,
+// el footer rosa-palo se inyecta via `puppeteer.pdf({ footerTemplate })`
+// para aparecer en cada pagina, y el sello+totales caen en la ultima pagina
+// con `page-break-inside: avoid`.
+const MAX_SINGLE_PAGE = 22;
+
 export async function generateInvoicePdf(data, filename) {
-  const html = buildInvoiceHtml(data);
-  // Single-page con layout absoluto del Canva original. El footer-band va
-  // inline en el body absolute al `bottom: 0` de `.page`. Multi-página real
-  // (puppeteer footerTemplate) se intentó pero rompía la posición de los
-  // absolutos; en su lugar los modos `compact`/`dense` del template
-  // comprimen filas para acomodar hasta ~22 items en 1 página.
-  return htmlToPdf(html, filename);
+  const lineCount = (data?.lineas || []).length;
+  const multiPage = lineCount > MAX_SINGLE_PAGE;
+
+  if (!multiPage) {
+    return htmlToPdf(buildInvoiceHtml(data), filename);
+  }
+
+  return htmlToPdf(buildInvoiceHtmlMultiPage(data), filename, {
+    displayHeaderFooter: true,
+    headerTemplate: '<span></span>',
+    footerTemplate: buildInvoiceFooterTemplate(),
+    margin: { top: '0', right: '0', bottom: '40.8mm', left: '0' },
+  });
 }
 
 export async function generateCertificatePdf(data, filename) {
