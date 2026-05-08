@@ -66,7 +66,7 @@ export default function KpiCard({
         )}
       </div>
       <p className="text-muted-foreground text-sm">{label}</p>
-      <h3 className="text-2xl font-semibold mt-1 tabular-nums">
+      <h3 className="text-xl sm:text-2xl font-semibold mt-1 tabular-nums">
         {useAnimation ? <AnimatedValue numericValue={numericValue} format={format} /> : value}
       </h3>
     </div>
