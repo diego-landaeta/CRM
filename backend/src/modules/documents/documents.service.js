@@ -692,10 +692,20 @@ export function buildInvoiceHtmlMultiPage(data) {
   .items-table .col-desc { text-align: left; }
   .items-table .col-num { text-align: center; }
 
-  /* Sello + totales — bloque indivisible. El page-break-inside: avoid
-     fuerza que entren juntos en la ultima pagina (sin partirse). */
+  /* Sello + totales — pagina dedicada al final, anclados al pie. Asi la
+     posicion es la misma siempre (matching el Canva original) en lugar de
+     flotar donde acabe la tabla. La altura del wrapper = A4 (297mm) menos
+     el footer-band del puppeteer footerTemplate (40.8mm) = 256.2mm. */
+  .last-page {
+    page-break-before: always;
+    break-before: page;
+    height: 256.2mm;
+    padding: 0 14.3mm 0 14.5mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
   .bottom-row {
-    margin-top: 6mm;
     display: flex;
     gap: 7mm;
     align-items: flex-start;
@@ -773,7 +783,9 @@ export function buildInvoiceHtmlMultiPage(data) {
           ${lineasHtml}
         </tbody>
       </table>
+    </div>
 
+    <div class="last-page">
       <div class="bottom-row">
         <div class="sello-box"></div>
         <div class="totals-wrapper">
@@ -915,7 +927,8 @@ const CERT_WAVES_SVG = `
 // El fondo `cert-bg-p1.png` (extraído del Canva original) ya trae bakeados:
 // el logo PSIKOAPRENDE en la cabecera, las firmas + nombres de Carlos Saiz
 // (Director) y Mireia Jareño (Responsable de Formación), y la línea de
-// firma del alumno con su label. Aquí solo overlayeamos el texto dinámico.
+// firma del alumno (vacía — el alumno firma a mano). Aquí solo overlayeamos
+// el texto dinámico (nombre, DNI, curso, fechas, aval).
 
 export async function buildCertP1Html(data) {
   const bgUrl = await imgBase64('cert-bg-p1.png');
@@ -972,13 +985,6 @@ export async function buildCertP1Html(data) {
     font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
     font-size: 10pt; font-weight: 700; color: #1a1a1a; padding: 0 22mm;
   }
-  /* Nombre del alumno por encima de la línea de firma izquierda del fondo */
-  .alumno-firma-label {
-    position: absolute;
-    top: 86.5%; left: 9%; width: 26%;
-    text-align: center;
-    font-size: 9.5pt; color: #1a1a1a;
-  }
 </style>
 </head>
 <body>
@@ -1000,8 +1006,6 @@ export async function buildCertP1Html(data) {
   <div class="t aval">
     Este certificado ha sido expedido por Psiko Aprende y avalado por ISEIE Innovation School, e Hispamedic
   </div>
-
-  <div class="alumno-firma-label">${alumno_nombre || ''}</div>
 
 </div>
 </body>

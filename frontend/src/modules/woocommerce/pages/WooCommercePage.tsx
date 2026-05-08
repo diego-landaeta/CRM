@@ -107,7 +107,7 @@ export default function WooCommercePage() {
     <div className="space-y-5 pb-8">
       <PageHeader title="WooCommerce" subtitle="Importar productos desde tu tienda" />
 
-      <div className="bg-card border border-border rounded-2xl p-5 max-w-2xl space-y-3">
+      <div className="bg-card border border-border rounded-2xl p-5 w-full max-w-2xl space-y-3">
         <h3 className="font-bold">Credenciales</h3>
         <input value={form.store_url} onChange={e => setForm({ ...form, store_url: e.target.value })} placeholder="https://tu-tienda.com" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
         <input value={form.consumer_key} onChange={e => setForm({ ...form, consumer_key: e.target.value })} placeholder="Consumer key (ck_...)" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm font-mono text-xs" />

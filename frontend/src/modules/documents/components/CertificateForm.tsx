@@ -7,6 +7,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
 import { downloadDoc } from '../lib/downloadDoc';
+import NaturalDatePicker from './NaturalDatePicker';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -42,7 +43,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [fixedDataOpen, setFixedDataOpen] = useState(false);
 
-  const { register, control, handleSubmit, watch } = useForm<CertificateFormValues>({
+  const { register, control, handleSubmit, watch, setValue } = useForm<CertificateFormValues>({
     defaultValues: {
       alumno_nombre: '',
       alumno_dni: '',
@@ -63,10 +64,32 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'modulos' });
 
+  const [touched, setTouched] = useState(false);
+
+  function getMissingFields(values: CertificateFormValues): string[] {
+    const missing: string[] = [];
+    if (!values.alumno_nombre?.trim()) missing.push('Nombre del alumno');
+    if (!values.alumno_dni?.trim()) missing.push('DNI/NIE');
+    if (!values.curso_nombre?.trim()) missing.push('Nombre del curso');
+    if (!values.fecha_expedicion?.trim()) missing.push('Fecha de expedición');
+    return missing;
+  }
+
+  function reportMissing(values: CertificateFormValues): boolean {
+    const missing = getMissingFields(values);
+    if (missing.length === 0) return false;
+    setTouched(true);
+    toast({ title: 'Faltan campos obligatorios', description: missing.join(' · '), variant: 'destructive' });
+    return true;
+  }
+
+  const invalidFields = touched ? new Set(getMissingFields(watch())) : new Set<string>();
+
   async function handlePreview(): Promise<void> {
+    const data = watch();
+    if (reportMissing(data)) return;
     setPreviewing(true);
     try {
-      const data = watch();
       const payload = {
         ...data,
         modulos: data.modulos.map(m => m.nombre).filter(Boolean),
@@ -93,6 +116,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
 
   async function onSubmit(data: CertificateFormValues): Promise<void> {
     if (!activeProject?.id) return;
+    if (reportMissing(data)) return;
     setLoading(true);
     try {
       const payload = {
@@ -121,12 +145,20 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <h3 className="font-semibold text-sm mb-4">Datos del alumno</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre completo *</label>
-            <input {...register('alumno_nombre', { required: true })} className={inp} placeholder="Nombre Apellido Apellido"/>
+            <label className="text-xs text-muted-foreground mb-1 block">Nombre completo <span className="text-red-500">*</span></label>
+            <input
+              {...register('alumno_nombre', { required: true })}
+              className={inp + (invalidFields.has('Nombre del alumno') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              placeholder="Nombre Apellido Apellido"
+            />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">DNI/NIE *</label>
-            <input {...register('alumno_dni', { required: true })} className={inp} placeholder="12345678A"/>
+            <label className="text-xs text-muted-foreground mb-1 block">DNI/NIE <span className="text-red-500">*</span></label>
+            <input
+              {...register('alumno_dni', { required: true })}
+              className={inp + (invalidFields.has('DNI/NIE') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              placeholder="12345678A"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Email</label>
@@ -145,24 +177,45 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <h3 className="font-semibold text-sm mb-4">Datos del curso</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre del diplomado/curso *</label>
-            <input {...register('curso_nombre', { required: true })} className={inp} placeholder="Diplomado en Psicoterapia Integrativa"/>
+            <label className="text-xs text-muted-foreground mb-1 block">Nombre del diplomado/curso <span className="text-red-500">*</span></label>
+            <input
+              {...register('curso_nombre', { required: true })}
+              className={inp + (invalidFields.has('Nombre del curso') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              placeholder="Diplomado en Psicoterapia Integrativa"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Horas totales</label>
             <input {...register('horas_total')} className={inp} placeholder="750"/>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha expedición</label>
-            <input {...register('fecha_expedicion')} className={inp}/>
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha expedición <span className="text-red-500">*</span></label>
+            <NaturalDatePicker
+              value={watch('fecha_expedicion')}
+              onChange={(text) => setValue('fecha_expedicion', text, { shouldDirty: true })}
+              required
+              invalid={invalidFields.has('Fecha de expedición')}
+              placeholder="7 de mayo de 2026 *"
+              ariaLabel="Fecha de expedición"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Fecha inicio</label>
-            <input {...register('fecha_inicio')} className={inp} placeholder="23 de Noviembre de 2025"/>
+            <NaturalDatePicker
+              value={watch('fecha_inicio')}
+              onChange={(text) => setValue('fecha_inicio', text, { shouldDirty: true })}
+              placeholder="23 de noviembre de 2025"
+              ariaLabel="Fecha de inicio del curso"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Fecha fin</label>
-            <input {...register('fecha_fin')} className={inp} placeholder="20 de Abril de 2026"/>
+            <NaturalDatePicker
+              value={watch('fecha_fin')}
+              onChange={(text) => setValue('fecha_fin', text, { shouldDirty: true })}
+              placeholder="20 de abril de 2026"
+              ariaLabel="Fecha de fin del curso"
+            />
           </div>
         </div>
       </div>
@@ -192,7 +245,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <button
           type="button"
           onClick={() => setFixedDataOpen(o => !o)}
-          aria-expanded={fixedDataOpen ? true : undefined}
+          aria-expanded={fixedDataOpen}
           className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <div>

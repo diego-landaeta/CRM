@@ -23,92 +23,78 @@ const SECTIONS = [
   { id: 'seo',          label: 'Tráfico orgánico', icon: MagnifyingGlass },
   { id: 'ia',           label: 'IA y Reportes', icon: Robot },
   { id: 'contabilidad', label: 'Contabilidad', icon: Calculator },
+  { id: 'documentos',   label: 'Documentos',   icon: Receipt },
   { id: 'configuracion',label: 'Configuración',icon: Gear },
   { id: 'atajos',       label: 'Atajos',       icon: Keyboard },
 ];
 
 /* ─── Primitives ──────────────────────────────────────────── */
-function SectionAnchor({ id }: { id: string }) {
-  return <div id={id} className="scroll-mt-4 absolute -top-4" />;
-}
+// Asignamos un numero secuencial a cada seccion del manual — usado en
+// SectionHeader y en el sidebar para dar sensacion editorial profesional.
+const SECTION_NUMBER: Record<string, string> = SECTIONS.reduce((acc, s, i) => {
+  acc[s.id] = String(i + 1).padStart(2, '0');
+  return acc;
+}, {} as Record<string, string>);
 
-function SectionHeader({ id, icon: Icon, label, color = 'blue', description }: {
+function SectionHeader({ id, icon: Icon, label, description }: {
   id: string;
   icon: React.ElementType;
   label: string;
+  /** Aceptado por compat — actualmente se ignora; el diseno usa un solo acento. */
   color?: string;
   description?: string;
 }) {
-  const colors = {
-    blue:   'from-blue-500/10 to-blue-500/0 border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40',
-    violet: 'from-violet-500/10 to-violet-500/0 border-violet-200 dark:border-violet-900 text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/40',
-    emerald:'from-emerald-500/10 to-emerald-500/0 border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40',
-    amber:  'from-amber-500/10 to-amber-500/0 border-amber-200 dark:border-amber-900 text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40',
-    rose:   'from-rose-500/10 to-rose-500/0 border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40',
-    sky:    'from-sky-500/10 to-sky-500/0 border-sky-200 dark:border-sky-900 text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/40',
-    indigo: 'from-indigo-500/10 to-indigo-500/0 border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/40',
-    teal:   'from-teal-500/10 to-teal-500/0 border-teal-200 dark:border-teal-900 text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/40',
-    orange: 'from-orange-500/10 to-orange-500/0 border-orange-200 dark:border-orange-900 text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/40',
-  };
-  const c = colors[color];
-  const [gradFrom, , border, text, iconBg] = c.split(' ');
+  const num = SECTION_NUMBER[id] || '';
   return (
-    <div id={id} className={`mt-10 mb-5 scroll-mt-4 rounded-xl border bg-gradient-to-r ${gradFrom} to-transparent ${border} px-5 py-4 flex items-center gap-4`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-        <Icon size={20} weight="duotone" className={text} />
+    <header id={id} className="scroll-mt-6 mt-16 mb-6 first:mt-2">
+      <div className="flex items-baseline gap-3 mb-2">
+        <span className="text-[11px] font-mono font-semibold tracking-widest text-primary/70">{num}</span>
+        <span className="h-px flex-1 bg-border" />
+        <Icon size={14} weight="duotone" className="text-muted-foreground" />
       </div>
-      <div>
-        <h2 className="text-lg font-bold text-foreground leading-tight">{label}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-      </div>
-    </div>
+      <h2 className="text-3xl font-bold tracking-tight text-foreground leading-tight">{label}</h2>
+      {description && (
+        <p className="text-[15px] text-muted-foreground mt-2 max-w-2xl leading-relaxed">{description}</p>
+      )}
+    </header>
   );
 }
 
 function SubHeader({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
-    <h3 id={id} className="scroll-mt-4 text-sm font-bold text-foreground mt-6 mb-2.5 flex items-center gap-2">
-      <span className="w-1 h-4 rounded-full bg-primary inline-block" />
+    <h3 id={id} className="scroll-mt-4 text-base font-semibold text-foreground mt-8 mb-3 tracking-tight">
       {children}
     </h3>
   );
 }
 
 function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted-foreground leading-relaxed mb-3">{children}</p>;
+  return <p className="text-[14.5px] text-muted-foreground leading-7 mb-3">{children}</p>;
 }
 
 function FeatureGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 my-3">{children}</div>;
+  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-4">{children}</div>;
 }
 
-function FeatureCard({ icon: Icon, title, children, color = 'default' }: {
+function FeatureCard({ icon: Icon, title, children }: {
   icon: React.ElementType;
   title: string;
   children: React.ReactNode;
+  /** Aceptado por compat; ignorado para uniformidad visual. */
   color?: string;
 }) {
-  const colors = {
-    default: 'border-border bg-card',
-    blue: 'border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20',
-    green: 'border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20',
-    violet: 'border-violet-200 dark:border-violet-900 bg-violet-50/50 dark:bg-violet-950/20',
-    orange: 'border-orange-200 dark:border-orange-900 bg-orange-50/50 dark:bg-orange-950/20',
-  };
-  const iconColors = {
-    default: 'text-primary', blue: 'text-blue-500', green: 'text-emerald-500',
-    violet: 'text-violet-500', orange: 'text-orange-500',
-  };
   return (
-    <div className={`rounded-lg border p-3.5 ${colors[color]}`}>
+    <div className="group rounded-xl border border-border bg-card hover:border-primary/30 transition-colors p-4">
       {Icon && (
-        <div className="flex items-center gap-2 mb-1.5">
-          <Icon size={15} weight="duotone" className={iconColors[color]} />
-          <span className="text-xs font-bold text-foreground">{title}</span>
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-7 h-7 rounded-lg bg-muted/60 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+            <Icon size={13} weight="duotone" className="text-foreground/70 group-hover:text-primary transition-colors" />
+          </div>
+          <span className="text-[13px] font-semibold text-foreground tracking-tight">{title}</span>
         </div>
       )}
-      {!Icon && title && <p className="text-xs font-bold text-foreground mb-1">{title}</p>}
-      <p className="text-xs text-muted-foreground leading-relaxed">{children}</p>
+      {!Icon && title && <p className="text-[13px] font-semibold text-foreground mb-1.5 tracking-tight">{title}</p>}
+      <p className="text-[13px] text-muted-foreground leading-relaxed">{children}</p>
     </div>
   );
 }
@@ -116,43 +102,50 @@ function FeatureCard({ icon: Icon, title, children, color = 'default' }: {
 type Step = string | { title: string; desc: string };
 function Steps({ items }: { items: Step[] }) {
   return (
-    <div className="my-3 space-y-2">
-      {items.map((item, i) => (
-        <div key={i} className="flex gap-3 items-start">
-          <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-            {i + 1}
-          </div>
-          <div className="flex-1 pt-0.5">
-            {typeof item === 'string'
-              ? <p className="text-sm text-muted-foreground">{item}</p>
-              : <><p className="text-sm font-semibold text-foreground">{item.title}</p><p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p></>
-            }
-          </div>
-        </div>
-      ))}
-    </div>
+    <ol className="my-5 space-y-1 relative">
+      {items.map((item, i) => {
+        const last = i === items.length - 1;
+        return (
+          <li key={i} className="flex gap-4 items-start relative pb-4">
+            {!last && <span aria-hidden className="absolute left-[13px] top-7 bottom-0 w-px bg-border" />}
+            <div className="relative w-7 h-7 rounded-full border border-border bg-card flex items-center justify-center flex-shrink-0 z-10 text-[12px] font-mono font-semibold text-foreground/70">
+              {i + 1}
+            </div>
+            <div className="flex-1 pt-0.5">
+              {typeof item === 'string'
+                ? <p className="text-[14px] text-muted-foreground leading-relaxed">{item}</p>
+                : <>
+                    <p className="text-[14px] font-semibold text-foreground tracking-tight">{item.title}</p>
+                    <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">{item.desc}</p>
+                  </>
+              }
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 function Callout({ type = 'info', children }: { type?: 'info' | 'warning' | 'success' | 'tip' | 'warn'; children: React.ReactNode }) {
   const cfg = {
-    info: { icon: Info, bg: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900', text: 'text-blue-800 dark:text-blue-300', ic: 'text-blue-500' },
-    tip:  { icon: CheckCircle, bg: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900', text: 'text-emerald-800 dark:text-emerald-300', ic: 'text-emerald-500' },
-    warn: { icon: Warning, bg: 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900', text: 'text-amber-800 dark:text-amber-300', ic: 'text-amber-500' },
+    info: { icon: Info,        accent: 'border-l-blue-500',    ic: 'text-blue-500' },
+    tip:  { icon: CheckCircle, accent: 'border-l-emerald-500', ic: 'text-emerald-500' },
+    warn: { icon: Warning,     accent: 'border-l-amber-500',   ic: 'text-amber-500' },
   };
   const c = cfg[type];
   const Icon = c.icon;
   return (
-    <div className={`flex gap-3 p-3.5 rounded-lg border ${c.bg} my-3`}>
-      <Icon size={15} className={`${c.ic} mt-0.5 flex-shrink-0`} weight="fill" />
-      <p className={`text-xs leading-relaxed ${c.text}`}>{children}</p>
-    </div>
+    <aside className={`flex gap-3 p-4 my-4 rounded-r-lg bg-muted/30 border-l-4 ${c.accent}`}>
+      <Icon size={16} className={`${c.ic} mt-0.5 flex-shrink-0`} weight="fill" />
+      <p className="text-[13.5px] leading-relaxed text-foreground/85">{children}</p>
+    </aside>
   );
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted border border-border text-[11px] font-mono font-bold text-foreground mx-0.5">
+    <kbd className="inline-flex items-center px-2 py-0.5 rounded-md bg-card border border-border shadow-sm text-[11px] font-mono font-semibold text-foreground/80 mx-0.5">
       {children}
     </kbd>
   );
@@ -200,32 +193,55 @@ export default function ManualPage() {
     return () => obs.disconnect();
   }, []);
 
+  // Agrupacion editorial del sidebar — 3 categorias semantica claras.
+  const NAV_GROUPS: { label: string; ids: string[] }[] = [
+    { label: 'Empezar',    ids: ['introduccion', 'dashboard', 'atajos'] },
+    { label: 'Operación',  ids: ['prospectos', 'clientes', 'productos', 'matriculas'] },
+    { label: 'Análisis',   ids: ['campanas', 'seo', 'ia'] },
+    { label: 'Sistema',    ids: ['contabilidad', 'documentos', 'configuracion'] },
+  ];
+
   return (
-    <div className="flex gap-8 max-w-[1180px] pb-20">
+    <div className="flex gap-10 max-w-[1240px] pb-24">
 
       {/* ── Sidebar ── */}
-      <aside className="hidden lg:block w-48 flex-shrink-0">
-        <div className="sticky top-4">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-2 mb-3">Contenido</p>
-          <nav className="space-y-0.5">
-            {SECTIONS.map(s => {
-              const Icon = s.icon;
-              const active = activeId === s.id;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => scrollTo(s.id)}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12.5px] transition-all text-left ${
-                    active
-                      ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <Icon size={14} weight={active ? 'fill' : 'regular'} className="flex-shrink-0" />
-                  {s.label}
-                </button>
-              );
-            })}
+      <aside className="hidden lg:block w-56 flex-shrink-0">
+        <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2">
+          <p className="text-[10px] font-mono font-semibold tracking-[0.18em] uppercase text-muted-foreground/70 px-2 mb-4">
+            Manual · v0.1
+          </p>
+          <nav className="space-y-5">
+            {NAV_GROUPS.map(group => (
+              <div key={group.label}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-2 mb-2">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.ids.map(id => {
+                    const s = SECTIONS.find(x => x.id === id);
+                    if (!s) return null;
+                    const active = activeId === s.id;
+                    return (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => scrollTo(s.id)}
+                        className={`w-full flex items-center gap-3 pl-2 pr-2 py-1.5 rounded-md text-[13px] transition-all text-left ${
+                          active
+                            ? 'text-foreground font-semibold bg-muted'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-mono w-6 text-right tabular-nums ${active ? 'text-primary' : 'text-muted-foreground/60'}`}>
+                          {SECTION_NUMBER[s.id]}
+                        </span>
+                        <span className="truncate">{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
       </aside>
@@ -233,36 +249,54 @@ export default function ManualPage() {
       {/* ── Content ── */}
       <main ref={contentRef} className="flex-1 min-w-0">
 
-        {/* Hero */}
-        <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-6 mb-8">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg flex-shrink-0">
-              <BookOpen size={28} weight="duotone" className="text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight">Manual de usuario</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Guía completa de MultiCRM · Todos los módulos explicados
-              </p>
-            </div>
+        {/* Hero — minimalista editorial */}
+        <header className="mb-14 pt-2">
+          <div className="flex items-center gap-2 mb-6">
+            <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-primary">Documentación</span>
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums">v0.1 · Beta</span>
           </div>
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <h1 className="text-[44px] sm:text-[52px] font-bold tracking-tight leading-[1.05] text-foreground">
+            Manual de usuario.
+          </h1>
+          <p className="text-lg text-muted-foreground mt-4 max-w-2xl leading-relaxed">
+            Guía completa de MultiCRM. Todos los módulos, flujos y atajos en un único sitio,
+            organizados para que encuentres lo que buscas en menos de 30 segundos.
+          </p>
+
+          <div className="mt-8 flex flex-wrap gap-2">
             {[
-              { label: '12 módulos', icon: SquaresFour, color: 'text-blue-500' },
-              { label: '3 roles de acceso', icon: ShieldCheck, color: 'text-violet-500' },
-              { label: 'Multi-proyecto', icon: Globe, color: 'text-emerald-500' },
-              { label: 'Atajos de teclado', icon: Keyboard, color: 'text-amber-500' },
-            ].map(item => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="flex items-center gap-2 bg-background/60 rounded-lg px-3 py-2 border border-border/50">
-                  <Icon size={14} className={item.color} weight="duotone" />
-                  <span className="text-xs font-semibold text-foreground">{item.label}</span>
-                </div>
-              );
-            })}
+              { id: 'prospectos',   label: 'Empezar con prospectos' },
+              { id: 'documentos',   label: 'Emitir factura' },
+              { id: 'configuracion',label: 'Crear un usuario' },
+              { id: 'atajos',       label: 'Atajos de teclado' },
+            ].map(q => (
+              <button
+                type="button"
+                key={q.id}
+                onClick={() => scrollTo(q.id)}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-border bg-card hover:border-primary/40 hover:bg-muted/50 transition-colors text-[12.5px] text-foreground/80"
+              >
+                {q.label}
+                <ArrowRight size={11} weight="bold" className="text-muted-foreground" />
+              </button>
+            ))}
           </div>
-        </div>
+
+          <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-0 border-y border-border divide-x divide-border">
+            {[
+              { kpi: '13', label: 'módulos' },
+              { kpi: '3',  label: 'roles' },
+              { kpi: '∞',  label: 'proyectos' },
+              { kpi: '15+', label: 'atajos' },
+            ].map(item => (
+              <div key={item.label} className="px-4 py-4 first:pl-0">
+                <div className="text-2xl font-bold tabular-nums tracking-tight">{item.kpi}</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mt-0.5">{item.label}</div>
+              </div>
+            ))}
+          </div>
+        </header>
 
         {/* ── INTRODUCCIÓN ── */}
         <SectionHeader id="introduccion" icon={BookOpen} label="Introducción" color="blue"
@@ -547,6 +581,15 @@ export default function ManualPage() {
           </FeatureCard>
         </FeatureGrid>
 
+        <SubHeader>Reportes CRM (datos)</SubHeader>
+        <P>
+          La página <strong>Reportes</strong> muestra los datos del CRM en el período seleccionado:
+          KPIs (total prospectos, tasa conversión, ventas cobradas, por cobrar), pipeline por estado,
+          ingresos mensuales, distribución por canal, rendimiento por gestor y top productos.
+          Botón <strong>CSV</strong> exporta un archivo con todas las secciones; botón <strong>PDF</strong>
+          genera un informe formateado (header con branding, KPIs, tablas) listo para imprimir o enviar.
+        </P>
+
         <SubHeader>Reportes IA</SubHeader>
         <P>
           Genera informes mensuales de rendimiento con inteligencia artificial (Claude de Anthropic).
@@ -555,7 +598,7 @@ export default function ManualPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-3">
           {['Resumen ejecutivo del mes', 'Análisis de prospectos por canal y estado',
             'Rendimiento campañas vs tráfico orgánico', 'Conversiones y facturación del período',
-            'Recomendaciones de mejora', 'Exportación a PDF con un clic'
+            'Recomendaciones de mejora', 'Exportación a PDF con un clic (markdown → PDF cliente-side)',
           ].map(item => (
             <div key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
               <CheckCircle size={13} className="text-emerald-500 flex-shrink-0" weight="fill" />
@@ -585,6 +628,82 @@ export default function ManualPage() {
           No necesitas duplicar el trabajo — solo registra la conversión desde la ficha del prospecto.
         </Callout>
 
+        {/* ── DOCUMENTOS ── */}
+        <SectionHeader id="documentos" icon={Receipt} label="Documentos" color="rose"
+          description="Facturas y certificados emitidos en PDF, pixel-perfect del template original" />
+        <P>
+          Genera facturas y certificados en PDF directamente desde el CRM, sin depender de Canva o
+          herramientas externas. Cada documento se numera secuencialmente por proyecto y queda
+          archivado con auditoría fiscal completa.
+        </P>
+
+        <SubHeader>Crear factura</SubHeader>
+        <Steps items={[
+          { title: 'Datos del cliente', desc: 'Busca por nombre/email para autocompletar desde tu base de prospectos. DNI/NIF y fecha son obligatorios.' },
+          { title: 'Líneas de la factura', desc: 'Añade cuantas líneas necesites con descripción, cantidad y precio. Puedes elegir productos del catálogo para autocompletar precios.' },
+          { title: 'IVA exento o aplicable', desc: 'Por defecto, exento (Art. 20.1.9° LIVA — servicios educativos). Desactiva el toggle para introducir un % de IVA aplicable.' },
+          { title: 'Vista previa o generar', desc: 'Vista previa renderiza la factura sin numerarla. Generar la emite, descarga el PDF y avanza el contador.' },
+        ]} />
+
+        <SubHeader>Facturas con muchas líneas (multi-página)</SubHeader>
+        <P>
+          Hasta 22 líneas, la factura cabe en una sola página con el layout pixel-perfect del Canva.
+          A partir de 23 líneas, el sistema cambia automáticamente a layout multi-página: la cabecera de
+          la tabla (DESCRIPCIÓN · CANTIDAD · PRECIO · TOTAL) se repite en cada página, el footer rosa-palo
+          con LOPD aparece en cada página, y el sello + totales quedan fijados en una página final dedicada.
+        </P>
+
+        <SubHeader>Crear certificado de finalización</SubHeader>
+        <Steps items={[
+          { title: 'Datos del alumno', desc: 'Nombre completo, DNI/NIE y email (opcional para envío automático).' },
+          { title: 'Datos del curso', desc: 'Nombre del diplomado, horas totales, fecha inicio, fecha fin y fecha de expedición. Las fechas se introducen en formato natural ("7 de mayo de 2026") con calendario integrado.' },
+          { title: 'Plan de estudios', desc: 'Lista de módulos del curso (página 2 del certificado). Añade los que apliquen.' },
+          { title: 'Generar', desc: 'Se descarga un PDF con dos páginas A4 horizontales — diploma + plan de estudios. La línea de firma del alumno queda vacía para firma manual.' },
+        ]} />
+
+        <Callout type="tip">
+          Los datos fijos del emisor (Psiko Aprende: razón social, NIF, dirección) y del certificado
+          (Director, Responsable de Formación, modalidad, ciudad) se guardan como predeterminados.
+          Solo necesitas cambiarlos si emites para otra entidad.
+        </Callout>
+
+        <SubHeader>Numeración automática</SubHeader>
+        <P>
+          Cada proyecto tiene contadores independientes para facturas (FAC-2026-0001) y certificados
+          (CERT-2026-0001). El siguiente número aparece en el formulario antes de generar — puedes
+          editarlo manualmente si necesitas saltar o retroceder (la numeración continúa desde el valor
+          que pongas).
+        </P>
+
+        <SubHeader>Configuración avanzada</SubHeader>
+        <P>
+          En <strong>Configuración → Numeración docs</strong> (solo SA/Admin) tienes el panel de
+          administración cross-proyecto:
+        </P>
+        <FeatureGrid>
+          <FeatureCard icon={Receipt} title="Editar contadores" color="orange">
+            Cambia el próximo número de cualquier proyecto. Útil al migrar desde otro sistema o
+            recuperar numeración.
+          </FeatureCard>
+          <FeatureCard icon={Envelope} title="Email automático" color="green">
+            Toggle por proyecto. Si está activo, al generar una factura/certificado se envía
+            automáticamente al cliente/alumno con el PDF adjunto vía Brevo.
+          </FeatureCard>
+          <FeatureCard icon={ChartLineUp} title="Histograma 12 meses" color="blue">
+            Gráfica de documentos emitidos en los últimos 12 meses por tipo (facturas vs certificados).
+          </FeatureCard>
+          <FeatureCard icon={ShieldCheck} title="Audit log fiscal" color="violet">
+            Cada generación, descarga, regeneración, eliminación y envío queda registrado con usuario, IP
+            y user-agent (requisito Hacienda).
+          </FeatureCard>
+        </FeatureGrid>
+
+        <Callout type="warn">
+          Una vez generado el PDF, el documento queda guardado y la numeración avanza. Si necesitas
+          regenerar el PDF (ej. cambio en la plantilla), usa <strong>Regenerar</strong> desde la lista —
+          mantiene el mismo número. La eliminación es irreversible y rompe la secuencia legal.
+        </Callout>
+
         {/* ── CONFIGURACIÓN ── */}
         <SectionHeader id="configuracion" icon={Gear} label="Configuración" color="orange"
           description="Gestión de usuarios, proyectos, módulos, API keys y webhooks" />
@@ -602,14 +721,24 @@ export default function ManualPage() {
           <FeatureCard icon={Globe} title="Identidad" color="blue">
             Nombre, emoji o logo del proyecto. El logo se muestra en el selector del sidebar.
           </FeatureCard>
+          <FeatureCard icon={Sparkle} title="Color de marca" color="violet">
+            Hex personalizado por proyecto (ej. #3b82f6). Se aplica al sidebar, botones y acentos al
+            activar el proyecto. Vacío = color por defecto del CRM.
+          </FeatureCard>
           <FeatureCard icon={ToggleRight} title="Módulos activos" color="green">
-            Activa o desactiva Leads, Matrículas, Contabilidad, etc. Solo aparecen en el menú los módulos habilitados.
+            Activa o desactiva Leads, Matrículas, Contabilidad, Documentos, etc. Solo aparecen en el menú
+            los módulos habilitados.
           </FeatureCard>
           <FeatureCard icon={LockKey} title="API keys" color="violet">
-            Credenciales de Meta Ads y Google Ads encriptadas con AES-256. Configurables sin tocar el código.
+            Credenciales de Meta Ads, Google Ads, Stripe, GSC, Brevo encriptadas con AES-256. Validación
+            real al pulsar «Probar» (Google Ads valida el refresh_token contra OAuth2 de Google).
           </FeatureCard>
           <FeatureCard icon={Tag} title="Campos personalizados" color="orange">
             Añade campos extra a la ficha del prospecto (texto, número, fecha, lista, sí/no). Agrúpalos por sección.
+          </FeatureCard>
+          <FeatureCard icon={Envelope} title="Email automático docs" color="green">
+            Toggle desde «Configuración → Numeración docs» que activa el envío automático de facturas y
+            certificados al cliente al generarse.
           </FeatureCard>
         </FeatureGrid>
 
@@ -725,19 +854,35 @@ export default function ManualPage() {
           Si te quedas atrapado en un input, pulsa <Kbd>Esc</Kbd> para volver a usar los atajos.
         </Callout>
 
-        {/* Footer */}
-        <div className="mt-12 pt-6 border-t border-border flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <BookOpen size={16} weight="duotone" className="text-primary" />
-            </div>
+        {/* Footer — editorial */}
+        <footer className="mt-20 pt-8 border-t border-border">
+          <div className="flex items-start justify-between gap-6 flex-wrap">
             <div>
-              <p className="text-xs font-bold text-foreground">MultiCRM v0.1.0 — Fase Beta</p>
-              <p className="text-xs text-muted-foreground">¿Falta algo o hay algo incorrecto? Comunícalo al equipo de desarrollo.</p>
+              <p className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 mb-2">
+                Fin del manual
+              </p>
+              <h3 className="text-xl font-bold tracking-tight">¿Falta algo o detectaste un error?</h3>
+              <p className="text-[14px] text-muted-foreground mt-2 max-w-md leading-relaxed">
+                Comunícalo al equipo de desarrollo. El manual evoluciona con el producto y cada
+                aporte mejora la experiencia para todos.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => scrollTo('introduccion')}
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border bg-card hover:bg-muted text-[13px] font-medium text-foreground/80"
+              >
+                Volver al inicio
+                <ArrowRight size={12} weight="bold" className="rotate-[-90deg]" />
+              </button>
             </div>
           </div>
-          <StatusBadge label="Beta" color="amber" />
-        </div>
+          <div className="mt-8 flex items-center justify-between gap-4 text-[11px] font-mono text-muted-foreground/60">
+            <span>MULTICRM · MANUAL DE USUARIO</span>
+            <span>v0.1.0 · BETA</span>
+          </div>
+        </footer>
       </main>
     </div>
   );

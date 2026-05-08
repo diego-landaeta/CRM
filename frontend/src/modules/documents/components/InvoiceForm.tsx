@@ -12,6 +12,7 @@ import type { Product } from '@/modules/products/api/products.api';
 import { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
 import { downloadDoc } from '../lib/downloadDoc';
+import DatePickerInput from './DatePickerInput';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -61,6 +62,8 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   const [nextNumber, setNextNumber] = useState<number | null>(null);
   const [nextFormatted, setNextFormatted] = useState<string>('');
   const [numeroOverride, setNumeroOverride] = useState<string>('');
+
+  const [touched, setTouched] = useState(false);
 
   const { register, control, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormValues>({
     defaultValues: {
@@ -120,6 +123,40 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   const total = subtotal + iva;
 
   const cliente_nombre = watch('cliente_nombre');
+  const cliente_dni = watch('cliente_dni');
+  const fecha = watch('fecha');
+
+  // Lista de campos obligatorios faltantes. Se usa para bloquear download/preview
+  // y para resaltar visualmente cada campo invalido cuando `touched` es true.
+  function getMissingFields(values: InvoiceFormValues): string[] {
+    const missing: string[] = [];
+    if (!values.fecha?.trim()) missing.push('Fecha');
+    if (!values.cliente_nombre?.trim()) missing.push('Nombre del cliente');
+    if (!values.cliente_dni?.trim()) missing.push('DNI / NIF del cliente');
+    if (!values.emisor_nombre?.trim()) missing.push('Nombre del emisor');
+    if (!values.emisor_nif?.trim()) missing.push('NIF del emisor');
+    const validLine = (values.lineas || []).some(l =>
+      String(l.descripcion || '').trim() &&
+      Number(l.cantidad) > 0 &&
+      Number(l.precio) > 0
+    );
+    if (!validLine) missing.push('Al menos una línea con descripción, cantidad y precio');
+    return missing;
+  }
+
+  function reportMissing(values: InvoiceFormValues): boolean {
+    const missing = getMissingFields(values);
+    if (missing.length === 0) return false;
+    setTouched(true);
+    toast({
+      title: 'Faltan campos obligatorios',
+      description: missing.join(' · '),
+      variant: 'destructive',
+    });
+    return true;
+  }
+
+  const invalidFields = touched ? new Set(getMissingFields(watch())) : new Set<string>();
 
   function handleClientPick(c: ClientPick) {
     setValue('cliente_nombre', c.nombre, { shouldDirty: true });
@@ -142,9 +179,10 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   }
 
   async function handlePreview(): Promise<void> {
+    const data = watch();
+    if (reportMissing(data)) return;
     setPreviewing(true);
     try {
-      const data = watch();
       // Inyectar el numero que se usaria al generar — backend solo lo asigna
       // en /generate, pero el preview necesita verlo en el pill rosa-palo.
       const overrideN = parseInt(numeroOverride, 10);
@@ -174,6 +212,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
 
   async function onSubmit(data: InvoiceFormValues): Promise<void> {
     if (!activeProject?.id) return;
+    if (reportMissing(data)) return;
     setLoading(true);
     try {
       // Si el usuario edito el numero, lo enviamos como override; backend
@@ -273,23 +312,39 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
             <p className="text-[11px] text-muted-foreground">Busca por nombre/email para autocompletar desde tu base de prospectos</p>
           </div>
           <div className="shrink-0">
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha</label>
-            <input type="date" {...register('fecha')} className={inp + ' w-40'} />
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha <span className="text-red-500">*</span></label>
+            <DatePickerInput
+              value={fecha}
+              onChange={(iso) => setValue('fecha', iso, { shouldDirty: true })}
+              className="w-44"
+              required
+              ariaLabel="Fecha de la factura"
+              invalid={invalidFields.has('Fecha')}
+            />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre o Razón Social</label>
-            <ClientCombobox
-              projectId={activeProject?.id}
-              value={cliente_nombre}
-              onChange={(v) => setValue('cliente_nombre', v, { shouldDirty: true })}
-              onSelect={handleClientPick}
-            />
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Nombre o Razón Social <span className="text-red-500">*</span>
+            </label>
+            <div className={invalidFields.has('Nombre del cliente') ? 'ring-2 ring-red-400/20 rounded-md' : ''}>
+              <ClientCombobox
+                projectId={activeProject?.id}
+                value={cliente_nombre}
+                onChange={(v) => setValue('cliente_nombre', v, { shouldDirty: true })}
+                onSelect={handleClientPick}
+              />
+            </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">DNI / NIF</label>
-            <input {...register('cliente_dni')} className={inp} />
+            <label className="text-xs text-muted-foreground mb-1 block">
+              DNI / NIF <span className="text-red-500">*</span>
+            </label>
+            <input
+              {...register('cliente_dni')}
+              className={inp + (invalidFields.has('DNI / NIF del cliente') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Email</label>

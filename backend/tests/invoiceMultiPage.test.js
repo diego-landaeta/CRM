@@ -69,6 +69,15 @@ describe('buildInvoiceHtmlMultiPage — F4-005', () => {
     expect(html).toMatch(/\.bottom-row\s*\{[^}]*page-break-inside:\s*avoid/);
   });
 
+  it('envuelve sello+totales en .last-page con page-break-before:always (posicion fija al pie)', () => {
+    const html = buildInvoiceHtmlMultiPage({ ...baseData, lineas: makeLines(30) });
+    // El bloque .last-page fuerza salto de pagina y ancla el bottom-row al pie.
+    expect(html).toMatch(/\.last-page\s*\{[^}]*page-break-before:\s*always/);
+    expect(html).toMatch(/\.last-page\s*\{[^}]*justify-content:\s*flex-end/);
+    // El HTML debe contener el wrapper antes del bottom-row.
+    expect(html).toMatch(/<div class="last-page">[\s\S]*<div class="bottom-row">/);
+  });
+
   it('NO incluye footer-band inline (lo inyecta puppeteer.footerTemplate)', () => {
     const html = buildInvoiceHtmlMultiPage({ ...baseData, lineas: makeLines(30) });
     expect(html).not.toContain('class="footer-band"');
