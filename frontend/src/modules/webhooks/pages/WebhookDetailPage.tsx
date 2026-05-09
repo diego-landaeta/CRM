@@ -9,6 +9,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import ListenModePanel from '../components/ListenModePanel';
 import PayloadMapper from '../components/PayloadMapper';
+import EventsHistory from '../components/EventsHistory';
 import type { Webhook, WebhookDestination, WebhookFieldMapping } from '../lib/types';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
@@ -347,6 +348,8 @@ export default function WebhookDetailPage() {
           </p>
         </section>
       )}
+
+      <EventsHistory webhookId={webhook.id} />
 
       <section className="flex justify-end pt-2">
         <button

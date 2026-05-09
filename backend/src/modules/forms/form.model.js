@@ -58,6 +58,29 @@ export async function update(id, fields) {
   return rows[0];
 }
 export async function remove(id) { await query(`DELETE FROM form_templates WHERE id = $1`, [id]); }
+
+// Historial de eventos: cada submission queda registrada con su payload + resultado
+export async function logEvent({ form_template_id, source, payload, status, result_type, result_id, error_message, ip_address }) {
+  try {
+    await query(
+      `INSERT INTO form_template_events (form_template_id, source, payload, status, result_type, result_id, error_message, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [form_template_id, source, JSON.stringify(payload || {}), status, result_type || null, result_id || null, error_message || null, ip_address || null]
+    );
+  } catch { /* silencioso — no bloquear el handler si falla el log */ }
+}
+
+export async function listEvents(form_template_id, limit = 50) {
+  const { rows } = await query(
+    `SELECT id, source, payload, status, result_type, result_id, error_message, ip_address, created_at
+     FROM form_template_events
+     WHERE form_template_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [form_template_id, limit]
+  );
+  return rows;
+}
 export async function incrementSubmissions(id) {
   await query(`UPDATE form_templates SET submissions_count = submissions_count + 1, updated_at = NOW() WHERE id = $1`, [id]);
 }

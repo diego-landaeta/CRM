@@ -232,6 +232,7 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     // Modo escucha: capturar payload sin procesar (estilo Make/Zapier)
     if (f.awaiting_sample) {
       await model.saveSample(f.id, body);
+      await model.logEvent({ form_template_id: f.id, source, payload: body, status: 'sample_captured', ip_address: req.ip });
       return res.json({ success: true, data: { mode: 'listen', captured: true, source, message: 'Payload capturado para mapeo.' } });
     }
 
@@ -369,6 +370,10 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       customFields,
     });
     await model.incrementSubmissions(f.id);
+    await model.logEvent({
+      form_template_id: f.id, source, payload: body, status: 'success',
+      result_type: 'lead', result_id: lead.id, ip_address: req.ip,
+    });
     res.json({
       success: true,
       data: {
@@ -380,6 +385,27 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
         producto_match_source: productoMatchSource,
       },
     });
+  } catch (err) {
+    // Log evento como error si tenemos contexto de form
+    try {
+      const f = await model.findByEmbed(req.params.embedId).catch(() => null);
+      if (f) await model.logEvent({
+        form_template_id: f.id, source, payload: body, status: 'error',
+        error_message: err.message, ip_address: req.ip,
+      });
+    } catch { /* silencioso */ }
+    next(err);
+  }
+}
+
+// GET /api/forms/:id/events — historial de eventos recibidos (admin)
+export async function listEvents(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id) || id <= 0) throw new AppError('ID inválido', 400, 'INVALID_ID');
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const events = await model.listEvents(id, limit);
+    res.json({ success: true, data: events });
   } catch (err) { next(err); }
 }
 
