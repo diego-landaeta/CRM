@@ -2,6 +2,7 @@
  * Helpers de periodo para el filtro de mes/año en CommissionsPage (CRM-138).
  * Extraídos del archivo de la página para poder testearlos sin montar React.
  */
+import type { ExportColumn } from '@/shared/lib/export';
 
 export interface CommissionRow {
   id: number;
@@ -67,4 +68,19 @@ export function buildCommissionsCsv(
     csv: rows.map(sep).join('\n'),
     filename: `comisiones-${period.replace(/\s+/g, '_').toLowerCase()}.csv`,
   };
+}
+
+// Columnas para el export universal (CRM-196).
+export function getCommissionExportColumns(): ExportColumn<CommissionRow>[] {
+  return [
+    { key: 'created_at', label: 'Fecha', type: 'date', value: (r) => r.created_at || null },
+    { key: 'user_nombre', label: 'Gestor', type: 'string', value: (r) => r.user_nombre || '' },
+    { key: 'lead_nombre', label: 'Cliente', type: 'string', value: (r) => r.lead_nombre || '' },
+    { key: 'producto', label: 'Producto', type: 'string', value: (r) => r.product_nombre || r.producto_contratado || '' },
+    { key: 'importe_base', label: 'Base cobrada (€)', type: 'number', value: (r) => Number(r.importe_base || 0) },
+    { key: 'pct', label: '%', type: 'number', value: (r) => r.pct ?? null },
+    { key: 'importe_comision', label: 'Comisión (€)', type: 'number', value: (r) => Number(r.importe_comision || 0) },
+    { key: 'estado', label: 'Estado', type: 'string', value: (r) => r.estado || '' },
+    { key: 'fecha_pago', label: 'Fecha pago', type: 'date', value: (r) => r.fecha_pago || null },
+  ];
 }

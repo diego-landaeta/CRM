@@ -34,4 +34,12 @@ export const updateProjectSchema = z.object({
     label: z.string().min(1),
     visible: z.boolean(),
   })).optional(),
+  external_panels: z.array(z.object({
+    id: z.string().min(1).max(64),
+    label: z.string().min(1).max(80),
+    url: z.string().url().max(2000),
+    icon: z.string().max(50).optional().nullable(),
+    open_in: z.enum(['iframe', 'tab']).optional(),
+  })).max(20).optional(),
+  sidebar_labels: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

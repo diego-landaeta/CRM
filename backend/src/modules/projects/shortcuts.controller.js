@@ -58,6 +58,10 @@ export const SHORTCUTS_CATALOG = [
   { id: 'reports',      label: 'Ver reportes',    icon: 'ChartBar',     route: '/reports' },
 ];
 
+// CRM-147: cada shortcut puede ahora opcionalmente restringirse a uno o mas
+// roles. `roles` vacio o ausente = visible para todos los roles.
+const ROLE_VALUES = ['superadmin', 'admin', 'gestor', 'soporte'];
+
 const shortcutsBodySchema = z.object({
   shortcuts: z.array(z.object({
     id:     z.string().min(1),
@@ -65,6 +69,7 @@ const shortcutsBodySchema = z.object({
     icon:   z.string().optional(),
     route:  z.string().optional(),
     action: z.string().optional(),
+    roles:  z.array(z.enum(ROLE_VALUES)).optional(),
   })),
 });
 

@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash, Download } from '@phosphor-icons/react';
+import { Plus, Trash, Download, Eye, Certificate as CertificateIcon, CaretDown } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { getAccessToken } from '@/shared/api/client';
+import PreviewModal from './PreviewModal';
+import { downloadDoc } from '../lib/downloadDoc';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -14,6 +17,7 @@ interface ModuloField {
 interface CertificateFormValues {
   alumno_nombre: string;
   alumno_dni: string;
+  alumno_email: string;
   curso_nombre: string;
   horas_total: string;
   modalidad: string;
@@ -34,11 +38,15 @@ interface CertificateFormProps {
 export default function CertificateForm({ onGenerated }: CertificateFormProps) {
   const { activeProject } = useProjectContext();
   const [loading, setLoading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [fixedDataOpen, setFixedDataOpen] = useState(false);
 
-  const { register, control, handleSubmit } = useForm<CertificateFormValues>({
+  const { register, control, handleSubmit, watch } = useForm<CertificateFormValues>({
     defaultValues: {
       alumno_nombre: '',
       alumno_dni: '',
+      alumno_email: '',
       curso_nombre: '',
       horas_total: '',
       modalidad: 'Online',
@@ -55,6 +63,34 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'modulos' });
 
+  async function handlePreview(): Promise<void> {
+    setPreviewing(true);
+    try {
+      const data = watch();
+      const payload = {
+        ...data,
+        modulos: data.modulos.map(m => m.nombre).filter(Boolean),
+      };
+      const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+      const token = getAccessToken() || '';
+      const res = await fetch(`${baseUrl}/api/documents/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: 'certificate', data: payload }),
+      });
+      if (!res.ok) {
+        toast({ title: 'Error generando preview', variant: 'destructive' });
+        return;
+      }
+      const html = await res.text();
+      setPreviewHtml(html);
+    } catch {
+      toast({ title: 'Error generando preview', variant: 'destructive' });
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   async function onSubmit(data: CertificateFormValues): Promise<void> {
     if (!activeProject?.id) return;
     setLoading(true);
@@ -65,8 +101,12 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
       };
       const res = await documentsApi.generate(activeProject.id, 'certificate', payload);
       if (res.success && res.data) {
-        toast({ title: 'Certificado generado', description: `Nº ${res.data.number}` });
+        toast({ title: 'Certificado generado', description: `Nº ${res.data.number} — descargando PDF…` });
         onGenerated?.(res.data);
+        // Auto-descarga del PDF recien generado
+        if (activeProject?.id) {
+          downloadDoc(res.data, activeProject.id).catch(() => {/* silencioso */});
+        }
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -74,6 +114,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Alumno */}
       <div className="bg-card border border-border rounded-lg p-5">
@@ -86,6 +127,15 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">DNI/NIE *</label>
             <input {...register('alumno_dni', { required: true })} className={inp} placeholder="12345678A"/>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input
+              type="email"
+              {...register('alumno_email')}
+              className={inp}
+              placeholder="alumno@ejemplo.com"
+            />
           </div>
         </div>
       </div>
@@ -103,8 +153,8 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
             <input {...register('horas_total')} className={inp} placeholder="750"/>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Modalidad</label>
-            <input {...register('modalidad')} className={inp}/>
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha expedición</label>
+            <input {...register('fecha_expedicion')} className={inp}/>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Fecha inicio</label>
@@ -113,29 +163,6 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Fecha fin</label>
             <input {...register('fecha_fin')} className={inp} placeholder="20 de Abril de 2026"/>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha expedición</label>
-            <input {...register('fecha_expedicion')} className={inp}/>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Ciudad</label>
-            <input {...register('ciudad')} className={inp}/>
-          </div>
-        </div>
-      </div>
-
-      {/* Firmantes */}
-      <div className="bg-card border border-border rounded-lg p-5">
-        <h3 className="font-semibold text-sm mb-4">Firmantes</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Director</label>
-            <input {...register('director_nombre')} className={inp}/>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Responsable de Formación</label>
-            <input {...register('resp_nombre')} className={inp}/>
           </div>
         </div>
       </div>
@@ -148,7 +175,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
             <div key={f.id} className="flex gap-2 items-center">
               <span className="text-xs text-muted-foreground w-16 shrink-0">Módulo {i + 1}</span>
               <input {...register(`modulos.${i}.nombre`)} className={inp} placeholder={`Nombre del módulo ${i + 1}`}/>
-              <button type="button" onClick={() => remove(i)} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0">
+              <button type="button" onClick={() => remove(i)} aria-label={`Eliminar módulo ${i + 1}`} title={`Eliminar módulo ${i + 1}`} className="text-muted-foreground hover:text-red-500 transition-colors shrink-0">
                 <Trash size={14}/>
               </button>
             </div>
@@ -160,13 +187,71 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <button type="submit" disabled={loading}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-          <Download size={16}/>
-          {loading ? 'Generando PDF...' : 'Generar Certificado PDF'}
+      {/* Datos fijos PsikoAprende (colapsable) */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setFixedDataOpen(o => !o)}
+          aria-expanded={fixedDataOpen ? true : undefined}
+          className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <div>
+            <h3 className="font-semibold text-sm">Datos fijos · Psiko Aprende</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Modalidad, ciudad y firmantes — se aplican por defecto</p>
+          </div>
+          <CaretDown size={14} className={`text-muted-foreground transition-transform ${fixedDataOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {fixedDataOpen && (
+          <div className="grid grid-cols-2 gap-3 px-4 pb-4 pt-1 border-t border-border">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Modalidad</label>
+              <input {...register('modalidad')} className={inp}/>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Ciudad</label>
+              <input {...register('ciudad')} className={inp}/>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Director</label>
+              <input {...register('director_nombre')} className={inp}/>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Responsable de Formación</label>
+              <input {...register('resp_nombre')} className={inp}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-end gap-2 sticky bottom-0 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 sm:py-0 bg-background sm:bg-transparent border-t border-border sm:border-0">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={previewing || loading}
+          className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <Eye size={16} />
+          {previewing ? 'Generando…' : 'Vista previa'}
+        </button>
+        <button
+          type="submit"
+          disabled={loading || previewing}
+          className="inline-flex items-center justify-center gap-2 h-10 px-6 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <Download size={16} />
+          {loading ? 'Generando PDF…' : 'Generar Certificado PDF'}
         </button>
       </div>
     </form>
+
+    {previewHtml && (
+      <PreviewModal
+        html={previewHtml}
+        title="Vista previa del certificado"
+        TitleIcon={CertificateIcon}
+        onClose={() => setPreviewHtml(null)}
+      />
+    )}
+    </>
   );
 }

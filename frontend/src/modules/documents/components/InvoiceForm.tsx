@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Plus, Trash, Download, Eye, FloppyDisk, ArrowCounterClockwise, Receipt, X } from '@phosphor-icons/react';
+import { Plus, Trash, Download, Eye, FloppyDisk, ArrowCounterClockwise, Receipt, CaretDown } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useInvoiceDefaults } from '../hooks/useInvoiceDefaults';
 import ClientCombobox, { type ClientPick } from './ClientCombobox';
+import ProductLineCombobox from './ProductLineCombobox';
+import { useProducts } from '@/modules/products/hooks/useProducts';
+import type { Product } from '@/modules/products/api/products.api';
 import { getAccessToken } from '@/shared/api/client';
+import PreviewModal from './PreviewModal';
+import { downloadDoc } from '../lib/downloadDoc';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -23,9 +28,11 @@ export interface InvoiceFormValues {
   emisor_telefono: string;
   fecha: string;
   iva_pct: number | string;
+  iva_exento: boolean;
   cliente_nombre: string;
   cliente_dni: string;
   cliente_direccion: string;
+  cliente_email: string;
   notas: string;
   lineas: InvoiceLine[];
 }
@@ -46,9 +53,14 @@ const fmtMoney = (n: number): string =>
 export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormProps) {
   const { activeProject } = useProjectContext();
   const { defaults, save: saveDefaults, reset: resetDefaults } = useInvoiceDefaults(activeProject?.id);
+  const { products } = useProducts(activeProject?.id);
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [emisorOpen, setEmisorOpen] = useState(false);
+  const [nextNumber, setNextNumber] = useState<number | null>(null);
+  const [nextFormatted, setNextFormatted] = useState<string>('');
+  const [numeroOverride, setNumeroOverride] = useState<string>('');
 
   const { register, control, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormValues>({
     defaultValues: {
@@ -58,9 +70,11 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
       emisor_telefono: defaults.emisor_telefono,
       fecha: todayLocal(),
       iva_pct: defaults.iva_pct,
+      iva_exento: true, // Psikoaprende: cursos educativos exentos por defecto (Art. 20.1.9° LIVA)
       cliente_nombre: '',
       cliente_dni: '',
       cliente_direccion: '',
+      cliente_email: '',
       notas: defaults.notas,
       lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
       ...initialValues,
@@ -77,10 +91,12 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         emisor_telefono: defaults.emisor_telefono,
         fecha: todayLocal(),
         iva_pct: defaults.iva_pct,
+        iva_exento: true,
         notas: defaults.notas,
         cliente_nombre: '',
         cliente_dni: '',
         cliente_direccion: '',
+        cliente_email: '',
         lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
         ...initialValues,
       });
@@ -91,6 +107,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   const { fields, append, remove } = useFieldArray({ control, name: 'lineas' });
   const lineas = watch('lineas');
   const ivaPct = parseFloat(String(watch('iva_pct'))) || 0;
+  const ivaExento = watch('iva_exento');
 
   // Totales por línea + globales
   const lineTotals = lineas.map((l) => {
@@ -99,7 +116,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     return Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0;
   });
   const subtotal = lineTotals.reduce((s, n) => s + n, 0);
-  const iva = subtotal * (ivaPct / 100);
+  const iva = ivaExento ? 0 : subtotal * (ivaPct / 100);
   const total = subtotal + iva;
 
   const cliente_nombre = watch('cliente_nombre');
@@ -108,6 +125,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     setValue('cliente_nombre', c.nombre, { shouldDirty: true });
     if (c.dni) setValue('cliente_dni', c.dni, { shouldDirty: true });
     if (c.direccion) setValue('cliente_direccion', c.direccion, { shouldDirty: true });
+    if (c.email) setValue('cliente_email', c.email, { shouldDirty: true });
   }
 
   function handleSaveDefaults() {
@@ -127,12 +145,19 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     setPreviewing(true);
     try {
       const data = watch();
+      // Inyectar el numero que se usaria al generar — backend solo lo asigna
+      // en /generate, pero el preview necesita verlo en el pill rosa-palo.
+      const overrideN = parseInt(numeroOverride, 10);
+      const previewData = {
+        ...data,
+        numero: Number.isFinite(overrideN) && overrideN >= 1 ? overrideN : (nextNumber ?? ''),
+      };
       const baseUrl = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
       const token = getAccessToken() || '';
       const res = await fetch(`${baseUrl}/api/documents/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ type: 'invoice', data }),
+        body: JSON.stringify({ type: 'invoice', data: previewData }),
       });
       if (!res.ok) {
         toast({ title: 'Error generando preview', variant: 'destructive' });
@@ -151,9 +176,18 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     if (!activeProject?.id) return;
     setLoading(true);
     try {
-      const res = await documentsApi.generate(activeProject.id, 'invoice', data as unknown as Record<string, unknown>);
+      // Si el usuario edito el numero, lo enviamos como override; backend
+      // reposiciona el contador y la sucesion continua desde ese valor.
+      const overrideNum = numeroOverride && parseInt(numeroOverride, 10) !== nextNumber
+        ? parseInt(numeroOverride, 10)
+        : undefined;
+      const res = await documentsApi.generate(
+        activeProject.id,
+        'invoice',
+        data as unknown as Record<string, unknown>,
+        overrideNum,
+      );
       if (res.success && res.data) {
-        // Auto-guardar emisor al generar exitosamente (UX: aprende de tu última factura)
         saveDefaults({
           emisor_nombre: data.emisor_nombre,
           emisor_nif: data.emisor_nif,
@@ -162,72 +196,86 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
           iva_pct: parseFloat(String(data.iva_pct)) || 21,
           notas: data.notas,
         });
-        toast({ title: 'Factura generada', description: `Nº ${res.data.number}` });
+        toast({ title: 'Factura generada', description: `Nº ${res.data.number} — descargando PDF…` });
         onGenerated?.(res.data);
+        // Auto-descarga del PDF recien generado
+        downloadDoc(res.data, activeProject.id).catch(() => {/* silencioso */});
+        // Refrescar el siguiente numero para la proxima factura
+        await loadNextNumber();
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally { setLoading(false); }
   }
 
+  // Carga el siguiente numero del backend y rellena el campo override
+  async function loadNextNumber(): Promise<void> {
+    if (!activeProject?.id) return;
+    try {
+      const res = await documentsApi.nextNumber(activeProject.id, 'invoice');
+      if (res.success && res.data) {
+        setNextNumber(res.data.number);
+        setNextFormatted(res.data.formatted);
+        setNumeroOverride(String(res.data.number));
+      }
+    } catch { /* silencioso */ }
+  }
+
+  useEffect(() => { loadNextNumber(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeProject?.id]);
+
+  const overrideNumValue = parseInt(numeroOverride, 10);
+  const overrideEdited = nextNumber != null && Number.isFinite(overrideNumValue) && overrideNumValue !== nextNumber;
+  const formattedOverride = Number.isFinite(overrideNumValue) && overrideNumValue >= 1
+    ? `FAC-${new Date().getFullYear()}-${String(overrideNumValue).padStart(4, '0')}`
+    : nextFormatted;
+
   return (
     <>
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* Emisor */}
-      <section className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-semibold text-sm">Datos del emisor</h3>
-            <p className="text-[11px] text-muted-foreground">Se guardan automáticamente al generar la factura</p>
+      {/* Numero de factura (peek + override) */}
+      <section className="bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-lg p-4 flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <label className="text-xs text-muted-foreground mb-1 block">Número de factura</label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground tabular-nums">FAC-{new Date().getFullYear()}-</span>
+            <input
+              type="number"
+              min="1"
+              value={numeroOverride}
+              onChange={(e) => setNumeroOverride(e.target.value)}
+              className="w-24 h-9 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums font-semibold text-center outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+              aria-label="Número de factura"
+            />
+            {overrideEdited && (
+              <button
+                type="button"
+                onClick={() => nextNumber != null && setNumeroOverride(String(nextNumber))}
+                className="text-[11px] text-primary hover:underline"
+                title="Volver al siguiente número automático"
+              >
+                Restablecer
+              </button>
+            )}
           </div>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={handleSaveDefaults}
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11px] font-medium border border-border bg-card hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-              title="Guardar como predeterminado"
-            >
-              <FloppyDisk size={12} /> Guardar
-            </button>
-            <button
-              type="button"
-              onClick={() => { resetDefaults(); toast({ title: 'Defaults restaurados' }); }}
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11px] font-medium border border-border bg-card hover:bg-muted transition-colors text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-              title="Restaurar"
-            >
-              <ArrowCounterClockwise size={12} /> Reset
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre / Razón social</label>
-            <input {...register('emisor_nombre')} className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">NIF</label>
-            <input {...register('emisor_nif')} className={inp} />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
-            <textarea {...register('emisor_direccion')} rows={2} className={inp + ' h-auto py-2'} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
-            <input {...register('emisor_telefono')} className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha de la factura</label>
-            <input type="date" {...register('fecha')} className={inp} />
-          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            {overrideEdited
+              ? <><span className="font-medium text-foreground">{formattedOverride}</span> · La numeración continuará desde aquí</>
+              : <>Siguiente disponible: <span className="font-medium text-foreground">{nextFormatted || '—'}</span></>}
+          </p>
         </div>
       </section>
 
       {/* Cliente */}
       <section className="bg-card border border-border rounded-lg p-5">
-        <div className="mb-4">
-          <h3 className="font-semibold text-sm">Datos del cliente</h3>
-          <p className="text-[11px] text-muted-foreground">Busca por nombre/email para autocompletar desde tu base de prospectos</p>
+        <div className="flex items-end justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold text-sm">Datos del cliente</h3>
+            <p className="text-[11px] text-muted-foreground">Busca por nombre/email para autocompletar desde tu base de prospectos</p>
+          </div>
+          <div className="shrink-0">
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha</label>
+            <input type="date" {...register('fecha')} className={inp + ' w-40'} />
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
@@ -244,6 +292,15 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
             <input {...register('cliente_dni')} className={inp} />
           </div>
           <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input
+              type="email"
+              {...register('cliente_email')}
+              className={inp}
+              placeholder="cliente@ejemplo.com"
+            />
+          </div>
+          <div className="sm:col-span-2">
             <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
             <input {...register('cliente_direccion')} className={inp} />
           </div>
@@ -252,7 +309,16 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
 
       {/* Líneas */}
       <section className="bg-card border border-border rounded-lg p-5">
-        <h3 className="font-semibold text-sm mb-4">Conceptos</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-sm">Conceptos</h3>
+          <button
+            type="button"
+            onClick={() => append({ descripcion: '', cantidad: 1, precio: '' })}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs text-primary font-semibold hover:bg-primary/5 transition-colors border border-primary/30 hover:border-primary/50"
+          >
+            <Plus size={13} /> Añadir línea
+          </button>
+        </div>
 
         {/* Desktop header */}
         <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-2">
@@ -266,11 +332,19 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         <div className="space-y-2">
           {fields.map((f, i) => (
             <div key={f.id} className="grid grid-cols-12 gap-2 items-start sm:items-center pb-2 sm:pb-0 border-b border-border sm:border-0 last:border-0">
-              <input
-                {...register(`lineas.${i}.descripcion`)}
-                className={inp + ' col-span-12 sm:col-span-6'}
-                placeholder="Descripción del servicio"
-              />
+              <div className="col-span-12 sm:col-span-6">
+                <ProductLineCombobox
+                  value={watch(`lineas.${i}.descripcion`) || ''}
+                  onChange={(v) => setValue(`lineas.${i}.descripcion`, v, { shouldDirty: true })}
+                  onSelectProduct={(p: Product) => {
+                    if (p.precio != null && p.precio !== '') {
+                      setValue(`lineas.${i}.precio`, String(p.precio), { shouldDirty: true });
+                    }
+                  }}
+                  products={products}
+                  placeholder="Descripción del servicio (o elige un curso del catálogo)"
+                />
+              </div>
               <div className="col-span-4 sm:col-span-2">
                 <span className="sm:hidden text-[10px] text-muted-foreground block">Cantidad</span>
                 <input
@@ -305,36 +379,47 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => append({ descripcion: '', cantidad: 1, precio: '' })}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-primary font-semibold hover:bg-primary/5 transition-colors mt-2"
-          >
-            <Plus size={13} /> Añadir línea
-          </button>
         </div>
 
-        {/* Totales */}
-        <div className="mt-5 flex justify-end">
-          <div className="w-full sm:w-72 border border-border rounded-md overflow-hidden text-sm">
-            <div className="flex justify-between items-center px-4 py-2 border-b border-border tabular-nums">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{fmtMoney(subtotal)}</span>
-            </div>
-            <div className="flex justify-between items-center px-4 py-2 border-b border-border tabular-nums">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <span>IVA</span>
+        {/* Footer: IVA toggle (izq) + totales compactos (der) */}
+        <div className="mt-5 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-5 gap-4 items-start">
+          <div className="sm:col-span-3 space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer text-xs">
+              <input
+                {...register('iva_exento')}
+                type="checkbox"
+                className="h-4 w-4 mt-0.5 cursor-pointer accent-primary shrink-0"
+              />
+              <span className="leading-snug">
+                <span className="font-medium">Operación exenta de IVA</span>
+                <span className="block text-[11px] text-muted-foreground">Servicios educativos · Art. 20.1.9° LIVA</span>
+              </span>
+            </label>
+            {!ivaExento && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+                <span>IVA aplicable:</span>
                 <input
                   {...register('iva_pct')}
                   type="number" min="0" max="100" step="1"
-                  className="w-12 h-7 text-center border border-border rounded text-xs bg-muted/50 tabular-nums"
+                  className="w-14 h-7 text-center border border-border rounded text-xs bg-muted/50 tabular-nums"
                   aria-label="Porcentaje IVA"
                 />
-                <span className="text-xs">%</span>
+                <span>%</span>
               </div>
-              <span>{fmtMoney(iva)}</span>
+            )}
+          </div>
+          <div className="sm:col-span-2 space-y-1.5 text-sm tabular-nums">
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-xs">Subtotal</span>
+              <span>{fmtMoney(subtotal)}</span>
             </div>
-            <div className="flex justify-between items-center px-4 py-2.5 font-bold tabular-nums bg-muted/30">
+            <div className="flex justify-between items-baseline">
+              <span className="text-muted-foreground text-xs">IVA{ivaExento ? ' (exento)' : ` (${watch('iva_pct') || 0}%)`}</span>
+              <span className={ivaExento ? 'text-muted-foreground italic' : ''}>
+                {ivaExento ? '—' : fmtMoney(iva)}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline pt-1.5 border-t border-border font-bold text-base">
               <span>Total</span>
               <span className="text-primary">{fmtMoney(total)}</span>
             </div>
@@ -352,6 +437,62 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
           className={inp + ' h-auto py-2 font-mono text-xs'}
           placeholder="IBAN: ES12 1234 5678 9012 3456 7890&#10;Beneficiario: ...&#10;Concepto: ..."
         />
+      </section>
+
+      {/* Datos del emisor (colapsable — Psiko Aprende) */}
+      <section className="bg-card border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setEmisorOpen(o => !o)}
+          aria-expanded={emisorOpen ? true : undefined}
+          className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <div>
+            <h3 className="font-semibold text-sm">Datos del emisor · Psiko Aprende</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Razón social, NIF, dirección — se guardan como predeterminados</p>
+          </div>
+          <CaretDown size={14} className={`text-muted-foreground transition-transform ${emisorOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {emisorOpen && (
+          <div className="border-t border-border px-4 py-4 space-y-3">
+            <div className="flex justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={handleSaveDefaults}
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11px] font-medium border border-border bg-card hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+                title="Guardar como predeterminado"
+              >
+                <FloppyDisk size={12} /> Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => { resetDefaults(); toast({ title: 'Defaults restaurados' }); }}
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md text-[11px] font-medium border border-border bg-card hover:bg-muted transition-colors text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                title="Restaurar"
+              >
+                <ArrowCounterClockwise size={12} /> Reset
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Nombre / Razón social</label>
+                <input {...register('emisor_nombre')} className={inp} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">NIF</label>
+                <input {...register('emisor_nif')} className={inp} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
+                <textarea {...register('emisor_direccion')} rows={2} className={inp + ' h-auto py-2'} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+                <input {...register('emisor_telefono')} className={inp} />
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Acciones */}
@@ -378,56 +519,13 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
 
     {/* Preview modal */}
     {previewHtml && (
-      <PreviewModal html={previewHtml} onClose={() => setPreviewHtml(null)} />
+      <PreviewModal
+        html={previewHtml}
+        title="Vista previa de la factura"
+        TitleIcon={Receipt}
+        onClose={() => setPreviewHtml(null)}
+      />
     )}
     </>
-  );
-}
-
-// ─── Preview modal local ──────────────────────────────────────────────────────
-interface PreviewModalProps {
-  html: string;
-  onClose: () => void;
-}
-
-function PreviewModal({ html, onClose }: PreviewModalProps) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="invoice-preview-title"
-        className="bg-card rounded-xl border border-border shadow-2xl flex flex-col w-full max-w-5xl max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Receipt size={16} className="text-primary" />
-            <span id="invoice-preview-title" className="font-semibold text-sm">Vista previa de la factura</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden bg-muted/30 min-h-[70vh]">
-          <iframe
-            srcDoc={html}
-            className="w-full h-full border-0"
-            title="Vista previa de la factura"
-          />
-        </div>
-      </div>
-    </div>
   );
 }

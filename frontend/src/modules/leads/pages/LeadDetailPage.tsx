@@ -18,6 +18,8 @@ import LeadTimelineCard from '../components/lead-detail/LeadTimelineCard';
 import LeadSidebar from '../components/lead-detail/LeadSidebar';
 import LeadLossDialog from '../components/lead-detail/LeadLossDialog';
 import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
+import LeadEmailDialog from '../components/LeadEmailDialog';
+import LeadEmailsCard from '../components/LeadEmailsCard';
 
 function LoadingSkeleton() {
   return (
@@ -79,6 +81,8 @@ export default function LeadDetailPage() {
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailRefreshKey, setEmailRefreshKey] = useState(0);
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
 
@@ -194,6 +198,14 @@ export default function LeadDetailPage() {
         onClose={() => setReassignOpen(false)}
         onSubmit={reassign}
       />
+      <LeadEmailDialog
+        open={emailOpen}
+        leadId={lead.id}
+        leadName={lead.nombre}
+        leadEmail={lead.email}
+        onClose={() => setEmailOpen(false)}
+        onSent={() => setEmailRefreshKey(k => k + 1)}
+      />
 
       <LeadHeaderCard
         lead={lead}
@@ -209,6 +221,12 @@ export default function LeadDetailPage() {
           <LeadInteractionsCard
             interacciones={interacciones}
             onOpen={() => setInteractionOpen(true)}
+          />
+          <LeadEmailsCard
+            leadId={lead.id}
+            hasEmail={!!lead.email}
+            onCompose={() => setEmailOpen(true)}
+            refreshKey={emailRefreshKey}
           />
           <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">

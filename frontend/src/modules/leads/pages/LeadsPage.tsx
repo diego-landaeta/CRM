@@ -39,6 +39,7 @@ const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'))
 const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
+const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -49,13 +50,13 @@ import BulkActionBar from '../components/BulkActionBar';
 import WhatsappTemplatesDialog from '../components/WhatsappTemplatesDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
+import { getLeadExportColumns } from '../lib/leadFormat';
 import {
   getInitials,
   getAvatarColor,
   formatDate,
   formatRelative,
   cleanPhone,
-  exportLeadsCSV,
 } from '../lib/leadFormat';
 
 
@@ -140,6 +141,7 @@ export default function LeadsPage() {
   const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -153,6 +155,16 @@ export default function LeadsPage() {
     if (v) setSearchParams({ qf: v }, { replace: true });
     else setSearchParams({}, { replace: true });
   }
+
+  // CRM-147: quick-add via ?new=1 (lo dispara el FAB de atajos).
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Filtros rapidos client-side (sobre los leads ya cargados)
   const filteredLeads = useMemo(() => {
@@ -410,13 +422,13 @@ export default function LeadsPage() {
           </button>
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
-              onClick={() => exportLeadsCSV(filteredLeads, `prospectos-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}.csv`)}
-              title="Exportar CSV"
-              aria-label="Exportar CSV"
+              onClick={() => setExportOpen(true)}
+              title="Exportar (Excel/CSV/JSON)"
+              aria-label="Exportar"
               className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <DownloadSimple size={14} weight="bold" />
-              <span className="hidden md:inline">CSV</span>
+              <span className="hidden md:inline">Exportar</span>
             </button>
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
@@ -693,7 +705,7 @@ export default function LeadsPage() {
           {!loading && filteredLeads.map((lead) => (
             <div
               key={lead.id}
-              onClick={() => navigate(`/leads/${lead.id}`)}
+              onClick={() => setDrawerLeadId(lead.id)}
               className="p-4 space-y-2.5 cursor-pointer active:bg-muted/50 transition-colors"
             >
               <div className="flex items-center justify-between gap-2">
@@ -856,6 +868,19 @@ export default function LeadsPage() {
         onReset={resetWaTemplates}
         projectName={activeProject?.nombre}
       />
+
+      {/* Export universal (CRM-196) */}
+      <Suspense fallback={null}>
+        <ExportDialog
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          context="leads"
+          title="Exportar prospectos"
+          filename={`prospectos-${activeProject?.slug || activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}`}
+          columns={getLeadExportColumns()}
+          rows={filteredLeads}
+        />
+      </Suspense>
     </div>
   );
 }

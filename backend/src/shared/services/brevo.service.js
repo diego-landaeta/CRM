@@ -22,7 +22,7 @@ async function getApiKey(projectId = null) {
   return envKey;
 }
 
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment }) {
   const apiKey = await getApiKey(projectId);
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
@@ -37,6 +37,11 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     textContent,
     tags,
   };
+  // Brevo acepta `attachment: [{ name, content }]` con content en base64.
+  // PDFs de facturas/certs estan muy por debajo del limite de 10MB.
+  if (Array.isArray(attachment) && attachment.length > 0) {
+    payload.attachment = attachment;
+  }
 
   try {
     const res = await fetch(`${BREVO_API_URL}/smtp/email`, {

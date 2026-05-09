@@ -87,7 +87,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
             Guardar campos
           </button>
 
-          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-border">
             {['dni', 'titulo', 'firma'].map(tipo => (
               <div key={tipo} className="border border-border rounded-xl p-3">
                 <p className="text-[11px] font-bold uppercase text-muted-foreground mb-2">{tipo}</p>

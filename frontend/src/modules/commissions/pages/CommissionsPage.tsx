@@ -12,22 +12,12 @@ import {
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
-import { monthLabel, isInMonth, buildCommissionsCsv, type CommissionRow } from '../lib/period';
+import { monthLabel, isInMonth, getCommissionExportColumns, type CommissionRow } from '../lib/period';
 import type { User } from '@/shared/types';
 import { formatCurrencyShort as fmt, formatDate } from '@/shared/lib/format';
 
 const RulesDialog = lazy(() => import('../components/RulesDialog'));
-
-function exportCommissionsCsv(items: CommissionRow[], period: string): void {
-  const { csv, filename } = buildCommissionsCsv(items, period);
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 
 const ESTADOS = [
   { v: '', label: 'Todas' },
@@ -61,6 +51,7 @@ export default function CommissionsPage() {
 
   // Selección múltiple para "marcar pagadas en lote" (CRM-138).
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [exportOpen, setExportOpen] = useState(false);
 
   async function load(): Promise<void> {
     setLoading(true);
@@ -146,7 +137,7 @@ export default function CommissionsPage() {
       toast({ title: 'Sin datos para exportar' });
       return;
     }
-    exportCommissionsCsv(filteredItems, periodLabel);
+    setExportOpen(true);
   }
 
   useEffect(() => {
@@ -179,10 +170,11 @@ export default function CommissionsPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleExport}
-              aria-label="Exportar CSV"
+              aria-label="Exportar"
+              title="Exportar (Excel/CSV/JSON)"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted text-muted-foreground hover:text-foreground"
             >
-              <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
+              <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">Exportar</span>
             </button>
             {isAdmin && periodMode === 'month' && (
               <button
@@ -461,6 +453,18 @@ export default function CommissionsPage() {
         onConfirm={handleCloseMonth}
         onCancel={() => setClosingMonth(false)}
       />
+
+      <Suspense fallback={null}>
+        <ExportDialog
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          context="commissions"
+          title="Exportar comisiones"
+          filename={`comisiones-${periodLabel.replace(/\s+/g, '_').toLowerCase()}`}
+          columns={getCommissionExportColumns()}
+          rows={filteredItems}
+        />
+      </Suspense>
     </div>
   );
 }

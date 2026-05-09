@@ -39,6 +39,7 @@ import {
   CaretLeft,
   CreditCard,
   ChatCircleText,
+  ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -146,6 +147,29 @@ const NAV_SECTIONS = [
   },
 ];
 
+// CRM-217: catálogo de labels personalizables del sidebar para el editor de
+// "Etiquetas sidebar" en ProjectSettingsDialog. Cada label original sirve de
+// clave de override en `projects.sidebar_labels`.
+export function getSidebarLabelCatalog() {
+  return NAV_SECTIONS.map((section) => {
+    const labels = [];
+    for (const item of section.items) {
+      labels.push({ label: item.label, type: item.children ? 'group' : 'item' });
+      if (item.children) {
+        for (const child of item.children) labels.push({ label: child.label, type: 'child' });
+      }
+    }
+    return { section: section.label, labels };
+  });
+}
+
+// Aplica el override (si existe) y deja el original en otro caso.
+export function applyLabel(original, overrides) {
+  if (!overrides || typeof overrides !== 'object') return original;
+  const o = overrides[original];
+  return typeof o === 'string' && o.trim().length > 0 ? o : original;
+}
+
 function canSeeItem(item, role, modules, projectType) {
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
@@ -159,12 +183,13 @@ function canSeeItem(item, role, modules, projectType) {
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children.filter((c) => canSeeItem(c, role, modules, projectType));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
   const [open, setOpen] = useState(hasActiveChild);
   if (!visible.length) return null;
+  const displayLabel = applyLabel(label, labelOverrides);
 
   // En modo collapsed: el grupo se renderiza como un boton compacto.
   // Click → expande el sidebar y abre el grupo. Tooltip nativo via title.
@@ -173,8 +198,8 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, onN
       <button
         type="button"
         onClick={() => { onExpandSidebar?.(); setOpen(true); }}
-        title={label}
-        aria-label={label}
+        title={displayLabel}
+        aria-label={displayLabel}
         className={cn(
           'w-full flex items-center justify-center h-10 rounded-md transition-colors',
           hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -195,7 +220,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, onN
         )}
       >
         <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
-        {label}
+        {displayLabel}
         <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
@@ -215,7 +240,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, onN
                 )
               }
             >
-              {child.label}
+              {applyLabel(child.label, labelOverrides)}
             </NavLink>
           ))}
         </div>
@@ -224,14 +249,83 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, onN
   );
 }
 
-function NavItem({ to, icon: Icon, label, badge, onClick, collapsed }) {
+// Mapa de nombres Phosphor → componente, para externalPanels (CRM-155).
+const EXTERNAL_ICONS = {
+  Globe, CreditCard, ChartLineUp, ShoppingBag, ChatCircleText, Envelope, Headset,
+  PlugsConnected, Robot, Sparkle, Coins, Receipt, Calculator, BookOpen, FilePdf,
+};
+
+function externalIconFor(name) {
+  return EXTERNAL_ICONS[name] || Globe;
+}
+
+function ExternalPanelItem({ panel, collapsed, onClick }) {
+  const Icon = externalIconFor(panel.icon);
+  const opensInTab = panel.open_in === 'tab';
+
+  if (opensInTab) {
+    return (
+      <a
+        href={panel.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onClick}
+        title={collapsed ? panel.label : undefined}
+        aria-label={collapsed ? panel.label : panel.label}
+        className={cn(
+          'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+        )}
+      >
+        <Icon size={18} weight="regular" />
+        {!collapsed && (
+          <>
+            <span className="truncate">{panel.label}</span>
+            <ArrowSquareOut size={11} weight="bold" className="ml-auto text-muted-foreground/60 flex-shrink-0" />
+          </>
+        )}
+      </a>
+    );
+  }
+
+  return (
+    <NavLink
+      to={`/external/${panel.id}`}
+      onClick={onClick}
+      title={collapsed ? panel.label : undefined}
+      aria-label={collapsed ? panel.label : undefined}
+      className={({ isActive }) =>
+        cn(
+          'relative flex items-center rounded-md text-[13px] transition-all',
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          isActive
+            ? 'bg-primary/10 text-primary font-bold shadow-sm'
+            : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && !collapsed && (
+            <span aria-hidden="true" className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary" />
+          )}
+          <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
+          {!collapsed && <span className="truncate">{panel.label}</span>}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed }) {
+  const displayLabel = applyLabel(label, labelOverrides);
   return (
     <NavLink
       to={to}
       end={to === '/'}
       onClick={onClick}
-      title={collapsed ? label : undefined}
-      aria-label={collapsed ? label : undefined}
+      title={collapsed ? displayLabel : undefined}
+      aria-label={collapsed ? displayLabel : undefined}
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
@@ -260,7 +354,7 @@ function NavItem({ to, icon: Icon, label, badge, onClick, collapsed }) {
               </span>
             )}
           </span>
-          {!collapsed && label}
+          {!collapsed && displayLabel}
           {!collapsed && badge && (
             <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
               {badge}
@@ -648,11 +742,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           // Filtrar items que el usuario puede ver
           const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type));
           if (visibleItems.length === 0) return null;
+          const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           return (
             <div key={section.label} className={cn(collapsed ? 'space-y-1' : 'space-y-0.5')}>
               {!collapsed ? (
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">
-                  {section.label}
+                  {sectionLabel}
                 </p>
               ) : (
                 sIdx > 0 && <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />
@@ -665,6 +760,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     role={user?.role}
                     modules={activeProject?.modules}
                     projectType={activeProject?.type}
+                    labelOverrides={activeProject?.sidebar_labels}
                     onNavigate={onNavigate}
                     collapsed={collapsed}
                     onExpandSidebar={onToggleCollapsed}
@@ -674,6 +770,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     key={item.to}
                     {...item}
                     badge={item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge : undefined}
+                    labelOverrides={activeProject?.sidebar_labels}
                     onClick={onNavigate}
                     collapsed={collapsed}
                   />
@@ -682,6 +779,27 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </div>
           );
         })}
+
+        {/* Paneles externos por proyecto (CRM-155) */}
+        {Array.isArray(activeProject?.external_panels) && activeProject.external_panels.length > 0 && (
+          <div className={cn(collapsed ? 'space-y-1' : 'space-y-0.5')}>
+            {!collapsed ? (
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">
+                Externos
+              </p>
+            ) : (
+              <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />
+            )}
+            {activeProject.external_panels.map((panel) => (
+              <ExternalPanelItem
+                key={panel.id}
+                panel={panel}
+                collapsed={collapsed}
+                onClick={onNavigate}
+              />
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* Footer: avatar + notificaciones */}

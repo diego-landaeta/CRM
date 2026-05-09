@@ -5,6 +5,10 @@ import { AppError } from '../../shared/utils/AppError.js';
 const stepSchema = z.object({
   delay_hours: z.number().min(0),
   brevo_template_id: z.number().int().optional().nullable(),
+  // CRM-185 fase 3: cada step puede usar una plantilla del modulo
+  // email-templates en lugar de subject/body inline. Si template_id esta
+  // presente, el scheduler la renderiza con el contexto del lead.
+  template_id: z.number().int().positive().optional().nullable(),
   subject: z.string().max(200).optional(),
   body: z.string().optional(),
 });

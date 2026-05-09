@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import { useProject } from '@/shared/hooks/useProject';
 import ProductFormDialog from '../components/ProductFormDialog';
@@ -91,6 +91,7 @@ function TreeNode({
 
 export default function ProductsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject } = useProject();
   const projectId = activeProject?.id;
   const { products, loading, error, create, update, deactivate } = useProducts(projectId);
@@ -99,13 +100,25 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
-  // Filtros
+  // Filtros (mi árbol + buscador + estado)
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [selectedCat, setSelectedCat] = useState<CategoryNode | null>(null);
   const [catSearch, setCatSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // CRM-147: quick-add via ?new=1. Cuando el FAB navega aquí con ese param,
+  // abrimos el modal de creación y limpiamos el query para no re-disparar.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditingProduct(null);
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Cargar árbol cuando cambia el proyecto
   useEffect(() => {
@@ -334,9 +347,15 @@ export default function ProductsPage() {
               {filteredProducts.map((product: any) => (
                 <div key={product.id} className={`bg-card p-5 rounded-lg border border-border transition-all ${!product.active ? 'opacity-50' : ''}`}>
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                      <Package size={20} weight="regular" />
-                    </div>
+                    {product.image_url_signed ? (
+                      <div className="w-10 h-10 rounded-md overflow-hidden border border-border bg-muted">
+                        <img src={product.image_url_signed} alt={product.nombre} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary">
+                        <Package size={20} weight="regular" />
+                      </div>
+                    )}
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${product.active ? 'bg-emerald-50 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                       {product.active ? 'Activo' : 'Inactivo'}
                     </span>

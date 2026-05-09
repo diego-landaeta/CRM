@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -56,6 +57,17 @@ export default function FormsPage() {
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // CRM-147: quick-add via ?new=1 desde el FAB.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditing({ nombre: '', kind: 'form', template_kind: 'contacto_basico', config: { color: '#4361ee', button_label: 'Enviar', success_msg: 'Gracias!' }, schema: {}, field_mapping: {}, active: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   async function handleSave(f: FormDef): Promise<void> {
     if (!activeProject?.id) return;

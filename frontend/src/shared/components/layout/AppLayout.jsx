@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 
 const FloatingDock = lazy(() => import('./FloatingDock'));
+const ShortcutsFAB = lazy(() => import('./ShortcutsFAB'));
 const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
 const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'));
@@ -209,6 +210,7 @@ export default function AppLayout() {
       {!hideFloating && !mobileOpen && (
         <Suspense fallback={null}>
           <FloatingDock />
+          <ShortcutsFAB />
         </Suspense>
       )}
       <Suspense fallback={null}>

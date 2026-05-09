@@ -33,6 +33,8 @@ const ROUTE_TITLES = {
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
+  '/configuracion/documentos': 'Numeración de documentos',
+  '/configuracion/email-templates': 'Plantillas de email',
   '/payroll': 'Nóminas',
   '/woocommerce': 'WooCommerce',
   '/reports': 'Reportes',
@@ -120,12 +122,15 @@ const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
+const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
+const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
+const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
@@ -176,6 +181,8 @@ function App() {
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
+          <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
+          <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
@@ -187,6 +194,7 @@ function App() {
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           {DevComponentsPage && (
