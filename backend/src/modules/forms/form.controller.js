@@ -54,7 +54,16 @@ const createSchema = z.object({
   template_kind: z.enum(['contacto_basico', 'lead_con_producto', 'custom']).optional(),
   schema: z.record(z.string(), z.any()).optional(),
   config: z.record(z.string(), z.any()).optional(),
-  field_mapping: z.record(z.string(), z.string()).optional(),
+  field_mapping: z.record(z.string(), z.union([
+    z.string(),                                                                    // 'path.al.value'
+    z.array(z.string()),                                                           // ['path1', 'path2'] → concatenados con ' '
+    z.object({                                                                     // { sources, separator?, prefix?, suffix? }
+      sources: z.array(z.string()),
+      separator: z.string().optional(),
+      prefix: z.string().optional(),
+      suffix: z.string().optional(),
+    }),
+  ])).optional(),
   active: z.boolean().optional(),
   default_product_id: z.number().int().positive().nullable().optional(),
   url_match_enabled: z.boolean().optional(),
@@ -227,11 +236,29 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     }
 
     const mapping = f.field_mapping || {};
-    // Resolver mapping explícito: targetField -> sourcePath dentro de body
+    // Resolver mapping explícito. Cada entry puede ser:
+    //   - string:  { telefono: 'path.al.tel' }
+    //   - array:   { telefono: ['Prefijo país', 'telefono'] }      ← concatenado con espacio
+    //   - objeto:  { telefono: { sources: ['Pref', 'tel'], separator: ' ', prefix: '+' } }
+    //
+    // Si es array u objeto con sources, se concatenan los valores no vacíos.
     const mapped = {};
-    for (const [target, sourcePath] of Object.entries(mapping)) {
-      const v = resolvePath(body, sourcePath);
-      if (v !== undefined) mapped[target] = v;
+    for (const [target, def] of Object.entries(mapping)) {
+      if (typeof def === 'string') {
+        const v = resolvePath(body, def);
+        if (v !== undefined && v !== null && v !== '') mapped[target] = v;
+      } else if (Array.isArray(def)) {
+        // Concatenación simple: array de paths con separador ' '
+        const values = def.map(p => resolvePath(body, p)).filter(v => v !== undefined && v !== null && v !== '');
+        if (values.length) mapped[target] = values.join(' ').trim();
+      } else if (def && typeof def === 'object' && Array.isArray(def.sources)) {
+        // Concatenación con configuración avanzada
+        const sep = def.separator !== undefined ? def.separator : ' ';
+        const prefix = def.prefix || '';
+        const suffix = def.suffix || '';
+        const values = def.sources.map(p => resolvePath(body, p)).filter(v => v !== undefined && v !== null && v !== '');
+        if (values.length) mapped[target] = `${prefix}${values.join(sep)}${suffix}`.trim();
+      }
     }
 
     // Auto-detect fallback: para cualquier campo del lead que NO se haya mapeado explícitamente,
