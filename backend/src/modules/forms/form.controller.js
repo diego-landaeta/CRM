@@ -101,6 +101,50 @@ function resolvePath(obj, path) {
   return path.split('.').reduce((acc, k) => (acc == null ? undefined : acc[k]), obj);
 }
 
+// Normaliza el body del webhook según el formato enviado por el cliente:
+//   - JSON simple: {nombre: "Juan", email: "..."}                                → tal cual
+//   - Elementor Pro Webhook: {form_id, form_name, fields: {nombre: {value, ...}, email: {value, ...}}}
+//     → aplana a {nombre: "Juan", email: "...", _form_id, _form_name}
+//   - form-urlencoded de Elementor Pro: form_fields[nombre]=Juan&form_fields[email]=...
+//     → aplana las keys form_fields[X]
+//   - Otros: pasa tal cual y deja que autoMap haga su magia
+function normalizeWebhookBody(body) {
+  if (!body || typeof body !== 'object') return {};
+
+  // Detectar Elementor Pro Webhook (tiene 'fields' como objeto con .value)
+  if (body.fields && typeof body.fields === 'object' && !Array.isArray(body.fields)) {
+    const sampleKey = Object.keys(body.fields)[0];
+    const sampleVal = body.fields[sampleKey];
+    if (sampleVal && typeof sampleVal === 'object' && 'value' in sampleVal) {
+      const flat = {};
+      for (const [k, v] of Object.entries(body.fields)) {
+        flat[k] = v?.value ?? v;
+      }
+      if (body.form_id) flat._form_id = body.form_id;
+      if (body.form_name) flat._form_name = body.form_name;
+      return flat;
+    }
+  }
+
+  // Detectar form-urlencoded estilo form_fields[X]
+  const flatFields = {};
+  let hasFormFields = false;
+  for (const [k, v] of Object.entries(body)) {
+    const m = k.match(/^form_fields\[([^\]]+)\]$/);
+    if (m) {
+      flatFields[m[1]] = v;
+      hasFormFields = true;
+    }
+  }
+  if (hasFormFields) {
+    if (body.form_id) flatFields._form_id = body.form_id;
+    if (body.form_name) flatFields._form_name = body.form_name;
+    return flatFields;
+  }
+
+  return body;
+}
+
 // PUBLIC: webhook receptor JSON. Bloqueado si webhook_mode='email'.
 export async function publicWebhook(req, res, next) {
   try {
@@ -109,7 +153,8 @@ export async function publicWebhook(req, res, next) {
     if (f.webhook_mode === 'email') {
       throw new AppError('Este endpoint está configurado solo para mailhook (email). Usa /api/forms/mailhook/:embedId', 400, 'WRONG_MODE');
     }
-    return processInboundPayload(req, res, next, req.body || {}, 'webhook', f);
+    const normalized = normalizeWebhookBody(req.body || {});
+    return processInboundPayload(req, res, next, normalized, 'webhook', f);
   } catch (err) { next(err); }
 }
 
