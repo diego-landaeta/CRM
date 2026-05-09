@@ -3,6 +3,8 @@ import * as model from './form.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from '../leads/lead.model.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
+import { autoMap } from './field-aliases.js';
+import { parseInboundEmail } from './mail-parser.js';
 
 const createSchema = z.object({
   project_id: z.number().int().positive(),
@@ -99,29 +101,53 @@ function resolvePath(obj, path) {
 }
 
 // PUBLIC: webhook receptor. Acepta payload arbitrario y aplica field_mapping.
+// Si no hay mapping configurado, usa auto-detección de campos (alias comunes).
 export async function publicWebhook(req, res, next) {
+  return processInboundPayload(req, res, next, req.body || {}, 'webhook');
+}
+
+// PUBLIC: mailhook (inbound email parser). Acepta payloads de Cloudflare Email Routing,
+// Brevo Inbound, Mailgun Routes, SendGrid Inbound Parse — auto-detecta el formato.
+// Parsea HTML/text del email para extraer campos del lead.
+export async function publicMailhook(req, res, next) {
+  try {
+    const { fields: extracted, meta } = parseInboundEmail(req.body);
+    // Adjuntar from/subject como contexto en custom_fields siempre (debug + trazabilidad)
+    extracted._mail_from = meta.from;
+    extracted._mail_subject = meta.subject;
+    return processInboundPayload(req, res, next, extracted, 'mailhook');
+  } catch (err) { next(err); }
+}
+
+// Procesa payload (de webhook o mailhook) con tolerancia: auto-detect, custom_fields, no rompe.
+async function processInboundPayload(req, res, next, body, source) {
   try {
     const f = await model.findByEmbed(req.params.embedId);
     if (!f || f.kind !== 'webhook') throw new AppError('Webhook no disponible', 404, 'NOT_FOUND');
 
     // Modo escucha: capturar payload sin procesar (estilo Make/Zapier)
     if (f.awaiting_sample) {
-      await model.saveSample(f.id, req.body || {});
-      return res.json({ success: true, data: { mode: 'listen', captured: true, message: 'Payload capturado para mapeo.' } });
+      await model.saveSample(f.id, body);
+      return res.json({ success: true, data: { mode: 'listen', captured: true, source, message: 'Payload capturado para mapeo.' } });
     }
 
-    const body = req.body || {};
     const mapping = f.field_mapping || {};
-    // Resolver mapping: targetField -> sourcePath dentro de body
+    // Resolver mapping explícito: targetField -> sourcePath dentro de body
     const mapped = {};
-    for (const [target, source] of Object.entries(mapping)) {
-      const v = resolvePath(body, source);
+    for (const [target, sourcePath] of Object.entries(mapping)) {
+      const v = resolvePath(body, sourcePath);
       if (v !== undefined) mapped[target] = v;
     }
-    // Si no hay mapping, asumir keys directas
-    const final = Object.keys(mapping).length > 0
-      ? mapped
-      : { nombre: body.nombre, email: body.email, telefono: body.telefono, notas: body.notas, custom_fields: body.custom_fields };
+
+    // Auto-detect fallback: para cualquier campo del lead que NO se haya mapeado explícitamente,
+    // intentamos detectarlo del body por aliases comunes (Nombre/Email/Teléfono/etc en cualquier idioma)
+    const auto = autoMap(body);
+    const final = { ...auto, ...mapped };  // mapping explícito gana sobre auto-detect
+
+    // Cualquier key del body que no se mapeó va a custom_fields para no perder info
+    const customFields = { ...(final.custom_fields || {}), ...(auto._unmapped || {}) };
+    delete final._unmapped;
+    delete final.custom_fields;
 
     // Routing por destination
     const destination = f.destination || 'lead';
@@ -149,26 +175,30 @@ export async function publicWebhook(req, res, next) {
     }
 
     // destination 'lead' (default)
-    if (!final.nombre || !final.email) {
-      throw new AppError('Para crear lead se requieren nombre y email tras mapeo', 400, 'VALIDATION_ERROR');
+    // TOLERANCIA: si falta nombre o email, NO rompemos. Capturamos lo que haya en custom_fields
+    // y registramos warning. Si falta email totalmente, sí rechazamos (no podemos identificar).
+    const fallbackNombre = final.nombre || customFields._mail_subject || '(sin nombre)';
+    if (!final.email) {
+      // Guardar el payload completo para debugging y devolver 422 (no 400) — el form llegó pero no es procesable
+      throw new AppError('Sin email no se puede crear lead. Payload guardado para debug.', 422, 'NO_EMAIL_FOUND');
     }
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
-      nombre: final.nombre,
+      nombre: fallbackNombre,
       email: final.email,
       telefono: final.telefono || null,
       productoInteresId: final.producto_interes_id ? parseInt(final.producto_interes_id) : null,
       notas: final.notas || null,
       landingUrl: final.landing_url || null,
       utms: {
-        utm_source: final.utm_source || 'webhook',
-        utm_medium: final.utm_medium || 'api',
+        utm_source: final.utm_source || source,
+        utm_medium: final.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
         utm_campaign: final.utm_campaign || f.embed_id,
       },
-      customFields: final.custom_fields || {},
+      customFields,
     });
     await model.incrementSubmissions(f.id);
-    res.json({ success: true, data: { lead_id: lead.id, mapped: Object.keys(final) } });
+    res.json({ success: true, data: { lead_id: lead.id, source, mapped_fields: Object.keys(final), unmapped_count: Object.keys(customFields).length } });
   } catch (err) { next(err); }
 }
 

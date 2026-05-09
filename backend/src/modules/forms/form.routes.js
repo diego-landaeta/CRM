@@ -8,6 +8,7 @@ const router = Router();
 router.get('/public/:embedId', ctrl.publicMeta);
 router.post('/public/:embedId/submit', ctrl.publicSubmit);
 router.post('/webhook/:embedId', ctrl.publicWebhook);
+router.post('/mailhook/:embedId', ctrl.publicMailhook);
 
 router.use(verifyToken);
 router.get('/', ctrl.list);
