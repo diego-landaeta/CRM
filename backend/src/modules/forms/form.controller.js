@@ -320,8 +320,13 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     }
 
     // Resolver producto_interes_id por URL matching o default
-    let productoInteresId = final.producto_interes_id ? parseInt(final.producto_interes_id) : null;
-    let productoMatchSource = 'manual';
+    // SAFE parseInt: si el valor mapeado no es numérico (ej. nombre del producto), NaN → null
+    let productoInteresId = null;
+    if (final.producto_interes_id !== undefined && final.producto_interes_id !== null) {
+      const parsed = parseInt(final.producto_interes_id);
+      if (!isNaN(parsed) && parsed > 0) productoInteresId = parsed;
+    }
+    let productoMatchSource = productoInteresId ? 'manual' : null;
 
     if (!productoInteresId && f.url_match_enabled !== false) {
       // Intentar varias fuentes de URL en orden
