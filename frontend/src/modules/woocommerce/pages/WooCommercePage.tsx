@@ -36,9 +36,17 @@ interface WooRun {
   error_message?: string | null;
 }
 
+interface SchemaItem { path: string; type: string; sample?: any }
+interface TargetField { key: string; label: string; type: string; required?: boolean; group: string }
+
 interface WooPreview {
   count: number;
-  sample: Array<{ name: string }>;
+  sample: any[];
+  schema?: SchemaItem[];
+  targets?: TargetField[];
+  sugeridos?: Record<string, string>;
+  current_mapping?: Record<string, string>;
+  mapped_preview?: Record<string, any>;
 }
 
 export default function WooCommercePage() {
@@ -48,6 +56,9 @@ export default function WooCommercePage() {
   const [runs, setRuns] = useState<WooRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [previewData, setPreviewData] = useState<WooPreview | null>(null);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [savingMapping, setSavingMapping] = useState(false);
   const reloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -98,9 +109,39 @@ export default function WooCommercePage() {
       const res = await client.get(`/woocommerce/preview?projectId=${activeProject.id}`);
       if (res.success && res.data) {
         const data = res.data as WooPreview;
-        toast({ title: `${data.count} productos en la tienda`, description: `Sample: ${data.sample.map(s => s.name).join(', ')}` });
+        setPreviewData(data);
+        // Si hay mapping guardado úsalo, si no usa los sugeridos
+        const initial = (data.current_mapping && Object.keys(data.current_mapping).length > 0)
+          ? data.current_mapping
+          : (data.sugeridos || {});
+        setMapping(initial);
+        toast({ title: `${data.count} productos en la tienda`, description: `Configura el mapeo abajo y guárdalo antes de importar` });
       }
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+  }
+
+  async function saveMapping(): Promise<void> {
+    if (!activeProject?.id) return;
+    setSavingMapping(true);
+    try {
+      await client.put(`/woocommerce/mapping?projectId=${activeProject.id}`, { field_mapping: mapping });
+      toast({ title: 'Mapeo guardado', description: 'Se aplicará en la próxima importación' });
+      // Refrescar preview para ver mapped_preview con los cambios
+      await preview();
+    } catch (err: any) {
+      toast({ title: 'Error guardando mapeo', description: err?.message || 'Error desconocido', variant: 'destructive' });
+    } finally {
+      setSavingMapping(false);
+    }
+  }
+
+  function updateMapping(crmField: string, sourcePath: string) {
+    setMapping((prev) => {
+      const next = { ...prev };
+      if (sourcePath) next[crmField] = sourcePath;
+      else delete next[crmField];
+      return next;
+    });
   }
 
   return (
@@ -137,11 +178,78 @@ export default function WooCommercePage() {
           <div className="flex items-center justify-between">
             <h3 className="font-bold">Importar productos</h3>
             <div className="flex gap-2">
-              <button onClick={preview} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-muted text-xs font-bold"><Eye size={14} /> Preview</button>
+              <button onClick={preview} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-muted text-xs font-bold"><Eye size={14} /> Preview + Mapeo</button>
               <button onClick={importNow} disabled={importing} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold disabled:opacity-50"><ArrowsClockwise size={14} weight="bold" /> {importing ? 'Iniciando...' : 'Importar ahora'}</button>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Trae todos los productos de la tienda. Crea los nuevos y actualiza los existentes (matched por wc_product_id).</p>
+          <p className="text-xs text-muted-foreground">
+            Pulsa <strong>Preview + Mapeo</strong> para ver cómo viene un producto desde WC y elegir qué campo de WC va a qué campo del CRM.
+          </p>
+        </div>
+      )}
+
+      {/* === MAPEO CONFIGURABLE === */}
+      {previewData && previewData.targets && previewData.schema && (
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="font-bold">Mapeo de campos WC → CRM</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {previewData.count} productos detectados · Configura qué campo de WC va a cada campo del CRM y guarda antes de importar.
+              </p>
+            </div>
+            <button
+              onClick={saveMapping}
+              disabled={savingMapping}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold disabled:opacity-50"
+            >
+              <FloppyDisk size={14} weight="bold" /> {savingMapping ? 'Guardando…' : 'Guardar mapeo'}
+            </button>
+          </div>
+
+          {/* Tabla de mapping agrupada */}
+          <div className="space-y-4">
+            {Array.from(new Set(previewData.targets.filter(t => t.type !== 'array_subfield' && t.type !== 'wildcard_object').map(t => t.group))).map((group) => (
+              <div key={group}>
+                <h4 className="text-[11px] font-bold uppercase text-muted-foreground mb-2">{group}</h4>
+                <div className="space-y-1.5">
+                  {previewData.targets!.filter(t => t.group === group && t.type !== 'array_subfield' && t.type !== 'wildcard_object').map((target) => {
+                    const currentSource = mapping[target.key] || '';
+                    const previewVal = previewData.mapped_preview?.[target.key];
+                    return (
+                      <div key={target.key} className="grid grid-cols-1 md:grid-cols-[180px_1fr_200px] gap-2 items-center text-xs">
+                        <label className="font-medium flex items-center gap-1">
+                          {target.label}
+                          {target.required && <span className="text-red-500">*</span>}
+                          <span className="text-muted-foreground font-mono ml-1">({target.key})</span>
+                        </label>
+                        <select
+                          value={currentSource}
+                          onChange={(e) => updateMapping(target.key, e.target.value)}
+                          className="h-9 px-2 rounded-md border border-border bg-muted/30 text-xs"
+                        >
+                          <option value="">— No mapear —</option>
+                          {previewData.schema!.filter(s => s.type !== 'object' && s.type !== 'array').map((s) => (
+                            <option key={s.path} value={s.path}>{s.path} ({s.type})</option>
+                          ))}
+                        </select>
+                        <div className="text-muted-foreground truncate font-mono text-[11px]" title={String(previewVal ?? '')}>
+                          {previewVal !== undefined && previewVal !== null
+                            ? `→ ${String(previewVal).slice(0, 60)}`
+                            : <span className="italic">sin valor</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <details className="text-xs border-t pt-3">
+            <summary className="cursor-pointer font-bold">Ver JSON crudo del primer producto</summary>
+            <pre className="mt-2 p-3 bg-muted/40 rounded text-[10px] overflow-x-auto max-h-80">{JSON.stringify(previewData.sample[0], null, 2)}</pre>
+          </details>
         </div>
       )}
 

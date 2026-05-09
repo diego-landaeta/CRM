@@ -4,6 +4,8 @@ import * as catModel from '../product-categories/category.model.js';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
+import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
 
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
@@ -420,10 +422,24 @@ export const importNow = async (req, res, next) => {
 
         // 3. Upsert productos con categoría + sku
         let created = 0, updated = 0, skipped = 0;
+        // Si hay field_mapping configurado, sus campos GANAN sobre el mapeo automático.
+        const userMapping = creds.field_mapping || {};
+        const hasUserMapping = Object.keys(userMapping).length > 0;
+
         for (const wp of wcProducts) {
           if (!wp.name) { skipped++; continue; }
-          const mapped = mapWcProduct(wp, categoryMap);
-          const r = await model.upsertProductFromWc({ projectId, wcId: wp.id, data: mapped });
+          const auto = mapWcProduct(wp, categoryMap);
+          // Aplicar mapping del usuario por encima
+          const userMapped = hasUserMapping ? applyWcFieldMapping(wp, userMapping) : {};
+          const finalMapped = {
+            ...auto,
+            ...userMapped,
+            // Conservar siempre el meta y la categoría auto si el user no lo sobrescribió
+            meta: auto.meta,
+            categoria_id: userMapped.categoria_id || auto.categoria_id,
+            subcategoria_id: auto.subcategoria_id,
+          };
+          const r = await model.upsertProductFromWc({ projectId, wcId: wp.id, data: finalMapped });
           if (r.action === 'created') created++;
           else if (r.action === 'updated') updated++;
         }
@@ -485,6 +501,74 @@ export const previewWc = async (req, res, next) => {
     const totalRes = await fetch(totalUrl);
     const total = parseInt(totalRes.headers.get('x-wp-total') || '0');
 
-    res.json({ success: true, data: { count: total, sample } });
+    // Schema completo del primer producto + sugeridos auto-detectados + targets disponibles
+    const firstItem = sample[0] || {};
+    const schema = inspectSchema(firstItem);
+    const sugeridos = autoSuggestWcMapping(firstItem);
+    const targets = TARGETS_CATALOG.product;
+
+    // Vista previa del mapping aplicado (si hay field_mapping configurado)
+    const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
+      ? creds.field_mapping
+      : sugeridos;
+    const mapped_preview = applyWcFieldMapping(firstItem, currentMapping);
+
+    res.json({
+      success: true,
+      data: {
+        count: total,
+        sample,                      // 3 items reales
+        schema,                      // tree-view del JSON
+        targets,                     // campos destino del CRM con grupos
+        transforms: TRANSFORMS_CATALOG,
+        sugeridos,                   // mapping auto detectado por defecto
+        current_mapping: creds.field_mapping || {},
+        mapped_preview,              // resultado de aplicar el mapping al primer item
+      },
+    });
   } catch (e) { next(e); }
 };
+
+// PUT /api/woocommerce/mapping?projectId=X — guarda el mapeo configurable
+export const saveMapping = async (req, res, next) => {
+  try {
+    const projectId = pid(req);
+    const mapping = req.body?.field_mapping;
+    if (!mapping || typeof mapping !== 'object') {
+      throw new AppError('field_mapping debe ser un objeto', 400, 'VALIDATION_ERROR');
+    }
+    await query(
+      `UPDATE wc_credentials SET field_mapping = $1, updated_at = NOW() WHERE project_id = $2`,
+      [JSON.stringify(mapping), projectId]
+    );
+    res.json({ success: true, data: { field_mapping: mapping } });
+  } catch (e) { next(e); }
+};
+
+// Detecta automáticamente el mapping inicial basado en el JSON de un producto WC
+function autoSuggestWcMapping(item) {
+  if (!item) return {};
+  const sug = {
+    nombre: 'name',
+    descripcion: 'short_description',
+    precio: 'price',
+    sku: 'sku',
+    url_info: 'permalink',           // ← URL del producto (lo que pidió el user)
+  };
+  // Solo añadir si existen en el item
+  return Object.fromEntries(
+    Object.entries(sug).filter(([_, path]) => item[path] !== undefined)
+  );
+}
+
+// Aplica un field_mapping a un producto WC, devuelve objeto con valores resueltos
+function applyWcFieldMapping(item, mapping) {
+  const out = {};
+  for (const [crmField, source] of Object.entries(mapping || {})) {
+    const path = typeof source === 'string' ? source : source?.source;
+    if (!path) continue;
+    const v = resolvePath(item, path);
+    if (v !== undefined && v !== null) out[crmField] = v;
+  }
+  return out;
+}

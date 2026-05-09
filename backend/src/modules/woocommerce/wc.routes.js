@@ -17,5 +17,6 @@ router.get('/runs', ctrl.listRuns);
 router.get('/runs/current', ctrl.getCurrentRun);
 router.post('/runs/start', ctrl.importNow);
 router.get('/preview', ctrl.previewWc);
+router.put('/mapping', ctrl.saveMapping);
 
 export default router;
