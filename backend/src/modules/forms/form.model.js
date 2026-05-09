@@ -26,15 +26,18 @@ export async function findByEmbed(embedId) {
   return rows[0] || null;
 }
 export async function create(data) {
-  const prefix = data.kind === 'webhook' ? 'whk' : 'frm';
+  // Prefijo del embed_id según kind+modo: frm/whk/mlh
+  const isWebhook = data.kind === 'webhook';
+  const isMailOnly = isWebhook && data.webhook_mode === 'email';
+  const prefix = !isWebhook ? 'frm' : (isMailOnly ? 'mlh' : 'whk');
   const embedId = `${prefix}_${crypto.randomBytes(10).toString('hex')}`;
   // Webhooks arrancan en modo escucha por defecto (estilo Make/Zapier)
-  const startsListening = data.kind === 'webhook';
+  const startsListening = isWebhook;
   const { rows } = await query(
-    `INSERT INTO form_templates (project_id, embed_id, nombre, template_kind, kind, destination, schema, config, field_mapping, active, awaiting_sample, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    `INSERT INTO form_templates (project_id, embed_id, nombre, template_kind, kind, webhook_mode, destination, schema, config, field_mapping, active, awaiting_sample, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
     [data.project_id, embedId, data.nombre, data.template_kind || 'contacto_basico',
-     data.kind || 'form', data.destination || 'lead',
+     data.kind || 'form', data.webhook_mode || 'both', data.destination || 'lead',
      JSON.stringify(data.schema || {}), JSON.stringify(data.config || {}),
      JSON.stringify(data.field_mapping || {}),
      data.active !== false, startsListening, data.created_by || null]
@@ -42,7 +45,7 @@ export async function create(data) {
   return rows[0];
 }
 export async function update(id, fields) {
-  const allowed = ['nombre', 'template_kind', 'schema', 'config', 'active', 'kind', 'field_mapping', 'destination'];
+  const allowed = ['nombre', 'template_kind', 'schema', 'config', 'active', 'kind', 'webhook_mode', 'field_mapping', 'destination'];
   const jsonbFields = new Set(['schema', 'config', 'field_mapping']);
   const sets = []; const params = []; let idx = 1;
   for (const k of allowed) if (fields[k] !== undefined) {

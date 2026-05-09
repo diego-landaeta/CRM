@@ -10,6 +10,7 @@ const createSchema = z.object({
   project_id: z.number().int().positive(),
   nombre: z.string().min(1).max(200),
   kind: z.enum(['form', 'webhook']).optional(),
+  webhook_mode: z.enum(['json', 'email', 'both']).optional(),  // solo si kind=webhook
   destination: z.enum(['lead', 'matricula']).optional(),
   template_kind: z.enum(['contacto_basico', 'lead_con_producto', 'custom']).optional(),
   schema: z.record(z.string(), z.any()).optional(),
@@ -100,29 +101,37 @@ function resolvePath(obj, path) {
   return path.split('.').reduce((acc, k) => (acc == null ? undefined : acc[k]), obj);
 }
 
-// PUBLIC: webhook receptor. Acepta payload arbitrario y aplica field_mapping.
-// Si no hay mapping configurado, usa auto-detección de campos (alias comunes).
+// PUBLIC: webhook receptor JSON. Bloqueado si webhook_mode='email'.
 export async function publicWebhook(req, res, next) {
-  return processInboundPayload(req, res, next, req.body || {}, 'webhook');
+  try {
+    const f = await model.findByEmbed(req.params.embedId);
+    if (!f || f.kind !== 'webhook') throw new AppError('Webhook no disponible', 404, 'NOT_FOUND');
+    if (f.webhook_mode === 'email') {
+      throw new AppError('Este endpoint está configurado solo para mailhook (email). Usa /api/forms/mailhook/:embedId', 400, 'WRONG_MODE');
+    }
+    return processInboundPayload(req, res, next, req.body || {}, 'webhook', f);
+  } catch (err) { next(err); }
 }
 
-// PUBLIC: mailhook (inbound email parser). Acepta payloads de Cloudflare Email Routing,
-// Brevo Inbound, Mailgun Routes, SendGrid Inbound Parse — auto-detecta el formato.
-// Parsea HTML/text del email para extraer campos del lead.
+// PUBLIC: mailhook (inbound email). Bloqueado si webhook_mode='json'.
 export async function publicMailhook(req, res, next) {
   try {
+    const f = await model.findByEmbed(req.params.embedId);
+    if (!f || f.kind !== 'webhook') throw new AppError('Mailhook no disponible', 404, 'NOT_FOUND');
+    if (f.webhook_mode === 'json') {
+      throw new AppError('Este endpoint está configurado solo para webhook JSON. Usa /api/forms/webhook/:embedId', 400, 'WRONG_MODE');
+    }
     const { fields: extracted, meta } = parseInboundEmail(req.body);
-    // Adjuntar from/subject como contexto en custom_fields siempre (debug + trazabilidad)
     extracted._mail_from = meta.from;
     extracted._mail_subject = meta.subject;
-    return processInboundPayload(req, res, next, extracted, 'mailhook');
+    return processInboundPayload(req, res, next, extracted, 'mailhook', f);
   } catch (err) { next(err); }
 }
 
 // Procesa payload (de webhook o mailhook) con tolerancia: auto-detect, custom_fields, no rompe.
-async function processInboundPayload(req, res, next, body, source) {
+async function processInboundPayload(req, res, next, body, source, preloadedForm = null) {
   try {
-    const f = await model.findByEmbed(req.params.embedId);
+    const f = preloadedForm || await model.findByEmbed(req.params.embedId);
     if (!f || f.kind !== 'webhook') throw new AppError('Webhook no disponible', 404, 'NOT_FOUND');
 
     // Modo escucha: capturar payload sin procesar (estilo Make/Zapier)
