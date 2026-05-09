@@ -13,6 +13,7 @@ interface WooCredentials {
   consumer_secret?: string;
   auto_sync_enabled?: boolean;
   sync_interval_minutes?: number;
+  default_currency?: string;
 }
 
 interface WooForm {
@@ -21,7 +22,10 @@ interface WooForm {
   consumer_secret: string;
   auto_sync_enabled: boolean;
   sync_interval_minutes: number;
+  default_currency: string;
 }
+
+const CURRENCIES = ['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF'];
 
 type RunStatus = 'success' | 'error' | 'running' | string;
 
@@ -52,7 +56,7 @@ interface WooPreview {
 export default function WooCommercePage() {
   const { activeProject } = useProjectContext();
   const [creds, setCreds] = useState<WooCredentials | null>(null);
-  const [form, setForm] = useState<WooForm>({ store_url: '', consumer_key: '', consumer_secret: '', auto_sync_enabled: false, sync_interval_minutes: 30 });
+  const [form, setForm] = useState<WooForm>({ store_url: '', consumer_key: '', consumer_secret: '', auto_sync_enabled: false, sync_interval_minutes: 30, default_currency: 'EUR' });
   const [runs, setRuns] = useState<WooRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -76,7 +80,7 @@ export default function WooCommercePage() {
       if (c.success) {
         const data = c.data as WooCredentials | null;
         setCreds(data);
-        if (data) setForm({ store_url: data.store_url, consumer_key: data.consumer_key, consumer_secret: '', auto_sync_enabled: data.auto_sync_enabled || false, sync_interval_minutes: data.sync_interval_minutes || 30 });
+        if (data) setForm({ store_url: data.store_url, consumer_key: data.consumer_key, consumer_secret: '', auto_sync_enabled: data.auto_sync_enabled || false, sync_interval_minutes: data.sync_interval_minutes || 30, default_currency: data.default_currency || 'EUR' });
       }
       if (r.success) setRuns((r.data as WooRun[]) || []);
     } finally { setLoading(false); }
@@ -153,6 +157,20 @@ export default function WooCommercePage() {
         <input value={form.store_url} onChange={e => setForm({ ...form, store_url: e.target.value })} placeholder="https://tu-tienda.com" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
         <input value={form.consumer_key} onChange={e => setForm({ ...form, consumer_key: e.target.value })} placeholder="Consumer key (ck_...)" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm font-mono text-xs" />
         <input value={form.consumer_secret} onChange={e => setForm({ ...form, consumer_secret: e.target.value })} type="password" placeholder={creds ? '(sin cambios — dejar vacio para mantener)' : 'Consumer secret (cs_...)'} className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm font-mono text-xs" />
+
+        <label className="block text-xs">
+          <span className="font-bold uppercase text-muted-foreground">Divisa por defecto</span>
+          <select
+            value={form.default_currency}
+            onChange={e => setForm({ ...form, default_currency: e.target.value })}
+            className="mt-1 w-40 h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm"
+          >
+            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Se aplicará a TODOS los productos importados de esta tienda. WooCommerce no expone la moneda por producto en su API estándar.
+          </p>
+        </label>
 
         <div className="pt-3 border-t border-border space-y-2">
           <label className="flex items-center gap-2 text-sm cursor-pointer">

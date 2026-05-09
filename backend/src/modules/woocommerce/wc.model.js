@@ -6,17 +6,18 @@ export async function getCreds(projectId) {
 }
 export async function upsertCreds(projectId, data) {
   const { rows } = await query(
-    `INSERT INTO wc_credentials (project_id, store_url, consumer_key, consumer_secret, active, auto_sync_enabled, sync_interval_minutes)
-     VALUES ($1, $2, $3, $4, COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30))
+    `INSERT INTO wc_credentials (project_id, store_url, consumer_key, consumer_secret, active, auto_sync_enabled, sync_interval_minutes, default_currency)
+     VALUES ($1, $2, $3, $4, COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30), COALESCE($8, 'EUR'))
      ON CONFLICT (project_id) DO UPDATE
        SET store_url = EXCLUDED.store_url, consumer_key = EXCLUDED.consumer_key,
            consumer_secret = CASE WHEN EXCLUDED.consumer_secret = '' THEN wc_credentials.consumer_secret ELSE EXCLUDED.consumer_secret END,
            active = EXCLUDED.active,
            auto_sync_enabled = EXCLUDED.auto_sync_enabled,
            sync_interval_minutes = EXCLUDED.sync_interval_minutes,
+           default_currency = EXCLUDED.default_currency,
            updated_at = NOW()
      RETURNING *`,
-    [projectId, data.store_url, data.consumer_key, data.consumer_secret || '', data.active, data.auto_sync_enabled, data.sync_interval_minutes]
+    [projectId, data.store_url, data.consumer_key, data.consumer_secret || '', data.active, data.auto_sync_enabled, data.sync_interval_minutes, data.default_currency]
   );
   return rows[0];
 }

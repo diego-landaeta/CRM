@@ -15,6 +15,7 @@ const credsSchema = z.object({
   active: z.boolean().optional(),
   auto_sync_enabled: z.boolean().optional(),
   sync_interval_minutes: z.number().int().min(5).max(1440).optional(),
+  default_currency: z.enum(['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF']).optional(),
 });
 
 function pid(req) {
@@ -358,8 +359,9 @@ async function buildSlugToProductMap(projectId) {
   return map;
 }
 
-// Mapea producto WC → datos para insertar
-function mapWcProduct(wp, categoryMap) {
+// Mapea producto WC → datos para insertar.
+// `defaultCurrency` aplica si el producto WC no trae moneda en su payload.
+function mapWcProduct(wp, categoryMap, defaultCurrency = 'EUR') {
   // Tipo de programa: meta `_cpt_sync_level` (cursos/masters/diplomados) si existe
   const levelMeta = (wp.meta_data || []).find(m => m.key === '_cpt_sync_level');
   const tipoPrograma = levelMeta?.value || null;
@@ -382,6 +384,7 @@ function mapWcProduct(wp, categoryMap) {
   return {
     nombre: wp.name,
     precio: parseFloat(wp.price || wp.regular_price || 0),
+    moneda: defaultCurrency,
     descripcion: wp.short_description || wp.description || null,
     sku: wp.sku || null,
     url_info: wp.permalink || null,  // Enlace al producto en la web pública
@@ -428,7 +431,7 @@ export const importNow = async (req, res, next) => {
 
         for (const wp of wcProducts) {
           if (!wp.name) { skipped++; continue; }
-          const auto = mapWcProduct(wp, categoryMap);
+          const auto = mapWcProduct(wp, categoryMap, creds.default_currency || 'EUR');
           // Aplicar mapping del usuario por encima
           const userMapped = hasUserMapping ? applyWcFieldMapping(wp, userMapping) : {};
           const finalMapped = {
@@ -505,7 +508,8 @@ export const previewWc = async (req, res, next) => {
     const firstItem = sample[0] || {};
     const schema = inspectSchema(firstItem);
     const sugeridos = autoSuggestWcMapping(firstItem);
-    const targets = TARGETS_CATALOG.product;
+    // moneda se controla a nivel credenciales (default_currency), no por producto
+    const targets = TARGETS_CATALOG.product.filter(t => t.key !== 'moneda');
 
     // Vista previa del mapping aplicado (si hay field_mapping configurado)
     const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
