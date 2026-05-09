@@ -195,32 +195,56 @@ function normalizeWebhookBody(body) {
   return body;
 }
 
-// PUBLIC: webhook receptor JSON. Bloqueado si webhook_mode='email'.
+// PUBLIC: webhook receptor JSON. NUNCA devuelve error al cliente — registra en historial.
+// Solo 404 legítimo si el embed_id no existe (puede que el creador haya borrado el webhook).
 export async function publicWebhook(req, res, next) {
   try {
     const f = await model.findByEmbed(req.params.embedId);
-    if (!f || f.kind !== 'webhook') throw new AppError('Webhook no disponible', 404, 'NOT_FOUND');
+    if (!f || f.kind !== 'webhook') {
+      return res.status(404).json({ success: false, error: 'Webhook no encontrado', code: 'NOT_FOUND' });
+    }
+    // Aunque el modo no coincida, RESPONDER 200 para no romper UX del form externo,
+    // y registrar el evento como 'wrong_mode' para que el admin se entere.
     if (f.webhook_mode === 'email') {
-      throw new AppError('Este endpoint está configurado solo para mailhook (email). Usa /api/forms/mailhook/:embedId', 400, 'WRONG_MODE');
+      await safeLogEvent(f.id, 'webhook', req.body, 'error', 'Endpoint configurado solo para email; usar /mailhook/', req.ip);
+      return res.json({ success: true, data: { received: true } });
     }
     const normalized = normalizeWebhookBody(req.body || {});
     return processInboundPayload(req, res, next, normalized, 'webhook', f);
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Cualquier error inesperado: registrar y devolver 200
+    await safeLogEvent(null, 'webhook', req.body, 'error', err.message, req.ip).catch(() => {});
+    return res.json({ success: true, data: { received: true } });
+  }
 }
 
-// PUBLIC: mailhook (inbound email). Bloqueado si webhook_mode='json'.
+// PUBLIC: mailhook. Mismo principio: nunca rompe el cliente.
 export async function publicMailhook(req, res, next) {
   try {
     const f = await model.findByEmbed(req.params.embedId);
-    if (!f || f.kind !== 'webhook') throw new AppError('Mailhook no disponible', 404, 'NOT_FOUND');
+    if (!f || f.kind !== 'webhook') {
+      return res.status(404).json({ success: false, error: 'Mailhook no encontrado', code: 'NOT_FOUND' });
+    }
     if (f.webhook_mode === 'json') {
-      throw new AppError('Este endpoint está configurado solo para webhook JSON. Usa /api/forms/webhook/:embedId', 400, 'WRONG_MODE');
+      await safeLogEvent(f.id, 'mailhook', req.body, 'error', 'Endpoint configurado solo para JSON; usar /webhook/', req.ip);
+      return res.json({ success: true, data: { received: true } });
     }
     const { fields: extracted, meta } = parseInboundEmail(req.body);
     extracted._mail_from = meta.from;
     extracted._mail_subject = meta.subject;
     return processInboundPayload(req, res, next, extracted, 'mailhook', f);
-  } catch (err) { next(err); }
+  } catch (err) {
+    await safeLogEvent(null, 'mailhook', req.body, 'error', err.message, req.ip).catch(() => {});
+    return res.json({ success: true, data: { received: true } });
+  }
+}
+
+// Helper: log event sin lanzar excepciones (silencioso)
+async function safeLogEvent(formId, source, payload, status, errorMessage, ip) {
+  if (!formId) return;
+  try {
+    await model.logEvent({ form_template_id: formId, source, payload, status, error_message: errorMessage, ip_address: ip });
+  } catch { /* no romper nunca */ }
 }
 
 // Procesa payload (de webhook o mailhook) con tolerancia: auto-detect, custom_fields, no rompe.
@@ -391,15 +415,20 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       },
     });
   } catch (err) {
-    // Log evento como error si tenemos contexto de form
+    // Registrar el error en el historial pero NUNCA devolver error al cliente.
+    // El form externo (Elementor/Make/etc) debe ver siempre 200 para no romper UX.
     try {
-      const f = await model.findByEmbed(req.params.embedId).catch(() => null);
+      const f = preloadedForm || await model.findByEmbed(req.params.embedId).catch(() => null);
       if (f) await model.logEvent({
         form_template_id: f.id, source, payload: body, status: 'error',
         error_message: err.message, ip_address: req.ip,
       });
     } catch { /* silencioso */ }
-    next(err);
+    // Respuesta 200 con detalle del error para debug interno (no impacta UX del form externo)
+    return res.json({
+      success: true,
+      data: { received: true, processing_error: err.message?.slice(0, 200) || 'Internal error' },
+    });
   }
 }
 
