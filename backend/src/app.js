@@ -36,6 +36,7 @@ import emailTemplatesModule from './modules/email-templates/index.js';
 import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
+import connectorsModule from './modules/connectors/index.js';
 import statusModule from './modules/status/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -112,6 +113,7 @@ const ALL_MODULES = [
   { name: 'email-templates', mod: emailTemplatesModule },
   { name: 'project-channels', mod: projectChannelsModule },
   { name: 'permissions', mod: permissionsModule },
+  { name: 'connectors', mod: connectorsModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
