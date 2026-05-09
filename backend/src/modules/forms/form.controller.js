@@ -5,6 +5,45 @@ import * as leadModel from '../leads/lead.model.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
 import { autoMap } from './field-aliases.js';
 import { parseInboundEmail } from './mail-parser.js';
+import { query } from '../../shared/config/db.js';
+
+// Normaliza URL para matching: quita protocol, www, query string, fragment, trailing slash
+function normalizeUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  return url
+    .toLowerCase()
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/?(\?.*)?(\#.*)?$/, '')
+    .replace(/\/$/, '');
+}
+
+// Busca el producto del proyecto cuya url_info matchea la URL dada (case-insensitive,
+// tolerante a www/https/queries). Devuelve el id o null.
+async function findProductByUrl(projectId, url) {
+  if (!url) return null;
+  const norm = normalizeUrl(url);
+  if (!norm) return null;
+  // Match exacto primero
+  const { rows: exact } = await query(
+    `SELECT id, url_info FROM products
+     WHERE project_id = $1 AND url_info IS NOT NULL AND active = true`,
+    [projectId]
+  );
+  for (const p of exact) {
+    if (normalizeUrl(p.url_info) === norm) return p.id;
+  }
+  // Match parcial: si la URL del form contiene el slug del producto
+  // (ej: form en /master-x/?utm=foo y producto.url_info = /master-x)
+  for (const p of exact) {
+    const productNorm = normalizeUrl(p.url_info);
+    if (productNorm && (norm.startsWith(productNorm) || productNorm.endsWith(norm.split('/').pop() || ''))) {
+      return p.id;
+    }
+  }
+  return null;
+}
 
 const createSchema = z.object({
   project_id: z.number().int().positive(),
@@ -17,6 +56,8 @@ const createSchema = z.object({
   config: z.record(z.string(), z.any()).optional(),
   field_mapping: z.record(z.string(), z.string()).optional(),
   active: z.boolean().optional(),
+  default_product_id: z.number().int().positive().nullable().optional(),
+  url_match_enabled: z.boolean().optional(),
 });
 const updateSchema = createSchema.partial().omit({ project_id: true });
 
@@ -203,6 +244,22 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     delete final._unmapped;
     delete final.custom_fields;
 
+    // Concatenar prefijo país + teléfono si vienen separados (típico Elementor:
+    // PREFIJO PAÍS = +34, TELÉFONO = 600123456 → final '+34 600123456')
+    if (final._phone_prefix && final.telefono) {
+      const prefix = String(final._phone_prefix).trim();
+      const num = String(final.telefono).trim();
+      // Si el número ya empieza con + o con el mismo prefijo, no duplicar
+      if (!num.startsWith('+') && !num.startsWith(prefix.replace(/^\+/, ''))) {
+        const cleanPrefix = prefix.startsWith('+') ? prefix : `+${prefix}`;
+        final.telefono = `${cleanPrefix} ${num}`;
+      }
+    } else if (final._phone_prefix && !final.telefono) {
+      // Solo llegó prefijo sin número — guardarlo en custom_fields, no como telefono
+      customFields.phone_prefix_only = final._phone_prefix;
+    }
+    delete final._phone_prefix;
+
     // Routing por destination
     const destination = f.destination || 'lead';
     if (destination === 'matricula') {
@@ -229,21 +286,54 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     }
 
     // destination 'lead' (default)
-    // TOLERANCIA: si falta nombre o email, NO rompemos. Capturamos lo que haya en custom_fields
-    // y registramos warning. Si falta email totalmente, sí rechazamos (no podemos identificar).
     const fallbackNombre = final.nombre || customFields._mail_subject || '(sin nombre)';
     if (!final.email) {
-      // Guardar el payload completo para debugging y devolver 422 (no 400) — el form llegó pero no es procesable
       throw new AppError('Sin email no se puede crear lead. Payload guardado para debug.', 422, 'NO_EMAIL_FOUND');
     }
+
+    // Resolver producto_interes_id por URL matching o default
+    let productoInteresId = final.producto_interes_id ? parseInt(final.producto_interes_id) : null;
+    let productoMatchSource = 'manual';
+
+    if (!productoInteresId && f.url_match_enabled !== false) {
+      // Intentar varias fuentes de URL en orden
+      const candidateUrls = [
+        final.landing_url,
+        body.landing_url,
+        body.page_url,
+        body.referrer,
+        body.referer,
+        req.headers?.referer,
+        req.headers?.referrer,
+        // Algunos forms de Elementor envían _wp_http_referer o page_url anidado
+        body._wp_http_referer,
+        body.page,
+      ].filter(Boolean);
+
+      for (const url of candidateUrls) {
+        const matched = await findProductByUrl(f.project_id, url);
+        if (matched) {
+          productoInteresId = matched;
+          productoMatchSource = `url_match:${url}`;
+          break;
+        }
+      }
+    }
+
+    // Fallback al producto por defecto del webhook si no hubo match
+    if (!productoInteresId && f.default_product_id) {
+      productoInteresId = f.default_product_id;
+      productoMatchSource = 'default_product';
+    }
+
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
       nombre: fallbackNombre,
       email: final.email,
       telefono: final.telefono || null,
-      productoInteresId: final.producto_interes_id ? parseInt(final.producto_interes_id) : null,
+      productoInteresId,
       notas: final.notas || null,
-      landingUrl: final.landing_url || null,
+      landingUrl: final.landing_url || body.landing_url || req.headers?.referer || null,
       utms: {
         utm_source: final.utm_source || source,
         utm_medium: final.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
@@ -252,7 +342,17 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       customFields,
     });
     await model.incrementSubmissions(f.id);
-    res.json({ success: true, data: { lead_id: lead.id, source, mapped_fields: Object.keys(final), unmapped_count: Object.keys(customFields).length } });
+    res.json({
+      success: true,
+      data: {
+        lead_id: lead.id,
+        source,
+        mapped_fields: Object.keys(final),
+        unmapped_count: Object.keys(customFields).length,
+        producto_interes_id: productoInteresId,
+        producto_match_source: productoMatchSource,
+      },
+    });
   } catch (err) { next(err); }
 }
 

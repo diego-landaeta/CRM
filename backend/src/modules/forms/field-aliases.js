@@ -20,6 +20,14 @@ const ALIASES = {
     'telefono', 'teléfono', 'tel', 'phone', 'phone_number', 'phonenumber',
     'tu telefono', 'tu teléfono', 'movil', 'móvil', 'celular', 'whatsapp',
     'wa', 'numero', 'número', 'mobile', 'cellphone', 'tel_number',
+    'numero telefono', 'número teléfono',
+  ],
+  // Prefijo de país (campo virtual). Si llega solo, se concatena al telefono.
+  _phone_prefix: [
+    'prefijo', 'prefijo pais', 'prefijo país', 'pais prefijo', 'país prefijo',
+    'country_code', 'countrycode', 'phone_prefix', 'phoneprefix',
+    'codigo pais', 'código país', 'dial_code', 'dialcode', 'cc',
+    'prefix', 'prefijo telefono', 'prefijo teléfono',
   ],
   notas: [
     'mensaje', 'message', 'notas', 'notes', 'comentario', 'comentarios',

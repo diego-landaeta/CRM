@@ -45,7 +45,7 @@ export async function create(data) {
   return rows[0];
 }
 export async function update(id, fields) {
-  const allowed = ['nombre', 'template_kind', 'schema', 'config', 'active', 'kind', 'webhook_mode', 'field_mapping', 'destination'];
+  const allowed = ['nombre', 'template_kind', 'schema', 'config', 'active', 'kind', 'webhook_mode', 'field_mapping', 'destination', 'default_product_id', 'url_match_enabled'];
   const jsonbFields = new Set(['schema', 'config', 'field_mapping']);
   const sets = []; const params = []; let idx = 1;
   for (const k of allowed) if (fields[k] !== undefined) {
