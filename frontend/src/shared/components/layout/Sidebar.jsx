@@ -63,7 +63,14 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/leads', icon: Users, module: 'leads' },
+      {
+        label: 'Prospectos', icon: Users, module: 'leads',
+        children: [
+          { label: 'Listado', to: '/leads', module: 'leads' },
+          { label: 'Pipeline (Kanban)', to: '/leads/pipeline', module: 'leads' },
+          { label: 'Audiencias Meta', to: '/leads/audiences', roles: ['superadmin', 'admin'], module: 'leads' },
+        ],
+      },
       {
         label: 'Clientes', icon: UserCheck, module: 'clients',
         children: [
@@ -141,6 +148,8 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
+      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
       { label: 'Soporte', to: '/soporte', icon: Headset },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
