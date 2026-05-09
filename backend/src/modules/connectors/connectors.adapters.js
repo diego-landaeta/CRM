@@ -5,18 +5,105 @@
 
 import { logger } from '../../shared/utils/logger.js';
 
-// Helper: resuelve "a.b.c" sobre obj
+// Helper: resuelve "a.b.c" sobre obj. Soporta:
+//   - Notación bracket: a.b[2].c
+//   - Wildcard array: a.b[*].c → devuelve array de valores
+//   - meta_data search: meta_data{key=foo}.value (busca en array de objetos por key)
 export function resolvePath(obj, path) {
   if (!obj || !path) return undefined;
-  return path.split('.').reduce((acc, key) => {
+  const parts = path.split('.');
+  let acc = obj;
+  for (const part of parts) {
     if (acc === undefined || acc === null) return undefined;
-    // Soportar arrays con notación [N]
-    const m = key.match(/^([^[]+)(?:\[(\d+)\])?$/);
-    if (!m) return undefined;
-    let val = acc[m[1]];
-    if (m[2] !== undefined && Array.isArray(val)) val = val[parseInt(m[2])];
-    return val;
-  }, obj);
+
+    // Wildcard [*] — itera sobre array
+    if (part.endsWith('[*]')) {
+      const key = part.slice(0, -3);
+      const arr = key ? acc[key] : acc;
+      if (!Array.isArray(arr)) return undefined;
+      // El resto del path se aplica a cada item
+      const restIdx = parts.indexOf(part) + 1;
+      const restPath = parts.slice(restIdx).join('.');
+      if (!restPath) return arr;
+      return arr.map(item => resolvePath(item, restPath));
+    }
+
+    // meta_data{key=foo}.value — buscar en array por keypair
+    const searchMatch = part.match(/^([^{]+)\{([^=]+)=([^}]+)\}$/);
+    if (searchMatch) {
+      const [, arrKey, searchKey, searchVal] = searchMatch;
+      const arr = acc[arrKey];
+      if (!Array.isArray(arr)) return undefined;
+      acc = arr.find(item => String(item?.[searchKey]) === searchVal);
+      continue;
+    }
+
+    // Bracket simple [N]
+    const bracketMatch = part.match(/^([^[]+)(?:\[(\d+)\])?$/);
+    if (!bracketMatch) return undefined;
+    let val = acc[bracketMatch[1]];
+    if (bracketMatch[2] !== undefined && Array.isArray(val)) val = val[parseInt(bracketMatch[2])];
+    acc = val;
+  }
+  return acc;
+}
+
+// Aplica una transformación al valor extraído
+// Transformaciones soportadas: trim, lowercase, uppercase, parseInt, parseFloat,
+// stripHtml, slug, regex:patrón → captura el grupo 1
+export function applyTransform(value, transform) {
+  if (value === undefined || value === null) return value;
+  if (!transform) return value;
+  switch (transform) {
+    case 'trim':       return String(value).trim();
+    case 'lowercase':  return String(value).toLowerCase();
+    case 'uppercase':  return String(value).toUpperCase();
+    case 'parseInt':   return parseInt(value) || null;
+    case 'parseFloat': return parseFloat(value) || null;
+    case 'stripHtml':  return String(value).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    case 'slug':       return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    default:
+      if (transform.startsWith('regex:')) {
+        const re = new RegExp(transform.slice(6));
+        const m = String(value).match(re);
+        return m ? (m[1] ?? m[0]) : null;
+      }
+      return value;
+  }
+}
+
+// Recorre recursivamente un objeto y devuelve todos los paths posibles con sus tipos
+// Útil para que el frontend muestre un tree-view del JSON sample
+export function inspectSchema(obj, prefix = '', maxDepth = 5) {
+  if (maxDepth <= 0 || obj === null || obj === undefined) return [];
+  const paths = [];
+  if (Array.isArray(obj)) {
+    paths.push({ path: prefix || '$', type: 'array', length: obj.length, sample: obj[0] });
+    if (obj.length > 0) {
+      const itemPaths = inspectSchema(obj[0], `${prefix}[0]`, maxDepth - 1);
+      paths.push(...itemPaths);
+      // Wildcard alternativo más útil para mapping
+      if (typeof obj[0] === 'object') {
+        for (const key of Object.keys(obj[0] || {})) {
+          paths.push({ path: `${prefix}[*].${key}`, type: 'wildcard', sample: obj[0][key] });
+        }
+      }
+    }
+    return paths;
+  }
+  if (typeof obj === 'object') {
+    for (const [key, val] of Object.entries(obj)) {
+      const fullPath = prefix ? `${prefix}.${key}` : key;
+      const type = Array.isArray(val) ? 'array' : typeof val;
+      const sample = type === 'string' && val.length > 80 ? val.slice(0, 80) + '...' : val;
+      paths.push({ path: fullPath, type, sample: type === 'object' || type === 'array' ? `<${type}>` : sample });
+      if (type === 'object' || type === 'array') {
+        paths.push(...inspectSchema(val, fullPath, maxDepth - 1));
+      }
+    }
+    return paths;
+  }
+  return [{ path: prefix, type: typeof obj, sample: obj }];
 }
 
 // Adaptador WooCommerce — products o orders

@@ -1,25 +1,73 @@
 import * as model from './connectors.model.js';
 import * as adapters from './connectors.adapters.js';
+import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from './connectors.targets.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
-// Aplica field_mapping a un item descargado del API externa.
-// Devuelve un objeto plano con los campos del CRM listos para insertar.
+// Aplica field_mapping a un item. Cada entry del mapping puede ser:
+//   - string ("path.dentro.del.json")
+//   - objeto { source, transform, default, subfields? }
+//
+// Soporta:
+//   - mapping plano: { nombre: 'name' } o { nombre: { source: 'name', transform: 'trim' } }
+//   - mapping a custom_fields: { 'custom_fields.acf_field': 'acf.mi_campo' }
+//   - mapping a array anidado (módulos): { _modules: { source: 'acf.modulos[*]', subfields: { titulo: 'titulo', horas: 'horas' } } }
 function applyMapping(item, mapping) {
-  const out = {};
-  for (const [crmField, sourcePath] of Object.entries(mapping || {})) {
-    if (!sourcePath) continue;
-    const v = adapters.resolvePath(item, sourcePath);
-    if (v !== undefined && v !== null && v !== '') out[crmField] = v;
+  const out = { custom_fields: {} };
+  for (const [crmField, def] of Object.entries(mapping || {})) {
+    const config = typeof def === 'string' ? { source: def } : (def || {});
+    if (!config.source && config.default === undefined) continue;
+
+    let value = config.source ? adapters.resolvePath(item, config.source) : undefined;
+    if (config.transform) value = adapters.applyTransform(value, config.transform);
+    if ((value === undefined || value === null || value === '') && config.default !== undefined) {
+      value = config.default;
+    }
+    if (value === undefined || value === null) continue;
+
+    // custom_fields.X → va a out.custom_fields[X]
+    if (crmField.startsWith('custom_fields.')) {
+      const fieldName = crmField.slice('custom_fields.'.length);
+      out.custom_fields[fieldName] = value;
+      continue;
+    }
+
+    // _modules → array de subitems con subfields mapeados
+    if (crmField === '_modules' && Array.isArray(value)) {
+      out._modules = value.map(sub => {
+        const subItem = {};
+        for (const [subKey, subPath] of Object.entries(config.subfields || {})) {
+          const subConfig = typeof subPath === 'string' ? { source: subPath } : subPath;
+          let subVal = subConfig.source ? adapters.resolvePath(sub, subConfig.source) : sub[subKey];
+          if (subConfig.transform) subVal = adapters.applyTransform(subVal, subConfig.transform);
+          if (subVal !== undefined && subVal !== null) subItem[subKey] = subVal;
+        }
+        return subItem;
+      });
+      continue;
+    }
+
+    out[crmField] = value;
   }
+  if (Object.keys(out.custom_fields).length === 0) delete out.custom_fields;
   return out;
+}
+
+// Resuelve categoría por id numérico o por nombre (case-insensitive)
+async function resolveCategoryId(projectId, value) {
+  if (!value) return null;
+  if (/^\d+$/.test(String(value))) return parseInt(value);
+  const { rows } = await query(
+    `SELECT id FROM product_categories WHERE project_id = $1 AND LOWER(nombre) = LOWER($2) LIMIT 1`,
+    [projectId, String(value)]
+  );
+  return rows[0]?.id || null;
 }
 
 // Inserta o actualiza un producto en CRM con datos del conector
 async function upsertProduct(projectId, mapped, originalItem) {
   if (!mapped.nombre) return { skipped: true };
-  // Idempotencia: si trae sku o external_id, intentar por ahí
   const sku = mapped.sku || null;
   const externalId = mapped.external_id || originalItem.id || null;
   let existing = null;
@@ -32,6 +80,8 @@ async function upsertProduct(projectId, mapped, originalItem) {
     existing = r.rows[0];
   }
 
+  const categoriaId = await resolveCategoryId(projectId, mapped.categoria_id);
+
   const fields = {
     nombre: mapped.nombre,
     descripcion: mapped.descripcion || null,
@@ -41,22 +91,28 @@ async function upsertProduct(projectId, mapped, originalItem) {
     duracion: mapped.duracion || null,
     url_info: mapped.url_info || null,
     image_url: mapped.image_url || null,
+    stripe_link: mapped.stripe_link || null,
+    categoria_id: categoriaId,
     wc_product_id: externalId,
-    wc_meta: JSON.stringify({ ...originalItem, _connector: true }),
+    wc_meta: JSON.stringify({ ...originalItem, _connector: true, _custom_fields: mapped.custom_fields || {} }),
   };
 
   if (existing) {
     await query(
-      `UPDATE products SET nombre=$1, descripcion=$2, precio=$3, moneda=$4, sku=$5, duracion=$6, url_info=$7, image_url=COALESCE($8, image_url), wc_meta=$9, updated_at=NOW() WHERE id=$10`,
-      [fields.nombre, fields.descripcion, fields.precio, fields.moneda, fields.sku, fields.duracion, fields.url_info, fields.image_url, fields.wc_meta, existing.id]
+      `UPDATE products SET nombre=$1, descripcion=$2, precio=$3, moneda=$4, sku=$5, duracion=$6,
+       url_info=$7, image_url=COALESCE($8, image_url), stripe_link=$9, categoria_id=COALESCE($10, categoria_id),
+       wc_meta=$11, updated_at=NOW() WHERE id=$12`,
+      [fields.nombre, fields.descripcion, fields.precio, fields.moneda, fields.sku, fields.duracion,
+       fields.url_info, fields.image_url, fields.stripe_link, fields.categoria_id, fields.wc_meta, existing.id]
     );
     return { action: 'updated', id: existing.id };
   }
 
   const ins = await query(
-    `INSERT INTO products (project_id, nombre, descripcion, precio, moneda, sku, duracion, url_info, image_url, wc_product_id, wc_meta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
-    [projectId, fields.nombre, fields.descripcion, fields.precio, fields.moneda, fields.sku, fields.duracion, fields.url_info, fields.image_url, fields.wc_product_id, fields.wc_meta]
+    `INSERT INTO products (project_id, nombre, descripcion, precio, moneda, sku, duracion, url_info, image_url, stripe_link, categoria_id, wc_product_id, wc_meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+    [projectId, fields.nombre, fields.descripcion, fields.precio, fields.moneda, fields.sku, fields.duracion,
+     fields.url_info, fields.image_url, fields.stripe_link, fields.categoria_id, fields.wc_product_id, fields.wc_meta]
   );
   return { action: 'created', id: ins.rows[0].id };
 }
@@ -84,12 +140,33 @@ export async function previewConnector(connectorId) {
   if (!c) throw new AppError('Conector no encontrado', 404, 'NOT_FOUND');
   const { items, total } = await adapters.fetchSample(c);
   await model.saveSample(connectorId, items[0] || {});
+
+  // Schema completo del item (todas las keys con tipos) para que el frontend
+  // muestre tree-view y permita drag-to-map cualquier campo.
+  const schema = items[0] ? adapters.inspectSchema(items[0]) : [];
+
+  // Catálogo de campos destino del CRM según destination
+  const targets = TARGETS_CATALOG[c.destination] || TARGETS_CATALOG.product;
+
+  // Test de mapping: aplicar el field_mapping actual al primer sample
+  let mapped_preview = null;
+  try {
+    if (c.field_mapping && Object.keys(c.field_mapping).length > 0 && items[0]) {
+      mapped_preview = applyMapping(items[0], c.field_mapping);
+    }
+  } catch (e) { /* mapping inválido, ignorar */ }
+
   return {
     type: c.type,
+    destination: c.destination,
     items_count_total: total,
     samples: items,
+    schema,                         // [{ path, type, sample }]
+    targets,                        // Campos destino disponibles
+    transforms: TRANSFORMS_CATALOG, // Transformaciones disponibles
     field_mapping_actual: c.field_mapping,
     sugeridos: detectFieldsFromSample(items[0] || {}),
+    mapped_preview,                 // resultado de aplicar mapping al primer item
   };
 }
 
