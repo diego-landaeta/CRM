@@ -6,14 +6,17 @@ import ProductFormDialog from '../components/ProductFormDialog';
 import { toast } from '@/shared/hooks/useToast';
 import {
   Plus, PencilSimple, Trash, FileText, Package,
-  CaretDown, CaretRight, Tree, MagnifyingGlass, X, Funnel,
+  CaretDown, CaretRight, Tree, MagnifyingGlass, X, Funnel, ArrowsClockwise,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import {
   getTree,
+  startWcSync,
+  getCurrentSyncStatus,
   type CategoryNode,
+  type WcRunStatus,
 } from '@/modules/product-categories/api/categories.api';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
@@ -107,6 +110,55 @@ export default function ProductsPage() {
   const [productSearch, setProductSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Sync WC status (polling)
+  const [syncStatus, setSyncStatus] = useState<WcRunStatus | null>(null);
+  const [syncStarting, setSyncStarting] = useState(false);
+
+  // Polling del estado del sync
+  useEffect(() => {
+    if (!projectId) return;
+    let cancel = false;
+    async function tick() {
+      try {
+        const s = await getCurrentSyncStatus(projectId!);
+        if (cancel) return;
+        // Si pasó de running a no-running, refrescar productos+árbol
+        if (syncStatus?.status === 'running' && s && s.status !== 'running') {
+          getTree(projectId!).then(setTree);
+          // Forzar refresh de productos sin tocar el hook
+          window.location.reload();
+          return;
+        }
+        setSyncStatus(s);
+      } catch { /* silencioso */ }
+    }
+    tick();
+    const interval = setInterval(tick, syncStatus?.status === 'running' ? 3000 : 30000);
+    return () => { cancel = true; clearInterval(interval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, syncStatus?.status]);
+
+  async function handleSyncWc() {
+    if (!projectId) return;
+    setSyncStarting(true);
+    try {
+      await startWcSync(projectId);
+      const s = await getCurrentSyncStatus(projectId);
+      setSyncStatus(s);
+      toast({ title: 'Sincronización iniciada', description: 'Se está descargando WooCommerce…' });
+    } catch (err: any) {
+      toast({
+        title: 'No se pudo iniciar',
+        description: err?.message?.includes('NO_CREDS') || err?.message?.includes('400')
+          ? 'Configura primero las credenciales en /woocommerce'
+          : err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncStarting(false);
+    }
+  }
 
   // CRM-147: quick-add via ?new=1. Cuando el FAB navega aquí con ese param,
   // abrimos el modal de creación y limpiamos el query para no re-disparar.
@@ -203,6 +255,17 @@ export default function ProductsPage() {
         actions={
           <div className="flex items-center gap-2">
             <button
+              onClick={handleSyncWc}
+              disabled={syncStarting || syncStatus?.status === 'running'}
+              className="flex items-center gap-2 h-9 px-3 rounded-md border bg-card text-sm hover:bg-muted disabled:opacity-50"
+              title="Sincronizar productos desde WooCommerce"
+            >
+              <ArrowsClockwise size={16} className={syncStatus?.status === 'running' ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">
+                {syncStatus?.status === 'running' ? 'Sincronizando…' : 'Sincronizar WC'}
+              </span>
+            </button>
+            <button
               onClick={() => setSidebarOpen((o) => !o)}
               className="flex items-center gap-2 h-9 px-3 rounded-md border bg-card text-sm hover:bg-muted"
             >
@@ -218,6 +281,24 @@ export default function ProductsPage() {
           </div>
         }
       />
+
+      {/* Banner de progreso del sync WC */}
+      {syncStatus?.status === 'running' && (
+        <div className="p-3 rounded-lg border bg-blue-500/10 border-blue-500/30 text-sm flex items-center gap-3">
+          <ArrowsClockwise size={18} className="animate-spin text-blue-500" />
+          <span>
+            Sincronizando WooCommerce · <strong>{syncStatus.elapsed_seconds}s</strong> transcurridos
+            {syncStatus.total_fetched ? ` · ${syncStatus.total_fetched} productos descargados` : ''}
+          </span>
+        </div>
+      )}
+      {syncStatus?.status === 'success' && syncStatus.finished_at && Date.now() - new Date(syncStatus.finished_at).getTime() < 60000 && (
+        <div className="p-3 rounded-lg border bg-emerald-500/10 border-emerald-500/30 text-sm">
+          ✅ Sync OK · <strong>{syncStatus.total_fetched}</strong> productos
+          ({syncStatus.total_created} nuevos, {syncStatus.total_updated} actualizados)
+          en {syncStatus.elapsed_seconds}s
+        </div>
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md px-3 py-2 font-medium">
