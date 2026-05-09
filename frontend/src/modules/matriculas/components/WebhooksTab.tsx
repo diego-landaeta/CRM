@@ -5,6 +5,7 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { PlugsConnected, Plus, Copy, Trash, X } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
+import { copyToClipboard } from '@/shared/lib/clipboard';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -142,7 +143,7 @@ function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit:
       <div className="flex gap-2">
         <code className="flex-1 p-2 bg-muted/40 rounded text-[11px] overflow-x-auto break-all">{url}</code>
         <button
-          onClick={() => { navigator.clipboard.writeText(url); toast({ title: 'Copiado' }); }}
+          onClick={async () => { const ok = await copyToClipboard(url); toast({ title: ok ? 'Copiado' : 'Usa Ctrl+C', variant: ok ? undefined : 'destructive' }); }}
           aria-label="Copiar URL del webhook"
           className="p-2 rounded bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
@@ -229,7 +230,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
               <div className="flex gap-2">
                 <code className="flex-1 p-2 bg-card rounded text-[11px] overflow-x-auto break-all">{url}</code>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(url); toast({ title: 'Copiado' }); }}
+                  onClick={async () => { const ok = await copyToClipboard(url); toast({ title: ok ? 'Copiado' : 'Usa Ctrl+C', variant: ok ? undefined : 'destructive' }); }}
                   aria-label="Copiar URL"
                   className="p-2 rounded bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >

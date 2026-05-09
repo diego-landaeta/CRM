@@ -92,13 +92,14 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   async function copyActiveLink() {
     if (!activeLink) return;
-    try {
-      await navigator.clipboard.writeText(activeLink);
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(activeLink);
+    if (ok) {
       setLinkCopied(true);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
       copiedTimeoutRef.current = setTimeout(() => setLinkCopied(false), 2000);
       toast({ title: 'Enlace copiado', description: 'Pégalo en WhatsApp/Email del cliente' });
-    } catch {
+    } else {
       toast({ title: 'No se pudo copiar', variant: 'destructive' });
     }
   }

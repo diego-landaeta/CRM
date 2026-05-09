@@ -119,9 +119,31 @@ export default function WebhookDetailPage() {
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
-  function copy(text: string): void {
-    navigator.clipboard.writeText(text);
-    toast({ title: 'Copiado al portapapeles' });
+  async function copy(text: string): Promise<void> {
+    // Intentar Clipboard API (solo HTTPS o localhost)
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast({ title: 'Copiado al portapapeles' });
+        return;
+      } catch { /* fallback abajo */ }
+    }
+    // Fallback HTTP: textarea + execCommand (deprecado pero funciona en todos lados)
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    document.body.removeChild(ta);
+    toast({
+      title: ok ? 'Copiado al portapapeles' : 'No se pudo copiar',
+      description: ok ? undefined : 'Selecciona el texto manualmente con Ctrl+C',
+      variant: ok ? undefined : 'destructive',
+    });
   }
 
   if (loading) {
