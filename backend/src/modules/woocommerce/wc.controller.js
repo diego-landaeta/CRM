@@ -382,6 +382,7 @@ function mapWcProduct(wp, categoryMap) {
     precio: parseFloat(wp.price || wp.regular_price || 0),
     descripcion: wp.short_description || wp.description || null,
     sku: wp.sku || null,
+    url_info: wp.permalink || null,  // Enlace al producto en la web pública
     categoria_id: categoriaLocalId,
     subcategoria_id: subcategoriaLocalId,
     meta: {

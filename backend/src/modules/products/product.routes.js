@@ -3,6 +3,7 @@ import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ProductController from './product.controller.js';
+import * as ModulesController from './product-modules.controller.js';
 
 const router = Router();
 
@@ -28,5 +29,12 @@ router.delete('/:id/image',
   projectAccess,
   ProductController.removeImage,
 );
+
+// Módulos / temario del producto (CRUD manual desde CRM, también lo leen documentos/certificados)
+router.get('/:id/modules', projectAccess, ModulesController.listModules);
+router.post('/:id/modules', roleGuard('admin', 'superadmin'), projectAccess, ModulesController.createModule);
+router.patch('/:id/modules/:moduleId', roleGuard('admin', 'superadmin'), projectAccess, ModulesController.updateModule);
+router.delete('/:id/modules/:moduleId', roleGuard('admin', 'superadmin'), projectAccess, ModulesController.deleteModule);
+router.post('/:id/modules/reorder', roleGuard('admin', 'superadmin'), projectAccess, ModulesController.reorderModules);
 
 export default router;
