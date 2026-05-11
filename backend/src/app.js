@@ -48,6 +48,10 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Detrás de Nginx (un único hop). Necesario para que express-rate-limit
+// y req.ip funcionen con X-Forwarded-For sin lanzar ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // Middleware global
 app.use(helmet());
 app.use(cors({
