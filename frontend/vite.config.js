@@ -3,14 +3,18 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Base path por entorno: VITE_BASE_PATH=/crm/ (prod) o /testeo_crm/ (staging)
+const BASE = process.env.VITE_BASE_PATH || '/crm/';
+const ESC = BASE.replace(/\//g, '\\/');
+
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      base: '/crm/',
-      scope: '/crm/',
+      base: BASE,
+      scope: BASE,
       manifest: false,
       includeAssets: ['offline.html', 'favicon.jpeg', 'favicon.svg', 'icons/*.png'],
       workbox: {
@@ -18,8 +22,8 @@ export default defineConfig({
         skipWaiting: true,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: '/crm/offline.html',
-        navigateFallbackDenylist: [/^\/crm\/api\//, /^\/crm\/embed\//],
+        navigateFallback: `${BASE}offline.html`,
+        navigateFallbackDenylist: [new RegExp(`^${ESC}api\\/`), new RegExp(`^${ESC}embed\\/`)],
         runtimeCaching: [
           // Google Fonts: cache largo
           {
@@ -32,12 +36,12 @@ export default defineConfig({
           },
           // Auth/login: NUNCA cachear
           {
-            urlPattern: /\/crm\/api\/auth(\/|$)/,
+            urlPattern: new RegExp(`${ESC}api\\/auth(\\/|$)`),
             handler: 'NetworkOnly',
           },
           // Endpoints autenticados (lectura): NetworkFirst con timeout corto
           {
-            urlPattern: /\/crm\/api\/(leads|clients|products|users|matriculas|conversions|reports|dashboard|email-sequences|forms|webhooks|projects|notifications|payroll|commissions|accounting|webhook-tokens|field-definitions|status|ia|claude|seo|campaigns|woocommerce|documents|reports-ia|audiences)(\/|$|\?)/i,
+            urlPattern: new RegExp(`${ESC}api\\/(leads|clients|products|users|matriculas|conversions|reports|dashboard|email-sequences|forms|webhooks|projects|notifications|payroll|commissions|accounting|webhook-tokens|field-definitions|status|ia|claude|seo|campaigns|woocommerce|documents|reports-ia|audiences)(\\/|$|\\?)`, 'i'),
             handler: 'NetworkFirst',
             method: 'GET',
             options: {
@@ -49,7 +53,7 @@ export default defineConfig({
           },
           // Imagenes/avatares/logos (assets binarios servidos por API)
           {
-            urlPattern: /\/crm\/api\/.*\/(logo|avatar)/i,
+            urlPattern: new RegExp(`${ESC}api\\/.*\\/(logo|avatar)`, 'i'),
             handler: 'StaleWhileRevalidate',
             method: 'GET',
             options: {
@@ -93,7 +97,7 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  base: '/crm/',
+  base: BASE,
   test: {
     globals: true,
     environment: 'jsdom',
