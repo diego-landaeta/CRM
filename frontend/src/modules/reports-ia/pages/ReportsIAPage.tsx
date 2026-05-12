@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -29,12 +30,12 @@ export default function ReportsIAPage() {
           title="Disponible en proyectos IA"
           description="Los reportes con Claude AI solo se generan para proyectos de tipo IA (Psicólogo IA, Nutricionista IA, Tarot IA). Cambia de proyecto en la barra superior para acceder."
           action={
-            <a
-              href="/crm/reports"
+            <Link
+              to="/reports"
               className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
             >
               <ChartBar size={14} weight="bold" /> Ver reportes CRM
-            </a>
+            </Link>
           }
         />
       ) : (

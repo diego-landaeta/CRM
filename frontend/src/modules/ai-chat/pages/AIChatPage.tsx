@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { ChatCircleText, Sparkle, FileText } from '@phosphor-icons/react';
@@ -33,12 +34,12 @@ export default function AIChatPage() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Mientras tanto, los reportes generados con Claude AI ya están disponibles para proyectos IA.
             </p>
-            <a
-              href="/crm/reports/ia"
+            <Link
+              to="/reports/ia"
               className="inline-block mt-2 text-xs text-primary font-medium hover:underline"
             >
               Ver Análisis IA →
-            </a>
+            </Link>
           </div>
         </article>
 
@@ -51,12 +52,12 @@ export default function AIChatPage() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Las métricas y dashboards tradicionales del CRM siguen activos.
             </p>
-            <a
-              href="/crm/reports"
+            <Link
+              to="/reports"
               className="inline-block mt-2 text-xs text-primary font-medium hover:underline"
             >
               Ver Reportes →
-            </a>
+            </Link>
           </div>
         </article>
       </section>
