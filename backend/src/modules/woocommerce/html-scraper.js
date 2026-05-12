@@ -94,8 +94,13 @@ function parseMetaValue(label, rawText) {
  * (case + accent insensitive) y devuelve el slice de HTML hasta el siguiente
  * <h2> O hasta el primer indicador de fin de contenido (footer/section close/h1).
  */
-function sliceSectionByKeywords(html, keywords) {
-  if (!keywords || keywords.length === 0) return '';
+/**
+ * Devuelve TODOS los slices que matchean los keywords como array de objetos
+ * { heading, html }. Si quieres solo el primero o concatenarlos, usa los
+ * wrappers más arriba.
+ */
+function sliceSectionsByKeywords(html, keywords) {
+  if (!keywords || keywords.length === 0) return [];
 
   // Recolectar TODOS los H2 con su posición y texto normalizado
   const h2Re = /<h2\b[^>]*>([\s\S]*?)<\/h2>/gi;
@@ -111,36 +116,73 @@ function sliceSectionByKeywords(html, keywords) {
   }
   if (allH2.length === 0) return '';
 
-  // Buscar match priorizando por orden de keyword y por especificidad
-  // (preferimos H2 cuyo texto sea más LARGO — sugiere título de sección formal).
-  let bestMatch = null;
+  // Recolectar TODOS los H2 que matchean CUALQUIER keyword del set.
+  // No solo el primero: si hay varias secciones equivalentes (p. ej.
+  // "Módulos del Curso" Y "Programa Académico" Y "Temario") las unimos.
+  const matchedSet = new Set();
+  const matches = [];
   for (const kw of keywords) {
     const kwNorm = normalizeForMatch(kw);
-    // Candidatos: H2 que contienen el keyword
-    const candidates = allH2.filter((h) => h.norm.includes(kwNorm));
-    if (candidates.length === 0) continue;
-    // De los candidatos, preferir el de texto MÁS LARGO (más específico)
-    // ej: "Contenido del Máster en Rehabilitación..." > "Crece con nuestros programas"
-    candidates.sort((a, b) => b.text.length - a.text.length);
-    bestMatch = candidates[0];
-    break;  // el primer keyword que matchea gana (orden en config = prioridad)
+    for (const h of allH2) {
+      if (matchedSet.has(h.index)) continue;
+      if (h.norm.includes(kwNorm)) {
+        matchedSet.add(h.index);
+        matches.push(h);
+      }
+    }
   }
+  if (matches.length === 0) return '';
 
-  if (!bestMatch) return '';
+  // Filtrar matches que parecen "ruido" (textos genéricos típicos del footer/CTA)
+  const NOISE_RE = /\b(unete|crece con|solicita|contacta|encuentra tu|conoce)/i;
+  const cleanMatches = matches.filter((h) => !NOISE_RE.test(normalizeForMatch(h.text)));
+  const useMatches = cleanMatches.length > 0 ? cleanMatches : matches;
 
-  const start = bestMatch.end;
-  const rest = html.slice(start);
+  // Ordenar por posición en el HTML para preservar el orden natural
+  useMatches.sort((a, b) => a.index - b.index);
+  // Set de índices de matches para detectar "siguiente match" rápido
+  const matchIdxSet = new Set(useMatches.map((m) => m.index));
 
-  // Cortes posibles. Ignoramos los muy cercanos (< 200 chars) para no
-  // matar el slice si la sección empieza con un H3/widget interno.
-  const MIN_DISTANCE = 200;
-  const cuts = [
-    rest.search(/<h2\b/i),
-    rest.search(/<footer\b/i),
-    rest.search(/<[^>]+class="[^"]*(?:site-footer|elementor-location-footer)[^"]*"/i),
-  ].filter((i) => i >= MIN_DISTANCE);
-  const end = cuts.length ? Math.min(...cuts) : Math.min(rest.length, 80000);
-  return rest.slice(0, end);
+  // Cortes generales: footer / site-footer (siempre cortan)
+  const footerRe = /<footer\b/i;
+  const siteFooterRe = /<[^>]+class="[^"]*(?:site-footer|elementor-location-footer)[^"]*"/i;
+
+  // Para cada match, el slice va desde su end hasta el SIGUIENTE H2 de allH2
+  // (sea match o no — un h2 distinto siempre cierra sección), o footer.
+  const slices = [];
+  for (let i = 0; i < useMatches.length; i++) {
+    const h = useMatches[i];
+    const start = h.end;
+    // Siguiente h2 en allH2 (posición absoluta)
+    const nextH2 = allH2.find((x) => x.index > h.index);
+    const nextH2Abs = nextH2 ? nextH2.index : Infinity;
+    // Footer / site-footer absolutos
+    const after = html.slice(start);
+    const footerRel = after.search(footerRe);
+    const siteFooterRel = after.search(siteFooterRe);
+    const footerAbs = footerRel >= 0 ? start + footerRel : Infinity;
+    const siteFooterAbs = siteFooterRel >= 0 ? start + siteFooterRel : Infinity;
+    const endAbs = Math.min(nextH2Abs, footerAbs, siteFooterAbs, start + 80000);
+    const slice = html.slice(start, endAbs);
+    if (slice.trim()) {
+      slices.push({ heading: h.text, html: slice });
+    }
+  }
+  return slices;
+}
+
+/**
+ * Versión legacy (compat): devuelve un único string. Por defecto el PRIMER slice,
+ * o si pasas { mode: 'concat' } los concatena todos.
+ */
+function sliceSectionByKeywords(html, keywords, opts = {}) {
+  const slices = sliceSectionsByKeywords(html, keywords);
+  if (slices.length === 0) return '';
+  if (opts.mode === 'concat' || slices.length === 1) {
+    if (slices.length === 1) return slices[0].html;
+    return slices.map((s) => `<h3>── ${s.heading} ──</h3>\n${s.html}`).join('\n\n');
+  }
+  return slices[0].html;
 }
 
 /** Extrae title H1 del HTML (primer h1 no vacío). */
@@ -269,15 +311,36 @@ export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
     html_size: html.length,
   };
 
-  // Para cada sección lógica configurada, extraer el slice
+  // Para cada sección lógica configurada, extraer TODOS los slices que matchean.
+  // - sections.{key}                 → primer slice (compat)
+  // - sections.{key}_2, _3, ...      → slices adicionales (separados por heading)
+  // - sections.{key}__all            → concatenación de TODOS con separadores
+  // - sections_meta.{key}            → array con [{heading, length, preview}, ...]
+  result.sections_meta = {};
   for (const [crmField, keywords] of Object.entries(sectionKeywords || {})) {
     if (!Array.isArray(keywords) || keywords.length === 0) continue;
-    const slice = sliceSectionByKeywords(html, keywords);
-    if (slice) {
-      const value = strategy === 'preserve_html' ? slice.trim() : htmlToText(slice);
-      // Limitar a 50KB para no reventar el campo TEXT
-      result.sections[crmField] = value.slice(0, 50000);
+    const slices = sliceSectionsByKeywords(html, keywords);
+    if (slices.length === 0) continue;
+    const toFinal = (s) => {
+      const v = strategy === 'preserve_html' ? s.trim() : htmlToText(s);
+      return v.slice(0, 50000);
+    };
+    // Primer slice como valor por defecto del campo
+    result.sections[crmField] = toFinal(slices[0].html);
+    // Slices adicionales con sufijo _2, _3...
+    for (let i = 1; i < slices.length; i++) {
+      result.sections[`${crmField}_${i + 1}`] = toFinal(slices[i].html);
     }
+    // Variante "__all": concatena los N con separador visible
+    if (slices.length > 1) {
+      const concatenated = slices.map((s) => `<h3>── ${s.heading} ──</h3>\n${s.html}`).join('\n\n');
+      result.sections[`${crmField}__all`] = strategy === 'preserve_html' ? concatenated.trim() : htmlToText(concatenated);
+    }
+    // Meta: array con info de cada slice para que la UI pueda mostrar lista
+    result.sections_meta[crmField] = slices.map((s) => ({
+      heading: s.heading,
+      length: (strategy === 'preserve_html' ? s.html : htmlToText(s.html)).length,
+    }));
   }
 
   return result;

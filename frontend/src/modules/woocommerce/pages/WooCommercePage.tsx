@@ -78,6 +78,7 @@ interface ScrapedData {
   url_used?: string;
   meta_box?: Record<string, { text?: string; value?: number; unit?: string; iso_date?: string; type?: string }>;
   sections?: Record<string, string>;
+  sections_meta?: Record<string, Array<{ heading: string; length: number }>>;
   imagen_og?: string;
   meta_description?: string;
   html_size?: number;
@@ -528,12 +529,23 @@ export default function WooCommercePage() {
                             </optgroup>
                           )}
                           {previewData.scraped && previewData.scraped.sections && Object.keys(previewData.scraped.sections).length > 0 && (
-                            <optgroup label="Scraper · secciones (texto)">
-                              {Object.entries(previewData.scraped.sections).map(([k, v]) => (
-                                <option key={`scraper.sections.${k}`} value={`scraper.sections.${k}`}>
-                                  scraper.sections.{k} ({String(v || '').length}c)
-                                </option>
-                              ))}
+                            <optgroup label="Scraper · secciones (texto) — TÚ eliges si concatenar">
+                              {Object.entries(previewData.scraped.sections).map(([k, v]) => {
+                                // Detectar el "base key" (modulos vs modulos_2 vs modulos__all)
+                                const isAll = k.endsWith('__all');
+                                const variantMatch = k.match(/^(.+)_(\d+)$/);
+                                const baseKey = isAll ? k.slice(0, -5) : variantMatch ? variantMatch[1] : k;
+                                const variantIdx = variantMatch ? parseInt(variantMatch[2]) : 1;
+                                const meta = previewData.scraped?.sections_meta?.[baseKey];
+                                let label = `scraper.sections.${k} (${String(v || '').length}c)`;
+                                if (isAll) {
+                                  label = `★ ${k} → todos ${meta?.length || ''} unidos (${String(v || '').length}c)`;
+                                } else if (meta && meta.length > 1) {
+                                  const variantInfo = meta[variantIdx - 1];
+                                  label = `scraper.sections.${k} — "${variantInfo?.heading?.slice(0, 50) || ''}" (${String(v || '').length}c)`;
+                                }
+                                return <option key={`scraper.sections.${k}`} value={`scraper.sections.${k}`}>{label}</option>;
+                              })}
                             </optgroup>
                           )}
                           {previewData.scraped && previewData.scraped.meta_box && Object.keys(previewData.scraped.meta_box).length > 0 && (
