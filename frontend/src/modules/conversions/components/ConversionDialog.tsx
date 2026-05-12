@@ -21,6 +21,33 @@ interface ConversionForm {
   notas_pago: string;
 }
 
+interface Installment {
+  importe_previsto: string;
+  fecha_vencimiento: string;
+}
+
+function addMonths(isoDate: string, months: number): string {
+  const d = new Date(isoDate);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
+function distributeInstallments(total: number, n: number, fechaInicio: string): Installment[] {
+  if (!isFinite(total) || total <= 0 || n < 2) return [];
+  const cuotaBase = Math.round((total / n) * 100) / 100;
+  const result: Installment[] = [];
+  for (let i = 0; i < n; i++) {
+    const importe = i === n - 1
+      ? Math.round((total - cuotaBase * (n - 1)) * 100) / 100
+      : cuotaBase;
+    result.push({
+      importe_previsto: String(importe),
+      fecha_vencimiento: addMonths(fechaInicio, i),
+    });
+  }
+  return result;
+}
+
 // Acepta tanto Lead como Client; solo necesita id, nombre y opcional producto_nombre
 interface ConversionDialogTarget {
   id: number;
@@ -50,6 +77,11 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [selectedLinkIdx, setSelectedLinkIdx] = useState<string>('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [aplicaDescuento, setAplicaDescuento] = useState(false);
+  const [numCuotas, setNumCuotas] = useState(3);
+  const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [installments, setInstallments] = useState<Installment[]>([]);
+  const [installmentsDirty, setInstallmentsDirty] = useState(false);
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -85,6 +117,31 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     setSelectedLinkIdx('-1');
     setCustomLink('');
   }, [form.producto_contratado]);
+
+  // Al elegir un producto del catálogo, autorrellena el importe con su precio.
+  // Si el usuario marca "Aplicar descuento", deja editar libremente sin pisar.
+  useEffect(() => {
+    if (!selectedProduct || aplicaDescuento) return;
+    const precio = selectedProduct.precio != null ? String(selectedProduct.precio) : '';
+    if (precio && form.importe_total !== precio) {
+      setForm(f => ({ ...f, importe_total: precio }));
+    }
+  }, [selectedProduct, aplicaDescuento]);
+
+  // Reset dirty flag when fraccionado switches off
+  useEffect(() => {
+    if (form.metodo_pago !== 'fraccionado') {
+      setInstallmentsDirty(false);
+      setInstallments([]);
+    }
+  }, [form.metodo_pago]);
+
+  // Recalcular cuotas si: estoy en fraccionado, las cuotas NO han sido editadas a mano
+  useEffect(() => {
+    if (form.metodo_pago !== 'fraccionado' || installmentsDirty) return;
+    const total = Number(form.importe_total);
+    setInstallments(distributeInstallments(total, numCuotas, fechaPrimeraCuota));
+  }, [form.metodo_pago, form.importe_total, numCuotas, fechaPrimeraCuota, installmentsDirty]);
 
   const activeLink = selectedLinkIdx === 'custom'
     ? customLink
@@ -134,6 +191,23 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       toast({ title: 'Importe pagado invalido', description: 'No puede superar el total', variant: 'destructive' });
       return;
     }
+    // Validar cuotas si es fraccionado
+    if (form.metodo_pago === 'fraccionado') {
+      if (installments.length < 2) {
+        toast({ title: 'Al menos 2 cuotas requeridas', variant: 'destructive' });
+        return;
+      }
+      const sumaCuotas = installments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
+      const diff = Math.abs(sumaCuotas - importe);
+      if (diff > 0.05) {
+        toast({ title: 'La suma de cuotas no coincide con el total', description: `Suma: ${sumaCuotas.toFixed(2)} EUR — Total: ${importe.toFixed(2)} EUR`, variant: 'destructive' });
+        return;
+      }
+      if (installments.some(c => !c.fecha_vencimiento || Number(c.importe_previsto) <= 0)) {
+        toast({ title: 'Revisa importe y fecha de cada cuota', variant: 'destructive' });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const res = await conversionsApi.create({
@@ -148,6 +222,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         notas_pago: form.notas_pago || null,
       });
       if (res.success && res.data) {
+        // Si es fraccionado, genera las cuotas custom
+        if (form.metodo_pago === 'fraccionado' && installments.length >= 2) {
+          try {
+            await conversionsApi.generateInstallments(res.data.id, {
+              installments: installments.map(c => ({
+                importe_previsto: Number(c.importe_previsto),
+                fecha_vencimiento: c.fecha_vencimiento,
+              })),
+            });
+          } catch (instErr: any) {
+            toast({ title: 'Conversión creada, pero falló generar cuotas', description: instErr?.data?.error || instErr?.message, variant: 'destructive' });
+          }
+        }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
         onCreated?.(res.data);
         onClose();
@@ -184,31 +271,61 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Producto contratado *</label>
-              {products.length > 0 ? (
-                <select value={form.producto_contratado} onChange={e => update('producto_contratado', e.target.value)} className={selectClass}>
-                  <option value="">Seleccionar o escribir abajo</option>
-                  {products.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
-                </select>
-              ) : null}
               <input
+                list={products.length > 0 ? 'conversion-products-list' : undefined}
                 value={form.producto_contratado}
                 onChange={e => update('producto_contratado', e.target.value)}
-                placeholder="Nombre del producto/curso"
-                className={inputClass + ' mt-2'}
+                placeholder={products.length > 0 ? 'Escribe o selecciona del listado' : 'Nombre del producto/curso'}
+                className={inputClass}
                 required
+                autoComplete="off"
               />
+              {products.length > 0 && (
+                <datalist id="conversion-products-list">
+                  {products.map(p => <option key={p.id} value={p.nombre} />)}
+                </datalist>
+              )}
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Puedes elegir uno del catálogo o escribir un nombre nuevo.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe total (EUR) *</label>
-                <input type="number" step="0.01" min="0.01" value={form.importe_total} onChange={e => update('importe_total', e.target.value)} className={inputClass} required />
+                <input
+                  type="number" step="0.01" min="0.01"
+                  value={form.importe_total}
+                  onChange={e => { update('importe_total', e.target.value); if (selectedProduct && !aplicaDescuento) setAplicaDescuento(true); }}
+                  readOnly={!!selectedProduct && !aplicaDescuento}
+                  className={inputClass + (selectedProduct && !aplicaDescuento ? ' bg-muted text-muted-foreground cursor-not-allowed' : '')}
+                  required
+                />
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe pagado hoy</label>
                 <input type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)} className={inputClass} />
               </div>
             </div>
+
+            {selectedProduct && (
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={aplicaDescuento}
+                  onChange={(e) => {
+                    setAplicaDescuento(e.target.checked);
+                    if (!e.target.checked && selectedProduct?.precio != null) {
+                      update('importe_total', String(selectedProduct.precio));
+                    }
+                  }}
+                />
+                <span>Aplicar descuento (editar importe manualmente)</span>
+                {!aplicaDescuento && selectedProduct.precio != null && (
+                  <span className="text-muted-foreground">— precio del catálogo: {selectedProduct.precio} EUR</span>
+                )}
+              </label>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -224,9 +341,96 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             </div>
 
             {form.metodo_pago === 'fraccionado' && (
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha compromiso de pago pendiente</label>
-                <input type="date" value={form.fecha_compromiso_pago} onChange={e => update('fecha_compromiso_pago', e.target.value)} className={inputClass} />
+              <div className="space-y-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                    Plan de cuotas
+                  </div>
+                  {installmentsDirty && (
+                    <button
+                      type="button"
+                      onClick={() => { setInstallmentsDirty(false); }}
+                      className="text-[10px] text-amber-700 dark:text-amber-300 underline"
+                    >
+                      Recalcular automáticamente
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Número de cuotas</label>
+                    <input
+                      type="number" min="2" max="60"
+                      value={numCuotas}
+                      onChange={e => { setNumCuotas(Math.max(2, Number(e.target.value) || 2)); setInstallmentsDirty(false); }}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Fecha primera cuota</label>
+                    <input
+                      type="date"
+                      value={fechaPrimeraCuota}
+                      onChange={e => { setFechaPrimeraCuota(e.target.value); setInstallmentsDirty(false); }}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {installments.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-[40px_1fr_140px] gap-2 text-[10px] font-bold uppercase text-muted-foreground px-1">
+                      <span>#</span>
+                      <span>Importe (EUR)</span>
+                      <span>Vencimiento</span>
+                    </div>
+                    {installments.map((c, i) => (
+                      <div key={i} className="grid grid-cols-[40px_1fr_140px] gap-2 items-center">
+                        <span className="text-xs font-mono text-muted-foreground">{i + 1}</span>
+                        <input
+                          type="number" step="0.01" min="0.01"
+                          value={c.importe_previsto}
+                          onChange={e => {
+                            const next = [...installments];
+                            next[i] = { ...next[i], importe_previsto: e.target.value };
+                            setInstallments(next);
+                            setInstallmentsDirty(true);
+                          }}
+                          className={inputClass}
+                        />
+                        <input
+                          type="date"
+                          value={c.fecha_vencimiento}
+                          onChange={e => {
+                            const next = [...installments];
+                            next[i] = { ...next[i], fecha_vencimiento: e.target.value };
+                            setInstallments(next);
+                            setInstallmentsDirty(true);
+                          }}
+                          className={inputClass}
+                        />
+                      </div>
+                    ))}
+                    {(() => {
+                      const suma = installments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
+                      const total = Number(form.importe_total) || 0;
+                      const diff = Math.round((total - suma) * 100) / 100;
+                      const ok = Math.abs(diff) <= 0.05;
+                      return (
+                        <div className={`text-[11px] font-medium pt-1 ${ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          Suma cuotas: {suma.toFixed(2)} EUR — Total: {total.toFixed(2)} EUR
+                          {!ok && ` — Diferencia: ${diff.toFixed(2)} EUR`}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Fecha compromiso de pago pendiente (opcional)</label>
+                  <input type="date" value={form.fecha_compromiso_pago} onChange={e => update('fecha_compromiso_pago', e.target.value)} className={inputClass} />
+                </div>
               </div>
             )}
 

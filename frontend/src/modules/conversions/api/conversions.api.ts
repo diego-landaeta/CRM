@@ -72,4 +72,14 @@ export const conversionsApi = {
     client.post(`/conversions/${id}/payments`, data),
   removePayment: (paymentId: number): Promise<ApiResponse<void>> =>
     client.delete(`/conversions/payments/${paymentId}`),
+  generateInstallments: (
+    id: number,
+    data: {
+      num_cuotas?: number;
+      importe_total?: number;
+      fecha_inicio?: string;
+      installments?: Array<{ importe_previsto: number; fecha_vencimiento: string }>;
+    },
+  ): Promise<ApiResponse<unknown>> =>
+    client.post(`/conversions/${id}/installments/generate`, data),
 };
