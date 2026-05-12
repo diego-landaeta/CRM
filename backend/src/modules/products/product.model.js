@@ -46,7 +46,11 @@ export async function create({ projectId, nombre, descripcion, categoria_id, sub
 export async function update(id, data) {
   const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id',
                    'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info',
-                   'image_url'];
+                   'image_url',
+                   'horas', 'num_modulos', 'modalidad', 'fecha_inicio_texto',
+                   'presentacion_texto', 'objetivos_texto', 'beneficios_texto',
+                   'dirigido_a_texto', 'para_que_te_prepara_texto', 'por_que_estudiar_texto',
+                   'modulos_texto', 'metodologia_texto', 'faqs_texto', 'profesores_texto'];
   const fields = [];
   const values = [];
   let idx = 1;

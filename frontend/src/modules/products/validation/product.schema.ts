@@ -29,6 +29,21 @@ export const productSchema = z.object({
   url_info: z.string().url('URL invalida').optional().or(z.literal('')),
   categoria_id: z.union([z.number(), z.string()]).optional().or(z.literal('')),
   subcategoria_id: z.union([z.number(), z.string()]).optional().or(z.literal('')),
+  // Campos del scraper / WC ricos
+  horas: z.string().optional().or(z.literal('')),
+  num_modulos: z.union([z.coerce.number().int().nonnegative(), z.literal(''), z.nan()]).optional(),
+  modalidad: z.string().optional().or(z.literal('')),
+  fecha_inicio_texto: z.string().optional().or(z.literal('')),
+  presentacion_texto: z.string().optional().or(z.literal('')),
+  objetivos_texto: z.string().optional().or(z.literal('')),
+  beneficios_texto: z.string().optional().or(z.literal('')),
+  dirigido_a_texto: z.string().optional().or(z.literal('')),
+  para_que_te_prepara_texto: z.string().optional().or(z.literal('')),
+  por_que_estudiar_texto: z.string().optional().or(z.literal('')),
+  modulos_texto: z.string().optional().or(z.literal('')),
+  metodologia_texto: z.string().optional().or(z.literal('')),
+  faqs_texto: z.string().optional().or(z.literal('')),
+  profesores_texto: z.string().optional().or(z.literal('')),
 });
 
 export type ProductFormData = z.infer<typeof productSchema>;
