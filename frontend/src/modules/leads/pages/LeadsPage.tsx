@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
@@ -31,6 +31,7 @@ import {
   PencilSimple,
   X,
   DownloadSimple,
+  ArrowsClockwise,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -129,6 +130,32 @@ export default function LeadsPage() {
   const { activeProject } = useProjectContext();
   const { products } = useProducts(activeProject?.id);
   const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
+
+  // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
+  const lastSeenIdsRef = useRef<Set<number>>(new Set());
+  const [newCount, setNewCount] = useState(0);
+  useEffect(() => {
+    // Inicializar set en primera carga
+    if (leads.length > 0 && lastSeenIdsRef.current.size === 0) {
+      lastSeenIdsRef.current = new Set(leads.map((l) => l.id));
+    }
+  }, [leads]);
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    const id = setInterval(() => { refetch(); }, 30000);
+    return () => clearInterval(id);
+  }, [activeProject?.id, refetch]);
+  // Detectar nuevos tras cada refetch
+  useEffect(() => {
+    if (!leads.length || lastSeenIdsRef.current.size === 0) return;
+    const seen = lastSeenIdsRef.current;
+    const fresh = leads.filter((l) => !seen.has(l.id));
+    if (fresh.length > 0) {
+      setNewCount((c) => c + fresh.length);
+      toast({ title: `${fresh.length} prospecto${fresh.length > 1 ? 's' : ''} nuevo${fresh.length > 1 ? 's' : ''}`, description: fresh[0].nombre });
+      fresh.forEach((l) => seen.add(l.id));
+    }
+  }, [leads]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
@@ -410,6 +437,24 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => { setNewCount(0); refetch(); }}
+            title="Refrescar lista de prospectos"
+            aria-label="Refrescar"
+            className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+              newCount > 0
+                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 animate-pulse'
+                : 'border-border bg-card hover:bg-muted'
+            }`}
+          >
+            <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
+            <span className="hidden md:inline">Refrescar</span>
+            {newCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {newCount > 9 ? '9+' : newCount}
+              </span>
+            )}
+          </button>
           <LeadsViewToggle active="list" />
           <button
             onClick={() => navigate('/leads/audiences')}

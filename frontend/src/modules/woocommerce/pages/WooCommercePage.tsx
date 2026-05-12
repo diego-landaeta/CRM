@@ -73,10 +73,22 @@ interface WooRun {
 interface SchemaItem { path: string; type: string; sample?: any }
 interface TargetField { key: string; label: string; type: string; required?: boolean; group: string }
 
+interface ScrapedData {
+  titulo?: string;
+  url_used?: string;
+  meta_box?: Record<string, { text?: string; value?: number; unit?: string; iso_date?: string; type?: string }>;
+  sections?: Record<string, string>;
+  imagen_og?: string;
+  meta_description?: string;
+  html_size?: number;
+  error?: string;
+}
+
 interface WooPreview {
   count: number;
   sample: any[];
   schema?: SchemaItem[];
+  scraped?: ScrapedData | null;
   targets?: TargetField[];
   sugeridos?: Record<string, string>;
   current_mapping?: Record<string, string>;
@@ -161,19 +173,23 @@ export default function WooCommercePage() {
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
     finally { setImporting(false); }
   }
-  async function preview(): Promise<void> {
+  const [previewUrl, setPreviewUrl] = useState('');
+  async function preview(customUrl?: string): Promise<void> {
     if (!activeProject?.id) return;
     try {
-      const res = await client.get(`/woocommerce/preview?projectId=${activeProject.id}`);
+      const qsUrl = customUrl ? `&url=${encodeURIComponent(customUrl)}` : '';
+      const res = await client.get(`/woocommerce/preview?projectId=${activeProject.id}${qsUrl}`);
       if (res.success && res.data) {
         const data = res.data as WooPreview;
         setPreviewData(data);
-        // Si hay mapping guardado úsalo, si no usa los sugeridos
         const initial = (data.current_mapping && Object.keys(data.current_mapping).length > 0)
           ? data.current_mapping
           : (data.sugeridos || {});
         setMapping(initial);
-        toast({ title: `${data.count} productos en la tienda`, description: `Configura el mapeo abajo y guárdalo antes de importar` });
+        const desc = customUrl
+          ? `Previsualizando producto de: ${customUrl}`
+          : `${data.count} productos en la tienda. Configura el mapeo abajo y guárdalo antes de importar.`;
+        toast({ title: 'Preview cargado', description: desc });
       }
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
@@ -400,16 +416,33 @@ export default function WooCommercePage() {
 
       {creds && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="font-bold">Importar productos</h3>
             <div className="flex gap-2">
-              <button onClick={preview} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-muted text-xs font-bold"><Eye size={14} /> Preview + Mapeo</button>
+              <button onClick={() => preview()} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-muted text-xs font-bold"><Eye size={14} /> Preview primer producto</button>
               <button onClick={importNow} disabled={importing} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold disabled:opacity-50"><ArrowsClockwise size={14} weight="bold" /> {importing ? 'Iniciando...' : 'Importar ahora'}</button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Pulsa <strong>Preview + Mapeo</strong> para ver cómo viene un producto desde WC y elegir qué campo de WC va a qué campo del CRM.
+            Pulsa <strong>Preview</strong> para ver cómo viene un producto desde WC + lo extraído por el scraper, y elegir qué va a cada campo del CRM.
           </p>
+
+          {/* Input URL para previsualizar un producto específico */}
+          <div className="flex gap-2 items-center pt-2 border-t border-border">
+            <input
+              value={previewUrl}
+              onChange={(e) => setPreviewUrl(e.target.value)}
+              placeholder="O pega la URL de un producto/máster concreto para previsualizar ese..."
+              className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/30 text-xs"
+            />
+            <button
+              onClick={() => preview(previewUrl)}
+              disabled={!previewUrl}
+              className="h-9 px-4 rounded-md bg-amber-600 text-white text-xs font-bold disabled:opacity-50"
+            >
+              Previsualizar esa URL
+            </button>
+          </div>
         </div>
       )}
 
@@ -454,9 +487,29 @@ export default function WooCommercePage() {
                           className="h-9 px-2 rounded-md border border-border bg-muted/30 text-xs"
                         >
                           <option value="">— No mapear —</option>
-                          {previewData.schema!.filter(s => s.type !== 'object' && s.type !== 'array').map((s) => (
-                            <option key={s.path} value={s.path}>{s.path} ({s.type})</option>
-                          ))}
+                          <optgroup label="Producto WC (JSON)">
+                            {previewData.schema!.filter(s => s.type !== 'object' && s.type !== 'array').map((s) => (
+                              <option key={s.path} value={s.path}>{s.path} ({s.type})</option>
+                            ))}
+                          </optgroup>
+                          {previewData.scraped && previewData.scraped.sections && Object.keys(previewData.scraped.sections).length > 0 && (
+                            <optgroup label="Scraper · secciones (texto)">
+                              {Object.entries(previewData.scraped.sections).map(([k, v]) => (
+                                <option key={`scraper.sections.${k}`} value={`scraper.sections.${k}`}>
+                                  scraper.sections.{k} ({String(v || '').length}c)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {previewData.scraped && previewData.scraped.meta_box && Object.keys(previewData.scraped.meta_box).length > 0 && (
+                            <optgroup label="Scraper · meta_box (Duración/Horas/etc)">
+                              {Object.entries(previewData.scraped.meta_box).map(([k, v]: [string, any]) => (
+                                <option key={`scraper.meta_box.${k}.text`} value={`scraper.meta_box.${k}.text`}>
+                                  scraper.meta_box.{k} = {v.text || ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
                         </select>
                         <div className="text-muted-foreground truncate font-mono text-[11px]" title={String(previewVal ?? '')}>
                           {previewVal !== undefined && previewVal !== null

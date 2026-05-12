@@ -456,7 +456,9 @@ export const importNow = async (req, res, next) => {
         for (const wp of wcProducts) {
           if (!wp.name) { skipped++; continue; }
           const auto = mapWcProduct(wp, categoryMap, creds.default_currency || 'EUR');
-          const userMapped = hasUserMapping ? applyWcFieldMapping(wp, userMapping) : {};
+          // userMapping se resuelve después del scrape (más abajo) si hay scraper activo,
+          // porque el path puede apuntar a scraper.sections.X
+          const userMapped = (hasUserMapping && !scraperOn) ? applyWcFieldMapping(wp, userMapping) : {};
           const finalMapped = {
             ...auto,
             ...userMapped,
@@ -526,6 +528,13 @@ export const importNow = async (req, res, next) => {
                 if (Object.keys(otrasSecciones).length > 0) finalMapped.otras_secciones = otrasSecciones;
                 // Imagen og como fallback si no hay imagen
                 if (scraped.imagen_og && !finalMapped.image_url) finalMapped.image_url = scraped.imagen_og;
+
+                // Aplicar mapping del admin AHORA que tenemos scraped (sus paths
+                // pueden referirse a scraper.sections.X o scraper.meta_box.X.text)
+                if (hasUserMapping) {
+                  const userMappedRich = applyMappingWithScraper(wp, scraped, userMapping);
+                  Object.assign(finalMapped, userMappedRich);
+                }
               } else {
                 scrapedFail++;
               }
@@ -640,26 +649,101 @@ export const previewWc = async (req, res, next) => {
     const projectId = pid(req);
     const creds = await model.getCreds(projectId);
     if (!creds) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
-    // Preview: solo primera página (rápido)
-    const base = `${creds.store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`;
-    const url = `${base}?per_page=3&${buildAuthQS(creds)}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new AppError(`WC respondió ${r.status}`, 502, 'WC_ERROR');
-    const sample = await r.json();
 
-    // Total (header X-WP-Total)
+    const customUrl = req.query.url;
+    const base = `${creds.store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`;
+
+    // Total
     const totalUrl = `${base}?per_page=1&${buildAuthQS(creds)}`;
     const totalRes = await fetch(totalUrl);
     const total = parseInt(totalRes.headers.get('x-wp-total') || '0');
 
-    // Schema completo del primer producto + sugeridos auto-detectados + targets disponibles
-    const firstItem = sample[0] || {};
+    let sample = [];
+    let firstItem = {};
+
+    if (customUrl && typeof customUrl === 'string') {
+      // Buscar el producto cuyo permalink termine con el slug de la URL dada
+      const slug = String(customUrl).replace(/\/$/, '').split('/').pop();
+      if (slug) {
+        const r = await fetch(`${base}?slug=${encodeURIComponent(slug)}&${buildAuthQS(creds)}`);
+        if (r.ok) {
+          const arr = await r.json();
+          if (Array.isArray(arr) && arr.length > 0) {
+            sample = arr;
+            firstItem = arr[0];
+          }
+        }
+      }
+      // Fallback: si no encontramos por slug, buscar por search del título limpio
+      if (!firstItem.id) {
+        const r = await fetch(`${base}?search=${encodeURIComponent(slug.replace(/-/g, ' '))}&per_page=3&${buildAuthQS(creds)}`);
+        if (r.ok) {
+          const arr = await r.json();
+          if (Array.isArray(arr) && arr.length > 0) {
+            sample = arr;
+            firstItem = arr[0];
+          }
+        }
+      }
+    }
+
+    if (!firstItem.id) {
+      // Fallback: primera página normal
+      const r = await fetch(`${base}?per_page=3&${buildAuthQS(creds)}`);
+      if (!r.ok) throw new AppError(`WC respondió ${r.status}`, 502, 'WC_ERROR');
+      sample = await r.json();
+      firstItem = sample[0] || {};
+    }
+
+    // Schema completo del producto + sugeridos auto-detectados + targets disponibles
     const schema = inspectSchema(firstItem);
     const sugeridos = autoSuggestWcMapping(firstItem);
-    // moneda se controla a nivel credenciales (default_currency), no por producto
     const targets = TARGETS_CATALOG.product.filter(t => t.key !== 'moneda');
 
-    // Vista previa del mapping aplicado (si hay field_mapping configurado)
+    // Si el scraper está activo, intentar también scrapear la SEO page de este producto
+    // para que el admin pueda mapear desde scraper.sections.* o scraper.meta_box.*
+    let scraped = null;
+    if (creds.scraper_enabled && firstItem.permalink) {
+      try {
+        let urlToScrape = firstItem.permalink;
+        if (creds.wp_user && creds.wp_app_password) {
+          const seo = await findSeoPageForProduct(firstItem, creds.store_url, creds.wp_user, creds.wp_app_password);
+          if (seo && seo.link) urlToScrape = seo.link;
+        }
+        const keywords = creds.section_keywords || {};
+        const stratg = creds.scrape_strategy || 'plain_text';
+        scraped = await scrapeProductPage(urlToScrape, keywords, { strategy: stratg, timeoutMs: 15000 });
+        scraped.url_used = urlToScrape;
+      } catch (sErr) {
+        scraped = { error: sErr.message };
+      }
+    }
+
+    // Targets enriquecidos: añadir todos los _texto + meta_box + atributos del scraper
+    // como destinos mapeables visibles en la UI.
+    const enrichedTargets = [...targets];
+    const SCRAPER_FIELDS = [
+      { key: 'presentacion_texto', label: 'Presentación (texto)', group: 'Scraper' },
+      { key: 'objetivos_texto', label: 'Objetivos (texto)', group: 'Scraper' },
+      { key: 'beneficios_texto', label: 'Beneficios (texto)', group: 'Scraper' },
+      { key: 'dirigido_a_texto', label: 'Dirigido a (texto)', group: 'Scraper' },
+      { key: 'para_que_te_prepara_texto', label: 'Para qué te prepara (texto)', group: 'Scraper' },
+      { key: 'por_que_estudiar_texto', label: 'Por qué estudiar (texto)', group: 'Scraper' },
+      { key: 'modulos_texto', label: 'Módulos / Temario (texto)', group: 'Scraper' },
+      { key: 'metodologia_texto', label: 'Metodología (texto)', group: 'Scraper' },
+      { key: 'faqs_texto', label: 'FAQs (texto)', group: 'Scraper' },
+      { key: 'profesores_texto', label: 'Profesores (texto)', group: 'Scraper' },
+      { key: 'duracion', label: 'Duración', group: 'Scraper · meta_box' },
+      { key: 'horas', label: 'Horas', group: 'Scraper · meta_box' },
+      { key: 'num_modulos', label: 'Nº de Módulos', group: 'Scraper · meta_box' },
+      { key: 'fecha_inicio_texto', label: 'Fecha de inicio', group: 'Scraper · meta_box' },
+      { key: 'modalidad', label: 'Modalidad (Online/Presencial)', group: 'Scraper · meta_box' },
+    ];
+    for (const sf of SCRAPER_FIELDS) {
+      if (!enrichedTargets.find((t) => t.key === sf.key)) enrichedTargets.push({ ...sf, type: 'string' });
+    }
+
+    // Vista previa del mapping aplicado
     const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
       ? creds.field_mapping
       : sugeridos;
@@ -669,13 +753,14 @@ export const previewWc = async (req, res, next) => {
       success: true,
       data: {
         count: total,
-        sample,                      // 3 items reales
-        schema,                      // tree-view del JSON
-        targets,                     // campos destino del CRM con grupos
+        sample,
+        schema,
+        targets: enrichedTargets,
         transforms: TRANSFORMS_CATALOG,
-        sugeridos,                   // mapping auto detectado por defecto
+        sugeridos,
         current_mapping: creds.field_mapping || {},
-        mapped_preview,              // resultado de aplicar el mapping al primer item
+        mapped_preview,
+        scraped,  // null si no hay scraper, objeto con titulo/meta_box/sections si sí
       },
     });
   } catch (e) { next(e); }
@@ -739,6 +824,35 @@ function applyWcFieldMapping(item, mapping) {
     const path = typeof source === 'string' ? source : source?.source;
     if (!path) continue;
     const v = resolvePath(item, path);
+    if (v !== undefined && v !== null) out[crmField] = v;
+  }
+  return out;
+}
+
+// Resuelve un valor desde un mapping que puede apuntar a:
+//   - path del item WC (ej "name", "regular_price")
+//   - "scraper.sections.{key}" → scraped.sections[key]
+//   - "scraper.meta_box.{key}.text|value|iso_date" → scraped.meta_box[key].xxx
+function resolveMappingPath(path, item, scraped) {
+  if (!path || typeof path !== 'string') return undefined;
+  if (path.startsWith('scraper.sections.')) {
+    const key = path.slice('scraper.sections.'.length);
+    return scraped?.sections?.[key];
+  }
+  if (path.startsWith('scraper.meta_box.')) {
+    const rest = path.slice('scraper.meta_box.'.length);
+    const [key, attr = 'text'] = rest.split('.');
+    return scraped?.meta_box?.[key]?.[attr];
+  }
+  return resolvePath(item, path);
+}
+
+function applyMappingWithScraper(item, scraped, mapping) {
+  const out = {};
+  for (const [crmField, source] of Object.entries(mapping || {})) {
+    const path = typeof source === 'string' ? source : source?.source;
+    if (!path) continue;
+    const v = resolveMappingPath(path, item, scraped);
     if (v !== undefined && v !== null) out[crmField] = v;
   }
   return out;
