@@ -132,6 +132,8 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
             l.reincidente, l.updated_at, l.created_at,
             u.nombre as responsable_nombre,
             lu.canal_detectado, lu.utm_source, lu.utm_campaign,
+            prod.nombre as producto_interes,
+            l.producto_interes_id,
             (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
             (SELECT MIN(fecha_recordatorio) FROM lead_reminders WHERE lead_id = l.id AND completado = false) AS next_reminder_at,
             p.dias_alerta_inactividad,
@@ -140,6 +142,7 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      LEFT JOIN projects p ON p.id = l.project_id
+     LEFT JOIN products prod ON prod.id = l.producto_interes_id
      ${where}
      ORDER BY l.fecha_solicitud DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

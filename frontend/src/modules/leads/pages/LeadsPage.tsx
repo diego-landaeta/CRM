@@ -104,6 +104,7 @@ function SkeletonRow() {
     <tr className="border-b animate-pulse">
       <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-full bg-muted" /><div className="w-24 h-4 bg-muted rounded" /></div></td>
       <td className="px-5 py-3.5"><div className="w-32 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-24 h-4 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-20 h-5 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
@@ -668,6 +669,7 @@ export default function LeadsPage() {
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Último contacto</th>
@@ -728,6 +730,15 @@ export default function LeadsPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.producto_interes ? (
+                      <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded font-medium" title={lead.producto_interes}>
+                        {lead.producto_interes.length > 40 ? lead.producto_interes.slice(0, 38) + '…' : lead.producto_interes}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground italic">Por definir</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
                   </td>
