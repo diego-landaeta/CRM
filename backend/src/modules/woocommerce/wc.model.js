@@ -6,18 +6,47 @@ export async function getCreds(projectId) {
 }
 export async function upsertCreds(projectId, data) {
   const { rows } = await query(
-    `INSERT INTO wc_credentials (project_id, store_url, consumer_key, consumer_secret, active, auto_sync_enabled, sync_interval_minutes, default_currency)
-     VALUES ($1, $2, $3, $4, COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30), COALESCE($8, 'EUR'))
+    `INSERT INTO wc_credentials (
+        project_id, store_url, consumer_key, consumer_secret,
+        active, auto_sync_enabled, sync_interval_minutes, default_currency,
+        wp_user, wp_app_password,
+        source_strategy, cpt_endpoints,
+        scraper_enabled, scrape_strategy, section_keywords
+     )
+     VALUES (
+        $1, $2, $3, $4,
+        COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30), COALESCE($8, 'EUR'),
+        $9, $10,
+        COALESCE($11, 'wc_only'), COALESCE($12, '[]'::jsonb),
+        COALESCE($13, false), COALESCE($14, 'plain_text'), $15
+     )
      ON CONFLICT (project_id) DO UPDATE
-       SET store_url = EXCLUDED.store_url, consumer_key = EXCLUDED.consumer_key,
+       SET store_url = EXCLUDED.store_url,
+           consumer_key = EXCLUDED.consumer_key,
            consumer_secret = CASE WHEN EXCLUDED.consumer_secret = '' THEN wc_credentials.consumer_secret ELSE EXCLUDED.consumer_secret END,
            active = EXCLUDED.active,
            auto_sync_enabled = EXCLUDED.auto_sync_enabled,
            sync_interval_minutes = EXCLUDED.sync_interval_minutes,
            default_currency = EXCLUDED.default_currency,
+           wp_user = EXCLUDED.wp_user,
+           wp_app_password = CASE WHEN EXCLUDED.wp_app_password = '' OR EXCLUDED.wp_app_password IS NULL
+                                  THEN wc_credentials.wp_app_password ELSE EXCLUDED.wp_app_password END,
+           source_strategy = EXCLUDED.source_strategy,
+           cpt_endpoints = EXCLUDED.cpt_endpoints,
+           scraper_enabled = EXCLUDED.scraper_enabled,
+           scrape_strategy = EXCLUDED.scrape_strategy,
+           section_keywords = COALESCE(EXCLUDED.section_keywords, wc_credentials.section_keywords),
            updated_at = NOW()
      RETURNING *`,
-    [projectId, data.store_url, data.consumer_key, data.consumer_secret || '', data.active, data.auto_sync_enabled, data.sync_interval_minutes, data.default_currency]
+    [
+      projectId,
+      data.store_url, data.consumer_key, data.consumer_secret || '',
+      data.active, data.auto_sync_enabled, data.sync_interval_minutes, data.default_currency,
+      data.wp_user || null, data.wp_app_password || null,
+      data.source_strategy, JSON.stringify(data.cpt_endpoints || []),
+      data.scraper_enabled, data.scrape_strategy,
+      data.section_keywords ? JSON.stringify(data.section_keywords) : null,
+    ]
   );
   return rows[0];
 }

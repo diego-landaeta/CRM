@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
+import { scrapeProductPage } from './html-scraper.js';
 
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
@@ -16,6 +17,15 @@ const credsSchema = z.object({
   auto_sync_enabled: z.boolean().optional(),
   sync_interval_minutes: z.number().int().min(5).max(1440).optional(),
   default_currency: z.enum(['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF']).optional(),
+  // WP REST API (para sacar ACF / pages / CPTs personalizados)
+  wp_user: z.string().max(100).optional().nullable(),
+  wp_app_password: z.string().max(500).optional().nullable(),
+  source_strategy: z.enum(['wc_only', 'wc_plus_cpt']).optional(),
+  cpt_endpoints: z.array(z.string()).max(20).optional(),
+  // Scraper HTML del permalink
+  scraper_enabled: z.boolean().optional(),
+  scrape_strategy: z.enum(['plain_text', 'preserve_html']).optional(),
+  section_keywords: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 function pid(req) {
@@ -556,6 +566,25 @@ export const saveMapping = async (req, res, next) => {
       [JSON.stringify(mapping), projectId]
     );
     res.json({ success: true, data: { field_mapping: mapping } });
+  } catch (e) { next(e); }
+};
+
+// POST /api/woocommerce/scrape-preview?projectId=X
+// Body: { url }  (URL pública de un producto/curso a probar)
+// Usa las section_keywords del proyecto y devuelve qué se extrajo.
+export const scrapePreview = async (req, res, next) => {
+  try {
+    const projectId = pid(req);
+    const url = req.body?.url;
+    if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+      throw new AppError('url requerida (http/https)', 400, 'VALIDATION_ERROR');
+    }
+    const creds = await model.getCreds(projectId);
+    if (!creds) throw new AppError('Configura primero WC creds del proyecto', 400, 'NO_CREDS');
+    const keywords = creds.section_keywords || {};
+    const strategy = creds.scrape_strategy || 'plain_text';
+    const result = await scrapeProductPage(url, keywords, { strategy });
+    res.json({ success: true, data: result });
   } catch (e) { next(e); }
 };
 
