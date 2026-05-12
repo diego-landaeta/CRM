@@ -99,24 +99,84 @@ export async function findProductByWcId(projectId, wcId) {
 export async function upsertProductFromWc({ projectId, wcId, data }) {
   const existing = await findProductByWcId(projectId, wcId);
   const meta = data.meta || {};
+  // Campos de scraping (todos opcionales). Si vienen, se guardan; si no, queda NULL.
+  const sc = {
+    duracion:           data.duracion ?? null,
+    horas:              data.horas ?? null,
+    fecha_inicio_texto: data.fecha_inicio_texto ?? null,
+    num_modulos:        Number.isFinite(data.num_modulos) ? data.num_modulos : null,
+    modalidad:          data.modalidad ?? null,
+    image_url:          data.image_url ?? null,
+    url_info:           data.url_info ?? null,
+    presentacion_texto:       data.presentacion_texto ?? null,
+    objetivos_texto:          data.objetivos_texto ?? null,
+    beneficios_texto:         data.beneficios_texto ?? null,
+    dirigido_a_texto:         data.dirigido_a_texto ?? null,
+    para_que_te_prepara_texto: data.para_que_te_prepara_texto ?? null,
+    por_que_estudiar_texto:   data.por_que_estudiar_texto ?? null,
+    modulos_texto:            data.modulos_texto ?? null,
+    metodologia_texto:        data.metodologia_texto ?? null,
+    faqs_texto:               data.faqs_texto ?? null,
+    profesores_texto:         data.profesores_texto ?? null,
+    otras_secciones:          data.otras_secciones ? JSON.stringify(data.otras_secciones) : null,
+  };
+
   if (existing) {
     const { rows } = await query(
       `UPDATE products
        SET nombre=$1, precio=$2, descripcion=$3, sku=$4,
-           categoria_id=$5, subcategoria_id=$6, wc_meta=$7, updated_at=NOW()
+           categoria_id=$5, subcategoria_id=$6, wc_meta=$7,
+           duracion = COALESCE($9, duracion),
+           horas = COALESCE($10, horas),
+           fecha_inicio_texto = COALESCE($11, fecha_inicio_texto),
+           num_modulos = COALESCE($12, num_modulos),
+           modalidad = COALESCE($13, modalidad),
+           image_url = COALESCE($14, image_url),
+           url_info = COALESCE($15, url_info),
+           presentacion_texto       = COALESCE($16, presentacion_texto),
+           objetivos_texto          = COALESCE($17, objetivos_texto),
+           beneficios_texto         = COALESCE($18, beneficios_texto),
+           dirigido_a_texto         = COALESCE($19, dirigido_a_texto),
+           para_que_te_prepara_texto = COALESCE($20, para_que_te_prepara_texto),
+           por_que_estudiar_texto   = COALESCE($21, por_que_estudiar_texto),
+           modulos_texto            = COALESCE($22, modulos_texto),
+           metodologia_texto        = COALESCE($23, metodologia_texto),
+           faqs_texto               = COALESCE($24, faqs_texto),
+           profesores_texto         = COALESCE($25, profesores_texto),
+           otras_secciones          = COALESCE($26::jsonb, otras_secciones),
+           updated_at=NOW()
        WHERE id = $8 RETURNING id`,
       [data.nombre, data.precio, data.descripcion || null, data.sku || null,
        data.categoria_id || null, data.subcategoria_id || null,
-       JSON.stringify(meta), existing.id]);
+       JSON.stringify(meta), existing.id,
+       sc.duracion, sc.horas, sc.fecha_inicio_texto, sc.num_modulos, sc.modalidad,
+       sc.image_url, sc.url_info,
+       sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
+       sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
+       sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
     return { action: 'updated', id: rows[0].id };
   }
   const { rows } = await query(
     `INSERT INTO products (project_id, nombre, precio, descripcion, sku,
-                           categoria_id, subcategoria_id, wc_product_id, wc_meta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+                           categoria_id, subcategoria_id, wc_product_id, wc_meta,
+                           duracion, horas, fecha_inicio_texto, num_modulos, modalidad,
+                           image_url, url_info,
+                           presentacion_texto, objetivos_texto, beneficios_texto,
+                           dirigido_a_texto, para_que_te_prepara_texto, por_que_estudiar_texto,
+                           modulos_texto, metodologia_texto, faqs_texto, profesores_texto,
+                           otras_secciones)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+             $10, $11, $12, $13, $14, $15, $16,
+             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::jsonb)
+     RETURNING id`,
     [projectId, data.nombre, data.precio, data.descripcion || null, data.sku || null,
      data.categoria_id || null, data.subcategoria_id || null,
-     wcId, JSON.stringify(meta)]);
+     wcId, JSON.stringify(meta),
+     sc.duracion, sc.horas, sc.fecha_inicio_texto, sc.num_modulos, sc.modalidad,
+     sc.image_url, sc.url_info,
+     sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
+     sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
+     sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
   return { action: 'created', id: rows[0].id };
 }
 

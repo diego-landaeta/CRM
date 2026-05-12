@@ -7,6 +7,9 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { ShoppingBag, FloppyDisk, ArrowsClockwise, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
+type SourceStrategy = 'wc_only' | 'wc_plus_cpt';
+type ScrapeStrategy = 'plain_text' | 'preserve_html';
+
 interface WooCredentials {
   store_url: string;
   consumer_key: string;
@@ -14,6 +17,13 @@ interface WooCredentials {
   auto_sync_enabled?: boolean;
   sync_interval_minutes?: number;
   default_currency?: string;
+  wp_user?: string | null;
+  wp_app_password?: string | null;
+  source_strategy?: SourceStrategy;
+  cpt_endpoints?: string[];
+  scraper_enabled?: boolean;
+  scrape_strategy?: ScrapeStrategy;
+  section_keywords?: Record<string, string[]>;
 }
 
 interface WooForm {
@@ -23,7 +33,27 @@ interface WooForm {
   auto_sync_enabled: boolean;
   sync_interval_minutes: number;
   default_currency: string;
+  wp_user: string;
+  wp_app_password: string;
+  source_strategy: SourceStrategy;
+  cpt_endpoints: string[];
+  scraper_enabled: boolean;
+  scrape_strategy: ScrapeStrategy;
+  section_keywords: Record<string, string[]>;
 }
+
+const DEFAULT_SECTION_KEYWORDS: Record<string, string[]> = {
+  presentacion: ['presentaci'],
+  objetivos: ['objetivo'],
+  beneficios: ['beneficio'],
+  dirigido_a: ['dirigido', 'para quien', 'a quien'],
+  para_que_te_prepara: ['te prepara', 'salidas profesionales'],
+  por_que_estudiar: ['por que estudiar', 'por que elegir'],
+  modulos: ['contenido del', 'temario del', 'programa del', 'syllabus', 'temario', 'contenido', 'modulos', 'modulo', 'unidades', 'unidad'],
+  metodologia: ['metodologi'],
+  faqs: ['pregunta frecuente', 'faq', 'dudas'],
+  profesores: ['profesor', 'docente', 'instructor', 'claustro', 'profesorado'],
+};
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF'];
 
@@ -56,7 +86,17 @@ interface WooPreview {
 export default function WooCommercePage() {
   const { activeProject } = useProjectContext();
   const [creds, setCreds] = useState<WooCredentials | null>(null);
-  const [form, setForm] = useState<WooForm>({ store_url: '', consumer_key: '', consumer_secret: '', auto_sync_enabled: false, sync_interval_minutes: 30, default_currency: 'EUR' });
+  const [form, setForm] = useState<WooForm>({
+    store_url: '', consumer_key: '', consumer_secret: '',
+    auto_sync_enabled: false, sync_interval_minutes: 30, default_currency: 'EUR',
+    wp_user: '', wp_app_password: '',
+    source_strategy: 'wc_only', cpt_endpoints: [],
+    scraper_enabled: false, scrape_strategy: 'plain_text',
+    section_keywords: DEFAULT_SECTION_KEYWORDS,
+  });
+  const [testUrl, setTestUrl] = useState('');
+  const [scrapePreview, setScrapePreview] = useState<any | null>(null);
+  const [scrapingPreview, setScrapingPreview] = useState(false);
   const [runs, setRuns] = useState<WooRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -80,7 +120,21 @@ export default function WooCommercePage() {
       if (c.success) {
         const data = c.data as WooCredentials | null;
         setCreds(data);
-        if (data) setForm({ store_url: data.store_url, consumer_key: data.consumer_key, consumer_secret: '', auto_sync_enabled: data.auto_sync_enabled || false, sync_interval_minutes: data.sync_interval_minutes || 30, default_currency: data.default_currency || 'EUR' });
+        if (data) setForm({
+          store_url: data.store_url,
+          consumer_key: data.consumer_key,
+          consumer_secret: '',
+          auto_sync_enabled: data.auto_sync_enabled || false,
+          sync_interval_minutes: data.sync_interval_minutes || 30,
+          default_currency: data.default_currency || 'EUR',
+          wp_user: data.wp_user || '',
+          wp_app_password: '',
+          source_strategy: data.source_strategy || 'wc_only',
+          cpt_endpoints: Array.isArray(data.cpt_endpoints) ? data.cpt_endpoints : [],
+          scraper_enabled: !!data.scraper_enabled,
+          scrape_strategy: data.scrape_strategy || 'plain_text',
+          section_keywords: data.section_keywords || DEFAULT_SECTION_KEYWORDS,
+        });
       }
       if (r.success) setRuns((r.data as WooRun[]) || []);
     } finally { setLoading(false); }
@@ -184,6 +238,159 @@ export default function WooCommercePage() {
             </label>
           )}
           <p className="text-xs text-muted-foreground">{form.auto_sync_enabled ? `El servidor revisa cada ${form.sync_interval_minutes} min y solo importa si cambia la cantidad de productos en WC.` : 'Sin auto-sync: deberas pulsar "Importar ahora" manualmente.'}</p>
+        </div>
+
+        <div className="pt-3 border-t border-border space-y-2">
+          <h4 className="text-xs font-bold uppercase text-muted-foreground">WordPress REST API (para ACF / CPTs)</h4>
+          <input
+            value={form.wp_user}
+            onChange={e => setForm({ ...form, wp_user: e.target.value })}
+            placeholder="Usuario WP admin (p.ej. SEOdiego)"
+            className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm"
+          />
+          <input
+            value={form.wp_app_password}
+            onChange={e => setForm({ ...form, wp_app_password: e.target.value })}
+            type="password"
+            placeholder={creds?.wp_user ? '(sin cambios — dejar vacío para mantener)' : 'Application Password de WP'}
+            className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm font-mono text-xs"
+          />
+
+          <label className="block text-xs">
+            <span className="font-bold uppercase text-muted-foreground">Estrategia de origen</span>
+            <select
+              value={form.source_strategy}
+              onChange={e => setForm({ ...form, source_strategy: e.target.value as SourceStrategy })}
+              className="mt-1 w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm"
+            >
+              <option value="wc_only">Solo WooCommerce ( /wc/v3/products )</option>
+              <option value="wc_plus_cpt">WC + Custom Post Types (cursos, masters, diplomados…)</option>
+            </select>
+          </label>
+
+          {form.source_strategy === 'wc_plus_cpt' && (
+            <label className="block text-xs">
+              <span className="font-bold uppercase text-muted-foreground">CPT endpoints (uno por línea — sin /wp/v2/)</span>
+              <textarea
+                value={form.cpt_endpoints.join('\n')}
+                onChange={e => setForm({ ...form, cpt_endpoints: e.target.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) })}
+                placeholder={'cursos\nmasters\ndiplomados'}
+                rows={4}
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Se llamará a {`{store_url}`}/wp-json/wp/v2/{`{slug}`} con el WP user/App Password.</p>
+            </label>
+          )}
+        </div>
+
+        <div className="pt-3 border-t border-border space-y-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.scraper_enabled}
+              onChange={e => setForm({ ...form, scraper_enabled: e.target.checked })}
+            />
+            <strong>Scraper HTML del permalink</strong>
+            <span className="text-[10px] text-muted-foreground">— extrae presentación, módulos, FAQs, etc. de cada producto</span>
+          </label>
+
+          {form.scraper_enabled && (
+            <>
+              <label className="block text-xs">
+                <span className="font-bold uppercase text-muted-foreground">Formato extraído</span>
+                <select
+                  value={form.scrape_strategy}
+                  onChange={e => setForm({ ...form, scrape_strategy: e.target.value as ScrapeStrategy })}
+                  className="mt-1 w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm"
+                >
+                  <option value="plain_text">Texto plano (recomendado)</option>
+                  <option value="preserve_html">Conservar HTML (formato rico)</option>
+                </select>
+              </label>
+
+              <details className="text-xs">
+                <summary className="cursor-pointer font-semibold">Keywords por sección (clic para editar)</summary>
+                <div className="mt-2 space-y-2 max-h-80 overflow-auto p-2 bg-muted/30 rounded">
+                  {Object.keys(form.section_keywords).map((key) => (
+                    <div key={key} className="grid grid-cols-[140px_1fr] gap-2 items-start">
+                      <label className="text-[11px] font-mono">{key}</label>
+                      <input
+                        value={form.section_keywords[key].join(', ')}
+                        onChange={(e) => {
+                          const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                          setForm({ ...form, section_keywords: { ...form.section_keywords, [key]: arr } });
+                        }}
+                        className="h-8 px-2 rounded border border-border bg-card text-[11px] font-mono"
+                      />
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Los keywords se buscan en los &lt;h2&gt; del HTML público del producto (case + acento insensitive). Orden = prioridad.
+                  </p>
+                </div>
+              </details>
+
+              {/* Test URL */}
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200">
+                <p className="text-[11px] font-bold text-amber-900 dark:text-amber-300 uppercase mb-1">Probar scraper en una URL</p>
+                <div className="flex gap-2">
+                  <input
+                    value={testUrl}
+                    onChange={(e) => setTestUrl(e.target.value)}
+                    placeholder="https://psikoaprende.com/master-en-..."
+                    className="flex-1 h-9 px-2 rounded border border-border bg-card text-xs font-mono"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!activeProject?.id || !testUrl) return;
+                      setScrapingPreview(true);
+                      try {
+                        // Primero guarda creds para que el endpoint lea los keywords actuales
+                        await client.put('/woocommerce/credentials', { project_id: activeProject.id, ...form });
+                        const res = await client.post(`/woocommerce/scrape-preview?projectId=${activeProject.id}`, { url: testUrl });
+                        if (res.success) setScrapePreview(res.data);
+                      } catch (err: any) {
+                        toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+                      } finally { setScrapingPreview(false); }
+                    }}
+                    disabled={scrapingPreview}
+                    className="h-9 px-3 rounded bg-amber-600 text-white text-xs font-bold disabled:opacity-50"
+                  >
+                    {scrapingPreview ? '…' : 'Probar'}
+                  </button>
+                </div>
+                {scrapePreview && (
+                  <div className="mt-2 text-[11px] space-y-1 max-h-96 overflow-auto">
+                    <div><strong>Título:</strong> {scrapePreview.titulo || <em>—</em>}</div>
+                    {scrapePreview.meta_box && Object.keys(scrapePreview.meta_box).length > 0 && (
+                      <div>
+                        <strong>Meta box:</strong>
+                        <ul className="ml-3 list-disc">
+                          {Object.entries(scrapePreview.meta_box).map(([k, v]: [string, any]) => (
+                            <li key={k}><code className="text-[10px]">{k}</code>: {v.text}{v.value != null && <> · valor=<code>{v.value}</code></>}{v.unit && <> · unidad=<code>{v.unit}</code></>}{v.iso_date && <> · ISO=<code>{v.iso_date}</code></>}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {scrapePreview.sections && Object.keys(scrapePreview.sections).length > 0 && (
+                      <div>
+                        <strong>Secciones extraídas:</strong>
+                        <ul className="ml-3 list-disc">
+                          {Object.entries(scrapePreview.sections).map(([k, v]: [string, any]) => (
+                            <li key={k}>
+                              <code className="text-[10px]">{k}</code> · {String(v).length} chars
+                              <div className="text-muted-foreground italic text-[10px] line-clamp-2">{String(v).slice(0, 200)}…</div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {scrapePreview.error && <div className="text-red-600">Error: {scrapePreview.error}</div>}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex gap-2 justify-end pt-3 border-t border-border">

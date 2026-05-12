@@ -19,30 +19,72 @@ function normalizeUrl(url) {
     .replace(/\/$/, '');
 }
 
-// Busca el producto del proyecto cuya url_info matchea la URL dada (case-insensitive,
-// tolerante a www/https/queries). Devuelve el id o null.
-async function findProductByUrl(projectId, url) {
+// Extrae el slug "interesante" de una URL (último segmento de path).
+function pathSlug(normUrl) {
+  if (!normUrl) return '';
+  const parts = normUrl.split('/').filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+// Similaridad simple por tokens: cuántos tokens del slug del producto aparecen en el slug del lead.
+// Devuelve 0..1.
+function slugSimilarity(slugA, slugB) {
+  if (!slugA || !slugB) return 0;
+  const tA = slugA.split(/[-_]+/).filter((t) => t.length >= 3);
+  const tB = slugB.split(/[-_]+/).filter((t) => t.length >= 3);
+  if (tA.length === 0 || tB.length === 0) return 0;
+  const setB = new Set(tB);
+  const hits = tA.filter((t) => setB.has(t)).length;
+  return hits / Math.max(tA.length, tB.length);
+}
+
+// Busca el producto del proyecto cuya url_info matchea la URL dada.
+// 3 niveles de match:
+//   1) Exacto (URL normalizada idéntica)
+//   2) Prefijo: la URL del lead empieza con la URL del producto (o viceversa)
+//   3) Similaridad de slug: comparar los últimos segmentos de path por tokens
+// Devuelve { product_id, source: 'exact'|'prefix'|'slug_similarity', score }
+async function findProductByUrlScored(projectId, url) {
   if (!url) return null;
   const norm = normalizeUrl(url);
   if (!norm) return null;
-  // Match exacto primero
-  const { rows: exact } = await query(
+
+  const { rows: products } = await query(
     `SELECT id, url_info FROM products
      WHERE project_id = $1 AND url_info IS NOT NULL AND active = true`,
     [projectId]
   );
-  for (const p of exact) {
-    if (normalizeUrl(p.url_info) === norm) return p.id;
+  if (products.length === 0) return null;
+
+  // 1) Exacto
+  for (const p of products) {
+    if (normalizeUrl(p.url_info) === norm) return { product_id: p.id, source: 'exact', score: 1 };
   }
-  // Match parcial: si la URL del form contiene el slug del producto
-  // (ej: form en /master-x/?utm=foo y producto.url_info = /master-x)
-  for (const p of exact) {
-    const productNorm = normalizeUrl(p.url_info);
-    if (productNorm && (norm.startsWith(productNorm) || productNorm.endsWith(norm.split('/').pop() || ''))) {
-      return p.id;
+  // 2) Prefijo
+  for (const p of products) {
+    const pn = normalizeUrl(p.url_info);
+    if (pn && (norm.startsWith(pn + '/') || norm === pn || pn.startsWith(norm + '/'))) {
+      return { product_id: p.id, source: 'prefix', score: 0.85 };
     }
   }
-  return null;
+  // 3) Similaridad de slug del último path
+  const leadSlug = pathSlug(norm);
+  let best = null;
+  for (const p of products) {
+    const productNorm = normalizeUrl(p.url_info);
+    const productSlug = pathSlug(productNorm);
+    const sim = slugSimilarity(leadSlug, productSlug);
+    if (sim >= 0.5 && (!best || sim > best.score)) {
+      best = { product_id: p.id, source: 'slug_similarity', score: sim };
+    }
+  }
+  return best;
+}
+
+// Wrapper de retrocompatibilidad: devuelve solo el id (uso interno legacy).
+async function findProductByUrl(projectId, url) {
+  const r = await findProductByUrlScored(projectId, url);
+  return r ? r.product_id : null;
 }
 
 const createSchema = z.object({

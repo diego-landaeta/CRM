@@ -7,6 +7,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
 import { scrapeProductPage } from './html-scraper.js';
+import { fetchCptAll, mapCptItemToProduct } from './wp-rest.js';
 
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
@@ -439,26 +440,108 @@ export const importNow = async (req, res, next) => {
         const userMapping = creds.field_mapping || {};
         const hasUserMapping = Object.keys(userMapping).length > 0;
 
+        // ¿Scraping habilitado en este proyecto?
+        const scraperOn = !!creds.scraper_enabled;
+        let sectionKeywords = creds.section_keywords;
+        // Postgres JSONB a veces se deserializa como string si pg-types no está configurado
+        if (typeof sectionKeywords === 'string') {
+          try { sectionKeywords = JSON.parse(sectionKeywords); } catch { sectionKeywords = {}; }
+        }
+        if (!sectionKeywords || typeof sectionKeywords !== 'object') sectionKeywords = {};
+        const scrapeStrategy = creds.scrape_strategy || 'plain_text';
+        let scrapedOk = 0, scrapedFail = 0, scrapedHits = 0;
+        const sampleKw = Object.entries(sectionKeywords).slice(0, 3).map(([k,v]) => `${k}=${Array.isArray(v)?v.length:typeof v}`);
+        logger.info({ projectId, scraperOn, kwCount: Object.keys(sectionKeywords).length, sampleKw, scrapeStrategy }, 'WC: estado scraper al iniciar import');
+
         for (const wp of wcProducts) {
           if (!wp.name) { skipped++; continue; }
           const auto = mapWcProduct(wp, categoryMap, creds.default_currency || 'EUR');
-          // Aplicar mapping del usuario por encima
           const userMapped = hasUserMapping ? applyWcFieldMapping(wp, userMapping) : {};
           const finalMapped = {
             ...auto,
             ...userMapped,
-            // Conservar siempre el meta y la categoría auto si el user no lo sobrescribió
             meta: auto.meta,
             categoria_id: userMapped.categoria_id || auto.categoria_id,
             subcategoria_id: auto.subcategoria_id,
           };
+
+          // Si scraper activo y hay permalink, traer las secciones desde el HTML público
+          if (scraperOn && wp.permalink) {
+            try {
+              if (scrapedOk + scrapedFail === 0) {
+                // Log diagnóstico del primer producto: tipo y contenido de keywords
+                logger.info({
+                  url: wp.permalink,
+                  kwType: typeof sectionKeywords,
+                  kwIsArray: Array.isArray(sectionKeywords),
+                  kwKeys: Object.keys(sectionKeywords || {}),
+                  modulosKw: sectionKeywords?.modulos,
+                }, 'WC: scrape diagnostic primer producto');
+              }
+              const scraped = await scrapeProductPage(wp.permalink, sectionKeywords, {
+                strategy: scrapeStrategy, timeoutMs: 20000,
+              });
+              if (scrapedOk + scrapedFail === 0) {
+                logger.info({
+                  url: wp.permalink,
+                  hasError: !!scraped.error,
+                  hasMetaBox: scraped.meta_box ? Object.keys(scraped.meta_box).length : 0,
+                  hasSections: scraped.sections ? Object.keys(scraped.sections).length : 0,
+                  htmlSize: scraped.html_size,
+                  sample: Object.entries(scraped.sections || {}).slice(0,2).map(([k,v]) => `${k}=${String(v).length}c`),
+                }, 'WC: scrape diagnostic resultado primer producto');
+              }
+              if (!scraped.error) {
+                scrapedOk++;
+                // meta_box: si existe, sobrescribe valores específicos
+                if (scraped.meta_box) {
+                  const mb = scraped.meta_box;
+                  if (mb.duracion?.text)     finalMapped.duracion         = mb.duracion.text;
+                  if (mb.horas?.text)        finalMapped.horas            = mb.horas.text;
+                  if (mb.fecha_inicio?.text) finalMapped.fecha_inicio_texto = mb.fecha_inicio.text;
+                  if (mb.num_modulos?.value) finalMapped.num_modulos      = mb.num_modulos.value;
+                  if (mb.modalidad?.text)    finalMapped.modalidad        = mb.modalidad.text;
+                }
+                // Mapear sections al esquema fijo de products._texto
+                const SECTION_TO_COLUMN = {
+                  presentacion:        'presentacion_texto',
+                  objetivos:           'objetivos_texto',
+                  beneficios:          'beneficios_texto',
+                  dirigido_a:          'dirigido_a_texto',
+                  para_que_te_prepara: 'para_que_te_prepara_texto',
+                  por_que_estudiar:    'por_que_estudiar_texto',
+                  modulos:             'modulos_texto',
+                  metodologia:         'metodologia_texto',
+                  faqs:                'faqs_texto',
+                  profesores:          'profesores_texto',
+                };
+                const otrasSecciones = {};
+                let hitCount = 0;
+                for (const [key, val] of Object.entries(scraped.sections || {})) {
+                  if (!val) continue;
+                  hitCount++;
+                  const col = SECTION_TO_COLUMN[key];
+                  if (col) finalMapped[col] = val;
+                  else otrasSecciones[key] = val;
+                }
+                if (hitCount > 0) scrapedHits++;
+                if (Object.keys(otrasSecciones).length > 0) finalMapped.otras_secciones = otrasSecciones;
+                // Imagen og como fallback si no hay imagen
+                if (scraped.imagen_og && !finalMapped.image_url) finalMapped.image_url = scraped.imagen_og;
+              } else {
+                scrapedFail++;
+              }
+            } catch (sErr) {
+              scrapedFail++;
+              logger.warn({ err: sErr.message, url: wp.permalink }, 'WC: scrape falló (no bloqueante)');
+            }
+          }
+
           try {
             const r = await model.upsertProductFromWc({ projectId, wcId: wp.id, data: finalMapped });
             if (r.action === 'created') created++;
             else if (r.action === 'updated') updated++;
           } catch (perItemErr) {
-            // No matar el run completo por un duplicado de nombre / FK suelta.
-            // Se cuenta como skipped y se loguea, el resto sigue.
             skipped++;
             logger.warn(
               { err: perItemErr.message, wcId: wp.id, wcName: wp.name, projectId },
@@ -466,6 +549,53 @@ export const importNow = async (req, res, next) => {
             );
           }
         }
+        if (scraperOn) {
+          logger.info({ projectId, scrapedOk, scrapedFail, scrapedHits }, 'WC: scraping completado');
+        }
+
+        // ─── Fase CPT (iseih y similares con CPTs custom + ACF rico) ───────
+        let cptCreated = 0, cptUpdated = 0, cptSkipped = 0;
+        if (creds.source_strategy === 'wc_plus_cpt' && Array.isArray(creds.cpt_endpoints) && creds.cpt_endpoints.length > 0) {
+          if (!creds.wp_user || !creds.wp_app_password) {
+            logger.warn({ projectId }, 'WC: source_strategy=wc_plus_cpt pero faltan wp_user/wp_app_password');
+          } else {
+            for (const cptSlug of creds.cpt_endpoints) {
+              try {
+                logger.info({ projectId, cptSlug }, 'WP CPT: descargando');
+                const items = await fetchCptAll(creds.store_url, cptSlug, creds.wp_user, creds.wp_app_password, { perPage: 100, maxPages: 50, contextEdit: true });
+                logger.info({ projectId, cptSlug, count: items.length }, 'WP CPT: items descargados');
+                for (const item of items) {
+                  if (!item || !item.id) { cptSkipped++; continue; }
+                  const mapped = mapCptItemToProduct(item, { cptSlug, defaultCurrency: creds.default_currency || 'EUR' });
+                  if (!mapped.nombre) { cptSkipped++; continue; }
+                  // Aplicar field_mapping si lo hubiera
+                  if (hasUserMapping) {
+                    const userMapped = applyWcFieldMapping(item, userMapping);
+                    Object.assign(mapped, userMapped);
+                  }
+                  try {
+                    // wcId del CPT = source_id (lo guardamos en wc_product_id para idempotencia)
+                    // Prefijado para no chocar con IDs WC: cptSlug+id
+                    const fakeWcId = -1 * (cptSlug.charCodeAt(0) * 100000 + item.id);
+                    const r = await model.upsertProductFromWc({ projectId, wcId: fakeWcId, data: mapped });
+                    if (r.action === 'created') cptCreated++;
+                    else if (r.action === 'updated') cptUpdated++;
+                  } catch (perItemErr) {
+                    cptSkipped++;
+                    logger.warn({ err: perItemErr.message, cptSlug, itemId: item.id }, 'WP CPT: item saltado');
+                  }
+                }
+              } catch (cptErr) {
+                logger.warn({ err: cptErr.message, cptSlug }, 'WP CPT: fetch falló (no bloquea el resto)');
+              }
+            }
+            logger.info({ projectId, cptCreated, cptUpdated, cptSkipped }, 'WP CPT: import completado');
+          }
+        }
+        // Sumar al total
+        created += cptCreated;
+        updated += cptUpdated;
+        skipped += cptSkipped;
         // 4. Pasada extra: scrap del menú HTML — solo crea ramas con productos
         let menuStats = { cats: 0, assigned: 0, pruned: 0 };
         try {
