@@ -94,7 +94,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 // LISTADO + DETALLE
 // ============================================================
 
-export async function findAll({ projectId, status, responsableId, canal, search, page, limit, includeConverted }) {
+export async function findAll({ projectId, status, responsableId, unassigned, canal, search, page, limit, includeConverted }) {
   const conditions = ['l.project_id = $1'];
   const params = [projectId];
   let paramIdx = 2;
@@ -105,7 +105,12 @@ export async function findAll({ projectId, status, responsableId, canal, search,
   } else if (!includeConverted) {
     conditions.push(`l.status <> 'convertido'`);
   }
-  if (responsableId) { conditions.push(`l.responsable_id = $${paramIdx++}`); params.push(responsableId); }
+  if (unassigned) {
+    conditions.push(`l.responsable_id IS NULL`);
+  } else if (responsableId) {
+    conditions.push(`l.responsable_id = $${paramIdx++}`);
+    params.push(responsableId);
+  }
   if (canal) {
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);
     params.push(canal);
@@ -245,6 +250,79 @@ export async function completeReminder(reminderId) {
 
 export async function reassignLead(leadId, newResponsableId) {
   await query(`UPDATE leads SET responsable_id = $1, updated_at = NOW() WHERE id = $2`, [newResponsableId, leadId]);
+}
+
+// Re-aplica round-robin a los leads con responsable_id IS NULL del proyecto.
+// Avanza el cursor (last_assigned_index) y devuelve resumen.
+export async function reassignPendingRoundRobin(projectId) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: gestores } = await client.query(
+      `SELECT up.user_id FROM user_projects up
+       JOIN users u ON u.id = up.user_id AND u.active = true AND u.role IN ('admin', 'gestor')
+       WHERE up.project_id = $1 AND up.active = true
+       ORDER BY up.orden_cola`,
+      [projectId]
+    );
+
+    if (gestores.length === 0) {
+      await client.query('ROLLBACK');
+      return { reassigned: 0, total_pending: 0, reason: 'NO_ACTIVE_GESTORES' };
+    }
+    const gestorIds = gestores.map((g) => g.user_id);
+
+    const { rows: pending } = await client.query(
+      `SELECT id FROM leads
+       WHERE project_id = $1 AND responsable_id IS NULL
+       ORDER BY created_at ASC`,
+      [projectId]
+    );
+
+    if (pending.length === 0) {
+      await client.query('ROLLBACK');
+      return { reassigned: 0, total_pending: 0 };
+    }
+
+    const { rows: queueRows } = await client.query(
+      `SELECT id, last_assigned_index FROM project_queue_state WHERE project_id = $1 FOR UPDATE`,
+      [projectId]
+    );
+
+    let cursor = queueRows.length > 0 ? queueRows[0].last_assigned_index : -1;
+    let lastUserId = null;
+
+    for (const lead of pending) {
+      cursor = (cursor + 1) % gestorIds.length;
+      const userId = gestorIds[cursor];
+      lastUserId = userId;
+      await client.query(
+        `UPDATE leads SET responsable_id = $1, updated_at = NOW() WHERE id = $2`,
+        [userId, lead.id]
+      );
+    }
+
+    if (queueRows.length > 0) {
+      await client.query(
+        `UPDATE project_queue_state SET last_assigned_index = $1, last_assigned_user_id = $2, updated_at = NOW() WHERE project_id = $3`,
+        [cursor, lastUserId, projectId]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO project_queue_state (project_id, last_assigned_index, last_assigned_user_id) VALUES ($1, $2, $3)`,
+        [projectId, cursor, lastUserId]
+      );
+    }
+
+    await client.query('COMMIT');
+    return { reassigned: pending.length, total_pending: pending.length };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateLead(id, fields) {

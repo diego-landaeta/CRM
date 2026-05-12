@@ -203,6 +203,19 @@ export async function reassign(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /api/leads/reassign-pending?projectId=X
+// Re-aplica round-robin a leads con responsable_id IS NULL del proyecto.
+export async function reassignPending(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (isNaN(projectId) || projectId <= 0) {
+      throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    }
+    const result = await leadService.reassignPending(projectId);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 export async function getLeadSequences(req, res, next) {
   try {
     const id = parseInt(req.params.id);

@@ -536,10 +536,36 @@ export default function LeadsPage() {
               style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
             >
               <option value="">Todos los gestores</option>
+              <option value="unassigned">— Sin asignar —</option>
               {gestores.map((g) => (
                 <option key={g.id} value={g.id}>{g.nombre}</option>
               ))}
             </select>
+          )}
+          {(user?.role === 'superadmin' || user?.role === 'admin') && filterResponsable === 'unassigned' && (
+            <button
+              onClick={async () => {
+                if (!activeProject?.id) return;
+                try {
+                  const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
+                  if (res.success) {
+                    const d = res.data as { reassigned: number; reason?: string };
+                    if (d.reason === 'NO_ACTIVE_GESTORES') {
+                      toast({ title: 'No hay gestores activos en este proyecto', variant: 'destructive' });
+                    } else {
+                      toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''}` });
+                      refetch?.();
+                    }
+                  }
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+                }
+              }}
+              className="h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap"
+              title="Aplica round-robin a todos los prospectos sin responsable"
+            >
+              Asignar pendientes
+            </button>
           )}
         </div>
 

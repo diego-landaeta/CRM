@@ -46,4 +46,8 @@ router.get('/:id/emails', leadEmailsController.listLeadEmails);
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
 
+// Asignar pendientes: re-aplica round-robin a leads con responsable_id IS NULL.
+// Útil cuando llegan leads sin gestores activos y luego se activan.
+router.post('/reassign-pending', roleGuard('admin', 'superadmin'), leadController.reassignPending);
+
 export default router;

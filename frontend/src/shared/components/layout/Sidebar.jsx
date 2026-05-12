@@ -52,6 +52,7 @@ import Portal from '@/shared/components/ui/portal';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { getLocalLogo } from '@/shared/lib/projectLogos';
+import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -194,9 +195,13 @@ function canSeeItem(item, role, modules, projectType) {
 }
 
 function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
-  const visible = children.filter((c) => canSeeItem(c, role, modules, projectType));
+  const visible = children
+    .filter((c) => canSeeItem(c, role, modules, projectType))
+    .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
-  const hasActiveChild = visible.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
+  const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
+  // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
+  const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
   const [open, setOpen] = useState(hasActiveChild);
   if (!visible.length) return null;
   const displayLabel = applyLabel(label, labelOverrides);
@@ -236,22 +241,33 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
       {open && (
         <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
           {visible.map((child) => (
-            <NavLink
-              key={child.to}
-              to={child.to}
-              end={child.to === '/accounting'}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
-                  isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
-                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
-                )
-              }
-            >
-              {applyLabel(child.label, labelOverrides)}
-            </NavLink>
+            child.comingSoon ? (
+              <div
+                key={child.to}
+                title="Próximamente"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground/50 cursor-not-allowed select-none"
+              >
+                <span className="truncate">{applyLabel(child.label, labelOverrides)}</span>
+                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+              </div>
+            ) : (
+              <NavLink
+                key={child.to}
+                to={child.to}
+                end={child.to === '/accounting'}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
+                    isActive
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                  )
+                }
+              >
+                {applyLabel(child.label, labelOverrides)}
+              </NavLink>
+            )
           ))}
         </div>
       )}
@@ -329,6 +345,27 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
 
 function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed }) {
   const displayLabel = applyLabel(label, labelOverrides);
+  const comingSoon = !isBetaAllowed(to);
+  if (comingSoon) {
+    return (
+      <div
+        title={`${displayLabel} — Próximamente`}
+        aria-label={`${displayLabel} — Próximamente`}
+        className={cn(
+          'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+        )}
+      >
+        <Icon size={18} weight="regular" />
+        {!collapsed && (
+          <>
+            <span className="truncate">{displayLabel}</span>
+            <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+          </>
+        )}
+      </div>
+    );
+  }
   return (
     <NavLink
       to={to}
@@ -593,6 +630,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {!collapsed && (
           <>
             <span className="font-semibold text-sm text-foreground flex-1">MultiCRM</span>
+            {BETA_MODE && (
+              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                BETA {BETA_VERSION}
+              </span>
+            )}
             {onToggleCollapsed && (
               <button
                 type="button"

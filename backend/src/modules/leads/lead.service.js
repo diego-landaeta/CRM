@@ -194,6 +194,10 @@ export async function reassign(leadId, newResponsableId, userId) {
   return { message: 'Lead reasignado', responsable_id: newResponsableId };
 }
 
+export async function reassignPending(projectId) {
+  return await leadModel.reassignPendingRoundRobin(projectId);
+}
+
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }) {
   // Detectar duplicado
   const duplicate = await leadModel.findDuplicateByEmail(email, project_id);

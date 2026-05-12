@@ -18,6 +18,7 @@ export const listLeadsSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
+  unassigned: z.coerce.boolean().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido']).optional(),
   search: z.string().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),

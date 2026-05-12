@@ -109,7 +109,8 @@ export function useLeads(): UseLeadsResult {
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (filterEstado) params.set('status', filterEstado);
       if (filterOrigen) params.set('canal', filterOrigen);
-      if (filterResponsable) params.set('responsableId', filterResponsable);
+      if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
+      else if (filterResponsable) params.set('responsableId', filterResponsable);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
