@@ -702,6 +702,7 @@ export const previewWc = async (req, res, next) => {
     const schema = inspectSchema(firstItem);
     const sugeridos = autoSuggestWcMapping(firstItem);
     const targets = TARGETS_CATALOG.product.filter(t => t.key !== 'moneda');
+    // ADICIONALES sugeridos cuando el scraper está activo (se enriquecen abajo si scrape tiene resultados)
 
     // Si el scraper está activo, intentar también scrapear la SEO page de este producto
     // para que el admin pueda mapear desde scraper.sections.* o scraper.meta_box.*
@@ -746,11 +747,31 @@ export const previewWc = async (req, res, next) => {
       if (!enrichedTargets.find((t) => t.key === sf.key)) enrichedTargets.push({ ...sf, type: 'string' });
     }
 
+    // Si tenemos scrape exitoso, enriquecer los sugeridos con campos del scraper
+    if (scraped && !scraped.error) {
+      if (scraped.url_used && scraped.url_used !== firstItem.permalink) {
+        sugeridos.url_info = 'scraper.url_used';   // SEO page > carrito WC
+      }
+      if (scraped.imagen_og) sugeridos.image_url = 'scraper.imagen_og';
+      if (scraped.sections) {
+        for (const [k, v] of Object.entries(scraped.sections)) {
+          if (v) sugeridos[`${k}_texto`] = `scraper.sections.${k}`;
+        }
+      }
+      if (scraped.meta_box) {
+        if (scraped.meta_box.duracion)     sugeridos.duracion           = 'scraper.meta_box.duracion.text';
+        if (scraped.meta_box.horas)        sugeridos.horas              = 'scraper.meta_box.horas.text';
+        if (scraped.meta_box.fecha_inicio) sugeridos.fecha_inicio_texto = 'scraper.meta_box.fecha_inicio.text';
+        if (scraped.meta_box.num_modulos)  sugeridos.num_modulos        = 'scraper.meta_box.num_modulos.value';
+        if (scraped.meta_box.modalidad)    sugeridos.modalidad          = 'scraper.meta_box.modalidad.text';
+      }
+    }
+
     // Vista previa del mapping aplicado
     const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
       ? creds.field_mapping
       : sugeridos;
-    const mapped_preview = applyWcFieldMapping(firstItem, currentMapping);
+    const mapped_preview = applyMappingWithScraper(firstItem, scraped, currentMapping);
 
     res.json({
       success: true,
@@ -834,10 +855,17 @@ function applyWcFieldMapping(item, mapping) {
 
 // Resuelve un valor desde un mapping que puede apuntar a:
 //   - path del item WC (ej "name", "regular_price")
+//   - "scraper.url_used" → scraped.url_used (link SEO page resuelto)
+//   - "scraper.titulo" → scraped.titulo (h1 de la SEO page)
+//   - "scraper.imagen_og" → scraped.imagen_og
 //   - "scraper.sections.{key}" → scraped.sections[key]
 //   - "scraper.meta_box.{key}.text|value|iso_date" → scraped.meta_box[key].xxx
 function resolveMappingPath(path, item, scraped) {
   if (!path || typeof path !== 'string') return undefined;
+  if (path === 'scraper.url_used')     return scraped?.url_used;
+  if (path === 'scraper.titulo')       return scraped?.titulo;
+  if (path === 'scraper.imagen_og')    return scraped?.imagen_og;
+  if (path === 'scraper.meta_description') return scraped?.meta_description;
   if (path.startsWith('scraper.sections.')) {
     const key = path.slice('scraper.sections.'.length);
     return scraped?.sections?.[key];

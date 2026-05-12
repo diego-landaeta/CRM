@@ -465,6 +465,17 @@ export default function WooCommercePage() {
             </button>
           </div>
 
+          {previewData.scraped && previewData.scraped.url_used && (
+            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 text-xs">
+              <div className="font-bold text-blue-900 dark:text-blue-300 uppercase mb-1">SEO page detectada (recomendada para url_info)</div>
+              <code className="text-blue-700 dark:text-blue-300 break-all">{previewData.scraped.url_used}</code>
+              <p className="mt-1 text-blue-700/80 dark:text-blue-300/80">
+                Para que el CRM use ESTE link en vez del de WC (que tiene sufijo numérico tipo <code>-2105-2</code>),
+                mapea <strong>URL de la landing</strong> → <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">scraper.url_used</code>.
+              </p>
+            </div>
+          )}
+
           {/* Tabla de mapping agrupada */}
           <div className="space-y-4">
             {Array.from(new Set(previewData.targets.filter(t => t.type !== 'array_subfield' && t.type !== 'wildcard_object').map(t => t.group))).map((group) => (
@@ -492,6 +503,30 @@ export default function WooCommercePage() {
                               <option key={s.path} value={s.path}>{s.path} ({s.type})</option>
                             ))}
                           </optgroup>
+                          {previewData.scraped && (
+                            <optgroup label="Scraper · meta global (URL SEO, título, imagen)">
+                              {previewData.scraped.url_used && (
+                                <option value="scraper.url_used">
+                                  scraper.url_used → {previewData.scraped.url_used.slice(0, 70)}
+                                </option>
+                              )}
+                              {previewData.scraped.titulo && (
+                                <option value="scraper.titulo">
+                                  scraper.titulo → {previewData.scraped.titulo.slice(0, 60)}
+                                </option>
+                              )}
+                              {previewData.scraped.imagen_og && (
+                                <option value="scraper.imagen_og">
+                                  scraper.imagen_og → {previewData.scraped.imagen_og.slice(0, 70)}
+                                </option>
+                              )}
+                              {previewData.scraped.meta_description && (
+                                <option value="scraper.meta_description">
+                                  scraper.meta_description (SEO description)
+                                </option>
+                              )}
+                            </optgroup>
+                          )}
                           {previewData.scraped && previewData.scraped.sections && Object.keys(previewData.scraped.sections).length > 0 && (
                             <optgroup label="Scraper · secciones (texto)">
                               {Object.entries(previewData.scraped.sections).map(([k, v]) => (
