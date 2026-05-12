@@ -164,11 +164,12 @@ export default function WebhookDetailPage() {
     );
   }
 
+  const apiBase = `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api`;
   const url = webhook.embed_id
-    ? `${window.location.origin}/testeo_crm/api/forms/webhook/${webhook.embed_id}`
+    ? `${apiBase}/forms/webhook/${webhook.embed_id}`
     : null;
   const mailhookUrl = webhook.embed_id
-    ? `${window.location.origin}/testeo_crm/api/forms/mailhook/${webhook.embed_id}`
+    ? `${apiBase}/forms/mailhook/${webhook.embed_id}`
     : null;
   const curlExample = url
     ? `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify({ nombre: 'Juan', email: 'juan@ejemplo.com' })}'`

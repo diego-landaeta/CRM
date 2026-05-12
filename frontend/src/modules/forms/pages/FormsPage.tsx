@@ -244,7 +244,7 @@ function EmbedDialog({ form, onClose }: EmbedDialogProps) {
     toast({ title: ok ? 'Copiado' : 'No se pudo copiar — usa Ctrl+C', variant: ok ? undefined : 'destructive' });
   }
 
-  const apiBase = `${window.location.origin}/testeo_crm/api/forms/public/${form.embed_id}`;
+  const apiBase = `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/forms/public/${form.embed_id}`;
   const iframeSrc = `${window.location.origin}/embed/form/${form.embed_id}`;
   const iframeHtml = `<iframe src="${iframeSrc}" width="100%" height="500" frameborder="0"></iframe>`;
   const scriptHtml = `<div id="crm-form-${form.embed_id}"></div>\n<script src="${window.location.origin}/embed/form.js" data-form-id="${form.embed_id}"></script>`;

@@ -86,7 +86,7 @@ export default function EventsHistory({ webhookId }: { webhookId: number }) {
                     </td>
                     <td className="px-3 py-2">
                       {e.result_id ? (
-                        <a href={`/testeo_crm/${e.result_type === 'lead' ? 'leads' : 'matriculas'}/${e.result_id}`}
+                        <a href={`${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/${e.result_type === 'lead' ? 'leads' : 'matriculas'}/${e.result_id}`}
                            className="text-primary hover:underline">
                           {e.result_type} #{e.result_id}
                         </a>
