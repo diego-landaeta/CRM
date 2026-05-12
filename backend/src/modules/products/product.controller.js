@@ -90,6 +90,60 @@ export async function getImageUrl(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/products/export?projectId=X&format=csv|json
+// Devuelve TODOS los productos del proyecto con todos los campos importados
+// (incluyendo los _texto del scraper, meta_box parseado y url_info).
+function _csvEscape(v) {
+  if (v == null) return '';
+  const s = String(v).replace(/\r?\n/g, ' ').replace(/"/g, '""');
+  return /[,";]/.test(s) || s.length > 100 ? `"${s}"` : s;
+}
+
+export async function exportAll(req, res, next) {
+  try {
+    const projectId = req.projectId;
+    const format = (req.query.format || 'json').toLowerCase();
+    const { rows } = await query(
+      `SELECT p.id, p.nombre, p.sku, p.precio, p.moneda, p.descripcion,
+              p.url_info, p.duracion, p.horas, p.num_modulos, p.modalidad,
+              p.fecha_inicio_texto, p.image_url,
+              p.presentacion_texto, p.objetivos_texto, p.beneficios_texto,
+              p.dirigido_a_texto, p.para_que_te_prepara_texto, p.por_que_estudiar_texto,
+              p.modulos_texto, p.metodologia_texto, p.faqs_texto, p.profesores_texto,
+              p.otras_secciones, p.source_type, p.source_id, p.wc_product_id,
+              p.created_at, p.updated_at,
+              c.nombre AS categoria_nombre
+       FROM products p
+       LEFT JOIN product_categories c ON c.id = p.categoria_id
+       WHERE p.project_id = $1 AND p.active = true
+       ORDER BY p.id`,
+      [projectId]
+    );
+
+    if (format === 'csv') {
+      const cols = [
+        'id','nombre','sku','precio','moneda','categoria_nombre','duracion','horas','num_modulos','modalidad',
+        'fecha_inicio_texto','url_info','image_url',
+        'presentacion_texto','objetivos_texto','beneficios_texto','dirigido_a_texto',
+        'para_que_te_prepara_texto','por_que_estudiar_texto','modulos_texto','metodologia_texto',
+        'faqs_texto','profesores_texto','source_type','source_id','wc_product_id'
+      ];
+      const lines = [cols.join(',')];
+      for (const r of rows) lines.push(cols.map((c) => _csvEscape(r[c])).join(','));
+      const csv = lines.join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="productos_proyecto_${projectId}_${new Date().toISOString().slice(0,10)}.csv"`);
+      return res.send('﻿' + csv);  // BOM para Excel
+    }
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: { total: rows.length, page: 1, limit: rows.length, totalPages: 1 },
+    });
+  } catch (err) { next(err); }
+}
+
 // GET /api/products/leads-stats?projectId=X
 // Devuelve productos del proyecto con conteo de leads asociados:
 //  - direct_count: leads.producto_interes_id = product.id

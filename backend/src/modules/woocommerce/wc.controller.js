@@ -7,7 +7,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
 import { scrapeProductPage } from './html-scraper.js';
-import { fetchCptAll, mapCptItemToProduct } from './wp-rest.js';
+import { fetchCptAll, mapCptItemToProduct, findSeoPageForProduct } from './wp-rest.js';
 
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
@@ -465,32 +465,30 @@ export const importNow = async (req, res, next) => {
             subcategoria_id: auto.subcategoria_id,
           };
 
-          // Si scraper activo y hay permalink, traer las secciones desde el HTML público
-          if (scraperOn && wp.permalink) {
+          // Si scraper activo, decidir la URL a scrapear:
+          //   - Si tenemos WP auth, intentar resolver la "page SEO" rica asociada
+          //   - Si no, usar el permalink del product directo
+          let urlToScrape = wp.permalink;
+          let scrapeSource = 'wc_permalink';
+          if (scraperOn && creds.wp_user && creds.wp_app_password) {
             try {
-              if (scrapedOk + scrapedFail === 0) {
-                // Log diagnóstico del primer producto: tipo y contenido de keywords
-                logger.info({
-                  url: wp.permalink,
-                  kwType: typeof sectionKeywords,
-                  kwIsArray: Array.isArray(sectionKeywords),
-                  kwKeys: Object.keys(sectionKeywords || {}),
-                  modulosKw: sectionKeywords?.modulos,
-                }, 'WC: scrape diagnostic primer producto');
+              const seoPage = await findSeoPageForProduct(wp, creds.store_url, creds.wp_user, creds.wp_app_password);
+              if (seoPage && seoPage.link && seoPage.link !== wp.permalink) {
+                urlToScrape = seoPage.link;
+                scrapeSource = `seo_page_id=${seoPage.id}`;
+                finalMapped.source_type = 'seo_page';
+                finalMapped.source_id = seoPage.id;
               }
-              const scraped = await scrapeProductPage(wp.permalink, sectionKeywords, {
+            } catch (_) {}
+          }
+          if (scraperOn && urlToScrape) {
+            try {
+              if (scrapedOk + scrapedFail < 3) {
+                logger.info({ wcId: wp.id, urlToScrape, scrapeSource }, 'WC: scrape arrancando');
+              }
+              const scraped = await scrapeProductPage(urlToScrape, sectionKeywords, {
                 strategy: scrapeStrategy, timeoutMs: 20000,
               });
-              if (scrapedOk + scrapedFail === 0) {
-                logger.info({
-                  url: wp.permalink,
-                  hasError: !!scraped.error,
-                  hasMetaBox: scraped.meta_box ? Object.keys(scraped.meta_box).length : 0,
-                  hasSections: scraped.sections ? Object.keys(scraped.sections).length : 0,
-                  htmlSize: scraped.html_size,
-                  sample: Object.entries(scraped.sections || {}).slice(0,2).map(([k,v]) => `${k}=${String(v).length}c`),
-                }, 'WC: scrape diagnostic resultado primer producto');
-              }
               if (!scraped.error) {
                 scrapedOk++;
                 // meta_box: si existe, sobrescribe valores específicos

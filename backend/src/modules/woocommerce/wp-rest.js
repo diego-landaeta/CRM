@@ -30,6 +30,57 @@ async function getJson(url, auth, timeoutMs = 25000) {
   }
 }
 
+/**
+ * Encuentra la "page SEO" asociada a un product WC.
+ *
+ * Lógica:
+ *   1. Quita el sufijo numérico del slug del product (-14121, -2105-2, etc.)
+ *   2. Busca /wp/v2/pages?slug={limpio}
+ *   3. Si no encuentra, busca /wp/v2/pages?search={titulo_limpio} y devuelve la primera
+ *
+ * Devuelve { id, slug, link } o null.
+ */
+export async function findSeoPageForProduct(product, baseUrl, user, pass) {
+  if (!product || !product.slug) return null;
+  const auth = basicHeader(user, pass);
+  const base = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages`;
+
+  // 1) Slug del product sin sufijo numérico tipo "-14121" o "-2105-2"
+  const cleanSlug = product.slug.replace(/(-\d+)+$/, '');
+  if (cleanSlug !== product.slug) {
+    try {
+      const arr = await getJson(`${base}?slug=${encodeURIComponent(cleanSlug)}&_fields=id,slug,link`, auth, 10000);
+      if (Array.isArray(arr) && arr.length > 0) {
+        return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link };
+      }
+    } catch (_) {}
+  }
+
+  // 2) Probar el slug exacto (por si la page tiene el mismo)
+  try {
+    const arr = await getJson(`${base}?slug=${encodeURIComponent(product.slug)}&_fields=id,slug,link`, auth, 10000);
+    if (Array.isArray(arr) && arr.length > 0) {
+      return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link };
+    }
+  } catch (_) {}
+
+  // 3) Búsqueda por título
+  if (product.name) {
+    const cleanTitle = String(product.name).replace(/^M[áa]ster\s+en\s+/i, '').replace(/^Curso\s+(?:de|en|sobre)\s+/i, '').slice(0, 80);
+    try {
+      const arr = await getJson(`${base}?search=${encodeURIComponent(cleanTitle)}&per_page=3&_fields=id,slug,link,title`, auth, 10000);
+      if (Array.isArray(arr) && arr.length > 0) {
+        // Validar que tiene sentido: el slug de la page debe parecerse al del product
+        const productCleanSlug = product.slug.replace(/(-\d+)+$/, '');
+        const best = arr.find((p) => p.slug && (p.slug === productCleanSlug || p.slug.includes(productCleanSlug.split('-').slice(0, 4).join('-'))));
+        if (best) return { id: best.id, slug: best.slug, link: best.link };
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 /** Lista items de un CPT (todas las páginas). */
 export async function fetchCptAll(baseUrl, cptSlug, user, pass, opts = {}) {
   const { perPage = 100, maxPages = 50, contextEdit = true } = opts;

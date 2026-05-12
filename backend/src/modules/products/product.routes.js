@@ -10,6 +10,7 @@ const router = Router();
 router.use(verifyToken);
 
 router.get('/', projectAccess, ProductController.list);
+router.get('/export', projectAccess, ProductController.exportAll);
 router.get('/leads-stats', projectAccess, ProductController.leadsStats);
 router.get('/:id', projectAccess, ProductController.getById);
 router.get('/:id/image-url', projectAccess, ProductController.getImageUrl);
