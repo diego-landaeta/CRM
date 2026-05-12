@@ -480,6 +480,9 @@ export const importNow = async (req, res, next) => {
                 scrapeSource = `seo_page_id=${seoPage.id}`;
                 finalMapped.source_type = 'seo_page';
                 finalMapped.source_id = seoPage.id;
+                // CRUCIAL: la URL pública útil del producto es la SEO page,
+                // no el permalink WC que termina en -1234-2. Lo sobrescribimos.
+                finalMapped.url_info = seoPage.link;
               }
             } catch (_) {}
           }
