@@ -48,7 +48,7 @@ ALTER TABLE wc_credentials
       "dirigido_a":           ["dirigido", "para quien", "a quien", "destinatario"],
       "para_que_te_prepara":  ["te prepara", "preparacion", "salidas profesionales", "salida laboral"],
       "por_que_estudiar":     ["por que estudiar", "por que elegir", "ventajas"],
-      "modulos":              ["modulo", "modulos", "temario", "programa", "contenido", "unidad", "unidades", "bloque", "syllabus"],
+      "modulos":              ["contenido del", "temario del", "programa del", "syllabus", "temario", "contenido", "modulos", "modulo", "unidades", "unidad", "bloques"],
       "metodologia":          ["metodologi"],
       "faqs":                 ["pregunta frecuente", "preguntas frecuentes", "faq", "dudas frecuentes"],
       "profesores":           ["profesor", "docente", "instructor", "tutor", "claustro", "profesorado"]
