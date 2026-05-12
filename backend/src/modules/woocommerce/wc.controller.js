@@ -442,9 +442,19 @@ export const importNow = async (req, res, next) => {
             categoria_id: userMapped.categoria_id || auto.categoria_id,
             subcategoria_id: auto.subcategoria_id,
           };
-          const r = await model.upsertProductFromWc({ projectId, wcId: wp.id, data: finalMapped });
-          if (r.action === 'created') created++;
-          else if (r.action === 'updated') updated++;
+          try {
+            const r = await model.upsertProductFromWc({ projectId, wcId: wp.id, data: finalMapped });
+            if (r.action === 'created') created++;
+            else if (r.action === 'updated') updated++;
+          } catch (perItemErr) {
+            // No matar el run completo por un duplicado de nombre / FK suelta.
+            // Se cuenta como skipped y se loguea, el resto sigue.
+            skipped++;
+            logger.warn(
+              { err: perItemErr.message, wcId: wp.id, wcName: wp.name, projectId },
+              'WC: producto saltado por error per-item'
+            );
+          }
         }
         // 4. Pasada extra: scrap del menú HTML — solo crea ramas con productos
         let menuStats = { cats: 0, assigned: 0, pruned: 0 };
