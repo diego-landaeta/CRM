@@ -16,7 +16,7 @@ export default defineConfig({
       base: BASE,
       scope: BASE,
       manifest: false,
-      includeAssets: ['offline.html', 'favicon.jpeg', 'favicon.svg', 'icons/*.png'],
+      includeAssets: ['offline.html', 'favicon.svg', 'icons/*.png'],
       workbox: {
         clientsClaim: true,
         skipWaiting: true,

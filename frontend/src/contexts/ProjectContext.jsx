@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 const ProjectContext = createContext(null);
 
 const BASE_URL = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
-const DEFAULT_FAVICON = `${BASE_URL}/favicon.jpeg`;
+const DEFAULT_FAVICON = `${BASE_URL}/favicon.svg`;
 
 function setFavicon(href) {
   let link = document.querySelector("link[rel='icon']");
