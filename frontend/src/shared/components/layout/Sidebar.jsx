@@ -464,7 +464,14 @@ function ProjectAvatar({ project, size = 'md' }) {
     );
   }
 
-  return <div className={`${dim} rounded-lg bg-muted/30 flex-shrink-0`} />;
+  // 4) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
+  //    ni logo subido, ni logo local por slug, ni emoji). Antes se mostraba un
+  //    rectángulo vacío feo.
+  return (
+    <div className={`${dim} rounded-lg bg-primary/15 text-primary flex items-center justify-center flex-shrink-0`}>
+      <Package size={size === 'sm' ? 14 : 16} weight="duotone" />
+    </div>
+  );
 }
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
