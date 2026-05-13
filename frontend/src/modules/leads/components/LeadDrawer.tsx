@@ -165,7 +165,7 @@ function ResumenTab({ lead, onEnroll }) {
       <DataRow label="País" value={lead.pais || '--'} />
       <DataRow label="Origen" value={lead.origen || '--'} />
       <DataRow label="Gestor" value={lead.responsable_nombre || lead.gestor || '--'} />
-      <DataRow label="Creado" value={fmtDate(lead.created_at)} />
+      <DataRow label="Creado" value={fmtDateTime(lead.created_at)} />
       {lead.notas && (
         <div>
           <p className="text-xs text-muted-foreground mb-1">Notas</p>

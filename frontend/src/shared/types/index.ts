@@ -80,6 +80,9 @@ export interface Lead {
   producto_interes?: string | null;
   producto_interes_id?: number | null;
   producto_nombre?: string | null;
+  producto_precio?: number | string | null;
+  producto_moneda?: string | null;
+  valor_oportunidad?: 'alto' | 'medio' | 'bajo' | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
   pais?: string | null;

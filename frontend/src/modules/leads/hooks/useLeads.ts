@@ -6,11 +6,13 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; page: number } = {
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; page: number } = {
   q: '',
   estado: '',
   origen: '',
   resp: '',
+  prod: '',
+  multi: '',  // '1' = todos los proyectos del user
   page: 1,
 };
 
@@ -39,6 +41,10 @@ export interface UseLeadsResult {
   setFilterOrigen: (v: string) => void;
   filterResponsable: string;
   setFilterResponsable: (v: string) => void;
+  filterProducto: string;
+  setFilterProducto: (v: string) => void;
+  multiProjectMode: boolean;
+  setMultiProjectMode: (v: boolean) => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -55,18 +61,21 @@ function normalizeLead<T extends Partial<Lead>>(lead: T): T {
 }
 
 export function useLeads(): UseLeadsResult {
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects } = useProjectContext() as { activeProject: { id?: number | null }; projects: Array<{ id: number }> };
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, page } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; page: number;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, page } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; page: number;
   };
+  const multiProjectMode = multiRaw === '1';
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
   const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
+  const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
+  const setMultiProjectMode = useCallback((v: boolean) => setUrlFilters({ multi: v ? '1' : '', page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
@@ -103,7 +112,11 @@ export function useLeads(): UseLeadsResult {
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set('projectId', String(pid));
+      if (multiProjectMode && projects && projects.length > 0) {
+        params.set('projectIds', projects.map((p) => p.id).join(','));
+      } else {
+        params.set('projectId', String(pid));
+      }
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
@@ -111,6 +124,7 @@ export function useLeads(): UseLeadsResult {
       if (filterOrigen) params.set('canal', filterOrigen);
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
       else if (filterResponsable) params.set('responsableId', filterResponsable);
+      if (filterProducto) params.set('productId', filterProducto);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -128,7 +142,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiProjectMode, projects]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -178,6 +192,10 @@ export function useLeads(): UseLeadsResult {
     setFilterOrigen,
     filterResponsable,
     setFilterResponsable,
+    filterProducto,
+    setFilterProducto,
+    multiProjectMode,
+    setMultiProjectMode,
     loading,
     error,
     refetch: fetchLeads,

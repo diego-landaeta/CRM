@@ -50,7 +50,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
                 <StatusBadge status={lead.estado} showIcon />
               </div>
               <p className="text-muted-foreground text-xs mt-0.5">
-                Prospecto #{lead.id} · creado {lead.created_at ? new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '--'}
+                Prospecto #{lead.id} · creado {lead.created_at ? new Date(lead.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--'}
                 {lead.proyecto_nombre && <> · {lead.proyecto_nombre}</>}
               </p>
             </div>

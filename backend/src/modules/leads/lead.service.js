@@ -131,7 +131,52 @@ export async function processWebhook(slug, apiKey, leadData) {
 // ============================================================
 
 export async function list(filters) {
-  return await leadModel.findAll(filters);
+  const result = await leadModel.findAll(filters);
+
+  // Calcular valor_oportunidad por percentiles del proyecto.
+  // - alto:  precio >= percentil 67 (top tercio)
+  // - medio: percentil 34-66
+  // - bajo:  percentil < 34
+  // - n/a:   sin producto matcheado
+  // Calculamos contra TODO el catálogo de productos del proyecto del lead.
+  // Cache por proyecto para no recalcular en cada fila.
+  const projectThresholdsCache = new Map();
+  async function getThresholds(projectId) {
+    if (projectThresholdsCache.has(projectId)) return projectThresholdsCache.get(projectId);
+    try {
+      const { rows } = await query(
+        `SELECT
+           PERCENTILE_CONT(0.34) WITHIN GROUP (ORDER BY precio) AS p34,
+           PERCENTILE_CONT(0.67) WITHIN GROUP (ORDER BY precio) AS p67
+         FROM products
+         WHERE project_id = $1 AND active = true AND precio IS NOT NULL AND precio > 0`,
+        [projectId]
+      );
+      const t = rows[0] && rows[0].p34 != null
+        ? { p34: Number(rows[0].p34), p67: Number(rows[0].p67) }
+        : { p34: 100, p67: 500 }; // fallback genérico
+      projectThresholdsCache.set(projectId, t);
+      return t;
+    } catch (_) {
+      const fallback = { p34: 100, p67: 500 };
+      projectThresholdsCache.set(projectId, fallback);
+      return fallback;
+    }
+  }
+  for (const lead of result.leads) {
+    if (lead.producto_precio == null) {
+      lead.valor_oportunidad = 'sin_producto';
+      lead.valor_oportunidad_score = 0;
+      continue;
+    }
+    const t = await getThresholds(lead.project_id);
+    const p = Number(lead.producto_precio);
+    if (p >= t.p67) lead.valor_oportunidad = 'alto';
+    else if (p >= t.p34) lead.valor_oportunidad = 'medio';
+    else lead.valor_oportunidad = 'bajo';
+    lead.valor_oportunidad_score = p;
+  }
+  return result;
 }
 
 export async function getById(id) {
@@ -199,8 +244,8 @@ export async function reassignPending(projectId) {
 }
 
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }) {
-  // Detectar duplicado
-  const duplicate = await leadModel.findDuplicateByEmail(email, project_id);
+  // Detectar duplicado solo si tiene email (sin email no podemos buscar dupe fiable)
+  const duplicate = email ? await leadModel.findDuplicateByEmail(email, project_id) : null;
 
   // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
   // asumimos doble submit y devolvemos el lead existente en vez de crear otro

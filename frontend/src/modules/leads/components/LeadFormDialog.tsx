@@ -156,8 +156,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               <Field label="Nombre *" error={errors.nombre?.message}>
                 <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
               </Field>
-              <Field label="Email *" error={errors.email?.message}>
-                <input {...register('email')} type="email" placeholder="correo@ejemplo.com" className={inputClass} />
+              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
+                <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
             </div>
 
@@ -180,8 +180,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Teléfono" error={errors.telefono?.message}>
-                <input {...register('telefono')} placeholder="+34 600 000 000" className={inputClass} />
+              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
+                <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass} />
               </Field>
               <Field label="Origen *" error={errors.origen?.message}>
                 <select {...register('origen')} className={selectClass} style={selectBg}>

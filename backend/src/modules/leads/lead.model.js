@@ -108,10 +108,22 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 // LISTADO + DETALLE
 // ============================================================
 
-export async function findAll({ projectId, status, responsableId, unassigned, canal, search, page, limit, includeConverted }) {
-  const conditions = ['l.project_id = $1'];
-  const params = [projectId];
-  let paramIdx = 2;
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted }) {
+  const conditions = [];
+  const params = [];
+  let paramIdx = 1;
+
+  // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    conditions.push(`l.project_id = ANY($${paramIdx++}::int[])`);
+    params.push(projectIds);
+  } else if (projectId) {
+    conditions.push(`l.project_id = $${paramIdx++}`);
+    params.push(projectId);
+  } else {
+    // Sin filtro de proyecto no devolvemos nada (seguridad)
+    return { leads: [], total: 0, page, limit, totalPages: 0 };
+  }
 
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
@@ -129,8 +141,12 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);
     params.push(canal);
   }
+  if (productId) {
+    conditions.push(`l.producto_interes_id = $${paramIdx++}`);
+    params.push(productId);
+  }
   if (search) {
-    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx})`);
+    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx})`);
     params.push(`%${search}%`);
     paramIdx++;
   }
@@ -145,10 +161,15 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.updated_at, l.created_at,
             l.landing_url,
+            l.project_id,
+            proj.nombre AS proyecto_nombre,
+            proj.slug AS proyecto_slug,
             u.nombre as responsable_nombre,
             lu.canal_detectado, lu.utm_source, lu.utm_campaign,
             prod.nombre as producto_interes,
             l.producto_interes_id,
+            prod.precio as producto_precio,
+            prod.moneda as producto_moneda,
             (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
             (SELECT MIN(fecha_recordatorio) FROM lead_reminders WHERE lead_id = l.id AND completado = false) AS next_reminder_at,
             p.dias_alerta_inactividad,
@@ -157,9 +178,13 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      LEFT JOIN projects p ON p.id = l.project_id
+     LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      ${where}
-     ORDER BY l.fecha_solicitud DESC
+     ORDER BY
+       -- Prioridad por valor de oportunidad: leads con producto caro arriba
+       COALESCE(prod.precio, 0) DESC NULLS LAST,
+       l.fecha_solicitud DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     [...params, limit, offset]
   );

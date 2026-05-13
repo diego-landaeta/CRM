@@ -36,10 +36,10 @@ import {
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
-const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
+const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
@@ -125,10 +125,12 @@ export default function LeadsPage() {
     filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
+    filterProducto, setFilterProducto,
+    multiProjectMode, setMultiProjectMode,
     loading, error, refetch,
   } = useLeads();
 
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects } = useProjectContext();
   const { products } = useProducts(activeProject?.id);
   const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
 
@@ -243,22 +245,6 @@ export default function LeadsPage() {
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);
-  }
-
-  async function confirmMarkContacted() {
-    const lead = confirmingContact;
-    if (!lead) return;
-    try {
-      const res = await client.patch(`/leads/${lead.id}/status`, { status: 'contactado', motivo: 'Marcado contactado desde lista' });
-      if (res.success) {
-        toast({ title: 'Marcado como contactado', description: lead.nombre });
-        await refetch();
-      }
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
-    } finally {
-      setConfirmingContact(null);
-    }
   }
 
   function handleConvert(lead) {
@@ -588,6 +574,29 @@ export default function LeadsPage() {
               ))}
             </select>
           )}
+          <select
+            value={filterProducto}
+            onChange={(e) => { setFilterProducto(e.target.value); setPage(1); }}
+            aria-label="Filtrar por programa"
+            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20 max-w-[200px]"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+          >
+            <option value="">Todos los programas</option>
+            {(products || []).map((p: any) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          {projects && projects.length > 1 && (
+            <label className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-border bg-muted/40 text-xs sm:text-sm cursor-pointer hover:bg-muted/60" title="Ver leads de todos mis proyectos en una sola lista">
+              <input
+                type="checkbox"
+                checked={multiProjectMode}
+                onChange={(e) => setMultiProjectMode(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span className="whitespace-nowrap">Todos mis proyectos</span>
+            </label>
+          )}
           {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && (
             <button
               onClick={async () => {
@@ -648,6 +657,16 @@ export default function LeadsPage() {
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
       </div>
 
+      {/* Leyenda de iconos de acción */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground bg-muted/30 border border-border rounded-md px-3 py-1.5">
+        <span className="font-semibold text-foreground">Acciones rápidas:</span>
+        <span className="inline-flex items-center gap-1"><WhatsappLogo size={13} weight="regular" className="text-green-600" /> WhatsApp</span>
+        <span className="inline-flex items-center gap-1"><EnvelopeSimple size={13} weight="regular" /> Email + secuencia</span>
+        <span className="inline-flex items-center gap-1"><CalendarPlus size={13} weight="regular" /> Programar próximo contacto</span>
+        <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
+        <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
+      </div>
+
       {/* Error state */}
       {error && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
@@ -675,6 +694,10 @@ export default function LeadsPage() {
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
+                {multiProjectMode && (
+                  <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyecto</th>
+                )}
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Último contacto</th>
@@ -761,6 +784,27 @@ export default function LeadsPage() {
                       <span className="text-muted-foreground italic">Por definir</span>
                     )}
                   </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.valor_oportunidad === 'alto' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" title="Producto de valor alto">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Alto
+                      </span>
+                    )}
+                    {lead.valor_oportunidad === 'medio' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" title="Producto de valor medio">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Medio
+                      </span>
+                    )}
+                    {lead.valor_oportunidad === 'bajo' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-muted-foreground bg-muted" title="Producto de valor bajo">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />Bajo
+                      </span>
+                    )}
+                    {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  {multiProjectMode && (
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
+                  )}
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
                   </td>
@@ -786,7 +830,7 @@ export default function LeadsPage() {
               })}
               {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={9} className="px-5">
+                  <td colSpan={multiProjectMode ? 12 : 11} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron prospectos"
@@ -898,17 +942,13 @@ export default function LeadsPage() {
         />
       </Suspense>
 
-      {/* Marcar contactado — confirm */}
+      {/* Marcar contactado — registra nota + opcional próximo contacto */}
       <Suspense fallback={null}>
-        <ConfirmDialog
+        <ContactedDialog
           open={!!confirmingContact}
-          tone="success"
-          title="Marcar como contactado"
-          message={confirmingContact ? <>Vas a marcar a <strong className="text-foreground">{confirmingContact.nombre}</strong> como contactado. El estado del prospecto cambiará y se registrará la fecha actual.</> : null}
-          confirmLabel="Sí, marcar contactado"
-          cancelLabel="Cancelar"
-          onConfirm={confirmMarkContacted}
-          onCancel={() => setConfirmingContact(null)}
+          lead={confirmingContact}
+          onClose={() => setConfirmingContact(null)}
+          onSaved={() => { setConfirmingContact(null); refetch(); }}
         />
       </Suspense>
 
