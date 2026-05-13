@@ -588,7 +588,7 @@ export default function LeadsPage() {
               ))}
             </select>
           )}
-          {(user?.role === 'superadmin' || user?.role === 'admin') && filterResponsable === 'unassigned' && (
+          {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && (
             <button
               onClick={async () => {
                 if (!activeProject?.id) return;
@@ -597,9 +597,9 @@ export default function LeadsPage() {
                   if (res.success) {
                     const d = res.data as { reassigned: number; reason?: string };
                     if (d.reason === 'NO_ACTIVE_GESTORES') {
-                      toast({ title: 'No hay gestores activos en este proyecto', variant: 'destructive' });
+                      toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
                     } else {
-                      toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''}` });
+                      toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
                       refetch?.();
                     }
                   }
@@ -607,10 +607,15 @@ export default function LeadsPage() {
                   toast({ title: 'Error', description: err?.message, variant: 'destructive' });
                 }
               }}
-              className="h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap"
+              className="h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5"
               title="Aplica round-robin a todos los prospectos sin responsable"
             >
               Asignar pendientes
+              {stats?.sin_asignar > 0 && (
+                <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.5 rounded">
+                  {stats.sin_asignar}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -735,6 +740,23 @@ export default function LeadsPage() {
                       <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded font-medium" title={lead.producto_interes}>
                         {lead.producto_interes.length > 40 ? lead.producto_interes.slice(0, 38) + '…' : lead.producto_interes}
                       </span>
+                    ) : lead.landing_url ? (
+                      (() => {
+                        // Mostrar el último segmento legible de la URL como "origen"
+                        // ej: https://psikoaprende.com/contacto/ → "página de contacto"
+                        let label = 'origen web';
+                        try {
+                          const path = new URL(lead.landing_url).pathname.replace(/\/$/, '').split('/').filter(Boolean);
+                          const last = path[path.length - 1] || 'home';
+                          // Limpiar: convertir guiones a espacios + capitalizar primera letra
+                          label = `Desde: ${last.replace(/-/g, ' ').replace(/^(.)/, (c) => c.toUpperCase())}`;
+                        } catch { /* mantener fallback */ }
+                        return (
+                          <span className="inline-block px-2 py-0.5 bg-muted text-muted-foreground rounded font-medium italic" title={lead.landing_url}>
+                            {label.length > 40 ? label.slice(0, 38) + '…' : label}
+                          </span>
+                        );
+                      })()
                     ) : (
                       <span className="text-muted-foreground italic">Por definir</span>
                     )}

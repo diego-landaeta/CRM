@@ -33,13 +33,27 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
   try {
     await client.query('BEGIN');
 
-    // Round-robin: lock queue state
-    const { rows: queueRows } = await client.query(
-      `SELECT id, last_assigned_index FROM project_queue_state WHERE project_id = $1 FOR UPDATE`,
-      [projectId]
-    );
+    // Round-robin: lock queue state. Si no existe, lo creamos en este
+    // mismo lock (no perdemos asignación al primer lead del proyecto).
+    let queueRows;
+    {
+      const r = await client.query(
+        `SELECT id, last_assigned_index FROM project_queue_state WHERE project_id = $1 FOR UPDATE`,
+        [projectId]
+      );
+      queueRows = r.rows;
+      if (queueRows.length === 0) {
+        const ins = await client.query(
+          `INSERT INTO project_queue_state (project_id, last_assigned_index)
+           VALUES ($1, -1) RETURNING id, last_assigned_index`,
+          [projectId]
+        );
+        queueRows = ins.rows;
+      }
+    }
 
-    // Obtener gestores activos del proyecto
+    // Obtener gestores activos del proyecto.
+    // Acepta admin + gestor (round-robin tradicional).
     const { rows: gestorRows } = await client.query(
       `SELECT up.user_id FROM user_projects up
        JOIN users u ON u.id = up.user_id AND u.active = true AND u.role IN ('admin', 'gestor')
@@ -49,7 +63,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     );
 
     let responsableId = null;
-    if (queueRows.length > 0 && gestorRows.length > 0) {
+    if (gestorRows.length > 0) {
       const gestores = gestorRows.map(r => r.user_id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
@@ -130,6 +144,7 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.updated_at, l.created_at,
+            l.landing_url,
             u.nombre as responsable_nombre,
             lu.canal_detectado, lu.utm_source, lu.utm_campaign,
             prod.nombre as producto_interes,
@@ -453,7 +468,8 @@ export async function getStats(projectId) {
        COUNT(*) FILTER (WHERE status = 'contactado') as contactados,
        COUNT(*) FILTER (WHERE status = 'en_seguimiento') as en_seguimiento,
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
-       COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados
+       COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
+       COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
      FROM leads WHERE project_id = $1`,
     [projectId]
   );

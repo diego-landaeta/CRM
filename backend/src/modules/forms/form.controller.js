@@ -395,7 +395,11 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     let productoMatchSource = productoInteresId ? 'manual' : null;
 
     if (!productoInteresId && f.url_match_enabled !== false) {
-      // Intentar varias fuentes de URL en orden
+      // Recolectar candidatos de URL agresivamente:
+      //   - los conocidos en snake_case
+      //   - los headers HTTP
+      //   - CUALQUIER key del body cuyo nombre contenga "page|url|referer|landing"
+      //     y cuyo valor parezca URL (http://...)
       const candidateUrls = [
         final.landing_url,
         body.landing_url,
@@ -404,10 +408,20 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
         body.referer,
         req.headers?.referer,
         req.headers?.referrer,
-        // Algunos forms de Elementor envían _wp_http_referer o page_url anidado
         body._wp_http_referer,
         body.page,
       ].filter(Boolean);
+
+      // Scanner del body: keys con "page|url|referer|landing" + valor http(s)://
+      if (body && typeof body === 'object') {
+        for (const [k, v] of Object.entries(body)) {
+          if (!v || typeof v !== 'string') continue;
+          if (!/^https?:\/\//i.test(v)) continue;
+          if (/page|url|referer|landing|source|origen/i.test(k)) {
+            if (!candidateUrls.includes(v)) candidateUrls.push(v);
+          }
+        }
+      }
 
       for (const url of candidateUrls) {
         const matched = await findProductByUrl(f.project_id, url);
@@ -416,6 +430,11 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
           productoMatchSource = `url_match:${url}`;
           break;
         }
+      }
+      // Si no matcheó NINGÚN producto, al menos guardamos la primera URL detectada
+      // como landing_url para que el admin la vea en el detalle.
+      if (!productoInteresId && candidateUrls.length > 0) {
+        if (!final.landing_url) final.landing_url = candidateUrls[0];
       }
     }
 
