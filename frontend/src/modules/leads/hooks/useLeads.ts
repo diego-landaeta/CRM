@@ -61,7 +61,11 @@ function normalizeLead<T extends Partial<Lead>>(lead: T): T {
 }
 
 export function useLeads(): UseLeadsResult {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null } };
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: { id?: number | null; isAll?: boolean };
+    projects: Array<{ id: number }>;
+    isAllProjects: boolean;
+  };
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
@@ -105,7 +109,13 @@ export function useLeads(): UseLeadsResult {
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchLeads = useCallback(async (): Promise<void> => {
-    if (!pid) return;
+    // Modo "Todos los proyectos": cruza todos los IDs del usuario.
+    const effectiveIds = isAllProjects
+      ? (projects || []).map((p) => p.id)
+      : selectedProjectIds;
+    const hasMulti = effectiveIds.length > 0;
+    if (!hasMulti && !pid) return;
+    if (isAllProjects && (!projects || projects.length === 0)) return;
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -114,8 +124,8 @@ export function useLeads(): UseLeadsResult {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (selectedProjectIds.length > 0) {
-        params.set('projectIds', selectedProjectIds.join(','));
+      if (hasMulti) {
+        params.set('projectIds', effectiveIds.join(','));
       } else {
         params.set('projectId', String(pid));
       }
@@ -144,32 +154,47 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
   }, []);
 
   const fetchStats = useCallback(async (): Promise<void> => {
-    if (!pid) return;
     try {
-      const res = await client.get(`/leads/stats?projectId=${pid}`);
-      if (res.success) {
-        const d = res.data || {};
-        setStats({
-          total: Number(d.total) || 0,
-          nuevo: Number(d.nuevos) || 0,
-          por_contactar: Number(d.por_contactar) || 0,
-          contactado: Number(d.contactados) || 0,
-          en_seguimiento: Number(d.en_seguimiento) || 0,
-          convertido: Number(d.convertidos) || 0,
-          no_interesado: Number(d.no_interesados) || 0,
+      let merged: Record<string, number> = {};
+      if (isAllProjects) {
+        if (!projects || projects.length === 0) return;
+        const results = await Promise.all(
+          projects.map((p) => client.get(`/leads/stats?projectId=${p.id}`).catch(() => ({ success: false } as any)))
+        );
+        results.forEach((r: any) => {
+          if (r.success) {
+            const d = r.data || {};
+            for (const k of ['total', 'nuevos', 'por_contactar', 'contactados', 'en_seguimiento', 'convertidos', 'no_interesados', 'sin_asignar']) {
+              merged[k] = (merged[k] || 0) + Number(d[k] || 0);
+            }
+          }
         });
+      } else {
+        if (!pid) return;
+        const res = await client.get(`/leads/stats?projectId=${pid}`);
+        if (!res.success) return;
+        merged = res.data || {};
       }
+      setStats({
+        total: Number(merged.total) || 0,
+        nuevo: Number(merged.nuevos) || 0,
+        por_contactar: Number(merged.por_contactar) || 0,
+        contactado: Number(merged.contactados) || 0,
+        en_seguimiento: Number(merged.en_seguimiento) || 0,
+        convertido: Number(merged.convertidos) || 0,
+        no_interesado: Number(merged.no_interesados) || 0,
+      } as Partial<LeadStats>);
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid]);
+  }, [pid, isAllProjects, projects]);
 
   useEffect(() => {
     fetchLeads();

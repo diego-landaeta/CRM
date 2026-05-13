@@ -464,7 +464,16 @@ function ProjectAvatar({ project, size = 'md' }) {
     );
   }
 
-  // 4) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
+  // 4) Caso especial "Todos los proyectos"
+  if (project?.isAll) {
+    return (
+      <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
+        ALL
+      </div>
+    );
+  }
+
+  // 5) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
   //    ni logo subido, ni logo local por slug, ni emoji). Antes se mostraba un
   //    rectángulo vacío feo.
   return (
@@ -723,8 +732,24 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                       if (tA !== tB) return tA - tB;
                       return (a.nombre || '').localeCompare(b.nombre || '', 'es');
                     });
+                    const allEntry = projects.length > 1 ? (
+                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
+                        <button
+                          type="button"
+                          onClick={() => { switchProject(-1); setPickerOpen(false); }}
+                          className={cn(
+                            'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
+                            activeProject?.id === -1 && 'bg-secondary font-semibold'
+                          )}
+                        >
+                          <ProjectAvatar project={{ isAll: true }} size="sm" />
+                          <span className="flex-1 truncate">Todos los proyectos</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold">vista global</span>
+                        </button>
+                      </li>
+                    ) : null;
                     let lastType = null;
-                    return sorted.map((p) => {
+                    const items = sorted.map((p) => {
                       const isActive = p.id === activeProject?.id;
                       const showDivider = lastType !== null && lastType !== p.type;
                       lastType = p.type;
@@ -747,12 +772,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                         </div>
                       );
                     });
+                    return <>{allEntry}{items}</>;
                   })()}
                 </ul>
               </Portal>
             )}
           </div>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !collapsed && (
+          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
             <button
               onClick={() => setConfigOpen(true)}
               className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"

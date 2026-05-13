@@ -20,7 +20,7 @@ function setFavicon(href) {
 }
 
 export function ProjectProvider({ children }) {
-  const { activeProject, projects, switchProject } = useAuth();
+  const { activeProject, projects, switchProject, isAllProjects } = useAuth();
 
   // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
   useEffect(() => {
@@ -37,6 +37,7 @@ export function ProjectProvider({ children }) {
       activeProject: activeProject || { id: null, nombre: 'Sin proyecto' },
       projects: projects || [],
       switchProject,
+      isAllProjects: !!isAllProjects,
     }}>
       {children}
     </ProjectContext.Provider>

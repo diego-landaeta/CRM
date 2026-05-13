@@ -93,17 +93,25 @@ function QuickActions({ client: c, onUpsell }: QuickActionsProps) {
 
 export default function ClientsPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
+    projects: Array<{ id: number }>;
+    isAllProjects: boolean;
+  };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
 
   useEffect(() => {
-    if (!activeProject?.id) return;
+    if (isAllProjects && (!projects || projects.length === 0)) return;
+    if (!isAllProjects && !activeProject?.id) return;
     (async () => {
       setLoading(true);
       try {
-        const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
+        const qs = isAllProjects
+          ? `projectIds=${projects.map((p) => p.id).join(',')}&status=convertido&limit=100`
+          : `projectId=${activeProject.id}&status=convertido&limit=100`;
+        const res = await client.get(`/leads?${qs}`);
         if (res.success) {
           const enriched = await Promise.all((res.data || []).map(async (l) => {
             try {
@@ -132,7 +140,7 @@ export default function ClientsPage() {
         setLoading(false);
       }
     })();
-  }, [activeProject?.id]);
+  }, [activeProject?.id, isAllProjects, projects]);
 
   const filtered = search
     ? clients.filter(c =>
