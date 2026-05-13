@@ -22,7 +22,7 @@ export const listLeadsSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
-  canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido']).optional(),
+  canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
   productId: z.coerce.number().int().positive().optional(),
   search: z.string().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -60,7 +60,7 @@ export const createLeadManualSchema = z.object({
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().nullable().or(z.literal('')),
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive().optional().nullable(),
-  canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia']).default('directo'),
+  canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp']).default('directo'),
   notas: z.string().max(2000).optional().or(z.literal('')),
   custom_fields: z.record(z.string(), z.any()).optional(),
 }).refine(

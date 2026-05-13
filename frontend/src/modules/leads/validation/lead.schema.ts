@@ -5,7 +5,7 @@ export const leadSchema = z.object({
   // Email opcional: si viene, debe ser válido; vacío también acepta
   email: z.string().email('Email no valido').optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
-  origen: z.enum(['meta_ads', 'google_ads', 'organico', 'referido', 'directo'], {
+  origen: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp', 'referido', 'directo'], {
     required_error: 'Selecciona un origen',
   }),
   estado: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
@@ -36,7 +36,10 @@ export interface OptionLabel<T extends string = string> {
 export const ORIGEN_OPTIONS: readonly OptionLabel<LeadOrigenSchema>[] = [
   { value: 'meta_ads', label: 'Meta Ads' },
   { value: 'google_ads', label: 'Google Ads' },
+  { value: 'tiktok_ads', label: 'TikTok Ads' },
+  { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'organico', label: 'Orgánico' },
+  { value: 'chatgpt_ia', label: 'ChatGPT IA' },
   { value: 'referido', label: 'Referido' },
   { value: 'directo', label: 'Directo' },
 ] as const;

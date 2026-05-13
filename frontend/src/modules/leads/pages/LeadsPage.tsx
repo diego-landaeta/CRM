@@ -43,6 +43,8 @@ const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import SearchableSelect from '@/shared/components/ui/SearchableSelect';
+import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import QuickActions from '../components/QuickActions';
@@ -126,7 +128,7 @@ export default function LeadsPage() {
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
-    multiProjectMode, setMultiProjectMode,
+    selectedProjectIds, setSelectedProjectIds,
     loading, error, refetch,
   } = useLeads();
 
@@ -543,59 +545,54 @@ export default function LeadsPage() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
-          <select
+          <SearchableSelect
             value={filterOrigen}
-            onChange={(e) => { setFilterOrigen(e.target.value); setPage(1); }}
-            aria-label="Filtrar por canal"
-            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            <option value="">Todos los canales</option>
-            <option value="meta_ads">Meta Ads</option>
-            <option value="google_ads">Google Ads</option>
-            <option value="tiktok_ads">TikTok Ads</option>
-            <option value="organico">Orgánico</option>
-            <option value="chatgpt_ia">ChatGPT IA</option>
-            <option value="referido">Referido</option>
-            <option value="directo">Directo</option>
-          </select>
+            onChange={(v) => { setFilterOrigen(v); setPage(1); }}
+            options={[
+              { value: 'meta_ads', label: 'Meta Ads' },
+              { value: 'google_ads', label: 'Google Ads' },
+              { value: 'tiktok_ads', label: 'TikTok Ads' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'organico', label: 'Orgánico' },
+              { value: 'chatgpt_ia', label: 'ChatGPT IA' },
+              { value: 'referido', label: 'Referido' },
+              { value: 'directo', label: 'Directo' },
+            ]}
+            placeholder="Buscar canal..."
+            allLabel="Todos los canales"
+            ariaLabel="Filtrar por canal"
+            maxWidth="180px"
+          />
           {(user?.role === 'superadmin' || user?.role === 'admin') && (
-            <select
+            <SearchableSelect
               value={filterResponsable}
-              onChange={(e) => { setFilterResponsable(e.target.value); setPage(1); }}
-              aria-label="Filtrar por gestor"
-              className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
-              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-            >
-              <option value="">Todos los gestores</option>
-              <option value="unassigned">— Sin asignar —</option>
-              {gestores.map((g) => (
-                <option key={g.id} value={g.id}>{g.nombre}</option>
-              ))}
-            </select>
+              onChange={(v) => { setFilterResponsable(v); setPage(1); }}
+              options={[
+                { value: 'unassigned', label: '— Sin asignar —' },
+                ...gestores.map((g: any) => ({ value: String(g.id), label: g.nombre })),
+              ]}
+              placeholder="Buscar gestor..."
+              allLabel="Todos los gestores"
+              ariaLabel="Filtrar por gestor"
+              maxWidth="200px"
+            />
           )}
-          <select
+          <SearchableSelect
             value={filterProducto}
-            onChange={(e) => { setFilterProducto(e.target.value); setPage(1); }}
-            aria-label="Filtrar por programa"
-            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20 max-w-[200px]"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            <option value="">Todos los programas</option>
-            {(products || []).map((p: any) => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
+            onChange={(v) => { setFilterProducto(v); setPage(1); }}
+            options={(products || []).map((p: any) => ({ value: String(p.id), label: p.nombre }))}
+            placeholder="Buscar programa..."
+            allLabel="Todos los programas"
+            ariaLabel="Filtrar por programa"
+            maxWidth="220px"
+          />
           {projects && projects.length > 1 && (
-            <label className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-border bg-muted/40 text-xs sm:text-sm cursor-pointer hover:bg-muted/60" title="Ver leads de todos mis proyectos en una sola lista">
-              <input
-                type="checkbox"
-                checked={multiProjectMode}
-                onChange={(e) => setMultiProjectMode(e.target.checked)}
-                className="rounded border-border"
-              />
-              <span className="whitespace-nowrap">Todos mis proyectos</span>
-            </label>
+            <MultiProjectPicker
+              projects={projects}
+              selected={selectedProjectIds}
+              onChange={(ids) => { setSelectedProjectIds(ids); setPage(1); }}
+              activeProjectId={activeProject?.id}
+            />
           )}
           {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && (
             <button
@@ -695,11 +692,12 @@ export default function LeadsPage() {
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
-                {multiProjectMode && (
+                {selectedProjectIds.length > 0 && (
                   <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyecto</th>
                 )}
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Recibido</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Último contacto</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Próximo</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
@@ -802,7 +800,7 @@ export default function LeadsPage() {
                     )}
                     {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
                   </td>
-                  {multiProjectMode && (
+                  {selectedProjectIds.length > 0 && (
                     <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-5 py-3.5">
@@ -810,6 +808,14 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <StatusBadge status={lead.estado} />
+                  </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.created_at ? (
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-foreground">{new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+                        <span className="text-muted-foreground text-[11px]">{new Date(lead.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ) : <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">
                     {lead.last_interaction_at ? formatRelative(lead.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
@@ -830,7 +836,7 @@ export default function LeadsPage() {
               })}
               {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={multiProjectMode ? 12 : 11} className="px-5">
+                  <td colSpan={selectedProjectIds.length > 0 ? 13 : 12} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron prospectos"
