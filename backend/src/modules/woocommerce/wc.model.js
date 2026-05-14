@@ -96,8 +96,28 @@ export async function findProductByWcId(projectId, wcId) {
   const { rows } = await query(`SELECT id FROM products WHERE project_id = $1 AND wc_product_id = $2`, [projectId, wcId]);
   return rows[0] || null;
 }
+// Busca un producto del proyecto por nombre exacto (case-insensitive trim).
+// Usado como fallback en el upsert: si los datos vienen del CPT y el nombre
+// ya existe (importado antes por WC), reusamos ese producto para no chocar
+// con la UNIQUE constraint (project_id, nombre).
+async function findProductByExactName(projectId, nombre) {
+  if (!nombre) return null;
+  const { rows } = await query(
+    `SELECT id, wc_product_id FROM products
+     WHERE project_id = $1 AND LOWER(TRIM(nombre)) = LOWER(TRIM($2))
+     LIMIT 1`,
+    [projectId, nombre]
+  );
+  return rows[0] || null;
+}
+
 export async function upsertProductFromWc({ projectId, wcId, data }) {
-  const existing = await findProductByWcId(projectId, wcId);
+  // 1) Por wc_product_id. 2) Fallback por nombre exacto (caso CPT que choca con WC).
+  let existing = await findProductByWcId(projectId, wcId);
+  if (!existing) {
+    const byName = await findProductByExactName(projectId, data.nombre);
+    if (byName) existing = byName;
+  }
   const meta = data.meta || {};
   // Campos de scraping (todos opcionales). Si vienen, se guardan; si no, queda NULL.
   const sc = {
