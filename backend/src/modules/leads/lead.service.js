@@ -96,6 +96,18 @@ export async function processWebhook(slug, apiKey, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Propuesto (cross-sell) = ya existe un lead CONVERTIDO del mismo email
+  // y este nuevo pregunta por OTRO producto. Es una oportunidad calificada.
+  const converted = leadData.email
+    ? await leadModel.findConvertedByEmail(leadData.email, project.id)
+    : null;
+  const esPropuesto = !!(
+    converted &&
+    productoInteresId &&
+    converted.producto_interes_id !== productoInteresId
+  );
+  const propuestoDe = esPropuesto ? converted.id : null;
+
   // Canal: override de Make > deteccion automatica por UTMs
   const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
@@ -114,6 +126,8 @@ export async function processWebhook(slug, apiKey, leadData) {
     landingUrl: leadData.landing_url || null,
     duplicadoDe,
     reincidente,
+    esPropuesto,
+    propuestoDe,
     forcedResponsableId: skipAssign ? null : forcedResponsableId,
     skipRoundRobin: skipAssign,
     idempotencyKey: leadData.idempotency_key || null,
@@ -201,6 +215,14 @@ export async function restore(leadId) {
   const result = await leadModel.restoreLead(leadId);
   if (!result) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
   return result;
+}
+
+// Historial de compra del email del lead: todas las conversiones previas en el proyecto.
+// Util para mostrar en la ficha cuando el lead es "propuesto" (cross-sell).
+export async function getPurchaseHistory(leadId) {
+  const { rows } = await query(`SELECT email, project_id FROM leads WHERE id = $1`, [leadId]);
+  if (!rows[0]?.email) return [];
+  return await leadModel.findPurchaseHistory(rows[0].email, rows[0].project_id);
 }
 
 // ============================================================
@@ -348,6 +370,15 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     duplicate.producto_interes_id === producto_interes_id
   );
 
+  // Cross-sell: cliente ya convertido pregunta por otro producto
+  const converted = email ? await leadModel.findConvertedByEmail(email, project_id) : null;
+  const esPropuesto = !!(
+    converted &&
+    producto_interes_id &&
+    converted.producto_interes_id !== producto_interes_id
+  );
+  const propuestoDe = esPropuesto ? converted.id : null;
+
   // Si el creador es gestor/admin (no superadmin/soporte), el lead se le asigna
   // a el/ella aunque venga por formulario manual — el round-robin avanza igual,
   // asi que la siguiente asignacion automatica no le vuelve a tocar.
@@ -368,6 +399,8 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     landingUrl: null,
     duplicadoDe,
     reincidente,
+    esPropuesto,
+    propuestoDe,
     forcedResponsableId,
     advanceRoundRobinAnyway: advanceRoundRobin,
     utms: {

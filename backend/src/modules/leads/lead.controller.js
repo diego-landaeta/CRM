@@ -190,6 +190,17 @@ export async function update(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/leads/:id/purchase-history
+// Devuelve todas las conversiones del email del lead en el proyecto.
+export async function getPurchaseHistory(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const data = await leadService.getPurchaseHistory(id);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 // DELETE /api/leads/:id  (superadmin only — soft delete con motivo)
 export async function softDelete(req, res, next) {
   try {

@@ -108,6 +108,8 @@ export interface Lead {
   dias_inactivo?: number | null;
   dias_alerta_inactividad?: number | null;
   reincidente?: boolean | null;
+  es_propuesto?: boolean | null;
+  propuesto_de?: number | null;
   gestor?: string | null;
   utms?: Utms | null;
   // UTMs pueden venir embebidos directamente en el lead segun endpoint

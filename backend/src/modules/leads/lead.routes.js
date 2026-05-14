@@ -39,6 +39,9 @@ router.patch('/reminders/:reminderId/complete', leadController.completeReminder)
 // Secuencias de email del lead (para popup de detalle)
 router.get('/:id/sequences', leadController.getLeadSequences);
 
+// Historial de compra del email del lead (cross-sell / propuesto)
+router.get('/:id/purchase-history', leadController.getPurchaseHistory);
+
 // Envío manual de email + historial (CRM-231)
 router.post('/:id/send-email', leadEmailsController.sendLeadEmail);
 router.get('/:id/emails', leadEmailsController.listLeadEmails);

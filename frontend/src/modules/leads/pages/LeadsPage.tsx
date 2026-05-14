@@ -745,6 +745,11 @@ export default function LeadsPage() {
                           Reincidente
                         </span>
                       )}
+                      {lead.es_propuesto && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300" title="Propuesto: ya es cliente y pregunta por otro programa (cross-sell)">
+                          Propuesto
+                        </span>
+                      )}
                       {!lead.reincidente && lead.lead_duplicado_de && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Este email ya existe en el proyecto">
                           Duplicado

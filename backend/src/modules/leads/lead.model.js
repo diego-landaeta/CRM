@@ -25,6 +25,35 @@ export async function findDuplicateByEmail(email, projectId) {
   return rows[0] || null;
 }
 
+// Busca cualquier lead CONVERTIDO previo de este email en el proyecto.
+// Sirve para detectar cross-sell: cliente que ya compró y ahora pregunta otro programa.
+export async function findConvertedByEmail(email, projectId) {
+  if (!email) return null;
+  const { rows } = await query(
+    `SELECT id, nombre, producto_interes_id
+     FROM leads
+     WHERE email = $1 AND project_id = $2 AND status = 'convertido' AND deleted_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [email, projectId]
+  );
+  return rows[0] || null;
+}
+
+// Devuelve todas las conversiones de un email en el proyecto (historial de compra).
+export async function findPurchaseHistory(email, projectId) {
+  if (!email) return [];
+  const { rows } = await query(
+    `SELECT c.id, c.producto_contratado, c.importe_total, c.importe_pagado,
+            c.metodo_pago, c.fecha_compra, c.created_at, c.lead_id
+     FROM conversions c
+     JOIN leads l ON l.id = c.lead_id
+     WHERE l.email = $1 AND l.project_id = $2 AND l.deleted_at IS NULL
+     ORDER BY c.fecha_compra DESC NULLS LAST, c.created_at DESC`,
+    [email, projectId]
+  );
+  return rows;
+}
+
 // Devuelve true si este email ya fue marcado como SPAM en este proyecto.
 // Si lo es, el webhook crea el nuevo lead pero lo deja ya marcado como spam
 // (no avanza round-robin, no notifica, ya queda fuera de listas).
@@ -79,7 +108,7 @@ export async function findProductByName(name, projectId) {
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -167,10 +196,10 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, custom_fields, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente,
+      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
        customFields ? JSON.stringify(customFields) : null, idempotencyKey]
     );
     const lead = leadRows[0];
@@ -275,7 +304,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
 
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
-            l.reincidente, l.updated_at, l.created_at,
+            l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
             proj.nombre AS proyecto_nombre,

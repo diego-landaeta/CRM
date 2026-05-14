@@ -152,12 +152,42 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
 }
 
 function ResumenTab({ lead, onEnroll }) {
+  const [history, setHistory] = useState<any[]>([]);
+  useEffect(() => {
+    if (!lead?.id || !lead?.email) return;
+    client.get(`/leads/${lead.id}/purchase-history`)
+      .then((r) => { if (r.success) setHistory(r.data || []); })
+      .catch(() => {});
+  }, [lead?.id, lead?.email]);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
         <StatusBadge status={lead.estado} />
         {lead.canal && <ChannelBadge channel={lead.canal} />}
+        {lead.es_propuesto && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300" title="Cliente existente preguntando por otro programa">
+            Propuesto
+          </span>
+        )}
       </div>
+
+      {history.length > 0 && (
+        <div className="rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
+          <p className="text-xs font-bold text-violet-700 dark:text-violet-300 mb-2">Historial de compra ({history.length})</p>
+          <div className="space-y-1.5">
+            {history.map((h) => (
+              <div key={h.id} className="text-[11px] bg-card border border-border rounded px-2 py-1.5 flex items-center gap-2">
+                <span className="font-semibold flex-1 truncate">{h.producto_contratado}</span>
+                <span className="text-muted-foreground tabular-nums">
+                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                </span>
+                {h.fecha_compra && <span className="text-muted-foreground">{new Date(h.fecha_compra).toLocaleDateString('es-ES')}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <DataRow label="Teléfono" value={lead.telefono ? <a href={`tel:${lead.telefono}`} className="text-primary hover:underline">{lead.telefono}</a> : '--'} />
       <DataRow label="Email" value={lead.email || '--'} />
