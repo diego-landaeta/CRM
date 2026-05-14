@@ -6,13 +6,16 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; page: number } = {
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number } = {
   q: '',
   estado: '',
   origen: '',
   resp: '',
   prod: '',
   multi: '',  // CSV de project ids (vacío = sólo proyecto activo)
+  from: '',
+  to: '',
+  sort: 'urgency',  // default: prioriza vencidos + valor*frescura
   page: 1,
 };
 
@@ -45,6 +48,11 @@ export interface UseLeadsResult {
   setFilterProducto: (v: string) => void;
   selectedProjectIds: number[];
   setSelectedProjectIds: (ids: number[]) => void;
+  dateFrom: string;
+  dateTo: string;
+  setDateRange: (from: string, to: string) => void;
+  sortMode: 'value' | 'recent' | 'urgency';
+  setSortMode: (m: 'value' | 'recent' | 'urgency') => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -69,9 +77,10 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, page } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; page: number;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number;
   };
+  const sortMode = (['value', 'recent', 'urgency'].includes(sortRaw) ? sortRaw : 'urgency') as 'value' | 'recent' | 'urgency';
   const selectedProjectIds: number[] = multiRaw
     ? multiRaw.split(',').map((x) => Number(x)).filter((x) => x > 0)
     : [];
@@ -82,6 +91,8 @@ export function useLeads(): UseLeadsResult {
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
   const setSelectedProjectIds = useCallback((ids: number[]) => setUrlFilters({ multi: ids.length ? ids.join(',') : '', page: 1 }), [setUrlFilters]);
+  const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
+  const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
@@ -137,6 +148,9 @@ export function useLeads(): UseLeadsResult {
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
       else if (filterResponsable) params.set('responsableId', filterResponsable);
       if (filterProducto) params.set('productId', filterProducto);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (sortMode) params.set('sort', sortMode);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -154,7 +168,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -223,6 +237,11 @@ export function useLeads(): UseLeadsResult {
     setFilterProducto,
     selectedProjectIds,
     setSelectedProjectIds,
+    dateFrom,
+    dateTo,
+    setDateRange,
+    sortMode,
+    setSortMode,
     loading,
     error,
     refetch: fetchLeads,

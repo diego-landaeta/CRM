@@ -250,7 +250,29 @@ export async function findLeadByIdempotencyKey(projectId, key) {
 // LISTADO + DETALLE
 // ============================================================
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted }) {
+// Calcula el ORDER BY segun la preferencia del usuario.
+// - 'value':    precio DESC, fecha DESC (default historico)
+// - 'recent':   fecha DESC (mas nuevos arriba, independiente del valor)
+// - 'urgency':  score combinado: vencidos primero, luego valor*frescura
+//   La frescura decae exponencialmente: leads de hoy valen 1, de hace 7 dias ~0.5
+function buildOrderBy(sort) {
+  if (sort === 'recent') {
+    return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+  }
+  if (sort === 'urgency') {
+    // Score: precio * exp(-edad_dias / 7). Asi un lead de 100 hoy supera a uno
+    // de 300 de hace 14 dias. Tambien empuja los que tienen recordatorio vencido.
+    return `
+      (CASE WHEN EXISTS (SELECT 1 FROM lead_reminders r WHERE r.lead_id = l.id AND r.completado = false AND r.fecha_recordatorio < CURRENT_DATE) THEN 1 ELSE 0 END) DESC,
+      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_solicitud, l.created_at))) / 604800)) DESC NULLS LAST,
+      COALESCE(l.fecha_solicitud, l.created_at) DESC
+    `;
+  }
+  // default 'value'
+  return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+}
+
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -296,6 +318,17 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     paramIdx++;
   }
 
+  // Filtro por rango de fechas (sobre fecha_solicitud, fallback created_at)
+  if (dateFrom) {
+    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= $${paramIdx++}`);
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    // dateTo inclusivo: hasta el final del día
+    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < ($${paramIdx++}::date + INTERVAL '1 day')`);
+    params.push(dateTo);
+  }
+
   const where = 'WHERE ' + conditions.join(' AND ');
   const offset = (page - 1) * limit;
 
@@ -326,10 +359,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      ${where}
-     ORDER BY
-       -- Prioridad por valor de oportunidad: leads con producto caro arriba
-       COALESCE(prod.precio, 0) DESC NULLS LAST,
-       l.fecha_solicitud DESC
+     ORDER BY ${buildOrderBy(sort)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     [...params, limit, offset]
   );

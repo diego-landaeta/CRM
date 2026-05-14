@@ -49,6 +49,7 @@ import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
+import DateRangeFilter from '../components/DateRangeFilter';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import QuickActions from '../components/QuickActions';
@@ -133,6 +134,8 @@ export default function LeadsPage() {
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
     selectedProjectIds, setSelectedProjectIds,
+    dateFrom, dateTo, setDateRange,
+    sortMode, setSortMode,
     loading, error, refetch,
   } = useLeads();
 
@@ -606,6 +609,23 @@ export default function LeadsPage() {
               activeProjectId={activeProject?.id}
             />
           )}
+          <DateRangeFilter
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => setDateRange(f, t)}
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency')}
+            aria-label="Ordenar leads"
+            title="Orden de los leads en la tabla"
+            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+          >
+            <option value="urgency">⚡ Urgencia (valor × frescura)</option>
+            <option value="value">💰 Más valor primero</option>
+            <option value="recent">🕒 Más recientes primero</option>
+          </select>
           {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && (
             <button
               onClick={async () => {

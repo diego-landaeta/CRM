@@ -43,6 +43,11 @@ export const listLeadsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(500).default(20),
   includeConverted: z.coerce.boolean().optional(),
+  // Filtro por rango de fechas (sobre fecha_solicitud o created_at)
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateFrom: YYYY-MM-DD').optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
+  // Orden: value (default), recent, urgency
+  sort: z.enum(['value', 'recent', 'urgency']).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }
