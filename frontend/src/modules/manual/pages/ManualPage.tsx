@@ -9,6 +9,7 @@ import {
   ArrowsDownUp, DownloadSimple, Trash, UserPlus, LockKey,
   ShieldCheck, WebhooksLogo, Tag, ToggleRight, Upload, Eye,
   MagnifyingGlass as Search, Command, Lightning,
+  PlugsConnected, CalendarBlank,
 } from '@phosphor-icons/react';
 
 /* ─── Navigation ──────────────────────────────────────────── */
@@ -24,6 +25,8 @@ const SECTIONS = [
   { id: 'ia',           label: 'IA y Reportes', icon: Robot },
   { id: 'contabilidad', label: 'Contabilidad', icon: Calculator },
   { id: 'configuracion',label: 'Configuración',icon: Gear },
+  { id: 'integraciones',label: 'Integraciones (Make)', icon: PlugsConnected },
+  { id: 'disponibilidad',label: 'Disponibilidad',icon: CalendarBlank },
   { id: 'atajos',       label: 'Atajos',       icon: Keyboard },
 ];
 
@@ -646,6 +649,192 @@ export default function ManualPage() {
         <Callout type="tip">
           El lead se asigna por round-robin automático al gestor con menos carga del proyecto.
           La respuesta del webhook es menor de 500ms — el email de notificación al gestor se envía de forma asíncrona.
+        </Callout>
+
+        {/* ── INTEGRACIONES (MAKE) ── */}
+        <SectionHeader id="integraciones" icon={PlugsConnected} label="Integraciones (Make)" color="violet"
+          description="Cómo conectar tu escenario de Make para que mande leads al CRM con todos los datos, incluido a quién asignárselo" />
+
+        <Callout type="info">
+          Esta sección asume que ya tienes un escenario en Make que recibe emails / formularios, filtra spam y mapea los campos.
+          Aquí solo añadiremos el paso final: <strong>POST al CRM</strong> con los datos limpios.
+        </Callout>
+
+        <SubHeader>1. Obtener el API key del proyecto</SubHeader>
+        <Steps items={[
+          { title: 'Abre el CRM con el proyecto destino seleccionado', desc: 'En el selector del sidebar elige el proyecto al que llegarán los leads (Psiko Aprende, ISEIH, etc.).' },
+          { title: 'Pulsa el engranaje al lado del nombre del proyecto', desc: 'Abre la configuración del proyecto activo (sólo Admin/Superadmin).' },
+          { title: 'Tab «Webhook»', desc: 'Verás la URL del webhook y el API key. Copia ambos — los pegarás en Make. Si necesitas regenerar la key, hay un botón "Regenerar" (invalida la anterior).' },
+        ]} />
+
+        <SubHeader>2. Añadir el módulo HTTP en Make</SubHeader>
+        <Steps items={[
+          { title: 'Abre tu escenario en Make', desc: 'Al final del flujo (después del Router que filtra spam y mapea los campos JSON).' },
+          { title: 'Añade un módulo «HTTP → Make a request»', desc: 'En la rama "no es spam". Es el módulo del icono naranja.' },
+          { title: 'URL', desc: 'Pega la URL del webhook que copiaste. Tiene esta forma: https://crm.iseih.com/api/leads/webhooks/{slug-del-proyecto}' },
+          { title: 'Method', desc: 'POST' },
+          { title: 'Headers (añade 2)', desc: 'Authorization: Bearer TU_API_KEY  ·  Content-Type: application/json' },
+          { title: 'Body type', desc: 'Raw' },
+          { title: 'Content type', desc: 'JSON (application/json)' },
+          { title: 'Parse response', desc: 'Yes — así Make podrá ramificar según el lead_id devuelto.' },
+        ]} />
+
+        <SubHeader>3. Pegar el JSON del body</SubHeader>
+        <p className="text-xs text-muted-foreground mb-2">
+          En «Request content» pega este JSON y reemplaza los <code className="px-1 rounded bg-muted">{`{{...}}`}</code> por los placeholders de tu escenario.
+          El módulo que mapea los campos suele estar 1 o 2 antes del HTTP — Make te lo deja arrastrar.
+        </p>
+        <pre className="my-3 p-3 rounded-lg bg-zinc-950 text-zinc-100 text-[11px] leading-relaxed overflow-x-auto">
+{`{
+  "nombre": "{{2.nombre}}",
+  "email": "{{2.email}}",
+  "telefono": "{{2.telefono}}",
+  "producto_interes": "{{2.programa_interes}}",
+  "canal": "directo",
+  "responsable_email": "{{2.gestor_asignado_email}}",
+  "notas": "{{2.mensaje_original}}",
+  "idempotency_key": "{{1.headers.\`message-id\`}}",
+  "custom_fields": {
+    "spam_score": "{{2.spam_score}}",
+    "scenario": "Psiko Contestacion Auto"
+  }
+}`}
+        </pre>
+
+        <SubHeader>4. Cómo decidir el gestor desde Make</SubHeader>
+        <p className="text-xs text-muted-foreground mb-2">
+          El campo <code className="px-1 rounded bg-muted">responsable_email</code> es <strong>opcional</strong>.
+          Si lo mandas, el CRM asigna directo a ese gestor (saltando round-robin). Si lo omites, aplica round-robin respetando disponibilidad. Tres formas de hacerlo:
+        </p>
+        <FeatureGrid>
+          <FeatureCard icon={Robot} title="Lo decide tu GPT mapeador" color="violet">
+            En el prompt del módulo "json con campos mapeados" añade reglas como:
+            <em> "si el programa contiene 'TEPT' → responsable_email='dayana@iseih.com'; si es 'Neuromodulación' → 'ana@iseih.com'"</em>. El GPT devuelve el campo y Make lo pasa al HTTP.
+          </FeatureCard>
+          <FeatureCard icon={ArrowsDownUp} title="Router de Make" color="blue">
+            Crea ramas según el contenido (idioma, programa, país, hora). Cada rama setea su propio <code>responsable_email</code> antes del HTTP.
+          </FeatureCard>
+          <FeatureCard icon={UserPlus} title="No lo asignas" color="green">
+            Omites el campo. El CRM aplica round-robin entre gestores activos y disponibles del proyecto.
+          </FeatureCard>
+        </FeatureGrid>
+
+        <SubHeader>5. Campos que acepta el webhook</SubHeader>
+        <div className="rounded-xl border border-border overflow-hidden my-3">
+          {[
+            { name: 'nombre',              req: 'sí', desc: 'Nombre del lead.' },
+            { name: 'email',               req: '*',  desc: 'Email del lead. Opcional si hay teléfono.' },
+            { name: 'telefono',            req: '*',  desc: 'Teléfono. Opcional si hay email. Hace falta al menos uno de los dos.' },
+            { name: 'producto_interes',    req: 'no', desc: 'Nombre del producto. Se busca en el catálogo del proyecto.' },
+            { name: 'producto_interes_id', req: 'no', desc: 'Id del producto si lo conoces (más fiable que por nombre).' },
+            { name: 'canal',               req: 'no', desc: 'meta_ads · google_ads · tiktok_ads · whatsapp · organico · chatgpt_ia · referido · directo. Si no viene, se detecta por UTMs.' },
+            { name: 'responsable_email',   req: 'no', desc: 'Email del gestor a quien asignar. Saltea round-robin.' },
+            { name: 'responsable_id',      req: 'no', desc: 'Id del gestor (alternativa al email; si vienen los dos, prioriza id).' },
+            { name: 'idempotency_key',     req: 'no', desc: 'Clave única para que los reintentos de Make no dupliquen. Muy recomendado.' },
+            { name: 'custom_fields',       req: 'no', desc: 'Objeto JSON con cualquier dato extra (spam_score, scenario, fuente…).' },
+            { name: 'notas',               req: 'no', desc: 'Texto libre, máx 2000 caracteres.' },
+            { name: 'landing_url',         req: 'no', desc: 'URL de la página de origen.' },
+            { name: 'utm_source / utm_medium / utm_campaign / utm_content / utm_term', req: 'no', desc: 'Tracking de campaña.' },
+          ].map((row, i) => (
+            <div key={i} className={`grid grid-cols-[180px_50px_1fr] gap-3 px-4 py-2.5 ${i > 0 ? 'border-t border-border' : ''}`}>
+              <code className="text-[11px] font-mono text-primary self-center">{row.name}</code>
+              <span className={`text-[10px] font-bold uppercase self-center ${row.req === 'sí' ? 'text-red-600' : row.req === '*' ? 'text-amber-600' : 'text-muted-foreground'}`}>{row.req}</span>
+              <p className="text-[11px] text-muted-foreground self-center">{row.desc}</p>
+            </div>
+          ))}
+        </div>
+        <Callout type="warn">
+          <strong>email o teléfono</strong> (marcados con <code>*</code>): debes mandar al menos uno. Si Make filtra emails que no tienen ni email ni teléfono, no llegarán al CRM.
+        </Callout>
+
+        <SubHeader>6. Idempotency: evitar duplicados en reintentos</SubHeader>
+        <p className="text-xs text-muted-foreground mb-2">
+          Make puede reintentar un módulo si falla la red. Si en cada reintento crea un nuevo lead, terminarás con duplicados.
+          Solución: manda un <code className="px-1 rounded bg-muted">idempotency_key</code> único por evento.
+          Si dentro de 24h el CRM recibe la misma key, devuelve el lead que ya creó en lugar de duplicarlo.
+        </p>
+        <Callout type="tip">
+          Buen valor para la key: el <code>message-id</code> del email original, o <code>{`{{project}}-{{email}}-{{fecha_dia}}`}</code>. Cualquier string único basta.
+        </Callout>
+
+        <SubHeader>7. Respuesta del webhook</SubHeader>
+        <pre className="my-3 p-3 rounded-lg bg-zinc-950 text-zinc-100 text-[11px] leading-relaxed overflow-x-auto">
+{`{
+  "success": true,
+  "data": {
+    "lead_id": 1234,
+    "responsable_id": 12,
+    "assignment_source": "webhook",   // o "round_robin"
+    "duplicado": false,
+    "reincidente": false,
+    "canal": "whatsapp"
+  }
+}`}
+        </pre>
+        <p className="text-xs text-muted-foreground">
+          Si fue un reintento idempotente, la respuesta incluirá <code>idempotent_replay: true</code> y el mismo <code>lead_id</code> que la primera vez.
+        </p>
+
+        <SubHeader>8. Probar antes de ir a producción</SubHeader>
+        <Steps items={[
+          { title: 'Pulsa «Run once» en Make', desc: 'Con un email de prueba que sepas que pasa el filtro de spam.' },
+          { title: 'Verifica el HTTP en el panel de Make', desc: 'Debe devolver código 201 y el cuerpo con lead_id.' },
+          { title: 'Ve a Prospectos en el CRM', desc: 'El lead debe aparecer en la lista, con el gestor asignado correcto (revisa la columna «Gestor»).' },
+          { title: 'Si algo sale 400/401', desc: 'Mira el mensaje de error en el panel de Make. Causas típicas: API key mal, slug del proyecto mal escrito, falta email y teléfono, o un campo con valor inválido (canal fuera del enum).' },
+        ]} />
+
+        <Callout type="warn">
+          Si activas el escenario con «Immediately as data arrives» y tu Make procesa cientos de emails al día, considera añadir un <strong>Sleep de 1s</strong> antes del HTTP para no saturar la API. El webhook tolera ráfagas, pero es mejor ir suave.
+        </Callout>
+
+        {/* ── DISPONIBILIDAD ── */}
+        <SectionHeader id="disponibilidad" icon={CalendarBlank} label="Disponibilidad de gestores" color="amber"
+          description="Saltar gestores que no están trabajando hoy o que están de vacaciones — sin tocar el round-robin" />
+
+        <Callout type="info">
+          Cuando un gestor no está disponible, el round-robin lo <strong>salta</strong> al asignar nuevos leads.
+          El reparto sigue funcionando con el resto del equipo. Cuando vuelve, recibe normalmente.
+        </Callout>
+
+        <SubHeader>Dónde se gestiona</SubHeader>
+        <Steps items={[
+          { title: 'Ve a Configuración → tab «Disponibilidad»', desc: 'Lista todos los gestores del CRM con su estado actual.' },
+          { title: 'Toggle Disponible / No disponible', desc: 'Botón verde/rojo a la derecha de cada gestor. Al marcar como No disponible, el sistema pide un motivo opcional ("enfermo", "formación", etc.) que queda registrado.' },
+          { title: 'Botón «Bloques»', desc: 'Despliega un panel para programar ausencias futuras (vacaciones, baja, formación). Indica fecha inicio, fecha fin y motivo. El sistema lo aplica automáticamente cuando llega el día y lo desactiva cuando termina.' },
+        ]} />
+
+        <SubHeader>Qué se considera "no disponible"</SubHeader>
+        <FeatureGrid>
+          <FeatureCard icon={ToggleRight} title="Toggle manual" color="orange">
+            Botón rojo "No disponible" activado. Útil para ausencias del momento (enfermo hoy, urgencia familiar).
+          </FeatureCard>
+          <FeatureCard icon={CalendarBlank} title="Bloque activo" color="amber">
+            Hay un bloque programado donde <strong>hoy</strong> está entre la fecha de inicio y la de fin. Útil para vacaciones planificadas.
+          </FeatureCard>
+        </FeatureGrid>
+
+        <Callout type="warn">
+          <strong>Excepción</strong>: si Make manda <code>responsable_email</code> en el webhook, el CRM asigna a ese gestor aunque esté no disponible.
+          Se asume que Make sabe lo que hace y a veces se quiere meter en su cola un lead específico aunque esté de baja.
+        </Callout>
+
+        <SubHeader>Casos de uso típicos</SubHeader>
+        <div className="rounded-xl border border-border overflow-hidden my-3">
+          {[
+            { case: 'Hoy no vienes a trabajar', sol: 'Toggle rojo "No disponible" + motivo "ausencia". Lo desactivas mañana.' },
+            { case: 'Vacaciones del 1 al 15 de agosto', sol: 'Bloque: 2026-08-01 → 2026-08-15. Motivo: "Vacaciones". Se activa solo el 1 de agosto.' },
+            { case: 'Formación 2 días al mes', sol: 'Un bloque por cada día/rango. Puedes tener varios bloques futuros.' },
+            { case: 'Gestor de baja médica indefinida', sol: 'Toggle rojo "No disponible" con motivo "Baja médica". No tiene fecha de vuelta, lo reactivas cuando sea.' },
+          ].map((row, i) => (
+            <div key={i} className={`grid grid-cols-[280px_1fr] gap-4 px-4 py-3 ${i > 0 ? 'border-t border-border' : ''}`}>
+              <p className="text-xs font-semibold text-foreground">{row.case}</p>
+              <p className="text-xs text-muted-foreground">{row.sol}</p>
+            </div>
+          ))}
+        </div>
+
+        <Callout type="tip">
+          Los leads que se reciben mientras un gestor está no disponible <strong>no se le encolan</strong> — se reparten entre el resto. Al volver, no le llega un "atraso", recibe los nuevos al ritmo normal del round-robin.
         </Callout>
 
         {/* ── ATAJOS ── */}
