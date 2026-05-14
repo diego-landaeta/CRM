@@ -55,10 +55,27 @@ const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
-  const { activeProject } = useProjectContext();
-  const { products, refetch: refetchProducts } = useProducts(activeProject?.id);
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: any;
+    projects: Array<{ id: number; nombre?: string }>;
+    isAllProjects: boolean;
+  };
+  // En modo "Todos los proyectos" el activeProject es el sentinel (-1).
+  // El form NECESITA un proyecto concreto, asi que mostramos un selector
+  // al inicio para que el usuario elija a cual asignar el lead.
+  const [pickedProjectId, setPickedProjectId] = useState<number | null>(null);
+  const effectiveProjectId = isAllProjects ? pickedProjectId : (activeProject?.id ?? null);
+  const effectiveProject = isAllProjects
+    ? (projects || []).find((p) => p.id === pickedProjectId) || null
+    : activeProject;
+
+  useEffect(() => {
+    if (!open) setPickedProjectId(null);
+  }, [open]);
+
+  const { products, refetch: refetchProducts } = useProducts(effectiveProjectId);
   const isEdit = !!lead;
-  const productoLabel = activeProject?.producto_label || 'Producto';
+  const productoLabel = (effectiveProject as any)?.producto_label || 'Producto';
 
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
@@ -84,14 +101,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   // Cargar custom fields al abrir dialog
   useEffect(() => {
-    if (!open || !activeProject?.id) return;
+    if (!open || !effectiveProjectId) return;
     (async () => {
       try {
-        const res = await client.get(`/field-definitions/project/${activeProject.id}?entity=lead`);
+        const res = await client.get(`/field-definitions/project/${effectiveProjectId}?entity=lead`);
         if (res.success) setCustomFields(res.data || []);
       } catch {}
     })();
-  }, [open, activeProject?.id]);
+  }, [open, effectiveProjectId]);
 
   useEffect(() => {
     if (open) {
@@ -113,15 +130,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   // Deteccion de duplicado debounce
   const checkDuplicates = useCallback(async (email: string | undefined): Promise<void> => {
-    if (!email || !email.includes('@') || !activeProject?.id || isEdit) { setDuplicates([]); return; }
+    if (!email || !email.includes('@') || !effectiveProjectId || isEdit) { setDuplicates([]); return; }
     try {
-      const res = await client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(email)}&limit=5`);
+      const res = await client.get(`/leads?projectId=${effectiveProjectId}&search=${encodeURIComponent(email)}&limit=5`);
       if (res.success) {
         const matches = ((res.data as DuplicateLead[]) || []).filter((l) => (l.email || '').toLowerCase() === email.toLowerCase());
         setDuplicates(matches);
       }
     } catch { setDuplicates([]); }
-  }, [activeProject?.id, isEdit]);
+  }, [effectiveProjectId, isEdit]);
 
   useEffect(() => {
     const t = setTimeout(() => checkDuplicates(watchedEmail), 600);
@@ -131,7 +148,11 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   if (!open) return null;
 
   async function handleFormSubmit(data: LeadFormData): Promise<void> {
-    await onSubmit({ ...data, custom_fields: customValues });
+    if (!effectiveProjectId) {
+      // Modo ALL sin proyecto elegido — el banner pide elegirlo
+      return;
+    }
+    await onSubmit({ ...data, custom_fields: customValues, _project_id: effectiveProjectId } as any);
     onClose();
   }
 
@@ -152,6 +173,29 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
           </div>
 
           <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+            {/* En modo "Todos los proyectos": pedimos al usuario que elija
+                a qué proyecto pertenece el lead antes de poder rellenar nada. */}
+            {isAllProjects && !isEdit && (
+              <div className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
+                <label className="text-xs font-semibold text-violet-800 dark:text-violet-300 block mb-1.5">
+                  Proyecto al que pertenece este prospecto *
+                </label>
+                <select
+                  value={pickedProjectId ?? ''}
+                  onChange={(e) => setPickedProjectId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm"
+                  required
+                >
+                  <option value="">— Elige proyecto —</option>
+                  {(projects || []).map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-violet-700 dark:text-violet-400 mt-1.5">
+                  Estás en la vista global. El lead se creará en el proyecto elegido y aplicará su round-robin.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Nombre *" error={errors.nombre?.message}>
                 <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
@@ -202,7 +246,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       value={field.value}
                       onChange={field.onChange}
                       products={products}
-                      projectId={activeProject?.id}
+                      projectId={effectiveProjectId}
                       projectLabel={productoLabel}
                       onProductCreated={() => refetchProducts?.()}
                     />

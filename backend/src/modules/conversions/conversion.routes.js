@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as ctrl from './conversion.controller.js';
+import * as refundsCtrl from './refunds.controller.js';
 
 const router = Router();
 
@@ -27,6 +28,11 @@ router.post('/:id/installments/generate', ctrl.generateInstallments);
 router.patch('/installments/:instId', ctrl.updateInstallment);
 router.post('/installments/:instId/pay', ctrl.payInstallment);
 router.delete('/installments/:instId', ctrl.deleteInstallment);
+
+// Devoluciones / refunds (fase de prueba)
+router.get('/:id/refunds', refundsCtrl.list);
+router.post('/:id/refunds', roleGuard('admin', 'superadmin'), refundsCtrl.create);
+router.delete('/refunds/:refundId', roleGuard('admin', 'superadmin'), refundsCtrl.remove);
 
 // Eliminar (solo admin/superadmin)
 router.delete('/:id', roleGuard('admin', 'superadmin'), ctrl.remove);

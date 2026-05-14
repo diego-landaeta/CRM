@@ -309,22 +309,32 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             </div>
 
             {selectedProduct && (
-              <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={aplicaDescuento}
-                  onChange={(e) => {
-                    setAplicaDescuento(e.target.checked);
-                    if (!e.target.checked && selectedProduct?.precio != null) {
-                      update('importe_total', String(selectedProduct.precio));
-                    }
-                  }}
-                />
-                <span>Aplicar descuento (editar importe manualmente)</span>
-                {!aplicaDescuento && selectedProduct.precio != null && (
-                  <span className="text-muted-foreground">— precio del catálogo: {selectedProduct.precio} EUR</span>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={aplicaDescuento}
+                    onChange={(e) => {
+                      setAplicaDescuento(e.target.checked);
+                      if (!e.target.checked && selectedProduct?.precio != null) {
+                        update('importe_total', String(selectedProduct.precio));
+                      }
+                    }}
+                  />
+                  <span>Aplicar descuento (editar importe manualmente)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase tracking-wide">Fase prueba</span>
+                  {!aplicaDescuento && selectedProduct.precio != null && (
+                    <span className="text-muted-foreground">— precio del catálogo: {selectedProduct.precio} EUR</span>
+                  )}
+                </label>
+                {aplicaDescuento && selectedProduct.precio != null && Number(form.importe_total) > 0 && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 pl-6">
+                    Descuento aplicado: {Number(selectedProduct.precio) - Number(form.importe_total) > 0
+                      ? `−${(Number(selectedProduct.precio) - Number(form.importe_total)).toFixed(2)} EUR (${(((Number(selectedProduct.precio) - Number(form.importe_total)) / Number(selectedProduct.precio)) * 100).toFixed(1)}%)`
+                      : 'sin descuento (mismo precio)'}
+                  </p>
                 )}
-              </label>
+              </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">

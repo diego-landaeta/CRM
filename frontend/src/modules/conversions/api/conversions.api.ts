@@ -82,4 +82,22 @@ export const conversionsApi = {
     },
   ): Promise<ApiResponse<unknown>> =>
     client.post(`/conversions/${id}/installments/generate`, data),
+
+  // Devoluciones (FASE DE PRUEBA)
+  listRefunds: (conversionId: number): Promise<ApiResponse<Refund[]>> =>
+    client.get(`/conversions/${conversionId}/refunds`),
+  createRefund: (conversionId: number, data: { importe: number; fecha?: string; motivo?: string | null }): Promise<ApiResponse<Refund>> =>
+    client.post(`/conversions/${conversionId}/refunds`, data),
+  removeRefund: (refundId: number): Promise<ApiResponse<void>> =>
+    client.delete(`/conversions/refunds/${refundId}`),
 };
+
+export interface Refund {
+  id: number;
+  conversion_id: number;
+  importe: number | string;
+  fecha: string;
+  motivo: string | null;
+  created_at: string;
+  created_by_nombre?: string | null;
+}

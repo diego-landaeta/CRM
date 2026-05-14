@@ -32,6 +32,7 @@ import {
   X,
   DownloadSimple,
   ArrowsClockwise,
+  Trash,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -358,7 +359,10 @@ export default function LeadsPage() {
   }
 
   async function handleCreateLead(data) {
-    if (!activeProject?.id) {
+    // En modo ALL el dialog pasa _project_id explicitamente. En modo
+    // proyecto activo, usamos activeProject.id.
+    const projectId = data._project_id || activeProject?.id;
+    if (!projectId || projectId === -1) {
       toast({ title: 'Error', description: 'Selecciona un proyecto primero', variant: 'destructive' });
       return;
     }
@@ -372,7 +376,7 @@ export default function LeadsPage() {
 
     try {
       const res = await client.post('/leads', {
-        project_id: activeProject.id,
+        project_id: projectId,
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
@@ -667,6 +671,9 @@ export default function LeadsPage() {
         <span className="inline-flex items-center gap-1"><CalendarPlus size={13} weight="regular" /> Programar próximo contacto</span>
         <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
         <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
+        {user?.role === 'superadmin' && (
+          <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
+        )}
       </div>
 
       {/* Error state */}
