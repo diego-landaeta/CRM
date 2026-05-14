@@ -18,11 +18,13 @@ import {
   ArrowLeft, WhatsappLogo, EnvelopeSimple, Phone, ArrowSquareOut,
   ShoppingCart, CurrencyEur, Wallet, CheckCircle, WarningCircle,
   Note, CalendarCheck, Users, MagnifyingGlass, Tag,
-  ChatCircleDots, User,
+  ChatCircleDots, User, PencilSimple, Trash,
 } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
+const LeadFormDialog = lazy(() => import('@/modules/leads/components/LeadFormDialog'));
+const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
 const AVATAR_COLORS = [
   'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
@@ -94,6 +96,8 @@ export default function ClientDetailPage() {
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [upsellOpen, setUpsellOpen] = useState<boolean>(false);
+  const [editOpen, setEditOpen] = useState<boolean>(false);
+  const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
   const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
 
   const canManage = user?.role === 'admin' || user?.role === 'superadmin';
@@ -227,6 +231,28 @@ export default function ClientDetailPage() {
             <ShoppingCart size={15} weight="bold" />
             <span className="hidden sm:inline">Nueva venta</span>
           </button>
+          {canManage && (
+            <button
+              onClick={() => setEditOpen(true)}
+              aria-label="Editar datos del cliente"
+              title="Editar nombre, email, teléfono, notas, campos custom"
+              className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <PencilSimple size={14} weight="regular" />
+              <span className="hidden sm:inline">Editar</span>
+            </button>
+          )}
+          {user?.role === 'superadmin' && (
+            <button
+              onClick={() => setDeleteOpen(true)}
+              aria-label="Eliminar cliente (soft delete)"
+              title="Eliminar cliente (queda en auditoría, no se ve más)"
+              className="h-9 px-3 rounded-lg border border-red-200 dark:border-red-800 bg-card hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-600 transition-colors flex items-center gap-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-400/40"
+            >
+              <Trash size={14} weight="regular" />
+              <span className="hidden sm:inline">Eliminar</span>
+            </button>
+          )}
           <Link
             to={`/leads/${lead.id}`}
             className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -445,8 +471,46 @@ export default function ClientDetailPage() {
           open={upsellOpen}
           onClose={() => setUpsellOpen(false)}
           lead={lead}
-          projectId={activeProject?.id || lead.project_id}
+          projectId={lead?.project_id || activeProject?.id}
           onCreated={() => { setUpsellOpen(false); load(); toast({ title: 'Venta registrada' }); }}
+        />
+      </Suspense>
+
+      {/* Editar datos del cliente */}
+      <Suspense fallback={null}>
+        <LeadFormDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          lead={lead}
+          onSubmit={async (data) => {
+            try {
+              await client.patch(`/leads/${lead.id}`, {
+                nombre: data.nombre,
+                telefono: data.telefono || null,
+                notas: data.notas || null,
+                custom_fields: data.custom_fields,
+              });
+              toast({ title: 'Cliente actualizado' });
+              await load();
+            } catch (err) {
+              toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+              throw err;
+            }
+          }}
+        />
+      </Suspense>
+
+      {/* Eliminar cliente (superadmin) */}
+      <Suspense fallback={null}>
+        <SoftDeleteDialog
+          open={deleteOpen}
+          lead={lead}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            toast({ title: 'Cliente eliminado' });
+            navigate('/clients');
+          }}
         />
       </Suspense>
     </div>

@@ -9,11 +9,17 @@ function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
 }
 
+// El flag 'secure' obliga a HTTPS — pero estamos sirviendo por HTTP en beta.
+// Si NODE_ENV=production fuerza secure=true, el navegador descarta la cookie
+// al recargar (no la envía de vuelta sobre HTTP) y el usuario queda deslogueado.
+// Solución: COOKIE_SECURE opcional en .env (default false hasta tener HTTPS).
+const COOKIE_SECURE = String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true';
+
 function setRefreshCookie(res, refreshToken, expiryDays) {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',  // 'lax' funciona sobre HTTP; 'strict' a veces lo bloquea al refrescar
     maxAge: expiryDays * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -22,8 +28,8 @@ function setRefreshCookie(res, refreshToken, expiryDays) {
 function clearRefreshCookie(res) {
   res.clearCookie('refreshToken', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',
     path: '/',
   });
 }
