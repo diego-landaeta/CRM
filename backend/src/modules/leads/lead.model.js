@@ -200,7 +200,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
       [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
-       customFields ? JSON.stringify(customFields) : null, idempotencyKey]
+       customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
 
