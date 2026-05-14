@@ -40,6 +40,7 @@ const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
 const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
+const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
@@ -133,6 +134,9 @@ export default function LeadsPage() {
   } = useLeads();
 
   const { activeProject, projects } = useProjectContext();
+  // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
+  // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
+  const showProjectColumn = (projects?.length || 0) > 1;
   const { products } = useProducts(activeProject?.id);
   const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
 
@@ -173,6 +177,7 @@ export default function LeadsPage() {
   const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
+  const [deletingLead, setDeletingLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -692,7 +697,7 @@ export default function LeadsPage() {
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
-                {selectedProjectIds.length > 0 && (
+                {showProjectColumn && (
                   <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyecto</th>
                 )}
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
@@ -800,7 +805,7 @@ export default function LeadsPage() {
                     )}
                     {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
                   </td>
-                  {selectedProjectIds.length > 0 && (
+                  {showProjectColumn && (
                     <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-5 py-3.5">
@@ -829,14 +834,14 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
                 );
               })}
               {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={selectedProjectIds.length > 0 ? 13 : 12} className="px-5">
+                  <td colSpan={showProjectColumn ? 13 : 12} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron prospectos"
@@ -885,7 +890,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}
@@ -937,13 +942,15 @@ export default function LeadsPage() {
         )}
       </div>
 
-      {/* Convertir prospecto — dialog inline */}
+      {/* Convertir prospecto — dialog inline.
+          Importante: en modo "Todos los proyectos" activeProject.id es -1 (sentinel),
+          asi que tomamos el project_id del propio lead para no enviar -1 al backend. */}
       <Suspense fallback={null}>
         <ConversionDialog
           open={!!convertingLead}
           onClose={() => setConvertingLead(null)}
           lead={convertingLead}
-          projectId={activeProject?.id}
+          projectId={convertingLead?.project_id || activeProject?.id}
           onCreated={handleConversionCreated}
         />
       </Suspense>
@@ -996,6 +1003,16 @@ export default function LeadsPage() {
           leadId={drawerLeadId}
           open={drawerLeadId !== null}
           onClose={() => setDrawerLeadId(null)}
+        />
+      </Suspense>
+
+      {/* Soft delete (superadmin) */}
+      <Suspense fallback={null}>
+        <SoftDeleteDialog
+          open={!!deletingLead}
+          lead={deletingLead}
+          onClose={() => setDeletingLead(null)}
+          onDeleted={() => { setDeletingLead(null); refetch(); }}
         />
       </Suspense>
 

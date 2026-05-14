@@ -97,7 +97,7 @@ export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject, isAllProjects } = useProject();
   const projectId = activeProject?.id;
-  const { products, loading, error, create, update, deactivate } = useProducts(projectId);
+  const { products, loading, error, refetch: refetchProducts, create, update, deactivate } = useProducts(projectId);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -123,12 +123,12 @@ export default function ProductsPage() {
       try {
         const s = await getCurrentSyncStatus(projectId!);
         if (cancel) return;
-        // Si pasó de running a no-running, refrescar productos+árbol
+        // Si pasó de running a no-running, refrescar arbol + productos sin recargar pagina.
+        // (antes hacia window.location.reload() lo que generaba el "se refresca solo"
+        // que el usuario veia al entrar tras un sync en curso).
         if (syncStatus?.status === 'running' && s && s.status !== 'running') {
           getTree(projectId!).then(setTree);
-          // Forzar refresh de productos sin tocar el hook
-          window.location.reload();
-          return;
+          refetchProducts?.();
         }
         setSyncStatus(s);
       } catch { /* silencioso */ }

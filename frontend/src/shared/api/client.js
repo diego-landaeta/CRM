@@ -75,7 +75,16 @@ const client = {
   post: (url, body, options) => request(url, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
   patch: (url, body, options) => request(url, { method: 'PATCH', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
   put: (url, body, options) => request(url, { method: 'PUT', body: body instanceof FormData ? body : JSON.stringify(body), ...options }),
-  delete: (url, options) => request(url, { method: 'DELETE', ...options }),
+  delete: (url, optionsOrBody) => {
+    // Acepta el patron de axios: delete(url, { data: {...} }) para mandar body
+    const opts = optionsOrBody || {};
+    const hasBody = opts.data !== undefined;
+    return request(url, {
+      method: 'DELETE',
+      ...(hasBody ? { body: JSON.stringify(opts.data) } : {}),
+      ...opts,
+    });
+  },
   upload: async (url, file) => {
     const formData = new FormData();
     formData.append('file', file);

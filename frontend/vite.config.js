@@ -11,15 +11,19 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Cambiado de 'autoUpdate' a 'prompt' para evitar recargas silenciosas que
+      // confunden al usuario ("la app se refresca sola al principio"). Ahora el
+      // SW se actualiza solo cuando el usuario acepta el PWAUpdatePrompt.
+      registerType: 'prompt',
       injectRegister: 'auto',
       base: BASE,
       scope: BASE,
       manifest: false,
       includeAssets: ['offline.html', 'favicon.svg', 'icons/*.png'],
       workbox: {
-        clientsClaim: true,
-        skipWaiting: true,
+        // Sin clientsClaim/skipWaiting: el SW nuevo espera a que el usuario recargue.
+        clientsClaim: false,
+        skipWaiting: false,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: `${BASE}offline.html`,

@@ -13,9 +13,57 @@ export async function findProjectBySlug(slug) {
 }
 
 export async function findDuplicateByEmail(email, projectId) {
+  // Solo considera leads NO eliminados como duplicados normales.
+  // Los eliminados por spam los detectamos aparte (findSpamMatch).
   const { rows } = await query(
-    `SELECT id, nombre, email, status, producto_interes_id, responsable_id, created_at, fecha_solicitud FROM leads WHERE email = $1 AND project_id = $2 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT id, nombre, email, status, producto_interes_id, responsable_id, created_at, fecha_solicitud
+     FROM leads
+     WHERE email = $1 AND project_id = $2 AND deleted_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
     [email, projectId]
+  );
+  return rows[0] || null;
+}
+
+// Devuelve true si este email ya fue marcado como SPAM en este proyecto.
+// Si lo es, el webhook crea el nuevo lead pero lo deja ya marcado como spam
+// (no avanza round-robin, no notifica, ya queda fuera de listas).
+export async function findSpamMatch(email, projectId) {
+  if (!email) return null;
+  const { rows } = await query(
+    `SELECT id, deleted_at, deleted_motivo
+     FROM leads
+     WHERE email = $1 AND project_id = $2
+       AND deleted_at IS NOT NULL AND deleted_reason = 'spam'
+     ORDER BY deleted_at DESC LIMIT 1`,
+    [email, projectId]
+  );
+  return rows[0] || null;
+}
+
+// Soft delete (superadmin). No purga: deja en DB para auditoria.
+export async function softDeleteLead(leadId, { reason, motivo, userId }) {
+  const { rows } = await query(
+    `UPDATE leads
+     SET deleted_at = NOW(),
+         deleted_reason = $1,
+         deleted_motivo = $2,
+         deleted_by = $3,
+         updated_at = NOW()
+     WHERE id = $4 AND deleted_at IS NULL
+     RETURNING id, project_id, email, deleted_reason`,
+    [reason, motivo || null, userId, leadId]
+  );
+  return rows[0] || null;
+}
+
+export async function restoreLead(leadId) {
+  const { rows } = await query(
+    `UPDATE leads
+     SET deleted_at = NULL, deleted_reason = NULL, deleted_motivo = NULL, deleted_by = NULL, updated_at = NOW()
+     WHERE id = $1
+     RETURNING id`,
+    [leadId]
   );
   return rows[0] || null;
 }
@@ -31,7 +79,7 @@ export async function findProductByName(name, projectId) {
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms, customFields, forcedResponsableId = null, idempotencyKey = null }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -95,7 +143,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       // Si no tiene acceso, caemos a round-robin (no fallar el webhook).
     }
 
-    if (!responsableId && gestorRows.length > 0) {
+    if (!responsableId && !skipRoundRobin && gestorRows.length > 0) {
       const gestores = gestorRows.map(r => r.user_id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
@@ -104,6 +152,16 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       await client.query(
         `UPDATE project_queue_state SET last_assigned_index = $1, last_assigned_user_id = $2, updated_at = NOW() WHERE project_id = $3`,
         [nextIndex, responsableId, projectId]
+      );
+    } else if (advanceRoundRobinAnyway && gestorRows.length > 0) {
+      // Lead manual creado por gestor: se queda con quien lo creó (forcedResponsableId)
+      // pero avanzamos la cola igual para que el siguiente lead automatico no le toque otra vez.
+      const gestores = gestorRows.map(r => r.user_id);
+      const lastIndex = queueRows[0].last_assigned_index;
+      const nextIndex = (lastIndex + 1) % gestores.length;
+      await client.query(
+        `UPDATE project_queue_state SET last_assigned_index = $1, last_assigned_user_id = $2, updated_at = NOW() WHERE project_id = $3`,
+        [nextIndex, gestores[nextIndex], projectId]
       );
     }
 
@@ -179,6 +237,9 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     // Sin filtro de proyecto no devolvemos nada (seguridad)
     return { leads: [], total: 0, page, limit, totalPages: 0 };
   }
+
+  // Excluir leads eliminados (soft delete)
+  conditions.push(`l.deleted_at IS NULL`);
 
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
@@ -558,7 +619,7 @@ export async function getStats(projectId) {
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1`,
+     FROM leads WHERE project_id = $1 AND deleted_at IS NULL`,
     [projectId]
   );
   return rows[0];

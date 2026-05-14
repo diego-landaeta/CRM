@@ -80,6 +80,11 @@ export async function processWebhook(slug, apiKey, leadData) {
     if (user && user.active) forcedResponsableId = user.id;
   }
 
+  // Detección de SPAM recurrente: si este email ya fue marcado como spam en este
+  // proyecto, el nuevo lead nace ya marcado como spam (queda fuera de listas y
+  // round-robin). Devolvemos un flag para que el llamante sepa que ocurrió.
+  const spamHistory = leadData.email ? await leadModel.findSpamMatch(leadData.email, project.id) : null;
+
   // Detectar duplicado (solo si hay email; sin email no podemos comparar)
   const duplicate = leadData.email ? await leadModel.findDuplicateByEmail(leadData.email, project.id) : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
@@ -94,6 +99,10 @@ export async function processWebhook(slug, apiKey, leadData) {
   // Canal: override de Make > deteccion automatica por UTMs
   const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
+  // Si es spam recurrente, no malgastamos un slot del round-robin.
+  // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
+  const skipAssign = !!spamHistory;
+
   // Crear lead con round-robin (o asignacion forzada si forcedResponsableId)
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId: project.id,
@@ -105,7 +114,8 @@ export async function processWebhook(slug, apiKey, leadData) {
     landingUrl: leadData.landing_url || null,
     duplicadoDe,
     reincidente,
-    forcedResponsableId,
+    forcedResponsableId: skipAssign ? null : forcedResponsableId,
+    skipRoundRobin: skipAssign,
     idempotencyKey: leadData.idempotency_key || null,
     customFields: leadData.custom_fields || null,
     utms: {
@@ -118,6 +128,26 @@ export async function processWebhook(slug, apiKey, leadData) {
       canal_detectado: canalDetectado,
     },
   });
+
+  // Si es spam recurrente, lo marcamos como eliminado automaticamente con
+  // motivo 'spam' (auditoria) y NO disparamos secuencias ni notificaciones.
+  if (skipAssign) {
+    await leadModel.softDeleteLead(lead.id, {
+      reason: 'spam',
+      motivo: `Auto: email ya marcado como spam previamente (lead #${spamHistory.id})`,
+      userId: null,
+    });
+    return {
+      lead_id: lead.id,
+      responsable_id: null,
+      assignment_source: 'spam_skipped',
+      duplicado: !!duplicadoDe,
+      reincidente: false,
+      spam_recurrente: true,
+      spam_previous_lead_id: spamHistory.id,
+      canal: canalDetectado,
+    };
+  }
 
   // Disparar email sequences con trigger lead_created (async)
   triggerSequences('lead_created', lead.id, project.id);
@@ -151,6 +181,26 @@ export async function processWebhook(slug, apiKey, leadData) {
     reincidente,
     canal: canalDetectado,
   };
+}
+
+// ============================================================
+// SOFT DELETE (superadmin)
+// ============================================================
+
+export async function softDelete(leadId, { reason, motivo, userId }) {
+  const validReasons = ['spam', 'test', 'duplicado_manual', 'otro'];
+  if (!validReasons.includes(reason)) {
+    throw new AppError('reason invalido (spam, test, duplicado_manual, otro)', 400, 'INVALID_REASON');
+  }
+  const result = await leadModel.softDeleteLead(leadId, { reason, motivo, userId });
+  if (!result) throw new AppError('Lead no encontrado o ya eliminado', 404, 'LEAD_NOT_FOUND');
+  return result;
+}
+
+export async function restore(leadId) {
+  const result = await leadModel.restoreLead(leadId);
+  if (!result) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+  return result;
 }
 
 // ============================================================
@@ -270,7 +320,8 @@ export async function reassignPending(projectId) {
   return await leadModel.reassignPendingRoundRobin(projectId);
 }
 
-export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }) {
+export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
+  const creatorUser = opts.creatorUser || null;
   // Detectar duplicado solo si tiene email (sin email no podemos buscar dupe fiable)
   const duplicate = email ? await leadModel.findDuplicateByEmail(email, project_id) : null;
 
@@ -297,6 +348,16 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     duplicate.producto_interes_id === producto_interes_id
   );
 
+  // Si el creador es gestor/admin (no superadmin/soporte), el lead se le asigna
+  // a el/ella aunque venga por formulario manual — el round-robin avanza igual,
+  // asi que la siguiente asignacion automatica no le vuelve a tocar.
+  let forcedResponsableId = null;
+  let advanceRoundRobin = false;
+  if (creatorUser && (creatorUser.role === 'gestor' || creatorUser.role === 'admin')) {
+    forcedResponsableId = creatorUser.userId;
+    advanceRoundRobin = true;
+  }
+
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId: project_id,
     nombre,
@@ -307,6 +368,8 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     landingUrl: null,
     duplicadoDe,
     reincidente,
+    forcedResponsableId,
+    advanceRoundRobinAnyway: advanceRoundRobin,
     utms: {
       utm_source: null,
       utm_medium: null,

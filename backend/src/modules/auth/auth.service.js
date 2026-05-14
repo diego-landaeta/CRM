@@ -5,7 +5,10 @@ import { AppError } from '../../shared/utils/AppError.js';
 import * as authModel from './auth.model.js';
 
 const BCRYPT_ROUNDS = 12;
-const ACCESS_TOKEN_EXPIRY = '15m';
+// Access token de 8h: el usuario aguanta una jornada completa sin necesitar
+// renovar (antes era 15m, lo que provocaba "se sale solo en muy poco tiempo").
+// El refresh token sigue siendo de 30 dias por seguridad para reanudar sesion.
+const ACCESS_TOKEN_EXPIRY = '8h';
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 
 function generateAccessToken(user, activeProjectId = null) {

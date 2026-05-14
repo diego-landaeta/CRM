@@ -83,6 +83,10 @@ export interface Lead {
   producto_precio?: number | string | null;
   producto_moneda?: string | null;
   valor_oportunidad?: 'alto' | 'medio' | 'bajo' | null;
+  deleted_at?: string | null;
+  deleted_reason?: 'spam' | 'test' | 'duplicado_manual' | 'otro' | null;
+  deleted_motivo?: string | null;
+  deleted_by?: number | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
   pais?: string | null;

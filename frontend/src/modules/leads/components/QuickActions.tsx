@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple,
+  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash,
 } from '@phosphor-icons/react';
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
 import { cleanPhone } from '../lib/leadFormat';
@@ -25,6 +25,7 @@ interface Props {
   onLogInteraction?: (lead: LeadLite, kind: string) => void;
   onCreateReminder?: (lead: LeadLite) => void;
   onEnrollSequence?: (lead: LeadLite) => void;
+  onSoftDelete?: (lead: LeadLite) => void;  // superadmin
   templates?: WhatsappTemplate[];
   projectName?: string;
   onEditTemplates?: () => void;
@@ -41,6 +42,7 @@ export default function QuickActions({
   onLogInteraction,
   onCreateReminder,
   onEnrollSequence,
+  onSoftDelete,
   templates,
   projectName,
   onEditTemplates,
@@ -146,6 +148,15 @@ export default function QuickActions({
           className="p-1.5 rounded hover:bg-violet-100 dark:hover:bg-violet-950/40 text-muted-foreground hover:text-violet-700 dark:hover:text-violet-400 transition-colors"
         >
           <Lightning size={14} weight="regular" />
+        </button>
+      )}
+      {onSoftDelete && (
+        <button
+          onClick={() => onSoftDelete(lead)}
+          title="Eliminar (superadmin)"
+          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-700 dark:hover:text-red-400 transition-colors"
+        >
+          <Trash size={14} weight="regular" />
         </button>
       )}
     </div>

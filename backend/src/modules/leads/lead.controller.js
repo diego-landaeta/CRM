@@ -136,7 +136,7 @@ export async function createManual(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.createManualLead(parsed.data);
+    const result = await leadService.createManualLead(parsed.data, { creatorUser: req.user });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -186,6 +186,27 @@ export async function update(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const result = await leadService.updateLead(id, parsed.data);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/leads/:id  (superadmin only — soft delete con motivo)
+export async function softDelete(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const reason = (req.body?.reason || 'otro').toLowerCase();
+    const motivo = req.body?.motivo || null;
+    const result = await leadService.softDelete(id, { reason, motivo, userId: req.user.userId });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function restore(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const result = await leadService.restore(id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
