@@ -22,6 +22,7 @@ const ALL_PROJECTS_OK = [
   /^\/preferences$/,
   /^\/notificaciones$/,
   /^\/manual$/,
+  /^\/settings$/,
   /^\/soporte$/,
   /^\/status$/,
   /^\/ai-chat$/,

@@ -28,7 +28,10 @@ export async function findProductByName(name, projectId) {
   return rows[0] || null;
 }
 
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms, customFields }) {
+// Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
+// y está disponible; si todo OK, salta el round-robin y le asigna directo.
+// Si no viene, ejecuta round-robin tradicional.
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, utms, customFields, forcedResponsableId = null, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -53,17 +56,46 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     }
 
     // Obtener gestores activos del proyecto.
-    // Acepta admin + gestor (round-robin tradicional).
+    // Filtros: usuario activo + rol admin/gestor + disponible (is_available)
+    //          + sin bloque de ausencia activo para hoy.
     const { rows: gestorRows } = await client.query(
       `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id AND u.active = true AND u.role IN ('admin', 'gestor')
+       JOIN users u ON u.id = up.user_id
+        AND u.active = true
+        AND u.is_available = true
+        AND u.role IN ('admin', 'gestor')
        WHERE up.project_id = $1 AND up.active = true
+         AND NOT EXISTS (
+           SELECT 1 FROM user_availability_blocks ab
+           WHERE ab.user_id = u.id
+             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
+         )
        ORDER BY up.orden_cola`,
       [projectId]
     );
 
     let responsableId = null;
-    if (gestorRows.length > 0) {
+    let assignmentSource = 'round_robin';
+
+    // Asignación forzada (Make ya decidió quién lo recibe).
+    // Validamos que el user tenga acceso ACTIVO al proyecto. No exigimos
+    // disponibilidad porque Make decidió a propósito y a veces se quiere
+    // asignar a alguien aunque esté de baja (queda en su cola pendiente).
+    if (forcedResponsableId) {
+      const { rows: access } = await client.query(
+        `SELECT u.id FROM users u
+         JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
+         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')`,
+        [projectId, forcedResponsableId]
+      );
+      if (access.length > 0) {
+        responsableId = access[0].id;
+        assignmentSource = 'webhook';
+      }
+      // Si no tiene acceso, caemos a round-robin (no fallar el webhook).
+    }
+
+    if (!responsableId && gestorRows.length > 0) {
       const gestores = gestorRows.map(r => r.user_id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
@@ -77,11 +109,11 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, custom_fields)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, custom_fields, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, fecha_solicitud, created_at`,
       [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente,
-       customFields ? JSON.stringify(customFields) : null]
+       customFields ? JSON.stringify(customFields) : null, idempotencyKey]
     );
     const lead = leadRows[0];
 
@@ -95,13 +127,36 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     }
 
     await client.query('COMMIT');
-    return { ...lead, responsableId };
+    return { ...lead, responsableId, assignmentSource };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
   }
+}
+
+// Buscar user por email (case-insensitive). Devuelve null si no existe.
+export async function findUserByEmail(email) {
+  if (!email) return null;
+  const { rows } = await query(
+    `SELECT id, email, nombre, role, active FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    [email]
+  );
+  return rows[0] || null;
+}
+
+// Idempotency: si Make reintenta con el mismo idempotency_key dentro de 24h,
+// devolvemos el lead que ya creamos en lugar de duplicar.
+export async function findLeadByIdempotencyKey(projectId, key) {
+  if (!key) return null;
+  const { rows } = await query(
+    `SELECT id, responsable_id FROM leads
+     WHERE project_id = $1 AND idempotency_key = $2 AND created_at > NOW() - INTERVAL '24 hours'
+     LIMIT 1`,
+    [projectId, key]
+  );
+  return rows[0] || null;
 }
 
 // ============================================================
@@ -304,8 +359,16 @@ export async function reassignPendingRoundRobin(projectId) {
 
     const { rows: gestores } = await client.query(
       `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id AND u.active = true AND u.role IN ('admin', 'gestor')
+       JOIN users u ON u.id = up.user_id
+        AND u.active = true
+        AND u.is_available = true
+        AND u.role IN ('admin', 'gestor')
        WHERE up.project_id = $1 AND up.active = true
+         AND NOT EXISTS (
+           SELECT 1 FROM user_availability_blocks ab
+           WHERE ab.user_id = u.id
+             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
+         )
        ORDER BY up.orden_cola`,
       [projectId]
     );

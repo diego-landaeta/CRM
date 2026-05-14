@@ -50,15 +50,38 @@ export async function processWebhook(slug, apiKey, leadData) {
   if (!project) throw new AppError('Proyecto no encontrado', 404, 'PROJECT_NOT_FOUND');
   if (project.webhook_api_key !== apiKey) throw new AppError('API key invalida', 401, 'INVALID_API_KEY');
 
-  // Buscar producto por nombre si viene
-  let productoInteresId = null;
-  if (leadData.producto_interes) {
+  // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
+  // el lead que ya creamos en lugar de duplicar.
+  if (leadData.idempotency_key) {
+    const existing = await leadModel.findLeadByIdempotencyKey(project.id, leadData.idempotency_key);
+    if (existing) {
+      return {
+        lead_id: existing.id,
+        responsable_id: existing.responsable_id,
+        duplicado: false,
+        reincidente: false,
+        canal: null,
+        idempotent_replay: true,
+      };
+    }
+  }
+
+  // Resolver producto: id explicito > nombre > nada
+  let productoInteresId = leadData.producto_interes_id || null;
+  if (!productoInteresId && leadData.producto_interes) {
     const product = await leadModel.findProductByName(leadData.producto_interes, project.id);
     if (product) productoInteresId = product.id;
   }
 
-  // Detectar duplicado
-  const duplicate = await leadModel.findDuplicateByEmail(leadData.email, project.id);
+  // Resolver responsable forzado (Make decide): id directo > email -> id
+  let forcedResponsableId = leadData.responsable_id || null;
+  if (!forcedResponsableId && leadData.responsable_email) {
+    const user = await leadModel.findUserByEmail(leadData.responsable_email);
+    if (user && user.active) forcedResponsableId = user.id;
+  }
+
+  // Detectar duplicado (solo si hay email; sin email no podemos comparar)
+  const duplicate = leadData.email ? await leadModel.findDuplicateByEmail(leadData.email, project.id) : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
 
   // Reincidente = mismo proyecto + mismo producto que duplicado
@@ -68,20 +91,23 @@ export async function processWebhook(slug, apiKey, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
-  // Detectar canal
-  const canalDetectado = detectChannel(leadData.utm_source, leadData.utm_medium);
+  // Canal: override de Make > deteccion automatica por UTMs
+  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
-  // Crear lead con round-robin
+  // Crear lead con round-robin (o asignacion forzada si forcedResponsableId)
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId: project.id,
     nombre: leadData.nombre,
-    email: leadData.email,
+    email: leadData.email || null,
     telefono: leadData.telefono || null,
     productoInteresId,
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
     duplicadoDe,
     reincidente,
+    forcedResponsableId,
+    idempotencyKey: leadData.idempotency_key || null,
+    customFields: leadData.custom_fields || null,
     utms: {
       utm_source: leadData.utm_source || null,
       utm_medium: leadData.utm_medium || null,
@@ -119,6 +145,7 @@ export async function processWebhook(slug, apiKey, leadData) {
   return {
     lead_id: lead.id,
     responsable_id: lead.responsableId,
+    assignment_source: lead.assignmentSource,  // 'webhook' (Make decidió) o 'round_robin'
     duplicado: !!duplicadoDe,
     duplicado_de: duplicadoDe,
     reincidente,

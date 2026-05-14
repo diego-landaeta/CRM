@@ -8,9 +8,11 @@ import ProjectsTab from '../components/settings/ProjectsTab';
 import ApisTab from '../components/settings/ApisTab';
 import SecurityTab from '../components/settings/SecurityTab';
 import FormsTab from '../components/settings/FormsTab';
+import AvailabilityTab from '../components/settings/AvailabilityTab';
 
 const TAB_CONTENT = {
   users: UsersTab,
+  availability: AvailabilityTab,
   projects: ProjectsTab,
   forms: FormsTab,
   apis: ApisTab,

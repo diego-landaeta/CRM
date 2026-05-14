@@ -2,9 +2,11 @@ import { z } from 'zod';
 
 export const webhookLeadSchema = z.object({
   nombre: z.string().min(1, 'Nombre requerido').max(200),
-  email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
+  // Email opcional: Make ya filtra spam y a veces el lead llega sólo por WhatsApp/telefono
+  email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().or(z.literal('')),
   telefono: z.string().max(50).optional(),
   producto_interes: z.string().max(255).optional(),
+  producto_interes_id: z.coerce.number().int().positive().optional(),
   notas: z.string().max(2000).optional(),
   landing_url: z.string().url().optional().or(z.literal('')),
   utm_source: z.string().max(100).optional(),
@@ -12,7 +14,20 @@ export const webhookLeadSchema = z.object({
   utm_campaign: z.string().max(255).optional(),
   utm_content: z.string().max(255).optional(),
   utm_term: z.string().max(255).optional(),
-});
+  // Make puede decidir el canal directamente (override de la deteccion automatica)
+  canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
+  // Asignacion explicita desde Make (saltea round-robin si vienen).
+  // Se acepta email o id; si vienen los dos, prioriza id.
+  responsable_email: z.string().email().optional().or(z.literal('')),
+  responsable_id: z.coerce.number().int().positive().optional(),
+  // Idempotency: si Make reintenta, no duplicamos.
+  idempotency_key: z.string().min(1).max(200).optional(),
+  // Campos custom libres (objeto JSON). Se guardan en leads.custom_fields.
+  custom_fields: z.record(z.string(), z.any()).optional(),
+}).refine(
+  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
+  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+);
 
 export const listLeadsSchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),
