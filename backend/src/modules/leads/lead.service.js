@@ -284,8 +284,8 @@ export async function getById(id) {
   return lead;
 }
 
-export async function getStats(projectId) {
-  return await leadModel.getStats(projectId);
+export async function getStats(projectId, opts = {}) {
+  return await leadModel.getStats(projectId, opts);
 }
 
 export async function getTodaySummary(ctx) {

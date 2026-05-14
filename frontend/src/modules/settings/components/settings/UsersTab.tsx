@@ -39,8 +39,10 @@ export default function UsersTab() {
     setLoading(true);
     setError(null);
     try {
+      // En modo "Todos los proyectos" activeProject.id es -1 (sentinel) — no
+      // lo mandamos al backend (que valida >0). Tratamos como "todos".
       let projectIdParam = '';
-      if (projectFilter === 'active' && activeProject?.id) {
+      if (projectFilter === 'active' && activeProject?.id && activeProject.id > 0) {
         projectIdParam = `&projectId=${activeProject.id}`;
       } else if (projectFilter !== 'active' && projectFilter !== 'all') {
         projectIdParam = `&projectId=${projectFilter}`;

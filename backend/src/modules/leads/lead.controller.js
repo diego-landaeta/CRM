@@ -39,7 +39,14 @@ export async function list(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.list(parsed.data);
+    const filters = { ...parsed.data };
+    // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
+    // Ignoramos cualquier responsableId/unassigned que venga del cliente.
+    if (req.user.role === 'gestor') {
+      filters.responsableId = req.user.userId;
+      filters.unassigned = false;
+    }
+    const result = await leadService.list(filters);
     res.json({
       success: true,
       data: result.leads,
@@ -53,6 +60,10 @@ export async function getById(req, res, next) {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const lead = await leadService.getById(id);
+    // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
+    if (req.user.role === 'gestor' && lead && lead.responsable_id !== req.user.userId) {
+      throw new AppError('No tienes acceso a este lead', 403, 'FORBIDDEN_LEAD');
+    }
     res.json({ success: true, data: lead });
   } catch (err) { next(err); }
 }
@@ -73,7 +84,9 @@ export async function stats(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
-    const data = await leadService.getStats(projectId);
+    // SEGURIDAD: gestor solo ve stats de sus propios leads.
+    const opts = req.user.role === 'gestor' ? { responsableId: req.user.userId } : {};
+    const data = await leadService.getStats(projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

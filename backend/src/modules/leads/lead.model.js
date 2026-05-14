@@ -351,7 +351,8 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
             (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
             (SELECT MIN(fecha_recordatorio) FROM lead_reminders WHERE lead_id = l.id AND completado = false) AS next_reminder_at,
             p.dias_alerta_inactividad,
-            EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo
+            EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo,
+            EXISTS(SELECT 1 FROM lead_spam_reports sr WHERE sr.lead_id = l.id AND sr.status = 'pending') AS has_pending_spam_report
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
@@ -667,7 +668,15 @@ export async function getTodaySummary({ userId, role, projectId }) {
   };
 }
 
-export async function getStats(projectId) {
+export async function getStats(projectId, { responsableId = null } = {}) {
+  // SEGURIDAD: si viene responsableId, las stats se calculan SOLO sobre
+  // los leads asignados a ese usuario (caso gestor).
+  const params = [projectId];
+  let respFilter = '';
+  if (responsableId) {
+    params.push(responsableId);
+    respFilter = ` AND responsable_id = $2`;
+  }
   const { rows } = await query(
     `SELECT
        COUNT(*) as total,
@@ -678,8 +687,8 @@ export async function getStats(projectId) {
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1 AND deleted_at IS NULL`,
-    [projectId]
+     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
+    params
   );
   return rows[0];
 }

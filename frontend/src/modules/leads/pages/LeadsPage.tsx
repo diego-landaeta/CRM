@@ -626,10 +626,10 @@ export default function LeadsPage() {
             <option value="value">💰 Más valor primero</option>
             <option value="recent">🕒 Más recientes primero</option>
           </select>
-          {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && (
+          {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && activeProject?.id && activeProject.id > 0 && (
             <button
               onClick={async () => {
-                if (!activeProject?.id) return;
+                if (!activeProject?.id || activeProject.id < 0) return;
                 try {
                   const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
                   if (res.success) {
@@ -695,7 +695,10 @@ export default function LeadsPage() {
         <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
         <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
         {user?.role === 'superadmin' && (
-          <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
+          <>
+            <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
+            <span className="inline-flex items-center gap-1"><Flag size={13} weight="fill" className="text-orange-600" /> Marcado para revisión = pendiente de spam-report</span>
+          </>
         )}
         {user?.role !== 'superadmin' && (
           <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam</span>
@@ -781,6 +784,11 @@ export default function LeadsPage() {
                       {lead.es_propuesto && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300" title="Propuesto: ya es cliente y pregunta por otro programa (cross-sell)">
                           Propuesto
+                        </span>
+                      )}
+                      {lead.has_pending_spam_report && user?.role === 'superadmin' && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 animate-pulse" title="Una gestora reportó este lead como spam — revisa en Notificaciones">
+                          <Flag size={9} weight="fill" /> Marcado para revisión
                         </span>
                       )}
                       {!lead.reincidente && lead.lead_duplicado_de && (

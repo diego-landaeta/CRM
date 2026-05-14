@@ -110,6 +110,7 @@ export interface Lead {
   reincidente?: boolean | null;
   es_propuesto?: boolean | null;
   propuesto_de?: number | null;
+  has_pending_spam_report?: boolean | null;
   gestor?: string | null;
   utms?: Utms | null;
   // UTMs pueden venir embebidos directamente en el lead segun endpoint
