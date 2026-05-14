@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as leadController from './lead.controller.js';
 import * as leadEmailsController from './lead-emails.controller.js';
+import * as spamReportController from './spam-report.controller.js';
 
 const router = Router();
 
@@ -19,6 +20,12 @@ router.use(verifyToken);
 router.get('/', leadController.list);
 router.get('/stats', leadController.stats);
 router.get('/today', leadController.today);
+
+// Spam reports: rutas estáticas ANTES de /:id para que no las absorba
+router.get('/spam-reports', roleGuard('superadmin'), spamReportController.listPending);
+router.get('/spam-reports/count', roleGuard('superadmin'), spamReportController.countPending);
+router.patch('/spam-reports/:reportId', roleGuard('superadmin'), spamReportController.resolveReport);
+
 router.get('/:id', leadController.getById);
 
 // Creacion manual (formulario interno)
@@ -48,6 +55,9 @@ router.get('/:id/emails', leadEmailsController.listLeadEmails);
 
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
+
+// Reportes de spam: cualquier usuario autenticado puede reportar
+router.post('/:id/report-spam', spamReportController.reportSpam);
 
 // Soft delete / restore: SOLO superadmin (audit trail importante).
 router.delete('/:id', roleGuard('superadmin'), leadController.softDelete);

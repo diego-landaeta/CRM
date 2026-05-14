@@ -497,6 +497,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+  const [spamReportsBadge, setSpamReportsBadge] = useState(0);
 
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
@@ -620,6 +621,21 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     const interval = setInterval(fetchBadge, 60000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [activeProject?.id]);
+
+  // Badge de reportes de spam pendientes — solo superadmin
+  useEffect(() => {
+    if (user?.role !== 'superadmin') return;
+    let cancelled = false;
+    async function fetchSpamCount() {
+      try {
+        const res = await client.get('/leads/spam-reports/count');
+        if (!cancelled && res.success) setSpamReportsBadge(res.data?.count || 0);
+      } catch {}
+    }
+    fetchSpamCount();
+    const interval = setInterval(fetchSpamCount, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user?.role]);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
@@ -854,7 +870,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   <NavItem
                     key={item.to}
                     {...item}
-                    badge={item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge : undefined}
+                    badge={
+                      item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge
+                      : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
+                      : undefined
+                    }
                     labelOverrides={activeProject?.sidebar_labels}
                     onClick={onNavigate}
                     collapsed={collapsed}

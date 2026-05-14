@@ -33,6 +33,7 @@ import {
   DownloadSimple,
   ArrowsClockwise,
   Trash,
+  Flag,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -42,6 +43,7 @@ const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
 const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
 const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
+const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
@@ -179,6 +181,7 @@ export default function LeadsPage() {
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
   const [deletingLead, setDeletingLead] = useState<any>(null);
+  const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -674,6 +677,9 @@ export default function LeadsPage() {
         {user?.role === 'superadmin' && (
           <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
         )}
+        {user?.role !== 'superadmin' && (
+          <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam</span>
+        )}
       </div>
 
       {/* Error state */}
@@ -846,7 +852,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
                 );
@@ -902,7 +908,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}
@@ -1025,6 +1031,16 @@ export default function LeadsPage() {
           lead={deletingLead}
           onClose={() => setDeletingLead(null)}
           onDeleted={() => { setDeletingLead(null); refetch(); }}
+        />
+      </Suspense>
+
+      {/* Reportar como spam (gestor/admin) */}
+      <Suspense fallback={null}>
+        <SpamReportDialog
+          open={!!reportingSpamLead}
+          lead={reportingSpamLead}
+          onClose={() => setReportingSpamLead(null)}
+          onReported={() => setReportingSpamLead(null)}
         />
       </Suspense>
 

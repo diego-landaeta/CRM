@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash,
+  WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag,
 } from '@phosphor-icons/react';
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
 import { cleanPhone } from '../lib/leadFormat';
@@ -26,6 +26,7 @@ interface Props {
   onCreateReminder?: (lead: LeadLite) => void;
   onEnrollSequence?: (lead: LeadLite) => void;
   onSoftDelete?: (lead: LeadLite) => void;  // superadmin
+  onReportSpam?: (lead: LeadLite) => void;  // cualquier rol
   templates?: WhatsappTemplate[];
   projectName?: string;
   onEditTemplates?: () => void;
@@ -43,6 +44,7 @@ export default function QuickActions({
   onCreateReminder,
   onEnrollSequence,
   onSoftDelete,
+  onReportSpam,
   templates,
   projectName,
   onEditTemplates,
@@ -148,6 +150,15 @@ export default function QuickActions({
           className="p-1.5 rounded hover:bg-violet-100 dark:hover:bg-violet-950/40 text-muted-foreground hover:text-violet-700 dark:hover:text-violet-400 transition-colors"
         >
           <Lightning size={14} weight="regular" />
+        </button>
+      )}
+      {onReportSpam && (
+        <button
+          onClick={() => onReportSpam(lead)}
+          title="Reportar como spam (revisa superadmin)"
+          className="p-1.5 rounded hover:bg-orange-100 dark:hover:bg-orange-950/40 text-muted-foreground hover:text-orange-700 dark:hover:text-orange-400 transition-colors"
+        >
+          <Flag size={14} weight="regular" />
         </button>
       )}
       {onSoftDelete && (
