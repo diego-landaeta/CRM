@@ -535,7 +535,24 @@ export const importNow = async (req, res, next) => {
                 // Aplicar mapping del admin AHORA que tenemos scraped (sus paths
                 // pueden referirse a scraper.sections.X o scraper.meta_box.X.text)
                 if (hasUserMapping) {
-                  const userMappedRich = applyMappingWithScraper(wp, scraped, userMapping);
+                  // Si el mapping del usuario tiene rutas cpt.acf.*, traemos el CPT
+                  // vinculado a este WC product para resolverlas.
+                  let cptForMapping = null;
+                  const usesCpt = Object.values(userMapping).some((v) => typeof v === 'string' && v.startsWith('cpt.'));
+                  if (usesCpt) {
+                    try {
+                      const metaArr = Array.isArray(wp.meta_data) ? wp.meta_data : [];
+                      const cptId = metaArr.find((m) => m.key === '_cpt_sync_source_id')?.value;
+                      const cptSlug = metaArr.find((m) => m.key === '_cpt_sync_level')?.value;
+                      if (cptId && cptSlug && creds.wp_user && creds.wp_app_password) {
+                        const cptUrl = `${creds.store_url.replace(/\/$/, '')}/wp-json/wp/v2/${cptSlug}/${cptId}?context=edit`;
+                        const auth = 'Basic ' + Buffer.from(`${creds.wp_user}:${creds.wp_app_password}`).toString('base64');
+                        const cr = await fetch(cptUrl, { headers: { Authorization: auth } });
+                        if (cr.ok) cptForMapping = await cr.json();
+                      }
+                    } catch (_) { /* opcional */ }
+                  }
+                  const userMappedRich = applyMappingWithScraper(wp, scraped, userMapping, cptForMapping);
                   Object.assign(finalMapped, userMappedRich);
                 }
               } else {
@@ -704,6 +721,22 @@ export const previewWc = async (req, res, next) => {
     const targets = TARGETS_CATALOG.product.filter(t => t.key !== 'moneda');
     // ADICIONALES sugeridos cuando el scraper está activo (se enriquecen abajo si scrape tiene resultados)
 
+    // Si el producto WC apunta a un CPT custom (meta_data._cpt_sync_source_id +
+    // _cpt_sync_level), traemos el CPT con sus ACF para que el admin pueda mapear
+    // campos como cpt.acf.horas, cpt.acf.objetivos, etc.
+    let cptItem = null;
+    try {
+      const metaArr = Array.isArray(firstItem.meta_data) ? firstItem.meta_data : [];
+      const cptId = metaArr.find((m) => m.key === '_cpt_sync_source_id')?.value;
+      const cptSlug = metaArr.find((m) => m.key === '_cpt_sync_level')?.value;
+      if (cptId && cptSlug && creds.wp_user && creds.wp_app_password) {
+        const cptUrl = `${creds.store_url.replace(/\/$/, '')}/wp-json/wp/v2/${cptSlug}/${cptId}?context=edit`;
+        const auth = 'Basic ' + Buffer.from(`${creds.wp_user}:${creds.wp_app_password}`).toString('base64');
+        const cr = await fetch(cptUrl, { headers: { Authorization: auth } });
+        if (cr.ok) cptItem = await cr.json();
+      }
+    } catch (_) { /* opcional, no bloquea */ }
+
     // Si el scraper está activo, intentar también scrapear la SEO page de este producto
     // para que el admin pueda mapear desde scraper.sections.* o scraper.meta_box.*
     let scraped = null;
@@ -767,11 +800,45 @@ export const previewWc = async (req, res, next) => {
       }
     }
 
+    // Si tenemos un CPT vinculado, añadir sugerencias mapeando ACF -> targets CRM.
+    // Heurística por nombres conocidos del esquema iseih/psiko/fono.
+    if (cptItem && cptItem.acf && typeof cptItem.acf === 'object') {
+      const acf = cptItem.acf;
+      const sug = (target, key) => { if (!sugeridos[target] && acf[key] != null) sugeridos[target] = `cpt.acf.${key}`; };
+      sug('horas', 'horas');
+      if (!sugeridos.duracion) sugeridos.duracion = acf.duracion_ != null ? 'cpt.acf.duracion_' : (acf.duracion != null ? 'cpt.acf.duracion' : sugeridos.duracion);
+      if (!sugeridos.num_modulos) sugeridos.num_modulos = acf.modulos_ != null ? 'cpt.acf.modulos_' : (acf.modulos != null ? 'cpt.acf.modulos' : sugeridos.num_modulos);
+      if (!sugeridos.fecha_inicio_texto) sugeridos.fecha_inicio_texto = acf.fecha_de_inicio != null ? 'cpt.acf.fecha_de_inicio' : (acf.fecha_inicio != null ? 'cpt.acf.fecha_inicio' : sugeridos.fecha_inicio_texto);
+      sug('presentacion_texto', 'h2_presentacion');
+      sug('objetivos_texto', 'objetivos');
+      sug('por_que_estudiar_texto', 'texto_por_que_estudiar');
+      sug('dirigido_a_texto', 'textos_profesionales');
+      sug('modulos_texto', 'columna_1_modulos');
+      sug('beneficios_texto', 'beneficio_1_');
+      sug('faqs_texto', 'preguntas_faqs');
+    }
+
     // Vista previa del mapping aplicado
     const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
       ? creds.field_mapping
       : sugeridos;
-    const mapped_preview = applyMappingWithScraper(firstItem, scraped, currentMapping);
+    const mapped_preview = applyMappingWithScraper(firstItem, scraped, currentMapping, cptItem);
+
+    // Schema del CPT (sólo claves ACF — el resto del WP REST es ruido para el mapping)
+    let cptSchema = null;
+    if (cptItem && cptItem.acf && typeof cptItem.acf === 'object') {
+      const acfEntries = Object.entries(cptItem.acf).map(([k, v]) => {
+        const type = Array.isArray(v) ? 'array' : (typeof v === 'object' && v ? 'object' : typeof v);
+        const sample = type === 'object' || type === 'array' ? '(combinado)' : (v == null ? null : String(v).slice(0, 80).replace(/\n/g, ' '));
+        return { path: `cpt.acf.${k}`, label: k, type, sample };
+      });
+      cptSchema = {
+        slug: cptItem.type || null,
+        id: cptItem.id || null,
+        title: cptItem.title?.rendered || cptItem.title || null,
+        acf_fields: acfEntries,
+      };
+    }
 
     res.json({
       success: true,
@@ -785,6 +852,7 @@ export const previewWc = async (req, res, next) => {
         current_mapping: creds.field_mapping || {},
         mapped_preview,
         scraped,  // null si no hay scraper, objeto con titulo/meta_box/sections si sí
+        cpt: cptSchema, // null si no hay CPT vinculado, objeto con acf_fields si sí
       },
     });
   } catch (e) { next(e); }
@@ -860,7 +928,18 @@ function applyWcFieldMapping(item, mapping) {
 //   - "scraper.imagen_og" → scraped.imagen_og
 //   - "scraper.sections.{key}" → scraped.sections[key]
 //   - "scraper.meta_box.{key}.text|value|iso_date" → scraped.meta_box[key].xxx
-function resolveMappingPath(path, item, scraped) {
+// Extrae texto de un valor ACF: string, array (join \n), o dict (values join \n\n).
+function acfTextValue(v) {
+  if (v == null) return undefined;
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.filter(Boolean).join('\n');
+  if (typeof v === 'object') {
+    return Object.values(v).filter((x) => x && typeof x === 'string').join('\n\n') || undefined;
+  }
+  return String(v);
+}
+
+function resolveMappingPath(path, item, scraped, cpt) {
   if (!path || typeof path !== 'string') return undefined;
   if (path === 'scraper.url_used')     return scraped?.url_used;
   if (path === 'scraper.titulo')       return scraped?.titulo;
@@ -875,15 +954,23 @@ function resolveMappingPath(path, item, scraped) {
     const [key, attr = 'text'] = rest.split('.');
     return scraped?.meta_box?.[key]?.[attr];
   }
+  // CPT ACF: paths como cpt.acf.horas, cpt.acf.objetivos, etc.
+  // Resuelve desde el CPT vinculado al producto WC (via _cpt_sync_source_id).
+  if (path.startsWith('cpt.acf.')) {
+    const key = path.slice('cpt.acf.'.length);
+    return acfTextValue(cpt?.acf?.[key]);
+  }
+  if (path === 'cpt.title') return cpt?.title?.rendered || cpt?.title || undefined;
+  if (path === 'cpt.link')  return cpt?.link || cpt?.permalink || undefined;
   return resolvePath(item, path);
 }
 
-function applyMappingWithScraper(item, scraped, mapping) {
+function applyMappingWithScraper(item, scraped, mapping, cpt) {
   const out = {};
   for (const [crmField, source] of Object.entries(mapping || {})) {
     const path = typeof source === 'string' ? source : source?.source;
     if (!path) continue;
-    const v = resolveMappingPath(path, item, scraped);
+    const v = resolveMappingPath(path, item, scraped, cpt);
     if (v !== undefined && v !== null) out[crmField] = v;
   }
   return out;

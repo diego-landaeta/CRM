@@ -85,6 +85,13 @@ interface ScrapedData {
   error?: string;
 }
 
+interface CptSchema {
+  slug?: string | null;
+  id?: number | null;
+  title?: string | null;
+  acf_fields: Array<{ path: string; label: string; type: string; sample: string | null }>;
+}
+
 interface WooPreview {
   count: number;
   sample: any[];
@@ -94,6 +101,7 @@ interface WooPreview {
   sugeridos?: Record<string, string>;
   current_mapping?: Record<string, string>;
   mapped_preview?: Record<string, any>;
+  cpt?: CptSchema | null;
 }
 
 export default function WooCommercePage() {
@@ -555,6 +563,17 @@ export default function WooCommercePage() {
                                   scraper.meta_box.{k} = {v.text || ''}
                                 </option>
                               ))}
+                            </optgroup>
+                          )}
+                          {previewData.cpt && previewData.cpt.acf_fields.length > 0 && (
+                            <optgroup label={`CPT · ${previewData.cpt.slug || 'wp'} (ACF rica — horas, módulos, secciones...)`}>
+                              {previewData.cpt.acf_fields.map((f) => (
+                                <option key={f.path} value={f.path}>
+                                  {f.path} {f.sample ? `= ${f.sample.slice(0, 60)}` : `(${f.type})`}
+                                </option>
+                              ))}
+                              <option value="cpt.title">cpt.title (título del CPT)</option>
+                              <option value="cpt.link">cpt.link (URL del CPT)</option>
                             </optgroup>
                           )}
                         </select>
