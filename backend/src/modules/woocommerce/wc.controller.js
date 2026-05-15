@@ -530,6 +530,17 @@ export async function runFullImport(creds, projectId, runId) {
                 }
                 if (hitCount > 0) scrapedHits++;
                 if (Object.keys(otrasSecciones).length > 0) finalMapped.otras_secciones = otrasSecciones;
+
+                // Si no tenemos num_modulos del meta_box pero sí modulos_texto, contar
+                // por patrones tipo "Módulo 1", "Módulo 2"... Útil para ICTESS donde el
+                // contador no aparece como meta_box pero el temario sí.
+                if (!finalMapped.num_modulos && finalMapped.modulos_texto) {
+                  const matches = finalMapped.modulos_texto.match(/\bM[oó]dulo\s+\d+\b/gi);
+                  if (matches && matches.length > 0) {
+                    const nums = new Set(matches.map(s => s.match(/\d+/)[0]));
+                    finalMapped.num_modulos = nums.size;
+                  }
+                }
                 // Imagen og como fallback si no hay imagen
                 if (scraped.imagen_og && !finalMapped.image_url) finalMapped.image_url = scraped.imagen_og;
 

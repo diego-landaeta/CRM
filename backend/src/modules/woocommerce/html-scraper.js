@@ -248,6 +248,20 @@ function extractMetaBox(html) {
     }
   }
 
+  // Patrón 4: pares consecutivos de <p class="elementor-heading-title">label</p>
+  // ... <p class="elementor-heading-title">valor</p> (estructura ICTESS).
+  // El label está en un widget Elementor y el valor en el siguiente, separados
+  // por divs de cierre/apertura. Tolera hasta ~600 chars de markup intermedio.
+  const headingPairRe = /<p[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{2,40})<\/p>[\s\S]{1,600}?<p[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{1,80})<\/p>/gi;
+  while ((m = headingPairRe.exec(html)) !== null) {
+    const labelText = normalizeForMatch(htmlToText(m[1]));
+    const valueRaw = htmlToText(m[2]).trim();
+    const key = LABEL_MAP[labelText];
+    if (key && valueRaw && !found[key]) {
+      found[key] = parseMetaValue(labelText, valueRaw);
+    }
+  }
+
   // Patrón 3: "Label: valor" en cualquier párrafo del HTML
   const labelColonRe = new RegExp(
     `<(?:p|li|span)[^>]*>\\s*<(?:strong|b)>?\\s*([A-Za-zÁÉÍÓÚñÑáéíóú\\s]+?)\\s*:?\\s*</?(?:strong|b)?>?\\s*([^<]{1,80})\\s*</(?:p|li|span)>`,
