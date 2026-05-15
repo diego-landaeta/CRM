@@ -1,5 +1,31 @@
 import { query } from '../../shared/config/db.js';
 
+// Mapping default basado en Fono (scraper-based) — funciona out-of-the-box
+// para cualquier WP-Elementor educativo sin tocar ACF. Se aplica automáticamente
+// al crear las credenciales de un proyecto nuevo si no se especifica otro mapping.
+// El admin puede sobreescribirlo desde el UI cuando quiera.
+export const DEFAULT_FIELD_MAPPING = {
+  sku: 'sku',
+  nombre: 'name',
+  precio: 'price',
+  descripcion: 'short_description',
+  url_info: 'scraper.url_used',
+  image_url: 'scraper.imagen_og',
+  horas: 'scraper.meta_box.horas.text',
+  duracion: 'scraper.meta_box.duracion.text',
+  modalidad: 'scraper.meta_box.modalidad.text',
+  num_modulos: 'scraper.meta_box.num_modulos.text',
+  modulos_texto: 'scraper.sections.modulos',
+  objetivos_texto: 'scraper.sections.objetivos',
+  beneficios_texto: 'scraper.sections.beneficios',
+  dirigido_a_texto: 'scraper.sections.dirigido_a',
+  metodologia_texto: 'scraper.sections.metodologia',
+  presentacion_texto: 'scraper.sections.presentacion',
+  por_que_estudiar_texto: 'scraper.sections.por_que_estudiar',
+  para_que_te_prepara_texto: 'scraper.sections.para_que_te_prepara',
+  faqs_texto: 'scraper.sections.faqs',
+};
+
 export async function getCreds(projectId) {
   const { rows } = await query(`SELECT * FROM wc_credentials WHERE project_id = $1`, [projectId]);
   return rows[0] || null;
@@ -11,14 +37,16 @@ export async function upsertCreds(projectId, data) {
         active, auto_sync_enabled, sync_interval_minutes, default_currency,
         wp_user, wp_app_password,
         source_strategy, cpt_endpoints,
-        scraper_enabled, scrape_strategy, section_keywords
+        scraper_enabled, scrape_strategy, section_keywords,
+        field_mapping
      )
      VALUES (
         $1, $2, $3, $4,
         COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30), COALESCE($8, 'EUR'),
         $9, $10,
         COALESCE($11, 'wc_only'), COALESCE($12, '[]'::jsonb),
-        COALESCE($13, false), COALESCE($14, 'plain_text'), $15
+        COALESCE($13, false), COALESCE($14, 'plain_text'), $15,
+        $16::jsonb
      )
      ON CONFLICT (project_id) DO UPDATE
        SET store_url = EXCLUDED.store_url,
@@ -36,6 +64,11 @@ export async function upsertCreds(projectId, data) {
            scraper_enabled = EXCLUDED.scraper_enabled,
            scrape_strategy = EXCLUDED.scrape_strategy,
            section_keywords = COALESCE(EXCLUDED.section_keywords, wc_credentials.section_keywords),
+           field_mapping = CASE
+             WHEN wc_credentials.field_mapping IS NULL OR wc_credentials.field_mapping = '{}'::jsonb
+               THEN EXCLUDED.field_mapping
+             ELSE wc_credentials.field_mapping
+           END,
            updated_at = NOW()
      RETURNING *`,
     [
@@ -46,6 +79,7 @@ export async function upsertCreds(projectId, data) {
       data.source_strategy, JSON.stringify(data.cpt_endpoints || []),
       data.scraper_enabled, data.scrape_strategy,
       data.section_keywords ? JSON.stringify(data.section_keywords) : null,
+      JSON.stringify(DEFAULT_FIELD_MAPPING),
     ]
   );
   return rows[0];
