@@ -50,13 +50,22 @@ export default function ChangeProductDialog({ open, lead, onClose, onSaved }: Pr
     }
   }, [open, lead?.project_id, lead?.producto_interes_id]);
 
+  // Normaliza para búsqueda: quita acentos, espacios extra, lowercase.
+  // Así "master" matchea "Máster" y "fonoaudiologia" matchea "Fonoaudiología".
+  const norm = (s: string) =>
+    String(s || '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase().trim();
+
   const filtered = useMemo(() => {
     if (!search) return products;
-    const q = search.toLowerCase();
-    return products.filter((p) =>
-      (p.nombre || '').toLowerCase().includes(q) ||
-      (p.sku || '').toLowerCase().includes(q)
-    );
+    // Soporta múltiples palabras: "master genero" matchea "Máster en X de Género"
+    const tokens = norm(search).split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return products;
+    return products.filter((p) => {
+      const haystack = norm(`${p.nombre || ''} ${p.sku || ''}`);
+      return tokens.every((t) => haystack.includes(t));
+    });
   }, [products, search]);
 
   if (!open || !lead) return null;
@@ -154,9 +163,20 @@ export default function ChangeProductDialog({ open, lead, onClose, onSaved }: Pr
             {loading ? (
               <p className="p-4 text-xs text-muted-foreground text-center">Cargando catálogo...</p>
             ) : filtered.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground text-center italic">
-                {search ? `Sin resultados para "${search}"` : 'No hay productos en el catálogo'}
-              </p>
+              <div className="p-4 text-xs text-muted-foreground text-center">
+                {search ? (
+                  <>
+                    <p className="italic mb-2">Sin resultados para "<strong className="text-foreground">{search}</strong>"</p>
+                    <p className="text-[10px] leading-relaxed">
+                      Si este producto no existe en el catálogo, no puedes vincularlo.<br/>
+                      Opciones:<br/>
+                      · Importa el catálogo del otro sitio (ej. <code>mxn.fonoaprende.com</code>) como segundo origen.<br/>
+                      · Renombra el producto ES para que incluya el sinónimo (ej. añade "Fonoaudiología" al título).<br/>
+                      · O busca un equivalente más general en el catálogo.
+                    </p>
+                  </>
+                ) : 'No hay productos en el catálogo'}
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {filtered.map((p) => (
