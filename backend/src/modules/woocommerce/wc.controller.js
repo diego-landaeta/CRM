@@ -960,6 +960,33 @@ export const autoDiscoverCpts = async (req, res, next) => {
       }
     } catch (_) { /* ignore */ }
 
+    // 3b) FALLBACK: si los productos WC declaran levels pero los CPTs no aparecen
+    // en /types (caso Fono: registrados con show_in_rest=false), probamos cada
+    // slug detectado por meta directamente. Si responde 200 + ACF, lo agregamos.
+    const detectedSlugs = new Set(detected.map((d) => d.slug));
+    for (const lvl of metaCptLevels) {
+      if (detectedSlugs.has(lvl)) continue;
+      try {
+        const r = await fetch(`${baseUrl}/wp-json/wp/v2/${lvl}?per_page=1&context=edit`, { headers: { Authorization: auth } });
+        if (!r.ok) continue;
+        const arr = await r.json();
+        const item = Array.isArray(arr) && arr[0];
+        if (!item) continue;
+        const acf = item.acf && typeof item.acf === 'object' && !Array.isArray(item.acf) ? item.acf : null;
+        const acfCount = acf ? Object.keys(acf).length : 0;
+        if (acfCount > 0) {
+          detected.push({
+            slug: lvl,
+            name: lvl,
+            sample_id: item.id,
+            sample_title: (item.title && item.title.rendered) || lvl,
+            acf_fields_count: acfCount,
+            has_meta_link: true,
+          });
+        }
+      } catch (_) { /* skip */ }
+    }
+
     // 4) Si la WC tiene meta _cpt_sync_level, priorizamos esos slugs
     let recommendedSlugs = detected.map((d) => d.slug);
     if (cptSyncEnabled && metaCptLevels.size > 0) {
