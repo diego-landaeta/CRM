@@ -42,17 +42,20 @@ interface WooForm {
   section_keywords: Record<string, string[]>;
 }
 
+// Defaults expandidos: cubre muchos diseños WP/Elementor habituales en
+// LATAM y España. Match case+accent insensitive contra el texto de <h2>.
 const DEFAULT_SECTION_KEYWORDS: Record<string, string[]> = {
-  presentacion: ['presentaci'],
-  objetivos: ['objetivo'],
-  beneficios: ['beneficio'],
-  dirigido_a: ['dirigido', 'para quien', 'a quien'],
-  para_que_te_prepara: ['te prepara', 'salidas profesionales'],
-  por_que_estudiar: ['por que estudiar', 'por que elegir'],
-  modulos: ['contenido del', 'temario del', 'programa del', 'syllabus', 'temario', 'contenido', 'modulos', 'modulo', 'unidades', 'unidad'],
-  metodologia: ['metodologi'],
-  faqs: ['pregunta frecuente', 'faq', 'dudas'],
-  profesores: ['profesor', 'docente', 'instructor', 'claustro', 'profesorado'],
+  presentacion: ['presentaci', 'introducci', 'sobre el curso', 'sobre el programa', 'acerca del', 'descripci'],
+  objetivos: ['objetivo', 'metas', 'lograras', 'aprenderas', 'que vas a aprender', 'que aprenderas'],
+  beneficios: ['beneficio', 'ventajas', 'que obtienes', 'que ofrece', 'lo que conseguiras'],
+  dirigido_a: ['dirigido', 'para quien', 'a quien va', 'destinatarios', 'perfil del alumno', 'requisitos'],
+  para_que_te_prepara: ['te prepara', 'salidas profesionales', 'oportunidades laborales', 'salida laboral', 'campo laboral', 'donde trabajar'],
+  por_que_estudiar: ['por que estudiar', 'por que elegir', 'por que cursar', 'razones para', 'que diferencia'],
+  modulos: ['modulo', 'modulos', 'unidad', 'unidades', 'tema', 'temario', 'temas', 'contenido del curso', 'contenido', 'syllabus', 'plan de estudios', 'programa del curso', 'estructura del curso', 'leccion', 'lecciones', 'capitulo', 'capitulos', 'bloque'],
+  metodologia: ['metodologi', 'como se imparte', 'modalidad de estudio', 'forma de estudio', 'sistema de estudio'],
+  faqs: ['pregunta frecuente', 'preguntas frecuente', 'faq', 'dudas', 'preguntas comunes', 'consultas', 'preguntas mas'],
+  profesores: ['profesor', 'profesora', 'docente', 'instructor', 'instructora', 'claustro', 'profesorado', 'equipo docente', 'tutor', 'tutora', 'equipo academico'],
+  certificacion: ['certificado', 'certificaci', 'titulaci', 'acreditaci', 'diploma'],
 };
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF'];

@@ -281,25 +281,70 @@ function extractMetaTags(html) {
  * @param {object} sectionKeywords - { presentacion: ['presentaci'], modulos: [...], ... }
  * @param {object} opts - { strategy: 'plain_text' | 'preserve_html', timeoutMs: 30000 }
  */
+// Hace fetch con hasta `retries` reintentos ante 5xx, abort o network error.
+// Backoff lineal: 600ms, 1500ms. Limita en total a ~timeoutMs total acumulado.
+async function fetchHtmlWithRetry(url, timeoutMs, retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const ac = new AbortController();
+      const to = setTimeout(() => ac.abort(), timeoutMs);
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; CRM-Importer/1.0)',
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'es-ES,es;q=0.9',
+        },
+        signal: ac.signal,
+      });
+      clearTimeout(to);
+      if (res.status >= 500 && attempt < retries) {
+        await new Promise((r) => setTimeout(r, 600 + 900 * attempt));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 600 + 900 * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error('fetchHtmlWithRetry failed');
+}
+
+// Extrae horas/duración/módulos del cuerpo del HTML cuando NO hay meta_box.
+// Busca patrones como "100 horas", "12 meses", "6 módulos" en cualquier parte.
+function extractDurationFromBody(html) {
+  if (!html) return {};
+  const text = htmlToText(html);
+  const out = {};
+  // Horas
+  const horasMatch = text.match(/\b(\d{1,4})\s*horas?\b/i);
+  if (horasMatch) out.horas = { text: `${horasMatch[1]} horas`, value: parseInt(horasMatch[1]), unit: 'horas', type: 'hours' };
+  // Duración en meses/semanas/días
+  const durMatch = text.match(/\b(\d{1,3})\s*(meses?|semanas?|d[ií]as?)\b/i);
+  if (durMatch) out.duracion = { text: `${durMatch[1]} ${durMatch[2]}`, value: parseInt(durMatch[1]), unit: durMatch[2], type: 'duration' };
+  // Nº módulos / lecciones / unidades
+  const modMatch = text.match(/\b(\d{1,3})\s*(m[oó]dulos?|lecciones?|unidades?|temas?|cap[ií]tulos?|bloques?)\b/i);
+  if (modMatch) out.num_modulos = { text: `${modMatch[1]} ${modMatch[2]}`, value: parseInt(modMatch[1]), unit: modMatch[2], type: 'count' };
+  // Modalidad
+  const modal = text.match(/\b(online|presencial|virtual|mixto|h[ií]brido|semipresencial)\b/i);
+  if (modal) out.modalidad = { text: modal[1], type: 'text' };
+  return out;
+}
+
 export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
   const { strategy = 'plain_text', timeoutMs = 30000 } = opts;
 
   let html;
   try {
-    const ac = new AbortController();
-    const to = setTimeout(() => ac.abort(), timeoutMs);
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; CRM-Importer/1.0)',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: ac.signal,
-    });
-    clearTimeout(to);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    html = await res.text();
+    html = await fetchHtmlWithRetry(url, timeoutMs);
   } catch (err) {
-    logger.warn({ url, err: err.message }, 'scrapeProductPage: fetch falló');
+    logger.warn({ url, err: err.message }, 'scrapeProductPage: fetch falló tras retries');
     return { error: err.message };
   }
 
@@ -310,6 +355,17 @@ export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
     sections: {},
     html_size: html.length,
   };
+
+  // Fallback: si meta_box no captó horas/duración/modalidad (típico en
+  // diseños sin tabla de specs), intentamos buscar en el cuerpo del HTML.
+  // No sobreescribe lo que meta_box ya detectó — sólo rellena lo que falta.
+  try {
+    const fb = extractDurationFromBody(html);
+    if (!result.meta_box) result.meta_box = {};
+    for (const [k, v] of Object.entries(fb)) {
+      if (!result.meta_box[k]) result.meta_box[k] = v;
+    }
+  } catch (_) { /* opcional */ }
 
   // Para cada sección lógica configurada, extraer TODOS los slices que matchean.
   // - sections.{key}                 → primer slice (compat)
