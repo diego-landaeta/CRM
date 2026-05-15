@@ -198,7 +198,7 @@ export async function update(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.updateLead(id, parsed.data);
+    const result = await leadService.updateLead(id, parsed.data, { userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

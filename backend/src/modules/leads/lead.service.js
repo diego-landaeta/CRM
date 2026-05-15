@@ -439,12 +439,34 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
   };
 }
 
-export async function updateLead(leadId, data) {
+export async function updateLead(leadId, data, opts = {}) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
+
+  // APRENDIZAJE: si el usuario vinculó manualmente un producto a este lead
+  // y el lead tiene landing_url, guardamos el slug como alias. Los futuros
+  // leads desde esa URL se vincularán solos.
+  if (
+    'producto_interes_id' in data &&
+    data.producto_interes_id &&
+    data.producto_interes_id !== lead.producto_interes_id &&
+    lead.landing_url
+  ) {
+    try {
+      await leadModel.learnUrlAlias({
+        projectId: lead.project_id,
+        productId: data.producto_interes_id,
+        landingUrl: lead.landing_url,
+        userId: opts.userId || null,
+      });
+    } catch (err) {
+      logger.warn({ err: err.message, leadId, productId: data.producto_interes_id }, 'learnUrlAlias failed (no critico)');
+    }
+  }
+
   return updated;
 }
 

@@ -11,6 +11,7 @@ import { useLeadDetail } from '../hooks/useLeads';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
+const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -110,7 +111,7 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
             {loading && !lead && <p className="text-sm text-muted-foreground">Cargando datos...</p>}
             {lead && (
               <>
-                {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} />}
+                {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} onSaved={refetch} />}
                 {tab === 'historial' && <HistorialTab timeline={timeline} />}
                 {tab === 'interacciones' && <InteraccionesTab leadId={lead.id} interacciones={interacciones} onRefetch={refetch} />}
                 {tab === 'recordatorios' && <RecordatoriosTab leadId={lead.id} reminders={reminders} onRefetch={refetch} />}
@@ -152,8 +153,9 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
   );
 }
 
-function ResumenTab({ lead, onEnroll }) {
+function ResumenTab({ lead, onEnroll, onSaved }) {
   const [history, setHistory] = useState<any[]>([]);
+  const [changeProductOpen, setChangeProductOpen] = useState(false);
   useEffect(() => {
     if (!lead?.id || !lead?.email) return;
     client.get(`/leads/${lead.id}/purchase-history`)
@@ -200,7 +202,19 @@ function ResumenTab({ lead, onEnroll }) {
         );
       })() : '--'} />
       <DataRow label="Email" value={lead.email || '--'} />
-      <DataRow label="Producto interés" value={lead.producto_interes || lead.producto_nombre || '--'} />
+      <DataRow label="Producto interés" value={
+        <span className="inline-flex items-center gap-2">
+          <span>{lead.producto_interes || lead.producto_nombre || <span className="italic text-muted-foreground">— sin vincular —</span>}</span>
+          <button
+            type="button"
+            onClick={() => setChangeProductOpen(true)}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-card hover:bg-muted text-primary font-semibold whitespace-nowrap"
+            title="Vincular o cambiar el producto de interés"
+          >
+            {lead.producto_interes_id ? 'Cambiar' : 'Vincular'}
+          </button>
+        </span>
+      } />
       <DataRow label="País" value={lead.pais || (() => {
         const c = detectCountryFromPhone(lead.telefono);
         return c ? <span className="text-muted-foreground italic">{c.flag} {c.name} <span className="text-[10px]">(por teléfono)</span></span> : '--';
@@ -222,6 +236,15 @@ function ResumenTab({ lead, onEnroll }) {
         <Plus size={14} weight="bold" />
         Enrolar en secuencia
       </button>
+
+      <Suspense fallback={null}>
+        <ChangeProductDialog
+          open={changeProductOpen}
+          lead={lead}
+          onClose={() => setChangeProductOpen(false)}
+          onSaved={() => { setChangeProductOpen(false); onSaved?.(); }}
+        />
+      </Suspense>
     </div>
   );
 }

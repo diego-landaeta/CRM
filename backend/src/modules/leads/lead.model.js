@@ -118,20 +118,37 @@ export async function findProductBySku(sku, projectId) {
   return rows[0] || null;
 }
 
+// Extrae el último segmento de una URL (slug del producto).
+function urlSlug(landingUrl) {
+  if (!landingUrl) return null;
+  try {
+    const u = new URL(landingUrl);
+    const parts = u.pathname.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : null;
+  } catch { return null; }
+}
+function urlHost(landingUrl) {
+  if (!landingUrl) return null;
+  try { return new URL(landingUrl).hostname; } catch { return null; }
+}
+
 // Busca por SLUG final de la landing_url. Útil cuando hay multi-sitio
 // (subdominios o dominios distintos) que comparten estructura de URL:
 // https://es.foo.com/curso-x/  y  https://mx.foo.com/curso-x/
 // Mapea ambos al mismo producto del catálogo CRM por el último segmento.
+// También consulta la tabla product_url_aliases para slugs aprendidos.
 export async function findProductByLandingSlug(landingUrl, projectId) {
-  if (!landingUrl) return null;
-  // Extraer el último segmento no vacío de la URL.
-  let slug = null;
-  try {
-    const u = new URL(landingUrl);
-    const parts = u.pathname.split('/').filter(Boolean);
-    slug = parts.length > 0 ? parts[parts.length - 1] : null;
-  } catch { /* URL inválida */ return null; }
+  const slug = urlSlug(landingUrl);
   if (!slug) return null;
+
+  // 1) Slug aprendido (tabla product_url_aliases)
+  const aliasRes = await query(
+    `SELECT product_id FROM product_url_aliases WHERE project_id = $1 AND url_slug = $2 LIMIT 1`,
+    [projectId, slug]
+  );
+  if (aliasRes.rows[0]) return { id: aliasRes.rows[0].product_id, _via: 'alias' };
+
+  // 2) Slug nativo de algún producto (url_info termina con ese slug)
   const { rows } = await query(
     `SELECT id FROM products
      WHERE project_id = $1 AND active = true
@@ -144,6 +161,46 @@ export async function findProductByLandingSlug(landingUrl, projectId) {
     [projectId, slug]
   );
   return rows[0] || null;
+}
+
+// Aprende: cuando un gestor vincula un lead a un producto, guardamos
+// el slug de la landing_url como alias. Los futuros leads desde esa
+// URL se vincularán automáticamente.
+export async function learnUrlAlias({ projectId, productId, landingUrl, userId }) {
+  const slug = urlSlug(landingUrl);
+  if (!slug) return null;
+  const host = urlHost(landingUrl);
+  // Si el slug coincide con el url_info nativo del producto, no creamos alias
+  // (ya se resolverá vía findProductByLandingSlug paso 2).
+  const own = await query(
+    `SELECT id FROM products WHERE id = $1 AND (url_info ILIKE '%/' || $2 || '/' OR url_info ILIKE '%/' || $2)`,
+    [productId, slug]
+  );
+  if (own.rows.length > 0) return { skipped: true, reason: 'native_match' };
+  // Upsert por (project_id, url_slug)
+  const { rows } = await query(
+    `INSERT INTO product_url_aliases (project_id, product_id, url_slug, source_host, created_by)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (project_id, url_slug) DO UPDATE
+       SET product_id = EXCLUDED.product_id, source_host = EXCLUDED.source_host, created_at = NOW()
+     RETURNING id, product_id, url_slug, source_host`,
+    [projectId, productId, slug, host, userId]
+  );
+  return rows[0];
+}
+
+// Lista aliases por producto
+export async function listProductAliases(projectId, productId) {
+  const { rows } = await query(
+    `SELECT id, url_slug, source_host, created_at FROM product_url_aliases
+     WHERE project_id = $1 AND product_id = $2 ORDER BY created_at DESC`,
+    [projectId, productId]
+  );
+  return rows;
+}
+
+export async function deleteProductAlias(aliasId, projectId) {
+  await query(`DELETE FROM product_url_aliases WHERE id = $1 AND project_id = $2`, [aliasId, projectId]);
 }
 
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
