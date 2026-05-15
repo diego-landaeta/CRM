@@ -44,11 +44,11 @@ export async function findPurchaseHistory(email, projectId) {
   if (!email) return [];
   const { rows } = await query(
     `SELECT c.id, c.producto_contratado, c.importe_total, c.importe_pagado,
-            c.metodo_pago, c.fecha_compra, c.created_at, c.lead_id
+            c.metodo_pago, c.fecha_conversion AS fecha_compra, c.created_at, c.lead_id
      FROM conversions c
      JOIN leads l ON l.id = c.lead_id
      WHERE l.email = $1 AND l.project_id = $2 AND l.deleted_at IS NULL
-     ORDER BY c.fecha_compra DESC NULLS LAST, c.created_at DESC`,
+     ORDER BY c.fecha_conversion DESC NULLS LAST, c.created_at DESC`,
     [email, projectId]
   );
   return rows;
