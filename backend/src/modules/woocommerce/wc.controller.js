@@ -755,7 +755,9 @@ export const previewWc = async (req, res, next) => {
       try {
         let urlToScrape = firstItem.permalink;
         if (creds.wp_user && creds.wp_app_password) {
-          const seo = await findSeoPageForProduct(firstItem, creds.store_url, creds.wp_user, creds.wp_app_password);
+          const seo = await findSeoPageForProduct(firstItem, creds.store_url, creds.wp_user, creds.wp_app_password, {
+            cptEndpoints: Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [],
+          });
           if (seo && seo.link) urlToScrape = seo.link;
         }
         const keywords = creds.section_keywords || {};
