@@ -118,6 +118,34 @@ export async function findProductBySku(sku, projectId) {
   return rows[0] || null;
 }
 
+// Busca por SLUG final de la landing_url. Útil cuando hay multi-sitio
+// (subdominios o dominios distintos) que comparten estructura de URL:
+// https://es.foo.com/curso-x/  y  https://mx.foo.com/curso-x/
+// Mapea ambos al mismo producto del catálogo CRM por el último segmento.
+export async function findProductByLandingSlug(landingUrl, projectId) {
+  if (!landingUrl) return null;
+  // Extraer el último segmento no vacío de la URL.
+  let slug = null;
+  try {
+    const u = new URL(landingUrl);
+    const parts = u.pathname.split('/').filter(Boolean);
+    slug = parts.length > 0 ? parts[parts.length - 1] : null;
+  } catch { /* URL inválida */ return null; }
+  if (!slug) return null;
+  const { rows } = await query(
+    `SELECT id FROM products
+     WHERE project_id = $1 AND active = true
+       AND (
+         url_info ILIKE '%/' || $2 || '/' OR
+         url_info ILIKE '%/' || $2 OR
+         url_info = $2
+       )
+     LIMIT 1`,
+    [projectId, slug]
+  );
+  return rows[0] || null;
+}
+
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
