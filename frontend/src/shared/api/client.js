@@ -24,6 +24,33 @@ export function setOnAuthFailure(cb) {
   onAuthFailure = cb;
 }
 
+// Reintento automático ante 502/503/504 (nginx upstream caído brevemente
+// durante deploys de PM2). 2 reintentos con backoff lineal — evita que el
+// usuario vea errores transitorios de 1-2s.
+async function fetchWithRetry(fullUrl, fetchOpts, maxRetries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(fullUrl, fetchOpts);
+      // Si la respuesta es 502/503/504 reintentamos
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      // network error (fetch rejected) → también reintentar
+      lastError = err;
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error('fetch failed after retries');
+}
+
 async function request(url, options = {}) {
   const isFormData = options.body instanceof FormData;
   const headers = isFormData
@@ -31,7 +58,7 @@ async function request(url, options = {}) {
     : { 'Content-Type': 'application/json', ...options.headers };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res = await fetch(`${BASE_URL}${url}`, {
+  const res = await fetchWithRetry(`${BASE_URL}${url}`, {
     credentials: 'include',
     ...options,
     headers,
