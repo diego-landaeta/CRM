@@ -7,6 +7,9 @@ export const webhookLeadSchema = z.object({
   telefono: z.string().max(50).optional(),
   producto_interes: z.string().max(255).optional(),
   producto_interes_id: z.coerce.number().int().positive().optional(),
+  // SKU del producto (clave universal cuando hay multi-sitio con nombres distintos
+  // por idioma). Si viene, gana sobre producto_interes (nombre) y empata con _id.
+  producto_interes_sku: z.string().max(100).optional(),
   notas: z.string().max(2000).optional(),
   landing_url: z.string().url().optional().or(z.literal('')),
   utm_source: z.string().max(100).optional(),

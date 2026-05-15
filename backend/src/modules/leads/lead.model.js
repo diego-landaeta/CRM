@@ -105,6 +105,19 @@ export async function findProductByName(name, projectId) {
   return rows[0] || null;
 }
 
+// Busca por SKU exacto (case-insensitive, trim). Útil para multi-sitio donde
+// los nombres difieren por idioma pero el SKU es el mismo.
+export async function findProductBySku(sku, projectId) {
+  if (!sku) return null;
+  const { rows } = await query(
+    `SELECT id FROM products
+     WHERE LOWER(TRIM(sku)) = LOWER(TRIM($1)) AND project_id = $2 AND active = true
+     LIMIT 1`,
+    [sku, projectId]
+  );
+  return rows[0] || null;
+}
+
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.

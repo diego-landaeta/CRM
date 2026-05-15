@@ -66,8 +66,13 @@ export async function processWebhook(slug, apiKey, leadData) {
     }
   }
 
-  // Resolver producto: id explicito > nombre > nada
+  // Resolver producto: id > sku > nombre > nada.
+  // El SKU es clave en multi-sitio (mismo catálogo, nombres distintos por idioma).
   let productoInteresId = leadData.producto_interes_id || null;
+  if (!productoInteresId && leadData.producto_interes_sku) {
+    const product = await leadModel.findProductBySku(leadData.producto_interes_sku, project.id);
+    if (product) productoInteresId = product.id;
+  }
   if (!productoInteresId && leadData.producto_interes) {
     const product = await leadModel.findProductByName(leadData.producto_interes, project.id);
     if (product) productoInteresId = product.id;
