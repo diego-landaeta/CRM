@@ -126,6 +126,37 @@ export default function WooCommercePage() {
   const [importing, setImporting] = useState(false);
   const [previewData, setPreviewData] = useState<WooPreview | null>(null);
   const [mapping, setMapping] = useState<Record<string, MappingSource>>({});
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<any>(null);
+
+  async function handleAutoDiscover() {
+    if (!activeProject?.id) return;
+    // Si el form tiene cambios sin guardar (incluido wp_app_password), guardamos
+    // primero para que el endpoint use credenciales actualizadas.
+    setDiscovering(true);
+    try {
+      await client.put(`/woocommerce/credentials?projectId=${activeProject.id}`, form);
+      const res = await client.post(`/woocommerce/auto-discover-cpts?projectId=${activeProject.id}`, { apply: true });
+      if (res.success) {
+        setDiscoverResult(res.data);
+        if (res.data.applied) {
+          // Refrescar form con la nueva config
+          setForm((f) => ({
+            ...f,
+            source_strategy: 'wc_plus_cpt',
+            cpt_endpoints: res.data.recommended_slugs,
+          }));
+          toast({ title: 'CPTs detectados y aplicados', description: `${res.data.recommended_slugs.length} endpoints configurados` });
+        } else if (res.data.detected.length === 0) {
+          toast({ title: 'Sin CPTs con ACF', description: 'Esta tienda parece no usar CPTs custom. Quedas con WC solo.' });
+        }
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally {
+      setDiscovering(false);
+    }
+  }
   const [savingMapping, setSavingMapping] = useState(false);
   const reloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -319,6 +350,38 @@ export default function WooCommercePage() {
               <option value="wc_plus_cpt">WC + Custom Post Types (cursos, masters, diplomados…)</option>
             </select>
           </label>
+
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={handleAutoDiscover}
+              disabled={discovering}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-semibold disabled:opacity-50"
+            >
+              🔍 {discovering ? 'Detectando…' : 'Auto-detectar CPTs'}
+            </button>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Llama a <code>/wp-json/wp/v2/types</code> con las credenciales WP de arriba, descubre los CPTs custom con ACF (cursos, masters…) y los configura solo.
+              Requiere wp_user + wp_app_password.
+            </p>
+            {discoverResult && (
+              <div className={`mt-2 p-2.5 rounded-md text-xs ${discoverResult.applied ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800' : 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'}`}>
+                <p className="font-semibold mb-1">
+                  {discoverResult.applied ? '✓ Aplicado' : 'Detectados'}: {discoverResult.recommended_slugs.length} CPT(s)
+                </p>
+                <ul className="space-y-0.5 ml-3">
+                  {discoverResult.detected.map((d: any) => (
+                    <li key={d.slug}>
+                      <code className="font-mono">{d.slug}</code> · {d.acf_fields_count} campos ACF · ej. <em>{d.sample_title?.slice(0,50)}</em>
+                    </li>
+                  ))}
+                </ul>
+                {discoverResult.cpt_sync_enabled && (
+                  <p className="mt-1.5 text-[10px] italic">Detectado: el WC vincula productos a CPT via <code>_cpt_sync_source_id</code> (típico de tu setup ISEIH/Fono).</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {form.source_strategy === 'wc_plus_cpt' && (
             <label className="block text-xs">

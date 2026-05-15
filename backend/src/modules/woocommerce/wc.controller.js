@@ -878,6 +878,122 @@ export const previewWc = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+// POST /api/woocommerce/auto-discover-cpts?projectId=X
+// Detecta automáticamente:
+//  1) Qué CPTs tiene el WP en /wp-json/wp/v2/types
+//  2) Filtra los que son "tipo producto" (excluye nav, attachment, pages, etc)
+//  3) Para cada uno comprueba si expone ACF y tiene items
+//  4) Genera mapping default usando los ACF detectados (heurística por nombres)
+//  5) Actualiza cpt_endpoints + field_mapping (sólo si está vacío)
+// Devuelve un resumen para mostrar al admin.
+const SYSTEM_TYPE_SLUGS = new Set([
+  'post','page','attachment','nav_menu_item','wp_block','wp_template',
+  'wp_template_part','wp_global_styles','wp_navigation','wp_font_family',
+  'wp_font_face','elementor_library','elementor_snippet','e-floating-buttons',
+  'rm_content_editor','product','product_variation','shop_order','shop_coupon',
+]);
+
+export const autoDiscoverCpts = async (req, res, next) => {
+  try {
+    const projectId = pid(req);
+    const creds = await model.getCreds(projectId);
+    if (!creds) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
+    if (!creds.wp_user || !creds.wp_app_password) {
+      throw new AppError('Faltan wp_user y wp_app_password en las credenciales (necesarios para CPTs con ACF en context=edit)', 400, 'NO_WP_AUTH');
+    }
+    const baseUrl = creds.store_url.replace(/\/$/, '');
+    const auth = 'Basic ' + Buffer.from(`${creds.wp_user}:${creds.wp_app_password}`).toString('base64');
+
+    // 1) Lista de tipos del WP
+    const typesRes = await fetch(`${baseUrl}/wp-json/wp/v2/types`, { headers: { Authorization: auth } });
+    if (!typesRes.ok) throw new AppError(`WP types respondió ${typesRes.status}`, 502, 'WP_TYPES_ERROR');
+    const types = await typesRes.json();
+
+    const candidates = [];
+    for (const [slug, info] of Object.entries(types)) {
+      if (SYSTEM_TYPE_SLUGS.has(slug)) continue;
+      const restBase = (info && info.rest_base) || slug;
+      candidates.push({ slug, rest_base: restBase, name: info?.name || slug });
+    }
+
+    // 2) Para cada candidato, intentar fetch /wp-json/wp/v2/{rest_base}?per_page=1&context=edit
+    const detected = [];
+    for (const c of candidates) {
+      try {
+        const r = await fetch(`${baseUrl}/wp-json/wp/v2/${c.rest_base}?per_page=1&context=edit`, { headers: { Authorization: auth } });
+        if (!r.ok) continue;
+        const arr = await r.json();
+        const item = Array.isArray(arr) && arr[0];
+        if (!item) continue;
+        const acf = item.acf && typeof item.acf === 'object' && !Array.isArray(item.acf) ? item.acf : null;
+        const acfCount = acf ? Object.keys(acf).length : 0;
+        if (acfCount > 0) {
+          detected.push({
+            slug: c.rest_base,
+            name: c.name,
+            sample_id: item.id,
+            sample_title: (item.title && item.title.rendered) || c.name,
+            acf_fields_count: acfCount,
+            has_meta_link: false,
+          });
+        }
+      } catch (_) { /* skip */ }
+    }
+
+    // 3) Comprobar si los productos WC vienen vinculados a CPTs via _cpt_sync_source_id
+    let cptSyncEnabled = false;
+    let metaCptLevels = new Set();
+    try {
+      const wcAuth = buildAuthQS(creds);
+      const wpRes = await fetch(`${baseUrl}/wp-json/wc/v3/products?per_page=10&${wcAuth}`);
+      if (wpRes.ok) {
+        const wpProducts = await wpRes.json();
+        for (const p of wpProducts) {
+          const m = Array.isArray(p.meta_data) ? p.meta_data : [];
+          const lvl = m.find((x) => x.key === '_cpt_sync_level')?.value;
+          if (lvl) { cptSyncEnabled = true; metaCptLevels.add(lvl); }
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // 4) Si la WC tiene meta _cpt_sync_level, priorizamos esos slugs
+    let recommendedSlugs = detected.map((d) => d.slug);
+    if (cptSyncEnabled && metaCptLevels.size > 0) {
+      // priorizar los slugs encontrados en meta + intersección con detectados
+      const detectedSet = new Set(recommendedSlugs);
+      recommendedSlugs = [...metaCptLevels].filter((s) => detectedSet.has(s));
+      // si la intersección queda vacía, dejamos los detectados
+      if (recommendedSlugs.length === 0) recommendedSlugs = detected.map((d) => d.slug);
+    }
+
+    // 5) Aplicar: si user marca apply=true, guardamos cpt_endpoints y source_strategy
+    const apply = String(req.query.apply || req.body?.apply || '').toLowerCase() === 'true';
+    let applied = false;
+    if (apply && recommendedSlugs.length > 0) {
+      await query(
+        `UPDATE wc_credentials
+         SET cpt_endpoints = $1::jsonb,
+             source_strategy = 'wc_plus_cpt',
+             updated_at = NOW()
+         WHERE project_id = $2`,
+        [JSON.stringify(recommendedSlugs), projectId]
+      );
+      applied = true;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        detected,                       // CPTs encontrados con ACF
+        cpt_sync_enabled: cptSyncEnabled, // ¿WC viene con meta _cpt_sync_*?
+        meta_cpt_levels: [...metaCptLevels],
+        recommended_slugs: recommendedSlugs,
+        applied,                        // ¿se guardó cpt_endpoints + strategy?
+      },
+    });
+  } catch (e) { next(e); }
+};
+
 // PUT /api/woocommerce/mapping?projectId=X — guarda el mapeo configurable
 export const saveMapping = async (req, res, next) => {
   try {
