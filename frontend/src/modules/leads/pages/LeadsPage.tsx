@@ -617,12 +617,13 @@ export default function LeadsPage() {
           />
           <select
             value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency')}
+            onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
             aria-label="Ordenar leads"
             title="Orden de los leads en la tabla"
             className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
           >
+            <option value="recent_value">📅 Día reciente · más valor (default)</option>
             <option value="urgency">⚡ Urgencia (valor × frescura)</option>
             <option value="value">💰 Más valor primero</option>
             <option value="recent">🕒 Más recientes primero</option>

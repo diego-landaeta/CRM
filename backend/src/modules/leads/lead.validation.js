@@ -50,7 +50,7 @@ export const listLeadsSchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateFrom: YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
   // Orden: value (default), recent, urgency
-  sort: z.enum(['value', 'recent', 'urgency']).optional(),
+  sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }

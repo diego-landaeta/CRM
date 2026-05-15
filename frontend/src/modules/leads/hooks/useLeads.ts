@@ -15,7 +15,7 @@ const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; p
   multi: '',  // CSV de project ids (vacío = sólo proyecto activo)
   from: '',
   to: '',
-  sort: 'urgency',  // default: prioriza vencidos + valor*frescura
+  sort: 'recent_value',  // default: día más reciente arriba, dentro del día los caros primero
   page: 1,
 };
 
@@ -51,8 +51,8 @@ export interface UseLeadsResult {
   dateFrom: string;
   dateTo: string;
   setDateRange: (from: string, to: string) => void;
-  sortMode: 'value' | 'recent' | 'urgency';
-  setSortMode: (m: 'value' | 'recent' | 'urgency') => void;
+  sortMode: 'value' | 'recent' | 'urgency' | 'recent_value';
+  setSortMode: (m: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -80,7 +80,7 @@ export function useLeads(): UseLeadsResult {
   const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page } = urlFilters as {
     q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number;
   };
-  const sortMode = (['value', 'recent', 'urgency'].includes(sortRaw) ? sortRaw : 'urgency') as 'value' | 'recent' | 'urgency';
+  const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent_value') as 'value' | 'recent' | 'urgency' | 'recent_value';
   const selectedProjectIds: number[] = multiRaw
     ? multiRaw.split(',').map((x) => Number(x)).filter((x) => x > 0)
     : [];
@@ -92,7 +92,7 @@ export function useLeads(): UseLeadsResult {
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
   const setSelectedProjectIds = useCallback((ids: number[]) => setUrlFilters({ multi: ids.length ? ids.join(',') : '', page: 1 }), [setUrlFilters]);
   const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
-  const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
+  const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency' | 'recent_value') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });

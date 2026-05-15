@@ -264,13 +264,16 @@ export async function findLeadByIdempotencyKey(projectId, key) {
 // ============================================================
 
 // Calcula el ORDER BY segun la preferencia del usuario.
-// - 'value':    precio DESC, fecha DESC (default historico)
-// - 'recent':   fecha DESC (mas nuevos arriba, independiente del valor)
-// - 'urgency':  score combinado: vencidos primero, luego valor*frescura
-//   La frescura decae exponencialmente: leads de hoy valen 1, de hace 7 dias ~0.5
+// - 'recent_value': agrupa por DIA mas reciente y dentro de cada día por precio DESC (DEFAULT)
+// - 'value':    precio DESC, fecha DESC (siempre los caros arriba aunque sean viejos)
+// - 'recent':   fecha DESC sin importar precio
+// - 'urgency':  score combinado: vencidos primero, luego valor*frescura exp
 function buildOrderBy(sort) {
   if (sort === 'recent') {
     return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+  }
+  if (sort === 'value') {
+    return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
   }
   if (sort === 'urgency') {
     // Score: precio * exp(-edad_dias / 7). Asi un lead de 100 hoy supera a uno
@@ -281,8 +284,13 @@ function buildOrderBy(sort) {
       COALESCE(l.fecha_solicitud, l.created_at) DESC
     `;
   }
-  // default 'value'
-  return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+  // default 'recent_value' — los del DIA MAS RECIENTE arriba, dentro del dia los CAROS arriba.
+  // Trunca a fecha (sin hora) para que todos los leads del mismo dia compartan posición de "grupo".
+  return `
+    DATE(COALESCE(l.fecha_solicitud, l.created_at)) DESC,
+    COALESCE(prod.precio, 0) DESC NULLS LAST,
+    COALESCE(l.fecha_solicitud, l.created_at) DESC
+  `;
 }
 
 export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort }) {
