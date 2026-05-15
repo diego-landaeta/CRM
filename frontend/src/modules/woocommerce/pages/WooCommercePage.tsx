@@ -135,7 +135,8 @@ export default function WooCommercePage() {
     // primero para que el endpoint use credenciales actualizadas.
     setDiscovering(true);
     try {
-      await client.put(`/woocommerce/credentials?projectId=${activeProject.id}`, form);
+      // project_id va en el body, no sólo en query (el schema Zod lo exige)
+      await client.put('/woocommerce/credentials', { project_id: activeProject.id, ...form });
       const res = await client.post(`/woocommerce/auto-discover-cpts?projectId=${activeProject.id}`, { apply: true });
       if (res.success) {
         setDiscoverResult(res.data);

@@ -45,7 +45,11 @@ export const getCreds = async (req, res, next) => {
 export const upsertCreds = async (req, res, next) => {
   try {
     const parsed = credsSchema.safeParse(req.body);
-    if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    if (!parsed.success) {
+      const first = parsed.error.errors[0];
+      const fieldPath = first.path.join('.');
+      throw new AppError(`Campo inválido: ${fieldPath} — ${first.message}`, 400, 'VALIDATION_ERROR');
+    }
     const r = await model.upsertCreds(parsed.data.project_id, parsed.data);
     res.json({ success: true, data: { ...r, consumer_secret: '****' } });
   } catch (e) { next(e); }
