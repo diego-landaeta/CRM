@@ -760,7 +760,7 @@ export default function LeadsPage() {
                   {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
                 </>
               )}
-              {!loading && filteredLeads.map((lead) => {
+              {filteredLeads.map((lead) => {
                 const priority = getLeadPriority(lead);
                 const pStyle = getPriorityStyle(priority);
                 return (
@@ -876,7 +876,7 @@ export default function LeadsPage() {
                 </tr>
                 );
               })}
-              {!loading && filteredLeads.length === 0 && !error && (
+              {!loading && leads.length === 0 && filteredLeads.length === 0 && !error && (
                 <tr>
                   <td colSpan={showProjectColumn ? 13 : 12} className="px-5">
                     <EmptyState
@@ -898,7 +898,7 @@ export default function LeadsPage() {
               <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
             </div>
           )}
-          {!loading && filteredLeads.map((lead) => (
+          {filteredLeads.map((lead) => (
             <div
               key={lead.id}
               onClick={() => setDrawerLeadId(lead.id)}
@@ -931,7 +931,7 @@ export default function LeadsPage() {
               </div>
             </div>
           ))}
-          {!loading && filteredLeads.length === 0 && !error && (
+          {!loading && leads.length === 0 && filteredLeads.length === 0 && !error && (
             <EmptyState
               icon={Users}
               title="No se encontraron prospectos"

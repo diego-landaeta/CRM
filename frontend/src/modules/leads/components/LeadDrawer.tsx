@@ -10,6 +10,7 @@ import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useLeadDetail } from '../hooks/useLeads';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { detectCountryFromPhone } from '../lib/phoneCountry';
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -189,10 +190,21 @@ function ResumenTab({ lead, onEnroll }) {
         </div>
       )}
 
-      <DataRow label="Teléfono" value={lead.telefono ? <a href={`tel:${lead.telefono}`} className="text-primary hover:underline">{lead.telefono}</a> : '--'} />
+      <DataRow label="Teléfono" value={lead.telefono ? (() => {
+        const c = detectCountryFromPhone(lead.telefono);
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <a href={`tel:${lead.telefono}`} className="text-primary hover:underline">{lead.telefono}</a>
+            {c && <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground" title={`Detectado por prefijo +${c.prefix}`}>{c.flag} {c.name}</span>}
+          </span>
+        );
+      })() : '--'} />
       <DataRow label="Email" value={lead.email || '--'} />
-      <DataRow label="Producto interés" value={lead.producto_interes || '--'} />
-      <DataRow label="País" value={lead.pais || '--'} />
+      <DataRow label="Producto interés" value={lead.producto_interes || lead.producto_nombre || '--'} />
+      <DataRow label="País" value={lead.pais || (() => {
+        const c = detectCountryFromPhone(lead.telefono);
+        return c ? <span className="text-muted-foreground italic">{c.flag} {c.name} <span className="text-[10px]">(por teléfono)</span></span> : '--';
+      })()} />
       <DataRow label="Origen" value={lead.origen || '--'} />
       <DataRow label="Gestor" value={lead.responsable_nombre || lead.gestor || '--'} />
       <DataRow label="Creado" value={fmtDateTime(lead.created_at)} />
