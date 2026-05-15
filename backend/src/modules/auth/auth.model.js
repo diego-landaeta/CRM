@@ -23,7 +23,20 @@ export async function findUserById(id) {
   return rows[0] || null;
 }
 
-export async function getUserProjects(userId) {
+export async function getUserProjects(userId, role) {
+  // Superadmin/admin ven TODOS los proyectos activos automáticamente
+  // (sin necesidad de estar en user_projects). Esto evita que un proyecto
+  // recién creado no aparezca en el selector hasta asignarse manualmente.
+  if (role === 'superadmin' || role === 'admin') {
+    const { rows } = await query(
+      `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
+              p.modules, p.shortcuts, p.external_panels, p.sidebar_labels
+       FROM projects p
+       WHERE p.active = true
+       ORDER BY p.nombre`
+    );
+    return rows;
+  }
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key, p.logo_url,
             p.modules, p.shortcuts, p.external_panels, p.sidebar_labels

@@ -42,7 +42,7 @@ export async function login(email, password, ipAddress) {
     throw new AppError('Credenciales incorrectas', 401, 'INVALID_CREDENTIALS');
   }
 
-  const projects = await authModel.getUserProjects(user.id);
+  const projects = await authModel.getUserProjects(user.id, user.role);
   const activeProjectId = projects.length > 0 ? projects[0].id : null;
 
   const accessToken = generateAccessToken(user, activeProjectId);
@@ -97,7 +97,7 @@ export async function refresh(refreshToken) {
     throw new AppError('Usuario no encontrado o desactivado', 401, 'USER_INVALID');
   }
 
-  const projects = await authModel.getUserProjects(user.id);
+  const projects = await authModel.getUserProjects(user.id, user.role);
   const activeProjectId = projects.length > 0 ? projects[0].id : null;
 
   // Revocar token viejo y generar uno nuevo (rotacion)

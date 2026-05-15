@@ -122,7 +122,7 @@ export async function me(req, res, next) {
     }
 
     const [projects, permissions, view] = await Promise.all([
-      authModel.getUserProjects(user.id),
+      authModel.getUserProjects(user.id, user.role),
       buildPermissionsMap(user.id, user.role, user.custom_role_id),
       resolveUserView(user.id, user.role, user.custom_role_id),
     ]);
