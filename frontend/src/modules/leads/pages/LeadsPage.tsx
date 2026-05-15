@@ -50,6 +50,7 @@ import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import DateRangeFilter from '../components/DateRangeFilter';
+import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import QuickActions from '../components/QuickActions';
@@ -686,8 +687,15 @@ export default function LeadsPage() {
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
       </div>
 
-      {/* Leyenda de iconos de acción */}
+      {/* Leyenda de iconos de acción + badges */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground bg-muted/30 border border-border rounded-md px-3 py-1.5">
+        <span className="font-semibold text-foreground">Etiquetas:</span>
+        <LeadFlagBadge kind="reincidente" />
+        <LeadFlagBadge kind="duplicado" />
+        <LeadFlagBadge kind="propuesto" />
+        {user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" pulse={false} />}
+        <span className="text-[10px] italic">(pasa el ratón sobre cada etiqueta para ver qué significa)</span>
+        <span className="border-l border-border h-3 mx-1" />
         <span className="font-semibold text-foreground">Acciones rápidas:</span>
         <span className="inline-flex items-center gap-1"><WhatsappLogo size={13} weight="regular" className="text-green-600" /> WhatsApp</span>
         <span className="inline-flex items-center gap-1"><EnvelopeSimple size={13} weight="regular" /> Email + secuencia</span>
@@ -776,33 +784,15 @@ export default function LeadsPage() {
                         {getInitials(lead.nombre)}
                       </div>
                       <span className="font-semibold">{lead.nombre}</span>
-                      {lead.reincidente && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya preguntó por este producto antes">
-                          Reincidente
-                        </span>
-                      )}
-                      {lead.es_propuesto && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300" title="Propuesto: ya es cliente y pregunta por otro programa (cross-sell)">
-                          Propuesto
-                        </span>
-                      )}
-                      {lead.has_pending_spam_report && user?.role === 'superadmin' && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 animate-pulse" title="Una gestora reportó este lead como spam — revisa en Notificaciones">
-                          <Flag size={9} weight="fill" /> Marcado para revisión
-                        </span>
-                      )}
-                      {!lead.reincidente && lead.lead_duplicado_de && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Este email ya existe en el proyecto">
-                          Duplicado
-                        </span>
-                      )}
+                      {lead.reincidente && <LeadFlagBadge kind="reincidente" />}
+                      {lead.es_propuesto && <LeadFlagBadge kind="propuesto" />}
+                      {lead.has_pending_spam_report && user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" />}
+                      {!lead.reincidente && lead.lead_duplicado_de && <LeadFlagBadge kind="duplicado" />}
                       {lead.dias_inactivo != null &&
                        lead.dias_alerta_inactividad != null &&
                        lead.dias_inactivo > lead.dias_alerta_inactividad &&
                        !['convertido', 'no_interesado'].includes(lead.estado) && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} días`}>
-                          {lead.dias_inactivo}d
-                        </span>
+                        <LeadFlagBadge kind="inactivo" daysInactive={lead.dias_inactivo} />
                       )}
                     </div>
                   </td>
