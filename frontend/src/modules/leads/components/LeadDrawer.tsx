@@ -230,7 +230,7 @@ function DataRow({ label, value }) {
   return (
     <div className="flex justify-between items-baseline gap-3">
       <span className="text-xs text-muted-foreground flex-shrink-0">{label}</span>
-      <span className="text-sm text-right truncate">{value}</span>
+      <span className="text-sm text-right break-words min-w-0">{value}</span>
     </div>
   );
 }
