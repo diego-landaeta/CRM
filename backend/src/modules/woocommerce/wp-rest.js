@@ -40,40 +40,46 @@ async function getJson(url, auth, timeoutMs = 25000) {
  *
  * Devuelve { id, slug, link } o null.
  */
-export async function findSeoPageForProduct(product, baseUrl, user, pass) {
+export async function findSeoPageForProduct(product, baseUrl, user, pass, opts = {}) {
   if (!product || !product.slug) return null;
   const auth = basicHeader(user, pass);
-  const base = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages`;
+  const root = baseUrl.replace(/\/$/, '');
+  // Probamos en /pages + en cualquier CPT pasado en opts.cptEndpoints (ej. cursos,
+  // diplomados, masters). Esto es lo que arregla ICTESS: las landing ricas viven
+  // en CPTs, no en pages, así que sin esto el scraper caía al permalink WC vacío.
+  const types = ['pages', ...(Array.isArray(opts.cptEndpoints) ? opts.cptEndpoints : [])];
 
   // 1) Slug del product sin sufijo numérico tipo "-14121" o "-2105-2"
   const cleanSlug = product.slug.replace(/(-\d+)+$/, '');
-  if (cleanSlug !== product.slug) {
+
+  for (const type of types) {
+    const base = `${root}/wp-json/wp/v2/${type}`;
+    if (cleanSlug !== product.slug) {
+      try {
+        const arr = await getJson(`${base}?slug=${encodeURIComponent(cleanSlug)}&_fields=id,slug,link`, auth, 10000);
+        if (Array.isArray(arr) && arr.length > 0) {
+          return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link, type };
+        }
+      } catch (_) {}
+    }
     try {
-      const arr = await getJson(`${base}?slug=${encodeURIComponent(cleanSlug)}&_fields=id,slug,link`, auth, 10000);
+      const arr = await getJson(`${base}?slug=${encodeURIComponent(product.slug)}&_fields=id,slug,link`, auth, 10000);
       if (Array.isArray(arr) && arr.length > 0) {
-        return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link };
+        return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link, type };
       }
     } catch (_) {}
   }
 
-  // 2) Probar el slug exacto (por si la page tiene el mismo)
-  try {
-    const arr = await getJson(`${base}?slug=${encodeURIComponent(product.slug)}&_fields=id,slug,link`, auth, 10000);
-    if (Array.isArray(arr) && arr.length > 0) {
-      return { id: arr[0].id, slug: arr[0].slug, link: arr[0].link };
-    }
-  } catch (_) {}
-
-  // 3) Búsqueda por título
+  // 3) Búsqueda por título — solo en /pages (los CPTs custom no siempre indexan search)
   if (product.name) {
+    const base = `${root}/wp-json/wp/v2/pages`;
     const cleanTitle = String(product.name).replace(/^M[áa]ster\s+en\s+/i, '').replace(/^Curso\s+(?:de|en|sobre)\s+/i, '').slice(0, 80);
     try {
       const arr = await getJson(`${base}?search=${encodeURIComponent(cleanTitle)}&per_page=3&_fields=id,slug,link,title`, auth, 10000);
       if (Array.isArray(arr) && arr.length > 0) {
-        // Validar que tiene sentido: el slug de la page debe parecerse al del product
         const productCleanSlug = product.slug.replace(/(-\d+)+$/, '');
         const best = arr.find((p) => p.slug && (p.slug === productCleanSlug || p.slug.includes(productCleanSlug.split('-').slice(0, 4).join('-'))));
-        if (best) return { id: best.id, slug: best.slug, link: best.link };
+        if (best) return { id: best.id, slug: best.slug, link: best.link, type: 'pages' };
       }
     } catch (_) {}
   }

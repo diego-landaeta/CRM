@@ -417,18 +417,13 @@ function mapWcProduct(wp, categoryMap, defaultCurrency = 'EUR') {
   };
 }
 
-export const importNow = async (req, res, next) => {
-  try {
-    const projectId = pid(req);
-    const creds = await model.getCreds(projectId);
-    if (!creds || !creds.active) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
-    const run = await model.startRun(projectId, req.user.id);
-    res.json({ success: true, data: { run_id: run.id, status: 'running' } });
-
-    setImmediate(async () => {
+// Función reutilizable: ejecuta el import completo (categorías + productos +
+// scraper + CPT + menú). Usada por importNow (setImmediate) y por el scheduler
+// (wooCommerceSyncScheduler) para que ambos apliquen field_mapping y scraper.
+export async function runFullImport(creds, projectId, runId) {
       try {
         // 1. Sincronizar categorías primero
-        logger.info({ projectId, runId: run.id }, 'WC: descargando categorías');
+        logger.info({ projectId, runId }, 'WC: descargando categorías');
         const wcCategories = await fetchWcCategories(creds);
         const categoryMap = await syncCategories(projectId, wcCategories);
         logger.info({ projectId, count: wcCategories.length }, 'WC: categorías sincronizadas');
@@ -478,7 +473,9 @@ export const importNow = async (req, res, next) => {
           let scrapeSource = 'wc_permalink';
           if (scraperOn && creds.wp_user && creds.wp_app_password) {
             try {
-              const seoPage = await findSeoPageForProduct(wp, creds.store_url, creds.wp_user, creds.wp_app_password);
+              const seoPage = await findSeoPageForProduct(wp, creds.store_url, creds.wp_user, creds.wp_app_password, {
+                cptEndpoints: Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [],
+              });
               if (seoPage && seoPage.link && seoPage.link !== wp.permalink) {
                 urlToScrape = seoPage.link;
                 scrapeSource = `seo_page_id=${seoPage.id}`;
@@ -652,7 +649,7 @@ export const importNow = async (req, res, next) => {
           logger.warn({ err: e.message, projectId }, 'WC: pruneEmpty falló');
         }
 
-        await model.finishRun(run.id, {
+        await model.finishRun(runId, {
           status: 'success',
           total_fetched: wcProducts.length,
           total_created: created,
@@ -661,10 +658,20 @@ export const importNow = async (req, res, next) => {
         });
         logger.info({ projectId, created, updated, skipped, total: wcProducts.length, menu: menuStats }, 'WC import OK');
       } catch (err) {
-        logger.error({ err: err.message, runId: run.id }, 'WC import error');
-        await model.finishRun(run.id, { status: 'error', error_message: err.message?.slice(0, 1000) });
+        logger.error({ err: err.message, runId }, 'WC import error');
+        await model.finishRun(runId, { status: 'error', error_message: err.message?.slice(0, 1000) });
       }
-    });
+}
+
+// Endpoint que dispara runFullImport en background y responde inmediatamente
+export const importNow = async (req, res, next) => {
+  try {
+    const projectId = pid(req);
+    const creds = await model.getCreds(projectId);
+    if (!creds || !creds.active) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
+    const run = await model.startRun(projectId, req.user.id);
+    res.json({ success: true, data: { run_id: run.id, status: 'running' } });
+    setImmediate(() => runFullImport(creds, projectId, run.id));
   } catch (e) { next(e); }
 };
 
