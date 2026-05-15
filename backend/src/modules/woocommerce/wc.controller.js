@@ -804,18 +804,38 @@ export const previewWc = async (req, res, next) => {
     // Heurística por nombres conocidos del esquema iseih/psiko/fono.
     if (cptItem && cptItem.acf && typeof cptItem.acf === 'object') {
       const acf = cptItem.acf;
-      const sug = (target, key) => { if (!sugeridos[target] && acf[key] != null) sugeridos[target] = `cpt.acf.${key}`; };
-      sug('horas', 'horas');
-      if (!sugeridos.duracion) sugeridos.duracion = acf.duracion_ != null ? 'cpt.acf.duracion_' : (acf.duracion != null ? 'cpt.acf.duracion' : sugeridos.duracion);
-      if (!sugeridos.num_modulos) sugeridos.num_modulos = acf.modulos_ != null ? 'cpt.acf.modulos_' : (acf.modulos != null ? 'cpt.acf.modulos' : sugeridos.num_modulos);
-      if (!sugeridos.fecha_inicio_texto) sugeridos.fecha_inicio_texto = acf.fecha_de_inicio != null ? 'cpt.acf.fecha_de_inicio' : (acf.fecha_inicio != null ? 'cpt.acf.fecha_inicio' : sugeridos.fecha_inicio_texto);
-      sug('presentacion_texto', 'h2_presentacion');
-      sug('objetivos_texto', 'objetivos');
-      sug('por_que_estudiar_texto', 'texto_por_que_estudiar');
-      sug('dirigido_a_texto', 'textos_profesionales');
-      sug('modulos_texto', 'columna_1_modulos');
-      sug('beneficios_texto', 'beneficio_1_');
-      sug('faqs_texto', 'preguntas_faqs');
+      // Helper: lista paths de claves que existen, en orden dado.
+      const collect = (...keys) => keys.filter((k) => acf[k] != null && String(acf[k]).trim() !== '').map((k) => `cpt.acf.${k}`);
+      // Detecta automáticamente todas las claves con prefijo dado (ej: beneficio_1, beneficio_2, ...)
+      const collectByPrefix = (prefix, suffixesAllowed = ['', '_']) => {
+        const keys = Object.keys(acf).filter((k) => {
+          if (!k.startsWith(prefix)) return false;
+          const rest = k.slice(prefix.length);
+          // permitido vacío, o número, o número+suffix (_)
+          return /^_?\d*_?$/.test(rest);
+        }).sort();
+        return keys.filter((k) => acf[k] != null && String(acf[k]).trim() !== '').map((k) => `cpt.acf.${k}`);
+      };
+
+      const setSug = (target, paths) => {
+        if (sugeridos[target] || paths.length === 0) return;
+        sugeridos[target] = paths.length === 1 ? paths[0] : paths;
+      };
+
+      setSug('horas', collect('horas'));
+      setSug('duracion', collect('duracion_', 'duracion'));
+      setSug('num_modulos', collect('modulos_', 'modulos'));
+      setSug('fecha_inicio_texto', collect('fecha_de_inicio', 'fecha_inicio'));
+      setSug('presentacion_texto', collect('h2_presentacion'));
+      setSug('objetivos_texto', collect('objetivos'));
+      setSug('por_que_estudiar_texto', collect('texto_por_que_estudiar'));
+      setSug('dirigido_a_texto', collect('textos_profesionales', 'encabezados_profesionales_a_quien_esta_dirigido'));
+      // Módulos: si hay columna_1 + columna_2 (caso ISEIH masters), concatenar.
+      setSug('modulos_texto', collect('columna_1_modulos', 'columna_2_modulos_', 'columna_2_modulos'));
+      // Beneficios: detecta beneficio_1, beneficio_2, beneficio_3... y concatena.
+      setSug('beneficios_texto', collectByPrefix('beneficio'));
+      // FAQs: pares pregunta+respuesta vienen en preguntas_faqs (objeto)
+      setSug('faqs_texto', collect('preguntas_faqs'));
     }
 
     // Vista previa del mapping aplicado
@@ -968,10 +988,23 @@ function resolveMappingPath(path, item, scraped, cpt) {
 function applyMappingWithScraper(item, scraped, mapping, cpt) {
   const out = {};
   for (const [crmField, source] of Object.entries(mapping || {})) {
-    const path = typeof source === 'string' ? source : source?.source;
-    if (!path) continue;
-    const v = resolveMappingPath(path, item, scraped, cpt);
-    if (v !== undefined && v !== null) out[crmField] = v;
+    // El source puede ser:
+    //  - string: una sola ruta. Resuelve normal.
+    //  - string[]: lista de rutas. Las resuelve todas y las concatena con \n\n.
+    //    Útil cuando el CPT divide un mismo bloque en columna_1_* / columna_2_*.
+    //  - { source: ... }: forma legacy, soporta string o array igual.
+    let paths;
+    if (Array.isArray(source)) paths = source;
+    else if (typeof source === 'string') paths = [source];
+    else if (source && typeof source === 'object') {
+      paths = Array.isArray(source.source) ? source.source : (source.source ? [source.source] : []);
+    } else continue;
+
+    const values = paths
+      .map((p) => resolveMappingPath(p, item, scraped, cpt))
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '');
+    if (values.length === 0) continue;
+    out[crmField] = values.length === 1 ? values[0] : values.map(String).join('\n\n');
   }
   return out;
 }

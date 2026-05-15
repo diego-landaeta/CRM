@@ -92,14 +92,17 @@ interface CptSchema {
   acf_fields: Array<{ path: string; label: string; type: string; sample: string | null }>;
 }
 
+// Una fuente de mapping puede ser un string (path único) o array de strings (concatenadas con \n\n).
+type MappingSource = string | string[];
+
 interface WooPreview {
   count: number;
   sample: any[];
   schema?: SchemaItem[];
   scraped?: ScrapedData | null;
   targets?: TargetField[];
-  sugeridos?: Record<string, string>;
-  current_mapping?: Record<string, string>;
+  sugeridos?: Record<string, MappingSource>;
+  current_mapping?: Record<string, MappingSource>;
   mapped_preview?: Record<string, any>;
   cpt?: CptSchema | null;
 }
@@ -122,7 +125,7 @@ export default function WooCommercePage() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [previewData, setPreviewData] = useState<WooPreview | null>(null);
-  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [mapping, setMapping] = useState<Record<string, MappingSource>>({});
   const [savingMapping, setSavingMapping] = useState(false);
   const reloadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -218,11 +221,35 @@ export default function WooCommercePage() {
     }
   }
 
+  // Reemplaza la lista entera de fuentes para un campo (compat).
   function updateMapping(crmField: string, sourcePath: string) {
     setMapping((prev) => {
       const next = { ...prev };
       if (sourcePath) next[crmField] = sourcePath;
       else delete next[crmField];
+      return next;
+    });
+  }
+  // Añade una fuente extra a un campo (resultado: array, se concatena con \n\n).
+  function addMappingSource(crmField: string, sourcePath: string) {
+    if (!sourcePath) return;
+    setMapping((prev) => {
+      const cur = prev[crmField];
+      const arr = Array.isArray(cur) ? [...cur] : (cur ? [cur] : []);
+      if (arr.includes(sourcePath)) return prev;
+      arr.push(sourcePath);
+      return { ...prev, [crmField]: arr };
+    });
+  }
+  // Quita una fuente concreta de un campo (si queda 1, se vuelve string).
+  function removeMappingSource(crmField: string, sourcePath: string) {
+    setMapping((prev) => {
+      const cur = prev[crmField];
+      const arr = Array.isArray(cur) ? cur.filter((s) => s !== sourcePath) : (cur === sourcePath ? [] : (cur ? [cur] : []));
+      const next = { ...prev };
+      if (arr.length === 0) delete next[crmField];
+      else if (arr.length === 1) next[crmField] = arr[0];
+      else next[crmField] = arr;
       return next;
     });
   }
@@ -492,18 +519,37 @@ export default function WooCommercePage() {
                 <h4 className="text-[11px] font-bold uppercase text-muted-foreground mb-2">{group}</h4>
                 <div className="space-y-1.5">
                   {previewData.targets!.filter(t => t.group === group && t.type !== 'array_subfield' && t.type !== 'wildcard_object').map((target) => {
-                    const currentSource = mapping[target.key] || '';
+                    const cur = mapping[target.key];
+                    const sourcesArr: string[] = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+                    const isMulti = sourcesArr.length > 1;
                     const previewVal = previewData.mapped_preview?.[target.key];
                     return (
-                      <div key={target.key} className="grid grid-cols-1 md:grid-cols-[180px_1fr_200px] gap-2 items-center text-xs">
-                        <label className="font-medium flex items-center gap-1">
+                      <div key={target.key} className="grid grid-cols-1 md:grid-cols-[180px_1fr_200px] gap-2 items-start text-xs">
+                        <label className="font-medium flex items-center gap-1 pt-2">
                           {target.label}
                           {target.required && <span className="text-red-500">*</span>}
                           <span className="text-muted-foreground font-mono ml-1">({target.key})</span>
                         </label>
+                        <div className="space-y-1.5">
+                          {isMulti && (
+                            <div className="flex flex-wrap gap-1 mb-1">
+                              {sourcesArr.map((s) => (
+                                <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-mono border border-primary/20">
+                                  {s.replace(/^cpt\.acf\./, 'acf.').replace(/^scraper\./, 'scr.')}
+                                  <button type="button" onClick={() => removeMappingSource(target.key, s)}
+                                    className="hover:bg-primary/20 rounded p-0.5" title="Quitar esta fuente">×</button>
+                                </span>
+                              ))}
+                              <span className="text-[10px] text-muted-foreground italic self-center">→ se concatenan con doble salto de línea</span>
+                            </div>
+                          )}
                         <select
-                          value={currentSource}
-                          onChange={(e) => updateMapping(target.key, e.target.value)}
+                          value={isMulti ? '' : (sourcesArr[0] || '')}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (isMulti) { addMappingSource(target.key, v); }
+                            else { updateMapping(target.key, v); }
+                          }}
                           className="h-9 px-2 rounded-md border border-border bg-muted/30 text-xs"
                         >
                           <option value="">— No mapear —</option>
@@ -577,9 +623,21 @@ export default function WooCommercePage() {
                             </optgroup>
                           )}
                         </select>
-                        <div className="text-muted-foreground truncate font-mono text-[11px]" title={String(previewVal ?? '')}>
+                        {sourcesArr.length > 0 && (
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            {isMulti ? '↑ elige otra para añadir y se concatenará al final' : 'Tip: para concatenar varios campos, vuelve a elegir otro y se añadirá como segunda fuente.'}
+                            {!isMulti && (
+                              <button type="button" onClick={() => addMappingSource(target.key, sourcesArr[0])}
+                                className="ml-2 underline hover:text-foreground">
+                                + añadir 2ª fuente
+                              </button>
+                            )}
+                          </p>
+                        )}
+                        </div>
+                        <div className="text-muted-foreground truncate font-mono text-[11px] pt-2" title={String(previewVal ?? '')}>
                           {previewVal !== undefined && previewVal !== null
-                            ? `→ ${String(previewVal).slice(0, 60)}`
+                            ? `→ ${String(previewVal).slice(0, 60)}${isMulti ? ` (concat ${sourcesArr.length})` : ''}`
                             : <span className="italic">sin valor</span>}
                         </div>
                       </div>
