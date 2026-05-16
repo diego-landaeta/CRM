@@ -6,9 +6,10 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import {
-  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple,
+  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash,
 } from '@phosphor-icons/react';
 import type { Client } from '@/shared/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 function exportCSV(clients: Client[], filename: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
@@ -37,6 +38,7 @@ function exportCSV(clients: Client[], filename: string): void {
 import { toast } from '@/shared/hooks/useToast';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
+const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
 function fmt(n: number | string): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -63,9 +65,10 @@ function cleanPhone(phone: string | null | undefined): string {
 interface QuickActionsProps {
   client: Client;
   onUpsell?: (c: Client) => void;
+  onDelete?: (c: Client) => void;
 }
 
-function QuickActions({ client: c, onUpsell }: QuickActionsProps) {
+function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
   const wa = c.telefono ? cleanPhone(c.telefono) : null;
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
@@ -87,12 +90,20 @@ function QuickActions({ client: c, onUpsell }: QuickActionsProps) {
           <ShoppingCart size={14} weight="regular" />
         </button>
       )}
+      {onDelete && (
+        <button onClick={() => onDelete(c)} title="Eliminar cliente (soft delete)" aria-label="Eliminar cliente"
+          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400/40">
+          <Trash size={14} weight="regular" />
+        </button>
+      )}
     </div>
   );
 }
 
 export default function ClientsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuperadmin = user?.role === 'superadmin';
   const { activeProject, projects, isAllProjects } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
     projects: Array<{ id: number }>;
@@ -154,9 +165,14 @@ export default function ClientsPage() {
   const totalPendiente = filtered.reduce((s, c) => s + Number(c.pendiente), 0);
 
   const [upsellLead, setUpsellLead] = useState<Client | null>(null);
+  const [deleteClient, setDeleteClient] = useState<Client | null>(null);
 
   function handleUpsell(c: Client): void {
     setUpsellLead(c);
+  }
+
+  function handleDelete(c: Client): void {
+    setDeleteClient(c);
   }
 
   async function handleUpsellCreated() {
@@ -272,7 +288,7 @@ export default function ClientsPage() {
                         {c.last_interaction_at ? formatRelative(c.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
                       </td>
                       <td className="px-4 py-3 text-right pr-3">
-                        <QuickActions client={c} onUpsell={handleUpsell} />
+                        <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
                       </td>
                     </tr>
                   ))}
@@ -312,7 +328,7 @@ export default function ClientsPage() {
                       {c.ultima_compra && <span className="text-muted-foreground">Compra: <span className="text-foreground">{formatRelative(c.ultima_compra)}</span></span>}
                       {c.last_interaction_at && <span className="text-muted-foreground">Contacto: <span className="text-foreground">{formatRelative(c.last_interaction_at)}</span></span>}
                     </div>
-                    <QuickActions client={c} onUpsell={handleUpsell} />
+                    <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
                   </div>
                 </div>
               ))}
@@ -329,6 +345,20 @@ export default function ClientsPage() {
           lead={upsellLead}
           projectId={activeProject?.id}
           onCreated={handleUpsellCreated}
+        />
+      </Suspense>
+
+      {/* Soft delete (solo superadmin) — reusa el mismo dialog que ficha de lead */}
+      <Suspense fallback={null}>
+        <SoftDeleteDialog
+          open={!!deleteClient}
+          lead={deleteClient}
+          onClose={() => setDeleteClient(null)}
+          onDeleted={() => {
+            setClients((prev) => prev.filter((x) => x.id !== deleteClient?.id));
+            setDeleteClient(null);
+            toast({ title: 'Cliente eliminado' });
+          }}
         />
       </Suspense>
     </div>
