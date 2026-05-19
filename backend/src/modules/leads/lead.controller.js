@@ -55,6 +55,23 @@ export async function list(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/leads/lookup-by-email?email=X&projectId=Y
+// Devuelve metadata MÍNIMA (id, nombre, email, status, responsable_nombre)
+// de leads con ese email en el proyecto. Bypassea el filtro RBAC de gestor
+// porque el objetivo es informativo (detección de duplicados).
+export async function lookupByEmail(req, res, next) {
+  try {
+    const email = (req.query.email || '').toLowerCase().trim();
+    const projectId = parseInt(req.query.projectId);
+    if (!email || !email.includes('@')) {
+      return res.json({ success: true, data: [] });
+    }
+    if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    const data = await leadService.lookupByEmail(email, projectId);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
@@ -222,6 +239,30 @@ export async function softDelete(req, res, next) {
     const reason = (req.body?.reason || 'otro').toLowerCase();
     const motivo = req.body?.motivo || null;
     const result = await leadService.softDelete(id, { reason, motivo, userId: req.user.userId });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// POST /api/leads/:id/merge   { loser_id, comment }
+// Fusiona dos leads del mismo proyecto. :id es el WINNER (queda activo).
+// loser_id es el lead que se borra (soft) tras mover su historial.
+// Permisos: gestor + admin + superadmin. Comentario obligatorio (auditoría).
+export async function mergeLeads(req, res, next) {
+  try {
+    const winnerId = parseInt(req.params.id);
+    const loserId = parseInt(req.body?.loser_id);
+    const comment = (req.body?.comment || '').trim();
+    if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
+    if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
+
+    // Si el solicitante es gestor, debe ser dueño del winner
+    if (req.user.role === 'gestor') {
+      const w = await leadService.getById(winnerId);
+      if (!w || w.responsable_id !== req.user.userId) {
+        throw new AppError('Solo puedes fusionar leads asignados a ti', 403, 'FORBIDDEN_LEAD');
+      }
+    }
+    const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
@@ -27,6 +28,8 @@ interface DuplicateLead {
   status?: string;
   estado?: string;
   created_at: string;
+  responsable_id?: number | null;
+  responsable_nombre?: string | null;
 }
 
 interface Props {
@@ -73,6 +76,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     if (!open) setPickedProjectId(null);
   }, [open]);
 
+  const { user } = useAuth() as any;
+  const isGestor = user?.role === 'gestor';
   const { products, refetch: refetchProducts } = useProducts(effectiveProjectId);
   const isEdit = !!lead;
   const productoLabel = (effectiveProject as any)?.producto_label || 'Producto';
@@ -128,14 +133,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     }
   }, [open, lead, reset]);
 
-  // Deteccion de duplicado debounce
+  // Deteccion de duplicado debounce.
+  // Usa /leads/lookup-by-email que IGNORA el filtro RBAC de gestor para
+  // que pueda detectar duplicados aunque el lead pertenezca a otra asesora.
   const checkDuplicates = useCallback(async (email: string | undefined): Promise<void> => {
     if (!email || !email.includes('@') || !effectiveProjectId || isEdit) { setDuplicates([]); return; }
     try {
-      const res = await client.get(`/leads?projectId=${effectiveProjectId}&search=${encodeURIComponent(email)}&limit=5`);
+      const res = await client.get(`/leads/lookup-by-email?email=${encodeURIComponent(email)}&projectId=${effectiveProjectId}`);
       if (res.success) {
-        const matches = ((res.data as DuplicateLead[]) || []).filter((l) => (l.email || '').toLowerCase() === email.toLowerCase());
-        setDuplicates(matches);
+        setDuplicates((res.data as DuplicateLead[]) || []);
       }
     } catch { setDuplicates([]); }
   }, [effectiveProjectId, isEdit]);
@@ -212,13 +218,31 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
                     Ya existe {duplicates.length} lead{duplicates.length > 1 ? 's' : ''} con ese email
                   </p>
-                  {duplicates.slice(0, 3).map(d => (
-                    <a key={d.id} href={`/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
-                    >
-                      <LinkIcon size={10} /> {d.nombre} — {d.status || d.estado} — {new Date(d.created_at).toLocaleDateString('es-ES')}
-                    </a>
-                  ))}
+                  {duplicates.slice(0, 3).map(d => {
+                    // Gestor solo puede abrir leads asignados a él/ella.
+                    // Si es de otra gestora, mostramos info pero sin link clicable.
+                    const isMine = !isGestor || d.responsable_id === user?.id;
+                    const responsableLabel = d.responsable_nombre || 'Sin asignar';
+                    const inner = (
+                      <>
+                        <LinkIcon size={10} /> {d.nombre} — {d.status || d.estado} — Asignado a <strong>{responsableLabel}</strong> — {new Date(d.created_at).toLocaleDateString('es-ES')}
+                      </>
+                    );
+                    return isMine ? (
+                      <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
+                      >{inner}</a>
+                    ) : (
+                      <div key={d.id} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
+                        title="Este lead pertenece a otra asesora — contacta con ella para coordinar"
+                      >{inner}</div>
+                    );
+                  })}
+                  {isGestor && duplicates.some(d => d.responsable_id !== user?.id) && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 italic">
+                      Hay duplicados asignados a otras asesoras. Coordina con ellas antes de crear un registro nuevo.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

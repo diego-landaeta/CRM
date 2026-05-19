@@ -1,18 +1,23 @@
+import { useState, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CaretRight, Lightning, WarningCircle, Link as LinkIcon } from '@phosphor-icons/react';
+import { ArrowLeft, CaretRight, Lightning, WarningCircle, Link as LinkIcon, GitMerge } from '@phosphor-icons/react';
 import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
 import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
+
+const MergeLeadDialog = lazy(() => import('../MergeLeadDialog'));
 
 interface LeadHeaderCardProps {
   lead: Lead;
   isAdmin: boolean;
   onReassign: () => void;
   onBack: () => void;
+  onMerged?: () => void;
 }
 
-export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: LeadHeaderCardProps) {
+export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMerged }: LeadHeaderCardProps) {
+  const [mergeOpen, setMergeOpen] = useState(false);
   return (
     <>
       {lead.lead_duplicado_de && (
@@ -66,6 +71,14 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
               </button>
             )}
             <button
+              onClick={() => setMergeOpen(true)}
+              aria-label="Fusionar duplicado"
+              title="Fusionar con otro lead duplicado"
+              className="h-9 px-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors flex items-center gap-2"
+            >
+              <GitMerge size={14} weight="bold" /> <span className="hidden sm:inline">Fusionar</span>
+            </button>
+            <button
               onClick={onBack}
               aria-label="Volver a prospectos"
               className="h-9 px-3 rounded-lg border border-border bg-secondary text-sm font-medium hover:bg-muted transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
@@ -76,6 +89,16 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
           </div>
         </div>
       </div>
+
+      <Suspense fallback={null}>
+        <MergeLeadDialog
+          open={mergeOpen}
+          winner={{ id: lead.id, nombre: lead.nombre, email: lead.email }}
+          projectId={(lead as any).project_id || null}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => { setMergeOpen(false); onMerged?.(); }}
+        />
+      </Suspense>
     </>
   );
 }

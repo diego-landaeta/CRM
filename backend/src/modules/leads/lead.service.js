@@ -369,6 +369,36 @@ export async function reassignPending(projectId) {
   return await leadModel.reassignPendingRoundRobin(projectId);
 }
 
+// Fusiona dos leads (winner + loser). Validaciones de negocio antes de llamar al model.
+export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+  if (!comment || comment.trim().length < 3) {
+    throw new AppError('Comentario obligatorio para auditoría', 400, 'COMMENT_REQUIRED');
+  }
+  try {
+    return await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+  } catch (err) {
+    throw new AppError(err.message || 'Error en fusión', 400, 'MERGE_FAILED');
+  }
+}
+
+// Lookup público: devuelve leads con ese email en el proyecto, sólo metadata
+// segura para mostrar a un gestor (sin acceso a contenido sensible).
+export async function lookupByEmail(email, projectId) {
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.status, l.created_at, l.responsable_id,
+            u.nombre AS responsable_nombre
+     FROM leads l
+     LEFT JOIN users u ON u.id = l.responsable_id
+     WHERE l.project_id = $1
+       AND LOWER(l.email) = $2
+       AND l.deleted_at IS NULL
+     ORDER BY l.created_at DESC
+     LIMIT 5`,
+    [projectId, email]
+  );
+  return rows;
+}
+
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
   // Detectar duplicado solo si tiene email (sin email no podemos buscar dupe fiable)

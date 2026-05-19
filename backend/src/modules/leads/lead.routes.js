@@ -20,6 +20,10 @@ router.use(verifyToken);
 router.get('/', leadController.list);
 router.get('/stats', leadController.stats);
 router.get('/today', leadController.today);
+// Lookup público para gestores: devuelve metadata mínima de leads con el
+// email indicado, ignorando el RBAC de listado normal. Para que un gestor
+// pueda detectar duplicados de leads que pertenecen a otra asesora.
+router.get('/lookup-by-email', leadController.lookupByEmail);
 
 // Spam reports: rutas estáticas ANTES de /:id para que no las absorba
 router.get('/spam-reports', roleGuard('superadmin'), spamReportController.listPending);
@@ -27,6 +31,7 @@ router.get('/spam-reports/count', roleGuard('superadmin'), spamReportController.
 router.patch('/spam-reports/:reportId', roleGuard('superadmin'), spamReportController.resolveReport);
 
 router.get('/:id', leadController.getById);
+router.post('/:id/merge', leadController.mergeLeads);
 
 // Creacion manual (formulario interno)
 router.post('/', leadController.createManual);

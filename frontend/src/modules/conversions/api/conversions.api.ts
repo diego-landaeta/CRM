@@ -82,6 +82,20 @@ export const conversionsApi = {
     },
   ): Promise<ApiResponse<unknown>> =>
     client.post(`/conversions/${id}/installments/generate`, data),
+  listInstallments: (id: number): Promise<ApiResponse<any[]>> =>
+    client.get(`/conversions/${id}/installments`),
+  payInstallment: (
+    instId: number,
+    data: { importe_cobrado: number; fecha_cobro?: string; metodo_pago?: string | null; notas?: string | null },
+  ): Promise<ApiResponse<any>> =>
+    client.post(`/conversions/installments/${instId}/pay`, data),
+  updateInstallment: (
+    instId: number,
+    data: { importe_previsto?: number; fecha_vencimiento?: string },
+  ): Promise<ApiResponse<any>> =>
+    client.patch(`/conversions/installments/${instId}`, data),
+  deleteInstallment: (instId: number): Promise<ApiResponse<void>> =>
+    client.delete(`/conversions/installments/${instId}`),
 
   // Devoluciones (FASE DE PRUEBA)
   listRefunds: (conversionId: number): Promise<ApiResponse<Refund[]>> =>

@@ -86,6 +86,73 @@ export async function softDeleteLead(leadId, { reason, motivo, userId }) {
   return rows[0] || null;
 }
 
+// Fusiona dos leads: mueve TODO el historial del loser al winner,
+// marca al loser como duplicado_de y lo soft-deletea con motivo=comentario.
+// Devuelve resumen { moved: {...counts}, winner_id, loser_id }.
+export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+  const { getClient } = await import('../../shared/config/db.js');
+  const c = await getClient();
+  try {
+    await c.query('BEGIN');
+
+    // Verificar que ambos existen, mismo proyecto, y ninguno borrado
+    const lw = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [winnerId]);
+    const ll = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [loserId]);
+    if (!lw.rows[0] || !ll.rows[0]) throw new Error('Lead no encontrado');
+    if (lw.rows[0].project_id !== ll.rows[0].project_id) throw new Error('Los leads pertenecen a proyectos distintos');
+    if (lw.rows[0].deleted_at || ll.rows[0].deleted_at) throw new Error('No se pueden fusionar leads eliminados');
+    if (winnerId === loserId) throw new Error('No se puede fusionar un lead consigo mismo');
+
+    // Mover hijos. Cada UPDATE devuelve count.
+    const counts = {};
+    const moveTables = [
+      'lead_interactions', 'lead_reminders', 'lead_utms',
+      'lead_status_history', 'conversions', 'matriculas',
+      'email_sequence_runs', 'lead_emails',
+    ];
+    for (const t of moveTables) {
+      try {
+        const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, loserId]);
+        counts[t] = r.rowCount;
+      } catch (err) {
+        // Tabla puede no existir en este entorno — ignoramos
+        if (err.code !== '42P01') throw err;
+        counts[t] = 'skipped';
+      }
+    }
+
+    // Apuntar lead_duplicado_de del loser al winner (auditoría)
+    await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, loserId]);
+
+    // Insertar nota en el winner con el comentario
+    await c.query(
+      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+       VALUES ($1, 'nota', $2, $3, NOW())`,
+      [winnerId, `Fusión con lead #${loserId} (${ll.rows[0].nombre}). Comentario: ${comment}`, userId]
+    );
+
+    // Soft-delete del loser
+    await c.query(
+      `UPDATE leads
+       SET deleted_at = NOW(),
+           deleted_reason = 'duplicado_manual',
+           deleted_motivo = $1,
+           deleted_by = $2,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [`Fusionado en lead #${winnerId}. ${comment}`, userId, loserId]
+    );
+
+    await c.query('COMMIT');
+    return { winner_id: winnerId, loser_id: loserId, moved: counts };
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally {
+    c.release();
+  }
+}
+
 export async function restoreLead(leadId) {
   const { rows } = await query(
     `UPDATE leads

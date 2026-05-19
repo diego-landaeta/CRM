@@ -4,7 +4,8 @@ import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
 import RefundDialog from './RefundDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react';
+import InstallmentsDialog from './InstallmentsDialog';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
@@ -27,6 +28,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogConv, setPaymentDialogConv] = useState<Conversion | null>(null);
   const [refundDialogConv, setRefundDialogConv] = useState<Conversion | null>(null);
+  const [installmentsDialogConv, setInstallmentsDialogConv] = useState<Conversion | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
@@ -195,6 +197,14 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                           Abonar
                         </button>
                       )}
+                      <button
+                        onClick={() => setInstallmentsDialogConv(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300 text-xs font-semibold hover:bg-violet-200 dark:hover:bg-violet-950/60"
+                        title={c.metodo_pago === 'fraccionado' ? 'Ver/editar cuotas' : 'Convertir a fraccionado'}
+                      >
+                        <Coins size={14} weight="bold" />
+                        {c.metodo_pago === 'fraccionado' ? 'Cuotas' : 'Fraccionar'}
+                      </button>
                       {Number(c.importe_pagado) > 0 && (
                         <button
                           onClick={() => setRefundDialogConv(c)}
@@ -306,6 +316,11 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       />
       <ConfirmDialog open={pendingPayment !== null} title="¿Eliminar pago?" message="Se recalculará el total de la conversión." onConfirm={doDeletePayment} onCancel={() => setPendingPayment(null)} />
       <ConfirmDialog open={pendingConversion !== null} title="¿Eliminar conversión?" message="Se eliminarán todos sus pagos. Esta acción no se puede deshacer." onConfirm={doDeleteConversion} onCancel={() => setPendingConversion(null)} />
+      <InstallmentsDialog
+        conversion={installmentsDialogConv}
+        onClose={() => setInstallmentsDialogConv(null)}
+        onSaved={() => load()}
+      />
     </div>
   );
 }
