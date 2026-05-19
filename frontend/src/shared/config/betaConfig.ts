@@ -27,6 +27,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/woocommerce',            // WC import (parte de Productos)
   '/forms',                  // Captación: Formularios
   '/webhooks',               // Captación: Webhooks
+  '/make-webhooks',          // Captación: Make
   '/notificaciones',         // Sistema básico
   '/preferences',            // Mis preferencias
   '/profile',                // Perfil

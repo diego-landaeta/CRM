@@ -90,6 +90,7 @@ const NAV_SECTIONS = [
         children: [
           { label: 'Formularios', to: '/forms', roles: ['superadmin', 'admin'] },
           { label: 'Webhooks', to: '/webhooks', roles: ['superadmin', 'admin'] },
+          { label: 'Make', to: '/make-webhooks', roles: ['superadmin', 'admin'] },
         ],
       },
       {

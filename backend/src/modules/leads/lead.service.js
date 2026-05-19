@@ -49,7 +49,23 @@ export async function processWebhook(slug, apiKey, leadData) {
   const project = await leadModel.findProjectBySlug(slug);
   if (!project) throw new AppError('Proyecto no encontrado', 404, 'PROJECT_NOT_FOUND');
   if (project.webhook_api_key !== apiKey) throw new AppError('API key invalida', 401, 'INVALID_API_KEY');
+  return _createLeadCore(project, leadData);
+}
 
+// Entrypoint para webhooks externos que YA validaron su propio secret
+// (ej. Make webhooks, Meta Lead Ads). Reutiliza toda la lógica de
+// dedupe/spam/round-robin sin requerir el webhook_api_key del proyecto.
+export async function createFromExternalWebhook(projectId, leadData, _opts = {}) {
+  const { rows } = await query(
+    `SELECT id, nombre, slug, webhook_api_key FROM projects WHERE id = $1 AND active = true`,
+    [projectId]
+  );
+  const project = rows[0];
+  if (!project) throw new AppError('Proyecto no encontrado o inactivo', 404, 'PROJECT_NOT_FOUND');
+  return _createLeadCore(project, leadData);
+}
+
+async function _createLeadCore(project, leadData) {
   // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
   // el lead que ya creamos en lugar de duplicar.
   if (leadData.idempotency_key) {

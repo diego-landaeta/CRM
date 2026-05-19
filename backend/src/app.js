@@ -37,6 +37,7 @@ import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
 import connectorsModule from './modules/connectors/index.js';
+import makeModule from './modules/make/index.js';
 import statusModule from './modules/status/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -119,6 +120,7 @@ const ALL_MODULES = [
   { name: 'project-channels', mod: projectChannelsModule },
   { name: 'permissions', mod: permissionsModule },
   { name: 'connectors', mod: connectorsModule },
+  { name: 'make', mod: makeModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
@@ -147,6 +149,11 @@ for (const { name, mod } of ALL_MODULES) {
   }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
+  // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
+  if (mod.publicMount) {
+    app.use(mod.publicMount.prefix, mod.publicMount.router);
+    logger.info(`Modulo registrado (public): ${mod.publicMount.prefix}`);
+  }
 }
 
 // Error handler (debe ir ultimo)

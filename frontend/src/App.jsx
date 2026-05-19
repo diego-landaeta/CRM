@@ -117,6 +117,8 @@ const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/Em
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
 const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDetailPage'));
+const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
+const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
@@ -176,6 +178,8 @@ function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/webhooks/:id" element={<WebhookDetailPage />} />
+          <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
+          <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
