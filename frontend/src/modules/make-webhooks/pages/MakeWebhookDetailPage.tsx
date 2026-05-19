@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Copy, ArrowsClockwise, Trash, Plus, X, PaperPlaneTilt,
+  ArrowLeft, Copy, ArrowsClockwise, Trash, Plus, X, PaperPlaneTilt, PencilSimple,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -71,6 +71,8 @@ export default function MakeWebhookDetailPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [labelDraft, setLabelDraft] = useState('');
+  const [savingLabel, setSavingLabel] = useState(false);
   const [newField, setNewField] = useState('');
   const [showSecret, setShowSecret] = useState(false);
 
@@ -84,6 +86,7 @@ export default function MakeWebhookDetailPage() {
       if (r1.success) {
         setHook(r1.data);
         setMapping(r1.data.field_mapping || {});
+        setLabelDraft(r1.data.label || '');
       }
       if (r2.success) setDeliveries(r2.data || []);
     } catch (err: any) {
@@ -103,6 +106,20 @@ export default function MakeWebhookDetailPage() {
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     }
+  }
+
+  async function saveLabel() {
+    if (!labelDraft.trim() || labelDraft === hook?.label) return;
+    setSavingLabel(true);
+    try {
+      const res = await client.patch(`/make-webhooks/${id}`, { label: labelDraft.trim() });
+      if (res.success) {
+        toast({ title: 'Nombre guardado' });
+        await load();
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    } finally { setSavingLabel(false); }
   }
 
   async function changeMode(mode: 'test' | 'active') {
@@ -153,17 +170,30 @@ export default function MakeWebhookDetailPage() {
         <ArrowLeft size={14} /> Volver
       </button>
 
-      <PageHeader
-        title={hook.label}
-        subtitle={`Conector Make · ${hook.total_received} recibidos · ${hook.total_created} leads creados · ${hook.total_errors} errores`}
-        actions={
-          <div className="flex gap-2">
-            <button onClick={deleteHook} className="h-9 px-3 rounded-lg border border-red-200 dark:border-red-800 text-red-600 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">
-              <Trash size={14} /> Eliminar
-            </button>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="group flex items-center gap-2 max-w-2xl">
+            <input
+              type="text"
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onBlur={saveLabel}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              placeholder="Nombre del conector"
+              title="Clic para editar el nombre"
+              className="text-2xl font-bold bg-transparent border-0 border-b-2 border-dashed border-muted-foreground/30 hover:border-primary focus:border-primary focus:border-solid outline-none px-1 py-0.5 -ml-1 min-w-0 flex-1"
+            />
+            <PencilSimple size={16} weight="regular" className="text-muted-foreground/60 group-hover:text-primary transition-colors flex-shrink-0" />
+            {savingLabel && <span className="text-xs text-muted-foreground">guardando…</span>}
           </div>
-        }
-      />
+          <p className="text-sm text-muted-foreground mt-1">
+            Conector Make · {hook.total_received} recibidos · {hook.total_created} leads creados · {hook.total_errors} errores
+          </p>
+        </div>
+        <button onClick={deleteHook} className="h-9 px-3 rounded-lg border border-red-200 dark:border-red-800 text-red-600 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1 flex-shrink-0">
+          <Trash size={14} /> Eliminar
+        </button>
+      </div>
 
       {/* Modo */}
       <div className="bg-card border border-border rounded-lg p-4">
