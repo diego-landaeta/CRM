@@ -100,11 +100,18 @@ async function _createLeadCore(project, leadData) {
     if (product) productoInteresId = product.id;
   }
 
-  // Resolver responsable forzado (Make decide): id directo > email -> id
+  // Resolver responsable forzado (Make decide): id directo > email > nombre.
+  // El nombre se resuelve dentro del proyecto (case-insensitive, primera palabra
+  // del nombre completo del user). Así Make puede mandar "Dayana" o "Ana" sin
+  // tener que conocer los emails.
   let forcedResponsableId = leadData.responsable_id || null;
   if (!forcedResponsableId && leadData.responsable_email) {
     const user = await leadModel.findUserByEmail(leadData.responsable_email);
     if (user && user.active) forcedResponsableId = user.id;
+  }
+  if (!forcedResponsableId && leadData.responsable_nombre) {
+    const user = await leadModel.findProjectUserByName(leadData.responsable_nombre, project.id);
+    if (user) forcedResponsableId = user.id;
   }
 
   // Detección de SPAM recurrente: si este email ya fue marcado como spam en este

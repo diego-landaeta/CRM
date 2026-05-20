@@ -9,10 +9,24 @@ export async function receive(req, res, next) {
   try {
     const { slug } = req.params;
     const secret = req.headers['x-make-secret'] || req.query.secret;
+
+    // La asesora (responsable) puede venir en 3 sitios además del body:
+    //   1) Header X-Asesora-Email / X-Asesora-Nombre
+    //   2) Query param ?asesora_email=... / ?asesora_nombre=...
+    //   3) Dentro del JSON del body (lo procesa el mapping normal)
+    // Cualquiera de las 3 funciona. Los headers/query tienen prioridad sobre el body
+    // para que sea fácil inyectar la asesora sin reconstruir el JSON en Make.
+    const overrides = {};
+    const hdrEmail = req.headers['x-asesora-email'] || req.query.asesora_email;
+    const hdrNombre = req.headers['x-asesora-nombre'] || req.query.asesora_nombre;
+    if (hdrEmail) overrides.responsable_email = String(hdrEmail);
+    if (hdrNombre) overrides.responsable_nombre = String(hdrNombre);
+
     const result = await svc.handleIncoming({
       slug,
       secret: typeof secret === 'string' ? secret : '',
       payload: req.body || {},
+      overrides,
       ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
     });
     res.status(result.mode === 'test' ? 200 : 201).json({ success: true, data: result });

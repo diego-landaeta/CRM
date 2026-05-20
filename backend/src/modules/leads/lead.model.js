@@ -398,6 +398,29 @@ export async function findUserByEmail(email) {
   return rows[0] || null;
 }
 
+// Buscar user por NOMBRE dentro de un proyecto. Útil para que Make pase
+// "Dayana" o "Ana" y el CRM resuelva al gestor correcto.
+// Match: el primer "token" del nombre del user empieza por la entrada
+// (Dayana → "Dayana Comercial", Ana → "Ana Comercial", Samantha → "Samantha Ictess").
+// Restringido a users activos asignados al proyecto.
+export async function findProjectUserByName(name, projectId) {
+  if (!name || !projectId) return null;
+  const cleaned = String(name).trim();
+  if (!cleaned) return null;
+  const { rows } = await query(
+    `SELECT u.id, u.email, u.nombre, u.role, u.active
+     FROM users u
+     JOIN user_projects up ON up.user_id = u.id AND up.active = true
+     WHERE up.project_id = $1
+       AND u.active = true
+       AND (u.nombre ILIKE $2 || ' %' OR u.nombre ILIKE $2 OR SPLIT_PART(u.nombre, ' ', 1) ILIKE $2)
+     ORDER BY (CASE WHEN SPLIT_PART(u.nombre, ' ', 1) ILIKE $2 THEN 0 ELSE 1 END)
+     LIMIT 1`,
+    [projectId, cleaned]
+  );
+  return rows[0] || null;
+}
+
 // Idempotency: si Make reintenta con el mismo idempotency_key dentro de 24h,
 // devolvemos el lead que ya creamos en lugar de duplicar.
 export async function findLeadByIdempotencyKey(projectId, key) {

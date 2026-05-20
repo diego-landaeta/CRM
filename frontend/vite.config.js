@@ -11,10 +11,13 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Cambiado de 'autoUpdate' a 'prompt' para evitar recargas silenciosas que
-      // confunden al usuario ("la app se refresca sola al principio"). Ahora el
-      // SW se actualiza solo cuando el usuario acepta el PWAUpdatePrompt.
-      registerType: 'prompt',
+      // selfDestroying=true publica un SW que se autoinstala, toma el control y
+      // se desinstala limpiando caches. Resuelve definitivamente el problema de
+      // "Sin conexión" causado por SWs antiguos que cachearon URLs HTTP del
+      // dominio anterior. Cuando todos los navegadores se hayan limpiado
+      // podremos reintroducir el PWA con cuidado.
+      selfDestroying: true,
+      registerType: 'autoUpdate',
       injectRegister: 'auto',
       base: BASE,
       scope: BASE,

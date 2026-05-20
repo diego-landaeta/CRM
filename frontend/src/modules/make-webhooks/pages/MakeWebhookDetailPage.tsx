@@ -38,6 +38,7 @@ const KNOWN_FIELDS: Array<{ key: string; label: string }> = [
   { key: 'email', label: 'Email' },
   { key: 'telefono', label: 'Teléfono' },
   { key: 'responsable_email', label: 'Asesora (email del gestor)' },
+  { key: 'responsable_nombre', label: 'Asesora (nombre: "Dayana", "Ana"…)' },
   { key: 'producto_interes', label: 'Producto (texto/nombre)' },
   { key: 'producto_interes_sku', label: 'Producto (SKU)' },
   { key: 'landing_url', label: 'Landing URL' },

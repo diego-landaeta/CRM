@@ -15,7 +15,7 @@ import * as leadService from '../leads/lead.service.js';
 // Claves no estándar van a custom_fields automáticamente.
 const KNOWN_LEAD_FIELDS = new Set([
   'nombre', 'email', 'telefono',
-  'responsable_email', 'responsable_id',
+  'responsable_email', 'responsable_id', 'responsable_nombre',
   'producto_interes', 'producto_interes_sku', 'producto_interes_id',
   'landing_url', 'canal', 'notas',
   'idempotency_key',
@@ -39,7 +39,7 @@ export function applyMapping(payload, fieldMapping) {
 
 // Llamado por el endpoint público al recibir un POST de Make.
 // Verifica secret, captura sample, y según mode crea lead o solo guarda.
-export async function handleIncoming({ slug, secret, payload, ip }) {
+export async function handleIncoming({ slug, secret, payload, overrides = {}, ip }) {
   const hook = await model.findBySlug(slug);
   if (!hook) throw new AppError('Webhook no encontrado', 404, 'WEBHOOK_NOT_FOUND');
   if (!hook.active) throw new AppError('Webhook deshabilitado', 403, 'WEBHOOK_INACTIVE');
@@ -80,6 +80,13 @@ export async function handleIncoming({ slug, secret, payload, ip }) {
   }
 
   const mapped = applyMapping(payload, hook.field_mapping);
+  // Aplicar overrides desde headers/query (responsable_email/nombre).
+  // Estos ganan sobre lo mapeado del body.
+  for (const [k, v] of Object.entries(overrides || {})) {
+    if (v !== undefined && v !== null && String(v).trim() !== '') {
+      mapped[k] = v;
+    }
+  }
   if (!mapped.nombre && !mapped.email) {
     await model.logDelivery({
       webhook_id: hook.id, result: 'rejected', payload, mapped,
