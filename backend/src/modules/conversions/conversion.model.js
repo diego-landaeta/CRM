@@ -151,7 +151,7 @@ export async function findAll({ projectId, leadId, pendiente, vencido, from, to,
 }
 
 export async function update(id, fields) {
-  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'notas_pago'];
+  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago'];
   const sets = [];
   const params = [];
   let idx = 1;

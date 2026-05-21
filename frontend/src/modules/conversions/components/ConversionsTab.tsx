@@ -5,7 +5,8 @@ import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
 import RefundDialog from './RefundDialog';
 import InstallmentsDialog from './InstallmentsDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins } from '@phosphor-icons/react';
+import EditConversionDialog from './EditConversionDialog';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
@@ -29,6 +30,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [paymentDialogConv, setPaymentDialogConv] = useState<Conversion | null>(null);
   const [refundDialogConv, setRefundDialogConv] = useState<Conversion | null>(null);
   const [installmentsDialogConv, setInstallmentsDialogConv] = useState<Conversion | null>(null);
+  const [editDialogConv, setEditDialogConv] = useState<Conversion | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
@@ -198,6 +200,14 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                         </button>
                       )}
                       <button
+                        onClick={() => setEditDialogConv(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 text-xs font-semibold hover:bg-sky-200 dark:hover:bg-sky-950/60"
+                        title="Editar datos de la conversión (producto, importe, fechas, método)"
+                      >
+                        <PencilSimple size={14} weight="bold" />
+                        Editar
+                      </button>
+                      <button
                         onClick={() => setInstallmentsDialogConv(c)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300 text-xs font-semibold hover:bg-violet-200 dark:hover:bg-violet-950/60"
                         title={c.metodo_pago === 'fraccionado' ? 'Ver/editar cuotas' : 'Convertir a fraccionado'}
@@ -319,6 +329,11 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       <InstallmentsDialog
         conversion={installmentsDialogConv}
         onClose={() => setInstallmentsDialogConv(null)}
+        onSaved={() => load()}
+      />
+      <EditConversionDialog
+        conversion={editDialogConv}
+        onClose={() => setEditDialogConv(null)}
         onSaved={() => load()}
       />
     </div>
