@@ -22,6 +22,13 @@ export async function receive(req, res, next) {
     if (hdrEmail) overrides.responsable_email = String(hdrEmail);
     if (hdrNombre) overrides.responsable_nombre = String(hdrNombre);
 
+    // Canal también soportado por header/query (X-Canal / ?canal=)
+    // Acepta cualquier string razonable; el CRM lo normaliza si matchea
+    // (whatsapp, instagram, web, email, meta_ads, google_ads, tiktok_ads,
+    //  chatgpt_ia, referido, organico, directo).
+    const hdrCanal = req.headers['x-canal'] || req.query.canal;
+    if (hdrCanal) overrides.canal = String(hdrCanal).toLowerCase().trim();
+
     const result = await svc.handleIncoming({
       slug,
       secret: typeof secret === 'string' ? secret : '',

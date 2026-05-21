@@ -18,13 +18,14 @@ import {
   ArrowLeft, WhatsappLogo, EnvelopeSimple, Phone, ArrowSquareOut,
   ShoppingCart, CurrencyEur, Wallet, CheckCircle, WarningCircle,
   Note, CalendarCheck, Users, MagnifyingGlass, Tag,
-  ChatCircleDots, User, PencilSimple, Trash,
+  ChatCircleDots, User, PencilSimple, Trash, GitMerge,
 } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const LeadFormDialog = lazy(() => import('@/modules/leads/components/LeadFormDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
+const MergeLeadDialog = lazy(() => import('@/modules/leads/components/MergeLeadDialog'));
 
 const AVATAR_COLORS = [
   'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
@@ -98,9 +99,14 @@ export default function ClientDetailPage() {
   const [upsellOpen, setUpsellOpen] = useState<boolean>(false);
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
+  const [mergeOpen, setMergeOpen] = useState<boolean>(false);
   const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
 
-  const canManage = user?.role === 'admin' || user?.role === 'superadmin';
+  // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
+  // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
+  const canManage = user?.role === 'admin'
+    || user?.role === 'superadmin'
+    || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
 
   async function load() {
     setLoading(true);
@@ -240,6 +246,17 @@ export default function ClientDetailPage() {
             >
               <PencilSimple size={14} weight="regular" />
               <span className="hidden sm:inline">Editar</span>
+            </button>
+          )}
+          {canManage && (
+            <button
+              onClick={() => setMergeOpen(true)}
+              aria-label="Fusionar cliente duplicado"
+              title="Fusionar con otro cliente duplicado (mueve historial y elimina el duplicado)"
+              className="h-9 px-3 rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors flex items-center gap-1.5 text-sm font-medium"
+            >
+              <GitMerge size={14} weight="regular" />
+              <span className="hidden sm:inline">Fusionar</span>
             </button>
           )}
           {user?.role === 'superadmin' && (
@@ -497,6 +514,17 @@ export default function ClientDetailPage() {
               throw err;
             }
           }}
+        />
+      </Suspense>
+
+      {/* Fusionar cliente duplicado (gestor + admin + superadmin) */}
+      <Suspense fallback={null}>
+        <MergeLeadDialog
+          open={mergeOpen}
+          winner={lead ? { id: lead.id, nombre: lead.nombre, email: lead.email } : null}
+          projectId={(lead as any)?.project_id || null}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => { setMergeOpen(false); toast({ title: 'Cliente fusionado' }); navigate('/clients'); }}
         />
       </Suspense>
 

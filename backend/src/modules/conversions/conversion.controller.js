@@ -74,6 +74,15 @@ export async function removePayment(req, res, next) {
   try {
     const paymentId = parseInt(req.params.paymentId);
     if (isNaN(paymentId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // RBAC: gestor solo puede borrar pagos de leads asignados a él.
+    if (req.user.role === 'gestor') {
+      const { getPaymentOwnership } = await import('./conversion.model.js');
+      const own = await getPaymentOwnership(paymentId);
+      if (!own) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
+      if (own.responsable_id !== req.user.userId) {
+        throw new AppError('Solo puedes borrar pagos de tus propios clientes', 403, 'FORBIDDEN_PAYMENT');
+      }
+    }
     const result = await conversionService.removePayment(paymentId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

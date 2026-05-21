@@ -20,7 +20,9 @@ router.patch('/:id', ctrl.update);
 
 // Pagos parciales
 router.post('/:id/payments', ctrl.addPayment);
-router.delete('/payments/:paymentId', roleGuard('admin', 'superadmin'), ctrl.removePayment);
+// El gestor puede borrar pagos de leads asignados a él. Admin/superadmin siempre.
+// Ownership se valida dentro del controller.
+router.delete('/payments/:paymentId', ctrl.removePayment);
 
 // Cuotas (CRM-183)
 router.get('/:id/installments', ctrl.listInstallments);

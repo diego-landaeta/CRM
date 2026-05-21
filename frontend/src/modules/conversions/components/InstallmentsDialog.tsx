@@ -30,6 +30,9 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [numCuotas, setNumCuotas] = useState(3);
   const [fechaInicio, setFechaInicio] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [draftInstallments, setDraftInstallments] = useState<Installment[]>([]);
+  // Editor de importe_total para aplicar descuentos/becas antes de fraccionar.
+  const [totalDraft, setTotalDraft] = useState<string>('');
+  const [savingTotal, setSavingTotal] = useState(false);
 
   async function load() {
     if (!conversion) return;
@@ -46,9 +49,41 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   }
 
   useEffect(() => {
-    if (conversion) load();
+    if (conversion) {
+      load();
+      setTotalDraft(String(conversion.importe_total));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversion?.id]);
+
+  // Actualiza el importe_total de la conversión (para aplicar descuentos).
+  async function handleSaveTotal() {
+    if (!conversion) return;
+    const nuevoTotal = Number(totalDraft);
+    if (!isFinite(nuevoTotal) || nuevoTotal <= 0) {
+      toast({ title: 'Importe inválido', variant: 'destructive' });
+      return;
+    }
+    const pagado = Number(conversion.importe_pagado || 0);
+    if (nuevoTotal < pagado) {
+      toast({ title: 'Total no puede ser menor a lo pagado', description: `Ya cobrado: ${formatCurrency(pagado)}`, variant: 'destructive' });
+      return;
+    }
+    setSavingTotal(true);
+    try {
+      await conversionsApi.update(conversion.id, { importe_total: nuevoTotal } as any);
+      toast({ title: 'Total actualizado', description: `Nuevo pendiente: ${formatCurrency(nuevoTotal - pagado)}` });
+      onSaved?.();
+      // Forzar recálculo del draft con el nuevo total
+      if (conversion) {
+        (conversion as any).importe_total = nuevoTotal;
+      }
+      // re-trigger del useEffect generador
+      setNumCuotas((n) => n);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSavingTotal(false); }
+  }
 
   // Si entra en modo create, genera draft equirepartido por num+fecha
   useEffect(() => {
@@ -185,6 +220,30 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
               <p className="text-xs text-muted-foreground">
                 Convierte esta conversión en pagos fraccionados. Las cuotas se distribuyen sobre el importe <strong>pendiente</strong> ({formatCurrency(pendiente)}).
               </p>
+
+              {/* Editor de importe total para aplicar descuentos/becas */}
+              <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3">
+                <label className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1 block">
+                  ¿Aplicar descuento o beca? Modifica el importe total antes de fraccionar:
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number" step="0.01" min={0} value={totalDraft}
+                    onChange={(e) => setTotalDraft(e.target.value)}
+                    className="flex-1 h-9 px-3 rounded-md border border-border bg-card text-sm tabular-nums"
+                  />
+                  <button
+                    onClick={handleSaveTotal}
+                    disabled={savingTotal || Number(totalDraft) === Number(conversion.importe_total)}
+                    className="h-9 px-3 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {savingTotal ? '...' : 'Actualizar total'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                  Ejemplo: 30% de beca sobre 950€ → escribe <strong>665</strong>. Luego abajo las 6 cuotas sumarán ese nuevo total.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Nº de cuotas</label>

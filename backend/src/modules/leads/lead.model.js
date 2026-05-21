@@ -369,8 +369,16 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     );
     const lead = leadRows[0];
 
-    // Guardar UTMs si hay
-    if (utms && (utms.utm_source || utms.utm_medium || utms.utm_campaign)) {
+    // Guardar UTMs si hay datos relevantes. Antes esto SOLO insertaba si había
+    // utm_source/medium/campaign, ignorando canal_detectado. Resultado: al crear
+    // manualmente con "WhatsApp" el canal no se guardaba. Ahora también dispara
+    // si viene canal o landing_url.
+    if (
+      utms && (
+        utms.utm_source || utms.utm_medium || utms.utm_campaign ||
+        utms.canal_detectado || utms.landing_url
+      )
+    ) {
       await client.query(
         `INSERT INTO lead_utms (lead_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_url, canal_detectado)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
