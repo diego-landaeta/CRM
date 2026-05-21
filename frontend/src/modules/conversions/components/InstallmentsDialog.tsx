@@ -92,20 +92,20 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     } finally { setSavingTotal(false); }
   }
 
-  // Si entra en modo create, genera draft equirepartido por num+fecha
+  // Si entra en modo create, genera draft equirepartido por num+fecha.
+  // IMPORTANTE: NO ajustamos la ultima cuota para que todas tengan el mismo
+  // importe. Si la division no es exacta, la suma diferira y el total de
+  // la conversion se actualizara al guardar (ver handleGenerate).
   useEffect(() => {
     if (mode !== 'create' || !conversion) return;
     const total = Number(conversion.importe_total) - Number(conversion.importe_pagado || 0);
     const start = new Date(fechaInicio);
-    const importeCuota = Math.round((total / numCuotas) * 100) / 100;
+    const importeCuota = Math.floor((total / numCuotas) * 100) / 100;
     const arr: Installment[] = [];
     for (let i = 0; i < numCuotas; i++) {
       const venc = new Date(start);
       venc.setMonth(venc.getMonth() + i);
-      const importe = i === numCuotas - 1
-        ? Math.round((total - importeCuota * (numCuotas - 1)) * 100) / 100
-        : importeCuota;
-      arr.push({ importe_previsto: importe, fecha_vencimiento: venc.toISOString().slice(0, 10) });
+      arr.push({ importe_previsto: importeCuota, fecha_vencimiento: venc.toISOString().slice(0, 10) });
     }
     setDraftInstallments(arr);
   }, [mode, numCuotas, fechaInicio, conversion]);
@@ -113,19 +113,35 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   async function handleGenerate() {
     if (!conversion) return;
     const suma = draftInstallments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
-    const pendiente = Number(conversion.importe_total) - Number(conversion.importe_pagado || 0);
-    if (Math.abs(suma - pendiente) > 0.5) {
-      toast({ title: 'Importes no cuadran', description: `La suma (${formatCurrency(suma)}) debe igualar al pendiente (${formatCurrency(pendiente)}).`, variant: 'destructive' });
+    const pagado = Number(conversion.importe_pagado || 0);
+    const totalActual = Number(conversion.importe_total);
+    const nuevoTotal = +(suma + pagado).toFixed(2);
+
+    if (draftInstallments.length < 1) {
+      toast({ title: 'Añade al menos una cuota', variant: 'destructive' });
       return;
     }
+    if (draftInstallments.some((c) => !c.fecha_vencimiento || Number(c.importe_previsto) <= 0)) {
+      toast({ title: 'Cuota incompleta', description: 'Todas las cuotas requieren fecha e importe > 0', variant: 'destructive' });
+      return;
+    }
+
     try {
+      // Si la suma de cuotas + pagado no es igual al total actual de la conversión,
+      // ajustamos el total para que cuadre con lo que la gestora puso. NO redondeamos.
+      if (Math.abs(nuevoTotal - totalActual) > 0.001) {
+        await conversionsApi.update(conversion.id, { importe_total: nuevoTotal } as any);
+        toast({
+          title: 'Total ajustado',
+          description: `Importe total: ${formatCurrency(totalActual)} → ${formatCurrency(nuevoTotal)} (suma exacta de cuotas + ya pagado)`,
+        });
+      }
       await conversionsApi.generateInstallments(conversion.id, {
         installments: draftInstallments.map(c => ({
           importe_previsto: Number(c.importe_previsto),
           fecha_vencimiento: c.fecha_vencimiento,
         })),
       });
-      // También cambiamos metodo_pago para que la UI refleje "fraccionado"
       await conversionsApi.update(conversion.id, { metodo_pago: 'fraccionado' } as any);
       toast({ title: 'Cuotas creadas', description: `${draftInstallments.length} cuotas programadas.` });
       onSaved?.();
