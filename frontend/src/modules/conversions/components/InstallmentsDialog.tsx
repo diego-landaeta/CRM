@@ -33,6 +33,11 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   // Editor de importe_total para aplicar descuentos/becas antes de fraccionar.
   const [totalDraft, setTotalDraft] = useState<string>('');
   const [savingTotal, setSavingTotal] = useState(false);
+  // Mini-form de cobro de cuota: pide importe + fecha (no asume hoy).
+  const [payingInst, setPayingInst] = useState<Installment | null>(null);
+  const [payImporte, setPayImporte] = useState<string>('');
+  const [payFecha, setPayFecha] = useState<string>('');
+  const [payingNow, setPayingNow] = useState(false);
 
   async function load() {
     if (!conversion) return;
@@ -128,19 +133,37 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     }
   }
 
-  async function handlePayInstallment(inst: Installment) {
+  function handlePayInstallment(inst: Installment) {
     if (!inst.id) return;
-    const importe = Number(prompt(`Importe cobrado para esta cuota (previsto: ${formatCurrency(inst.importe_previsto)}):`, String(inst.importe_previsto)));
-    if (!isFinite(importe) || importe <= 0) return;
-    const fecha = new Date().toISOString().slice(0, 10);
+    // Abre el mini-form prefilled con importe previsto + fecha de HOY como
+    // valor por defecto (editable). Importante: la gestora a menudo registra
+    // el pago días después, por eso NO asumimos hoy a ciegas.
+    setPayingInst(inst);
+    setPayImporte(String(inst.importe_previsto));
+    setPayFecha(new Date().toISOString().slice(0, 10));
+  }
+
+  async function confirmPayInstallment() {
+    if (!payingInst?.id) return;
+    const importe = Number(payImporte);
+    if (!isFinite(importe) || importe <= 0) {
+      toast({ title: 'Importe inválido', variant: 'destructive' });
+      return;
+    }
+    if (!payFecha) {
+      toast({ title: 'Fecha requerida', variant: 'destructive' });
+      return;
+    }
+    setPayingNow(true);
     try {
-      await conversionsApi.payInstallment(inst.id, { importe_cobrado: importe, fecha_cobro: fecha });
-      toast({ title: 'Cuota cobrada' });
+      await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
+      toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
+      setPayingInst(null);
       onSaved?.();
       await load();
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
-    }
+    } finally { setPayingNow(false); }
   }
 
   async function handleDeleteInstallment(inst: Installment) {
@@ -315,6 +338,47 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           )}
         </div>
       </div>
+
+      {/* Mini-modal cobro de cuota: importe + fecha (no se asume hoy) */}
+      {payingInst && (
+        <div className="fixed inset-0 !m-0 z-[90] flex items-center justify-center p-4" onClick={() => setPayingInst(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h4 className="font-semibold text-base mb-1">Cobrar cuota #{payingInst.numero}</h4>
+            <p className="text-xs text-muted-foreground mb-4">Importe previsto: {formatCurrency(payingInst.importe_previsto)}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Importe cobrado (€)</label>
+                <input
+                  type="number" step="0.01" min={0} value={payImporte}
+                  onChange={(e) => setPayImporte(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm tabular-nums"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Fecha del pago</label>
+                <input
+                  type="date" value={payFecha}
+                  onChange={(e) => setPayFecha(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Por defecto hoy. Cámbialo si registras un pago pasado.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setPayingInst(null)} disabled={payingNow}
+                className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={confirmPayInstallment} disabled={payingNow}
+                className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+                {payingNow ? 'Guardando…' : 'Confirmar cobro'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
