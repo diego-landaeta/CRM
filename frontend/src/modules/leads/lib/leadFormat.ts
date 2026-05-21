@@ -25,7 +25,10 @@ export function getAvatarColor(id: number): string {
 
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '--';
-  const d = new Date(dateStr);
+  // Strings 'YYYY-MM-DD' se interpretan como local para evitar desfase TZ (-1 día).
+  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '--';
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
@@ -34,7 +37,9 @@ export function formatRelative(
   { future = false }: { future?: boolean } = {},
 ): string | null {
   if (!dateStr) return null;
-  const d = new Date(dateStr);
+  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
   const now = new Date();
   const diffMs = future ? d.getTime() - now.getTime() : now.getTime() - d.getTime();
   const diffDays = Math.round(diffMs / 86400000);

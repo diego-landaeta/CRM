@@ -36,10 +36,23 @@ export function formatNumber(n) {
  * Fecha corta es-ES: "15 mar." (sin año).
  * @param {string|Date|null|undefined} d
  */
+// Parsea strings 'YYYY-MM-DD' como fecha LOCAL (no UTC) para evitar el bug
+// clásico de "21 nov" → "20 nov" en zonas con offset negativo.
+// Para timestamps con hora ('YYYY-MM-DDTHH...'), usa new Date normal.
+function toLocalDate(d) {
+  if (!d) return null;
+  if (d instanceof Date) return Number.isNaN(d.getTime()) ? null : d;
+  if (typeof d === 'string') {
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  const date = new Date(d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatDateShort(d) {
-  if (!d) return '--';
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return '--';
+  const date = toLocalDate(d);
+  if (!date) return '--';
   return date.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short' });
 }
 
@@ -48,9 +61,8 @@ export function formatDateShort(d) {
  * @param {string|Date|null|undefined} d
  */
 export function formatDate(d) {
-  if (!d) return '--';
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return '--';
+  const date = toLocalDate(d);
+  if (!date) return '--';
   return date.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -59,9 +71,8 @@ export function formatDate(d) {
  * @param {string|Date|null|undefined} d
  */
 export function formatDateNumeric(d) {
-  if (!d) return '--';
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return '--';
+  const date = toLocalDate(d);
+  if (!date) return '--';
   return date.toLocaleDateString(LOCALE);
 }
 
@@ -70,6 +81,7 @@ export function formatDateNumeric(d) {
  * @param {string|Date|null|undefined} d
  */
 export function formatDateTime(d) {
+  // Para timestamps con hora, usamos new Date normal (la hora SI tiene info de TZ).
   if (!d) return '--';
   const date = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(date.getTime())) return '--';
