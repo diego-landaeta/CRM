@@ -1,11 +1,25 @@
-# CRM MultiProyecto
+# 360 CRM — MultiProyecto
 
 Sistema interno de gestion de leads, conversiones, campanas publicitarias y monitorizacion de ingresos.
+
+## Entornos en vivo
+
+| Rama Git | Entorno | URL | DB | PM2 |
+|---|---|---|---|---|
+| **`main`** | **Producción** | https://360crm.tech/crm/ | `crm_prod_db` | `crm-api-production` :3001 |
+| **`staging`** | **QA / Testeo** | https://360crm.tech/testeo/ | `crm_test_db` | `crm-api-staging` :3002 |
+| `feat/*` | Features en desarrollo | local | — | — |
+
+Landing pública: https://360crm.tech/
+
+**Flujo de desarrollo:** `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod.
+Ver [docs/09-deploy-y-ramas.md](docs/09-deploy-y-ramas.md) para deploy completo, rollback, envs y webhooks externos.
 
 ## Proyectos CRM
 - Psiko Aprende
 - ISEIH
 - Fono Aprende
+- ICTESS
 
 ## Proyectos IA (monitorizacion)
 - Psicologo IA
@@ -136,6 +150,8 @@ scripts/           Backup, deploy, utilidades
 | [Arquitectura frontend](docs/05-arquitectura-frontend.md) | Layouts, componentes, colores, responsive |
 | [Deploy y DevOps](docs/06-despliegue-devops.md) | Nginx, PM2, backups, CI |
 | [Tareas Jira](docs/07-tareas-jira.md) | 15 Epics, ~97 Stories con criterios de aceptacion |
+| [Integración Meta](docs/08-integracion-meta.md) | Plan System User Token + webhooks Lead Ads sin App Review |
+| **[Deploy y ramas](docs/09-deploy-y-ramas.md)** | **Mapeo rama→entorno, comandos scp+pm2, migraciones, rollback, webhooks Make** |
 | [CLAUDE.md](CLAUDE.md) | Guia de desarrollo y convenciones de codigo |
 
 ---
@@ -164,7 +180,7 @@ Custom Audiences Meta, Chat Claude AI, Export PDF — 8 stories, todas pendiente
 ## Convenciones
 
 - **Commits en espanol** con prefijos: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`
-- **Ramas:** `main` (produccion), `dev` (desarrollo), `feature/nombre`, `hotfix/nombre`
+- **Ramas:** `main` (producción), `staging` (QA/testeo), `feat/nombre-corto` (features), `hotfix/nombre` (urgencias)
 - **Backend:** JavaScript ES modules, queries SQL directas (NO ORM), validacion con Zod
 - **Frontend:** shadcn/ui + Tailwind, React Context (NO Redux), lazy loading por pagina
 - **Idioma codigo:** ingles para variables/funciones, espanol para comentarios
