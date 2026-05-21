@@ -66,8 +66,8 @@ export const conversionsApi = {
     client.post('/conversions', data),
   update: (id: number, data: Partial<Conversion>): Promise<ApiResponse<Conversion>> =>
     client.patch(`/conversions/${id}`, data),
-  remove: (id: number): Promise<ApiResponse<void>> =>
-    client.delete(`/conversions/${id}`),
+  remove: (id: number, data: { reason: string; motivo?: string | null }): Promise<ApiResponse<void>> =>
+    client.delete(`/conversions/${id}`, { data } as any),
   addPayment: (id: number, data: AddPaymentInput): Promise<ApiResponse<Payment>> =>
     client.post(`/conversions/${id}/payments`, data),
   removePayment: (paymentId: number): Promise<ApiResponse<void>> =>

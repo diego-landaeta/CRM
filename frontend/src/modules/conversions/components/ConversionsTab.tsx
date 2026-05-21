@@ -33,6 +33,8 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [editDialogConv, setEditDialogConv] = useState<Conversion | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>('duplicada');
+  const [deleteMotivo, setDeleteMotivo] = useState<string>('');
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
 
   async function loadRefunds(conversionId: number): Promise<void> {
@@ -89,12 +91,20 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
     } finally { setPendingPayment(null); }
   }
 
-  function handleDeleteConversion(id: number): void { setPendingConversion(id); }
+  function handleDeleteConversion(id: number): void {
+    setPendingConversion(id);
+    setDeleteReason('duplicada');
+    setDeleteMotivo('');
+  }
   async function doDeleteConversion(): Promise<void> {
     if (pendingConversion === null) return;
+    if (deleteReason === 'otro' && deleteMotivo.trim().length < 3) {
+      toast({ title: 'Detalle requerido', description: 'Si motivo = Otro, escribe el detalle (mín 3 chars)', variant: 'destructive' });
+      return;
+    }
     try {
-      await conversionsApi.remove(pendingConversion);
-      toast({ title: 'Conversión eliminada' });
+      await conversionsApi.remove(pendingConversion, { reason: deleteReason, motivo: deleteMotivo.trim() || null });
+      toast({ title: 'Conversión eliminada', description: 'Queda registro en el historial del lead' });
       await load();
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
@@ -325,7 +335,58 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
         }}
       />
       <ConfirmDialog open={pendingPayment !== null} title="¿Eliminar pago?" message="Se recalculará el total de la conversión." onConfirm={doDeletePayment} onCancel={() => setPendingPayment(null)} />
-      <ConfirmDialog open={pendingConversion !== null} title="¿Eliminar conversión?" message="Se eliminarán todos sus pagos. Esta acción no se puede deshacer." onConfirm={doDeleteConversion} onCancel={() => setPendingConversion(null)} />
+      {/* Dialog eliminar conversión con motivo obligatorio para auditoría */}
+      {pendingConversion !== null && (
+        <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center p-4" onClick={() => setPendingConversion(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h4 className="font-semibold text-base mb-1">Eliminar compra</h4>
+            <p className="text-xs text-muted-foreground mb-4">
+              Se eliminarán todos sus pagos. Esta acción no se puede deshacer, pero quedará un registro en el historial del lead con el motivo.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-1.5 block">Motivo *</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { value: 'duplicada', label: 'Duplicada' },
+                    { value: 'error_carga', label: 'Error al cargar' },
+                    { value: 'anulacion_cliente', label: 'Anulación cliente' },
+                    { value: 'otro', label: 'Otro' },
+                  ].map((r) => (
+                    <button key={r.value} type="button"
+                      onClick={() => setDeleteReason(r.value)}
+                      className={`h-9 rounded-md border text-xs font-medium ${deleteReason === r.value ? 'bg-red-600 text-white border-red-600' : 'border-border bg-card hover:bg-muted'}`}
+                    >{r.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-1.5 block">
+                  Detalle {deleteReason === 'otro' ? '*' : '(opcional)'}
+                </label>
+                <textarea
+                  value={deleteMotivo}
+                  onChange={(e) => setDeleteMotivo(e.target.value)}
+                  rows={2}
+                  placeholder={deleteReason === 'duplicada' ? 'Ej: misma compra cargada 2 veces por error' : 'Detalle del motivo...'}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setPendingConversion(null)}
+                className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">
+                Cancelar
+              </button>
+              <button onClick={doDeleteConversion}
+                className="h-9 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 inline-flex items-center gap-1">
+                <Trash size={14} weight="bold" /> Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <InstallmentsDialog
         conversion={installmentsDialogConv}
         onClose={() => setInstallmentsDialogConv(null)}

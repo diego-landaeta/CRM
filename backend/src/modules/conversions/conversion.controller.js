@@ -88,11 +88,32 @@ export async function removePayment(req, res, next) {
   } catch (err) { next(err); }
 }
 
+const DELETE_REASONS = ['duplicada', 'error_carga', 'anulacion_cliente', 'otro'];
+
 export async function remove(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
-    const result = await conversionService.remove(id);
+    const reason = String(req.body?.reason || '').toLowerCase().trim();
+    const motivo = req.body?.motivo ? String(req.body.motivo).trim() : null;
+    if (!DELETE_REASONS.includes(reason)) {
+      throw new AppError(`Motivo requerido (${DELETE_REASONS.join(', ')})`, 400, 'REASON_REQUIRED');
+    }
+    if (reason === 'otro' && (!motivo || motivo.length < 3)) {
+      throw new AppError('Detalle del motivo requerido cuando reason=otro', 400, 'MOTIVO_REQUIRED');
+    }
+    // RBAC: gestor solo puede borrar conversiones de sus propios leads
+    const existing = await conversionService.getById(id);
+    if (!existing) throw new AppError('Conversión no encontrada', 404, 'CONVERSION_NOT_FOUND');
+    if (req.user.role === 'gestor') {
+      const { rows } = await (await import('../../shared/config/db.js')).query(
+        `SELECT responsable_id FROM leads WHERE id = $1`, [existing.lead_id]
+      );
+      if (rows[0]?.responsable_id !== req.user.userId) {
+        throw new AppError('Solo puedes borrar conversiones de tus propios clientes', 403, 'FORBIDDEN_CONVERSION');
+      }
+    }
+    const result = await conversionService.remove(id, { reason, motivo, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

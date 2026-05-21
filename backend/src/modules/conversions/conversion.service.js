@@ -81,9 +81,31 @@ export async function removePayment(paymentId) {
   return { message: 'Pago eliminado' };
 }
 
-export async function remove(id) {
+export async function remove(id, { reason, motivo, userId } = {}) {
   const existing = await conversionModel.findById(id);
   if (!existing) throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
+
+  // Antes de borrar, dejamos rastro en lead_interactions para auditoría.
+  if (existing.lead_id && reason) {
+    try {
+      const { query } = await import('../../shared/config/db.js');
+      const REASON_LABELS = {
+        duplicada: 'Compra duplicada',
+        error_carga: 'Error al cargar',
+        anulacion_cliente: 'Anulación del cliente',
+        otro: 'Otro',
+      };
+      const nota = `Compra eliminada — ${REASON_LABELS[reason] || reason}: ${existing.producto_contratado} (${existing.importe_total}€)${motivo ? `. Motivo: ${motivo}` : ''}`;
+      await query(
+        `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+         VALUES ($1, 'nota', $2, $3, NOW())`,
+        [existing.lead_id, nota, userId || null]
+      );
+    } catch (err) {
+      // El log no debe bloquear el borrado
+    }
+  }
+
   await conversionModel.deleteConversion(id);
-  return { message: 'Conversion eliminada' };
+  return { message: 'Conversion eliminada', reason, motivo };
 }
