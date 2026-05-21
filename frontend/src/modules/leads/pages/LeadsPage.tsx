@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
@@ -31,17 +31,26 @@ import {
   PencilSimple,
   X,
   DownloadSimple,
+  ArrowsClockwise,
+  Trash,
+  Flag,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
-const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 const CsvImportDialog = lazy(() => import('../components/CsvImportDialog'));
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 const EnrollSequenceModal = lazy(() => import('../components/EnrollSequenceModal'));
+const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
+const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
+const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import SearchableSelect from '@/shared/components/ui/SearchableSelect';
+import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
+import DateRangeFilter from '../components/DateRangeFilter';
+import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import QuickActions from '../components/QuickActions';
@@ -103,6 +112,7 @@ function SkeletonRow() {
     <tr className="border-b animate-pulse">
       <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><div className="w-7 h-7 rounded-full bg-muted" /><div className="w-24 h-4 bg-muted rounded" /></div></td>
       <td className="px-5 py-3.5"><div className="w-32 h-4 bg-muted rounded" /></td>
+      <td className="px-5 py-3.5"><div className="w-24 h-4 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-20 h-5 bg-muted rounded" /></td>
       <td className="px-5 py-3.5"><div className="w-16 h-4 bg-muted rounded" /></td>
@@ -123,12 +133,45 @@ export default function LeadsPage() {
     filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
+    filterProducto, setFilterProducto,
+    selectedProjectIds, setSelectedProjectIds,
+    dateFrom, dateTo, setDateRange,
+    sortMode, setSortMode,
     loading, error, refetch,
   } = useLeads();
 
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects } = useProjectContext();
+  // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
+  // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
+  const showProjectColumn = (projects?.length || 0) > 1;
   const { products } = useProducts(activeProject?.id);
   const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
+
+  // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
+  const lastSeenIdsRef = useRef<Set<number>>(new Set());
+  const [newCount, setNewCount] = useState(0);
+  useEffect(() => {
+    // Inicializar set en primera carga
+    if (leads.length > 0 && lastSeenIdsRef.current.size === 0) {
+      lastSeenIdsRef.current = new Set(leads.map((l) => l.id));
+    }
+  }, [leads]);
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    const id = setInterval(() => { refetch(); }, 30000);
+    return () => clearInterval(id);
+  }, [activeProject?.id, refetch]);
+  // Detectar nuevos tras cada refetch
+  useEffect(() => {
+    if (!leads.length || lastSeenIdsRef.current.size === 0) return;
+    const seen = lastSeenIdsRef.current;
+    const fresh = leads.filter((l) => !seen.has(l.id));
+    if (fresh.length > 0) {
+      setNewCount((c) => c + fresh.length);
+      toast({ title: `${fresh.length} prospecto${fresh.length > 1 ? 's' : ''} nuevo${fresh.length > 1 ? 's' : ''}`, description: fresh[0].nombre });
+      fresh.forEach((l) => seen.add(l.id));
+    }
+  }, [leads]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
@@ -141,6 +184,8 @@ export default function LeadsPage() {
   const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
+  const [deletingLead, setDeletingLead] = useState<any>(null);
+  const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -215,22 +260,6 @@ export default function LeadsPage() {
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);
-  }
-
-  async function confirmMarkContacted() {
-    const lead = confirmingContact;
-    if (!lead) return;
-    try {
-      const res = await client.patch(`/leads/${lead.id}/status`, { status: 'contactado', motivo: 'Marcado contactado desde lista' });
-      if (res.success) {
-        toast({ title: 'Marcado como contactado', description: lead.nombre });
-        await refetch();
-      }
-    } catch (err) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
-    } finally {
-      setConfirmingContact(null);
-    }
   }
 
   function handleConvert(lead) {
@@ -337,7 +366,10 @@ export default function LeadsPage() {
   }
 
   async function handleCreateLead(data) {
-    if (!activeProject?.id) {
+    // En modo ALL el dialog pasa _project_id explicitamente. En modo
+    // proyecto activo, usamos activeProject.id.
+    const projectId = data._project_id || activeProject?.id;
+    if (!projectId || projectId === -1) {
       toast({ title: 'Error', description: 'Selecciona un proyecto primero', variant: 'destructive' });
       return;
     }
@@ -351,7 +383,7 @@ export default function LeadsPage() {
 
     try {
       const res = await client.post('/leads', {
-        project_id: activeProject.id,
+        project_id: projectId,
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
@@ -410,6 +442,24 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => { setNewCount(0); refetch(); }}
+            title="Refrescar lista de prospectos"
+            aria-label="Refrescar"
+            className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+              newCount > 0
+                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 animate-pulse'
+                : 'border-border bg-card hover:bg-muted'
+            }`}
+          >
+            <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
+            <span className="hidden md:inline">Refrescar</span>
+            {newCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {newCount > 9 ? '9+' : newCount}
+              </span>
+            )}
+          </button>
           <LeadsViewToggle active="list" />
           <button
             onClick={() => navigate('/leads/audiences')}
@@ -511,35 +561,102 @@ export default function LeadsPage() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
-          <select
+          <SearchableSelect
             value={filterOrigen}
-            onChange={(e) => { setFilterOrigen(e.target.value); setPage(1); }}
-            aria-label="Filtrar por canal"
+            onChange={(v) => { setFilterOrigen(v); setPage(1); }}
+            options={[
+              { value: 'meta_ads', label: 'Meta Ads' },
+              { value: 'google_ads', label: 'Google Ads' },
+              { value: 'tiktok_ads', label: 'TikTok Ads' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'organico', label: 'Orgánico' },
+              { value: 'chatgpt_ia', label: 'ChatGPT IA' },
+              { value: 'referido', label: 'Referido' },
+              { value: 'directo', label: 'Directo' },
+            ]}
+            placeholder="Buscar canal..."
+            allLabel="Todos los canales"
+            ariaLabel="Filtrar por canal"
+            maxWidth="180px"
+          />
+          {(user?.role === 'superadmin' || user?.role === 'admin') && (
+            <SearchableSelect
+              value={filterResponsable}
+              onChange={(v) => { setFilterResponsable(v); setPage(1); }}
+              options={[
+                { value: 'unassigned', label: '— Sin asignar —' },
+                ...gestores.map((g: any) => ({ value: String(g.id), label: g.nombre })),
+              ]}
+              placeholder="Buscar gestor..."
+              allLabel="Todos los gestores"
+              ariaLabel="Filtrar por gestor"
+              maxWidth="200px"
+            />
+          )}
+          <SearchableSelect
+            value={filterProducto}
+            onChange={(v) => { setFilterProducto(v); setPage(1); }}
+            options={(products || []).map((p: any) => ({ value: String(p.id), label: p.nombre }))}
+            placeholder="Buscar programa..."
+            allLabel="Todos los programas"
+            ariaLabel="Filtrar por programa"
+            maxWidth="220px"
+          />
+          {projects && projects.length > 1 && (
+            <MultiProjectPicker
+              projects={projects}
+              selected={selectedProjectIds}
+              onChange={(ids) => { setSelectedProjectIds(ids); setPage(1); }}
+              activeProjectId={activeProject?.id}
+            />
+          )}
+          <DateRangeFilter
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => setDateRange(f, t)}
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
+            aria-label="Ordenar leads"
+            title="Orden de los leads en la tabla"
             className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
           >
-            <option value="">Todos los canales</option>
-            <option value="meta_ads">Meta Ads</option>
-            <option value="google_ads">Google Ads</option>
-            <option value="tiktok_ads">TikTok Ads</option>
-            <option value="organico">Orgánico</option>
-            <option value="chatgpt_ia">ChatGPT IA</option>
-            <option value="referido">Referido</option>
-            <option value="directo">Directo</option>
+            <option value="recent_value">📅 Día reciente · más valor (default)</option>
+            <option value="urgency">⚡ Urgencia (valor × frescura)</option>
+            <option value="value">💰 Más valor primero</option>
+            <option value="recent">🕒 Más recientes primero</option>
           </select>
-          {(user?.role === 'superadmin' || user?.role === 'admin') && (
-            <select
-              value={filterResponsable}
-              onChange={(e) => { setFilterResponsable(e.target.value); setPage(1); }}
-              aria-label="Filtrar por gestor"
-              className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
-              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+          {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && activeProject?.id && activeProject.id > 0 && (
+            <button
+              onClick={async () => {
+                if (!activeProject?.id || activeProject.id < 0) return;
+                try {
+                  const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
+                  if (res.success) {
+                    const d = res.data as { reassigned: number; reason?: string };
+                    if (d.reason === 'NO_ACTIVE_GESTORES') {
+                      toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
+                    } else {
+                      toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
+                      refetch?.();
+                    }
+                  }
+                } catch (err: any) {
+                  toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+                }
+              }}
+              className="h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5"
+              title="Aplica round-robin a todos los prospectos sin responsable"
             >
-              <option value="">Todos los gestores</option>
-              {gestores.map((g) => (
-                <option key={g.id} value={g.id}>{g.nombre}</option>
-              ))}
-            </select>
+              Asignar pendientes
+              {stats?.sin_asignar > 0 && (
+                <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.5 rounded">
+                  {stats.sin_asignar}
+                </span>
+              )}
+            </button>
           )}
         </div>
 
@@ -571,6 +688,32 @@ export default function LeadsPage() {
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
       </div>
 
+      {/* Leyenda de iconos de acción + badges */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground bg-muted/30 border border-border rounded-md px-3 py-1.5">
+        <span className="font-semibold text-foreground">Etiquetas:</span>
+        <LeadFlagBadge kind="reincidente" />
+        <LeadFlagBadge kind="duplicado" />
+        <LeadFlagBadge kind="propuesto" />
+        {user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" pulse={false} />}
+        <span className="text-[10px] italic">(pasa el ratón sobre cada etiqueta para ver qué significa)</span>
+        <span className="border-l border-border h-3 mx-1" />
+        <span className="font-semibold text-foreground">Acciones rápidas:</span>
+        <span className="inline-flex items-center gap-1"><WhatsappLogo size={13} weight="regular" className="text-green-600" /> WhatsApp</span>
+        <span className="inline-flex items-center gap-1"><EnvelopeSimple size={13} weight="regular" /> Email + secuencia</span>
+        <span className="inline-flex items-center gap-1"><CalendarPlus size={13} weight="regular" /> Programar próximo contacto</span>
+        <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
+        <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
+        {user?.role === 'superadmin' && (
+          <>
+            <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
+            <span className="inline-flex items-center gap-1"><Flag size={13} weight="fill" className="text-orange-600" /> Marcado para revisión = pendiente de spam-report</span>
+          </>
+        )}
+        {user?.role !== 'superadmin' && (
+          <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam</span>
+        )}
+      </div>
+
       {/* Error state */}
       {error && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
@@ -597,8 +740,14 @@ export default function LeadsPage() {
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
+                {showProjectColumn && (
+                  <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Proyecto</th>
+                )}
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Recibido</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Último contacto</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Próximo</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
@@ -611,7 +760,7 @@ export default function LeadsPage() {
                   {[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
                 </>
               )}
-              {!loading && filteredLeads.map((lead) => {
+              {filteredLeads.map((lead) => {
                 const priority = getLeadPriority(lead);
                 const pStyle = getPriorityStyle(priority);
                 return (
@@ -636,32 +785,79 @@ export default function LeadsPage() {
                         {getInitials(lead.nombre)}
                       </div>
                       <span className="font-semibold">{lead.nombre}</span>
-                      {lead.reincidente && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" title="Reincidente: ya preguntó por este producto antes">
-                          Reincidente
-                        </span>
-                      )}
-                      {!lead.reincidente && lead.lead_duplicado_de && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" title="Este email ya existe en el proyecto">
-                          Duplicado
-                        </span>
-                      )}
+                      {lead.reincidente && <LeadFlagBadge kind="reincidente" />}
+                      {lead.es_propuesto && <LeadFlagBadge kind="propuesto" />}
+                      {lead.has_pending_spam_report && user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" />}
+                      {!lead.reincidente && lead.lead_duplicado_de && <LeadFlagBadge kind="duplicado" />}
                       {lead.dias_inactivo != null &&
                        lead.dias_alerta_inactividad != null &&
                        lead.dias_inactivo > lead.dias_alerta_inactividad &&
                        !['convertido', 'no_interesado'].includes(lead.estado) && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" title={`Sin actividad hace ${lead.dias_inactivo} días`}>
-                          {lead.dias_inactivo}d
-                        </span>
+                        <LeadFlagBadge kind="inactivo" daysInactive={lead.dias_inactivo} />
                       )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.producto_interes ? (
+                      <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded font-medium" title={lead.producto_interes}>
+                        {lead.producto_interes.length > 40 ? lead.producto_interes.slice(0, 38) + '…' : lead.producto_interes}
+                      </span>
+                    ) : lead.landing_url ? (
+                      (() => {
+                        // Mostrar el último segmento legible de la URL como "origen"
+                        // ej: https://psikoaprende.com/contacto/ → "página de contacto"
+                        let label = 'origen web';
+                        try {
+                          const path = new URL(lead.landing_url).pathname.replace(/\/$/, '').split('/').filter(Boolean);
+                          const last = path[path.length - 1] || 'home';
+                          // Limpiar: convertir guiones a espacios + capitalizar primera letra
+                          label = `Desde: ${last.replace(/-/g, ' ').replace(/^(.)/, (c) => c.toUpperCase())}`;
+                        } catch { /* mantener fallback */ }
+                        return (
+                          <span className="inline-block px-2 py-0.5 bg-muted text-muted-foreground rounded font-medium italic" title={lead.landing_url}>
+                            {label.length > 40 ? label.slice(0, 38) + '…' : label}
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-muted-foreground italic">Por definir</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.valor_oportunidad === 'alto' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" title="Producto de valor alto">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Alto
+                      </span>
+                    )}
+                    {lead.valor_oportunidad === 'medio' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" title="Producto de valor medio">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Medio
+                      </span>
+                    )}
+                    {lead.valor_oportunidad === 'bajo' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-muted-foreground bg-muted" title="Producto de valor bajo">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />Bajo
+                      </span>
+                    )}
+                    {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  {showProjectColumn && (
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
+                  )}
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
                   </td>
                   <td className="px-5 py-3.5">
                     <StatusBadge status={lead.estado} />
+                  </td>
+                  <td className="px-5 py-3.5 text-xs">
+                    {lead.created_at ? (
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-foreground">{new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+                        <span className="text-muted-foreground text-[11px]">{new Date(lead.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ) : <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">
                     {lead.last_interaction_at ? formatRelative(lead.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
@@ -675,14 +871,14 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
                 );
               })}
-              {!loading && filteredLeads.length === 0 && !error && (
+              {!loading && leads.length === 0 && filteredLeads.length === 0 && !error && (
                 <tr>
-                  <td colSpan={9} className="px-5">
+                  <td colSpan={showProjectColumn ? 13 : 12} className="px-5">
                     <EmptyState
                       icon={Users}
                       title="No se encontraron prospectos"
@@ -702,7 +898,7 @@ export default function LeadsPage() {
               <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
             </div>
           )}
-          {!loading && filteredLeads.map((lead) => (
+          {filteredLeads.map((lead) => (
             <div
               key={lead.id}
               onClick={() => setDrawerLeadId(lead.id)}
@@ -731,11 +927,11 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}
-          {!loading && filteredLeads.length === 0 && !error && (
+          {!loading && leads.length === 0 && filteredLeads.length === 0 && !error && (
             <EmptyState
               icon={Users}
               title="No se encontraron prospectos"
@@ -783,28 +979,26 @@ export default function LeadsPage() {
         )}
       </div>
 
-      {/* Convertir prospecto — dialog inline */}
+      {/* Convertir prospecto — dialog inline.
+          Importante: en modo "Todos los proyectos" activeProject.id es -1 (sentinel),
+          asi que tomamos el project_id del propio lead para no enviar -1 al backend. */}
       <Suspense fallback={null}>
         <ConversionDialog
           open={!!convertingLead}
           onClose={() => setConvertingLead(null)}
           lead={convertingLead}
-          projectId={activeProject?.id}
+          projectId={convertingLead?.project_id || activeProject?.id}
           onCreated={handleConversionCreated}
         />
       </Suspense>
 
-      {/* Marcar contactado — confirm */}
+      {/* Marcar contactado — registra nota + opcional próximo contacto */}
       <Suspense fallback={null}>
-        <ConfirmDialog
+        <ContactedDialog
           open={!!confirmingContact}
-          tone="success"
-          title="Marcar como contactado"
-          message={confirmingContact ? <>Vas a marcar a <strong className="text-foreground">{confirmingContact.nombre}</strong> como contactado. El estado del prospecto cambiará y se registrará la fecha actual.</> : null}
-          confirmLabel="Sí, marcar contactado"
-          cancelLabel="Cancelar"
-          onConfirm={confirmMarkContacted}
-          onCancel={() => setConfirmingContact(null)}
+          lead={confirmingContact}
+          onClose={() => setConfirmingContact(null)}
+          onSaved={() => { setConfirmingContact(null); refetch(); }}
         />
       </Suspense>
 
@@ -846,6 +1040,26 @@ export default function LeadsPage() {
           leadId={drawerLeadId}
           open={drawerLeadId !== null}
           onClose={() => setDrawerLeadId(null)}
+        />
+      </Suspense>
+
+      {/* Soft delete (superadmin) */}
+      <Suspense fallback={null}>
+        <SoftDeleteDialog
+          open={!!deletingLead}
+          lead={deletingLead}
+          onClose={() => setDeletingLead(null)}
+          onDeleted={() => { setDeletingLead(null); refetch(); }}
+        />
+      </Suspense>
+
+      {/* Reportar como spam (gestor/admin) */}
+      <Suspense fallback={null}>
+        <SpamReportDialog
+          open={!!reportingSpamLead}
+          lead={reportingSpamLead}
+          onClose={() => setReportingSpamLead(null)}
+          onReported={() => setReportingSpamLead(null)}
         />
       </Suspense>
 

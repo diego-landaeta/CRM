@@ -7,7 +7,7 @@ import ProjectSettingsDialog from '../ProjectSettingsDialog';
 import ProjectDialog from './ProjectDialog';
 
 export default function ProjectsTab() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -21,6 +21,8 @@ export default function ProjectsTab() {
     try {
       const res = await client.get('/projects');
       if (res.success) setProjects(res.data);
+      // Refresca AuthContext.projects para que el sidebar incluya proyectos nuevos
+      refreshUser?.();
     } finally { setLoading(false); }
   }
 

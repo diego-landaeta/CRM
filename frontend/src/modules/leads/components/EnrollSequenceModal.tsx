@@ -29,13 +29,21 @@ export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled 
   const [enrolling, setEnrolling] = useState(false);
 
   useEffect(() => {
-    if (!open || !activeProject?.id) return;
+    if (!open) return;
     let cancelled = false;
     setLoading(true);
     setSelected(null);
     (async () => {
       try {
-        const res = await client.get(`/email-sequences?projectId=${activeProject.id}`);
+        // En modo "Todos los proyectos" activeProject.id es -1, no sirve.
+        // Resolvemos el project_id del lead.
+        let pid = activeProject?.id && activeProject.id > 0 ? activeProject.id : null;
+        if (!pid && leadId != null) {
+          const leadRes = await client.get(`/leads/${leadId}`);
+          if (leadRes.success) pid = leadRes.data?.project_id;
+        }
+        if (!pid) { setLoading(false); return; }
+        const res = await client.get(`/email-sequences?projectId=${pid}`);
         if (!cancelled && res.success) {
           setSequences((res.data || []).filter((s) => s.active));
         }
@@ -46,7 +54,7 @@ export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled 
       }
     })();
     return () => { cancelled = true; };
-  }, [open, activeProject?.id]);
+  }, [open, activeProject?.id, leadId]);
 
   useEffect(() => {
     if (!open) return;

@@ -14,7 +14,9 @@ export interface CustomRole {
   permissions?: PermissionMap;
 }
 
-export async function listCustomRoles(projectId: number): Promise<CustomRole[]> {
-  const res = await client.get(`/permissions/custom-roles?projectId=${projectId}`);
+// Custom roles son globales (no por proyecto). El parámetro projectId se acepta
+// por compat pero no se envía al backend.
+export async function listCustomRoles(_projectId?: number): Promise<CustomRole[]> {
+  const res = await client.get(`/permissions/custom-roles`);
   return (res.data as CustomRole[]) || [];
 }

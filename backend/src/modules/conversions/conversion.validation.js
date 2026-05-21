@@ -24,6 +24,7 @@ export const updateConversionSchema = z.object({
   importe_total: z.number().positive().optional(),
   metodo_pago: z.enum(PAYMENT_METHODS).nullable().optional(),
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 

@@ -102,7 +102,11 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
 }
 
 export default function LeadsPipelinePage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: { id?: number | null; isAll?: boolean };
+    projects: Array<{ id: number }>;
+    isAllProjects: boolean;
+  };
   const pid = activeProject?.id;
 
   const [allLeads, setAllLeads] = useState<PipelineLead[]>([]);
@@ -113,13 +117,14 @@ export default function LeadsPipelinePage() {
   const [dragOverCol, setDragOverCol] = useState<LeadStatus | null>(null);
 
   const fetchAllLeads = useCallback(async () => {
-    if (!pid) return;
+    if (isAllProjects && (!projects || projects.length === 0)) return;
+    if (!isAllProjects && !pid) return;
     setLoading(true);
     try {
-      // Limitamos a 200 leads por pipeline para mantener render fluido
-      // (sin virtualización). Si se necesita más, hay que paginar por columna
-      // o introducir react-window. Ver issue #virtualization.
-      const res = await client.get<PipelineLead[]>(`/leads?projectId=${pid}&limit=200&includeConverted=1`);
+      const qs = isAllProjects
+        ? `projectIds=${projects.map((p) => p.id).join(',')}&limit=200&includeConverted=1`
+        : `projectId=${pid}&limit=200&includeConverted=1`;
+      const res = await client.get<PipelineLead[]>(`/leads?${qs}`);
       if (res.success) {
         // Backend devuelve status, frontend usa estado - normalizar
         setAllLeads((res.data || []).map((l: PipelineLead) => ({
@@ -133,7 +138,7 @@ export default function LeadsPipelinePage() {
     } finally {
       setLoading(false);
     }
-  }, [pid]);
+  }, [pid, isAllProjects, projects]);
 
   useEffect(() => {
     fetchAllLeads();

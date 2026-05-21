@@ -5,7 +5,7 @@ import { hexToHslTriplet } from '@/shared/lib/color';
 const ProjectContext = createContext(null);
 
 const BASE_URL = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
-const DEFAULT_FAVICON = `${BASE_URL}/favicon.jpeg`;
+const DEFAULT_FAVICON = `${BASE_URL}/favicon.svg`;
 
 function setFavicon(href) {
   let link = document.querySelector("link[rel='icon']");
@@ -36,7 +36,7 @@ function applyThemeColor(hex) {
 }
 
 export function ProjectProvider({ children }) {
-  const { activeProject, projects, switchProject } = useAuth();
+  const { activeProject, projects, switchProject, isAllProjects } = useAuth();
 
   // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
   useEffect(() => {
@@ -59,6 +59,7 @@ export function ProjectProvider({ children }) {
       activeProject: activeProject || { id: null, nombre: 'Sin proyecto' },
       projects: projects || [],
       switchProject,
+      isAllProjects: !!isAllProjects,
     }}>
       {children}
     </ProjectContext.Provider>

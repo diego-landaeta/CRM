@@ -64,7 +64,7 @@ export default function useUrlFilters<T extends UrlFilterDefaults>(defaults: T):
         }
       }
       return next;
-    }, { replace: true });
+    }, { replace: true, preventScrollReset: true });
   }, [filters, setSearchParams, defaults]);
 
   const reset = useCallback((): void => {
@@ -72,7 +72,7 @@ export default function useUrlFilters<T extends UrlFilterDefaults>(defaults: T):
       const next = new URLSearchParams(prev);
       for (const key of Object.keys(defaults)) next.delete(key);
       return next;
-    }, { replace: true });
+    }, { replace: true, preventScrollReset: true });
   }, [setSearchParams, defaults]);
 
   // Composición setFilters + reset como función con propiedad

@@ -70,6 +70,7 @@ export async function deleteCustomRole(req, res, next) {
 export async function getUserPermissions(req, res, next) {
   try {
     const userId = parseInt(req.params.userId);
+    if (isNaN(userId) || userId <= 0) throw new AppError('userId inválido', 400, 'INVALID_ID');
     const { rows } = await query(
       `SELECT id, nombre, role, custom_role_id FROM users WHERE id = $1`,
       [userId]
@@ -96,10 +97,41 @@ export async function getUserPermissions(req, res, next) {
 export async function saveUserPermissions(req, res, next) {
   try {
     const userId = parseInt(req.params.userId);
+    if (isNaN(userId) || userId <= 0) throw new AppError('userId inválido', 400, 'INVALID_ID');
     const parsed = overridesSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
 
     await service.saveUserPermissions(userId, parsed.data);
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+const viewSchema = z.object({
+  default_route:        z.string().optional(),
+  hidden_sidebar_items: z.array(z.string()).optional(),
+  dashboard_widgets:    z.array(z.string()).optional(),
+  compact_sidebar:      z.boolean().optional(),
+});
+
+// GET /api/permissions/role-views/:roleKey
+export async function getRoleView(req, res, next) {
+  try {
+    const data = await service.getRoleView(req.params.roleKey);
+    if (!data) throw new AppError('Rol no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/permissions/role-views/:roleKey (solo custom roles)
+export async function setRoleView(req, res, next) {
+  try {
+    const id = parseInt(req.params.roleKey);
+    if (isNaN(id)) throw new AppError('Solo roles custom son editables (pasa el id numérico)', 400, 'SYSTEM_ROLE_READONLY');
+    const parsed = viewSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+
+    const updated = await service.setCustomRoleView(id, parsed.data);
+    if (!updated) throw new AppError('Rol custom no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }

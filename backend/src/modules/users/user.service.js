@@ -5,6 +5,7 @@ import * as userModel from './user.model.js';
 import { revokeAllUserTokens } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { query } from '../../shared/config/db.js';
 
 const BCRYPT_ROUNDS = 12;
 const SET_PASSWORD_EXPIRY_HOURS = 24;
@@ -85,7 +86,37 @@ export async function deactivate(id) {
   await userModel.deactivate(id);
   // PDF spec: al desactivar, la sesion activa se cierra inmediatamente
   await revokeAllUserTokens(id);
-  return { message: 'Usuario desactivado' };
+
+  // Huerfanizar los leads de los que era responsable y re-asignar via
+  // round-robin a los gestores restantes de cada proyecto afectado.
+  // Si no quedan gestores → los leads quedan con responsable_id = NULL.
+  let reassigned = 0, orphaned = 0;
+  try {
+    const { rows: affectedProjects } = await query(
+      `SELECT DISTINCT project_id FROM leads WHERE responsable_id = $1`,
+      [id]
+    );
+    if (affectedProjects.length > 0) {
+      // Quitarles el responsable a TODOS los leads que el user dejó atrás
+      const upd = await query(
+        `UPDATE leads SET responsable_id = NULL, updated_at = NOW() WHERE responsable_id = $1 RETURNING project_id`,
+        [id]
+      );
+      orphaned = upd.rowCount;
+      // Re-aplicar round-robin proyecto a proyecto
+      const { reassignPendingRoundRobin } = await import('../leads/lead.model.js');
+      for (const p of affectedProjects) {
+        try {
+          const r = await reassignPendingRoundRobin(p.project_id);
+          reassigned += r.reassigned || 0;
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, userId: id }, 'Re-asignación tras desactivar usuario falló (no bloqueante)');
+  }
+
+  return { message: 'Usuario desactivado', leads_huerfanizados: orphaned, leads_reasignados: reassigned };
 }
 
 export async function reactivate(id) {

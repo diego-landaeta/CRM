@@ -10,6 +10,8 @@ import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useLeadDetail } from '../hooks/useLeads';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { detectCountryFromPhone } from '../lib/phoneCountry';
+const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -109,7 +111,7 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
             {loading && !lead && <p className="text-sm text-muted-foreground">Cargando datos...</p>}
             {lead && (
               <>
-                {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} />}
+                {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} onSaved={refetch} />}
                 {tab === 'historial' && <HistorialTab timeline={timeline} />}
                 {tab === 'interacciones' && <InteraccionesTab leadId={lead.id} interacciones={interacciones} onRefetch={refetch} />}
                 {tab === 'recordatorios' && <RecordatoriosTab leadId={lead.id} reminders={reminders} onRefetch={refetch} />}
@@ -151,21 +153,75 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
   );
 }
 
-function ResumenTab({ lead, onEnroll }) {
+function ResumenTab({ lead, onEnroll, onSaved }) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [changeProductOpen, setChangeProductOpen] = useState(false);
+  useEffect(() => {
+    if (!lead?.id || !lead?.email) return;
+    client.get(`/leads/${lead.id}/purchase-history`)
+      .then((r) => { if (r.success) setHistory(r.data || []); })
+      .catch(() => {});
+  }, [lead?.id, lead?.email]);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
         <StatusBadge status={lead.estado} />
         {lead.canal && <ChannelBadge channel={lead.canal} />}
+        {lead.es_propuesto && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300" title="Cliente existente preguntando por otro programa">
+            Propuesto
+          </span>
+        )}
       </div>
 
-      <DataRow label="Teléfono" value={lead.telefono ? <a href={`tel:${lead.telefono}`} className="text-primary hover:underline">{lead.telefono}</a> : '--'} />
+      {history.length > 0 && (
+        <div className="rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
+          <p className="text-xs font-bold text-violet-700 dark:text-violet-300 mb-2">Historial de compra ({history.length})</p>
+          <div className="space-y-1.5">
+            {history.map((h) => (
+              <div key={h.id} className="text-[11px] bg-card border border-border rounded px-2 py-1.5 flex items-center gap-2">
+                <span className="font-semibold flex-1 truncate">{h.producto_contratado}</span>
+                <span className="text-muted-foreground tabular-nums">
+                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                </span>
+                {h.fecha_compra && <span className="text-muted-foreground">{new Date(h.fecha_compra).toLocaleDateString('es-ES')}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <DataRow label="Teléfono" value={lead.telefono ? (() => {
+        const c = detectCountryFromPhone(lead.telefono);
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <a href={`tel:${lead.telefono}`} className="text-primary hover:underline">{lead.telefono}</a>
+            {c && <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground" title={`Detectado por prefijo +${c.prefix}`}>{c.flag} {c.name}</span>}
+          </span>
+        );
+      })() : '--'} />
       <DataRow label="Email" value={lead.email || '--'} />
-      <DataRow label="Producto interés" value={lead.producto_interes || '--'} />
-      <DataRow label="País" value={lead.pais || '--'} />
+      <DataRow label="Producto interés" value={
+        <span className="inline-flex items-center gap-2">
+          <span>{lead.producto_interes || lead.producto_nombre || <span className="italic text-muted-foreground">— sin vincular —</span>}</span>
+          <button
+            type="button"
+            onClick={() => setChangeProductOpen(true)}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-card hover:bg-muted text-primary font-semibold whitespace-nowrap"
+            title="Vincular o cambiar el producto de interés"
+          >
+            {lead.producto_interes_id ? 'Cambiar' : 'Vincular'}
+          </button>
+        </span>
+      } />
+      <DataRow label="País" value={lead.pais || (() => {
+        const c = detectCountryFromPhone(lead.telefono);
+        return c ? <span className="text-muted-foreground italic">{c.flag} {c.name} <span className="text-[10px]">(por teléfono)</span></span> : '--';
+      })()} />
       <DataRow label="Origen" value={lead.origen || '--'} />
       <DataRow label="Gestor" value={lead.responsable_nombre || lead.gestor || '--'} />
-      <DataRow label="Creado" value={fmtDate(lead.created_at)} />
+      <DataRow label="Creado" value={fmtDateTime(lead.created_at)} />
       {lead.notas && (
         <div>
           <p className="text-xs text-muted-foreground mb-1">Notas</p>
@@ -180,6 +236,15 @@ function ResumenTab({ lead, onEnroll }) {
         <Plus size={14} weight="bold" />
         Enrolar en secuencia
       </button>
+
+      <Suspense fallback={null}>
+        <ChangeProductDialog
+          open={changeProductOpen}
+          lead={lead}
+          onClose={() => setChangeProductOpen(false)}
+          onSaved={() => { setChangeProductOpen(false); onSaved?.(); }}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -188,7 +253,7 @@ function DataRow({ label, value }) {
   return (
     <div className="flex justify-between items-baseline gap-3">
       <span className="text-xs text-muted-foreground flex-shrink-0">{label}</span>
-      <span className="text-sm text-right truncate">{value}</span>
+      <span className="text-sm text-right break-words min-w-0">{value}</span>
     </div>
   );
 }

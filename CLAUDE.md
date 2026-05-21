@@ -122,9 +122,16 @@ scripts/    # backup.sh, deploy.sh
 ### General
 - **Idioma del codigo:** ingles para variables/funciones, espanol para comentarios si son necesarios
 - **Commits en espanol** con prefijos: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`
-- **Ramas:** `main` (produccion), `dev` (desarrollo), `feature/nombre-corto`, `hotfix/nombre`
+- **Ramas y entornos:**
+  - `main` → **produccion** (https://360crm.tech/crm/, DB `crm_prod_db`, PM2 `crm-api-production` :3001, frontend `/var/www/crm/production/frontend`)
+  - `staging` → **QA/testeo** (https://360crm.tech/testeo/, DB `crm_test_db`, PM2 `crm-api-staging` :3002, frontend `/var/www/crm/staging/frontend`)
+  - `feat/<nombre-corto>` → features en desarrollo (PRs)
+  - Flujo: `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod
+  - **NUNCA commit directo a `main`**. Ver `docs/09-deploy-y-ramas.md` para procedimiento de deploy completo, rollback, envs y webhooks externos.
 - Variables de entorno en `.env` — NUNCA hardcodeadas
-- Nunca commit de `.env`, `node_modules/`, `dist/`
+- Nunca commit de `.env`, `.env.production`, `node_modules/`, `dist/`
+- VPS: Hostinger `187.124.128.126` (DNS `360crm.tech`). HTTPS con Let's Encrypt + renovación auto (`certbot.timer`).
+- Backups DB en `/var/backups/crm/*.sql.gz` — hacer pg_dump antes de deploys grandes.
 
 ## Reglas de negocio criticas
 

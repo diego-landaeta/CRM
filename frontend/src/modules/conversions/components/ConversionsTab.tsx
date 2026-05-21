@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { conversionsApi, type Conversion, type Payment } from '../api/conversions.api';
+import { conversionsApi, type Conversion, type Payment, type Refund } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle } from '@phosphor-icons/react';
+import RefundDialog from './RefundDialog';
+import InstallmentsDialog from './InstallmentsDialog';
+import EditConversionDialog from './EditConversionDialog';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
@@ -25,8 +28,21 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogConv, setPaymentDialogConv] = useState<Conversion | null>(null);
+  const [refundDialogConv, setRefundDialogConv] = useState<Conversion | null>(null);
+  const [installmentsDialogConv, setInstallmentsDialogConv] = useState<Conversion | null>(null);
+  const [editDialogConv, setEditDialogConv] = useState<Conversion | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
+  const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
+
+  async function loadRefunds(conversionId: number): Promise<void> {
+    try {
+      const r = await conversionsApi.listRefunds(conversionId);
+      if (r.success) {
+        setRefundsByConv((prev) => ({ ...prev, [conversionId]: r.data || [] }));
+      }
+    } catch { /* silencioso */ }
+  }
 
   async function load(): Promise<void> {
     if (!lead?.id) return;
@@ -42,6 +58,24 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   }
 
   useEffect(() => { load(); }, [lead?.id]);
+
+  // Tras cargar conversiones, traemos las devoluciones de cada una (suelen ser pocas).
+  useEffect(() => {
+    conversions.forEach((c) => { loadRefunds(c.id); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversions]);
+
+  async function handleDeleteRefund(refundId: number): Promise<void> {
+    if (!confirm('¿Eliminar esta devolución? La operación es irreversible.')) return;
+    try {
+      await conversionsApi.removeRefund(refundId);
+      toast({ title: 'Devolución eliminada' });
+      // Recargamos las devoluciones de TODAS las conversiones (la mas barata)
+      conversions.forEach((c) => loadRefunds(c.id));
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    }
+  }
 
   function handleDeletePayment(paymentId: number): void { setPendingPayment(paymentId); }
   async function doDeletePayment(): Promise<void> {
@@ -166,6 +200,33 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                         </button>
                       )}
                       <button
+                        onClick={() => setEditDialogConv(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 text-xs font-semibold hover:bg-sky-200 dark:hover:bg-sky-950/60"
+                        title="Editar datos de la conversión (producto, importe, fechas, método)"
+                      >
+                        <PencilSimple size={14} weight="bold" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => setInstallmentsDialogConv(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300 text-xs font-semibold hover:bg-violet-200 dark:hover:bg-violet-950/60"
+                        title={c.metodo_pago === 'fraccionado' ? 'Ver/editar cuotas' : 'Convertir a fraccionado'}
+                      >
+                        <Coins size={14} weight="bold" />
+                        {c.metodo_pago === 'fraccionado' ? 'Cuotas' : 'Fraccionar'}
+                      </button>
+                      {Number(c.importe_pagado) > 0 && (
+                        <button
+                          onClick={() => setRefundDialogConv(c)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 text-xs font-semibold hover:bg-amber-200 dark:hover:bg-amber-950/60"
+                          title="Registrar devolución (fase de prueba)"
+                        >
+                          <ArrowCounterClockwise size={14} weight="bold" />
+                          Devolver
+                          <span className="text-[8px] font-bold uppercase opacity-70">test</span>
+                        </button>
+                      )}
+                      <button
                         onClick={() => handleDeleteConversion(c.id)}
                         className="p-1 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600"
                         title="Eliminar"
@@ -201,6 +262,38 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                     <PaymentsList conversionId={c.id} onDelete={handleDeletePayment} canManage={canManage} />
                   </details>
                 )}
+
+                {/* Devoluciones (FASE DE PRUEBA) */}
+                {(refundsByConv[c.id]?.length || 0) > 0 && (
+                  <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-900">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ArrowCounterClockwise size={12} className="text-amber-600" weight="bold" />
+                      <span className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">
+                        Devoluciones registradas — fase de prueba
+                      </span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        Neto cobrado: {formatCurrency(Number(c.importe_pagado) - (refundsByConv[c.id] || []).reduce((s, r) => s + Number(r.importe), 0))}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {(refundsByConv[c.id] || []).map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 text-[11px] bg-amber-50/50 dark:bg-amber-950/20 rounded px-2 py-1">
+                          <span className="font-mono text-muted-foreground">{r.fecha}</span>
+                          <span className="font-semibold text-amber-700 dark:text-amber-300 tabular-nums">−{formatCurrency(r.importe)}</span>
+                          <span className="flex-1 text-muted-foreground truncate">{r.motivo || '(sin motivo)'}</span>
+                          {r.created_by_nombre && <span className="text-muted-foreground italic">por {r.created_by_nombre}</span>}
+                          {canManage && (
+                            <button onClick={() => handleDeleteRefund(r.id)}
+                              className="text-muted-foreground hover:text-red-600 p-0.5"
+                              title="Eliminar devolución">
+                              <Trash size={10} weight="bold" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -221,8 +314,28 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
         conversion={paymentDialogConv}
         onPaid={() => load()}
       />
+      <RefundDialog
+        open={!!refundDialogConv}
+        conversion={refundDialogConv}
+        onClose={() => setRefundDialogConv(null)}
+        onSaved={() => {
+          const id = refundDialogConv?.id;
+          setRefundDialogConv(null);
+          if (id) loadRefunds(id);
+        }}
+      />
       <ConfirmDialog open={pendingPayment !== null} title="¿Eliminar pago?" message="Se recalculará el total de la conversión." onConfirm={doDeletePayment} onCancel={() => setPendingPayment(null)} />
       <ConfirmDialog open={pendingConversion !== null} title="¿Eliminar conversión?" message="Se eliminarán todos sus pagos. Esta acción no se puede deshacer." onConfirm={doDeleteConversion} onCancel={() => setPendingConversion(null)} />
+      <InstallmentsDialog
+        conversion={installmentsDialogConv}
+        onClose={() => setInstallmentsDialogConv(null)}
+        onSaved={() => load()}
+      />
+      <EditConversionDialog
+        conversion={editDialogConv}
+        onClose={() => setEditDialogConv(null)}
+        onSaved={() => load()}
+      />
     </div>
   );
 }

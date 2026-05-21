@@ -8,13 +8,13 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors'],
     requires: [],
   },
   leads: {
     label: 'Leads / Captacion',
     description: 'Pipeline + audiencias + forms + webhooks',
-    modules: ['leads', 'forms', 'webhook-tokens', 'audiences'],
+    modules: ['leads', 'forms', 'webhook-tokens', 'audiences', 'make'],
     requires: ['core'],
   },
   comercial: {

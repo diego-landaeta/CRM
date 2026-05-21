@@ -4,8 +4,8 @@ import { uploadToR2, deleteFromR2 } from '../../shared/services/r2.service.js';
 import { generatePresignedUrl } from '../../shared/utils/presignedUrl.js';
 import { logger } from '../../shared/utils/logger.js';
 
-export async function listByProject(projectId) {
-  return ProductModel.findByProject(projectId);
+export async function listByProject(projectId, opts = {}) {
+  return ProductModel.findByProject(projectId, opts);
 }
 
 export async function getById(id, projectId) {

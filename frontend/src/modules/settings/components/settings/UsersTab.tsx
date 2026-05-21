@@ -29,6 +29,7 @@ export default function UsersTab() {
   const [newRole, setNewRole] = useState('gestor');
   const [newProjects, setNewProjects] = useState([]);
   const [createLoading, setCreateLoading] = useState(false);
+  const [inviteLink, setInviteLink] = useState<{ email: string; url: string } | null>(null);
 
   const [editRole, setEditRole] = useState('');
   const [editProjects, setEditProjects] = useState([]);
@@ -38,8 +39,10 @@ export default function UsersTab() {
     setLoading(true);
     setError(null);
     try {
+      // En modo "Todos los proyectos" activeProject.id es -1 (sentinel) — no
+      // lo mandamos al backend (que valida >0). Tratamos como "todos".
       let projectIdParam = '';
-      if (projectFilter === 'active' && activeProject?.id) {
+      if (projectFilter === 'active' && activeProject?.id && activeProject.id > 0) {
         projectIdParam = `&projectId=${activeProject.id}`;
       } else if (projectFilter !== 'active' && projectFilter !== 'all') {
         projectIdParam = `&projectId=${projectFilter}`;
@@ -87,7 +90,15 @@ export default function UsersTab() {
         projectIds: newProjects,
       });
       if (res.success) {
-        toast({ title: 'Usuario creado', description: `Se ha enviado email de bienvenida a ${newEmail}` });
+        const token = (res.data as { setPasswordToken?: string })?.setPasswordToken;
+        if (token) {
+          const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+          const url = `${window.location.origin}${base}/set-password?token=${token}`;
+          setInviteLink({ email: newEmail.trim(), url });
+          toast({ title: 'Usuario creado', description: 'Comparte el link de invitación que aparece abajo.' });
+        } else {
+          toast({ title: 'Usuario creado', description: `Se ha enviado email de bienvenida a ${newEmail}` });
+        }
         setShowCreateDialog(false);
         resetCreateForm();
         fetchUsers();
@@ -188,6 +199,41 @@ export default function UsersTab() {
           <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Crear Usuario</span>
         </button>
       </div>
+
+      {inviteLink && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-xs">
+              <p className="font-semibold text-amber-900 dark:text-amber-200">Invitación pendiente para {inviteLink.email}</p>
+              <p className="text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                Si el envío por email no está activo, copia este link y pásaselo. Caduca en 24h. Al abrirlo el usuario define su propia contraseña.
+              </p>
+            </div>
+            <button onClick={() => setInviteLink(null)} aria-label="Cerrar" className="text-amber-900/60 hover:text-amber-900 dark:text-amber-300/60">
+              <X size={14} weight="bold" />
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input readOnly value={inviteLink.url} onFocus={(e) => e.currentTarget.select()} className="flex-1 h-8 px-2 rounded-md border border-amber-300 dark:border-amber-700 bg-white/80 dark:bg-black/30 text-[11px] font-mono" />
+            <button
+              onClick={async () => {
+                try {
+                  if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(inviteLink.url);
+                  else {
+                    const ta = document.createElement('textarea');
+                    ta.value = inviteLink.url; document.body.appendChild(ta); ta.select();
+                    document.execCommand('copy'); document.body.removeChild(ta);
+                  }
+                  toast({ title: 'Link copiado' });
+                } catch { toast({ title: 'No se pudo copiar', variant: 'destructive' }); }
+              }}
+              className="h-8 px-3 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700"
+            >
+              Copiar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 p-3 rounded-md border border-border bg-card">
         <span className="text-[11px] font-medium text-muted-foreground">Mostrar:</span>

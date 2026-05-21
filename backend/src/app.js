@@ -36,6 +36,8 @@ import emailTemplatesModule from './modules/email-templates/index.js';
 import installationModule from './modules/installation/index.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
+import connectorsModule from './modules/connectors/index.js';
+import makeModule from './modules/make/index.js';
 import statusModule from './modules/status/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -48,13 +50,18 @@ import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js'
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Detrás de Nginx (un único hop). Necesario para que express-rate-limit
+// y req.ip funcionen con X-Forwarded-For sin lanzar ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // Middleware global
 app.use(helmet());
 app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
 app.use(cookieParser());
 
 // API root
@@ -113,6 +120,8 @@ const ALL_MODULES = [
   { name: 'email-templates', mod: emailTemplatesModule },
   { name: 'project-channels', mod: projectChannelsModule },
   { name: 'permissions', mod: permissionsModule },
+  { name: 'connectors', mod: connectorsModule },
+  { name: 'make', mod: makeModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
@@ -141,6 +150,11 @@ for (const { name, mod } of ALL_MODULES) {
   }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
+  // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
+  if (mod.publicMount) {
+    app.use(mod.publicMount.prefix, mod.publicMount.router);
+    logger.info(`Modulo registrado (public): ${mod.publicMount.prefix}`);
+  }
 }
 
 // Error handler (debe ir ultimo)

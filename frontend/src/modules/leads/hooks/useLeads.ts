@@ -6,11 +6,16 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; page: number } = {
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number } = {
   q: '',
   estado: '',
   origen: '',
   resp: '',
+  prod: '',
+  multi: '',  // CSV de project ids (vacío = sólo proyecto activo)
+  from: '',
+  to: '',
+  sort: 'recent_value',  // default: día más reciente arriba, dentro del día los caros primero
   page: 1,
 };
 
@@ -39,6 +44,15 @@ export interface UseLeadsResult {
   setFilterOrigen: (v: string) => void;
   filterResponsable: string;
   setFilterResponsable: (v: string) => void;
+  filterProducto: string;
+  setFilterProducto: (v: string) => void;
+  selectedProjectIds: number[];
+  setSelectedProjectIds: (ids: number[]) => void;
+  dateFrom: string;
+  dateTo: string;
+  setDateRange: (from: string, to: string) => void;
+  sortMode: 'value' | 'recent' | 'urgency' | 'recent_value';
+  setSortMode: (m: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -55,18 +69,30 @@ function normalizeLead<T extends Partial<Lead>>(lead: T): T {
 }
 
 export function useLeads(): UseLeadsResult {
-  const { activeProject } = useProjectContext();
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: { id?: number | null; isAll?: boolean };
+    projects: Array<{ id: number }>;
+    isAllProjects: boolean;
+  };
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, page } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; page: number;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number;
   };
+  const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent_value') as 'value' | 'recent' | 'urgency' | 'recent_value';
+  const selectedProjectIds: number[] = multiRaw
+    ? multiRaw.split(',').map((x) => Number(x)).filter((x) => x > 0)
+    : [];
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
   const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
+  const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
+  const setSelectedProjectIds = useCallback((ids: number[]) => setUrlFilters({ multi: ids.length ? ids.join(',') : '', page: 1 }), [setUrlFilters]);
+  const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
+  const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency' | 'recent_value') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
@@ -94,7 +120,13 @@ export function useLeads(): UseLeadsResult {
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchLeads = useCallback(async (): Promise<void> => {
-    if (!pid) return;
+    // Modo "Todos los proyectos": cruza todos los IDs del usuario.
+    const effectiveIds = isAllProjects
+      ? (projects || []).map((p) => p.id)
+      : selectedProjectIds;
+    const hasMulti = effectiveIds.length > 0;
+    if (!hasMulti && !pid) return;
+    if (isAllProjects && (!projects || projects.length === 0)) return;
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -103,13 +135,22 @@ export function useLeads(): UseLeadsResult {
     setError(null);
     try {
       const params = new URLSearchParams();
-      params.set('projectId', String(pid));
+      if (hasMulti) {
+        params.set('projectIds', effectiveIds.join(','));
+      } else {
+        params.set('projectId', String(pid));
+      }
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (filterEstado) params.set('status', filterEstado);
       if (filterOrigen) params.set('canal', filterOrigen);
-      if (filterResponsable) params.set('responsableId', filterResponsable);
+      if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
+      else if (filterResponsable) params.set('responsableId', filterResponsable);
+      if (filterProducto) params.set('productId', filterProducto);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (sortMode) params.set('sort', sortMode);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -127,32 +168,47 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
   }, []);
 
   const fetchStats = useCallback(async (): Promise<void> => {
-    if (!pid) return;
     try {
-      const res = await client.get(`/leads/stats?projectId=${pid}`);
-      if (res.success) {
-        const d = res.data || {};
-        setStats({
-          total: Number(d.total) || 0,
-          nuevo: Number(d.nuevos) || 0,
-          por_contactar: Number(d.por_contactar) || 0,
-          contactado: Number(d.contactados) || 0,
-          en_seguimiento: Number(d.en_seguimiento) || 0,
-          convertido: Number(d.convertidos) || 0,
-          no_interesado: Number(d.no_interesados) || 0,
+      let merged: Record<string, number> = {};
+      if (isAllProjects) {
+        if (!projects || projects.length === 0) return;
+        const results = await Promise.all(
+          projects.map((p) => client.get(`/leads/stats?projectId=${p.id}`).catch(() => ({ success: false } as any)))
+        );
+        results.forEach((r: any) => {
+          if (r.success) {
+            const d = r.data || {};
+            for (const k of ['total', 'nuevos', 'por_contactar', 'contactados', 'en_seguimiento', 'convertidos', 'no_interesados', 'sin_asignar']) {
+              merged[k] = (merged[k] || 0) + Number(d[k] || 0);
+            }
+          }
         });
+      } else {
+        if (!pid) return;
+        const res = await client.get(`/leads/stats?projectId=${pid}`);
+        if (!res.success) return;
+        merged = res.data || {};
       }
+      setStats({
+        total: Number(merged.total) || 0,
+        nuevo: Number(merged.nuevos) || 0,
+        por_contactar: Number(merged.por_contactar) || 0,
+        contactado: Number(merged.contactados) || 0,
+        en_seguimiento: Number(merged.en_seguimiento) || 0,
+        convertido: Number(merged.convertidos) || 0,
+        no_interesado: Number(merged.no_interesados) || 0,
+      } as Partial<LeadStats>);
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid]);
+  }, [pid, isAllProjects, projects]);
 
   useEffect(() => {
     fetchLeads();
@@ -177,6 +233,15 @@ export function useLeads(): UseLeadsResult {
     setFilterOrigen,
     filterResponsable,
     setFilterResponsable,
+    filterProducto,
+    setFilterProducto,
+    selectedProjectIds,
+    setSelectedProjectIds,
+    dateFrom,
+    dateTo,
+    setDateRange,
+    sortMode,
+    setSortMode,
     loading,
     error,
     refetch: fetchLeads,

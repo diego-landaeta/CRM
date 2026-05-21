@@ -72,4 +72,46 @@ export const conversionsApi = {
     client.post(`/conversions/${id}/payments`, data),
   removePayment: (paymentId: number): Promise<ApiResponse<void>> =>
     client.delete(`/conversions/payments/${paymentId}`),
+  generateInstallments: (
+    id: number,
+    data: {
+      num_cuotas?: number;
+      importe_total?: number;
+      fecha_inicio?: string;
+      installments?: Array<{ importe_previsto: number; fecha_vencimiento: string }>;
+    },
+  ): Promise<ApiResponse<unknown>> =>
+    client.post(`/conversions/${id}/installments/generate`, data),
+  listInstallments: (id: number): Promise<ApiResponse<any[]>> =>
+    client.get(`/conversions/${id}/installments`),
+  payInstallment: (
+    instId: number,
+    data: { importe_cobrado: number; fecha_cobro?: string; metodo_pago?: string | null; notas?: string | null },
+  ): Promise<ApiResponse<any>> =>
+    client.post(`/conversions/installments/${instId}/pay`, data),
+  updateInstallment: (
+    instId: number,
+    data: { importe_previsto?: number; fecha_vencimiento?: string },
+  ): Promise<ApiResponse<any>> =>
+    client.patch(`/conversions/installments/${instId}`, data),
+  deleteInstallment: (instId: number): Promise<ApiResponse<void>> =>
+    client.delete(`/conversions/installments/${instId}`),
+
+  // Devoluciones (FASE DE PRUEBA)
+  listRefunds: (conversionId: number): Promise<ApiResponse<Refund[]>> =>
+    client.get(`/conversions/${conversionId}/refunds`),
+  createRefund: (conversionId: number, data: { importe: number; fecha?: string; motivo?: string | null }): Promise<ApiResponse<Refund>> =>
+    client.post(`/conversions/${conversionId}/refunds`, data),
+  removeRefund: (refundId: number): Promise<ApiResponse<void>> =>
+    client.delete(`/conversions/refunds/${refundId}`),
 };
+
+export interface Refund {
+  id: number;
+  conversion_id: number;
+  importe: number | string;
+  fecha: string;
+  motivo: string | null;
+  created_at: string;
+  created_by_nombre?: string | null;
+}

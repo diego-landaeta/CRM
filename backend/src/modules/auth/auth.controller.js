@@ -3,17 +3,23 @@ import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import { loginSchema, setPasswordSchema } from './auth.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { buildPermissionsMap } from '../permissions/permissions.service.js';
+import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
 }
 
+// El flag 'secure' obliga a HTTPS — pero estamos sirviendo por HTTP en beta.
+// Si NODE_ENV=production fuerza secure=true, el navegador descarta la cookie
+// al recargar (no la envía de vuelta sobre HTTP) y el usuario queda deslogueado.
+// Solución: COOKIE_SECURE opcional en .env (default false hasta tener HTTPS).
+const COOKIE_SECURE = String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true';
+
 function setRefreshCookie(res, refreshToken, expiryDays) {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',  // 'lax' funciona sobre HTTP; 'strict' a veces lo bloquea al refrescar
     maxAge: expiryDays * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -22,8 +28,8 @@ function setRefreshCookie(res, refreshToken, expiryDays) {
 function clearRefreshCookie(res) {
   res.clearCookie('refreshToken', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',
     path: '/',
   });
 }
@@ -115,9 +121,10 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const [projects, permissions] = await Promise.all([
-      authModel.getUserProjects(user.id),
+    const [projects, permissions, view] = await Promise.all([
+      authModel.getUserProjects(user.id, user.role),
       buildPermissionsMap(user.id, user.role, user.custom_role_id),
+      resolveUserView(user.id, user.role, user.custom_role_id),
     ]);
 
     res.json({
@@ -133,6 +140,7 @@ export async function me(req, res, next) {
           custom_role_label: user.custom_role_label,
         },
         permissions,
+        view,
         projects: sanitizeProjects(projects, user.role),
       },
     });

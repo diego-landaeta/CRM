@@ -6,6 +6,39 @@ import CommandPalette from './CommandPalette';
 import { List, X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import NeedsProjectBanner from '@/shared/components/ui/NeedsProjectBanner';
+
+// Rutas que SÍ funcionan en modo "Todos los proyectos" (vista global).
+// El resto requiere un proyecto concreto (catálogo, settings, finanzas, etc.).
+const ALL_PROJECTS_OK = [
+  /^\/$/,                    // Dashboard
+  /^\/leads$/,               // Lista de prospectos
+  /^\/leads\/pipeline$/,     // Kanban
+  /^\/leads\/\d+$/,          // Detalle de prospecto
+  /^\/clients$/,             // Clientes
+  /^\/clients\/\d+$/,        // Detalle de cliente
+  /^\/profile$/,
+  /^\/preferences$/,
+  /^\/notificaciones$/,
+  /^\/manual$/,
+  /^\/settings$/,
+  /^\/soporte$/,
+  /^\/status$/,
+  /^\/ai-chat$/,
+];
+
+function pathAllowsAll(pathname) {
+  return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
+}
+
+function AllProjectsGuard({ pathname, children }) {
+  const { isAllProjects } = useProjectContext();
+  if (isAllProjects && !pathAllowsAll(pathname)) {
+    return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
+  }
+  return children;
+}
 
 const FloatingDock = lazy(() => import('./FloatingDock'));
 const ShortcutsFAB = lazy(() => import('./ShortcutsFAB'));
@@ -200,7 +233,9 @@ export default function AppLayout() {
         }>
           {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
           <div key={pathname} className="animate-in fade-in duration-200">
-            <Outlet />
+            <AllProjectsGuard pathname={pathname}>
+              <Outlet />
+            </AllProjectsGuard>
           </div>
         </Suspense>
       </main>

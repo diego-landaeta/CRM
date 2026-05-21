@@ -8,27 +8,44 @@ export async function listByConversion(conversionId) {
   return rows;
 }
 
-export async function generateInstallments(conversionId, numCuotas, importeTotal, fechaInicio) {
-  // Genera N cuotas iguales mensuales desde fechaInicio
+export async function generateInstallments(conversionId, numCuotas, importeTotal, fechaInicio, customInstallments = null) {
+  // Si llega customInstallments, lo usa tal cual. Si no, distribuye N cuotas
+  // iguales mensuales desde fechaInicio (comportamiento original).
   const c = await getClient();
   try {
     await c.query('BEGIN');
     // Borra anteriores no cobradas
     await c.query(`DELETE FROM conversion_installments WHERE conversion_id = $1 AND fecha_cobro IS NULL`, [conversionId]);
-    const importeCuota = Math.round((Number(importeTotal) / numCuotas) * 100) / 100;
-    const start = new Date(fechaInicio);
-    for (let i = 0; i < numCuotas; i++) {
-      const venc = new Date(start);
-      venc.setMonth(venc.getMonth() + i);
-      const importe = i === numCuotas - 1
-        // ultima cuota = total - sum(anteriores) para evitar redondeos
-        ? Math.round((Number(importeTotal) - importeCuota * (numCuotas - 1)) * 100) / 100
-        : importeCuota;
-      await c.query(
-        `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
-         VALUES ($1, $2, $3, $4)`,
-        [conversionId, i + 1, importe, venc.toISOString().slice(0, 10)]
-      );
+
+    if (Array.isArray(customInstallments) && customInstallments.length > 0) {
+      for (let i = 0; i < customInstallments.length; i++) {
+        const cuota = customInstallments[i];
+        const importe = Number(cuota.importe_previsto);
+        const fecha = cuota.fecha_vencimiento;
+        if (!isFinite(importe) || importe <= 0) throw new Error(`Cuota ${i + 1}: importe inválido`);
+        if (!fecha) throw new Error(`Cuota ${i + 1}: fecha de vencimiento requerida`);
+        await c.query(
+          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
+           VALUES ($1, $2, $3, $4)`,
+          [conversionId, i + 1, importe, fecha]
+        );
+      }
+    } else {
+      const importeCuota = Math.round((Number(importeTotal) / numCuotas) * 100) / 100;
+      const start = new Date(fechaInicio);
+      for (let i = 0; i < numCuotas; i++) {
+        const venc = new Date(start);
+        venc.setMonth(venc.getMonth() + i);
+        const importe = i === numCuotas - 1
+          // ultima cuota = total - sum(anteriores) para evitar redondeos
+          ? Math.round((Number(importeTotal) - importeCuota * (numCuotas - 1)) * 100) / 100
+          : importeCuota;
+        await c.query(
+          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
+           VALUES ($1, $2, $3, $4)`,
+          [conversionId, i + 1, importe, venc.toISOString().slice(0, 10)]
+        );
+      }
     }
     await c.query('COMMIT');
     return await listByConversion(conversionId);

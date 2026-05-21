@@ -80,6 +80,13 @@ export interface Lead {
   producto_interes?: string | null;
   producto_interes_id?: number | null;
   producto_nombre?: string | null;
+  producto_precio?: number | string | null;
+  producto_moneda?: string | null;
+  valor_oportunidad?: 'alto' | 'medio' | 'bajo' | null;
+  deleted_at?: string | null;
+  deleted_reason?: 'spam' | 'test' | 'duplicado_manual' | 'otro' | null;
+  deleted_motivo?: string | null;
+  deleted_by?: number | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
   pais?: string | null;
@@ -101,6 +108,9 @@ export interface Lead {
   dias_inactivo?: number | null;
   dias_alerta_inactividad?: number | null;
   reincidente?: boolean | null;
+  es_propuesto?: boolean | null;
+  propuesto_de?: number | null;
+  has_pending_spam_report?: boolean | null;
   gestor?: string | null;
   utms?: Utms | null;
   // UTMs pueden venir embebidos directamente en el lead segun endpoint

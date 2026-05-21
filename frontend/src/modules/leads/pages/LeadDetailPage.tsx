@@ -235,7 +235,7 @@ export default function LeadDetailPage() {
             <ConversionsTab
               lead={lead}
               projectId={lead.project_id}
-              canManage={user?.role === 'admin' || user?.role === 'superadmin' || lead.responsable_id === user?.userId}
+              canManage={user?.role === 'admin' || user?.role === 'superadmin' || lead.responsable_id === user?.id}
             />
           </div>
           <LeadRemindersCard

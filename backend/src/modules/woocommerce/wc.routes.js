@@ -14,7 +14,11 @@ router.get('/mappings', ctrl.listMappings);
 router.put('/mappings', ctrl.setMappings);
 
 router.get('/runs', ctrl.listRuns);
+router.get('/runs/current', ctrl.getCurrentRun);
 router.post('/runs/start', ctrl.importNow);
+router.post('/auto-discover-cpts', ctrl.autoDiscoverCpts);
 router.get('/preview', ctrl.previewWc);
+router.put('/mapping', ctrl.saveMapping);
+router.post('/scrape-preview', ctrl.scrapePreview);
 
 export default router;

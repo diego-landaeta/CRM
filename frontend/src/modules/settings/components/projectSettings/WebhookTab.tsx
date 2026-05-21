@@ -18,12 +18,13 @@ export default function WebhookTab({ project }) {
   }, []);
 
   async function doCopy(text, key) {
-    try {
-      await navigator.clipboard.writeText(text);
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopied(key);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
       copiedTimeoutRef.current = setTimeout(() => setCopied(null), 2000);
-    } catch {}
+    }
   }
 
   function regenerate() {

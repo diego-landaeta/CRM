@@ -3,6 +3,6 @@
 import { useProjectContext } from '@/contexts/ProjectContext';
 
 export function useProject() {
-  const { activeProject, switchProject } = useProjectContext();
-  return { activeProject, setActiveProject: (p) => switchProject(p.id) };
+  const { activeProject, switchProject, isAllProjects } = useProjectContext();
+  return { activeProject, isAllProjects, setActiveProject: (p) => switchProject(p.id) };
 }

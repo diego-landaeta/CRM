@@ -52,6 +52,7 @@ import Portal from '@/shared/components/ui/portal';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { getLocalLogo } from '@/shared/lib/projectLogos';
+import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -63,7 +64,14 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/leads', icon: Users, module: 'leads' },
+      {
+        label: 'Prospectos', icon: Users, module: 'leads',
+        children: [
+          { label: 'Listado', to: '/leads', module: 'leads' },
+          { label: 'Pipeline (Kanban)', to: '/leads/pipeline', module: 'leads' },
+          { label: 'Audiencias Meta', to: '/leads/audiences', roles: ['superadmin', 'admin'], module: 'leads' },
+        ],
+      },
       {
         label: 'Clientes', icon: UserCheck, module: 'clients',
         children: [
@@ -82,6 +90,7 @@ const NAV_SECTIONS = [
         children: [
           { label: 'Formularios', to: '/forms', roles: ['superadmin', 'admin'] },
           { label: 'Webhooks', to: '/webhooks', roles: ['superadmin', 'admin'] },
+          { label: 'Make', to: '/make-webhooks', roles: ['superadmin', 'admin'] },
         ],
       },
       {
@@ -102,6 +111,7 @@ const NAV_SECTIONS = [
         label: 'Productos', icon: Package, roles: ['superadmin', 'admin'],
         children: [
           { label: 'Catálogo', to: '/products', roles: ['superadmin', 'admin'], module: 'products' },
+          { label: 'Árbol de categorías', to: '/configuracion/categorias-arbol', roles: ['superadmin', 'admin'], module: 'products' },
           { label: 'Cursos pendientes', to: '/products/pending', roles: ['superadmin', 'admin'], module: 'products' },
           { label: 'WooCommerce', to: '/woocommerce', roles: ['superadmin', 'admin'], module: 'woocommerce' },
         ],
@@ -140,6 +150,8 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
+      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
       { label: 'Soporte', to: '/soporte', icon: Headset },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
@@ -184,9 +196,13 @@ function canSeeItem(item, role, modules, projectType) {
 }
 
 function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
-  const visible = children.filter((c) => canSeeItem(c, role, modules, projectType));
+  const visible = children
+    .filter((c) => canSeeItem(c, role, modules, projectType))
+    .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
-  const hasActiveChild = visible.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
+  const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
+  // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
+  const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
   const [open, setOpen] = useState(hasActiveChild);
   if (!visible.length) return null;
   const displayLabel = applyLabel(label, labelOverrides);
@@ -226,22 +242,33 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
       {open && (
         <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
           {visible.map((child) => (
-            <NavLink
-              key={child.to}
-              to={child.to}
-              end={child.to === '/accounting'}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
-                  isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
-                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
-                )
-              }
-            >
-              {applyLabel(child.label, labelOverrides)}
-            </NavLink>
+            child.comingSoon ? (
+              <div
+                key={child.to}
+                title="Próximamente"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground/50 cursor-not-allowed select-none"
+              >
+                <span className="truncate">{applyLabel(child.label, labelOverrides)}</span>
+                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+              </div>
+            ) : (
+              <NavLink
+                key={child.to}
+                to={child.to}
+                end={child.to === '/accounting'}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'block px-3 py-1.5 rounded-lg text-[12px] transition-all',
+                    isActive
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                  )
+                }
+              >
+                {applyLabel(child.label, labelOverrides)}
+              </NavLink>
+            )
           ))}
         </div>
       )}
@@ -319,6 +346,27 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
 
 function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed }) {
   const displayLabel = applyLabel(label, labelOverrides);
+  const comingSoon = !isBetaAllowed(to);
+  if (comingSoon) {
+    return (
+      <div
+        title={`${displayLabel} — Próximamente`}
+        aria-label={`${displayLabel} — Próximamente`}
+        className={cn(
+          'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+        )}
+      >
+        <Icon size={18} weight="regular" />
+        {!collapsed && (
+          <>
+            <span className="truncate">{displayLabel}</span>
+            <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+          </>
+        )}
+      </div>
+    );
+  }
   return (
     <NavLink
       to={to}
@@ -417,7 +465,23 @@ function ProjectAvatar({ project, size = 'md' }) {
     );
   }
 
-  return <div className={`${dim} rounded-lg bg-muted/30 flex-shrink-0`} />;
+  // 4) Caso especial "Todos los proyectos"
+  if (project?.isAll) {
+    return (
+      <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
+        ALL
+      </div>
+    );
+  }
+
+  // 5) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
+  //    ni logo subido, ni logo local por slug, ni emoji). Antes se mostraba un
+  //    rectángulo vacío feo.
+  return (
+    <div className={`${dim} rounded-lg bg-primary/15 text-primary flex items-center justify-center flex-shrink-0`}>
+      <Package size={size === 'sm' ? 14 : 16} weight="duotone" />
+    </div>
+  );
 }
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
@@ -434,6 +498,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+  const [spamReportsBadge, setSpamReportsBadge] = useState(0);
 
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
@@ -558,6 +623,21 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     return () => { cancelled = true; clearInterval(interval); };
   }, [activeProject?.id]);
 
+  // Badge de reportes de spam pendientes — solo superadmin
+  useEffect(() => {
+    if (user?.role !== 'superadmin') return;
+    let cancelled = false;
+    async function fetchSpamCount() {
+      try {
+        const res = await client.get('/leads/spam-reports/count');
+        if (!cancelled && res.success) setSpamReportsBadge(res.data?.count || 0);
+      } catch {}
+    }
+    fetchSpamCount();
+    const interval = setInterval(fetchSpamCount, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user?.role]);
+
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
 
@@ -583,6 +663,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {!collapsed && (
           <>
             <span className="font-semibold text-sm text-foreground flex-1">MultiCRM</span>
+            {BETA_MODE && (
+              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                BETA {BETA_VERSION}
+              </span>
+            )}
             {onToggleCollapsed && (
               <button
                 type="button"
@@ -664,8 +749,24 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                       if (tA !== tB) return tA - tB;
                       return (a.nombre || '').localeCompare(b.nombre || '', 'es');
                     });
+                    const allEntry = projects.length > 1 ? (
+                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
+                        <button
+                          type="button"
+                          onClick={() => { switchProject(-1); setPickerOpen(false); }}
+                          className={cn(
+                            'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
+                            activeProject?.id === -1 && 'bg-secondary font-semibold'
+                          )}
+                        >
+                          <ProjectAvatar project={{ isAll: true }} size="sm" />
+                          <span className="flex-1 truncate">Todos los proyectos</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold">vista global</span>
+                        </button>
+                      </li>
+                    ) : null;
                     let lastType = null;
-                    return sorted.map((p) => {
+                    const items = sorted.map((p) => {
                       const isActive = p.id === activeProject?.id;
                       const showDivider = lastType !== null && lastType !== p.type;
                       lastType = p.type;
@@ -688,12 +789,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                         </div>
                       );
                     });
+                    return <>{allEntry}{items}</>;
                   })()}
                 </ul>
               </Portal>
             )}
           </div>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !collapsed && (
+          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
             <button
               onClick={() => setConfigOpen(true)}
               className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"
@@ -769,7 +871,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   <NavItem
                     key={item.to}
                     {...item}
-                    badge={item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge : undefined}
+                    badge={
+                      item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge
+                      : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
+                      : undefined
+                    }
                     labelOverrides={activeProject?.sidebar_labels}
                     onClick={onNavigate}
                     collapsed={collapsed}

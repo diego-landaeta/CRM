@@ -8,11 +8,13 @@ const router = Router();
 router.get('/public/:embedId', ctrl.publicMeta);
 router.post('/public/:embedId/submit', ctrl.publicSubmit);
 router.post('/webhook/:embedId', ctrl.publicWebhook);
+router.post('/mailhook/:embedId', ctrl.publicMailhook);
 
 router.use(verifyToken);
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);
 router.get('/:id/status', ctrl.getStatus);
+router.get('/:id/events', ctrl.listEvents);
 router.post('/', roleGuard('admin', 'superadmin', 'soporte'), ctrl.create);
 router.patch('/:id', roleGuard('admin', 'superadmin', 'soporte'), ctrl.update);
 router.delete('/:id', roleGuard('admin', 'superadmin', 'soporte'), ctrl.remove);

@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
@@ -27,6 +28,8 @@ interface DuplicateLead {
   status?: string;
   estado?: string;
   created_at: string;
+  responsable_id?: number | null;
+  responsable_nombre?: string | null;
 }
 
 interface Props {
@@ -55,10 +58,29 @@ const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
-  const { activeProject } = useProjectContext();
-  const { products, refetch: refetchProducts } = useProducts(activeProject?.id);
+  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+    activeProject: any;
+    projects: Array<{ id: number; nombre?: string }>;
+    isAllProjects: boolean;
+  };
+  // En modo "Todos los proyectos" el activeProject es el sentinel (-1).
+  // El form NECESITA un proyecto concreto, asi que mostramos un selector
+  // al inicio para que el usuario elija a cual asignar el lead.
+  const [pickedProjectId, setPickedProjectId] = useState<number | null>(null);
+  const effectiveProjectId = isAllProjects ? pickedProjectId : (activeProject?.id ?? null);
+  const effectiveProject = isAllProjects
+    ? (projects || []).find((p) => p.id === pickedProjectId) || null
+    : activeProject;
+
+  useEffect(() => {
+    if (!open) setPickedProjectId(null);
+  }, [open]);
+
+  const { user } = useAuth() as any;
+  const isGestor = user?.role === 'gestor';
+  const { products, refetch: refetchProducts } = useProducts(effectiveProjectId);
   const isEdit = !!lead;
-  const productoLabel = activeProject?.producto_label || 'Producto';
+  const productoLabel = (effectiveProject as any)?.producto_label || 'Producto';
 
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
@@ -84,14 +106,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   // Cargar custom fields al abrir dialog
   useEffect(() => {
-    if (!open || !activeProject?.id) return;
+    if (!open || !effectiveProjectId) return;
     (async () => {
       try {
-        const res = await client.get(`/field-definitions/project/${activeProject.id}?entity=lead`);
+        const res = await client.get(`/field-definitions/project/${effectiveProjectId}?entity=lead`);
         if (res.success) setCustomFields(res.data || []);
       } catch {}
     })();
-  }, [open, activeProject?.id]);
+  }, [open, effectiveProjectId]);
 
   useEffect(() => {
     if (open) {
@@ -111,17 +133,18 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     }
   }, [open, lead, reset]);
 
-  // Deteccion de duplicado debounce
+  // Deteccion de duplicado debounce.
+  // Usa /leads/lookup-by-email que IGNORA el filtro RBAC de gestor para
+  // que pueda detectar duplicados aunque el lead pertenezca a otra asesora.
   const checkDuplicates = useCallback(async (email: string | undefined): Promise<void> => {
-    if (!email || !email.includes('@') || !activeProject?.id || isEdit) { setDuplicates([]); return; }
+    if (!email || !email.includes('@') || !effectiveProjectId || isEdit) { setDuplicates([]); return; }
     try {
-      const res = await client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(email)}&limit=5`);
+      const res = await client.get(`/leads/lookup-by-email?email=${encodeURIComponent(email)}&projectId=${effectiveProjectId}`);
       if (res.success) {
-        const matches = ((res.data as DuplicateLead[]) || []).filter((l) => (l.email || '').toLowerCase() === email.toLowerCase());
-        setDuplicates(matches);
+        setDuplicates((res.data as DuplicateLead[]) || []);
       }
     } catch { setDuplicates([]); }
-  }, [activeProject?.id, isEdit]);
+  }, [effectiveProjectId, isEdit]);
 
   useEffect(() => {
     const t = setTimeout(() => checkDuplicates(watchedEmail), 600);
@@ -131,7 +154,11 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   if (!open) return null;
 
   async function handleFormSubmit(data: LeadFormData): Promise<void> {
-    await onSubmit({ ...data, custom_fields: customValues });
+    if (!effectiveProjectId) {
+      // Modo ALL sin proyecto elegido — el banner pide elegirlo
+      return;
+    }
+    await onSubmit({ ...data, custom_fields: customValues, _project_id: effectiveProjectId } as any);
     onClose();
   }
 
@@ -152,12 +179,35 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
           </div>
 
           <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+            {/* En modo "Todos los proyectos": pedimos al usuario que elija
+                a qué proyecto pertenece el lead antes de poder rellenar nada. */}
+            {isAllProjects && !isEdit && (
+              <div className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
+                <label className="text-xs font-semibold text-violet-800 dark:text-violet-300 block mb-1.5">
+                  Proyecto al que pertenece este prospecto *
+                </label>
+                <select
+                  value={pickedProjectId ?? ''}
+                  onChange={(e) => setPickedProjectId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm"
+                  required
+                >
+                  <option value="">— Elige proyecto —</option>
+                  {(projects || []).map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-violet-700 dark:text-violet-400 mt-1.5">
+                  Estás en la vista global. El lead se creará en el proyecto elegido y aplicará su round-robin.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Nombre *" error={errors.nombre?.message}>
                 <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
               </Field>
-              <Field label="Email *" error={errors.email?.message}>
-                <input {...register('email')} type="email" placeholder="correo@ejemplo.com" className={inputClass} />
+              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
+                <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
             </div>
 
@@ -168,20 +218,38 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
                     Ya existe {duplicates.length} lead{duplicates.length > 1 ? 's' : ''} con ese email
                   </p>
-                  {duplicates.slice(0, 3).map(d => (
-                    <a key={d.id} href={`/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
-                      className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
-                    >
-                      <LinkIcon size={10} /> {d.nombre} — {d.status || d.estado} — {new Date(d.created_at).toLocaleDateString('es-ES')}
-                    </a>
-                  ))}
+                  {duplicates.slice(0, 3).map(d => {
+                    // Gestor solo puede abrir leads asignados a él/ella.
+                    // Si es de otra gestora, mostramos info pero sin link clicable.
+                    const isMine = !isGestor || d.responsable_id === user?.id;
+                    const responsableLabel = d.responsable_nombre || 'Sin asignar';
+                    const inner = (
+                      <>
+                        <LinkIcon size={10} /> {d.nombre} — {d.status || d.estado} — Asignado a <strong>{responsableLabel}</strong> — {new Date(d.created_at).toLocaleDateString('es-ES')}
+                      </>
+                    );
+                    return isMine ? (
+                      <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
+                      >{inner}</a>
+                    ) : (
+                      <div key={d.id} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
+                        title="Este lead pertenece a otra asesora — contacta con ella para coordinar"
+                      >{inner}</div>
+                    );
+                  })}
+                  {isGestor && duplicates.some(d => d.responsable_id !== user?.id) && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 italic">
+                      Hay duplicados asignados a otras asesoras. Coordina con ellas antes de crear un registro nuevo.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Teléfono" error={errors.telefono?.message}>
-                <input {...register('telefono')} placeholder="+34 600 000 000" className={inputClass} />
+              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
+                <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass} />
               </Field>
               <Field label="Origen *" error={errors.origen?.message}>
                 <select {...register('origen')} className={selectClass} style={selectBg}>
@@ -202,7 +270,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       value={field.value}
                       onChange={field.onChange}
                       products={products}
-                      projectId={activeProject?.id}
+                      projectId={effectiveProjectId}
                       projectLabel={productoLabel}
                       onProductCreated={() => refetchProducts?.()}
                     />

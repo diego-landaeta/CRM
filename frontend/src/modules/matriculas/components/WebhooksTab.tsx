@@ -5,6 +5,7 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { PlugsConnected, Plus, Copy, Trash, X } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
+import { copyToClipboard } from '@/shared/lib/clipboard';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -115,7 +116,7 @@ export default function WebhooksTab({ project }: { project: Project | null | und
 }
 
 function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit: () => void; onDelete: () => void }) {
-  const url = `${window.location.origin}/testeo_crm/api/webhook-tokens/receive/${token.token}`;
+  const url = `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}`;
   return (
     <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -142,7 +143,7 @@ function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit:
       <div className="flex gap-2">
         <code className="flex-1 p-2 bg-muted/40 rounded text-[11px] overflow-x-auto break-all">{url}</code>
         <button
-          onClick={() => { navigator.clipboard.writeText(url); toast({ title: 'Copiado' }); }}
+          onClick={async () => { const ok = await copyToClipboard(url); toast({ title: ok ? 'Copiado' : 'Usa Ctrl+C', variant: ok ? undefined : 'destructive' }); }}
           aria-label="Copiar URL del webhook"
           className="p-2 rounded bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
@@ -205,7 +206,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
     onSave({ notas, active, field_mapping: mapping });
   }
 
-  const url = token?.token ? `${window.location.origin}/testeo_crm/api/webhook-tokens/receive/${token.token}` : null;
+  const url = token?.token ? `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}` : null;
 
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
@@ -229,7 +230,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
               <div className="flex gap-2">
                 <code className="flex-1 p-2 bg-card rounded text-[11px] overflow-x-auto break-all">{url}</code>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(url); toast({ title: 'Copiado' }); }}
+                  onClick={async () => { const ok = await copyToClipboard(url); toast({ title: ok ? 'Copiado' : 'Usa Ctrl+C', variant: ok ? undefined : 'destructive' }); }}
                   aria-label="Copiar URL"
                   className="p-2 rounded bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >

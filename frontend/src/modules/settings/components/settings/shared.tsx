@@ -1,6 +1,6 @@
 import {
   Users, Folder, Key, Envelope, ShieldCheck, PlugsConnected, Globe, ListChecks,
-  ChatCircleText, Lightning, Receipt, EnvelopeOpen, type Icon,
+  ChatCircleText, Lightning, Tree, Receipt, EnvelopeOpen, CalendarBlank, type Icon,
 } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 
@@ -14,8 +14,10 @@ export interface SettingsTab {
 export const TABS: SettingsTab[] = [
   { id: 'projects',     label: 'Proyectos',           icon: Folder },
   { id: 'users',        label: 'Usuarios',            icon: Users },
+  { id: 'availability', label: 'Disponibilidad',      icon: CalendarBlank },
   { id: 'roles',        label: 'Roles y Permisos',    icon: ShieldCheck,    to: '/configuracion/roles' },
   { id: 'fields',       label: 'Campos custom',       icon: ListChecks,     to: '/configuracion/campos' },
+  { id: 'cat-tree',     label: 'Árbol de categorías', icon: Tree,           to: '/configuracion/categorias-arbol' },
   { id: 'channels',     label: 'Canales',             icon: ChatCircleText, to: '/configuracion/canales' },
   { id: 'forms',        label: 'Formularios',         icon: Globe },
   { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/webhooks' },

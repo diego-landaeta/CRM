@@ -30,4 +30,9 @@ export interface WebhookTarget {
   required?: boolean;
 }
 
-export type WebhookFieldMapping = Record<string, string>;
+// Cada destino del CRM puede recibir:
+//   - string: 'path.al.value'
+//   - array: ['path1', 'path2'] → backend concatena con espacio
+//   - objeto: { sources, separator, prefix, suffix }
+export type WebhookMappingValue = string | string[] | { sources: string[]; separator?: string; prefix?: string; suffix?: string };
+export type WebhookFieldMapping = Record<string, WebhookMappingValue>;

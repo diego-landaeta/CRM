@@ -74,6 +74,15 @@ export async function removePayment(req, res, next) {
   try {
     const paymentId = parseInt(req.params.paymentId);
     if (isNaN(paymentId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // RBAC: gestor solo puede borrar pagos de leads asignados a él.
+    if (req.user.role === 'gestor') {
+      const { getPaymentOwnership } = await import('./conversion.model.js');
+      const own = await getPaymentOwnership(paymentId);
+      if (!own) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
+      if (own.responsable_id !== req.user.userId) {
+        throw new AppError('Solo puedes borrar pagos de tus propios clientes', 403, 'FORBIDDEN_PAYMENT');
+      }
+    }
     const result = await conversionService.removePayment(paymentId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -101,7 +110,13 @@ export async function listInstallments(req, res, next) {
 export async function generateInstallments(req, res, next) {
   try {
     const id = parseInt(req.params.id);
-    const { num_cuotas, importe_total, fecha_inicio } = req.body;
+    const { num_cuotas, importe_total, fecha_inicio, installments } = req.body;
+    // Modo "cuotas custom": cliente manda array completo con importe + fecha por cuota
+    if (Array.isArray(installments) && installments.length > 0) {
+      const rows = await installmentsModel.generateInstallments(id, null, null, null, installments);
+      return res.json({ success: true, data: rows });
+    }
+    // Modo "auto": N cuotas iguales mensuales desde fecha_inicio
     if (!num_cuotas || num_cuotas < 2) throw new AppError('num_cuotas debe ser >= 2', 400, 'INVALID');
     if (!importe_total) throw new AppError('importe_total requerido', 400, 'INVALID');
     if (!fecha_inicio) throw new AppError('fecha_inicio requerida', 400, 'INVALID');

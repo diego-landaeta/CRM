@@ -13,7 +13,8 @@ const sendEmailSchema = z.object({
 export async function sendLeadEmail(req, res, next) {
   try {
     const leadId = parseInt(req.params.id);
-    if (isNaN(leadId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    if (isNaN(leadId) || leadId <= 0) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    if (!req.user?.userId) throw new AppError('Auth inválida', 401, 'AUTH_REQUIRED');
 
     const parsed = sendEmailSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');

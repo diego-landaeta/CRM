@@ -128,10 +128,11 @@ export function useNotifications(): UseNotificationsResult {
       // Service worker showNotification es preferible (sobrevive al close del tab)
       // pero requiere registration. Fallback a Notification directa.
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const iconPath = `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/icons/icon-192.png`;
         navigator.serviceWorker.ready.then((reg) => {
           reg.showNotification(title, {
-            badge: '/crm/icons/icon-192.png',
-            icon: '/crm/icons/icon-192.png',
+            badge: iconPath,
+            icon: iconPath,
             ...options,
           });
         });

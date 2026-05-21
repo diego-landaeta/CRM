@@ -88,6 +88,7 @@ const LeadsPipelinePage = lazy(() => import('./modules/leads/pages/LeadsPipeline
 const AudienceExportPage = lazy(() => import('./modules/leads/pages/AudienceExportPage'));
 const LeadDetailPage = lazy(() => import('./modules/leads/pages/LeadDetailPage'));
 const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'));
+const ProductsTreePage = lazy(() => import('./modules/products/pages/ProductsTreePage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
 const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPendingPage'));
 const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage'));
@@ -116,8 +117,11 @@ const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/Em
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
 const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDetailPage'));
+const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
+const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
+const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
@@ -152,6 +156,7 @@ function App() {
           <Route path="/leads/audiences" element={<AudienceExportPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/products/arbol" element={<ProductsTreePage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
@@ -173,10 +178,13 @@ function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/webhooks" element={<WebhooksPage />} />
           <Route path="/webhooks/:id" element={<WebhookDetailPage />} />
+          <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
+          <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
+          <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/payroll" element={<PayrollPage />} />

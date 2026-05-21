@@ -151,7 +151,7 @@ export async function findAll({ projectId, leadId, pendiente, vencido, from, to,
 }
 
 export async function update(id, fields) {
-  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'notas_pago'];
+  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago'];
   const sets = [];
   const params = [];
   let idx = 1;
@@ -216,6 +216,20 @@ export async function addPayment(conversionId, { importe, fecha, notas }) {
   } finally {
     client.release();
   }
+}
+
+// Devuelve { conversion_id, lead_id, responsable_id } del pago para RBAC.
+export async function getPaymentOwnership(paymentId) {
+  const { query } = await import('../../shared/config/db.js');
+  const { rows } = await query(
+    `SELECT cp.id AS payment_id, cp.conversion_id, c.lead_id, l.responsable_id, l.project_id
+     FROM conversion_payments cp
+     JOIN conversions c ON c.id = cp.conversion_id
+     JOIN leads l ON l.id = c.lead_id
+     WHERE cp.id = $1`,
+    [paymentId]
+  );
+  return rows[0] || null;
 }
 
 export async function deletePayment(paymentId) {

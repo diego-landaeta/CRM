@@ -61,3 +61,6 @@ reset-postgres-password.ps1
 
 # package-lock.json en raiz es huerfano (no hay package.json en raiz)
 /package-lock.json
+
+# Excel lock files
+~$*.xlsx

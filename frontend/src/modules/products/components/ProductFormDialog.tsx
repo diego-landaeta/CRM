@@ -48,7 +48,13 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(productSchema),
-    defaultValues: { nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '' },
+    defaultValues: {
+      nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
+      horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+      presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
+      para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
+      metodologia_texto: '', faqs_texto: '', profesores_texto: '',
+    },
   });
 
   useEffect(() => {
@@ -72,7 +78,27 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
         sku: product.sku || '',
         duracion: product.duracion || '',
         url_info: product.url_info || '',
-      } : { nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '' });
+        horas: product.horas || '',
+        num_modulos: product.num_modulos != null ? String(product.num_modulos) : '',
+        modalidad: product.modalidad || '',
+        fecha_inicio_texto: product.fecha_inicio_texto || '',
+        presentacion_texto: product.presentacion_texto || '',
+        objetivos_texto: product.objetivos_texto || '',
+        beneficios_texto: product.beneficios_texto || '',
+        dirigido_a_texto: product.dirigido_a_texto || '',
+        para_que_te_prepara_texto: product.para_que_te_prepara_texto || '',
+        por_que_estudiar_texto: product.por_que_estudiar_texto || '',
+        modulos_texto: product.modulos_texto || '',
+        metodologia_texto: product.metodologia_texto || '',
+        faqs_texto: product.faqs_texto || '',
+        profesores_texto: product.profesores_texto || '',
+      } : {
+        nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
+        horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+        presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
+        para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
+        metodologia_texto: '', faqs_texto: '', profesores_texto: '',
+      });
       setCategoriaSel(product?.categoria_id ? String(product.categoria_id) : '');
       setSubcategoriaSel(product?.subcategoria_id ? String(product.subcategoria_id) : '');
       // Sincronizar links: usa product.payment_links si viene del backend (CRM-140),
@@ -145,7 +171,24 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
 
   if (!open) return null;
 
-  const parents = categories.filter(c => !c.parent_id);
+  // CRM-247 fix temporal: el modelo viejo asumía 2 niveles. Ahora el árbol es N niveles
+  // (Cursos > Para Profesionales > Psicología Org. > Trauma > ...). Mostramos TODAS las
+  // categorías en el primer selector con su path completo, e ignoramos subcategoria_id.
+  function pathOf(c: any): string {
+    const parts = [c.nombre];
+    let cur = c;
+    let safety = 0;
+    while (cur.parent_id && safety++ < 10) {
+      const parent = categories.find((x: any) => x.id === cur.parent_id);
+      if (!parent) break;
+      parts.unshift(parent.nombre);
+      cur = parent;
+    }
+    return parts.join(' › ');
+  }
+  const allCategoriesWithPath = categories
+    .map((c: any) => ({ id: c.id, label: pathOf(c), nombre: c.nombre, parent_id: c.parent_id }))
+    .sort((a: any, b: any) => a.label.localeCompare(b.label));
   const subs = categories.filter(c => String(c.parent_id) === categoriaSel);
 
   function addPaymentLink() {
@@ -234,7 +277,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="grid grid-cols-2 gap-3">
               <select value={categoriaSel} onChange={e => { setCategoriaSel(e.target.value); setSubcategoriaSel(''); }} className={smallInput}>
                 <option value="">Sin categoría</option>
-                {parents.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                {allCategoriesWithPath.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
               <select value={subcategoriaSel} onChange={e => setSubcategoriaSel(e.target.value)} className={smallInput} disabled={!subs.length}>
                 <option value="">{subs.length ? 'Sin subcategoría' : '—'}</option>
@@ -323,6 +366,63 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <Field label="URL de información / landing" error={errors.url_info?.message}>
               <input {...register('url_info')} placeholder="https://..." className={smallInput} />
             </Field>
+          </div>
+
+          {/* === Datos del programa (importados del scraper / WC) === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="text-[11px] font-bold uppercase text-muted-foreground">
+              Datos del programa <span className="font-normal normal-case opacity-70">(importados de WP/WC, editables)</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <Field label="Horas">
+                <input {...register('horas')} placeholder="ej: 1500 horas" className={smallInput} />
+              </Field>
+              <Field label="Nº módulos">
+                <input {...register('num_modulos')} type="number" min="0" placeholder="ej: 10" className={smallInput} />
+              </Field>
+              <Field label="Modalidad">
+                <input {...register('modalidad')} placeholder="Online, Presencial..." className={smallInput} />
+              </Field>
+              <Field label="Fecha de inicio">
+                <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
+              </Field>
+            </div>
+          </div>
+
+          {/* === Secciones extraídas (texto) === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="text-[11px] font-bold uppercase text-muted-foreground">
+              Contenido del programa <span className="font-normal normal-case opacity-70">(extraído del HTML público — se usa para diplomados/recibos)</span>
+            </div>
+            {[
+              { name: 'presentacion_texto', label: 'Presentación' },
+              { name: 'objetivos_texto', label: 'Objetivos' },
+              { name: 'beneficios_texto', label: 'Beneficios' },
+              { name: 'dirigido_a_texto', label: 'A quién va dirigido' },
+              { name: 'para_que_te_prepara_texto', label: 'Para qué te prepara' },
+              { name: 'por_que_estudiar_texto', label: 'Por qué estudiar' },
+              { name: 'modulos_texto', label: 'Módulos / Temario' },
+              { name: 'metodologia_texto', label: 'Metodología' },
+              { name: 'faqs_texto', label: 'Preguntas frecuentes (FAQs)' },
+              { name: 'profesores_texto', label: 'Profesorado' },
+            ].map((f) => (
+              <details key={f.name} className="border border-border rounded-md bg-card">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium hover:bg-muted/40 flex items-center justify-between">
+                  <span>{f.label}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {(product?.[f.name]?.length || 0) > 0 ? `${product[f.name].length} chars` : 'vacío'}
+                  </span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <textarea
+                    {...register(f.name)}
+                    rows={6}
+                    placeholder={`Pegado por el scraper. Si está vacío puedes editarlo.`}
+                    className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-xs leading-relaxed resize-y font-sans"
+                  />
+                </div>
+              </details>
+            ))}
           </div>
 
           {/* Enlaces de pago (CRM-140) — soporta múltiples Stripe Payment Links */}
