@@ -73,7 +73,7 @@ function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener" title="WhatsApp" aria-label="Abrir WhatsApp"
+        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Abrir WhatsApp"
           className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <WhatsappLogo size={14} weight="regular" />
         </a>

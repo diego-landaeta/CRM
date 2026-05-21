@@ -109,7 +109,7 @@ export default function NaturalDatePicker({
       </div>
 
       {open && (
-        <div role="dialog" className="absolute z-50 mt-1 right-0 w-72 bg-card border border-border rounded-lg shadow-xl p-3">
+        <div role="dialog" className="absolute z-50 mt-1 right-0 w-72 max-w-[calc(100vw-1.5rem)] bg-card border border-border rounded-lg shadow-xl p-3">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"

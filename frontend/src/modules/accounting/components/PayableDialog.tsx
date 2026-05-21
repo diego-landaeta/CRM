@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { payableApi } from '../api/payable.api';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { X } from '@phosphor-icons/react';
 
@@ -56,7 +57,7 @@ export default function PayableDialog({ projectId, onClose, onSaved }: Props) {
     <Portal>
       <div className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-        <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-lg p-6 space-y-3">
+        <form onSubmit={handleSubmit} className="relative bg-card rounded-lg border border-border w-full max-w-lg mx-3 sm:mx-0 p-6 space-y-3 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Nueva factura por pagar</h2>
             <button
@@ -70,9 +71,12 @@ export default function PayableDialog({ projectId, onClose, onSaved }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <input required placeholder="Proveedor" value={data.proveedor} onChange={e => setData({ ...data, proveedor: e.target.value })} className={inputClass} />
-            <select value={data.categoria} onChange={e => setData({ ...data, categoria: e.target.value })} className={inputClass}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Select<string>
+              value={data.categoria}
+              onChange={(v) => setData({ ...data, categoria: v })}
+              options={CATEGORIES.map(c => ({ value: c, label: c }))}
+              ariaLabel="Categoría"
+            />
             <input required placeholder="Concepto" value={data.concepto} onChange={e => setData({ ...data, concepto: e.target.value })} className={inputClass + ' col-span-2'} />
             <input required type="number" step="0.01" placeholder="Importe total" value={data.importe_total} onChange={e => setData({ ...data, importe_total: e.target.value })} className={inputClass + ' tabular-nums'} />
             <div></div>

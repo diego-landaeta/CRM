@@ -240,7 +240,7 @@ export default function LeadsPipelinePage() {
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
-            <div key={col.key} className="flex-shrink-0 w-[280px]">
+            <div key={col.key} className="flex-shrink-0 w-[260px] sm:w-[280px]">
               <div className={`rounded-lg px-4 py-3 mb-3 ${col.bg} animate-pulse`}>
                 <div className="w-24 h-4 bg-muted rounded" />
               </div>
@@ -301,7 +301,7 @@ export default function LeadsPipelinePage() {
               onDragOver={(e) => handleDragOver(e, col.key as LeadStatus)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, col.key as LeadStatus)}
-              className={`flex-shrink-0 w-[280px] flex flex-col rounded-lg transition-all ${
+              className={`flex-shrink-0 w-[260px] sm:w-[280px] flex flex-col rounded-lg transition-all ${
                 dragOverCol === col.key && dragLead?.estado !== col.key
                   ? `ring-2 ${col.ring} bg-muted/30`
                   : ''

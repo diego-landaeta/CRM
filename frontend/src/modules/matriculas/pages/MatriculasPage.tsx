@@ -4,7 +4,8 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import { GraduationCap, CheckCircle, XCircle, Clock, Eye, PlugsConnected } from '@phosphor-icons/react';
+import Select from '@/shared/components/ui/Select';
+import { GraduationCap, Eye, PlugsConnected } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import WebhooksTab from '../components/WebhooksTab';
@@ -124,19 +125,20 @@ export default function MatriculasPage() {
           aria-label="Buscar matrículas"
           className="flex-1 min-w-[200px] h-9 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
         />
-        <select
+        <Select<string>
           value={filterEstado}
-          onChange={e => setFilterEstado(e.target.value)}
-          aria-label="Filtrar por estado"
-          className="h-9 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
-        >
-          <option value="">Todos los estados</option>
-          <option value="solicitud_admision">Solicitud admisión</option>
-          <option value="datos_validados">Datos validados</option>
-          <option value="pendiente">Pendientes</option>
-          <option value="validada">Validadas</option>
-          <option value="rechazada">Rechazadas</option>
-        </select>
+          onChange={setFilterEstado}
+          options={[
+            { value: '', label: 'Todos los estados' },
+            { value: 'solicitud_admision', label: 'Solicitud admisión' },
+            { value: 'datos_validados', label: 'Datos validados' },
+            { value: 'pendiente', label: 'Pendientes' },
+            { value: 'validada', label: 'Validadas' },
+            { value: 'rechazada', label: 'Rechazadas' },
+          ]}
+          ariaLabel="Filtrar por estado"
+          className="w-48"
+        />
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden">

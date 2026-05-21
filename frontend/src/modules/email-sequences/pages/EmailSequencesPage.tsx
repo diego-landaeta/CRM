@@ -4,6 +4,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import Select from '@/shared/components/ui/Select';
 import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk, FileText } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
@@ -204,14 +205,12 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
             aria-label="Nombre de la secuencia"
             className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
-          <select
+          <Select<TriggerEvent>
             value={s.trigger_event}
-            onChange={e => setS({ ...s, trigger_event: e.target.value as TriggerEvent })}
-            aria-label="Evento que dispara la secuencia"
-            className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            {TRIGGERS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-          </select>
+            onChange={(v) => setS({ ...s, trigger_event: v })}
+            options={TRIGGERS.map(t => ({ value: t.v, label: t.label }))}
+            ariaLabel="Evento que dispara la secuencia"
+          />
 
           <div className="space-y-3 pt-2 border-t border-border">
             <p className="text-xs font-bold uppercase text-muted-foreground">Pasos</p>
@@ -243,15 +242,17 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
                 {templates.length > 0 && (
                   <div className="flex items-center gap-1.5">
                     <FileText size={11} className="text-muted-foreground" />
-                    <select
-                      value={step.template_id ?? ''}
-                      onChange={e => updateStep(i, 'template_id', e.target.value ? Number(e.target.value) : null)}
-                      aria-label={`Plantilla del paso ${i + 1}`}
-                      className="flex-1 h-7 px-2 rounded border border-border bg-card text-[11px] focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    >
-                      <option value="">— Sin plantilla (usar texto manual) —</option>
-                      {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
+                    <Select<number | null>
+                      value={step.template_id ?? null}
+                      onChange={(v) => updateStep(i, 'template_id', v)}
+                      options={[
+                        { value: null, label: '— Sin plantilla (usar texto manual) —' },
+                        ...templates.map(t => ({ value: t.id as number, label: t.name })),
+                      ]}
+                      ariaLabel={`Plantilla del paso ${i + 1}`}
+                      size="sm"
+                      className="flex-1"
+                    />
                   </div>
                 )}
                 <input
@@ -275,6 +276,7 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
               );
             })}
             <button
+              type="button"
               onClick={addStep}
               className="flex items-center gap-1 h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
@@ -284,12 +286,14 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
             <button
+              type="button"
               onClick={onClose}
               className="h-9 px-4 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               Cancelar
             </button>
             <button
+              type="button"
               onClick={() => onSave(s)}
               className="flex items-center gap-1 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
             >

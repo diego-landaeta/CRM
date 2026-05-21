@@ -1,7 +1,7 @@
 import { Funnel, Lightning, ChartPieSlice, Phone, CalendarCheck, Users } from '@phosphor-icons/react';
 import { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBadge';
 import { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
-import { selectClass, selectBg } from './InfoField';
+import Select from '@/shared/components/ui/Select';
 import type { Lead, Interaction, Reminder, LeadStatus } from '@/shared/types';
 
 interface LeadSidebarProps {
@@ -29,16 +29,12 @@ export default function LeadSidebar({
         <h3 className="text-[13px] font-semibold mb-2 flex items-center gap-1.5">
           <Funnel size={14} weight="regular" className="text-muted-foreground" /> Cambiar estado
         </h3>
-        <select
+        <Select<LeadStatus | ''>
           value={selectedEstado}
-          onChange={(e) => onSelectedEstadoChange(e.target.value as LeadStatus)}
-          className={selectClass}
-          style={selectBg}
-        >
-          {Object.entries(ESTADO_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+          onChange={onSelectedEstadoChange}
+          options={Object.entries(ESTADO_LABELS).map(([k, v]) => ({ value: k as LeadStatus, label: v }))}
+          ariaLabel="Cambiar estado"
+        />
         <button
           onClick={onEstadoUpdate}
           disabled={statusLoading || selectedEstado === lead.estado}

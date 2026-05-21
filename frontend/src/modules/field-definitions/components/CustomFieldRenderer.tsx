@@ -1,4 +1,5 @@
 import type { FieldDefinition } from '../api/fields.api';
+import Select from '@/shared/components/ui/Select';
 
 const inputClass = 'w-full h-10 px-3 rounded-md border border-border bg-muted/30 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -58,19 +59,16 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
       case 'select': {
         const choices = field.options?.choices || [];
         return (
-          <select
-            id={id}
-            disabled={disabled}
-            required={field.required}
+          <Select<string>
             value={stringValue}
-            onChange={(e) => set(e.target.value)}
-            className={inputClass + ' appearance-none cursor-pointer'}
-          >
-            <option value="">— Seleccionar —</option>
-            {choices.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            onChange={set}
+            options={[
+              { value: '', label: '— Seleccionar —' },
+              ...choices.map((c) => ({ value: c, label: c })),
+            ]}
+            ariaLabel={field.label}
+            disabled={disabled}
+          />
         );
       }
       case 'boolean':

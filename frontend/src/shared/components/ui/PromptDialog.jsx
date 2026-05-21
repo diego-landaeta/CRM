@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Portal from './portal';
+import Select from './Select';
 import { X, Question } from '@phosphor-icons/react';
 
 /**
@@ -90,19 +91,17 @@ export default function PromptDialog({
             </div>
             <div className="mt-3 ml-[52px]">
               {options ? (
-                <select
-                  ref={inputRef}
+                <Select
                   value={value}
-                  onChange={e => setValue(e.target.value)}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <option value="">— Selecciona —</option>
-                  {options.map(opt => (
-                    typeof opt === 'object'
-                      ? <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      : <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                  onChange={setValue}
+                  options={[
+                    { value: '', label: '— Selecciona —' },
+                    ...options.map(opt => (
+                      typeof opt === 'object' ? { value: opt.value, label: opt.label } : { value: opt, label: opt }
+                    )),
+                  ]}
+                  ariaLabel={title}
+                />
               ) : multiline ? (
                 <textarea
                   ref={inputRef}

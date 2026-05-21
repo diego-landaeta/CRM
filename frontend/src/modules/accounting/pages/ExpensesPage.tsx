@@ -1,13 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { accountingApi } from '../api/accounting.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { Plus, X, Receipt, Trash, PencilSimple } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -36,7 +36,6 @@ function formatDate(d) {
 
 export default function ExpensesPage() {
   const { activeProject } = useProjectContext();
-  const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -93,15 +92,16 @@ export default function ExpensesPage() {
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Filtrar:</span>
-        <select
+        <Select<string>
           value={filterCat}
-          onChange={e => setFilterCat(e.target.value)}
-          aria-label="Filtrar por categoría"
-          className="h-9 px-3 rounded-lg border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-        >
-          <option value="">Todas las categorías</option>
-          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+          onChange={setFilterCat}
+          options={[
+            { value: '', label: 'Todas las categorías' },
+            ...CATEGORIAS.map(c => ({ value: c, label: c })),
+          ]}
+          ariaLabel="Filtrar por categoría"
+          className="w-48"
+        />
       </div>
 
       {loading ? (
@@ -345,9 +345,12 @@ function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
 
             <div>
               <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Categoría</label>
-              <select value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} className={inputClass + ' appearance-none cursor-pointer pr-8'}>
-                {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select<string>
+                value={form.categoria}
+                onChange={(v) => setForm({ ...form, categoria: v })}
+                options={CATEGORIAS.map(c => ({ value: c, label: c }))}
+                ariaLabel="Categoría"
+              />
             </div>
 
             <div>

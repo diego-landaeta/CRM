@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import useOnlineStatus from '@/shared/hooks/useOnlineStatus';
-import { WifiSlash, CheckCircle } from '@phosphor-icons/react';
+import { WifiSlash } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
 /**

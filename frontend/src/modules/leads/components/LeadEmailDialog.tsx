@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, EnvelopeSimple, PaperPlaneTilt, FileText } from '@phosphor-icons/react';
 import { leadEmailsApi } from '../api/lead-emails.api';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -139,20 +140,19 @@ export default function LeadEmailDialog({
               <label className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                 <FileText size={11} /> Usar plantilla
               </label>
-              <select
-                aria-label="Plantilla de email"
+              <Select<number | ''>
                 value={selectedTemplateId}
-                onChange={(e) => {
-                  const id = e.target.value ? Number(e.target.value) : '';
-                  setSelectedTemplateId(id);
-                  if (id) applyTemplate(id);
+                onChange={(v) => {
+                  setSelectedTemplateId(v);
+                  if (v !== '') applyTemplate(v);
                 }}
+                options={[
+                  { value: '' as const, label: '— Seleccionar plantilla —' },
+                  ...templates.map(t => ({ value: t.id as number, label: t.name })),
+                ]}
+                ariaLabel="Plantilla de email"
                 disabled={renderingTemplate || sending || !leadEmail}
-                className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
-              >
-                <option value="">— Seleccionar plantilla —</option>
-                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              />
               {renderingTemplate && (
                 <p className="text-[10px] text-muted-foreground mt-1">Aplicando plantilla…</p>
               )}

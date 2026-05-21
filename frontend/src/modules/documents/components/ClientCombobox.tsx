@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MagnifyingGlass, CaretDown, X, User as UserIcon } from '@phosphor-icons/react';
+import { MagnifyingGlass, X, User as UserIcon } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 
 export interface ClientPick {

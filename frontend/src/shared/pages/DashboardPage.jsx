@@ -23,7 +23,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell,
 } from 'recharts';
-import StatusBadge, { STATUS_STYLES } from '@/shared/components/ui/StatusBadge';
+import StatusBadge from '@/shared/components/ui/StatusBadge';
 import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -68,7 +68,7 @@ function fmtNum(n) { return new Intl.NumberFormat('es-ES').format(Number(n || 0)
 function fmtPct(n) { return `${(Number(n) || 0).toFixed(2)}%`; }
 
 function SaasMonitor({ projectId }) {
-  const { metrics, mrrDelta, subsDelta, churnTrend, loading } = useStripeMonitor(projectId);
+  const { metrics, mrrDelta, subsDelta, loading } = useStripeMonitor(projectId);
   if (loading) return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {[1,2,3,4].map(i => <div key={i} className="h-28 bg-muted/50 rounded-lg animate-pulse" />)}
@@ -132,7 +132,7 @@ function SaasMonitor({ projectId }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
-  const { kpis, stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
+  const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
   const [drawerLeadId, setDrawerLeadId] = useState(null);
 
   if (loading) {

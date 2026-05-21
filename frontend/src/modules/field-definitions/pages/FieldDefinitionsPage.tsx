@@ -3,6 +3,7 @@ import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import Select from '@/shared/components/ui/Select';
 import { Plus, PencilSimple, Trash, ArrowUp, ArrowDown, ListChecks, Users, Package, UserCheck } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import useFieldDefinitions from '../hooks/useFieldDefinitions';
@@ -347,13 +348,14 @@ function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }: FieldEd
 
           <label className="block">
             <span className="text-xs font-bold text-muted-foreground">Tipo</span>
-            <select
-              value={field.type}
-              onChange={(e) => patch({ type: e.target.value as FieldType, options: e.target.value === 'select' ? (field.options || { choices: [] }) : null })}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm"
-            >
-              {TYPES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
-            </select>
+            <div className="mt-1">
+              <Select<FieldType>
+                value={field.type}
+                onChange={(v) => patch({ type: v, options: v === 'select' ? (field.options || { choices: [] }) : null })}
+                options={TYPES.map((t) => ({ value: t.v, label: t.label }))}
+                ariaLabel="Tipo de campo"
+              />
+            </div>
           </label>
 
           {field.type === 'select' && (

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
-import { selectClass, selectBg } from './InfoField';
 
 export interface ReassignGestor {
   id: number;
@@ -55,14 +55,17 @@ export default function LeadReassignDialog({ open, gestores, onClose, onSubmit }
           <div className="space-y-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Nuevo responsable</label>
-              <select value={reassignId} onChange={(e) => setReassignId(e.target.value)} className={selectClass} style={selectBg}>
-                <option value="">Seleccionar responsable</option>
-                {gestores
-                  .filter((g) => g.role === 'admin' || g.role === 'gestor' || g.role === 'superadmin')
-                  .map((g) => (
-                    <option key={g.id} value={g.id}>{g.nombre} ({g.role})</option>
-                  ))}
-              </select>
+              <Select<string>
+                value={reassignId}
+                onChange={setReassignId}
+                options={[
+                  { value: '', label: 'Seleccionar responsable' },
+                  ...gestores
+                    .filter((g) => g.role === 'admin' || g.role === 'gestor' || g.role === 'superadmin')
+                    .map((g) => ({ value: String(g.id), label: `${g.nombre} (${g.role})` })),
+                ]}
+                ariaLabel="Nuevo responsable"
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={onClose} className="px-4 py-2 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">

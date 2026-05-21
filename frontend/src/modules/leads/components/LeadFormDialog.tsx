@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
@@ -53,8 +54,6 @@ function Field({ label, error, hint, children }: { label: string; error?: string
 }
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
-const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
-const selectBg = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
@@ -92,7 +91,6 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     reset,
     watch,
     control,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LeadFormData>({
     resolver: zodResolver(leadSchema),
@@ -252,11 +250,18 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass} />
               </Field>
               <Field label="Origen *" error={errors.origen?.message}>
-                <select {...register('origen')} className={selectClass} style={selectBg}>
-                  {ORIGEN_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                <Controller
+                  name="origen"
+                  control={control}
+                  render={({ field }) => (
+                    <Select<LeadFormData['origen']>
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={ORIGEN_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                      ariaLabel="Origen"
+                    />
+                  )}
+                />
               </Field>
             </div>
 
@@ -278,12 +283,21 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 />
               </Field>
               <Field label="Pais">
-                <select {...register('pais')} className={selectClass} style={selectBg}>
-                  <option value="">Sin especificar</option>
-                  {PAIS_OPTIONS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+                <Controller
+                  name="pais"
+                  control={control}
+                  render={({ field }) => (
+                    <Select<string>
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      options={[
+                        { value: '', label: 'Sin especificar' },
+                        ...PAIS_OPTIONS.map((p) => ({ value: p, label: p })),
+                      ]}
+                      ariaLabel="País"
+                    />
+                  )}
+                />
               </Field>
             </div>
 
@@ -304,15 +318,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                           className={inputClass + ' h-20 py-2 resize-none'}
                         />
                       ) : f.type === 'select' ? (
-                        <select
+                        <Select<string>
                           value={(customValues[f.field_key] as string) || ''}
-                          onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
-                          required={f.required}
-                          className={selectClass} style={selectBg}
-                        >
-                          <option value="">Seleccionar...</option>
-                          {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                          onChange={(v) => setCustomValues({ ...customValues, [f.field_key]: v })}
+                          options={[
+                            { value: '', label: 'Seleccionar...' },
+                            ...(f.options || []).map(o => ({ value: o, label: o })),
+                          ]}
+                          ariaLabel={f.label}
+                        />
                       ) : f.type === 'boolean' ? (
                         <label className="flex items-center gap-2 h-9">
                           <input type="checkbox"

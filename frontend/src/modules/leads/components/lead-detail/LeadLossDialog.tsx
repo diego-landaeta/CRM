@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Portal from '@/shared/components/ui/portal';
-import { selectClass, selectBg } from './InfoField';
+import Select from '@/shared/components/ui/Select';
 
 interface LeadLossDialogProps {
   open: boolean;
@@ -19,15 +19,20 @@ export default function LeadLossDialog({ open, onClose, onConfirm, loading }: Le
         <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-sm p-6">
           <h2 className="text-lg font-semibold mb-1">Motivo de pérdida</h2>
           <p className="text-muted-foreground text-sm mb-5">Este campo es obligatorio al marcar un lead como no interesado.</p>
-          <select value={reason} onChange={(e) => setReason(e.target.value)} className={selectClass} style={selectBg}>
-            <option value="">Selecciona un motivo</option>
-            <option value="precio">Precio</option>
-            <option value="falta_interes">Falta de interés</option>
-            <option value="sin_respuesta">Sin respuesta</option>
-            <option value="competencia">Competencia</option>
-            <option value="timing">Timing (no es el momento)</option>
-            <option value="otro">Otro</option>
-          </select>
+          <Select<string>
+            value={reason}
+            onChange={setReason}
+            options={[
+              { value: '', label: 'Selecciona un motivo' },
+              { value: 'precio', label: 'Precio' },
+              { value: 'falta_interes', label: 'Falta de interés' },
+              { value: 'sin_respuesta', label: 'Sin respuesta' },
+              { value: 'competencia', label: 'Competencia' },
+              { value: 'timing', label: 'Timing (no es el momento)' },
+              { value: 'otro', label: 'Otro' },
+            ]}
+            ariaLabel="Motivo de pérdida"
+          />
           <div className="flex justify-end gap-2 mt-4">
             <button onClick={onClose} className="px-4 py-2 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted transition-colors">
               Cancelar

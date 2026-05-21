@@ -12,7 +12,6 @@ import {
   Package,
   Megaphone,
   CurrencyEur,
-  ChartLineUp,
   Gear,
   User,
   ArrowRight,

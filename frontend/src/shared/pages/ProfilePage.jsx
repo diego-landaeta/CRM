@@ -124,12 +124,12 @@ export default function ProfilePage() {
     defaultValues: { current: '', nueva: '', confirmar: '' },
   });
 
-  async function onSaveProfile(data) {
+  async function onSaveProfile(_data) {
     await new Promise((r) => setTimeout(r, 500));
     toast({ title: 'Perfil actualizado', description: 'Los cambios se han guardado' });
   }
 
-  async function onChangePassword(data) {
+  async function onChangePassword(_data) {
     await new Promise((r) => setTimeout(r, 500));
     resetPass();
     toast({ title: 'Contraseña actualizada', description: 'Tu contraseña se ha cambiado correctamente' });

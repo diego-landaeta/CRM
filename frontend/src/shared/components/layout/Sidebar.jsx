@@ -5,7 +5,6 @@ import {
   Users,
   Package,
   Megaphone,
-  CurrencyEur,
   ChartLineUp,
   Gear,
   SignOut,
@@ -13,7 +12,6 @@ import {
   CaretRight,
   Moon,
   Sun,
-  ShieldCheck,
   Calculator,
   Receipt,
   UserCheck,
@@ -21,7 +19,6 @@ import {
   MagnifyingGlass,
   Robot,
   Sparkle,
-  GraduationCap,
   Envelope,
   Globe,
   PlugsConnected,
@@ -30,7 +27,6 @@ import {
   Headset,
   ActivityIcon as Activity,
   FilePdf,
-  DownloadSimple,
   UserCircle,
   CaretUp,
   Wrench,
@@ -44,7 +40,6 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import usePwaInstall from '@/shared/hooks/usePwaInstall';
 import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
@@ -489,7 +484,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
-  const { canInstall, promptInstall } = usePwaInstall();
   const [configOpen, setConfigOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerPos, setPickerPos] = useState(null);
@@ -612,15 +606,40 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   useEffect(() => {
     if (!activeProject?.id) return;
     let cancelled = false;
+    let interval = null;
+
     async function fetchBadge() {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const res = await client.get(`/leads?projectId=${activeProject.id}&status=nuevo&limit=1`);
         if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
       } catch {}
     }
-    fetchBadge();
-    const interval = setInterval(fetchBadge, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
+    function start() {
+      stop();
+      fetchBadge();
+      // 5 min: badge no requiere precision tiempo-real; al volver a la pestaña refrescamos via visibilitychange.
+      interval = setInterval(fetchBadge, 5 * 60 * 1000);
+    }
+    function stop() {
+      if (interval) { clearInterval(interval); interval = null; }
+    }
+    function onVisibilityChange() {
+      if (document.hidden) stop();
+      else start();
+    }
+
+    if (typeof document === 'undefined' || !document.hidden) start();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+    return () => {
+      cancelled = true;
+      stop();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+    };
   }, [activeProject?.id]);
 
   // Badge de reportes de spam pendientes — solo superadmin
@@ -978,11 +997,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
                   onClick={() => { toggleTheme(); }}
                 />
-                <UserMenuItem
-                  icon={Wrench}
-                  label={dockHidden ? 'Mostrar flotantes' : 'Ocultar flotantes'}
-                  onClick={() => { dockHidden ? showDock() : setUserMenuView('hide-dock'); }}
-                />
+                {location.pathname.startsWith('/manual') && (
+                  <UserMenuItem
+                    icon={Wrench}
+                    label={dockHidden ? 'Mostrar flotantes' : 'Ocultar flotantes'}
+                    onClick={() => { dockHidden ? showDock() : setUserMenuView('hide-dock'); }}
+                  />
+                )}
                 <div className="mx-2 my-1 border-t border-border" />
                 <UserMenuItem
                   icon={SignOut}

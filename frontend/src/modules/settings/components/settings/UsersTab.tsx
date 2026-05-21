@@ -8,9 +8,10 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  ROLE_STYLES, AVATAR_COLORS, getInitials, inputClass, selectClass, selectBg,
+  ROLE_STYLES, AVATAR_COLORS, getInitials, inputClass,
 } from './shared';
 
 export default function UsersTab() {
@@ -243,10 +244,17 @@ export default function UsersTab() {
         <button onClick={() => setProjectFilter('all')} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}>
           Todos los proyectos
         </button>
-        <select value={projectFilter !== 'active' && projectFilter !== 'all' ? projectFilter : ''} onChange={(e) => e.target.value && setProjectFilter(e.target.value)} aria-label="Filtrar por proyecto especifico" className="h-8 px-2 rounded-lg border border-border bg-muted/50 text-xs ml-auto max-w-[180px]">
-          <option value="">Proyecto especifico...</option>
-          {(projects || []).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-        </select>
+        <Select<string>
+          value={projectFilter !== 'active' && projectFilter !== 'all' ? projectFilter : ''}
+          onChange={(v) => { if (v) setProjectFilter(v); }}
+          options={[
+            { value: '', label: 'Proyecto especifico...' },
+            ...(projects || []).map((p) => ({ value: String(p.id), label: p.nombre })),
+          ]}
+          ariaLabel="Filtrar por proyecto especifico"
+          size="sm"
+          className="ml-auto max-w-[180px] w-full"
+        />
         <span className="text-[11px] text-muted-foreground">{users.length} usuario{users.length !== 1 ? 's' : ''}</span>
       </div>
 
@@ -391,11 +399,16 @@ export default function UsersTab() {
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1.5 block px-1">Rol *</label>
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={selectClass} style={selectBg}>
-              <option value="admin">Admin</option>
-              <option value="gestor">Gestor</option>
-              <option value="soporte">Desarrollador / Soporte</option>
-            </select>
+            <Select<string>
+              value={newRole}
+              onChange={setNewRole}
+              options={[
+                { value: 'admin', label: 'Admin' },
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'soporte', label: 'Desarrollador / Soporte' },
+              ]}
+              ariaLabel="Rol"
+            />
           </div>
           {projects.length > 0 && (
             <ProjectSelector
@@ -428,11 +441,16 @@ export default function UsersTab() {
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1.5 block px-1">Rol</label>
-            <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className={selectClass} style={selectBg}>
-              <option value="admin">Admin</option>
-              <option value="gestor">Gestor</option>
-              <option value="soporte">Desarrollador / Soporte</option>
-            </select>
+            <Select<string>
+              value={editRole}
+              onChange={setEditRole}
+              options={[
+                { value: 'admin', label: 'Admin' },
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'soporte', label: 'Desarrollador / Soporte' },
+              ]}
+              ariaLabel="Rol"
+            />
           </div>
           {projects.length > 0 && (
             <ProjectSelector

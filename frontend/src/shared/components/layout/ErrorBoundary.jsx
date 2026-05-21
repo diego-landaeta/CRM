@@ -23,7 +23,7 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     // En el futuro: enviar a Sentry / logging service.
     // Por ahora console.error en producción para tener pista en DevTools.
-    // eslint-disable-next-line no-console
+     
     console.error('[ErrorBoundary]', error, info?.componentStack);
   }
 

@@ -2,8 +2,6 @@ import {
   Users, Folder, Key, Envelope, ShieldCheck, PlugsConnected, Globe, ListChecks,
   ChatCircleText, Lightning, Tree, Receipt, EnvelopeOpen, CalendarBlank, type Icon,
 } from '@phosphor-icons/react';
-import type { CSSProperties } from 'react';
-
 export interface SettingsTab {
   id: string;
   label: string;
@@ -53,8 +51,6 @@ export function getInitials(name: string | null | undefined): string {
 }
 
 export const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
-export const selectClass = inputClass + ' appearance-none cursor-pointer pr-9';
-export const selectBg: CSSProperties = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
 export const SERVICES_CATALOG = [
   { service: 'brevo', name: 'Brevo (Email transaccional)', description: 'API Key para envio de emails desde cada proyecto (remitente configurable)', placeholder: 'xkeysib-...', global: false },

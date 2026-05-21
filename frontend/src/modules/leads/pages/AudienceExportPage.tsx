@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { useAudienceWizard } from '../hooks/useAudienceWizard';
 import { useMetaUpload } from '../hooks/useMetaUpload';
@@ -175,15 +176,16 @@ export default function AudienceExportPage() {
 
               {/* Producto */}
               <FilterSection title="Producto">
-                <select
-                  value={wizard.filters.productoId || ''}
-                  onChange={e => wizard.setFilter({ productoId: e.target.value ? Number(e.target.value) : null })}
-                  aria-label="Filtrar por producto"
-                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <option value="">Cualquier producto</option>
-                  {(products || []).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                <Select<number | null>
+                  value={wizard.filters.productoId || null}
+                  onChange={(v) => wizard.setFilter({ productoId: v })}
+                  options={[
+                    { value: null, label: 'Cualquier producto' },
+                    ...(products || []).map(p => ({ value: p.id as number, label: p.nombre })),
+                  ]}
+                  ariaLabel="Filtrar por producto"
+                  size="sm"
+                />
               </FilterSection>
 
               {/* Importe */}

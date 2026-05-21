@@ -242,9 +242,13 @@ export default function AppLayout() {
 
       <Toaster />
       <CommandPalette />
-      {!hideFloating && !mobileOpen && (
+      {pathname.startsWith('/manual') && !mobileOpen && (
         <Suspense fallback={null}>
           <FloatingDock />
+        </Suspense>
+      )}
+      {!hideFloating && !mobileOpen && (
+        <Suspense fallback={null}>
           <ShortcutsFAB />
         </Suspense>
       )}

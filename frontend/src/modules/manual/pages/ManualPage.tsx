@@ -317,7 +317,6 @@ export default function ManualPage() {
             { role: 'Admin', color: 'blue', desc: 'Acceso operativo completo dentro de sus proyectos. Puede crear usuarios pero no gestionarlos globalmente.', icon: LockKey },
             { role: 'Gestor', color: 'gray', desc: 'Solo ve sus proyectos asignados. En prospectos, gestiona únicamente los leads asignados a él.', icon: Users },
           ].map(r => {
-            const Icon = r.icon;
             const borderColors = { violet: 'border-violet-200 dark:border-violet-900', blue: 'border-blue-200 dark:border-blue-900', gray: 'border-border' };
             const bgColors = { violet: 'bg-violet-50/60 dark:bg-violet-950/20', blue: 'bg-blue-50/60 dark:bg-blue-950/20', gray: 'bg-muted/40' };
             return (

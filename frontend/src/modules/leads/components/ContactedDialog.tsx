@@ -88,7 +88,7 @@ export default function ContactedDialog({ open, lead, onClose, onSaved }: Props)
         <div className="p-5 space-y-4">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Tipo de contacto</label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {(['llamada', 'whatsapp', 'email', 'nota'] as const).map((t) => (
                 <button key={t} type="button" onClick={() => setTipo(t)}
                   className={`h-9 rounded-md border text-xs font-medium capitalize ${tipo === t ? 'bg-primary text-white border-primary' : 'border-border bg-card hover:bg-muted'}`}>

@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CurrencyEur, CheckCircle, Clock, ChartBar, Gear,
@@ -68,7 +69,7 @@ export default function CommissionsPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterEstado, filterUser]);
+  useEffect(() => { load();   }, [filterEstado, filterUser]);
   useEffect(() => { setSelected(new Set()); }, [periodMode, year, month, filterEstado, filterUser]);
 
   // Aplicar filtro de mes en cliente (el backend aún no acepta el parámetro segun ticket).
@@ -212,13 +213,16 @@ export default function CommissionsPage() {
         </button>
         {periodMode === 'month' && (
           <>
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputClass}>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {new Date(2000, i, 1).toLocaleDateString('es-ES', { month: 'long' })}
-                </option>
-              ))}
-            </select>
+            <Select<number>
+              value={month}
+              onChange={setMonth}
+              options={Array.from({ length: 12 }, (_, i) => ({
+                value: i + 1,
+                label: new Date(2000, i, 1).toLocaleDateString('es-ES', { month: 'long' }),
+              }))}
+              ariaLabel="Mes"
+              className="w-36"
+            />
             <input
               type="number"
               min="2020"
@@ -264,10 +268,16 @@ export default function CommissionsPage() {
             </button>
           ))}
           {isAdmin && users.length > 0 && (
-            <select value={filterUser} onChange={e => setFilterUser(e.target.value)} className={inputClass + ' ml-auto'}>
-              <option value="">Todos los gestores</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </select>
+            <Select<string>
+              value={filterUser}
+              onChange={setFilterUser}
+              options={[
+                { value: '', label: 'Todos los gestores' },
+                ...users.map(u => ({ value: String(u.id), label: u.nombre })),
+              ]}
+              ariaLabel="Filtrar por gestor"
+              className="ml-auto w-48"
+            />
           )}
         </div>
 

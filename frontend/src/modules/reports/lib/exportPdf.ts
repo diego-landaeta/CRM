@@ -153,7 +153,7 @@ function drawTable(
   all.forEach((cells, idx) => {
     const isHeader = idx === 0;
     let maxH = lineH;
-    cells.forEach((c, ci) => {
+    cells.forEach((c) => {
       doc.setFont('helvetica', isHeader ? 'bold' : 'normal');
       doc.setFontSize(isHeader ? 8 : 9);
       const lines: string[] = doc.splitTextToSize(c, colW - padding * 2);

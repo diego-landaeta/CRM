@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -124,10 +125,15 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Tipo</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className={inputClass}>
-                  <option value="crm">CRM (leads)</option>
-                  <option value="ia">IA (monitor pagos)</option>
-                </select>
+                <Select<string>
+                  value={form.type}
+                  onChange={(v) => setForm({ ...form, type: v })}
+                  options={[
+                    { value: 'crm', label: 'CRM (leads)' },
+                    { value: 'ia', label: 'IA (monitor pagos)' },
+                  ]}
+                  ariaLabel="Tipo"
+                />
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>

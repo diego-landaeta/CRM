@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { ArrowsClockwise, X } from '@phosphor-icons/react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useLocation } from 'react-router-dom';
 import { toast } from '@/shared/hooks/useToast';
+import Select from '@/shared/components/ui/Select';
 import {
   X, Bug, Lightning, Question, Image as ImageIcon, PaperPlaneRight,
 } from '@phosphor-icons/react';
@@ -106,15 +107,12 @@ export default function CreateTicketForm({ onSubmitted }: { onSubmitted?: () => 
         <KindSelector value={form.kind} onChange={(k) => patch({ kind: k })} />
         <label className="block">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Severidad</span>
-          <select
+          <Select<TicketSeverity>
             value={form.severity}
-            onChange={(e) => patch({ severity: e.target.value as TicketSeverity })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm"
-          >
-            {Object.entries(TICKET_SEVERITY).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+            onChange={(v) => patch({ severity: v })}
+            options={Object.entries(TICKET_SEVERITY).map(([k, v]) => ({ value: k as TicketSeverity, label: v.label }))}
+            ariaLabel="Severidad"
+          />
         </label>
       </div>
 
@@ -248,7 +246,7 @@ export default function CreateTicketForm({ onSubmitted }: { onSubmitted?: () => 
           />
         </div>
         {attachments.length > 0 && (
-          <div className="grid grid-cols-4 gap-2 mt-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-2">
             {attachments.map((a, i) => (
               <div key={i} className="relative group">
                 <img src={a.dataUrl} alt={a.name} loading="lazy" decoding="async" className="w-full h-16 object-cover rounded border border-border" />

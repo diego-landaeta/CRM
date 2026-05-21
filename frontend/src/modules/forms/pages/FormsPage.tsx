@@ -6,6 +6,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import Select from '@/shared/components/ui/Select';
 import { Globe, Plus, Trash, Copy, X, FloppyDisk, Code, Power } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -195,9 +196,12 @@ function FormEditor({ form, onSave, onClose }: FormEditorProps) {
         <div className="p-5 space-y-3">
           <input value={f.nombre} onChange={e => setF({ ...f, nombre: e.target.value })} placeholder="Nombre interno" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
 
-          <select value={f.template_kind} onChange={e => setF({ ...f, template_kind: e.target.value as TemplateKind })} className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm">
-            {KINDS.map(k => <option key={k.v} value={k.v}>{k.label}</option>)}
-          </select>
+          <Select<TemplateKind>
+            value={f.template_kind}
+            onChange={(v) => setF({ ...f, template_kind: v })}
+            options={KINDS.map(k => ({ value: k.v, label: k.label }))}
+            ariaLabel="Tipo de plantilla"
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs">

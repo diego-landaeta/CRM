@@ -827,15 +827,17 @@ export function buildInvoicePreviewHtml(data) {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --fit: 0.6; --zoom: 1; }
-  html, body { width: 100%; min-height: 100%; }
+  html, body { min-width: 100%; min-height: 100%; }
   body {
     background: #e5e7eb;
     padding: 20px;
     display: flex;
-    justify-content: center;
+    justify-content: safe center;
     align-items: safe center;
+    min-width: min-content;
     font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
     overflow: auto;
+    touch-action: pan-x pan-y;
   }
   .invoice-frame {
     width: calc(210mm * var(--fit) * var(--zoom));
@@ -1224,7 +1226,7 @@ export async function buildCertPreviewHtml(data) {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --fit: 0.6; --zoom: 1; }
-  html, body { width: 100%; min-height: 100%; }
+  html, body { min-width: 100%; min-height: 100%; }
   body {
     background: #e5e7eb;
     padding: 16px;
@@ -1233,8 +1235,10 @@ export async function buildCertPreviewHtml(data) {
     gap: 12px;
     align-items: safe center;
     justify-content: safe center;
+    min-width: min-content;
     font-family: Arial, Helvetica, sans-serif;
     overflow: auto;
+    touch-action: pan-x pan-y;
   }
   .cert-frame {
     width: calc(297mm * var(--fit) * var(--zoom));

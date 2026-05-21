@@ -123,7 +123,6 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   const total = subtotal + iva;
 
   const cliente_nombre = watch('cliente_nombre');
-  const cliente_dni = watch('cliente_dni');
   const fecha = watch('fecha');
 
   // Lista de campos obligatorios faltantes. Se usa para bloquear download/preview
@@ -260,7 +259,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
     } catch { /* silencioso */ }
   }
 
-  useEffect(() => { loadNextNumber(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeProject?.id]);
+  useEffect(() => { loadNextNumber();   }, [activeProject?.id]);
 
   const overrideNumValue = parseInt(numeroOverride, 10);
   const overrideEdited = nextNumber != null && Number.isFinite(overrideNumValue) && overrideNumValue !== nextNumber;

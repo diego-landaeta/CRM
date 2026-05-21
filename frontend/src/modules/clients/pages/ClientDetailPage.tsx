@@ -216,7 +216,7 @@ export default function ClientDetailPage() {
         {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {waPhone && (
-            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener" aria-label="Abrir WhatsApp"
+            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" aria-label="Abrir WhatsApp"
               className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
               <WhatsappLogo size={15} weight="regular" />
               <span className="hidden sm:inline">WhatsApp</span>

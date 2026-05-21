@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, ArrowSquareOut, EnvelopeSimple, Phone, WhatsappLogo, Calendar,
+  X, ArrowSquareOut, EnvelopeSimple, Phone, WhatsappLogo,
   CalendarCheck, ClockCounterClockwise, ChatCircleText, Plus, CheckCircle,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
-import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import Select from '@/shared/components/ui/Select';
+import StatusBadge from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useLeadDetail } from '../hooks/useLeads';
 import client from '@/shared/api/client';
@@ -302,12 +303,19 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
     <div className="space-y-4">
       <form onSubmit={add} className="space-y-2 p-3 rounded-lg border border-border bg-muted/30">
         <div className="flex gap-2">
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-xs">
-            <option value="llamada">Llamada</option>
-            <option value="email">Email</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="nota">Nota</option>
-          </select>
+          <Select<string>
+            value={tipo}
+            onChange={setTipo}
+            options={[
+              { value: 'llamada', label: 'Llamada' },
+              { value: 'email', label: 'Email' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'nota', label: 'Nota' },
+            ]}
+            ariaLabel="Tipo de interacción"
+            size="sm"
+            className="w-32"
+          />
           <input
             value={nota}
             onChange={(e) => setNota(e.target.value)}

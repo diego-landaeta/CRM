@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '@/shared/api/client';
-import { Package, Eye, EyeSlash, Check, X, ShieldCheck } from '@phosphor-icons/react';
+import { Eye, EyeSlash, Check, X, ShieldCheck } from '@phosphor-icons/react';
 
 const RULES = [
   { id: 'length', label: 'Mínimo 8 caracteres', test: (v) => v.length >= 8 },

@@ -34,8 +34,8 @@ export default function KpiCard({
   className = '',
   // tone: prop legacy ignorada (no afecta render). Mantenida para compat
   // con call sites que la pasan; preferir iconBg/badgeColor explícitos.
-  // eslint-disable-next-line no-unused-vars
-  tone = null,
+
+  tone: _tone = null,
 }) {
   const TrendIcon = trend === 'up' ? TrendUp : TrendDown;
   const showBadge = badge && badge !== '--';

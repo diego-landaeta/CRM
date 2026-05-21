@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 export default function InfoField({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -10,8 +10,6 @@ export default function InfoField({ label, children }: { label: string; children
 }
 
 export const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
-export const selectClass = "w-full h-9 px-3 pr-9 rounded-md border border-border bg-muted/50 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all";
-export const selectBg: CSSProperties = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' };
 
 const AVATAR_COLORS: ReadonlyArray<string> = [
   'bg-rose-100 text-rose-700', 'bg-sky-100 text-sky-700',

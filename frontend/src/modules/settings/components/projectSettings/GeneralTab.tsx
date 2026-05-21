@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import client from '@/shared/api/client';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { isValidHexColor } from '@/shared/lib/color';
 import { SectionTitle, Field, inputClass, useConfirm } from './shared';
@@ -94,10 +95,15 @@ export default function GeneralTab({ project, onSaved }) {
           <input value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} className={inputClass} placeholder="🎓" maxLength={4} />
         </Field>
         <Field label="Tipo">
-          <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className={inputClass}>
-            <option value="crm">CRM (leads)</option>
-            <option value="ia">IA (monitor pagos)</option>
-          </select>
+          <Select
+            value={form.type}
+            onChange={(v) => setForm({ ...form, type: v })}
+            options={[
+              { value: 'crm', label: 'CRM (leads)' },
+              { value: 'ia', label: 'IA (monitor pagos)' },
+            ]}
+            ariaLabel="Tipo de proyecto"
+          />
         </Field>
         <Field label="Alerta inactividad" hint="Dias sin contacto para avisar">
           <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: e.target.value })} className={inputClass} />

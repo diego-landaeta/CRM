@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { EnvelopeSimple, PaperPlaneTilt, CaretDown, CaretRight, Spinner } from '@phosphor-icons/react';
 import { leadEmailsApi, type LeadEmail } from '../api/lead-emails.api';
 
@@ -113,10 +114,10 @@ export default function LeadEmailsCard({ leadId, hasEmail, onCompose, refreshKey
                 </button>
                 {isOpen && (
                   <div className="ml-6 mb-3 mr-2 p-3 bg-muted/30 border border-border rounded-md">
-                    {/* eslint-disable-next-line react/no-danger -- contenido viene de Brevo del propio CRM */}
+                    { }
                     <div
                       className="text-xs leading-relaxed prose-sm max-w-none [&_a]:text-primary [&_a]:underline"
-                      dangerouslySetInnerHTML={{ __html: e.body_html }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(e.body_html) }}
                     />
                     {e.brevo_msg_id && (
                       <p className="text-[10px] text-muted-foreground mt-2 font-mono">

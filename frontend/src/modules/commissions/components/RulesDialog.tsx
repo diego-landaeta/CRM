@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { commissionsApi, type CommissionRule } from '../api/commissions.api';
 import Portal from '@/shared/components/ui/portal';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { Gear, X, Plus, Trash } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
@@ -113,28 +114,50 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
             <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
               <p className="text-[11px] font-medium text-muted-foreground">Nueva regla</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                <select value={newRule.project_id} onChange={e => setNewRule({ ...newRule, project_id: e.target.value, product_id: '' })} className={inputClass} required>
-                  <option value="">Proyecto</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-                <select value={newRule.user_id} onChange={e => setNewRule({ ...newRule, user_id: e.target.value })} className={inputClass} required>
-                  <option value="">Gestor</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                </select>
-                <select value={newRule.product_id} onChange={e => setNewRule({ ...newRule, product_id: e.target.value })} className={inputClass} disabled={!newRule.project_id}>
-                  <option value="">Todas las ventas (generica)</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                <Select<string>
+                  value={newRule.project_id}
+                  onChange={(v) => setNewRule({ ...newRule, project_id: v, product_id: '' })}
+                  options={[
+                    { value: '', label: 'Proyecto' },
+                    ...projects.map(p => ({ value: String(p.id), label: p.nombre })),
+                  ]}
+                  ariaLabel="Proyecto"
+                />
+                <Select<string>
+                  value={newRule.user_id}
+                  onChange={(v) => setNewRule({ ...newRule, user_id: v })}
+                  options={[
+                    { value: '', label: 'Gestor' },
+                    ...users.map(u => ({ value: String(u.id), label: u.nombre })),
+                  ]}
+                  ariaLabel="Gestor"
+                />
+                <Select<string>
+                  value={newRule.product_id}
+                  onChange={(v) => setNewRule({ ...newRule, product_id: v })}
+                  options={[
+                    { value: '', label: 'Todas las ventas (generica)' },
+                    ...products.map(p => ({ value: String(p.id), label: p.nombre })),
+                  ]}
+                  ariaLabel="Producto"
+                  disabled={!newRule.project_id}
+                />
                 <div className="flex gap-1">
                   <input type="number" min="0" max="100" step="0.01" placeholder="%" value={newRule.pct} onChange={e => setNewRule({ ...newRule, pct: e.target.value })} className={inputClass + ' flex-1'} required />
                   <button type="submit" aria-label="Añadir regla" className="px-3 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-primary/40">
                     <Plus size={12} weight="bold" />
                   </button>
                 </div>
-                <select value={newRule.base_calc} onChange={e => setNewRule({ ...newRule, base_calc: e.target.value as 'cobrado' | 'vendido' })} className={inputClass + ' col-span-4'}>
-                  <option value="cobrado">Calcular sobre lo cobrado (cuando cliente paga)</option>
-                  <option value="vendido">Calcular sobre lo vendido (al firmar venta)</option>
-                </select>
+                <Select<'cobrado' | 'vendido'>
+                  value={newRule.base_calc}
+                  onChange={(v) => setNewRule({ ...newRule, base_calc: v })}
+                  options={[
+                    { value: 'cobrado', label: 'Calcular sobre lo cobrado (cuando cliente paga)' },
+                    { value: 'vendido', label: 'Calcular sobre lo vendido (al firmar venta)' },
+                  ]}
+                  ariaLabel="Base de cálculo"
+                  className="col-span-4"
+                />
               </div>
               <p className="text-[10px] text-muted-foreground">Si producto vacio = aplica a TODAS las ventas del gestor en ese proyecto. Producto especifico = override.</p>
             </form>

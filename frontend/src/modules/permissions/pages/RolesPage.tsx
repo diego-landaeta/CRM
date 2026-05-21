@@ -6,7 +6,6 @@ import {
   FIXED_ROLES,
   PERMISSION_RESOURCES,
   ROLE_DEFAULT_PERMISSIONS,
-  type FixedRole,
 } from '@/shared/hooks/usePermission';
 import type { UserRole } from '@/shared/types';
 import * as api from '../api/permissions.api';
@@ -47,7 +46,7 @@ export default function RolesPage() {
           setCustomRoles(list);
           setCustomRolesAvailable(true);
         }
-      } catch (err) {
+      } catch {
         // 404 esperado si CRM-228 backend aun no esta desplegado
         if (!cancelled) setCustomRolesAvailable(false);
       }

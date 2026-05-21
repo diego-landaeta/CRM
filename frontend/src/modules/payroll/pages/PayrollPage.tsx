@@ -4,6 +4,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import Select from '@/shared/components/ui/Select';
 import { Coins, Plus, X, FloppyDisk, Calendar, Clock } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -128,10 +129,16 @@ function PlansTab({ project }: TabProps) {
     <div className="space-y-3">
       <div className="flex justify-end gap-2">
         {usersWithoutPlan.length > 0 && (
-          <select onChange={e => { if (e.target.value) setEditing({ user_id: parseInt(e.target.value), modo_fijo: '', modo_horas: '', modo_comisiones: false, active: true }); }} className="h-9 px-3 rounded-lg border border-border bg-card text-sm">
-            <option value="">Añadir plan a usuario...</option>
-            {usersWithoutPlan.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
+          <Select<string>
+            value=""
+            onChange={(v) => { if (v) setEditing({ user_id: parseInt(v), modo_fijo: '', modo_horas: '', modo_comisiones: false, active: true }); }}
+            options={[
+              { value: '', label: 'Añadir plan a usuario...' },
+              ...usersWithoutPlan.map(u => ({ value: String(u.id), label: u.nombre })),
+            ]}
+            ariaLabel="Añadir plan a usuario"
+            className="w-56"
+          />
         )}
       </div>
 
@@ -281,9 +288,13 @@ function PeriodsTab({ project }: TabProps) {
     <div className="space-y-3">
       <div className="flex gap-2 items-center">
         <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="h-9 w-24 px-2 rounded border border-border bg-card text-sm" />
-        <select value={month} onChange={e => setMonth(Number(e.target.value))} className="h-9 px-3 rounded border border-border bg-card text-sm">
-          {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-        </select>
+        <Select<number>
+          value={month}
+          onChange={setMonth}
+          options={Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))}
+          ariaLabel="Mes"
+          className="w-20"
+        />
         <button onClick={generateAll} className="ml-auto px-3 py-1.5 rounded bg-primary text-white text-xs font-bold">Generar/recalcular periodos</button>
       </div>
       {loading ? <SkeletonTable rows={4} columns={8} /> : periods.length === 0 ? (
@@ -391,10 +402,15 @@ function HoursTab({ project }: TabProps) {
   return (
     <div className="space-y-3">
       <div className="bg-card border border-border rounded-2xl p-4 grid grid-cols-1 md:grid-cols-5 gap-2">
-        <select value={form.user_id} onChange={e => setForm({ ...form, user_id: e.target.value })} className="h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm">
-          <option value="">Usuario</option>
-          {users.map(u => <option key={u.user_id} value={u.user_id}>{u.user_nombre}</option>)}
-        </select>
+        <Select<string>
+          value={form.user_id}
+          onChange={(v) => setForm({ ...form, user_id: v })}
+          options={[
+            { value: '', label: 'Usuario' },
+            ...users.map(u => ({ value: String(u.user_id), label: u.user_nombre })),
+          ]}
+          ariaLabel="Usuario"
+        />
         <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} className="h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
         <input type="number" step="0.25" placeholder="Horas" value={form.horas} onChange={e => setForm({ ...form, horas: e.target.value })} className="h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
         <input placeholder="Notas" value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} className="h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm md:col-span-1" />

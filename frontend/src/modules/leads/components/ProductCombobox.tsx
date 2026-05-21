@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { MagnifyingGlass, Plus, X, CaretDown } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -192,14 +193,25 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
               className={inputClass}
             />
             <div className="grid grid-cols-2 gap-2">
-              <select value={data.categoria_id} onChange={e => setData({ ...data, categoria_id: e.target.value, subcategoria_id: '' })} className={inputClass}>
-                <option value="">Sin categoria</option>
-                {parentCategories.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-              <select value={data.subcategoria_id} onChange={e => setData({ ...data, subcategoria_id: e.target.value })} className={inputClass} disabled={!subcategories.length}>
-                <option value="">{subcategories.length ? 'Sin subcategoria' : '—'}</option>
-                {subcategories.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
+              <Select<string>
+                value={data.categoria_id}
+                onChange={(v) => setData({ ...data, categoria_id: v, subcategoria_id: '' })}
+                options={[
+                  { value: '', label: 'Sin categoria' },
+                  ...parentCategories.map(c => ({ value: String(c.id), label: c.nombre })),
+                ]}
+                ariaLabel="Categoría"
+              />
+              <Select<string>
+                value={data.subcategoria_id}
+                onChange={(v) => setData({ ...data, subcategoria_id: v })}
+                options={[
+                  { value: '', label: subcategories.length ? 'Sin subcategoria' : '—' },
+                  ...subcategories.map(c => ({ value: String(c.id), label: c.nombre })),
+                ]}
+                ariaLabel="Subcategoría"
+                disabled={!subcategories.length}
+              />
             </div>
             <textarea
               placeholder="Descripción (opcional)"

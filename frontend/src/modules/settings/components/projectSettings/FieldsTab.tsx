@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, X, ArrowUp, ArrowDown, FloppyDisk, Gear, Notepad } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { SectionTitle, useConfirm, FIELD_TYPES, BASE_FIELDS } from './shared';
 
@@ -180,9 +181,12 @@ export default function FieldsTab({ project, onSaved }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={smallInput + ' font-mono text-xs'} required />
               <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={smallInput} required />
-              <select value={newField.type} onChange={e => setNewField({ ...newField, type: e.target.value })} className={smallInput}>
-                {FIELD_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-              </select>
+              <Select
+                value={newField.type}
+                onChange={(v) => setNewField({ ...newField, type: v })}
+                options={FIELD_TYPES.map(t => ({ value: t.v, label: t.label }))}
+                ariaLabel="Tipo de campo"
+              />
               <input value={newField.grupo} onChange={e => setNewField({ ...newField, grupo: e.target.value })} placeholder="Sección (opcional)" className={smallInput} />
               {newField.type === 'select' && (
                 <input value={newField.options} onChange={e => setNewField({ ...newField, options: e.target.value })} placeholder="Opciones separadas por coma" className={smallInput + ' col-span-2'} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, X, Tag } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { SectionTitle, useConfirm, inputClass } from './shared';
 
@@ -62,10 +63,16 @@ export default function CategoriesTab({ project }) {
         <p className="text-[11px] font-medium text-muted-foreground">Añadir categoría</p>
         <div className="flex gap-2">
           <input value={newCat.nombre} onChange={e => setNewCat({ ...newCat, nombre: e.target.value })} placeholder="Nombre" className={inputClass + ' flex-1'} required />
-          <select value={newCat.parent_id} onChange={e => setNewCat({ ...newCat, parent_id: e.target.value })} className={inputClass + ' flex-1'}>
-            <option value="">Categoria raiz</option>
-            {parents.map(p => <option key={p.id} value={p.id}>Subcategoria de: {p.nombre}</option>)}
-          </select>
+          <Select
+            value={newCat.parent_id}
+            onChange={(v) => setNewCat({ ...newCat, parent_id: v })}
+            options={[
+              { value: '', label: 'Categoria raiz' },
+              ...parents.map(p => ({ value: String(p.id), label: `Subcategoria de: ${p.nombre}` })),
+            ]}
+            ariaLabel="Categoría padre"
+            className="flex-1"
+          />
           <button type="submit" className="px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 flex items-center gap-1">
             <Plus size={14} weight="bold" /> Añadir
           </button>

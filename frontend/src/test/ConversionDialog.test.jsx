@@ -55,12 +55,11 @@ describe('ConversionDialog — render base', () => {
   });
 
   it('campo "Fecha compromiso" se muestra si metodo_pago = fraccionado', async () => {
-    const { container } = render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
-    const selects = container.querySelectorAll('select');
-    // Primer select es "Metodo de pago" (no hay productos)
-    const metodoSelect = Array.from(selects).find((s) => s.querySelector('option[value="fraccionado"]'));
-    expect(metodoSelect).toBeTruthy();
-    fireEvent.change(metodoSelect, { target: { value: 'fraccionado' } });
+    render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    // Sin productos solo hay un combobox: "Metodo de pago"
+    const metodoTrigger = screen.getByRole('combobox', { name: /Método de pago/i });
+    fireEvent.click(metodoTrigger);
+    fireEvent.mouseDown(await screen.findByRole('option', { name: 'Fraccionado' }));
     expect(await screen.findByText(/Fecha compromiso de pago pendiente/i)).toBeInTheDocument();
   });
 });
@@ -173,6 +172,12 @@ describe('ConversionDialog — submit', () => {
 });
 
 describe('ConversionDialog — payment links derivados', () => {
+  function pickProduct(name) {
+    const productoTrigger = screen.getByRole('combobox', { name: /Producto contratado/i });
+    fireEvent.click(productoTrigger);
+    fireEvent.mouseDown(screen.getByRole('option', { name }));
+  }
+
   it('usa payment_links del producto si existe array', () => {
     productsState.products = [
       {
@@ -185,16 +190,11 @@ describe('ConversionDialog — payment links derivados', () => {
       },
     ];
     render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
-    // Seleccionamos el producto
-    const select = screen.getAllByRole('combobox')[0];
-    fireEvent.change(select, { target: { value: 'Master IA' } });
-    // Verificamos que aparecen los enlaces en el select de pago
-    const linkSelects = document.querySelectorAll('select');
-    const linkSelect = linkSelects[linkSelects.length - 1]; // último select = enlace
-    const opts = linkSelect.querySelectorAll('option');
-    const labels = Array.from(opts).map((o) => o.textContent);
-    expect(labels.some((l) => /Pago completo/.test(l))).toBe(true);
-    expect(labels.some((l) => /Anticipo/.test(l))).toBe(true);
+    pickProduct('Master IA');
+    const linkTrigger = screen.getByRole('combobox', { name: /Enlace de pago/i });
+    fireEvent.click(linkTrigger);
+    expect(screen.getByRole('option', { name: /Pago completo/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Anticipo/i })).toBeInTheDocument();
   });
 
   it('si no hay payment_links usa fallback stripe_link como enlace único', () => {
@@ -202,19 +202,16 @@ describe('ConversionDialog — payment links derivados', () => {
       { id: 1, nombre: 'Curso Y', stripe_link: 'https://buy.stripe.com/legacy', payment_links: null },
     ];
     render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
-    const select = screen.getAllByRole('combobox')[0];
-    fireEvent.change(select, { target: { value: 'Curso Y' } });
-    const linkSelect = document.querySelectorAll('select');
-    const last = linkSelect[linkSelect.length - 1];
-    const labels = Array.from(last.querySelectorAll('option')).map((o) => o.textContent);
-    expect(labels.some((l) => /Pago completo/.test(l))).toBe(true);
+    pickProduct('Curso Y');
+    const linkTrigger = screen.getByRole('combobox', { name: /Enlace de pago/i });
+    fireEvent.click(linkTrigger);
+    expect(screen.getByRole('option', { name: /Pago completo/i })).toBeInTheDocument();
   });
 
   it('producto sin payment_links ni stripe_link muestra mensaje "no tiene enlaces"', () => {
     productsState.products = [{ id: 1, nombre: 'Sin enlaces', payment_links: null }];
     render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
-    const select = screen.getAllByRole('combobox')[0];
-    fireEvent.change(select, { target: { value: 'Sin enlaces' } });
+    pickProduct('Sin enlaces');
     expect(screen.getByText(/no tiene enlaces configurados/i)).toBeInTheDocument();
   });
 });

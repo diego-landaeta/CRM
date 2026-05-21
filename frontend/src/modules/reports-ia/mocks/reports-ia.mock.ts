@@ -113,7 +113,7 @@ export function reportsListMock(projectId: string | number, params: ListReportsP
   if (params.periodo) arr = arr.filter(r => r.periodo === params.periodo);
   return arr
     .sort((a, b) => b.periodo.localeCompare(a.periodo))
-    .map(({ content, ...rest }) => rest); // listado sin content
+    .map(({ content: _content, ...rest }) => rest); // listado sin content
 }
 
 export function reportDetailMock(id: string): Report | null {

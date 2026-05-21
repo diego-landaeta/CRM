@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
@@ -274,15 +275,16 @@ export default function CsvImportDialog({ open, onClose, projectId, onImported }
                         {field.required && <span className="text-red-600 ml-0.5">*</span>}
                       </div>
                       <ArrowRight size={12} className="text-muted-foreground flex-shrink-0" />
-                      <select
-                        value={mapping[field.key] ?? ''}
-                        onChange={(e) => setMapping(m => ({ ...m, [field.key]: e.target.value === '' ? undefined : Number(e.target.value) }))}
-                        className="flex-1 h-9 px-3 rounded-md border border-border bg-card text-sm">
-                        <option value="">— Sin mapear —</option>
-                        {parsed.headers.map((h, i) => (
-                          <option key={i} value={i}>{h || `Columna ${i + 1}`}</option>
-                        ))}
-                      </select>
+                      <Select<number | null>
+                        value={mapping[field.key] ?? null}
+                        onChange={(v) => setMapping(m => ({ ...m, [field.key]: v == null ? undefined : v }))}
+                        options={[
+                          { value: null, label: '— Sin mapear —' },
+                          ...parsed.headers.map((h, i) => ({ value: i, label: h || `Columna ${i + 1}` })),
+                        ]}
+                        ariaLabel={`Mapear campo ${field.key}`}
+                        className="flex-1"
+                      />
                     </div>
                   ))}
                 </div>

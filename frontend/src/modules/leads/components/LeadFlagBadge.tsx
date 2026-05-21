@@ -101,7 +101,7 @@ export default function LeadFlagBadge({ kind, daysInactive, pulse, className = '
       {open && (
         <span
           role="tooltip"
-          className="absolute z-[60] left-0 top-full mt-1.5 w-72 p-3 rounded-md bg-zinc-900 text-zinc-100 shadow-2xl text-[11px] leading-snug normal-case font-normal pointer-events-none"
+          className="absolute z-[60] left-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] p-3 rounded-md bg-zinc-900 text-zinc-100 shadow-2xl text-[11px] leading-snug normal-case font-normal pointer-events-none"
           onClick={(e) => e.stopPropagation()}
         >
           <p className="font-bold text-white mb-1">{def.title}</p>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { payableApi } from '../api/payable.api';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { X } from '@phosphor-icons/react';
 
@@ -82,12 +83,17 @@ export default function PaymentDialog({ payable, onClose, onSaved }: Props) {
               </div>
               <div>
                 <label className="text-[10px] font-medium text-muted-foreground block mb-1">Método</label>
-                <select value={data.metodo} onChange={e => setData({ ...data, metodo: e.target.value })} className={inputClass}>
-                  <option value="transferencia">Transferencia</option>
-                  <option value="tarjeta">Tarjeta</option>
-                  <option value="efectivo">Efectivo</option>
-                  <option value="otros">Otros</option>
-                </select>
+                <Select<string>
+                  value={data.metodo}
+                  onChange={(v) => setData({ ...data, metodo: v })}
+                  options={[
+                    { value: 'transferencia', label: 'Transferencia' },
+                    { value: 'tarjeta', label: 'Tarjeta' },
+                    { value: 'efectivo', label: 'Efectivo' },
+                    { value: 'otros', label: 'Otros' },
+                  ]}
+                  ariaLabel="Método de pago"
+                />
               </div>
             </div>
             <input placeholder="Referencia (opcional)" value={data.referencia} onChange={e => setData({ ...data, referencia: e.target.value })} className={inputClass} />

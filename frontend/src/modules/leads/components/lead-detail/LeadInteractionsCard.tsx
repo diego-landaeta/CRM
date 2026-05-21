@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Phone, EnvelopeSimple, WhatsappLogo, Note } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
-import { selectClass, selectBg } from './InfoField';
 import type { Interaction } from '@/shared/types';
 
 type InteractionTipo = Interaction['tipo'];
@@ -108,12 +108,17 @@ export function InteractionDialog({ open, onClose, onSubmit }: InteractionDialog
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Tipo</label>
-              <select value={tipo} onChange={(e) => setTipo(e.target.value as InteractionTipo)} className={selectClass} style={selectBg}>
-                <option value="llamada">Llamada</option>
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="nota">Nota</option>
-              </select>
+              <Select<InteractionTipo>
+                value={tipo}
+                onChange={setTipo}
+                options={[
+                  { value: 'llamada', label: 'Llamada' },
+                  { value: 'email', label: 'Email' },
+                  { value: 'whatsapp', label: 'WhatsApp' },
+                  { value: 'nota', label: 'Nota' },
+                ]}
+                ariaLabel="Tipo de interacción"
+              />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Fecha y hora</label>

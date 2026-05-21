@@ -20,7 +20,6 @@ const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'))
 const PayableDialog = lazy(() => import('../components/PayableDialog'));
 const PaymentDialog = lazy(() => import('../components/PaymentDialog'));
 
-const CATEGORIES = ['salarios', 'alquiler', 'proveedores', 'software', 'publicidad', 'impuestos', 'servicios', 'mantenimiento', 'otros'];
 const ESTADOS = [
   { v: '', label: 'Todas' },
   { v: 'pendiente', label: 'Pendientes' },
@@ -63,7 +62,7 @@ export default function AccountsPayablePage() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [projId, filterEstado]);
+  useEffect(() => { load();   }, [projId, filterEstado]);
 
   function handleDelete(id) { setPendingDelete(id); }
   async function doDelete() {

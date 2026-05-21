@@ -8,6 +8,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import StatusBadge, { STATUS_KEYS } from '@/shared/components/ui/StatusBadge';
+import Select from '@/shared/components/ui/Select';
 import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { Button } from '@/shared/components/ui/button';
@@ -249,9 +250,14 @@ export default function DevComponentsPage() {
           </label>
           <label className="block">
             <span className="text-xs font-bold uppercase text-muted-foreground">Status</span>
-            <select className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
-              {STATUS_KEYS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <div className="mt-1">
+              <Select<string>
+                value={STATUS_KEYS[0]}
+                onChange={() => {}}
+                options={STATUS_KEYS.map((s) => ({ value: s, label: s }))}
+                ariaLabel="Status (demo)"
+              />
+            </div>
           </label>
           <label className="block">
             <span className="text-xs font-bold uppercase text-muted-foreground">Notas</span>

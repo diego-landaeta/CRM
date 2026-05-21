@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, X, ArrowUp, ArrowDown, FloppyDisk, ArrowSquareOut, Globe } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { SectionTitle, useConfirm, inputClass } from './shared';
 
@@ -154,14 +155,15 @@ export default function ExternalPanelsTab({ project, onSaved }: Props) {
             title={ICON_HINT}
             className={inputClass}
           />
-          <select
+          <Select<'iframe' | 'tab'>
             value={draft.open_in || 'iframe'}
-            onChange={e => setDraft({ ...draft, open_in: e.target.value as 'iframe' | 'tab' })}
-            className={inputClass}
-          >
-            <option value="iframe">Embebido (iframe dentro del CRM)</option>
-            <option value="tab">Pestaña nueva</option>
-          </select>
+            onChange={(v) => setDraft({ ...draft, open_in: v })}
+            options={[
+              { value: 'iframe', label: 'Embebido (iframe dentro del CRM)' },
+              { value: 'tab', label: 'Pestaña nueva' },
+            ]}
+            ariaLabel="Cómo abrir el panel"
+          />
         </div>
         <div className="mt-3 flex justify-end">
           <button
@@ -212,14 +214,16 @@ export default function ExternalPanelsTab({ project, onSaved }: Props) {
                         title={ICON_HINT}
                         className={inputClass + ' h-8'}
                       />
-                      <select
+                      <Select<'iframe' | 'tab'>
                         value={editBuf.open_in || 'iframe'}
-                        onChange={e => setEditBuf({ ...editBuf, open_in: e.target.value as 'iframe' | 'tab' })}
-                        className={inputClass + ' h-8'}
-                      >
-                        <option value="iframe">Embebido (iframe)</option>
-                        <option value="tab">Pestaña nueva</option>
-                      </select>
+                        onChange={(v) => setEditBuf({ ...editBuf, open_in: v })}
+                        options={[
+                          { value: 'iframe', label: 'Embebido (iframe)' },
+                          { value: 'tab', label: 'Pestaña nueva' },
+                        ]}
+                        ariaLabel="Cómo abrir el panel"
+                        size="sm"
+                      />
                     </div>
                   ) : (
                     <>

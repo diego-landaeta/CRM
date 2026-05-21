@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import { X, Link as LinkIcon, Copy, CheckCircle } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
@@ -251,7 +252,6 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   }
 
   const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
-  const selectClass = inputClass + ' appearance-none cursor-pointer pr-8';
 
   return (
     <Portal>
@@ -271,6 +271,17 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Producto contratado *</label>
+              {products.length > 0 ? (
+                <Select<string>
+                  value={form.producto_contratado}
+                  onChange={(v) => update('producto_contratado', v)}
+                  options={[
+                    { value: '', label: 'Seleccionar o escribir abajo' },
+                    ...products.map(p => ({ value: p.nombre, label: p.nombre })),
+                  ]}
+                  ariaLabel="Producto contratado"
+                />
+              ) : null}
               <input
                 list={products.length > 0 ? 'conversion-products-list' : undefined}
                 value={form.producto_contratado}
@@ -340,9 +351,12 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Metodo de pago</label>
-                <select value={form.metodo_pago} onChange={e => update('metodo_pago', e.target.value as MetodoPago)} className={selectClass}>
-                  {METODOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
+                <Select<MetodoPago>
+                  value={form.metodo_pago}
+                  onChange={(v) => update('metodo_pago', v)}
+                  options={METODOS.map(m => ({ value: m.value, label: m.label }))}
+                  ariaLabel="Método de pago"
+                />
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha conversion</label>
@@ -450,19 +464,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 <div className="flex items-center gap-2 text-[11px] font-bold text-blue-800 dark:text-blue-300">
                   <LinkIcon size={12} weight="bold" /> Enlace de pago para compartir
                 </div>
-                <select
+                <Select<string>
                   value={selectedLinkIdx}
-                  onChange={(e) => setSelectedLinkIdx(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="-1">Sin enlace</option>
-                  {productLinks.map((l, i) => (
-                    <option key={i} value={i}>
-                      {l.label} {l.tipo !== 'completo' && `(${l.tipo})`}
-                    </option>
-                  ))}
-                  <option value="custom">Personalizado…</option>
-                </select>
+                  onChange={setSelectedLinkIdx}
+                  options={[
+                    { value: '-1', label: 'Sin enlace' },
+                    ...productLinks.map((l, i) => ({
+                      value: String(i),
+                      label: l.tipo !== 'completo' ? `${l.label} (${l.tipo})` : l.label,
+                    })),
+                    { value: 'custom', label: 'Personalizado…' },
+                  ]}
+                  ariaLabel="Enlace de pago"
+                />
                 {selectedLinkIdx === 'custom' && (
                   <input
                     type="url"

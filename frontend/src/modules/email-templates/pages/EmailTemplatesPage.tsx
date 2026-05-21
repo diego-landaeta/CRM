@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { Plus, EnvelopeSimple, Pencil, Trash, Eye, FloppyDisk, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
@@ -162,7 +163,7 @@ export default function EmailTemplatesPage() {
               </button>
             </div>
             <div className="flex-1 overflow-auto p-5">
-              <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewHtml.body_html }} />
+              <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml.body_html) }} />
             </div>
           </div>
         </div>

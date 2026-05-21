@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema, PAYMENT_LINK_TYPES } from '../validation/product.schema';
 import { X, CurrencyEur, Link, Tag, Plus, Trash, Image as ImageIcon, UploadSimple } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
@@ -45,6 +46,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(productSchema),
@@ -275,14 +277,25 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
               <Tag size={12} /> Categorización
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <select value={categoriaSel} onChange={e => { setCategoriaSel(e.target.value); setSubcategoriaSel(''); }} className={smallInput}>
-                <option value="">Sin categoría</option>
-                {allCategoriesWithPath.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-              <select value={subcategoriaSel} onChange={e => setSubcategoriaSel(e.target.value)} className={smallInput} disabled={!subs.length}>
-                <option value="">{subs.length ? 'Sin subcategoría' : '—'}</option>
-                {subs.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
+              <Select<string>
+                value={categoriaSel}
+                onChange={(v) => { setCategoriaSel(v); setSubcategoriaSel(''); }}
+                options={[
+                  { value: '', label: 'Sin categoría' },
+                  ...allCategoriesWithPath.map(c => ({ value: String(c.id), label: c.label })),
+                ]}
+                ariaLabel="Categoría"
+              />
+              <Select<string>
+                value={subcategoriaSel}
+                onChange={setSubcategoriaSel}
+                options={[
+                  { value: '', label: subs.length ? 'Sin subcategoría' : '—' },
+                  ...subs.map(c => ({ value: String(c.id), label: c.nombre })),
+                ]}
+                ariaLabel="Subcategoría"
+                disabled={!subs.length}
+              />
             </div>
           </div>
 
@@ -352,12 +365,23 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 <input {...register('precio')} type="number" step="0.01" min="0" placeholder="0.00" className={smallInput} />
               </Field>
               <Field label="Moneda">
-                <select {...register('moneda')} className={smallInput}>
-                  <option value="EUR">EUR &euro;</option>
-                  <option value="USD">USD $</option>
-                  <option value="MXN">MXN $</option>
-                  <option value="COP">COP $</option>
-                </select>
+                <Controller
+                  name="moneda"
+                  control={control}
+                  render={({ field }) => (
+                    <Select<string>
+                      value={field.value || 'EUR'}
+                      onChange={field.onChange}
+                      options={[
+                        { value: 'EUR', label: 'EUR €' },
+                        { value: 'USD', label: 'USD $' },
+                        { value: 'MXN', label: 'MXN $' },
+                        { value: 'COP', label: 'COP $' },
+                      ]}
+                      ariaLabel="Moneda"
+                    />
+                  )}
+                />
               </Field>
               <Field label="Duración" hint="ej: 8 sesiones">
                 <input {...register('duracion')} placeholder="opcional" className={smallInput} />
@@ -458,15 +482,12 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                         placeholder="Etiqueta (ej: Pago único)"
                         className={smallInput}
                       />
-                      <select
+                      <Select<string>
                         value={link.tipo}
-                        onChange={(e) => updatePaymentLink(idx, { tipo: e.target.value })}
-                        className={smallInput}
-                      >
-                        {PAYMENT_LINK_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => updatePaymentLink(idx, { tipo: v })}
+                        options={PAYMENT_LINK_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+                        ariaLabel="Tipo de enlace de pago"
+                      />
                     </div>
                     <div className="flex gap-2 items-start">
                       <input

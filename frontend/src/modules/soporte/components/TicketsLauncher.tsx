@@ -23,10 +23,6 @@ const TONE_BG = {
 
 const KIND_ICON = { bug: Bug, feature: Lightning, question: Question };
 
-// Limite: 5 imagenes por ticket, 1 MB cada una (data URLs en localStorage)
-const MAX_FILES = 5;
-const MAX_FILE_SIZE = 1 * 1024 * 1024;
-
 export default function TicketsLauncher() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'create'
