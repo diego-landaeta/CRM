@@ -96,6 +96,13 @@ export const conversionsApi = {
     client.patch(`/conversions/installments/${instId}`, data),
   deleteInstallment: (instId: number): Promise<ApiResponse<void>> =>
     client.delete(`/conversions/installments/${instId}`),
+  editPaidInstallment: (
+    instId: number,
+    data: { fecha_cobro?: string; importe_cobrado?: number },
+  ): Promise<ApiResponse<any>> =>
+    client.patch(`/conversions/installments/${instId}/paid`, data),
+  unpayInstallment: (instId: number): Promise<ApiResponse<any>> =>
+    client.post(`/conversions/installments/${instId}/unpay`, {}),
 
   // Devoluciones (FASE DE PRUEBA)
   listRefunds: (conversionId: number): Promise<ApiResponse<Refund[]>> =>

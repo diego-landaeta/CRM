@@ -33,8 +33,10 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   // Editor de importe_total para aplicar descuentos/becas antes de fraccionar.
   const [totalDraft, setTotalDraft] = useState<string>('');
   const [savingTotal, setSavingTotal] = useState(false);
-  // Mini-form de cobro de cuota: pide importe + fecha (no asume hoy).
+  // Mini-form de cobro/edición de cuota: pide importe + fecha (no asume hoy).
+  // mode='new' marca pagada por primera vez; mode='edit' modifica un pago hecho.
   const [payingInst, setPayingInst] = useState<Installment | null>(null);
+  const [payMode, setPayMode] = useState<'new' | 'edit'>('new');
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
   const [payingNow, setPayingNow] = useState(false);
@@ -135,12 +137,31 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
 
   function handlePayInstallment(inst: Installment) {
     if (!inst.id) return;
-    // Abre el mini-form prefilled con importe previsto + fecha de HOY como
-    // valor por defecto (editable). Importante: la gestora a menudo registra
-    // el pago días después, por eso NO asumimos hoy a ciegas.
     setPayingInst(inst);
+    setPayMode('new');
     setPayImporte(String(inst.importe_previsto));
     setPayFecha(new Date().toISOString().slice(0, 10));
+  }
+
+  function handleEditPaid(inst: Installment) {
+    if (!inst.id) return;
+    setPayingInst(inst);
+    setPayMode('edit');
+    setPayImporte(String(inst.importe_cobrado || inst.importe_previsto));
+    setPayFecha((inst.fecha_cobro || '').slice(0, 10));
+  }
+
+  async function handleUnpay(inst: Installment) {
+    if (!inst.id) return;
+    if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
+    try {
+      await conversionsApi.unpayInstallment(inst.id);
+      toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
+      onSaved?.();
+      await load();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+    }
   }
 
   async function confirmPayInstallment() {
@@ -156,8 +177,13 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     }
     setPayingNow(true);
     try {
-      await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
-      toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
+      if (payMode === 'edit') {
+        await conversionsApi.editPaidInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
+        toast({ title: 'Pago actualizado', description: `${importe}€ el ${payFecha}` });
+      } else {
+        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
+        toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
+      }
       setPayingInst(null);
       onSaved?.();
       await load();
@@ -214,9 +240,21 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                         <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}</p>
                       </div>
                       {pagada ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-400">
-                          <CheckCircle size={14} weight="fill" /> Pagada {inst.fecha_cobro ? formatDate(inst.fecha_cobro) : ''}
-                        </span>
+                        <>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-400">
+                            <CheckCircle size={14} weight="fill" /> {inst.fecha_cobro ? formatDate(inst.fecha_cobro) : 'Pagada'} · {formatCurrency(Number(inst.importe_cobrado || 0))}
+                          </span>
+                          <button onClick={() => handleEditPaid(inst)}
+                            title="Editar pago (fecha o importe)"
+                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-sky-700 hover:bg-sky-100 dark:hover:bg-sky-950/40">
+                            Editar
+                          </button>
+                          <button onClick={() => handleUnpay(inst)}
+                            title="Deshacer el pago (vuelve a pendiente)"
+                            className="px-2 py-1 rounded-md text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-950/40">
+                            Deshacer
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button onClick={() => handlePayInstallment(inst)}
@@ -344,8 +382,14 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         <div className="fixed inset-0 !m-0 z-[90] flex items-center justify-center p-4" onClick={() => setPayingInst(null)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h4 className="font-semibold text-base mb-1">Cobrar cuota #{payingInst.numero}</h4>
-            <p className="text-xs text-muted-foreground mb-4">Importe previsto: {formatCurrency(payingInst.importe_previsto)}</p>
+            <h4 className="font-semibold text-base mb-1">
+              {payMode === 'edit' ? 'Editar pago' : 'Cobrar cuota'} #{payingInst.numero}
+            </h4>
+            <p className="text-xs text-muted-foreground mb-4">
+              {payMode === 'edit'
+                ? 'Cambia importe o fecha. Se actualizará el pago y el total cobrado.'
+                : `Importe previsto: ${formatCurrency(payingInst.importe_previsto)}`}
+            </p>
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Importe cobrado (€)</label>
@@ -373,7 +417,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
               </button>
               <button onClick={confirmPayInstallment} disabled={payingNow}
                 className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
-                {payingNow ? 'Guardando…' : 'Confirmar cobro'}
+                {payingNow ? 'Guardando…' : (payMode === 'edit' ? 'Guardar cambios' : 'Confirmar cobro')}
               </button>
             </div>
           </div>

@@ -29,6 +29,9 @@ router.get('/:id/installments', ctrl.listInstallments);
 router.post('/:id/installments/generate', ctrl.generateInstallments);
 router.patch('/installments/:instId', ctrl.updateInstallment);
 router.post('/installments/:instId/pay', ctrl.payInstallment);
+// CRUD del pago ya hecho: editar (fecha/importe) o deshacer
+router.patch('/installments/:instId/paid', ctrl.editPaidInstallment);
+router.post('/installments/:instId/unpay', ctrl.unpayInstallment);
 router.delete('/installments/:instId', ctrl.deleteInstallment);
 
 // Devoluciones / refunds (fase de prueba)

@@ -155,3 +155,35 @@ export async function deleteInstallment(req, res, next) {
     res.json({ success: true });
   } catch (err) { next(err); }
 }
+
+// PATCH /installments/:instId/paid  { fecha_cobro?, importe_cobrado? }
+// Edita un pago YA realizado (no marcar pagada de nuevo, eso es payInstallment).
+export async function editPaidInstallment(req, res, next) {
+  try {
+    const instId = parseInt(req.params.instId);
+    const { fecha_cobro, importe_cobrado } = req.body || {};
+    if (!fecha_cobro && importe_cobrado === undefined) {
+      throw new AppError('Indica fecha_cobro o importe_cobrado', 400, 'INVALID');
+    }
+    const r = await installmentsModel.editPaid(instId, { fecha_cobro, importe_cobrado });
+    if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data: r });
+  } catch (err) {
+    if (err.message === 'Cuota no pagada') return next(new AppError(err.message, 400, 'NOT_PAID'));
+    next(err);
+  }
+}
+
+// POST /installments/:instId/unpay
+// Deshace el pago, devuelve la cuota a pendiente.
+export async function unpayInstallment(req, res, next) {
+  try {
+    const instId = parseInt(req.params.instId);
+    const r = await installmentsModel.unpay(instId);
+    if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data: r });
+  } catch (err) {
+    if (err.message === 'Cuota no estaba pagada') return next(new AppError(err.message, 400, 'NOT_PAID'));
+    next(err);
+  }
+}

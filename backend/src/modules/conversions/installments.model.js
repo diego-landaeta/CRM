@@ -106,6 +106,87 @@ export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas
   }
 }
 
+// Edita un pago YA registrado (fecha_cobro / importe_cobrado).
+// Mantiene en sync el conversion_payment correspondiente y el importe_pagado
+// de la conversión (suma/resta el diff de importe).
+export async function editPaid(id, { fecha_cobro, importe_cobrado }) {
+  const c = await getClient();
+  try {
+    await c.query('BEGIN');
+    const { rows: instRows } = await c.query(`SELECT * FROM conversion_installments WHERE id = $1 FOR UPDATE`, [id]);
+    const inst = instRows[0];
+    if (!inst) { await c.query('ROLLBACK'); return null; }
+    if (!inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota no pagada'); }
+
+    const newImporte = importe_cobrado !== undefined ? Number(importe_cobrado) : Number(inst.importe_cobrado);
+    const newFecha = fecha_cobro || inst.fecha_cobro;
+    const diff = newImporte - Number(inst.importe_cobrado);
+
+    // Actualizar conversion_payment vinculado
+    if (inst.payment_id) {
+      await c.query(
+        `UPDATE conversion_payments SET importe = $1, fecha = $2 WHERE id = $3`,
+        [newImporte, newFecha, inst.payment_id]
+      );
+    }
+    // Ajustar importe_pagado de la conversión si cambió el monto
+    if (diff !== 0) {
+      await c.query(
+        `UPDATE conversions SET importe_pagado = importe_pagado + $1, updated_at = NOW() WHERE id = $2`,
+        [diff, inst.conversion_id]
+      );
+    }
+    // Actualizar cuota
+    const { rows } = await c.query(
+      `UPDATE conversion_installments
+         SET fecha_cobro = $1, importe_cobrado = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [newFecha, newImporte, id]
+    );
+    await c.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally { c.release(); }
+}
+
+// Deshace el pago de una cuota: borra el conversion_payment, resta del
+// importe_pagado de la conversión, y devuelve la cuota a estado "pendiente".
+export async function unpay(id) {
+  const c = await getClient();
+  try {
+    await c.query('BEGIN');
+    const { rows: instRows } = await c.query(`SELECT * FROM conversion_installments WHERE id = $1 FOR UPDATE`, [id]);
+    const inst = instRows[0];
+    if (!inst) { await c.query('ROLLBACK'); return null; }
+    if (!inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota no estaba pagada'); }
+
+    // Borrar payment (cascade pone payment_id de la cuota en NULL automaticamente)
+    if (inst.payment_id) {
+      await c.query(`DELETE FROM conversion_payments WHERE id = $1`, [inst.payment_id]);
+    }
+    // Restar importe del total pagado
+    await c.query(
+      `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado - $1), updated_at = NOW() WHERE id = $2`,
+      [Number(inst.importe_cobrado || 0), inst.conversion_id]
+    );
+    // Limpiar la cuota
+    const { rows } = await c.query(
+      `UPDATE conversion_installments
+         SET fecha_cobro = NULL, importe_cobrado = NULL, metodo = NULL, payment_id = NULL, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    await c.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally { c.release(); }
+}
+
 export async function remove(id) {
+  // Permite borrar SOLO cuotas no cobradas (las pagadas hay que deshacer primero con unpay)
   await query(`DELETE FROM conversion_installments WHERE id = $1 AND fecha_cobro IS NULL`, [id]);
 }
