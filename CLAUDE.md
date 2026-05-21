@@ -125,9 +125,10 @@ scripts/    # backup.sh, deploy.sh
 - **Ramas y entornos:**
   - `main` → **produccion** (https://360crm.tech/crm/, DB `crm_prod_db`, PM2 `crm-api-production` :3001, frontend `/var/www/crm/production/frontend`)
   - `staging` → **QA/testeo** (https://360crm.tech/testeo/, DB `crm_test_db`, PM2 `crm-api-staging` :3002, frontend `/var/www/crm/staging/frontend`)
-  - `feat/<nombre-corto>` → features en desarrollo (PRs)
-  - Flujo: `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod
-  - **NUNCA commit directo a `main`**. Ver `docs/09-deploy-y-ramas.md` para procedimiento de deploy completo, rollback, envs y webhooks externos.
+  - `feat/<nombre-corto>` → features en desarrollo (opcional, sin PRs)
+  - Flujo recomendado para cambios grandes: `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod
+  - **Push directo a `main` está permitido** para fixes y cambios chicos (es el flujo habitual del owner). Para cambios riesgosos (pagos, auth, migraciones DB) pasar primero por `staging`.
+  - Ver `docs/09-deploy-y-ramas.md` para procedimiento de deploy completo, rollback, envs y webhooks externos.
 - Variables de entorno en `.env` — NUNCA hardcodeadas
 - Nunca commit de `.env`, `.env.production`, `node_modules/`, `dist/`
 - VPS: Hostinger `187.124.128.126` (DNS `360crm.tech`). HTTPS con Let's Encrypt + renovación auto (`certbot.timer`).
