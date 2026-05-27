@@ -13,7 +13,7 @@ export default function LeadsViewToggle({ active }: { active: 'list' | 'kanban' 
       className="inline-flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-muted/40"
     >
       <Link
-        to="/leads"
+        to="/prospectos"
         role="tab"
         aria-selected={active === 'list'}
         className={`${baseClass} rounded-sm ${active === 'list' ? activeClass : inactiveClass}`}
@@ -22,7 +22,7 @@ export default function LeadsViewToggle({ active }: { active: 'list' | 'kanban' 
         Lista
       </Link>
       <Link
-        to="/leads/pipeline"
+        to="/prospectos/pipeline"
         role="tab"
         aria-selected={active === 'kanban'}
         className={`${baseClass} rounded-sm ${active === 'kanban' ? activeClass : inactiveClass}`}

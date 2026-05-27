@@ -38,6 +38,7 @@ import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
 import connectorsModule from './modules/connectors/index.js';
 import makeModule from './modules/make/index.js';
+import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -122,6 +123,7 @@ const ALL_MODULES = [
   { name: 'permissions', mod: permissionsModule },
   { name: 'connectors', mod: connectorsModule },
   { name: 'make', mod: makeModule },
+  { name: 'messages', mod: messagesModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)

@@ -48,7 +48,7 @@ export default function WebhookDetailPage() {
         const w = res.data as WebhookDetail;
         if (w.kind !== 'webhook') {
           toast({ title: 'No es un webhook', variant: 'destructive' });
-          navigate('/webhooks', { replace: true });
+          navigate('/captacion/webhooks', { replace: true });
           return;
         }
         setWebhook(w);
@@ -116,7 +116,7 @@ export default function WebhookDetailPage() {
     try {
       await client.delete(`/forms/${id}`);
       toast({ title: 'Eliminado' });
-      navigate('/webhooks');
+      navigate('/captacion/webhooks');
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
@@ -159,7 +159,7 @@ export default function WebhookDetailPage() {
     return (
       <div className="space-y-5 pb-8">
         <PageHeader title="Webhook no encontrado" />
-        <Link to="/webhooks" className="text-sm text-primary hover:underline">← Volver a webhooks</Link>
+        <Link to="/captacion/webhooks" className="text-sm text-primary hover:underline">← Volver a webhooks</Link>
       </div>
     );
   }
@@ -183,7 +183,7 @@ export default function WebhookDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <Link
-              to="/webhooks"
+              to="/captacion/webhooks"
               aria-label="Volver"
               className="flex items-center gap-1 h-9 px-3 rounded-lg border border-border bg-secondary text-sm hover:bg-muted transition-colors"
             >

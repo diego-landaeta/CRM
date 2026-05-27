@@ -51,11 +51,11 @@ const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
 // Mapa de "n" (nuevo) según ruta actual
 const NEW_ACTIONS = {
-  '/leads': { url: '/leads?new=1', label: 'prospecto' },
-  '/clients': { url: '/leads?new=1', label: 'prospecto' },
-  '/products': { url: '/products?new=1', label: 'producto' },
-  '/forms': { url: '/forms?new=1', label: 'formulario' },
-  '/webhooks': { url: '/webhooks?new=1', label: 'webhook' },
+  '/prospectos': { url: '/prospectos?new=1', label: 'prospecto' },
+  '/clientes': { url: '/prospectos?new=1', label: 'prospecto' },
+  '/productos': { url: '/productos?new=1', label: 'producto' },
+  '/captacion': { url: '/captacion?new=1', label: 'formulario' },
+  '/captacion/webhooks': { url: '/captacion/webhooks?new=1', label: 'webhook' },
   '/email-sequences': { url: '/email-sequences?new=1', label: 'secuencia' },
   '/accounting/expenses': { url: '/accounting/expenses?new=1', label: 'egreso' },
   '/accounting/payable': { url: '/accounting/payable?new=1', label: 'cuenta por pagar' },
@@ -64,9 +64,9 @@ const NEW_ACTIONS = {
 // Navegación rápida G + tecla
 const G_TARGETS = {
   d: '/',
-  l: '/leads',
-  c: '/clients',
-  p: '/products',
+  l: '/prospectos',
+  c: '/clientes',
+  p: '/productos',
   r: '/reports',
   a: '/accounting',
   s: '/settings',

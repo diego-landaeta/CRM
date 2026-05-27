@@ -45,7 +45,7 @@ export default function ChangeProductDialog({ open, lead, onClose, onSaved }: Pr
       setLoading(true);
       client.get(`/products?projectId=${lead.project_id}&active=true&limit=500`)
         .then((r) => { if (r.success) setProducts(r.data || []); })
-        .catch(() => {})
+        .catch(() => toast({ title: 'Error al cargar productos', variant: 'destructive' }))
         .finally(() => setLoading(false));
     }
   }, [open, lead?.project_id, lead?.producto_interes_id]);

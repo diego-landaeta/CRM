@@ -35,6 +35,7 @@ import {
   CaretLeft,
   CreditCard,
   ChatCircleText,
+  ChatsCircle,
   ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,78 +60,29 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      {
-        label: 'Prospectos', icon: Users, module: 'leads',
-        children: [
-          { label: 'Listado', to: '/leads', module: 'leads' },
-          { label: 'Pipeline (Kanban)', to: '/leads/pipeline', module: 'leads' },
-          { label: 'Audiencias Meta', to: '/leads/audiences', roles: ['superadmin', 'admin'], module: 'leads' },
-        ],
-      },
-      {
-        label: 'Clientes', icon: UserCheck, module: 'clients',
-        children: [
-          { label: 'Listado', to: '/clients', module: 'clients' },
-          { label: 'Matrículas', to: '/matriculas', module: 'matriculas' },
-        ],
-      },
+      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
     ],
   },
   {
     label: 'Captación',
     items: [
       { label: 'Email seguimiento', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
-      {
-        label: 'Captación', icon: Globe, roles: ['superadmin', 'admin'],
-        children: [
-          { label: 'Formularios', to: '/forms', roles: ['superadmin', 'admin'] },
-          { label: 'Webhooks', to: '/webhooks', roles: ['superadmin', 'admin'] },
-          { label: 'Make', to: '/make-webhooks', roles: ['superadmin', 'admin'] },
-        ],
-      },
-      {
-        label: 'Campañas', icon: Megaphone, roles: ['superadmin', 'admin'],
-        children: [
-          { label: 'Consolidado', to: '/campaigns', roles: ['superadmin', 'admin'] },
-          { label: 'Meta Ads', to: '/campaigns/meta', roles: ['superadmin', 'admin'] },
-          { label: 'Google Ads', to: '/campaigns/google', roles: ['superadmin', 'admin'] },
-          { label: 'Tráfico orgánico', to: '/seo', roles: ['superadmin', 'admin'] },
-        ],
-      },
+      { label: 'Captación', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'] },
+      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
     ],
   },
   {
     label: 'Catálogo',
     items: [
-      {
-        label: 'Productos', icon: Package, roles: ['superadmin', 'admin'],
-        children: [
-          { label: 'Catálogo', to: '/products', roles: ['superadmin', 'admin'], module: 'products' },
-          { label: 'Árbol de categorías', to: '/configuracion/categorias-arbol', roles: ['superadmin', 'admin'], module: 'products' },
-          { label: 'Cursos pendientes', to: '/products/pending', roles: ['superadmin', 'admin'], module: 'products' },
-          { label: 'WooCommerce', to: '/woocommerce', roles: ['superadmin', 'admin'], module: 'woocommerce' },
-        ],
-      },
+      { label: 'Productos', to: '/productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Documentos', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
     ],
   },
   {
     label: 'Finanzas',
     items: [
-      {
-        label: 'Contabilidad', icon: Calculator,
-        children: [
-          { label: 'Dashboard', to: '/accounting', roles: ['superadmin', 'admin'], module: 'accounting_income' },
-          { label: 'Ingresos', to: '/accounting/income', roles: ['superadmin', 'admin'], module: 'accounting_income' },
-          { label: 'Conversiones', to: '/revenue', roles: ['superadmin', 'admin'], module: 'accounting_income' },
-          { label: 'Egresos', to: '/accounting/expenses', roles: ['superadmin', 'admin'], module: 'accounting_expenses' },
-          { label: 'Cuentas por cobrar', to: '/accounting/receivable', roles: ['superadmin', 'admin'], module: 'accounting_receivable' },
-          { label: 'Cuentas por pagar', to: '/accounting/payable', roles: ['superadmin', 'admin'], module: 'accounting_payable' },
-          { label: 'Comisiones', to: '/commissions', module: 'commissions' },
-          { label: 'Nóminas', to: '/payroll', roles: ['superadmin', 'admin'], module: 'payroll' },
-        ],
-      },
-      // Solo visible para proyectos IA (SaaS): MRR, churn, suscripciones
+      { label: 'Contabilidad', to: '/finanzas', icon: Calculator },
       { label: 'Stripe', to: '/stripe', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia' },
     ],
   },
@@ -145,6 +97,7 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
       { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
       { label: 'Soporte', to: '/soporte', icon: Headset },
@@ -493,6 +446,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
+  const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
 
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
@@ -656,6 +610,20 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     const interval = setInterval(fetchSpamCount, 60000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [user?.role]);
+
+  // Badge de mensajes no leidos
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchMsgCount() {
+      try {
+        const res = await client.get('/messages/conversations/unread-count');
+        if (!cancelled && res.success) setMsgUnreadBadge(res.data?.count || 0);
+      } catch {}
+    }
+    fetchMsgCount();
+    const interval = setInterval(fetchMsgCount, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
@@ -891,8 +859,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     key={item.to}
                     {...item}
                     badge={
-                      item.to === '/leads' && newLeadsBadge > 0 ? newLeadsBadge
+                      item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                       : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
+                      : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
                       : undefined
                     }
                     labelOverrides={activeProject?.sidebar_labels}

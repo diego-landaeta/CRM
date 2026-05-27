@@ -439,7 +439,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 </summary>
                 <div className="px-3 pb-3">
                   <textarea
-                    {...register(f.name)}
+                    {...register(f.name as any)}
                     rows={6}
                     placeholder={`Pegado por el scraper. Si está vacío puedes editarlo.`}
                     className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-xs leading-relaxed resize-y font-sans"

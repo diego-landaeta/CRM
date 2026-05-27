@@ -106,7 +106,7 @@ export default function AccountingDashboardPage() {
               className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             <button
-              onClick={() => navigate('/accounting/expenses')}
+              onClick={() => navigate('/finanzas/egresos')}
               aria-label="Nuevo egreso"
               className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40"
             >

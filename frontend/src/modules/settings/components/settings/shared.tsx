@@ -18,7 +18,7 @@ export const TABS: SettingsTab[] = [
   { id: 'cat-tree',     label: 'Árbol de categorías', icon: Tree,           to: '/configuracion/categorias-arbol' },
   { id: 'channels',     label: 'Canales',             icon: ChatCircleText, to: '/configuracion/canales' },
   { id: 'forms',        label: 'Formularios',         icon: Globe },
-  { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/webhooks' },
+  { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/captacion/webhooks' },
   { id: 'sequences',    label: 'Email seguimiento',   icon: Envelope,       to: '/email-sequences' },
   { id: 'templates',    label: 'Plantillas email',    icon: EnvelopeOpen,   to: '/configuracion/email-templates' },
   { id: 'shortcuts',    label: 'Atajos rápidos',      icon: Lightning,      to: '/configuracion/atajos' },

@@ -19,17 +19,13 @@ import {
   Notepad,
   PlugsConnected,
   CaretDown,
-  Phone,
   EnvelopeSimple,
   WhatsappLogo,
   CheckCircle,
   CalendarPlus,
-  DotsThreeVertical,
   Lightning,
   UploadSimple,
   ChatCircleText,
-  PencilSimple,
-  X,
   DownloadSimple,
   ArrowsClockwise,
   Trash,
@@ -63,9 +59,7 @@ import { getLeadExportColumns } from '../lib/leadFormat';
 import {
   getInitials,
   getAvatarColor,
-  formatDate,
   formatRelative,
-  cleanPhone,
 } from '../lib/leadFormat';
 
 
@@ -188,7 +182,7 @@ export default function LeadsPage() {
   const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
-  const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
+  const [, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
   const [bulkLoading, setBulkLoading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [quickFilter, setQuickFilterState] = useState(searchParams.get('qf') || ''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
@@ -255,7 +249,7 @@ export default function LeadsPage() {
       .then((res) => {
         if (res.success) setGestores(res.data || []);
       })
-      .catch(() => {});
+      .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
   }, [user?.role]);
 
   function handleMarkContacted(lead) {
@@ -346,7 +340,7 @@ export default function LeadsPage() {
       });
       toast({ title: 'Interacción registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
       refetch();
-    } catch (err) {
+    } catch {
       // Silent fail — el link igual abre, no queremos bloquear al usuario
     }
   }
@@ -462,7 +456,7 @@ export default function LeadsPage() {
           </button>
           <LeadsViewToggle active="list" />
           <button
-            onClick={() => navigate('/leads/audiences')}
+            onClick={() => navigate('/prospectos/audiencias')}
             title="Audiencias para Meta/Google"
             aria-label="Audiencias"
             className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"

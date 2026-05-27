@@ -90,7 +90,7 @@ export default function LeadDetailPage() {
     if (!isAdmin || gestores.length > 0) return;
     client.get('/users?limit=100')
       .then((res) => { if (res.success) setGestores(res.data || []); })
-      .catch(() => {});
+      .catch(() => toast({ title: 'Error al cargar gestores', variant: 'destructive' }));
   }, [isAdmin, gestores.length]);
 
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function LeadDetailPage() {
         action={
           <div className="flex items-center justify-center gap-2">
             <button
-              onClick={() => navigate('/leads')}
+              onClick={() => navigate('/prospectos')}
               className="text-sm font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 rounded px-2 py-1"
             >
               Volver a Prospectos
@@ -211,7 +211,7 @@ export default function LeadDetailPage() {
         lead={lead}
         isAdmin={isAdmin}
         onReassign={() => setReassignOpen(true)}
-        onBack={() => navigate('/leads')}
+        onBack={() => navigate('/prospectos')}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

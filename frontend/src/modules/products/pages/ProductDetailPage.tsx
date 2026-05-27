@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useProject } from '@/shared/hooks/useProject';
 import { getProduct } from '../api/products.api';
 import DossierPanel from '../components/DossierPanel';
 import { Button } from '@/shared/components/ui/button';
 import {
-  ArrowLeft, Clock, Hash, MapPin, Calendar, Link as LinkIcon,
-  Image as ImageIcon, GraduationCap,
+  ArrowLeft, Clock, Hash, MapPin, Calendar, Link as LinkIcon, GraduationCap,
 } from '@phosphor-icons/react';
 
 interface Product {
@@ -118,7 +118,7 @@ export default function ProductDetailPage() {
     <div className="p-5 max-w-4xl space-y-5 pb-12">
       <div className="flex items-start gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/products" aria-label="Volver a productos"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to="/productos" aria-label="Volver a productos"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-1">
@@ -131,7 +131,7 @@ export default function ProductDetailPage() {
           {product.descripcion && (
             <p
               className="text-muted-foreground text-sm mt-2 whitespace-pre-wrap leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: product.descripcion }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.descripcion) }}
             />
           )}
         </div>
@@ -172,7 +172,7 @@ export default function ProductDetailPage() {
             Este producto no tiene secciones extraídas (Módulos, FAQs, Profesores, etc.).
           </p>
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-            Configura el scraper y el mapeo en <Link to="/woocommerce" className="underline font-semibold">WooCommerce → Mapeo</Link> y vuelve a importar.
+            Configura el scraper y el mapeo en <Link to="/productos/woocommerce" className="underline font-semibold">WooCommerce → Mapeo</Link> y vuelve a importar.
           </p>
         </div>
       ) : (

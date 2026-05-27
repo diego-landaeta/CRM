@@ -105,7 +105,7 @@ export default function ExternalPanelPage() {
         // demasiado para casos como Stripe). Dejamos sin sandbox para máxima compatibilidad.
         referrerPolicy="no-referrer-when-downgrade"
         loading="lazy"
-        className="flex-1 w-full bg-white"
+        className="flex-1 w-full bg-card"
       />
     </div>
   );

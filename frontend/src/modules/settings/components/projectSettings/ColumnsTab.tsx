@@ -16,7 +16,7 @@ export default function ColumnsTab({ project, onSaved }) {
   useEffect(() => {
     client.get(`/field-definitions/project/${project.id}`).then(r => {
       if (r.success) setCustomFields(r.data || []);
-    }).catch(() => {});
+    }).catch(() => toast({ title: 'Error al cargar campos personalizados', variant: 'destructive' }));
   }, [project.id]);
 
   function move(idx, dir) {

@@ -86,7 +86,7 @@ export default function ChannelsConfigPage() {
         <div className="text-sm text-muted-foreground">
           <p className="font-semibold text-foreground mb-1">Mientras llega...</p>
           <p>
-            Las plantillas de WhatsApp por proyecto se editan desde la <Link to="/leads" className="text-primary font-medium hover:underline">página de prospectos</Link> &gt; menú &quot;Editar plantillas&quot;.
+            Las plantillas de WhatsApp por proyecto se editan desde la <Link to="/prospectos" className="text-primary font-medium hover:underline">página de prospectos</Link> &gt; menú &quot;Editar plantillas&quot;.
             Para conectar WhatsApp Web o el correo de cada proyecto puedes usar el panel flotante (icono <Sparkle size={12} weight="bold" className="inline" /> abajo a la derecha).
           </p>
         </div>

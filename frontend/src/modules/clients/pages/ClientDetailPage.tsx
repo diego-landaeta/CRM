@@ -146,7 +146,7 @@ export default function ClientDetailPage() {
         description="Es posible que haya sido eliminado o no tengas acceso al proyecto."
         action={
           <button
-            onClick={() => navigate('/clients')}
+            onClick={() => navigate('/clientes')}
             className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
           >
             Volver a Clientes
@@ -171,7 +171,7 @@ export default function ClientDetailPage() {
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">
         <button
-          onClick={() => navigate('/clients')}
+          onClick={() => navigate('/clientes')}
           aria-label="Volver a Clientes"
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
         >
@@ -524,7 +524,7 @@ export default function ClientDetailPage() {
           winner={lead ? { id: lead.id, nombre: lead.nombre, email: lead.email } : null}
           projectId={(lead as any)?.project_id || null}
           onClose={() => setMergeOpen(false)}
-          onMerged={() => { setMergeOpen(false); toast({ title: 'Cliente fusionado' }); navigate('/clients'); }}
+          onMerged={() => { setMergeOpen(false); toast({ title: 'Cliente fusionado' }); navigate('/clientes'); }}
         />
       </Suspense>
 
@@ -537,7 +537,7 @@ export default function ClientDetailPage() {
           onDeleted={() => {
             setDeleteOpen(false);
             toast({ title: 'Cliente eliminado' });
-            navigate('/clients');
+            navigate('/clientes');
           }}
         />
       </Suspense>

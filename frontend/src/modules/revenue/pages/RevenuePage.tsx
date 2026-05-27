@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
+import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/react';
@@ -63,7 +64,7 @@ export default function RevenuePage() {
     setLoading(true);
     client.get(`/conversions?projectId=${activeProject.id}&limit=100`)
       .then(res => { if (res.success) setConversions((res.data as Conversion[]) || []); })
-      .catch(() => {})
+      .catch(() => toast({ title: 'Error al cargar conversiones', variant: 'destructive' }))
       .finally(() => setLoading(false));
   }, [activeProject?.id]);
 

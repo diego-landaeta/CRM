@@ -4,40 +4,43 @@ import { useProjectContext } from './contexts/ProjectContext';
 
 const ROUTE_TITLES = {
   '/': 'Dashboard',
-  '/leads': 'Prospectos',
-  '/leads/pipeline': 'Pipeline',
-  '/leads/audiences': 'Audiencias',
-  '/clients': 'Clientes',
-  '/products': 'Productos',
-  '/products/pending': 'Productos pendientes',
-  '/campaigns': 'Campañas',
-  '/campaigns/meta': 'Meta Ads',
-  '/campaigns/google': 'Google Ads',
-  '/seo': 'Tráfico orgánico',
+  '/prospectos': 'Prospectos',
+  '/prospectos/pipeline': 'Pipeline',
+  '/prospectos/audiencias': 'Audiencias',
+  '/clientes': 'Clientes',
+  '/clientes/matriculas': 'Matrículas',
+  '/captacion': 'Captación',
+  '/captacion/webhooks': 'Webhooks',
+  '/captacion/make': 'Make',
+  '/campanas': 'Campañas',
+  '/campanas/meta': 'Meta Ads',
+  '/campanas/google': 'Google Ads',
+  '/campanas/seo': 'Tráfico orgánico',
+  '/productos': 'Productos',
+  '/productos/arbol': 'Árbol de categorías',
+  '/productos/pendientes': 'Cursos pendientes',
+  '/productos/woocommerce': 'WooCommerce',
+  '/finanzas': 'Contabilidad',
+  '/finanzas/ingresos': 'Ingresos',
+  '/finanzas/conversiones': 'Conversiones',
+  '/finanzas/egresos': 'Egresos',
+  '/finanzas/por-cobrar': 'Cuentas por cobrar',
+  '/finanzas/por-pagar': 'Cuentas por pagar',
+  '/finanzas/comisiones': 'Comisiones',
+  '/finanzas/nominas': 'Nóminas',
   '/stripe': 'Stripe',
-  '/revenue': 'Conversiones',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
   '/notificaciones': 'Notificaciones',
-  '/accounting': 'Contabilidad',
-  '/accounting/income': 'Ingresos',
-  '/accounting/expenses': 'Egresos',
-  '/accounting/receivable': 'Cuentas por cobrar',
-  '/accounting/payable': 'Cuentas por pagar',
-  '/commissions': 'Comisiones',
-  '/matriculas': 'Matrículas',
   '/email-sequences': 'Email seguimiento',
-  '/forms': 'Forms',
-  '/webhooks': 'Webhooks',
   '/configuracion/campos': 'Campos personalizados',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
   '/configuracion/documentos': 'Numeración de documentos',
   '/configuracion/email-templates': 'Plantillas de email',
-  '/payroll': 'Nóminas',
-  '/woocommerce': 'WooCommerce',
   '/reports': 'Reportes',
+  '/messages': 'Mensajes',
   '/manual': 'Manual',
   '/settings': 'Configuración',
   '/profile': 'Mi perfil',
@@ -81,6 +84,14 @@ const SetPasswordPage = lazy(() => import('./shared/pages/SetPasswordPage'));
 const DashboardPage = lazy(() => import('./shared/pages/DashboardPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const NotFoundPage = lazy(() => import('./shared/pages/NotFoundPage'));
+
+// Layouts con SubNav (tabs)
+const ProspectosLayout = lazy(() => import('./modules/leads/pages/ProspectosLayout'));
+const CaptacionLayout = lazy(() => import('./modules/forms/pages/CaptacionLayout'));
+const CampanasLayout = lazy(() => import('./modules/campaigns/pages/CampanasLayout'));
+const ClientesLayout = lazy(() => import('./modules/clients/pages/ClientesLayout'));
+const ProductosLayout = lazy(() => import('./modules/products/pages/ProductosLayout'));
+const FinanzasLayout = lazy(() => import('./modules/accounting/pages/FinanzasLayout'));
 
 // Modules
 const LeadsPage = lazy(() => import('./modules/leads/pages/LeadsPage'));
@@ -127,6 +138,7 @@ const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/Shortcut
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
+const MessagesPage = lazy(() => import('./modules/messages/pages/MessagesPage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
@@ -151,35 +163,62 @@ function App() {
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/leads" element={<LeadsPage />} />
-          <Route path="/leads/pipeline" element={<LeadsPipelinePage />} />
-          <Route path="/leads/audiences" element={<AudienceExportPage />} />
-          <Route path="/leads/:id" element={<LeadDetailPage />} />
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/products/arbol" element={<ProductsTreePage />} />
-          <Route path="/products/pending" element={<CoursesPendingPage />} />
-          <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/campaigns" element={<CampaignsPage />} />
-          <Route path="/campaigns/meta" element={<MetaCampaignsPage />} />
-          <Route path="/campaigns/google" element={<GoogleCampaignsPage />} />
-          <Route path="/seo" element={<SeoPage />} />
-          <Route path="/stripe" element={<IADashboardPage />} />
-          <Route path="/revenue" element={<RevenuePage />} />
-          <Route path="/accounting" element={<AccountingDashboardPage />} />
-          <Route path="/accounting/income" element={<IncomePage />} />
-          <Route path="/accounting/expenses" element={<ExpensesPage />} />
-          <Route path="/accounting/receivable" element={<ReceivablePage />} />
-          <Route path="/accounting/payable" element={<AccountsPayablePage />} />
-          <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/clients/:id" element={<ClientDetailPage />} />
-          <Route path="/commissions" element={<CommissionsPage />} />
-          <Route path="/matriculas" element={<MatriculasPage />} />
+
+          {/* Prospectos — tabs */}
+          <Route path="/prospectos" element={<ProspectosLayout />}>
+            <Route index element={<LeadsPage />} />
+            <Route path="pipeline" element={<LeadsPipelinePage />} />
+            <Route path="audiencias" element={<AudienceExportPage />} />
+          </Route>
+          <Route path="/prospectos/:id" element={<LeadDetailPage />} />
+
+          {/* Clientes — tabs */}
+          <Route path="/clientes" element={<ClientesLayout />}>
+            <Route index element={<ClientsPage />} />
+            <Route path="matriculas" element={<MatriculasPage />} />
+          </Route>
+          <Route path="/clientes/:id" element={<ClientDetailPage />} />
+
+          {/* Captación — tabs */}
+          <Route path="/captacion" element={<CaptacionLayout />}>
+            <Route index element={<FormsPage />} />
+            <Route path="webhooks" element={<WebhooksPage />} />
+            <Route path="webhooks/:id" element={<WebhookDetailPage />} />
+            <Route path="make" element={<MakeWebhooksPage />} />
+            <Route path="make/:id" element={<MakeWebhookDetailPage />} />
+          </Route>
+
+          {/* Campañas — tabs */}
+          <Route path="/campanas" element={<CampanasLayout />}>
+            <Route index element={<CampaignsPage />} />
+            <Route path="meta" element={<MetaCampaignsPage />} />
+            <Route path="google" element={<GoogleCampaignsPage />} />
+            <Route path="seo" element={<SeoPage />} />
+          </Route>
+
+          {/* Productos — tabs */}
+          <Route path="/productos" element={<ProductosLayout />}>
+            <Route index element={<ProductsPage />} />
+            <Route path="arbol" element={<ProductsTreePage />} />
+            <Route path="pendientes" element={<CoursesPendingPage />} />
+            <Route path="woocommerce" element={<WooCommercePage />} />
+          </Route>
+          <Route path="/productos/:id" element={<ProductDetailPage />} />
+
+          {/* Finanzas — tabs */}
+          <Route path="/finanzas" element={<FinanzasLayout />}>
+            <Route index element={<AccountingDashboardPage />} />
+            <Route path="ingresos" element={<IncomePage />} />
+            <Route path="conversiones" element={<RevenuePage />} />
+            <Route path="egresos" element={<ExpensesPage />} />
+            <Route path="por-cobrar" element={<ReceivablePage />} />
+            <Route path="por-pagar" element={<AccountsPayablePage />} />
+            <Route path="comisiones" element={<CommissionsPage />} />
+            <Route path="nominas" element={<PayrollPage />} />
+          </Route>
+
           <Route path="/email-sequences" element={<EmailSequencesPage />} />
-          <Route path="/forms" element={<FormsPage />} />
-          <Route path="/webhooks" element={<WebhooksPage />} />
-          <Route path="/webhooks/:id" element={<WebhookDetailPage />} />
-          <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
-          <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
+          <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
@@ -187,14 +226,13 @@ function App() {
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
-          <Route path="/payroll" element={<PayrollPage />} />
-          <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/reports/ia" element={<ReportsIAPage />} />
           <Route path="/ai-chat" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />

@@ -24,7 +24,7 @@ const TABS = [
   { key: 'emails', label: 'Emails' },
 ];
 
-function fmtDate(d: string | null | undefined): string {
+function _fmtDate(d: string | null | undefined): string {
   if (!d) return '--';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -161,7 +161,7 @@ function ResumenTab({ lead, onEnroll, onSaved }) {
     if (!lead?.id || !lead?.email) return;
     client.get(`/leads/${lead.id}/purchase-history`)
       .then((r) => { if (r.success) setHistory(r.data || []); })
-      .catch(() => {});
+      .catch(() => toast({ title: 'Error al cargar historial de compras', variant: 'destructive' }));
   }, [lead?.id, lead?.email]);
 
   return (

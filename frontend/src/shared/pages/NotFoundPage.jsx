@@ -3,9 +3,9 @@ import { Compass, ArrowLeft, House, MagnifyingGlass } from '@phosphor-icons/reac
 
 const QUICK_LINKS = [
   { to: '/', label: 'Dashboard', icon: House },
-  { to: '/leads', label: 'Prospectos', icon: Compass },
-  { to: '/clients', label: 'Clientes', icon: Compass },
-  { to: '/products', label: 'Productos', icon: Compass },
+  { to: '/prospectos', label: 'Prospectos', icon: Compass },
+  { to: '/clientes', label: 'Clientes', icon: Compass },
+  { to: '/productos', label: 'Productos', icon: Compass },
 ];
 
 export default function NotFoundPage() {

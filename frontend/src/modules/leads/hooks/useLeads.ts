@@ -27,6 +27,7 @@ export interface LeadStats {
   en_seguimiento: number;
   convertido: number;
   no_interesado: number;
+  sin_asignar: number;
 }
 
 export interface UseLeadsResult {

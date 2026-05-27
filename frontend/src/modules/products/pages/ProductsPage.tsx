@@ -95,7 +95,7 @@ function TreeNode({
 export default function ProductsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeProject, isAllProjects } = useProject();
+  const { activeProject } = useProject();
   const projectId = activeProject?.id;
   const { products, loading, error, refetch: refetchProducts, create, update, deactivate } = useProducts(projectId);
 

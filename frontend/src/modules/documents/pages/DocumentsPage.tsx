@@ -120,8 +120,7 @@ function PreviewModal({ doc, onClose }: PreviewModalProps) {
           )}
           <iframe
             ref={iframeRef}
-            className="w-full h-full border-0"
-            style={{ minHeight: '70vh' }}
+            className="w-full h-full border-0 min-h-[70vh]"
             title="Previsualización del documento"
           />
         </div>

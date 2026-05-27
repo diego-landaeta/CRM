@@ -19,15 +19,10 @@ export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').t
 // Cualquier `to` que empiece por uno de estos prefijos se considera activo.
 export const BETA_ROUTES: readonly string[] = [
   '/',                       // Dashboard
-  '/leads',                  // Prospectos (listado, pipeline, audiencias)
-  '/clients',                // Clientes
-  '/matriculas',             // Matrículas (parte de Clientes)
-  '/products',               // Productos
-  '/configuracion/categorias-arbol',  // Árbol de categorías (parte de Productos)
-  '/woocommerce',            // WC import (parte de Productos)
-  '/forms',                  // Captación: Formularios
-  '/webhooks',               // Captación: Webhooks
-  '/make-webhooks',          // Captación: Make
+  '/prospectos',             // Prospectos (listado, pipeline, audiencias)
+  '/clientes',               // Clientes + Matrículas
+  '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
+  '/captacion',              // Captación: Formularios, Webhooks, Make
   '/notificaciones',         // Sistema básico
   '/preferences',            // Mis preferencias
   '/profile',                // Perfil
