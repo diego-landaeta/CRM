@@ -11,7 +11,7 @@
 |-------|-------|
 | IP | 187.124.128.126 |
 | SSH Port | 22 |
-| User root | root / 1234567890ASDa, |
+| User root | root / <<VPS_ROOT_PASS — ver credenciales fuera de repo>> |
 | User claude | claude / ClaudeCRM2026! |
 | SSH Key | ED25519 (Diego@LAPTOP-HPPO8T3H) |
 
