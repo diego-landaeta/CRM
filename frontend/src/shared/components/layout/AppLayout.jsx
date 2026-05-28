@@ -12,12 +12,20 @@ import NeedsProjectBanner from '@/shared/components/ui/NeedsProjectBanner';
 // Rutas que SÍ funcionan en modo "Todos los proyectos" (vista global).
 // El resto requiere un proyecto concreto (catálogo, settings, finanzas, etc.).
 const ALL_PROJECTS_OK = [
-  /^\/$/,                    // Dashboard
-  /^\/leads$/,               // Lista de prospectos
-  /^\/leads\/pipeline$/,     // Kanban
-  /^\/leads\/\d+$/,          // Detalle de prospecto
-  /^\/clients$/,             // Clientes
-  /^\/clients\/\d+$/,        // Detalle de cliente
+  /^\/$/,                          // Dashboard
+  // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
+  /^\/prospectos$/,                // Lista de prospectos
+  /^\/prospectos\/pipeline$/,      // Kanban
+  /^\/prospectos\/audiencias$/,    // Audiencias Meta
+  /^\/prospectos\/\d+$/,           // Detalle de prospecto
+  // Clientes
+  /^\/clientes$/,
+  /^\/clientes\/matriculas$/,
+  /^\/clientes\/\d+$/,
+  // Legacy (por si algun link viejo apunta a /leads o /clients)
+  /^\/leads$/, /^\/leads\/pipeline$/, /^\/leads\/\d+$/,
+  /^\/clients$/, /^\/clients\/\d+$/,
+  // Generales (no dependen de proyecto)
   /^\/profile$/,
   /^\/preferences$/,
   /^\/notificaciones$/,
