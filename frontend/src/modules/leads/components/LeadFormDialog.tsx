@@ -156,7 +156,21 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
       // Modo ALL sin proyecto elegido — el banner pide elegirlo
       return;
     }
-    await onSubmit({ ...data, custom_fields: customValues, _project_id: effectiveProjectId } as any);
+    // El ProductCombobox guarda el NOMBRE del producto en data.producto_interes,
+    // pero el backend acepta producto_interes_id (number). Resolvemos el nombre
+    // a ID buscando en el array `products` (case-insensitive trim).
+    let producto_interes_id: number | null = null;
+    if (data.producto_interes && Array.isArray(products)) {
+      const nombre = String(data.producto_interes).trim().toLowerCase();
+      const p = products.find((x: any) => String(x.nombre || '').trim().toLowerCase() === nombre);
+      if (p) producto_interes_id = p.id;
+    }
+    await onSubmit({
+      ...data,
+      producto_interes_id,
+      custom_fields: customValues,
+      _project_id: effectiveProjectId,
+    } as any);
     onClose();
   }
 
