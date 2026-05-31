@@ -111,3 +111,63 @@ Ver tambien [project_pendientes_post_beta.md](./project_pendientes_post_beta.md)
 - PWA + CommandPalette + FloatingDock + KeyboardShortcuts
 
 ISEIE actualmente muestra esos items como "Proximamente" via `betaConfig.ts` allowlist. Se irian activando si se portan los modulos.
+
+---
+
+# Parte 2 — Fixes post-27/may
+
+## 2026-05-28 — Bugs Dayana + deploy producción
+
+### Bug 1: Leads se guardaban sin programa
+**Causa:** `ProductCombobox` pasa el NOMBRE del producto al form state (string), pero el backend `createLeadManualSchema` sólo acepta `producto_interes_id` (number). Zod descartaba `producto_interes` text → lead se creaba sin product link.
+
+**Fix:** `LeadFormDialog.handleFormSubmit` resuelve nombre → ID buscando en el array `products` antes de enviar al backend. Commit `2bcdcad`.
+
+### Bug 2: Recordatorios no se guardaban (3 dialogs)
+**Causa:** El backend `createReminderSchema` valida `fecha_recordatorio` con regex estricto `^\d{4}-\d{2}-\d{2}$`. Tres dialogs distintos enviaban formatos mal:
+
+1. **`ReminderQuickDialog`**: enviaba `{fecha: <ISO timestamp>}` con la key mal y formato datetime ISO completo
+2. **`LeadDrawer.add()`**: `<input type="datetime-local">` devuelve `YYYY-MM-DDTHH:MM` directo al endpoint
+3. (ContactedDialog ya estaba bien)
+
+**Fix:** Los 3 dialogs ahora hacen `fecha.slice(0,10)` para el campo fecha + meten la hora en la nota (`"Llamar al cliente · 14:30"`). Commits `2bcdcad` + `23b20af`.
+
+### Fix: `/prospectos` en modo "Todos los proyectos"
+**Causa:** `ALL_PROJECTS_OK` en `AppLayout.jsx` tenía regex en inglés (`/^\/leads$/`, `/^\/clients$/`) pero las rutas reales del CRM están traducidas (`/prospectos`, `/clientes`). El `AllProjectsGuard` bloqueaba todas las rutas con banner "Selecciona un proyecto".
+
+**Fix:** Agregado al allowlist:
+- `/^\/prospectos$/`, `/^\/prospectos\/pipeline$/`, `/^\/prospectos\/audiencias$/`, `/^\/prospectos\/\d+$/`
+- `/^\/clientes$/`, `/^\/clientes\/matriculas$/`, `/^\/clientes\/\d+$/`
+- Mantengo `/leads` y `/clients` legacy
+
+Commit `d34aebc`.
+
+### Deploy a producción
+- Bundle nuevo `index-D6hX6GuZ.js` deployado a `/var/www/crm/production/frontend/`
+- Backend sin restart (sólo cambios FE)
+- Atomic swap con `.new` → `.old` → swap
+
+## 2026-05-28 — Import ICTESS
+
+### Importación SOLICITUDES Contactos
+- **Fuente:** `SOLICITUDES - Contactos.csv` (154 filas)
+- **Destino:** project_id=4 (ICTESS) en `crm_prod_db`
+- **Distribución de Origen respetada:**
+  - WhatsApp → `whatsapp` (105)
+  - Web → `organico` inicialmente, después cambiado a `directo` por pedido del owner (49)
+  - vacío → `directo` (3)
+- **Asesoras matched:** Antonio → Tony (id 9), Samantha → Samantha Ictess (id 8)
+- **Resultado:** 26 nuevos + 128 actualizados (los CETLAT previos se mergearon por email) + 14 conversions creadas
+- **Scripts en repo:** `import_ictess.mjs` + `fix_ictess.mjs`
+
+Commit `1fc3caa`.
+
+### Detalle: 1 lead Venta sin conversion creada
+Carlos Alonso Azuara (id 2060) está marcado `convertido` pero la conversion NO se creó porque su fila CSV no tenía `Fecha venta` ni `Precio` (solo "Pagado" en notas). Samantha debe registrar la conversion manualmente desde el CRM.
+
+## Notas para el próximo dev/IA
+
+- **Verifica el bundle live** con `curl -s https://360crm.tech/crm/ | grep -oE 'index-[A-Za-z0-9_-]+\.js'`
+- **Si Dayana reporta otro bug**, primer paso: leer este archivo + `CHANGELOG.md` para ver si ya está fixed
+- **Para deploys FE**: el atomic swap está en `HANDOFF.md` sección 6
+- **No hay git en `/opt/crm/production/`** — recordar siempre que el deploy es por tarball
