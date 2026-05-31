@@ -64,3 +64,8 @@ reset-postgres-password.ps1
 
 # Excel lock files
 ~$*.xlsx
+
+# Backups locales (preprod testing)
+backups/
+*.dump
+
