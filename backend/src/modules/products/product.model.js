@@ -4,7 +4,7 @@ import { query } from '../../shared/config/db.js';
 const LIST_COLS = [
   'p.id', 'p.project_id', 'p.nombre', 'p.sku', 'p.precio', 'p.moneda',
   'p.duracion', 'p.horas', 'p.modalidad', 'p.fecha_inicio_texto', 'p.num_modulos',
-  'p.image_url', 'p.url_info', 'p.stripe_link', 'p.brochure_url',
+  'p.image_url', 'p.url_info', 'p.stripe_link',
   'p.source_type', 'p.wc_product_id',
   'p.categoria_id', 'p.subcategoria_id',
   'p.active', 'p.created_at', 'p.updated_at',
