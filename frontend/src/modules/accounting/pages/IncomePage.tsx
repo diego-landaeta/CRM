@@ -89,7 +89,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </thead>
               <tbody>
                 {items.map(r => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/leads/${r.lead_id}`)}>
+                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/prospectos/${r.lead_id}`)}>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(r.fecha_compra)}</td>
                     <td className="px-4 py-3 font-semibold">{r.lead_nombre}</td>
                     <td className="px-4 py-3">{r.producto_contratado}</td>
@@ -112,7 +112,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           {/* Mobile cards */}
           <div className="md:hidden divide-y divide-border">
             {items.map(r => (
-              <button key={r.id} type="button" onClick={() => navigate(`/leads/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <button key={r.id} type="button" onClick={() => navigate(`/prospectos/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-semibold truncate">{r.lead_nombre}</div>

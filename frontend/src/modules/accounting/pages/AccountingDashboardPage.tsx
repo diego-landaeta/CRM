@@ -213,7 +213,7 @@ export default function AccountingDashboardPage() {
                 </thead>
                 <tbody>
                   {cuentas_por_cobrar.map(r => (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/leads/${r.lead_id}`)}>
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/prospectos/${r.lead_id}`)}>
                       <td className="px-5 py-3">
                         <div className="font-semibold">{r.lead_nombre}</div>
                         <div className="text-xs text-muted-foreground">{r.lead_email}</div>
@@ -248,7 +248,7 @@ export default function AccountingDashboardPage() {
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => navigate(`/leads/${r.lead_id}`)}
+                  onClick={() => navigate(`/prospectos/${r.lead_id}`)}
                   className="w-full text-left bg-muted/40 hover:bg-muted rounded-md p-3 space-y-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                   <div className="flex items-start justify-between gap-2">

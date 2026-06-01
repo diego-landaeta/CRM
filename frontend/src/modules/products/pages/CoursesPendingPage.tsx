@@ -175,7 +175,7 @@ export default function CoursesPendingPage() {
                 )}
                 {item.lead_id && (
                   <Link
-                    to={`/leads/${item.lead_id}`}
+                    to={`/prospectos/${item.lead_id}`}
                     className="inline-flex items-center gap-1 text-primary hover:underline"
                   >
                     <ArrowSquareOut size={11} weight="bold" /> Ver lead origen

@@ -94,7 +94,7 @@ export default function SpamReportsSection() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <button
-                      onClick={() => navigate(`/leads/${r.lead_id}`)}
+                      onClick={() => navigate(`/prospectos/${r.lead_id}`)}
                       className="font-semibold text-sm hover:text-primary inline-flex items-center gap-1"
                     >
                       {r.lead_nombre}

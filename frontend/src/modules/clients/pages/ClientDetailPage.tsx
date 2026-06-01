@@ -271,7 +271,7 @@ export default function ClientDetailPage() {
             </button>
           )}
           <Link
-            to={`/leads/${lead.id}`}
+            to={`/prospectos/${lead.id}`}
             className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
             title="Ver ficha completa en Prospectos"
             aria-label="Ver ficha completa en Prospectos"
@@ -340,7 +340,7 @@ export default function ClientDetailPage() {
                       description="Aún no se ha registrado ninguna llamada, email, WhatsApp o nota con este cliente."
                       action={
                         <Link
-                          to={`/leads/${lead.id}`}
+                          to={`/prospectos/${lead.id}`}
                           className="text-xs text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
                         >
                           Añadir desde la ficha completa
@@ -473,7 +473,7 @@ export default function ClientDetailPage() {
 
           {/* Link to full lead */}
           <Link
-            to={`/leads/${lead.id}`}
+            to={`/prospectos/${lead.id}`}
             className="flex items-center justify-between w-full p-3.5 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm text-muted-foreground hover:text-foreground group focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <span className="font-medium">Ver ficha completa en Prospectos</span>

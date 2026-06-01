@@ -123,7 +123,7 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
 
           <footer className="p-4 border-t border-border flex gap-2">
             <button
-              onClick={() => { onClose(); navigate(`/leads/${leadId}`); }}
+              onClick={() => { onClose(); navigate(`/prospectos/${leadId}`); }}
               className="flex-1 h-10 px-3 rounded-lg border border-border text-sm font-medium bg-secondary hover:bg-muted transition-colors flex items-center justify-center gap-2"
             >
               <ArrowSquareOut size={14} weight="bold" />

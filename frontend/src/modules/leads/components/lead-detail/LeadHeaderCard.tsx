@@ -28,7 +28,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
             <span className="font-bold">Prospecto duplicado</span> — este email ya existe en el sistema.
           </div>
           <Link
-            to={`/leads/${lead.lead_duplicado_de}`}
+            to={`/prospectos/${lead.lead_duplicado_de}`}
             className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
           >
             <LinkIcon size={12} weight="bold" /> Ver original #{lead.lead_duplicado_de}
