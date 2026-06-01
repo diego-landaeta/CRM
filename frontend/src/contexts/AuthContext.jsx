@@ -7,11 +7,21 @@ const AuthContext = createContext(null);
 export const ALL_PROJECTS_ID = -1;
 const ALL_PROJECTS_PSEUDO = { id: ALL_PROJECTS_ID, nombre: 'Todos los proyectos', isAll: true, type: 'multi' };
 
+// Dev-only bypass: fake superadmin user + proyectos seed para validar UI sin backend.
+const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
+const FAKE_USER = { id: 1, userId: 1, nombre: 'Dev Bypass', email: 'dev@local', role: 'superadmin' };
+const FAKE_PROJECTS = [
+  { id: 1, nombre: 'Psiko Aprende', slug: 'psiko-aprende', type: 'multi' },
+  { id: 2, nombre: 'ISEIH', slug: 'iseih', type: 'multi' },
+  { id: 3, nombre: 'Fono Aprende', slug: 'fono-aprende', type: 'multi' },
+  { id: 4, nombre: 'ICTESS', slug: 'ictess', type: 'multi' },
+];
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState(null);
-  const [loading, setLoading] = useState(true); // true hasta que verifiquemos sesión
+  const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
+  const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
+  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
+  const [loading, setLoading] = useState(!BYPASS); // bypass salta el loader
   const initialized = useRef(false);
 
   // Al montar, intentar restaurar sesión con refresh token (cookie httpOnly)

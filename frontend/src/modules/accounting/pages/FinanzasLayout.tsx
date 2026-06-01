@@ -7,6 +7,7 @@ import SubNav from '@/shared/components/ui/SubNav';
 
 const TABS = [
   { label: 'Dashboard', to: '/finanzas', icon: ChartBar },
+  { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt },
   { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp },
   { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur },
   { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown },

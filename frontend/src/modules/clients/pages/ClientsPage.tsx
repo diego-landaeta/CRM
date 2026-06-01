@@ -268,7 +268,7 @@ export default function ClientsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
+                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{c.nombre}</div>
                         <div className="text-xs text-muted-foreground">{c.responsable_nombre || '—'}</div>
@@ -301,7 +301,7 @@ export default function ClientsPage() {
               {filtered.map((c) => (
                 <div
                   key={c.id}
-                  onClick={() => navigate(`/clients/${c.id}`)}
+                  onClick={() => navigate(`/clientes/${c.id}`)}
                   className="p-4 space-y-2 cursor-pointer active:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">

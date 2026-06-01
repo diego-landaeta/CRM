@@ -13,7 +13,7 @@ function fmt(n) {
 }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'; }
 
-export default function IncomePage() {
+export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
   const [items, setItems] = useState([]);
@@ -38,8 +38,8 @@ export default function IncomePage() {
   return (
     <div className="space-y-5 pb-8">
       <PageHeader
-        title="Ingresos"
-        subtitle={`Todas las ventas registradas${activeProject ? ' en ' + activeProject.nombre : ''}`}
+        title={title}
+        subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

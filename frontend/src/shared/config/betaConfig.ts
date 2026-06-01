@@ -23,6 +23,8 @@ export const BETA_ROUTES: readonly string[] = [
   '/clientes',               // Clientes + Matrículas
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
   '/captacion',              // Captación: Formularios, Webhooks, Make
+  '/email-sequences',         // Email de seguimiento
+  '/documentos',              // Documentos comerciales
   '/notificaciones',         // Sistema básico
   '/preferences',            // Mis preferencias
   '/profile',                // Perfil

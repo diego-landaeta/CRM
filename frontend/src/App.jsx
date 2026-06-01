@@ -21,6 +21,7 @@ const ROUTE_TITLES = {
   '/productos/pendientes': 'Cursos pendientes',
   '/productos/woocommerce': 'WooCommerce',
   '/finanzas': 'Contabilidad',
+  '/finanzas/ventas': 'Ventas',
   '/finanzas/ingresos': 'Ingresos',
   '/finanzas/conversiones': 'Conversiones',
   '/finanzas/egresos': 'Egresos',
@@ -208,6 +209,7 @@ function App() {
           {/* Finanzas — tabs */}
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
+            <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             <Route path="ingresos" element={<IncomePage />} />
             <Route path="conversiones" element={<RevenuePage />} />
             <Route path="egresos" element={<ExpensesPage />} />
