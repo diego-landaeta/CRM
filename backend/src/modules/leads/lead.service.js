@@ -204,6 +204,15 @@ async function _createLeadCore(project, leadData) {
   // Disparar email sequences con trigger lead_created (async)
   triggerSequences('lead_created', lead.id, project.id);
 
+  // Trazabilidad de duplicado por webhook (admin lo verá en el filtro).
+  if (duplicadoDe) {
+    const reincidenteTag = reincidente ? ' [REINCIDENTE — mismo producto]' : '';
+    Promise.all([
+      leadModel.createInteraction(lead.id, 'nota', `🔁 Marcado como duplicado del lead #${duplicadoDe}${reincidenteTag} — entrada por webhook.`, null, null),
+      leadModel.createInteraction(duplicadoDe, 'nota', `📌 Llegó un nuevo lead duplicado #${lead.id} (${lead.nombre || 'sin nombre'}) por webhook.${reincidenteTag}`, null, null),
+    ]).catch((err) => logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado webhook'));
+  }
+
   // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
   if (lead.responsableId) {
     (async () => {
@@ -370,8 +379,23 @@ export async function reassign(leadId, newResponsableId, userId) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
+  const prevResponsableId = lead.responsable_id || null;
   await leadModel.reassignLead(leadId, newResponsableId);
   await leadModel.updateStatus(leadId, lead.status, lead.status, userId);
+
+  try {
+    const { rows } = await query(
+      `SELECT id, nombre, email FROM users WHERE id = ANY($1::int[])`,
+      [[prevResponsableId, newResponsableId, userId].filter(Boolean)]
+    );
+    const byId = Object.fromEntries(rows.map((u) => [u.id, u.nombre || u.email]));
+    const prevName = prevResponsableId ? (byId[prevResponsableId] || `gestor #${prevResponsableId}`) : 'sin asignar';
+    const newName = byId[newResponsableId] || `gestor #${newResponsableId}`;
+    const actorName = byId[userId] || 'sistema';
+    await leadModel.createInteraction(leadId, 'nota', `👤 Reasignado de ${prevName} a ${newName} por ${actorName}.`, userId, null);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId }, 'No se pudo registrar interaction de reasignación (no crítico)');
+  }
 
   return { message: 'Lead reasignado', responsable_id: newResponsableId };
 }
@@ -419,7 +443,16 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
   if (!dup) return { duplicate: null };
   if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
-    return { duplicate: { id: dup.id, masked: true, message: 'Ya existe un lead con estos datos asignado a otro gestor' } };
+    return {
+      duplicate: {
+        id: dup.id,
+        masked: true,
+        responsable_nombre: dup.responsable_nombre || 'otro gestor',
+        status: dup.status,
+        created_at: dup.created_at,
+        message: `Ya existe un lead con estos datos asignado a ${dup.responsable_nombre || 'otro gestor'}`,
+      },
+    };
   }
   return { duplicate: dup };
 }
@@ -500,6 +533,33 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
 
   // Disparar email sequences con trigger lead_created (async)
   triggerSequences('lead_created', lead.id, project_id);
+
+  // Trazabilidad de duplicado en historial de ambos leads, enlazado.
+  if (duplicadoDe) {
+    const creatorId = creatorUser?.userId || null;
+    const creatorName = creatorUser?.email || creatorUser?.name || 'sistema';
+    const reincidenteTag = reincidente ? ' [REINCIDENTE — mismo producto]' : '';
+    try {
+      await Promise.all([
+        leadModel.createInteraction(
+          lead.id,
+          'nota',
+          `🔁 Marcado como duplicado del lead #${duplicadoDe}${reincidenteTag} — creado por ${creatorName} tras confirmar el aviso de duplicado.`,
+          creatorId,
+          null
+        ),
+        leadModel.createInteraction(
+          duplicadoDe,
+          'nota',
+          `📌 Se creó un nuevo lead duplicado #${lead.id} (${nombre || 'sin nombre'}) por ${creatorName}.${reincidenteTag}`,
+          creatorId,
+          null
+        ),
+      ]);
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado (no crítico)');
+    }
+  }
 
   return {
     lead_id: lead.id,
