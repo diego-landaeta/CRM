@@ -25,6 +25,27 @@ export async function findDuplicateByEmail(email, projectId) {
   return rows[0] || null;
 }
 
+// Detecta duplicado por email O por telefono (E.164). Cualquiera que matchee
+// se considera duplicado. Útil cuando el lead llega solo con tel (WhatsApp).
+export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
+  const cleanEmail = (email && email.trim()) || null;
+  const cleanTel = (telefono && telefono.trim()) || null;
+  if (!cleanEmail && !cleanTel) return null;
+
+  const { rows } = await query(
+    `SELECT id, nombre, email, telefono, status, producto_interes_id, responsable_id, created_at, fecha_solicitud,
+            ($2::text IS NOT NULL AND email = $2) AS match_by_email,
+            ($3::text IS NOT NULL AND telefono = $3) AS match_by_phone
+     FROM leads
+     WHERE project_id = $1 AND deleted_at IS NULL
+       AND (($2::text IS NOT NULL AND email = $2) OR ($3::text IS NOT NULL AND telefono = $3))
+     ORDER BY ($2::text IS NOT NULL AND email = $2) DESC, created_at DESC
+     LIMIT 1`,
+    [projectId, cleanEmail, cleanTel]
+  );
+  return rows[0] || null;
+}
+
 // Busca cualquier lead CONVERTIDO previo de este email en el proyecto.
 // Sirve para detectar cross-sell: cliente que ya compró y ahora pregunta otro programa.
 export async function findConvertedByEmail(email, projectId) {
@@ -476,7 +497,7 @@ function buildOrderBy(sort) {
   `;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -495,6 +516,11 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
 
   // Excluir leads eliminados (soft delete)
   conditions.push(`l.deleted_at IS NULL`);
+
+  // Filtro duplicados (solo admin/superadmin a nivel ruta).
+  if (duplicated) {
+    conditions.push(`l.lead_duplicado_de IS NOT NULL`);
+  }
 
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
@@ -764,7 +790,7 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);

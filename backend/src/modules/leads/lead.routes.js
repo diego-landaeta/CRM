@@ -25,6 +25,9 @@ router.get('/today', leadController.today);
 // pueda detectar duplicados de leads que pertenecen a otra asesora.
 router.get('/lookup-by-email', leadController.lookupByEmail);
 
+// Check duplicado antes de crear (manual).
+router.post('/check-duplicate', leadController.checkDuplicate);
+
 // Spam reports: rutas estáticas ANTES de /:id para que no las absorba
 router.get('/spam-reports', roleGuard('superadmin'), spamReportController.listPending);
 router.get('/spam-reports/count', roleGuard('superadmin'), spamReportController.countPending);

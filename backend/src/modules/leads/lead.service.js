@@ -120,8 +120,11 @@ async function _createLeadCore(project, leadData) {
   // round-robin). Devolvemos un flag para que el llamante sepa que ocurrió.
   const spamHistory = leadData.email ? await leadModel.findSpamMatch(leadData.email, project.id) : null;
 
-  // Detectar duplicado (solo si hay email; sin email no podemos comparar)
-  const duplicate = leadData.email ? await leadModel.findDuplicateByEmail(leadData.email, project.id) : null;
+  // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
+  const telNormWebhook = normalizePhone(leadData.telefono);
+  const duplicate = (leadData.email || telNormWebhook)
+    ? await leadModel.findDuplicateByEmailOrPhone(leadData.email, telNormWebhook, project.id)
+    : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
 
   // Reincidente = mismo proyecto + mismo producto que duplicado
@@ -407,10 +410,25 @@ export async function lookupByEmail(email, projectId) {
   return rows;
 }
 
+// Comprueba duplicado SIN crear nada. Para el confirm dialog del frontend.
+export async function checkDuplicate({ project_id, email, telefono }, requestUser) {
+  if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+  const telNorm = normalizePhone(telefono);
+  const cleanEmail = email ? String(email).toLowerCase().trim() : null;
+  if (!cleanEmail && !telNorm) return { duplicate: null };
+  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
+  if (!dup) return { duplicate: null };
+  if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
+    return { duplicate: { id: dup.id, masked: true, message: 'Ya existe un lead con estos datos asignado a otro gestor' } };
+  }
+  return { duplicate: dup };
+}
+
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
-  // Detectar duplicado solo si tiene email (sin email no podemos buscar dupe fiable)
-  const duplicate = email ? await leadModel.findDuplicateByEmail(email, project_id) : null;
+  // Detectar duplicado por email O por teléfono normalizado.
+  const telNorm = normalizePhone(telefono);
+  const duplicate = (email || telNorm) ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id) : null;
 
   // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
   // asumimos doble submit y devolvemos el lead existente en vez de crear otro
@@ -500,9 +518,24 @@ export async function updateLead(leadId, data, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
     data.telefono = normalizePhone(data.telefono);
   }
+  if (Object.prototype.hasOwnProperty.call(data, 'email') && (data.email === '' || !data.email)) {
+    data.email = null;
+  }
+  // canal NO va en tabla leads sino en lead_utms
+  const newCanal = data.canal;
+  if (newCanal !== undefined) delete data.canal;
 
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
+
+  if (newCanal !== undefined) {
+    await query(
+      `INSERT INTO lead_utms (lead_id, canal_detectado, created_at)
+       VALUES ($1, $2::utm_channel, NOW())
+       ON CONFLICT (lead_id) DO UPDATE SET canal_detectado = EXCLUDED.canal_detectado`,
+      [leadId, newCanal]
+    );
+  }
 
   // APRENDIZAJE: si el usuario vinculó manualmente un producto a este lead
   // y el lead tiene landing_url, guardamos el slug como alias. Los futuros
