@@ -64,11 +64,11 @@ router.get('/:id/emails', leadEmailsController.listLeadEmails);
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
 
-// Reportes de spam: cualquier usuario autenticado puede reportar
-router.post('/:id/report-spam', spamReportController.reportSpam);
+// #15: solo admin/superadmin reporta spam (antes era cualquier autenticado).
+router.post('/:id/report-spam', roleGuard('admin', 'superadmin'), spamReportController.reportSpam);
 
-// Soft delete / restore: SOLO superadmin (audit trail importante).
-router.delete('/:id', roleGuard('superadmin'), leadController.softDelete);
+// #15: admin y superadmin pueden eliminar (soft-delete). Restore solo superadmin.
+router.delete('/:id', roleGuard('admin', 'superadmin'), leadController.softDelete);
 router.patch('/:id/restore', roleGuard('superadmin'), leadController.restore);
 
 // Asignar pendientes: re-aplica round-robin a leads con responsable_id IS NULL.

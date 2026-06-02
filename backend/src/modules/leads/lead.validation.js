@@ -53,6 +53,8 @@ export const listLeadsSchema = z.object({
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
   // Filtro de duplicados (lead_duplicado_de IS NOT NULL) — solo admin/superadmin.
   duplicated: z.coerce.boolean().optional(),
+  // Filtro de reincidentes — solo admin/superadmin.
+  reincidente: z.coerce.boolean().optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }

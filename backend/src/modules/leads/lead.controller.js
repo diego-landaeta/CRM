@@ -46,6 +46,7 @@ export async function list(req, res, next) {
       filters.responsableId = req.user.userId;
       filters.unassigned = false;
       filters.duplicated = false;
+      filters.reincidente = false;
     }
     const result = await leadService.list(filters);
     res.json({

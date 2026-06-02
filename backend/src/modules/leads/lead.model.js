@@ -500,7 +500,7 @@ function buildOrderBy(sort) {
   `;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -523,6 +523,11 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   // Filtro duplicados (solo admin/superadmin a nivel ruta).
   if (duplicated) {
     conditions.push(`l.lead_duplicado_de IS NOT NULL`);
+  }
+
+  // Filtro reincidentes — lead que repite consulta del mismo producto.
+  if (reincidente) {
+    conditions.push(`l.reincidente = TRUE`);
   }
 
   if (status) {

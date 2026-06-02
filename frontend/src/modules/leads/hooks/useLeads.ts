@@ -6,7 +6,7 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string } = {
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string; rein: string } = {
   q: '',
   estado: '',
   origen: '',
@@ -18,6 +18,7 @@ const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; p
   sort: 'recent_value',  // default: día más reciente arriba, dentro del día los caros primero
   page: 1,
   dup: '',
+  rein: '',
 };
 
 export interface LeadStats {
@@ -57,6 +58,8 @@ export interface UseLeadsResult {
   setSortMode: (m: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
   filterDup: boolean;
   setFilterDup: (v: boolean) => void;
+  filterReincidente: boolean;
+  setFilterReincidente: (v: boolean) => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -81,8 +84,8 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page, dup: filterDup } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string; rein: string;
   };
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent_value') as 'value' | 'recent' | 'urgency' | 'recent_value';
   const selectedProjectIds: number[] = multiRaw
@@ -98,6 +101,7 @@ export function useLeads(): UseLeadsResult {
   const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
   const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency' | 'recent_value') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
   const setFilterDup = useCallback((v: boolean) => setUrlFilters({ dup: v ? '1' : '', page: 1 }), [setUrlFilters]);
+  const setFilterReincidente = useCallback((v: boolean) => setUrlFilters({ rein: v ? '1' : '', page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
@@ -157,6 +161,7 @@ export function useLeads(): UseLeadsResult {
       if (dateTo) params.set('dateTo', dateTo);
       if (sortMode) params.set('sort', sortMode);
       if (filterDup === '1') params.set('duplicated', 'true');
+      if (filterReincidente === '1') params.set('reincidente', 'true');
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -174,7 +179,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, filterDup]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, filterDup, filterReincidente]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -250,6 +255,8 @@ export function useLeads(): UseLeadsResult {
     setSortMode,
     filterDup: filterDup === '1',
     setFilterDup,
+    filterReincidente: filterReincidente === '1',
+    setFilterReincidente,
     loading,
     error,
     refetch: fetchLeads,
