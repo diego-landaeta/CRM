@@ -28,19 +28,31 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [viewUserId, setViewUserId] = useState('all');
+  const [gestores, setGestores] = useState([]);
+  const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
+
+  useEffect(() => {
+    if (!activeProject?.id || !isAdmin) return;
+    client.get('/sales/gestores-stats', { params: { projectId: activeProject.id } })
+      .then((r) => setGestores(r?.data?.gestores || []))
+      .catch(() => setGestores([]));
+  }, [activeProject?.id, isAdmin, reloadKey]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const params = activeProject?.id ? `?projectId=${activeProject.id}&limit=100` : '?limit=100';
-        const res = await client.get(`/conversions${params}`);
+        const params = { limit: 100 };
+        if (activeProject?.id) params.projectId = activeProject.id;
+        if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+        const res = await client.get('/conversions', { params });
         if (res.success) setItems(res.data || []);
       } catch {
         setItems([]);
       } finally { setLoading(false); }
     })();
-  }, [activeProject?.id, reloadKey]);
+  }, [activeProject?.id, reloadKey, effectiveResponsableId]);
 
   const totalFacturado = items.reduce((s, r) => s + Number(r.importe_total || 0), 0);
   const totalCobrado = items.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
@@ -73,6 +85,29 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         />
       </Suspense>
 
+      {isAdmin && gestores.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+          <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
+          <select
+            value={viewUserId}
+            onChange={(e) => setViewUserId(e.target.value)}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px]"
+          >
+            <option value="all">— Todas (vista general) —</option>
+            {gestores.map((g) => (
+              <option key={g.user_id} value={g.user_id}>
+                {g.nombre} · {g.role} ({g.ventas} venta{g.ventas === 1 ? '' : 's'})
+              </option>
+            ))}
+          </select>
+          {viewUserId !== 'all' && (
+            <button type="button" onClick={() => setViewUserId('all')} className="text-[11px] text-primary hover:underline">
+              Quitar filtro
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <KpiCard
           icon={Receipt}
@@ -101,7 +136,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <MyGoalCard projectId={activeProject?.id} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} title="Programas más vendidos" />
+          <TopProductsCard projectId={activeProject?.id} responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
         </Suspense>
       </div>
 

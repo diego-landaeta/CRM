@@ -97,10 +97,25 @@ export async function findById(id) {
 }
 
 export async function findByLead(leadId) {
+  // Devuelve payments y refunds embebidos (json_agg) para evitar N+1 desde el front.
   const { rows } = await query(
     `SELECT c.*,
             (c.importe_total - c.importe_pagado) AS importe_pendiente,
-            (SELECT COUNT(*) FROM conversion_payments WHERE conversion_id = c.id) AS payments_count
+            COALESCE((SELECT json_agg(cp_row ORDER BY cp_row.fecha DESC, cp_row.id DESC)
+                      FROM (
+                        SELECT id, importe, fecha, notas, created_at
+                          FROM conversion_payments WHERE conversion_id = c.id
+                      ) cp_row), '[]'::json) AS payments,
+            (SELECT COUNT(*) FROM conversion_payments WHERE conversion_id = c.id) AS payments_count,
+            COALESCE((SELECT json_agg(cr_row ORDER BY cr_row.fecha DESC, cr_row.id DESC)
+                      FROM (
+                        SELECT cr.id, cr.importe, cr.fecha, cr.motivo, cr.created_at,
+                               u.nombre AS created_by_nombre
+                          FROM conversion_refunds cr
+                          LEFT JOIN users u ON u.id = cr.created_by
+                         WHERE cr.conversion_id = c.id
+                      ) cr_row), '[]'::json) AS refunds,
+            COALESCE((SELECT SUM(importe) FROM conversion_refunds WHERE conversion_id = c.id), 0) AS refunds_total
      FROM conversions c
      WHERE c.lead_id = $1
      ORDER BY c.fecha_conversion DESC, c.id DESC`,
@@ -109,13 +124,14 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, pendiente, vencido, from, to, page, limit }) {
+export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
+  if (responsableId) { conditions.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -127,7 +143,9 @@ export async function findAll({ projectId, leadId, pendiente, vencido, from, to,
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const offset = (page - 1) * limit;
 
-  const { rows: countRows } = await query(`SELECT COUNT(*) FROM conversions c ${where}`, params);
+  // JOIN a leads necesario si filtramos por l.responsable_id
+  const countJoin = responsableId ? 'LEFT JOIN leads l ON l.id = c.lead_id' : '';
+  const { rows: countRows } = await query(`SELECT COUNT(*) FROM conversions c ${countJoin} ${where}`, params);
   const total = parseInt(countRows[0].count);
 
   const { rows } = await query(
@@ -137,9 +155,11 @@ export async function findAll({ projectId, leadId, pendiente, vencido, from, to,
             c.fecha_compromiso_pago, c.metodo_pago,
             c.fecha_conversion, c.created_at,
             l.nombre as lead_nombre, l.email as lead_email,
+            l.responsable_id, u.nombre as responsable_nombre,
             p.nombre as proyecto_nombre
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
+     LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
      ORDER BY c.fecha_conversion DESC, c.id DESC
