@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProjectContext } from '@/contexts/ProjectContext';
 import { Bell, BellRinging, ArrowRight } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
+import { cn } from '@/shared/lib/utils';
 
 function fmtRelative(date) {
   if (!date) return '';
@@ -16,34 +16,48 @@ function fmtRelative(date) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-export default function NotificationsBell() {
+export default function NotificationsBell({ collapsed = false, className = '' }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { activeProject } = useProjectContext();
+  const { user, activeProject } = useAuth();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [pos, setPos] = useState(null);
   const buttonRef = useRef(null);
   const popoverRef = useRef(null);
 
-  // Solo admins/superadmins ven la campana
   const canSee = user?.role === 'admin' || user?.role === 'superadmin';
 
-  // Por ahora derivamos "notificaciones" de leads recientes + recordatorios vencidos.
-  // Cuando exista un endpoint /api/notifications real, este efecto lo consumira.
+  // Combina: notifs reales del backend (/api/notifications) + derivados de /leads/today.
+  // Polling cada 60s para mantener el badge fresco.
   useEffect(() => {
     if (!canSee || !activeProject?.id) return;
     let cancelled = false;
-    (async () => {
+    async function load() {
       try {
-        const [todayRes, leadsRes] = await Promise.all([
-          client.get(`/leads/today?projectId=${activeProject.id}`).catch(() => ({ success: false })),
-          client.get(`/leads?projectId=${activeProject.id}&status=nuevo&limit=3`).catch(() => ({ success: false })),
+        const [notifsRes, todayRes, leadsRes] = await Promise.all([
+          client.get(`/notifications`, { params: { limit: 20 } }).catch(() => ({ success: false, data: [] })),
+          client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
+          client.get(`/leads`, { params: { projectId: activeProject.id, status: 'nuevo', limit: 3 } }).catch(() => ({ success: false, data: [] })),
         ]);
         if (cancelled) return;
         const list = [];
+
+        // 1) Notifs reales (lead_deleted, etc) — prioridad alta
+        const notifs = Array.isArray(notifsRes?.data) ? notifsRes.data : [];
+        for (const n of notifs.slice(0, 10)) {
+          list.push({
+            id: `notif-${n.id}`,
+            notifId: n.id,
+            kind: n.is_read ? 'info' : (n.type === 'lead_deleted' ? 'urgent' : 'info'),
+            title: n.title,
+            body: n.message || '',
+            href: n.link_path || null,
+            when: n.created_at,
+            isRead: n.is_read,
+          });
+        }
+
         const today = todayRes.success ? todayRes.data : null;
-        // Reminders vencidos
         if (today?.reminders_pendientes) {
           for (const r of today.reminders_pendientes.filter((x) => x.vencido).slice(0, 3)) {
             list.push({
@@ -56,7 +70,6 @@ export default function NotificationsBell() {
             });
           }
         }
-        // Cobros vencidos
         if (today?.cobros_vencidos > 0) {
           list.push({
             id: 'cobros',
@@ -67,28 +80,35 @@ export default function NotificationsBell() {
             when: new Date().toISOString(),
           });
         }
-        // Leads nuevos
-        if (leadsRes.success && leadsRes.data?.length > 0) {
-          for (const l of leadsRes.data.slice(0, 2)) {
-            list.push({
-              id: `lead-${l.id}`,
-              kind: 'info',
-              title: 'Nuevo prospecto',
-              body: `${l.nombre} — ${l.email || 'sin email'}`,
-              href: `/leads/${l.id}`,
-              when: l.created_at,
-            });
-          }
+        const leadsList = Array.isArray(leadsRes?.data) ? leadsRes.data : [];
+        for (const l of leadsList.slice(0, 2)) {
+          list.push({
+            id: `lead-${l.id}`,
+            kind: 'info',
+            title: 'Nuevo prospecto',
+            body: `${l.nombre} — ${l.email || 'sin email'}`,
+            href: `/leads/${l.id}`,
+            when: l.created_at,
+          });
         }
         setItems(list);
       } catch {
         // Silent fail
       }
-    })();
-    return () => { cancelled = true; };
+    }
+    load();
+    const interval = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [canSee, activeProject?.id]);
 
-  // Posicionamiento responsive del popover (escapa del sidebar via Portal)
+  async function handleItemClick(item) {
+    if (item.notifId && !item.isRead) {
+      client.patch(`/notifications/${item.notifId}/read`).catch(() => {});
+    }
+    setOpen(false);
+    if (item.href) navigate(item.href);
+  }
+
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) return;
     function compute() {
@@ -98,20 +118,14 @@ export default function NotificationsBell() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const width = Math.min(desiredWidth, vw - margin * 2);
-
-      // Por defecto abre debajo del boton
       let top = rect.bottom + 6;
-      // Anchor a la derecha del boton, alineando bordes derechos. Si se sale, recolocar.
       let left = rect.right - width;
       if (left < margin) left = margin;
       if (left + width + margin > vw) left = vw - width - margin;
-
-      // Si no hay espacio vertical abajo, abrir hacia arriba
       const maxHeight = 360;
       if (top + maxHeight + margin > vh && rect.top > maxHeight) {
         top = rect.top - 6 - maxHeight;
       }
-
       setPos({ top, left, width });
     }
     compute();
@@ -123,7 +137,6 @@ export default function NotificationsBell() {
     };
   }, [open]);
 
-  // Click outside + Esc
   useEffect(() => {
     if (!open) return;
     function onDocClick(e) {
@@ -154,13 +167,17 @@ export default function NotificationsBell() {
         aria-label={`Notificaciones${unread > 0 ? ` (${unread} sin leer)` : ''}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-          open ? 'bg-primary/10 text-primary' : 'bg-secondary hover:bg-muted text-muted-foreground hover:text-foreground'
-        }`}
+        title="Notificaciones"
+        className={cn(
+          'relative p-2 rounded-md transition-colors flex-shrink-0',
+          open ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60',
+          collapsed && 'w-full flex justify-center',
+          className,
+        )}
       >
         <Icon size={16} weight={unread > 0 ? 'fill' : 'regular'} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-card">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -201,14 +218,16 @@ export default function NotificationsBell() {
                   {items.map((it) => (
                     <li key={it.id}>
                       <button
-                        onClick={() => { setOpen(false); navigate(it.href); }}
-                        className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors flex items-start gap-3"
+                        onClick={() => handleItemClick(it)}
+                        className={cn(
+                          'w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors flex items-start gap-3',
+                          it.notifId && !it.isRead ? 'bg-primary/5' : ''
+                        )}
                       >
-                        <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                          it.kind === 'overdue' ? 'bg-red-500'
-                          : it.kind === 'urgent' ? 'bg-amber-500'
-                          : 'bg-blue-500'
-                        }`} />
+                        <span className={cn(
+                          'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
+                          it.kind === 'overdue' ? 'bg-red-500' : it.kind === 'urgent' ? 'bg-amber-500' : 'bg-blue-500',
+                        )} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold leading-tight">{it.title}</p>
                           <p className="text-xs text-muted-foreground truncate">{it.body}</p>
