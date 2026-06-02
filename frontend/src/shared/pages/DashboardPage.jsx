@@ -31,6 +31,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
+const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 
 const STATUS_BAR_COLORS = {
   nuevo: '#3b82f6',
@@ -377,6 +378,11 @@ export default function DashboardPage() {
           <PerformanceInsights stats={stats} today={today} recentLeads={leadsRecientes} />
         </div>
       </div>
+
+      {/* Programas más vendidos */}
+      <Suspense fallback={null}>
+        <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
+      </Suspense>
 
       {/* Monitor SaaS — solo proyectos IA */}
       {activeProject?.type === 'ia' && <SaasMonitor projectId={activeProject.id} />}

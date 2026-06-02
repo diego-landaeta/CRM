@@ -101,7 +101,7 @@ const NAV_SECTIONS = [
     label: 'Finanzas',
     items: [
       { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'] },
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, roles: ['superadmin', 'admin'], module: 'conversions' },
+      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
       { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income' },
       { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions' },
       { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses' },

@@ -9,6 +9,7 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
+const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -89,6 +90,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           format={fmt}
         />
       </div>
+
+      <Suspense fallback={null}>
+        <TopProductsCard projectId={activeProject?.id} days={null} limit={10} title="Programas más vendidos" />
+      </Suspense>
 
       {loading ? (
         <SkeletonTable rows={5} columns={6} />
