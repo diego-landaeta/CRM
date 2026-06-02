@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -10,6 +11,8 @@ import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-i
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
+const MyGoalCard = lazy(() => import('@/modules/sales/components/MyGoalCard'));
+const GestoresStatsTable = lazy(() => import('@/modules/sales/components/GestoresStatsTable'));
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -19,6 +22,8 @@ function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { da
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);
@@ -91,9 +96,20 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         />
       </div>
 
-      <Suspense fallback={null}>
-        <TopProductsCard projectId={activeProject?.id} days={null} limit={10} title="Programas más vendidos" />
-      </Suspense>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Suspense fallback={null}>
+          <MyGoalCard projectId={activeProject?.id} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} title="Programas más vendidos" />
+        </Suspense>
+      </div>
+
+      {isAdmin && (
+        <Suspense fallback={null}>
+          <GestoresStatsTable projectId={activeProject?.id} canEdit={true} />
+        </Suspense>
+      )}
 
       {loading ? (
         <SkeletonTable rows={5} columns={6} />
