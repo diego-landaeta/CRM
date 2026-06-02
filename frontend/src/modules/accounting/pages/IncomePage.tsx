@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -6,7 +6,9 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import { CurrencyEur, ArrowRight, Receipt, CheckCircle } from '@phosphor-icons/react';
+import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
+
+const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -18,6 +20,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const { activeProject } = useProjectContext();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -30,17 +34,38 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         setItems([]);
       } finally { setLoading(false); }
     })();
-  }, [activeProject?.id]);
+  }, [activeProject?.id, reloadKey]);
 
   const totalFacturado = items.reduce((s, r) => s + Number(r.importe_total || 0), 0);
   const totalCobrado = items.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader
-        title={title}
-        subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <PageHeader
+          title={title}
+          subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
+        />
+        {activeProject?.id && (
+          <button
+            type="button"
+            onClick={() => setRegisterOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 self-start sm:self-auto"
+          >
+            <Plus size={14} weight="bold" />
+            Nueva venta
+          </button>
+        )}
+      </div>
+
+      <Suspense fallback={null}>
+        <RegisterSaleDialog
+          open={registerOpen}
+          project={activeProject}
+          onClose={() => setRegisterOpen(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      </Suspense>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <KpiCard
