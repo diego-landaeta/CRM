@@ -684,6 +684,21 @@ export async function findById(id) {
   );
   lead.auditLog = auditRows;
 
+  // Programas secundarios (#18 multi-cursos)
+  const { rows: spRows } = await query(
+    `SELECT lp.id, lp.product_id, p.nombre AS product_nombre,
+            lp.responsable_id, u.nombre AS responsable_nombre,
+            lp.status, lp.notas, lp.added_at, lp.added_via,
+            lp.added_by_user_id, au.nombre AS added_by_nombre
+     FROM lead_products lp
+     LEFT JOIN products p ON p.id = lp.product_id
+     LEFT JOIN users u ON u.id = lp.responsable_id
+     LEFT JOIN users au ON au.id = lp.added_by_user_id
+     WHERE lp.lead_id = $1 ORDER BY lp.added_at DESC`,
+    [id]
+  );
+  lead.secondaryProducts = spRows;
+
   return lead;
 }
 
