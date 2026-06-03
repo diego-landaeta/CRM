@@ -126,6 +126,7 @@ const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetail
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
+const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -180,6 +181,7 @@ function App() {
             <Route path="matriculas" element={<MatriculasPage />} />
           </Route>
           <Route path="/sales" element={<SalesPage />} />
+          <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
 
           {/* Captación — tabs */}

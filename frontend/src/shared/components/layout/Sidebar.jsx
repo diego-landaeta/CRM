@@ -84,6 +84,7 @@ const NAV_SECTIONS = [
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
       { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
+      { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
   },
