@@ -18,6 +18,7 @@ import LeadTimelineCard from '../components/lead-detail/LeadTimelineCard';
 import LeadSidebar from '../components/lead-detail/LeadSidebar';
 import LeadLossDialog from '../components/lead-detail/LeadLossDialog';
 import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
+import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
 
@@ -81,6 +82,7 @@ export default function LeadDetailPage() {
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailRefreshKey, setEmailRefreshKey] = useState(0);
 
@@ -198,6 +200,13 @@ export default function LeadDetailPage() {
         onClose={() => setReassignOpen(false)}
         onSubmit={reassign}
       />
+      <MergeLeadDialog
+        open={mergeOpen}
+        winner={lead}
+        projectId={lead.project_id}
+        onClose={() => setMergeOpen(false)}
+        onMerged={() => { setMergeOpen(false); refetch?.(); }}
+      />
       <LeadEmailDialog
         open={emailOpen}
         leadId={lead.id}
@@ -258,6 +267,7 @@ export default function LeadDetailPage() {
           onOpenInteraction={() => setInteractionOpen(true)}
           onOpenReminder={() => setReminderOpen(true)}
           onOpenReassign={() => setReassignOpen(true)}
+          onOpenMerge={() => setMergeOpen(true)}
         />
       </div>
     </div>
