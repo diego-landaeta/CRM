@@ -660,6 +660,17 @@ export async function findById(id) {
   );
   lead.reminders = reminderRows;
 
+  // Audit log (cambios de campos editables)
+  const { rows: auditRows } = await query(
+    `SELECT la.id, la.field_name, la.old_value, la.new_value, la.changed_at,
+            la.changed_by_user_id, u.nombre as changed_by_nombre
+     FROM lead_audit_log la
+     LEFT JOIN users u ON u.id = la.changed_by_user_id
+     WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
+    [id]
+  );
+  lead.auditLog = auditRows;
+
   return lead;
 }
 

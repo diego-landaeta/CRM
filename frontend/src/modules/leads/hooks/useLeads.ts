@@ -269,6 +269,7 @@ export interface TimelineItem {
   date: string;
   source: string;
   color: string;
+  _ts?: number;
 }
 
 export interface UseLeadDetailResult {
@@ -321,14 +322,42 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
   const recordatorio = reminders[0] || null;
   const utms = lead?.utms || null;
   const statusHistory = lead?.statusHistory || [];
+  const auditLog = ((lead as unknown) as { auditLog?: any[] })?.auditLog || [];
 
-  const timeline: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
-    id: h.id || i,
+  const FIELD_LABELS: Record<string, { label: string; emoji: string }> = {
+    nombre: { label: 'Nombre', emoji: '📝' },
+    email: { label: 'Email', emoji: '✉️' },
+    telefono: { label: 'Teléfono', emoji: '📞' },
+    notas: { label: 'Notas', emoji: '🗒️' },
+    producto_interes_id: { label: 'Producto de interés', emoji: '📦' },
+    canal: { label: 'Canal', emoji: '🛰️' },
+    responsable_id: { label: 'Responsable', emoji: '👤' },
+    custom_fields: { label: 'Campos custom', emoji: '⚙️' },
+  };
+  const fmtVal = (v: string | null | undefined) => (v == null || v === '' ? '∅' : (v.length > 60 ? v.slice(0, 60) + '…' : v));
+
+  const timelineStatus: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
+    id: `s-${h.id || i}`,
     action: `Estado cambiado a ${h.status_nuevo}${h.changed_by_nombre ? ' por ' + h.changed_by_nombre : ''}`,
     date: h.changed_at ? new Date(h.changed_at).toLocaleString('es-ES') : '',
+    _ts: h.changed_at ? new Date(h.changed_at).getTime() : 0,
     source: 'Sistema',
-    color: ['#4361ee', '#059669', '#d97706', '#7c3aed'][i % 4],
+    color: '#4361ee',
   }));
+  const timelineAudit: TimelineItem[] = auditLog.map((a: any, i: number) => {
+    const meta = FIELD_LABELS[a.field_name] || { label: a.field_name, emoji: '📝' };
+    return {
+      id: `a-${a.id || i}`,
+      action: `${meta.emoji} ${meta.label}: ${fmtVal(a.old_value)} → ${fmtVal(a.new_value)}${a.changed_by_nombre ? ' · por ' + a.changed_by_nombre : ''}`,
+      date: a.changed_at ? new Date(a.changed_at).toLocaleString('es-ES') : '',
+      _ts: a.changed_at ? new Date(a.changed_at).getTime() : 0,
+      source: 'Edición',
+      color: '#7c3aed',
+    };
+  });
+
+  const timeline: TimelineItem[] = [...timelineStatus, ...timelineAudit]
+    .sort((a, b) => ((b as any)._ts || 0) - ((a as any)._ts || 0));
 
   if (timeline.length === 0 && lead) {
     timeline.push({

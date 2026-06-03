@@ -599,6 +599,19 @@ export async function updateLead(leadId, data, opts = {}) {
   const newCanal = data.canal;
   if (newCanal !== undefined) delete data.canal;
 
+  // Snapshot ANTES del update para audit log
+  const auditFields = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const auditableData = {};
+  for (const f of auditFields) {
+    if (Object.prototype.hasOwnProperty.call(data, f) && JSON.stringify(data[f]) !== JSON.stringify(lead[f])) {
+      auditableData[f] = { old: lead[f], new: data[f] };
+    }
+  }
+  if (newCanal !== undefined) {
+    const oldCanal = lead.utms?.canal_detectado || null;
+    if (oldCanal !== newCanal) auditableData.canal = { old: oldCanal, new: newCanal };
+  }
+
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
 
@@ -609,6 +622,22 @@ export async function updateLead(leadId, data, opts = {}) {
        ON CONFLICT (lead_id) DO UPDATE SET canal_detectado = EXCLUDED.canal_detectado`,
       [leadId, newCanal]
     );
+  }
+
+  // Audit log: una fila por campo modificado
+  const userId = opts.userId || null;
+  for (const [field, { old, new: nv }] of Object.entries(auditableData)) {
+    try {
+      const oldStr = old == null ? null : (typeof old === 'object' ? JSON.stringify(old) : String(old));
+      const newStr = nv == null ? null : (typeof nv === 'object' ? JSON.stringify(nv) : String(nv));
+      await query(
+        `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [leadId, field, oldStr, newStr, userId]
+      );
+    } catch (err) {
+      logger.warn({ err: err.message, leadId, field }, 'audit log insert falló (no crítico)');
+    }
   }
 
   // APRENDIZAJE: si el usuario vinculó manualmente un producto a este lead
