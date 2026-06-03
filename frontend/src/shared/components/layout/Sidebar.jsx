@@ -47,6 +47,7 @@ import {
   TrendDown,
   Wallet,
   HandCoins,
+  GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -72,6 +73,7 @@ const NAV_SECTIONS = [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'Audiencias Meta', to: '/prospectos/audiencias', icon: Users, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
       { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],

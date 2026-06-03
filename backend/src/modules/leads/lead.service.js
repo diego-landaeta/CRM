@@ -6,6 +6,7 @@ import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
+import * as dupQueue from './dup-queue.service.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
 async function triggerSequences(triggerEvent, leadId, projectId) {
@@ -212,6 +213,17 @@ async function _createLeadCore(project, leadData) {
       leadModel.createInteraction(lead.id, 'nota', `🔁 Marcado como duplicado del lead #${duplicadoDe}${reincidenteTag} — entrada por webhook.`, null, null),
       leadModel.createInteraction(duplicadoDe, 'nota', `📌 Llegó un nuevo lead duplicado #${lead.id} (${lead.nombre || 'sin nombre'}) por webhook.${reincidenteTag}`, null, null),
     ]).catch((err) => logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado webhook'));
+
+    // #13: encolar para revisión de admin (no bloquea Make)
+    dupQueue.enqueue({
+      leadId: lead.id,
+      originalLeadId: duplicadoDe,
+      projectId: project.id,
+      matchByEmail: !!(duplicado && duplicado.match_by_email),
+      matchByPhone: !!(duplicado && duplicado.match_by_phone),
+      source: 'webhook',
+      leadName: lead.nombre,
+    });
   }
 
   // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
@@ -425,6 +437,7 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
   }
   try {
     const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    dupQueue.markMerged(loserId, userId);
     notifyAdmins({
       type: 'lead_merged',
       title: `Fusión: lead #${loserId} → #${winnerId}`,

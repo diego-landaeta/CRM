@@ -33,6 +33,10 @@ router.get('/spam-reports', roleGuard('superadmin'), spamReportController.listPe
 router.get('/spam-reports/count', roleGuard('superadmin'), spamReportController.countPending);
 router.patch('/spam-reports/:reportId', roleGuard('superadmin'), spamReportController.resolveReport);
 
+// #13 Cola de revisión de duplicados — admin/superadmin
+router.get('/review-queue',              roleGuard('admin', 'superadmin'), leadController.listReviewQueue);
+router.post('/review-queue/:id/decide',  roleGuard('admin', 'superadmin'), leadController.decideReviewQueue);
+
 router.get('/:id', leadController.getById);
 router.post('/:id/merge', leadController.mergeLeads);
 
