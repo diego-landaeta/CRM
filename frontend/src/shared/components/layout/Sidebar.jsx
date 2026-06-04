@@ -47,6 +47,7 @@ import {
   TrendDown,
   Wallet,
   HandCoins,
+  GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -72,6 +73,7 @@ const NAV_SECTIONS = [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'Audiencias Meta', to: '/prospectos/audiencias', icon: Users, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
       { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],
@@ -84,6 +86,7 @@ const NAV_SECTIONS = [
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
       { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
+      { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
   },
@@ -101,7 +104,7 @@ const NAV_SECTIONS = [
     label: 'Finanzas',
     items: [
       { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'] },
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, roles: ['superadmin', 'admin'], module: 'conversions' },
+      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
       { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income' },
       { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions' },
       { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses' },
@@ -109,7 +112,7 @@ const NAV_SECTIONS = [
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable' },
       { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions' },
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll' },
-      { label: 'Stripe', to: '/stripe', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Stripe', to: '/stripe', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia', statusTag: 'Investigando' },
     ],
   },
   {
@@ -219,11 +222,11 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
             child.comingSoon ? (
               <div
                 key={child.to}
-                title="Próximamente"
+                title={child.statusTag ? `${applyLabel(child.label, labelOverrides)} — ${child.statusTag}` : 'Próximamente'}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground/50 cursor-not-allowed select-none"
               >
                 <span className="truncate">{applyLabel(child.label, labelOverrides)}</span>
-                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">{child.statusTag || 'Próximamente'}</span>
               </div>
             ) : (
               <NavLink

@@ -5,6 +5,9 @@ import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
+import { notifyAdmins } from '../notifications/notifications.service.js';
+import * as dupQueue from './dup-queue.service.js';
+import * as leadProducts from './lead-products.service.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
 async function triggerSequences(triggerEvent, leadId, projectId) {
@@ -120,8 +123,11 @@ async function _createLeadCore(project, leadData) {
   // round-robin). Devolvemos un flag para que el llamante sepa que ocurrió.
   const spamHistory = leadData.email ? await leadModel.findSpamMatch(leadData.email, project.id) : null;
 
-  // Detectar duplicado (solo si hay email; sin email no podemos comparar)
-  const duplicate = leadData.email ? await leadModel.findDuplicateByEmail(leadData.email, project.id) : null;
+  // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
+  const telNormWebhook = normalizePhone(leadData.telefono);
+  const duplicate = (leadData.email || telNormWebhook)
+    ? await leadModel.findDuplicateByEmailOrPhone(leadData.email, telNormWebhook, project.id)
+    : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
 
   // Reincidente = mismo proyecto + mismo producto que duplicado
@@ -201,6 +207,36 @@ async function _createLeadCore(project, leadData) {
   // Disparar email sequences con trigger lead_created (async)
   triggerSequences('lead_created', lead.id, project.id);
 
+  // Trazabilidad de duplicado por webhook (admin lo verá en el filtro).
+  if (duplicadoDe) {
+    const reincidenteTag = reincidente ? ' [REINCIDENTE — mismo producto]' : '';
+    Promise.all([
+      leadModel.createInteraction(lead.id, 'nota', `🔁 Marcado como duplicado del lead #${duplicadoDe}${reincidenteTag} — entrada por webhook.`, null, null),
+      leadModel.createInteraction(duplicadoDe, 'nota', `📌 Llegó un nuevo lead duplicado #${lead.id} (${lead.nombre || 'sin nombre'}) por webhook.${reincidenteTag}`, null, null),
+    ]).catch((err) => logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado webhook'));
+
+    // #13: encolar para revisión de admin (no bloquea Make)
+    dupQueue.enqueue({
+      leadId: lead.id,
+      originalLeadId: duplicadoDe,
+      projectId: project.id,
+      matchByEmail: !!(duplicate && duplicate.match_by_email),
+      matchByPhone: !!(duplicate && duplicate.match_by_phone),
+      source: 'webhook',
+      leadName: lead.nombre,
+    });
+
+    // #18: si el duplicado pidió OTRO producto, añadirlo al lead original como secundario.
+    if (productoInteresId && duplicate && duplicate.producto_interes_id !== productoInteresId) {
+      leadProducts.autoAddFromReincidente({
+        originalLeadId: duplicadoDe,
+        newProductId: productoInteresId,
+        newLeadId: lead.id,
+        addedByUserId: null,
+      });
+    }
+  }
+
   // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
   if (lead.responsableId) {
     (async () => {
@@ -241,8 +277,21 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
   if (!validReasons.includes(reason)) {
     throw new AppError('reason invalido (spam, test, duplicado_manual, otro)', 400, 'INVALID_REASON');
   }
+  const { rows: leadFull } = await query(`SELECT nombre, email, telefono, project_id FROM leads WHERE id = $1`, [leadId]);
+  const leadInfo = leadFull[0] || {};
   const result = await leadModel.softDeleteLead(leadId, { reason, motivo, userId });
   if (!result) throw new AppError('Lead no encontrado o ya eliminado', 404, 'LEAD_NOT_FOUND');
+
+  // Notif admin/superadmin (#16)
+  notifyAdmins({
+    type: 'lead_deleted',
+    title: `Lead #${leadId} eliminado`,
+    message: `${leadInfo.nombre || '—'} (${leadInfo.email || leadInfo.telefono || '—'}) — motivo: ${reason}${motivo ? ' · ' + motivo : ''}`,
+    link_path: `/prospectos/papelera`,
+    metadata: { lead_id: leadId, reason, motivo, project_id: leadInfo.project_id },
+    triggered_by_user_id: userId || null,
+  });
+
   return result;
 }
 
@@ -367,8 +416,23 @@ export async function reassign(leadId, newResponsableId, userId) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
+  const prevResponsableId = lead.responsable_id || null;
   await leadModel.reassignLead(leadId, newResponsableId);
   await leadModel.updateStatus(leadId, lead.status, lead.status, userId);
+
+  try {
+    const { rows } = await query(
+      `SELECT id, nombre, email FROM users WHERE id = ANY($1::int[])`,
+      [[prevResponsableId, newResponsableId, userId].filter(Boolean)]
+    );
+    const byId = Object.fromEntries(rows.map((u) => [u.id, u.nombre || u.email]));
+    const prevName = prevResponsableId ? (byId[prevResponsableId] || `gestor #${prevResponsableId}`) : 'sin asignar';
+    const newName = byId[newResponsableId] || `gestor #${newResponsableId}`;
+    const actorName = byId[userId] || 'sistema';
+    await leadModel.createInteraction(leadId, 'nota', `👤 Reasignado de ${prevName} a ${newName} por ${actorName}.`, userId, null);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId }, 'No se pudo registrar interaction de reasignación (no crítico)');
+  }
 
   return { message: 'Lead reasignado', responsable_id: newResponsableId };
 }
@@ -383,7 +447,17 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     throw new AppError('Comentario obligatorio para auditoría', 400, 'COMMENT_REQUIRED');
   }
   try {
-    return await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    dupQueue.markMerged(loserId, userId);
+    notifyAdmins({
+      type: 'lead_merged',
+      title: `Fusión: lead #${loserId} → #${winnerId}`,
+      message: comment.trim(),
+      link_path: `/prospectos/${winnerId}`,
+      metadata: { winner_id: winnerId, loser_id: loserId },
+      triggered_by_user_id: userId || null,
+    });
+    return result;
   } catch (err) {
     throw new AppError(err.message || 'Error en fusión', 400, 'MERGE_FAILED');
   }
@@ -407,10 +481,34 @@ export async function lookupByEmail(email, projectId) {
   return rows;
 }
 
+// Comprueba duplicado SIN crear nada. Para el confirm dialog del frontend.
+export async function checkDuplicate({ project_id, email, telefono }, requestUser) {
+  if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+  const telNorm = normalizePhone(telefono);
+  const cleanEmail = email ? String(email).toLowerCase().trim() : null;
+  if (!cleanEmail && !telNorm) return { duplicate: null };
+  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
+  if (!dup) return { duplicate: null };
+  if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
+    return {
+      duplicate: {
+        id: dup.id,
+        masked: true,
+        responsable_nombre: dup.responsable_nombre || 'otro gestor',
+        status: dup.status,
+        created_at: dup.created_at,
+        message: `Ya existe un lead con estos datos asignado a ${dup.responsable_nombre || 'otro gestor'}`,
+      },
+    };
+  }
+  return { duplicate: dup };
+}
+
 export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
-  // Detectar duplicado solo si tiene email (sin email no podemos buscar dupe fiable)
-  const duplicate = email ? await leadModel.findDuplicateByEmail(email, project_id) : null;
+  // Detectar duplicado por email O por teléfono normalizado.
+  const telNorm = normalizePhone(telefono);
+  const duplicate = (email || telNorm) ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id) : null;
 
   // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
   // asumimos doble submit y devolvemos el lead existente en vez de crear otro
@@ -483,6 +581,33 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
   // Disparar email sequences con trigger lead_created (async)
   triggerSequences('lead_created', lead.id, project_id);
 
+  // Trazabilidad de duplicado en historial de ambos leads, enlazado.
+  if (duplicadoDe) {
+    const creatorId = creatorUser?.userId || null;
+    const creatorName = creatorUser?.email || creatorUser?.name || 'sistema';
+    const reincidenteTag = reincidente ? ' [REINCIDENTE — mismo producto]' : '';
+    try {
+      await Promise.all([
+        leadModel.createInteraction(
+          lead.id,
+          'nota',
+          `🔁 Marcado como duplicado del lead #${duplicadoDe}${reincidenteTag} — creado por ${creatorName} tras confirmar el aviso de duplicado.`,
+          creatorId,
+          null
+        ),
+        leadModel.createInteraction(
+          duplicadoDe,
+          'nota',
+          `📌 Se creó un nuevo lead duplicado #${lead.id} (${nombre || 'sin nombre'}) por ${creatorName}.${reincidenteTag}`,
+          creatorId,
+          null
+        ),
+      ]);
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado (no crítico)');
+    }
+  }
+
   return {
     lead_id: lead.id,
     responsable_id: lead.responsableId,
@@ -500,9 +625,53 @@ export async function updateLead(leadId, data, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
     data.telefono = normalizePhone(data.telefono);
   }
+  if (Object.prototype.hasOwnProperty.call(data, 'email') && (data.email === '' || !data.email)) {
+    data.email = null;
+  }
+  // canal NO va en tabla leads sino en lead_utms
+  const newCanal = data.canal;
+  if (newCanal !== undefined) delete data.canal;
+
+  // Snapshot ANTES del update para audit log
+  const auditFields = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const auditableData = {};
+  for (const f of auditFields) {
+    if (Object.prototype.hasOwnProperty.call(data, f) && JSON.stringify(data[f]) !== JSON.stringify(lead[f])) {
+      auditableData[f] = { old: lead[f], new: data[f] };
+    }
+  }
+  if (newCanal !== undefined) {
+    const oldCanal = lead.utms?.canal_detectado || null;
+    if (oldCanal !== newCanal) auditableData.canal = { old: oldCanal, new: newCanal };
+  }
 
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
+
+  if (newCanal !== undefined) {
+    await query(
+      `INSERT INTO lead_utms (lead_id, canal_detectado, created_at)
+       VALUES ($1, $2::utm_channel, NOW())
+       ON CONFLICT (lead_id) DO UPDATE SET canal_detectado = EXCLUDED.canal_detectado`,
+      [leadId, newCanal]
+    );
+  }
+
+  // Audit log: una fila por campo modificado
+  const userId = opts.userId || null;
+  for (const [field, { old, new: nv }] of Object.entries(auditableData)) {
+    try {
+      const oldStr = old == null ? null : (typeof old === 'object' ? JSON.stringify(old) : String(old));
+      const newStr = nv == null ? null : (typeof nv === 'object' ? JSON.stringify(nv) : String(nv));
+      await query(
+        `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [leadId, field, oldStr, newStr, userId]
+      );
+    } catch (err) {
+      logger.warn({ err: err.message, leadId, field }, 'audit log insert falló (no crítico)');
+    }
+  }
 
   // APRENDIZAJE: si el usuario vinculó manualmente un producto a este lead
   // y el lead tiene landing_url, guardamos el slug como alias. Los futuros

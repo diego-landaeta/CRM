@@ -21,6 +21,9 @@ export const BETA_ROUTES: readonly string[] = [
   '/',                       // Dashboard
   '/prospectos',             // Prospectos (listado, pipeline, audiencias)
   '/clientes',               // Clientes + Matrículas
+  '/finanzas/ventas',        // Ventas (registro venta histórica + listado conversiones)
+  '/sales',                  // Ventas (ruta alternativa)
+  '/meta-ads',               // Meta Ads (metricas + ROI manual)
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
   '/captacion',              // Captación: Formularios, Webhooks, Make
   '/email-sequences',         // Email de seguimiento

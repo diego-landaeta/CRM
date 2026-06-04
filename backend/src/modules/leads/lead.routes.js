@@ -25,10 +25,23 @@ router.get('/today', leadController.today);
 // pueda detectar duplicados de leads que pertenecen a otra asesora.
 router.get('/lookup-by-email', leadController.lookupByEmail);
 
+// Check duplicado antes de crear (manual).
+router.post('/check-duplicate', leadController.checkDuplicate);
+
 // Spam reports: rutas estáticas ANTES de /:id para que no las absorba
 router.get('/spam-reports', roleGuard('superadmin'), spamReportController.listPending);
 router.get('/spam-reports/count', roleGuard('superadmin'), spamReportController.countPending);
 router.patch('/spam-reports/:reportId', roleGuard('superadmin'), spamReportController.resolveReport);
+
+// #13 Cola de revisión de duplicados — admin/superadmin
+router.get('/review-queue',              roleGuard('admin', 'superadmin'), leadController.listReviewQueue);
+router.post('/review-queue/:id/decide',  roleGuard('admin', 'superadmin'), leadController.decideReviewQueue);
+
+// #18 Multi-cursos por lead
+router.get('/:id/products',              leadController.listLeadProducts);
+router.post('/:id/products',             leadController.addLeadProduct);
+router.patch('/:id/products/:lpId',      leadController.updateLeadProduct);
+router.delete('/:id/products/:lpId',     leadController.removeLeadProduct);
 
 router.get('/:id', leadController.getById);
 router.post('/:id/merge', leadController.mergeLeads);
@@ -61,11 +74,11 @@ router.get('/:id/emails', leadEmailsController.listLeadEmails);
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
 
-// Reportes de spam: cualquier usuario autenticado puede reportar
-router.post('/:id/report-spam', spamReportController.reportSpam);
+// #15: solo admin/superadmin reporta spam (antes era cualquier autenticado).
+router.post('/:id/report-spam', roleGuard('admin', 'superadmin'), spamReportController.reportSpam);
 
-// Soft delete / restore: SOLO superadmin (audit trail importante).
-router.delete('/:id', roleGuard('superadmin'), leadController.softDelete);
+// #15: admin y superadmin pueden eliminar (soft-delete). Restore solo superadmin.
+router.delete('/:id', roleGuard('admin', 'superadmin'), leadController.softDelete);
 router.patch('/:id/restore', roleGuard('superadmin'), leadController.restore);
 
 // Asignar pendientes: re-aplica round-robin a leads con responsable_id IS NULL.

@@ -13,6 +13,9 @@ import leadsModule from './modules/leads/index.js';
 import productsModule from './modules/products/index.js';
 import dossiersModule from './modules/dossiers/index.js';
 import conversionsModule from './modules/conversions/index.js';
+import salesModule from './modules/sales/index.js';
+import notificationsModule from './modules/notifications/index.js';
+import metaAdsModule from './modules/meta-ads/index.js';
 import accountingModule from './modules/accounting/index.js';
 import fieldDefsModule from './modules/field-definitions/index.js';
 import credentialsModule from './modules/credentials/index.js';
@@ -99,6 +102,9 @@ const ALL_MODULES = [
   { name: 'products', mod: productsModule },
   { name: 'dossiers', mod: dossiersModule },
   { name: 'conversions', mod: conversionsModule },
+  { name: 'sales', mod: salesModule },
+  { name: 'notifications', mod: notificationsModule },
+  { name: 'meta-ads', mod: metaAdsModule },
   { name: 'accounting', mod: accountingModule },
   { name: 'field-definitions', mod: fieldDefsModule },
   { name: 'credentials', mod: credentialsModule },

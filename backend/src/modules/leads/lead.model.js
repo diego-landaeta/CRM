@@ -25,6 +25,30 @@ export async function findDuplicateByEmail(email, projectId) {
   return rows[0] || null;
 }
 
+// Detecta duplicado por email O por telefono (E.164). Cualquiera que matchee
+// se considera duplicado. Útil cuando el lead llega solo con tel (WhatsApp).
+export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
+  const cleanEmail = (email && email.trim()) || null;
+  const cleanTel = (telefono && telefono.trim()) || null;
+  if (!cleanEmail && !cleanTel) return null;
+
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
+            l.responsable_id, l.created_at, l.fecha_solicitud,
+            u.nombre AS responsable_nombre,
+            ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
+            ($3::text IS NOT NULL AND l.telefono = $3) AS match_by_phone
+     FROM leads l
+     LEFT JOIN users u ON u.id = l.responsable_id
+     WHERE l.project_id = $1 AND l.deleted_at IS NULL
+       AND (($2::text IS NOT NULL AND l.email = $2) OR ($3::text IS NOT NULL AND l.telefono = $3))
+     ORDER BY ($2::text IS NOT NULL AND l.email = $2) DESC, l.created_at DESC
+     LIMIT 1`,
+    [projectId, cleanEmail, cleanTel]
+  );
+  return rows[0] || null;
+}
+
 // Busca cualquier lead CONVERTIDO previo de este email en el proyecto.
 // Sirve para detectar cross-sell: cliente que ya compró y ahora pregunta otro programa.
 export async function findConvertedByEmail(email, projectId) {
@@ -107,7 +131,8 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     const counts = {};
     const moveTables = [
       'lead_interactions', 'lead_reminders', 'lead_utms',
-      'lead_status_history', 'conversions', 'matriculas',
+      'lead_status_history', 'lead_audit_log',
+      'conversions', 'matriculas',
       'email_sequence_runs', 'lead_emails',
     ];
     for (const t of moveTables) {
@@ -124,11 +149,23 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     // Apuntar lead_duplicado_de del loser al winner (auditoría)
     await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, loserId]);
 
-    // Insertar nota en el winner con el comentario
+    // Nota en el winner explicando la fusión
     await c.query(
       `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
        VALUES ($1, 'nota', $2, $3, NOW())`,
-      [winnerId, `Fusión con lead #${loserId} (${ll.rows[0].nombre}). Comentario: ${comment}`, userId]
+      [winnerId, `🔗 Fusionado con lead #${loserId} (${ll.rows[0].nombre || '—'}). Comentario: ${comment}`, userId]
+    );
+    // Nota en el loser (queda si se restaura desde papelera)
+    await c.query(
+      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+       VALUES ($1, 'nota', $2, $3, NOW())`,
+      [loserId, `❌ Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '—'}). Lead cerrado por fusión. Comentario: ${comment}`, userId]
+    );
+    // Audit log de la operación en ambos
+    await c.query(
+      `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+       VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
+      [winnerId, String(loserId), userId, loserId, String(winnerId)]
     );
 
     // Soft-delete del loser
@@ -476,7 +513,7 @@ function buildOrderBy(sort) {
   `;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -495,6 +532,16 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
 
   // Excluir leads eliminados (soft delete)
   conditions.push(`l.deleted_at IS NULL`);
+
+  // Filtro duplicados (solo admin/superadmin a nivel ruta).
+  if (duplicated) {
+    conditions.push(`l.lead_duplicado_de IS NOT NULL`);
+  }
+
+  // Filtro reincidentes — lead que repite consulta del mismo producto.
+  if (reincidente) {
+    conditions.push(`l.reincidente = TRUE`);
+  }
 
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
@@ -625,6 +672,32 @@ export async function findById(id) {
     [id]
   );
   lead.reminders = reminderRows;
+
+  // Audit log (cambios de campos editables)
+  const { rows: auditRows } = await query(
+    `SELECT la.id, la.field_name, la.old_value, la.new_value, la.changed_at,
+            la.changed_by_user_id, u.nombre as changed_by_nombre
+     FROM lead_audit_log la
+     LEFT JOIN users u ON u.id = la.changed_by_user_id
+     WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
+    [id]
+  );
+  lead.auditLog = auditRows;
+
+  // Programas secundarios (#18 multi-cursos)
+  const { rows: spRows } = await query(
+    `SELECT lp.id, lp.product_id, p.nombre AS product_nombre,
+            lp.responsable_id, u.nombre AS responsable_nombre,
+            lp.status, lp.notas, lp.added_at, lp.added_via,
+            lp.added_by_user_id, au.nombre AS added_by_nombre
+     FROM lead_products lp
+     LEFT JOIN products p ON p.id = lp.product_id
+     LEFT JOIN users u ON u.id = lp.responsable_id
+     LEFT JOIN users au ON au.id = lp.added_by_user_id
+     WHERE lp.lead_id = $1 ORDER BY lp.added_at DESC`,
+    [id]
+  );
+  lead.secondaryProducts = spRows;
 
   return lead;
 }
@@ -764,7 +837,7 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);

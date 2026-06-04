@@ -11,6 +11,7 @@ import { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBad
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadHeaderCard from '../components/lead-detail/LeadHeaderCard';
 import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
+import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
 import LeadRemindersCard, { ReminderDialog } from '../components/lead-detail/LeadRemindersCard';
@@ -18,6 +19,7 @@ import LeadTimelineCard from '../components/lead-detail/LeadTimelineCard';
 import LeadSidebar from '../components/lead-detail/LeadSidebar';
 import LeadLossDialog from '../components/lead-detail/LeadLossDialog';
 import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
+import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
 
@@ -81,6 +83,7 @@ export default function LeadDetailPage() {
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailRefreshKey, setEmailRefreshKey] = useState(0);
 
@@ -198,6 +201,13 @@ export default function LeadDetailPage() {
         onClose={() => setReassignOpen(false)}
         onSubmit={reassign}
       />
+      <MergeLeadDialog
+        open={mergeOpen}
+        winner={lead}
+        projectId={lead.project_id}
+        onClose={() => setMergeOpen(false)}
+        onMerged={() => { setMergeOpen(false); refetch?.(); }}
+      />
       <LeadEmailDialog
         open={emailOpen}
         leadId={lead.id}
@@ -217,6 +227,7 @@ export default function LeadDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard
             interacciones={interacciones}
@@ -258,6 +269,7 @@ export default function LeadDetailPage() {
           onOpenInteraction={() => setInteractionOpen(true)}
           onOpenReminder={() => setReminderOpen(true)}
           onOpenReassign={() => setReassignOpen(true)}
+          onOpenMerge={() => setMergeOpen(true)}
         />
       </div>
     </div>

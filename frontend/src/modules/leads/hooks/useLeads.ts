@@ -6,7 +6,7 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number } = {
+const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string; rein: string } = {
   q: '',
   estado: '',
   origen: '',
@@ -17,6 +17,8 @@ const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; p
   to: '',
   sort: 'recent_value',  // default: día más reciente arriba, dentro del día los caros primero
   page: 1,
+  dup: '',
+  rein: '',
 };
 
 export interface LeadStats {
@@ -54,6 +56,10 @@ export interface UseLeadsResult {
   setDateRange: (from: string, to: string) => void;
   sortMode: 'value' | 'recent' | 'urgency' | 'recent_value';
   setSortMode: (m: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
+  filterDup: boolean;
+  setFilterDup: (v: boolean) => void;
+  filterReincidente: boolean;
+  setFilterReincidente: (v: boolean) => void;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -65,7 +71,7 @@ function normalizeLead<T extends Partial<Lead>>(lead: T): T {
   return {
     ...lead,
     estado: (lead.status as LeadStatus | undefined) || (lead.estado as LeadStatus | undefined),
-    origen: (lead.canal_detectado as LeadOrigen | undefined) || (lead.origen as LeadOrigen | undefined) || ('directo' as LeadOrigen),
+    origen: (lead.canal_detectado as LeadOrigen | undefined) || ((lead as { utms?: { canal_detectado?: LeadOrigen } }).utms?.canal_detectado as LeadOrigen | undefined) || (lead.origen as LeadOrigen | undefined) || ('directo' as LeadOrigen),
   };
 }
 
@@ -78,8 +84,8 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number;
+  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
+    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; page: number; dup: string; rein: string;
   };
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent_value') as 'value' | 'recent' | 'urgency' | 'recent_value';
   const selectedProjectIds: number[] = multiRaw
@@ -94,6 +100,8 @@ export function useLeads(): UseLeadsResult {
   const setSelectedProjectIds = useCallback((ids: number[]) => setUrlFilters({ multi: ids.length ? ids.join(',') : '', page: 1 }), [setUrlFilters]);
   const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
   const setSortMode = useCallback((m: 'value' | 'recent' | 'urgency' | 'recent_value') => setUrlFilters({ sort: m, page: 1 }), [setUrlFilters]);
+  const setFilterDup = useCallback((v: boolean) => setUrlFilters({ dup: v ? '1' : '', page: 1 }), [setUrlFilters]);
+  const setFilterReincidente = useCallback((v: boolean) => setUrlFilters({ rein: v ? '1' : '', page: 1 }), [setUrlFilters]);
   const setPage = useCallback((v: number | ((prev: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v;
     setUrlFilters({ page: Number(next) || 1 });
@@ -152,6 +160,8 @@ export function useLeads(): UseLeadsResult {
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
       if (sortMode) params.set('sort', sortMode);
+      if (filterDup === '1') params.set('duplicated', 'true');
+      if (filterReincidente === '1') params.set('reincidente', 'true');
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -169,7 +179,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, filterDup, filterReincidente]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -243,6 +253,10 @@ export function useLeads(): UseLeadsResult {
     setDateRange,
     sortMode,
     setSortMode,
+    filterDup: filterDup === '1',
+    setFilterDup,
+    filterReincidente: filterReincidente === '1',
+    setFilterReincidente,
     loading,
     error,
     refetch: fetchLeads,
@@ -255,6 +269,7 @@ export interface TimelineItem {
   date: string;
   source: string;
   color: string;
+  _ts?: number;
 }
 
 export interface UseLeadDetailResult {
@@ -307,14 +322,42 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
   const recordatorio = reminders[0] || null;
   const utms = lead?.utms || null;
   const statusHistory = lead?.statusHistory || [];
+  const auditLog = ((lead as unknown) as { auditLog?: any[] })?.auditLog || [];
 
-  const timeline: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
-    id: h.id || i,
+  const FIELD_LABELS: Record<string, { label: string; emoji: string }> = {
+    nombre: { label: 'Nombre', emoji: '📝' },
+    email: { label: 'Email', emoji: '✉️' },
+    telefono: { label: 'Teléfono', emoji: '📞' },
+    notas: { label: 'Notas', emoji: '🗒️' },
+    producto_interes_id: { label: 'Producto de interés', emoji: '📦' },
+    canal: { label: 'Canal', emoji: '🛰️' },
+    responsable_id: { label: 'Responsable', emoji: '👤' },
+    custom_fields: { label: 'Campos custom', emoji: '⚙️' },
+  };
+  const fmtVal = (v: string | null | undefined) => (v == null || v === '' ? '∅' : (v.length > 60 ? v.slice(0, 60) + '…' : v));
+
+  const timelineStatus: TimelineItem[] = statusHistory.map((h: any, i: number) => ({
+    id: `s-${h.id || i}`,
     action: `Estado cambiado a ${h.status_nuevo}${h.changed_by_nombre ? ' por ' + h.changed_by_nombre : ''}`,
     date: h.changed_at ? new Date(h.changed_at).toLocaleString('es-ES') : '',
+    _ts: h.changed_at ? new Date(h.changed_at).getTime() : 0,
     source: 'Sistema',
-    color: ['#4361ee', '#059669', '#d97706', '#7c3aed'][i % 4],
+    color: '#4361ee',
   }));
+  const timelineAudit: TimelineItem[] = auditLog.map((a: any, i: number) => {
+    const meta = FIELD_LABELS[a.field_name] || { label: a.field_name, emoji: '📝' };
+    return {
+      id: `a-${a.id || i}`,
+      action: `${meta.emoji} ${meta.label}: ${fmtVal(a.old_value)} → ${fmtVal(a.new_value)}${a.changed_by_nombre ? ' · por ' + a.changed_by_nombre : ''}`,
+      date: a.changed_at ? new Date(a.changed_at).toLocaleString('es-ES') : '',
+      _ts: a.changed_at ? new Date(a.changed_at).getTime() : 0,
+      source: 'Edición',
+      color: '#7c3aed',
+    };
+  });
+
+  const timeline: TimelineItem[] = [...timelineStatus, ...timelineAudit]
+    .sort((a, b) => ((b as any)._ts || 0) - ((a as any)._ts || 0));
 
   if (timeline.length === 0 && lead) {
     timeline.push({

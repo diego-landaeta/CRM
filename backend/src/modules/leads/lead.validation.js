@@ -51,9 +51,22 @@ export const listLeadsSchema = z.object({
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
   // Orden: value (default), recent, urgency
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
+  // Filtro de duplicados (lead_duplicado_de IS NOT NULL) — solo admin/superadmin.
+  duplicated: z.coerce.boolean().optional(),
+  // Filtro de reincidentes — solo admin/superadmin.
+  reincidente: z.coerce.boolean().optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }
+);
+
+export const checkDuplicateSchema = z.object({
+  project_id: z.number().int().positive(),
+  email: z.string().email().optional().or(z.literal('')).or(z.null()),
+  telefono: z.string().max(50).optional().or(z.literal('')).or(z.null()),
+}).refine(
+  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
+  { message: 'Debes proporcionar email o teléfono', path: ['email'] }
 );
 
 export const updateStatusSchema = z.object({
@@ -93,9 +106,11 @@ export const createLeadManualSchema = z.object({
 
 export const updateLeadSchema = z.object({
   nombre: z.string().min(1, 'Nombre no puede estar vacio').max(200).optional(),
+  email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).nullable().optional().or(z.literal('')),
   telefono: z.string().max(50).nullable().optional(),
   notas: z.string().max(2000).nullable().optional(),
   producto_interes_id: z.number().int().positive().nullable().optional(),
+  canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
   custom_fields: z.record(z.string(), z.any()).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
