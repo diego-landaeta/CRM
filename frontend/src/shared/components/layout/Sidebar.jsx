@@ -112,7 +112,7 @@ const NAV_SECTIONS = [
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable' },
       { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions' },
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll' },
-      { label: 'Stripe', to: '/stripe', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Stripe', to: '/stripe', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia', statusTag: 'Investigando' },
     ],
   },
   {
@@ -222,11 +222,11 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
             child.comingSoon ? (
               <div
                 key={child.to}
-                title="Próximamente"
+                title={child.statusTag ? `${applyLabel(child.label, labelOverrides)} — ${child.statusTag}` : 'Próximamente'}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground/50 cursor-not-allowed select-none"
               >
                 <span className="truncate">{applyLabel(child.label, labelOverrides)}</span>
-                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próximamente</span>
+                <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">{child.statusTag || 'Próximamente'}</span>
               </div>
             ) : (
               <NavLink
