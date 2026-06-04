@@ -15,17 +15,41 @@ function unpackToken(packed) {
 }
 
 /**
- * Devuelve { connected, ad_account_id, ad_account_nombre, currency, last_synced_at, sync_status, backfill_done }
+ * Lista TODAS las cuentas conectadas a un proyecto (multi-cuenta).
  * NUNCA devuelve el token plano.
  */
-export async function getAccount(projectId) {
+export async function listAccounts(projectId) {
   const { rows } = await query(
     `SELECT id, project_id, ad_account_id, ad_account_nombre, currency, timezone_name,
             last_synced_at, last_sync_status, last_sync_error, backfill_done, created_at
-     FROM meta_ad_accounts WHERE project_id = $1`,
+     FROM meta_ad_accounts WHERE project_id = $1
+     ORDER BY created_at ASC`,
     [projectId]
   );
+  return rows;
+}
+
+/**
+ * Obtiene UNA cuenta por id interno (no por project_id).
+ */
+export async function getAccountById(accountId) {
+  const { rows } = await query(
+    `SELECT id, project_id, ad_account_id, ad_account_nombre, currency, timezone_name,
+            last_synced_at, last_sync_status, last_sync_error, backfill_done, created_at
+     FROM meta_ad_accounts WHERE id = $1`,
+    [accountId]
+  );
   return rows[0] || null;
+}
+
+/**
+ * @deprecated Legacy 1:1. Devuelve la PRIMERA cuenta del proyecto. Útil solo para
+ * migrar código viejo que asumía 1 cuenta por proyecto. Nuevo código debe usar
+ * listAccounts() o getAccountById().
+ */
+export async function getAccount(projectId) {
+  const all = await listAccounts(projectId);
+  return all[0] || null;
 }
 
 /**
@@ -50,12 +74,13 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
   }
 
   const enc = packToken(access_token);
+  // ON CONFLICT (project_id, ad_account_id) — la misma cuenta no se duplica dentro del
+  // mismo proyecto. Si ya existe, actualiza token/metadata (equivale a re-conectar).
   const { rows } = await query(
     `INSERT INTO meta_ad_accounts
        (project_id, ad_account_id, access_token_enc, ad_account_nombre, currency, timezone_name, created_by_user_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (project_id) DO UPDATE SET
-       ad_account_id = EXCLUDED.ad_account_id,
+     ON CONFLICT (project_id, ad_account_id) DO UPDATE SET
        access_token_enc = EXCLUDED.access_token_enc,
        ad_account_nombre = EXCLUDED.ad_account_nombre,
        currency = EXCLUDED.currency,
@@ -68,78 +93,145 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
 
   // Backfill 90 días en background (no bloquea respuesta)
   if (!account.backfill_done) {
-    setImmediate(() => runBackfill(account.project_id, 90).catch((err) => {
-      logger.error({ err: err.message, project_id }, 'Meta backfill falló');
+    setImmediate(() => runBackfill(account.id, 90).catch((err) => {
+      logger.error({ err: err.message, account_id: account.id }, 'Meta backfill falló');
     }));
   }
 
   return { ...account, validation: meta };
 }
 
-export async function disconnect(projectId) {
-  await query(`DELETE FROM meta_ad_accounts WHERE project_id = $1`, [projectId]);
-  await query(`DELETE FROM meta_campaigns WHERE project_id = $1`, [projectId]);
-  // meta_campaigns_daily se borra en cascade por FK
-  return { disconnected: true };
+/**
+ * Rota el access_token de UNA cuenta concreta. Identifica la cuenta por accountId
+ * (id interno, no ad_account_id). Mantiene todos los datos sincronizados.
+ */
+export async function updateToken({ accountId, access_token }) {
+  if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
+  if (!access_token || access_token.length < 20) {
+    throw new AppError('access_token requerido', 400, 'INVALID_TOKEN');
+  }
+  const existing = await getAccountById(accountId);
+  if (!existing) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  let meta;
+  try {
+    meta = await metaClient.validateConnection({
+      adAccountId: existing.ad_account_id, accessToken: access_token,
+    });
+  } catch (err) {
+    throw new AppError(`Token nuevo inválido: ${err.message}`, 400, 'META_VALIDATION_FAILED');
+  }
+  const enc = packToken(access_token);
+  await query(
+    `UPDATE meta_ad_accounts SET
+       access_token_enc = $1,
+       ad_account_nombre = $2,
+       currency = $3,
+       timezone_name = $4,
+       last_sync_error = NULL,
+       updated_at = NOW()
+     WHERE id = $5`,
+    [enc, meta.nombre, meta.currency, meta.timezone_name, accountId]
+  );
+  return { rotated: true, validation: meta };
+}
+
+/**
+ * Desconecta UNA cuenta. Borra credenciales + campañas/adsets/ads + daily de esa
+ * cuenta concreta. NO toca otras cuentas del mismo proyecto.
+ */
+export async function disconnect(accountId) {
+  const acc = await getAccountById(accountId);
+  if (!acc) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  // meta_campaigns.ad_account_id no es FK formal, borro manualmente. Cascade del PK
+  // limpia adsets/ads/daily de cada nivel.
+  await query(`DELETE FROM meta_campaigns WHERE project_id = $1 AND ad_account_id = $2`,
+    [acc.project_id, acc.ad_account_id]);
+  await query(`DELETE FROM meta_ad_accounts WHERE id = $1`, [accountId]);
+  return { disconnected: true, ad_account_id: acc.ad_account_id };
 }
 
 /**
  * Sync incremental: trae el día de ayer y hoy. Ligero (1-2 chunks).
  */
-export async function syncIncremental(projectId) {
-  const account = await getAccount(projectId);
-  if (!account) throw new AppError('Cuenta Meta no conectada', 404, 'NOT_CONNECTED');
-  const token = await loadToken(projectId);
-  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress' WHERE project_id=$1`, [projectId]);
+export async function syncIncremental(accountId) {
+  const account = await getAccountById(accountId);
+  if (!account) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  const projectId = account.project_id;
+  const token = await loadTokenById(accountId);
+  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress' WHERE id=$1`, [accountId]);
   try {
     await syncCampaignsSnapshot({ account, token });
+    await syncAdSetsSnapshot({ account, token });
+    await syncAdsSnapshot({ account, token });
     const today = new Date().toISOString().slice(0, 10);
     const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const rows = await metaClient.fetchDailyInsights({
-      adAccountId: account.ad_account_id, accessToken: token, since: ayer, until: today,
-    });
-    await upsertDailyMetrics(projectId, rows);
+    // 3 levels, separados por pausa pequeña para no chocar rate limit.
+    const campRows = await metaClient.fetchDailyInsights({ adAccountId: account.ad_account_id, accessToken: token, since: ayer, until: today, level: 'campaign' });
+    await upsertCampaignDaily(projectId, campRows);
+    const adsetRows = await metaClient.fetchDailyInsights({ adAccountId: account.ad_account_id, accessToken: token, since: ayer, until: today, level: 'adset' });
+    await upsertAdSetDaily(projectId, adsetRows);
+    const adRows = await metaClient.fetchDailyInsights({ adAccountId: account.ad_account_id, accessToken: token, since: ayer, until: today, level: 'ad' });
+    await upsertAdDaily(projectId, adRows);
     await recalcCampaignTotals(projectId);
+    await recalcAdSetTotals(projectId);
+    await recalcAdTotals(projectId);
     await query(
-      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', last_sync_error=NULL WHERE project_id=$1`,
-      [projectId]
+      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', last_sync_error=NULL WHERE id=$1`,
+      [accountId]
     );
-    return { synced: rows.length };
+    return { synced: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } };
   } catch (err) {
     await query(
-      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE project_id=$1`,
-      [projectId, err.message]
+      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE id=$1`,
+      [accountId, err.message]
     );
     throw err;
   }
 }
 
 /**
- * Backfill de N días (default 90). Corre en background — pacing seguro.
+ * Backfill de N días (default 90) para UNA cuenta específica.
  */
-export async function runBackfill(projectId, days = 90) {
-  const account = await getAccount(projectId);
-  if (!account) throw new AppError('Cuenta no conectada', 404, 'NOT_CONNECTED');
-  const token = await loadToken(projectId);
-  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress', last_sync_error=NULL WHERE project_id=$1`, [projectId]);
+export async function runBackfill(accountId, days = 90) {
+  const account = await getAccountById(accountId);
+  if (!account) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  const projectId = account.project_id;
+  const token = await loadTokenById(accountId);
+  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress', last_sync_error=NULL WHERE id=$1`, [accountId]);
   try {
     await syncCampaignsSnapshot({ account, token });
+    await syncAdSetsSnapshot({ account, token });
+    await syncAdsSnapshot({ account, token });
     const until = new Date().toISOString().slice(0, 10);
     const sinceDate = new Date(Date.now() - days * 86400000);
     const since = sinceDate.toISOString().slice(0, 10);
-    logger.info({ project_id: projectId, since, until }, 'Meta backfill arrancando');
-    const rows = await metaClient.fetchDailyInsightsRange({
-      adAccountId: account.ad_account_id, accessToken: token, since, until,
-      onProgress: (i, total, cur) => logger.info({ i, total, cur }, 'Meta backfill chunk'),
+    logger.info({ project_id: projectId, since, until }, 'Meta backfill arrancando (3 niveles)');
+    // 3 backfills secuenciales. fetchDailyInsightsRange ya mete 30s entre chunks.
+    const campRows = await metaClient.fetchDailyInsightsRange({
+      adAccountId: account.ad_account_id, accessToken: token, since, until, level: 'campaign',
+      onProgress: (i, t, c) => logger.info({ level: 'campaign', i, total: t, cur: c }, 'Meta backfill chunk'),
     });
-    await upsertDailyMetrics(projectId, rows);
+    await upsertCampaignDaily(projectId, campRows);
+    const adsetRows = await metaClient.fetchDailyInsightsRange({
+      adAccountId: account.ad_account_id, accessToken: token, since, until, level: 'adset',
+      onProgress: (i, t, c) => logger.info({ level: 'adset', i, total: t, cur: c }, 'Meta backfill chunk'),
+    });
+    await upsertAdSetDaily(projectId, adsetRows);
+    const adRows = await metaClient.fetchDailyInsightsRange({
+      adAccountId: account.ad_account_id, accessToken: token, since, until, level: 'ad',
+      onProgress: (i, t, c) => logger.info({ level: 'ad', i, total: t, cur: c }, 'Meta backfill chunk'),
+    });
+    await upsertAdDaily(projectId, adRows);
     await recalcCampaignTotals(projectId);
+    await recalcAdSetTotals(projectId);
+    await recalcAdTotals(projectId);
     await query(
-      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', backfill_done=TRUE, last_sync_error=NULL WHERE project_id=$1`,
-      [projectId]
+      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', backfill_done=TRUE, last_sync_error=NULL WHERE id=$1`,
+      [accountId]
     );
-    logger.info({ project_id: projectId, rows: rows.length }, 'Meta backfill completo');
-    return { rows: rows.length, days };
+    const total = campRows.length + adsetRows.length + adRows.length;
+    logger.info({ account_id: accountId, project_id: projectId, rows: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } }, 'Meta backfill completo');
+    return { rows: total, days, breakdown: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } };
   } catch (err) {
     logger.error({ err: err.message, project_id: projectId }, 'Meta backfill error');
     await query(
@@ -150,9 +242,9 @@ export async function runBackfill(projectId, days = 90) {
   }
 }
 
-async function loadToken(projectId) {
-  const { rows } = await query(`SELECT access_token_enc FROM meta_ad_accounts WHERE project_id=$1`, [projectId]);
-  if (!rows[0]) throw new AppError('Cuenta no conectada', 404, 'NOT_CONNECTED');
+async function loadTokenById(accountId) {
+  const { rows } = await query(`SELECT access_token_enc FROM meta_ad_accounts WHERE id=$1`, [accountId]);
+  if (!rows[0]) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
   return unpackToken(rows[0].access_token_enc);
 }
 
@@ -180,7 +272,7 @@ async function syncCampaignsSnapshot({ account, token }) {
   return campaigns.length;
 }
 
-async function upsertDailyMetrics(projectId, rows) {
+async function upsertCampaignDaily(projectId, rows) {
   for (const r of rows) {
     const cpl = r.leads > 0 ? (r.spend / r.leads) : null;
     await query(
@@ -194,6 +286,134 @@ async function upsertDailyMetrics(projectId, rows) {
       [r.campaign_id, projectId, r.date, r.spend, r.impressions, r.reach, r.clicks, r.leads, r.ctr, r.cpc, r.cpm, cpl]
     );
   }
+}
+
+// AdSets: snapshot + daily + totales
+async function syncAdSetsSnapshot({ account, token }) {
+  const adsets = await metaClient.listAdSets({ adAccountId: account.ad_account_id, accessToken: token });
+  for (const a of adsets) {
+    await query(
+      `INSERT INTO meta_adsets
+         (adset_id, campaign_id, project_id, nombre, status, effective_status,
+          optimization_goal, billing_event, daily_budget, lifetime_budget, start_time, end_time, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+       ON CONFLICT (adset_id) DO UPDATE SET
+         campaign_id=EXCLUDED.campaign_id, nombre=EXCLUDED.nombre, status=EXCLUDED.status,
+         effective_status=EXCLUDED.effective_status, optimization_goal=EXCLUDED.optimization_goal,
+         billing_event=EXCLUDED.billing_event, daily_budget=EXCLUDED.daily_budget,
+         lifetime_budget=EXCLUDED.lifetime_budget, start_time=EXCLUDED.start_time,
+         end_time=EXCLUDED.end_time, synced_at=NOW()`,
+      [
+        a.id, a.campaign_id, account.project_id, a.name || '', a.status || null, a.effective_status || null,
+        a.optimization_goal || null, a.billing_event || null,
+        a.daily_budget ? Number(a.daily_budget) / 100 : null,
+        a.lifetime_budget ? Number(a.lifetime_budget) / 100 : null,
+        a.start_time || null, a.end_time || null,
+      ]
+    );
+  }
+  return adsets.length;
+}
+
+async function upsertAdSetDaily(projectId, rows) {
+  for (const r of rows) {
+    const cpl = r.leads > 0 ? (r.spend / r.leads) : null;
+    // El insights puede traer adsets que ya no existen en meta_adsets (eliminados).
+    // Verificamos antes de insertar para evitar FK violation.
+    const { rowCount } = await query(`SELECT 1 FROM meta_adsets WHERE adset_id=$1`, [r.adset_id]);
+    if (!rowCount) continue;
+    await query(
+      `INSERT INTO meta_adsets_daily
+         (adset_id, campaign_id, project_id, date, spend, impressions, reach, clicks, leads, ctr, cpc, cpm, cpl)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (adset_id, date) DO UPDATE SET
+         spend=EXCLUDED.spend, impressions=EXCLUDED.impressions, reach=EXCLUDED.reach,
+         clicks=EXCLUDED.clicks, leads=EXCLUDED.leads, ctr=EXCLUDED.ctr, cpc=EXCLUDED.cpc,
+         cpm=EXCLUDED.cpm, cpl=EXCLUDED.cpl, synced_at=NOW()`,
+      [r.adset_id, r.campaign_id, projectId, r.date, r.spend, r.impressions, r.reach, r.clicks, r.leads, r.ctr, r.cpc, r.cpm, cpl]
+    );
+  }
+}
+
+async function recalcAdSetTotals(projectId) {
+  await query(
+    `UPDATE meta_adsets ma SET
+       total_spend = COALESCE(s.spend, 0),
+       total_impressions = COALESCE(s.impressions, 0),
+       total_reach = COALESCE(s.reach, 0),
+       total_clicks = COALESCE(s.clicks, 0),
+       total_leads = COALESCE(s.leads, 0)
+     FROM (
+       SELECT adset_id, SUM(spend) AS spend, SUM(impressions) AS impressions,
+              MAX(reach) AS reach, SUM(clicks) AS clicks, SUM(leads) AS leads
+       FROM meta_adsets_daily WHERE project_id=$1 GROUP BY adset_id
+     ) s
+     WHERE ma.adset_id = s.adset_id AND ma.project_id=$1`,
+    [projectId]
+  );
+}
+
+// Ads: snapshot + daily + totales
+async function syncAdsSnapshot({ account, token }) {
+  const ads = await metaClient.listAds({ adAccountId: account.ad_account_id, accessToken: token });
+  for (const ad of ads) {
+    // Verificamos que el adset exista; si no, saltamos (Meta a veces devuelve ads huérfanos cuando
+    // se borra el adset durante la paginación).
+    const { rowCount } = await query(`SELECT 1 FROM meta_adsets WHERE adset_id=$1`, [ad.adset_id]);
+    if (!rowCount) continue;
+    await query(
+      `INSERT INTO meta_ads
+         (ad_id, adset_id, campaign_id, project_id, nombre, status, effective_status, creative_id, created_time, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+       ON CONFLICT (ad_id) DO UPDATE SET
+         adset_id=EXCLUDED.adset_id, campaign_id=EXCLUDED.campaign_id, nombre=EXCLUDED.nombre,
+         status=EXCLUDED.status, effective_status=EXCLUDED.effective_status,
+         creative_id=EXCLUDED.creative_id, created_time=EXCLUDED.created_time, synced_at=NOW()`,
+      [
+        ad.id, ad.adset_id, ad.campaign_id, account.project_id, ad.name || '',
+        ad.status || null, ad.effective_status || null,
+        ad.creative?.id || null, ad.created_time || null,
+      ]
+    );
+  }
+  return ads.length;
+}
+
+async function upsertAdDaily(projectId, rows) {
+  for (const r of rows) {
+    const cpl = r.leads > 0 ? (r.spend / r.leads) : null;
+    const { rowCount } = await query(`SELECT 1 FROM meta_ads WHERE ad_id=$1`, [r.ad_id]);
+    if (!rowCount) continue;
+    await query(
+      `INSERT INTO meta_ads_daily
+         (ad_id, adset_id, campaign_id, project_id, date, spend, impressions, reach, clicks, leads, ctr, cpc, cpm, cpl)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT (ad_id, date) DO UPDATE SET
+         spend=EXCLUDED.spend, impressions=EXCLUDED.impressions, reach=EXCLUDED.reach,
+         clicks=EXCLUDED.clicks, leads=EXCLUDED.leads, ctr=EXCLUDED.ctr, cpc=EXCLUDED.cpc,
+         cpm=EXCLUDED.cpm, cpl=EXCLUDED.cpl, synced_at=NOW()`,
+      [r.ad_id, r.adset_id, r.campaign_id, projectId, r.date,
+       r.spend, r.impressions, r.reach, r.clicks, r.leads, r.ctr, r.cpc, r.cpm, cpl]
+    );
+  }
+}
+
+async function recalcAdTotals(projectId) {
+  await query(
+    `UPDATE meta_ads mad SET
+       total_spend = COALESCE(s.spend, 0),
+       total_impressions = COALESCE(s.impressions, 0),
+       total_reach = COALESCE(s.reach, 0),
+       total_clicks = COALESCE(s.clicks, 0),
+       total_leads = COALESCE(s.leads, 0)
+     FROM (
+       SELECT ad_id, SUM(spend) AS spend, SUM(impressions) AS impressions,
+              MAX(reach) AS reach, SUM(clicks) AS clicks, SUM(leads) AS leads
+       FROM meta_ads_daily WHERE project_id=$1 GROUP BY ad_id
+     ) s
+     WHERE mad.ad_id = s.ad_id AND mad.project_id=$1`,
+    [projectId]
+  );
 }
 
 async function recalcCampaignTotals(projectId) {
@@ -249,6 +469,89 @@ export async function listCampaignsForUI({ projectId, status = null, dateFrom = 
      FROM meta_campaigns mc ${dailyJoin}
      WHERE ${where.join(' AND ')}
      ORDER BY total_spend DESC NULLS LAST, mc.nombre`,
+    params
+  );
+  return rows.map((r) => ({
+    ...r,
+    total_spend: Number(r.total_spend || 0),
+    total_impressions: Number(r.total_impressions || 0),
+    total_reach: Number(r.total_reach || 0),
+    total_clicks: Number(r.total_clicks || 0),
+    total_leads: Number(r.total_leads || 0),
+    cpl: r.total_leads > 0 ? Number(r.total_spend) / Number(r.total_leads) : null,
+    ctr: r.total_impressions > 0 ? (Number(r.total_clicks) / Number(r.total_impressions)) * 100 : null,
+  }));
+}
+
+/**
+ * AdSets de una campaña con métricas en rango (igual patrón que listCampaignsForUI).
+ */
+export async function listAdSetsForUI({ projectId, campaignId, dateFrom = null, dateTo = null }) {
+  const params = [projectId, campaignId];
+  const useDaily = !!(dateFrom || dateTo);
+  let dailyJoin = '';
+  let metricCols = `ma.total_spend, ma.total_impressions, ma.total_reach, ma.total_clicks, ma.total_leads`;
+  if (useDaily) {
+    const dw = [`d.adset_id = ma.adset_id`];
+    if (dateFrom) { params.push(dateFrom); dw.push(`d.date >= $${params.length}`); }
+    if (dateTo) { params.push(dateTo); dw.push(`d.date <= $${params.length}`); }
+    dailyJoin = `LEFT JOIN LATERAL (
+      SELECT SUM(spend) AS spend, SUM(impressions) AS impressions, MAX(reach) AS reach,
+             SUM(clicks) AS clicks, SUM(leads) AS leads
+      FROM meta_adsets_daily d WHERE ${dw.join(' AND ')}
+    ) ds ON TRUE`;
+    metricCols = `COALESCE(ds.spend,0) AS total_spend, COALESCE(ds.impressions,0) AS total_impressions,
+                  COALESCE(ds.reach,0) AS total_reach, COALESCE(ds.clicks,0) AS total_clicks,
+                  COALESCE(ds.leads,0) AS total_leads`;
+  }
+  const { rows } = await query(
+    `SELECT ma.adset_id, ma.campaign_id, ma.nombre, ma.status, ma.effective_status,
+            ma.optimization_goal, ma.billing_event, ma.daily_budget, ma.lifetime_budget,
+            ma.start_time, ma.end_time, ${metricCols}
+     FROM meta_adsets ma ${dailyJoin}
+     WHERE ma.project_id = $1 AND ma.campaign_id = $2
+     ORDER BY total_spend DESC NULLS LAST, ma.nombre`,
+    params
+  );
+  return rows.map((r) => ({
+    ...r,
+    total_spend: Number(r.total_spend || 0),
+    total_impressions: Number(r.total_impressions || 0),
+    total_reach: Number(r.total_reach || 0),
+    total_clicks: Number(r.total_clicks || 0),
+    total_leads: Number(r.total_leads || 0),
+    cpl: r.total_leads > 0 ? Number(r.total_spend) / Number(r.total_leads) : null,
+    ctr: r.total_impressions > 0 ? (Number(r.total_clicks) / Number(r.total_impressions)) * 100 : null,
+  }));
+}
+
+/**
+ * Ads de un adset con métricas en rango.
+ */
+export async function listAdsForUI({ projectId, adsetId, dateFrom = null, dateTo = null }) {
+  const params = [projectId, adsetId];
+  const useDaily = !!(dateFrom || dateTo);
+  let dailyJoin = '';
+  let metricCols = `mad.total_spend, mad.total_impressions, mad.total_reach, mad.total_clicks, mad.total_leads`;
+  if (useDaily) {
+    const dw = [`d.ad_id = mad.ad_id`];
+    if (dateFrom) { params.push(dateFrom); dw.push(`d.date >= $${params.length}`); }
+    if (dateTo) { params.push(dateTo); dw.push(`d.date <= $${params.length}`); }
+    dailyJoin = `LEFT JOIN LATERAL (
+      SELECT SUM(spend) AS spend, SUM(impressions) AS impressions, MAX(reach) AS reach,
+             SUM(clicks) AS clicks, SUM(leads) AS leads
+      FROM meta_ads_daily d WHERE ${dw.join(' AND ')}
+    ) ds ON TRUE`;
+    metricCols = `COALESCE(ds.spend,0) AS total_spend, COALESCE(ds.impressions,0) AS total_impressions,
+                  COALESCE(ds.reach,0) AS total_reach, COALESCE(ds.clicks,0) AS total_clicks,
+                  COALESCE(ds.leads,0) AS total_leads`;
+  }
+  const { rows } = await query(
+    `SELECT mad.ad_id, mad.adset_id, mad.campaign_id, mad.nombre, mad.status, mad.effective_status,
+            mad.creative_id, mad.created_time, ${metricCols}
+     FROM meta_ads mad ${dailyJoin}
+     WHERE mad.project_id = $1 AND mad.adset_id = $2
+     ORDER BY total_spend DESC NULLS LAST, mad.nombre`,
     params
   );
   return rows.map((r) => ({
@@ -336,6 +639,39 @@ export async function listAssociations(projectId, campaignId = null) {
   return rows;
 }
 
+// ────────────────────────────────────────────────────────────
+// Asociación AdSet ↔ productos (más granular que campaña-nivel).
+
+export async function listAdSetAssociations(projectId, adsetId = null) {
+  const params = [projectId];
+  const where = ['mp.project_id = $1'];
+  if (adsetId) { params.push(adsetId); where.push(`mp.adset_id = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT mp.id, mp.adset_id, mp.product_id, mp.notas, mp.created_at,
+            p.nombre AS product_nombre, p.precio AS product_precio,
+            ma.nombre AS adset_nombre, ma.campaign_id
+     FROM meta_adset_products mp
+     LEFT JOIN products p ON p.id = mp.product_id
+     LEFT JOIN meta_adsets ma ON ma.adset_id = mp.adset_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY ma.nombre, p.nombre`,
+    params
+  );
+  return rows;
+}
+
+export async function setAdSetAssociations({ projectId, adsetId, productIds, userId }) {
+  await query(`DELETE FROM meta_adset_products WHERE adset_id = $1 AND project_id = $2`, [adsetId, projectId]);
+  for (const pid of productIds || []) {
+    await query(
+      `INSERT INTO meta_adset_products (adset_id, product_id, project_id, asociado_por_user_id)
+       VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+      [adsetId, pid, projectId, userId || null]
+    );
+  }
+  return { adset_id: adsetId, product_ids: productIds || [] };
+}
+
 export async function setAssociations({ projectId, campaignId, productIds, userId }) {
   // Reemplaza todas las asociaciones de esta campaña por la nueva lista (replace semantics).
   await query(`DELETE FROM meta_campaign_products WHERE campaign_id = $1 AND project_id = $2`, [campaignId, projectId]);
@@ -347,6 +683,115 @@ export async function setAssociations({ projectId, campaignId, productIds, userI
     );
   }
   return { campaign_id: campaignId, product_ids: productIds || [] };
+}
+
+/**
+ * Vista por producto: cada producto del proyecto + campañas/adsets que lo promocionan
+ * (con status), gasto agregado (no doble-cuenta porque agrupamos por producto al final),
+ * leads Meta, ventas y ROI. Filtra a productos QUE TENGAN al menos una asociación.
+ */
+export async function getProductsView({ projectId, dateFrom = null, dateTo = null }) {
+  const params = [projectId];
+  const dailyW = ['d.project_id = $1'];
+  const convW = ['c.project_id = $1'];
+  if (dateFrom) {
+    params.push(dateFrom);
+    dailyW.push(`d.date >= $${params.length}`);
+    convW.push(`c.fecha_conversion >= $${params.length}`);
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    dailyW.push(`d.date <= $${params.length}`);
+    convW.push(`c.fecha_conversion <= $${params.length}`);
+  }
+  // Productos asociados a través de campaña o adset. UNION para no perder ninguno.
+  // El spend se atribuye sumando UNA SOLA vez por adset/campaña (DISTINCT en la subquery).
+  const { rows } = await query(
+    `WITH product_links AS (
+       -- Asociaciones a nivel campaña: cada producto recibe SUM(spend de la campaña entera)
+       SELECT mcp.product_id, 'campaign'::text AS scope, mcp.campaign_id AS link_id, mc.nombre AS link_name, mc.effective_status AS link_status
+       FROM meta_campaign_products mcp
+       JOIN meta_campaigns mc ON mc.campaign_id = mcp.campaign_id
+       WHERE mcp.project_id = $1
+       UNION ALL
+       SELECT map.product_id, 'adset'::text, map.adset_id, ma.nombre, ma.effective_status
+       FROM meta_adset_products map
+       JOIN meta_adsets ma ON ma.adset_id = map.adset_id
+       WHERE map.project_id = $1
+     ),
+     product_spend_camp AS (
+       SELECT mcp.product_id,
+              COALESCE(SUM(d.spend), 0)::numeric AS spend,
+              COALESCE(SUM(d.leads), 0)::int AS leads
+       FROM meta_campaign_products mcp
+       LEFT JOIN meta_campaigns_daily d ON d.campaign_id = mcp.campaign_id AND ${dailyW.join(' AND ')}
+       WHERE mcp.project_id = $1
+       GROUP BY mcp.product_id
+     ),
+     product_spend_adset AS (
+       SELECT map.product_id,
+              COALESCE(SUM(d.spend), 0)::numeric AS spend,
+              COALESCE(SUM(d.leads), 0)::int AS leads
+       FROM meta_adset_products map
+       LEFT JOIN meta_adsets_daily d ON d.adset_id = map.adset_id AND ${dailyW.join(' AND ').replace(/d\.project_id = \$1/, 'd.project_id = $1')}
+       WHERE map.project_id = $1
+       GROUP BY map.product_id
+     ),
+     product_revenue AS (
+       SELECT c.producto_contratado_id AS product_id,
+              COUNT(DISTINCT c.id)::int AS ventas,
+              COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
+              COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+       FROM conversions c
+       WHERE ${convW.join(' AND ')} AND c.producto_contratado_id IS NOT NULL
+       GROUP BY c.producto_contratado_id
+     ),
+     product_links_agg AS (
+       SELECT product_id,
+              COUNT(*) FILTER (WHERE scope = 'campaign') AS n_campaigns,
+              COUNT(*) FILTER (WHERE scope = 'adset') AS n_adsets,
+              JSON_AGG(JSON_BUILD_OBJECT('scope', scope, 'id', link_id, 'name', link_name, 'status', link_status) ORDER BY scope, link_name) AS links
+       FROM product_links GROUP BY product_id
+     )
+     SELECT pla.product_id,
+            p.nombre AS producto_nombre,
+            p.precio AS producto_precio,
+            p.activo AS producto_activo,
+            pla.n_campaigns, pla.n_adsets, pla.links,
+            COALESCE(psc.spend, 0) + COALESCE(psa.spend, 0) AS spend,
+            COALESCE(psc.leads, 0) + COALESCE(psa.leads, 0) AS leads_meta,
+            COALESCE(pr.ventas, 0) AS ventas,
+            COALESCE(pr.facturado, 0) AS facturado,
+            COALESCE(pr.cobrado, 0) AS cobrado
+     FROM product_links_agg pla
+     JOIN products p ON p.id = pla.product_id
+     LEFT JOIN product_spend_camp psc ON psc.product_id = pla.product_id
+     LEFT JOIN product_spend_adset psa ON psa.product_id = pla.product_id
+     LEFT JOIN product_revenue pr ON pr.product_id = pla.product_id
+     ORDER BY (COALESCE(psc.spend, 0) + COALESCE(psa.spend, 0)) DESC NULLS LAST, p.nombre`,
+    params
+  );
+  return rows.map((r) => {
+    const spend = Number(r.spend || 0);
+    const facturado = Number(r.facturado || 0);
+    return {
+      product_id: r.product_id,
+      producto_nombre: r.producto_nombre,
+      producto_precio: r.producto_precio != null ? Number(r.producto_precio) : null,
+      producto_activo: !!r.producto_activo,
+      n_campaigns: Number(r.n_campaigns || 0),
+      n_adsets: Number(r.n_adsets || 0),
+      links: r.links || [],
+      spend,
+      leads_meta: Number(r.leads_meta || 0),
+      ventas: Number(r.ventas || 0),
+      facturado,
+      cobrado: Number(r.cobrado || 0),
+      ganancia: facturado - spend,
+      roi_pct: spend > 0 ? Number((((facturado - spend) / spend) * 100).toFixed(2)) : null,
+      cpl: r.leads_meta > 0 ? Number(spend / r.leads_meta) : null,
+    };
+  });
 }
 
 /**
