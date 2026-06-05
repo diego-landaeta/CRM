@@ -467,7 +467,9 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
   }
   try {
     const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
-    dupQueue.markMerged(loserId, userId);
+    // Con await: sin él, el endpoint podía devolver respuesta antes de que la
+    // UPDATE corra, dejando la entrada como 'pending' aunque el merge se hizo.
+    await dupQueue.markMerged(loserId, userId);
     notifyAdmins({
       type: 'lead_merged',
       title: `Fusión: lead #${loserId} → #${winnerId}`,
