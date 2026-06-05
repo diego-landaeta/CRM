@@ -1,95 +1,101 @@
-import { useEffect, useState } from 'react';
-import { Flag, Info } from '@phosphor-icons/react';
+import { useState } from 'react';
+import { X, WarningOctagon } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-interface LeadLite {
-  id: number;
-  nombre?: string;
-  email?: string;
-}
-
-interface Props {
+export interface SpamReportDialogProps {
   open: boolean;
-  lead: LeadLite | null;
   onClose: () => void;
+  leadId?: number | null;
+  leadNombre?: string | null;
   onReported?: () => void;
 }
 
-// Cualquier gestor/admin puede reportar un lead como spam. El superadmin lo
-// revisará desde /notificaciones y decidirá si confirmar (soft-delete) o descartar.
-export default function SpamReportDialog({ open, lead, onClose, onReported }: Props) {
+export default function SpamReportDialog({ open, onClose, leadId, leadNombre, onReported }: SpamReportDialogProps) {
   const [motivo, setMotivo] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (open) setMotivo('');
-  }, [open]);
+  if (!open) return null;
 
-  if (!open || !lead) return null;
+  const canSubmit = !!leadId && motivo.trim().length >= 3 && !submitting;
 
-  async function handleReport() {
-    if (!lead) return;
-    setSaving(true);
+  async function handleSubmit() {
+    if (!leadId || motivo.trim().length < 3) return;
+    setSubmitting(true);
     try {
-      const res = await client.post(`/leads/${lead.id}/report-spam`, { motivo: motivo || null });
-      if (res.success) {
-        toast({ title: 'Reportado como spam', description: 'El superadmin lo revisará.' });
-        onReported?.();
-      }
+      await client.post(`/leads/${leadId}/report-spam`, { motivo: motivo.trim() });
+      toast({
+        title: 'Reporte enviado',
+        description: 'Un superadmin revisará el caso y decidirá si confirma el spam o lo descarta.',
+      });
+      setMotivo('');
+      if (onReported) onReported();
+      onClose();
     } catch (err: any) {
-      const msg = err?.data?.error || err?.message;
       const code = err?.data?.code;
       if (code === 'REPORT_ALREADY_PENDING') {
         toast({ title: 'Ya reportado', description: 'Este lead ya tiene un reporte pendiente.', variant: 'destructive' });
       } else {
-        toast({ title: 'Error', description: msg, variant: 'destructive' });
+        toast({ title: 'No se pudo enviar', description: err?.message || 'Error', variant: 'destructive' });
       }
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSubmitting(false); }
   }
 
   return (
-    <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
-      <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
-        <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-          <div className="w-9 h-9 rounded-md bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 flex items-center justify-center flex-shrink-0">
-            <Flag size={18} weight="regular" />
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !submitting && onClose()}>
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
+              <WarningOctagon size={20} weight="duotone" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg">Reportar como spam</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                {leadNombre ? <>"{leadNombre}"</> : 'Este lead'} se marcará para revisión.
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-base">Reportar como spam</h3>
-            <p className="text-xs text-muted-foreground truncate">{lead.nombre} {lead.email ? `· ${lead.email}` : ''}</p>
-          </div>
+          <button onClick={() => !submitting && onClose()} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground">
+            <X size={16} weight="bold" />
+          </button>
         </div>
-        <div className="p-5 space-y-3">
-          <div className="flex items-start gap-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-            <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" weight="duotone" />
-            <p className="text-[11px] text-blue-800 dark:text-blue-300">
-              El reporte llega al superadmin para que lo revise. Si lo confirma, el lead se elimina como spam
-              y si el mismo email vuelve a escribir queda filtrado automáticamente.
-            </p>
-          </div>
+
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Levanta un reporte si el lead parece fraudulento o automatizado (mismo nombre repetido, email descartable, contenido obviamente bot).
+            Un <strong className="text-foreground">superadmin</strong> revisa los reportes y decide si confirma (soft-delete) o descarta.
+          </p>
+
           <div>
-            <label className="text-xs font-semibold text-foreground mb-1.5 block">¿Por qué crees que es spam? (opcional)</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Motivo <span className="text-red-600 normal-case font-semibold">(obligatorio)</span>
+            </label>
             <textarea
+              rows={3}
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              rows={3}
-              placeholder="Ej: nombre/email genérico, mensaje sin sentido, bot..."
-              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none"
+              placeholder="Email descartable / contenido bot / duplicado de otro spam reciente…"
+              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+              maxLength={500}
             />
+            <p className="text-[10px] text-muted-foreground mt-1 text-right tabular-nums">{motivo.length} / 500</p>
           </div>
         </div>
-        <div className="flex justify-end gap-2 p-4 border-t border-border bg-muted/20">
-          <button onClick={onClose} disabled={saving}
-            className="inline-flex items-center h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50">
-            Cancelar
-          </button>
-          <button onClick={handleReport} disabled={saving}
-            className="inline-flex items-center h-9 px-4 rounded-md bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
-            {saving ? 'Enviando...' : 'Reportar'}
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
+          <button
+            type="button"
+            onClick={() => !submitting && onClose()}
+            className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted transition-colors"
+          >Cancelar</button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="h-9 px-4 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {submitting ? 'Enviando…' : 'Reportar spam'}
           </button>
         </div>
       </div>
