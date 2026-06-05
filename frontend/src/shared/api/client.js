@@ -1,4 +1,6 @@
 const BASE_URL = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
+// Alias exportado para módulos que necesiten URL absoluta (descargas blob, etc.)
+export const API_BASE_URL = BASE_URL;
 
 class ApiError extends Error {
   constructor(message, status, data) {

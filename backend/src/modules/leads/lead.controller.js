@@ -1,8 +1,10 @@
 import * as leadService from './lead.service.js';
+import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { leadsToWasapiCsv, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -56,6 +58,61 @@ export async function list(req, res, next) {
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+// GET /api/leads/export/wasapi?projectId=X&...filtros
+// Descarga CSV con formato Wasapi (plantilla bulk WhatsApp). Sin integración con
+// API de Wasapi — solo genera el archivo para subir manualmente a la plataforma.
+// Todos los filtros opcionales. Si el rol es 'gestor', fuerza responsable=él mismo.
+export async function exportWasapi(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+
+    const filters = {
+      projectId,
+      status: req.query.status || null,
+      responsableId: req.query.responsableId ? parseInt(req.query.responsableId) : null,
+      unassigned: false,
+      canal: null,
+      productId: req.query.productId ? parseInt(req.query.productId) : null,
+      search: null,
+      page: 1,
+      limit: 10000,
+      includeConverted: req.query.includeConverted === 'true',
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+      sort: 'fecha_desc',
+      duplicated: false,
+      reincidente: false,
+    };
+    if (req.user.role === 'gestor') {
+      filters.responsableId = req.user.userId;
+    }
+
+    const result = await leadModel.findAll(filters);
+    let leads = result.leads.map((l) => ({
+      nombre: l.nombre,
+      email: l.email,
+      telefono: l.telefono,
+      status: l.status,
+      producto_nombre: l.producto_interes,
+    }));
+
+    if (req.query.onlyWithPhone === 'true') {
+      leads = leads.filter((l) => l.telefono && String(l.telefono).replace(/[^\d]/g, '').length >= 7);
+    }
+    if (req.query.pais) {
+      const paisFilter = String(req.query.pais).toLowerCase();
+      leads = leads.filter((l) => (detectCountry(l.telefono) || '').toLowerCase() === paisFilter);
+    }
+
+    const csv = leadsToWasapiCsv(leads, { withHeader: req.query.header !== 'false' });
+    const filename = `wasapi-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   } catch (err) { next(err); }
 }
 
