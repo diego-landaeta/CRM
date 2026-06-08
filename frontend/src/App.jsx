@@ -127,6 +127,8 @@ const CommissionsPage = lazy(() => import('./modules/commissions/pages/Commissio
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
+const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
+const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
@@ -241,6 +243,8 @@ function App() {
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/solicitudes-cambio" element={<ChangeRequestsPage />} />
+          <Route path="/solicitudes-cambio/:id" element={<ChangeRequestDetailPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />

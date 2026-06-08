@@ -133,6 +133,7 @@ const NAV_SECTIONS = [
     label: 'Sistema',
     items: [
       { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
+      { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
       { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
       { label: 'Soporte', to: '/soporte', icon: Headset },

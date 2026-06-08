@@ -43,6 +43,7 @@ import connectorsModule from './modules/connectors/index.js';
 import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
+import changeRequestsModule from './modules/change-requests/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -137,6 +138,8 @@ app.use(installationModule.prefix, installationModule.router);
 logger.info(`Modulo registrado: ${installationModule.prefix} (siempre activo)`);
 app.use(statusModule.prefix, statusModule.router);
 logger.info(`Modulo registrado: ${statusModule.prefix} (siempre activo, incluye rutas publicas)`);
+app.use(changeRequestsModule.prefix, changeRequestsModule.router);
+logger.info(`Modulo registrado: ${changeRequestsModule.prefix} (siempre activo)`);
 
 async function loadActiveBundles() {
   try {
