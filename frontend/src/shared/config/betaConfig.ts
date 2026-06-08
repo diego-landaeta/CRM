@@ -28,6 +28,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/captacion',              // Captación: Formularios, Webhooks, Make
   '/email-sequences',         // Email de seguimiento
   '/documentos',              // Documentos comerciales
+  '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
   '/notificaciones',         // Sistema básico
   '/preferences',            // Mis preferencias
   '/profile',                // Perfil
