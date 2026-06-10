@@ -28,12 +28,13 @@ export default function UsersTab() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState('gestor');
-  const [newProjects, setNewProjects] = useState([]);
+  // Cada proyecto seleccionado lleva su flag recibe_leads.
+  const [newProjects, setNewProjects] = useState<Array<{ projectId: number; recibeLeads: boolean }>>([]);
   const [createLoading, setCreateLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<{ email: string; url: string } | null>(null);
 
   const [editRole, setEditRole] = useState('');
-  const [editProjects, setEditProjects] = useState([]);
+  const [editProjects, setEditProjects] = useState<Array<{ projectId: number; recibeLeads: boolean }>>([]);
   const [editLoading, setEditLoading] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -78,7 +79,7 @@ export default function UsersTab() {
       toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
       return;
     }
-    if (newProjects.length === 0) {
+    if (!newProjects || newProjects.length === 0) {
       toast({ title: 'Error', description: 'Debes asignar al menos un proyecto', variant: 'destructive' });
       return;
     }
@@ -88,7 +89,7 @@ export default function UsersTab() {
         nombre: newName.trim(),
         email: newEmail.trim(),
         role: newRole,
-        projectIds: newProjects,
+        projects: newProjects,
       });
       if (res.success) {
         const token = (res.data as { setPasswordToken?: string })?.setPasswordToken;
@@ -111,14 +112,27 @@ export default function UsersTab() {
     }
   }
 
-  function handleToggleProject(projectId, list, setter) {
-    setter(list.includes(projectId) ? list.filter((id) => id !== projectId) : [...list, projectId]);
+  // Add / remove proyecto. Para gestor, recibe_leads no aplica (gestor siempre
+  // recibe), así que arrancamos en true por consistencia. Para admin arranca en
+  // false y el superadmin lo activa explícitamente.
+  function handleToggleProject(projectId, list, setter, role) {
+    const exists = list.some((p) => p.projectId === projectId);
+    if (exists) setter(list.filter((p) => p.projectId !== projectId));
+    else setter([...list, { projectId, recibeLeads: role === 'gestor' }]);
+  }
+  function handleToggleRecibeLeads(projectId, list, setter) {
+    setter(list.map((p) => p.projectId === projectId ? { ...p, recibeLeads: !p.recibeLeads } : p));
   }
 
   function handleOpenEdit(user) {
     setEditingUser(user);
     setEditRole(user.role);
-    setEditProjects(user.project_ids || user.projects || []);
+    // Backend devuelve user.projects = [{ projectId, recibeLeads }]; si solo
+    // viene project_ids (datos viejos), mapeamos con recibeLeads=false.
+    const projs = Array.isArray(user.projects) && user.projects.length > 0 && typeof user.projects[0] === 'object' && 'projectId' in user.projects[0]
+      ? user.projects.map((p) => ({ projectId: p.projectId, recibeLeads: !!p.recibeLeads }))
+      : (user.project_ids || []).map((id) => ({ projectId: id, recibeLeads: false }));
+    setEditProjects(projs);
     setOpenMenuId(null);
   }
 
@@ -127,8 +141,8 @@ export default function UsersTab() {
     if (!editingUser) return;
     setEditLoading(true);
     try {
-      const payload: { role: string; projectIds?: number[] } = { role: editRole };
-      if (editProjects.length > 0) payload.projectIds = editProjects;
+      const payload: { role: string; projects?: Array<{ projectId: number; recibeLeads: boolean }> } = { role: editRole };
+      if (editProjects.length > 0) payload.projects = editProjects;
       await client.patch(`/users/${editingUser.id}`, payload);
       toast({ title: 'Usuario actualizado', description: `${editingUser.nombre || editingUser.name} actualizado` });
       setEditingUser(null);
@@ -158,10 +172,13 @@ export default function UsersTab() {
   }
 
   const formatProjectNames = (user) => {
-    const ids = user.project_ids || user.projects || [];
-    if (!ids || ids.length === 0) return 'Ninguno';
-    if (ids.length === projects.length) return 'Todos';
-    return ids.map((id) => projects.find((p) => p.id === id)?.nombre || '').filter(Boolean).join(', ');
+    // user.projects puede ser legacy (number[]) o nuevo ([{projectId, recibeLeads}]).
+    const list = Array.isArray(user.projects) && user.projects.length > 0 && typeof user.projects[0] === 'object' && 'projectId' in user.projects[0]
+      ? user.projects.map((p) => p.projectId)
+      : (user.project_ids || []);
+    if (!list || list.length === 0) return 'Ninguno';
+    if (list.length === projects.length) return 'Todos';
+    return list.map((id) => projects.find((p) => p.id === id)?.nombre || '').filter(Boolean).join(', ');
   };
 
   if (loading) {
@@ -414,7 +431,9 @@ export default function UsersTab() {
             <ProjectSelector
               projects={projects}
               selected={newProjects}
-              onToggle={(id) => handleToggleProject(id, newProjects, setNewProjects)}
+              role={newRole}
+              onToggle={(id) => handleToggleProject(id, newProjects, setNewProjects, newRole)}
+              onToggleRecibeLeads={(id) => handleToggleRecibeLeads(id, newProjects, setNewProjects)}
               required
             />
           )}
@@ -456,7 +475,9 @@ export default function UsersTab() {
             <ProjectSelector
               projects={projects}
               selected={editProjects}
-              onToggle={(id) => handleToggleProject(id, editProjects, setEditProjects)}
+              role={editRole}
+              onToggle={(id) => handleToggleProject(id, editProjects, setEditProjects, editRole)}
+              onToggleRecibeLeads={(id) => handleToggleRecibeLeads(id, editProjects, setEditProjects)}
               required={false}
             />
           )}
@@ -489,22 +510,44 @@ function UserActionsMenu({ isActive, isOpen, onToggle, onClose, onEdit, onToggle
   );
 }
 
-function ProjectSelector({ projects, selected, onToggle, required }) {
+function ProjectSelector({ projects, selected, role, onToggle, onToggleRecibeLeads, required }) {
+  // gestor SIEMPRE recibe leads de los proyectos a los que pertenece — el flag
+  // no aplica. Para admin/superadmin es opt-in por proyecto.
+  const showRecibeLeadsToggle = role === 'admin';
   return (
     <div>
       <label className="text-xs text-muted-foreground mb-1.5 block px-1">
         Proyectos asignados{required && ' *'}
       </label>
       <p className="text-[11px] text-muted-foreground mb-2 px-1">
-        {required ? 'Selecciona al menos un proyecto al que tendrá acceso' : 'Selecciona los proyectos a los que tendrá acceso'}
+        {required ? 'Selecciona al menos un proyecto al que tendrá acceso.' : 'Selecciona los proyectos a los que tendrá acceso.'}
+        {showRecibeLeadsToggle && ' Marca "Recibe leads" para incluir al usuario en el round-robin de ese proyecto.'}
       </p>
-      <div className="grid grid-cols-2 gap-2 mt-2">
-        {projects.map((p) => (
-          <label key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer text-sm">
-            <input type="checkbox" checked={selected.includes(p.id)} onChange={() => onToggle(p.id)} className="rounded border-border accent-primary w-4 h-4" />
-            <span className="truncate">{p.nombre}</span>
-          </label>
-        ))}
+      <div className="space-y-1.5 mt-2">
+        {projects.map((p) => {
+          const sel = selected.find((s) => s.projectId === p.id);
+          const checked = !!sel;
+          return (
+            <div key={p.id} className="flex items-center gap-3 px-3 py-2 rounded-md border border-border bg-muted/30 hover:bg-muted/60 transition-colors">
+              <label className="flex items-center gap-2 cursor-pointer text-sm flex-1 min-w-0">
+                <input type="checkbox" checked={checked} onChange={() => onToggle(p.id)} className="rounded border-border accent-primary w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{p.nombre}</span>
+              </label>
+              {checked && (
+                showRecibeLeadsToggle ? (
+                  <label className="flex items-center gap-1.5 text-[11px] cursor-pointer text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+                    <input type="checkbox" checked={!!sel?.recibeLeads} onChange={() => onToggleRecibeLeads(p.id)} className="rounded border-border accent-emerald-600 w-3.5 h-3.5" />
+                    <span>Recibe leads</span>
+                  </label>
+                ) : role === 'gestor' ? (
+                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                    Recibe leads
+                  </span>
+                ) : null
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
