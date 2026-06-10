@@ -383,7 +383,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
        JOIN users u ON u.id = up.user_id
         AND u.active = true
         AND u.is_available = true
-        AND u.role IN ('gestor', 'admin')
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -804,7 +804,7 @@ export async function reassignPendingRoundRobin(projectId) {
        JOIN users u ON u.id = up.user_id
         AND u.active = true
         AND u.is_available = true
-        AND u.role IN ('gestor', 'admin')
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
