@@ -484,6 +484,53 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
 
+  // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
+  // Persistido en localStorage. Por defecto, abierto: Principal + la sección
+  // de la ruta activa. El resto cerradas para reducir ruido visual.
+  const location = useLocation();
+  const SECTIONS_KEY = 'crm-sidebar-sections-v1';
+  const [openSections, setOpenSections] = useState(() => {
+    function autoOpen() {
+      const out = {};
+      for (const s of NAV_SECTIONS) {
+        const has = s.items.some((it) => {
+          if (location.pathname === it.to) return true;
+          if (it.children?.some((c) => location.pathname === c.to || location.pathname.startsWith((c.to || '') + '/'))) return true;
+          return it.to && it.to !== '/' && location.pathname.startsWith(it.to + '/');
+        });
+        out[s.label] = s.label === 'Principal' || has;
+      }
+      return out;
+    }
+    try {
+      const stored = localStorage.getItem(SECTIONS_KEY);
+      if (stored) return { ...autoOpen(), ...JSON.parse(stored) };
+    } catch { /* ignore */ }
+    return autoOpen();
+  });
+  // Al navegar, abrir automáticamente la sección de la nueva ruta si estaba cerrada.
+  useEffect(() => {
+    setOpenSections((prev) => {
+      const next = { ...prev };
+      for (const s of NAV_SECTIONS) {
+        const has = s.items.some((it) => {
+          if (location.pathname === it.to) return true;
+          if (it.children?.some((c) => location.pathname === c.to || location.pathname.startsWith((c.to || '') + '/'))) return true;
+          return it.to && it.to !== '/' && location.pathname.startsWith(it.to + '/');
+        });
+        if (has && !next[s.label]) next[s.label] = true;
+      }
+      return next;
+    });
+  }, [location.pathname]);
+  function toggleSection(label) {
+    setOpenSections((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try { localStorage.setItem(SECTIONS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
 
@@ -589,8 +636,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     };
   }, [userMenuOpen]);
 
-  // Cerrar el menu al cambiar de ruta
-  const location = useLocation();
+  // Cerrar el menu al cambiar de ruta (reusa `location` declarado más arriba).
   useEffect(() => { setUserMenuOpen(false); }, [location.pathname]);
 
   useEffect(() => {
@@ -868,43 +914,65 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
+          const isOpen = !!openSections[section.label];
+          const renderItems = () => visibleItems.map((item) =>
+            item.children ? (
+              <NavGroup
+                key={item.label}
+                {...item}
+                role={user?.role}
+                modules={activeProject?.modules}
+                projectType={activeProject?.type}
+                labelOverrides={activeProject?.sidebar_labels}
+                onNavigate={onNavigate}
+                collapsed={collapsed}
+                onExpandSidebar={onToggleCollapsed}
+              />
+            ) : (
+              <NavItem
+                key={item.to}
+                {...item}
+                badge={
+                  item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
+                  : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
+                  : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
+                  : undefined
+                }
+                labelOverrides={activeProject?.sidebar_labels}
+                onClick={onNavigate}
+                collapsed={collapsed}
+              />
+            )
+          );
+          // Modo colapsado (sidebar mini): nunca colapsamos por sección — solo
+          // iconos verticales separados por divisores.
+          if (collapsed) {
+            return (
+              <div key={section.label} className="space-y-1">
+                {sIdx > 0 && <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />}
+                {renderItems()}
+              </div>
+            );
+          }
           return (
-            <div key={section.label} className={cn(collapsed ? 'space-y-1' : 'space-y-0.5')}>
-              {!collapsed ? (
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">
-                  {sectionLabel}
-                </p>
-              ) : (
-                sIdx > 0 && <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />
-              )}
-              {visibleItems.map((item) =>
-                item.children ? (
-                  <NavGroup
-                    key={item.label}
-                    {...item}
-                    role={user?.role}
-                    modules={activeProject?.modules}
-                    projectType={activeProject?.type}
-                    labelOverrides={activeProject?.sidebar_labels}
-                    onNavigate={onNavigate}
-                    collapsed={collapsed}
-                    onExpandSidebar={onToggleCollapsed}
-                  />
-                ) : (
-                  <NavItem
-                    key={item.to}
-                    {...item}
-                    badge={
-                      item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
-                      : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
-                      : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
-                      : undefined
-                    }
-                    labelOverrides={activeProject?.sidebar_labels}
-                    onClick={onNavigate}
-                    collapsed={collapsed}
-                  />
-                )
+            <div key={section.label} className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => toggleSection(section.label)}
+                aria-expanded={isOpen}
+                className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
+              >
+                <span>{sectionLabel}</span>
+                <CaretDown
+                  size={10}
+                  weight="bold"
+                  className={cn('transition-transform duration-150', isOpen ? '' : '-rotate-90')}
+                />
+              </button>
+              {isOpen && (
+                <div className="space-y-0.5 mt-0.5 ml-1 pl-2 border-l border-border/50">
+                  {renderItems()}
+                </div>
               )}
             </div>
           );
