@@ -6,6 +6,7 @@ import * as matriculaModel from '../matriculas/matricula.model.js';
 import { autoMap } from './field-aliases.js';
 import { parseInboundEmail } from './mail-parser.js';
 import { query } from '../../shared/config/db.js';
+import { countryToPrefix } from '../../shared/utils/countryPrefix.js';
 
 // Normaliza URL para matching: quita protocol, www, query string, fragment, trailing slash
 function normalizeUrl(url) {
@@ -353,6 +354,25 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       customFields.phone_prefix_only = final._phone_prefix;
     }
     delete final._phone_prefix;
+
+    // País: si el payload trae país mapeado (ej. "Venezuela") y el teléfono
+    // NO viene ya con prefijo internacional, le ponemos el prefijo del país.
+    // Si el teléfono ya empieza con + o 00, lo respetamos. Si no reconocemos
+    // el país, lo guardamos igual en custom_fields y no tocamos el teléfono.
+    if (final.pais) {
+      const paisStr = String(final.pais).trim();
+      customFields.pais = paisStr;
+      const cc = countryToPrefix(paisStr);
+      if (cc && final.telefono) {
+        const num = String(final.telefono).trim();
+        const startsWithIntl = num.startsWith('+') || num.startsWith('00');
+        const alreadyHasThisCC = num.replace(/^\+/, '').startsWith(cc);
+        if (!startsWithIntl && !alreadyHasThisCC) {
+          final.telefono = `+${cc}${num.replace(/[\s\-().]/g, '')}`;
+        }
+      }
+    }
+    delete final.pais;
 
     // Routing por destination
     const destination = f.destination || 'lead';

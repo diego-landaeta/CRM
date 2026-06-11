@@ -8,6 +8,7 @@ const TARGETS_BY_DEST: Record<WebhookDestination, WebhookTarget[]> = {
     { key: 'nombre', label: 'Nombre', required: true },
     { key: 'email', label: 'Email', required: true },
     { key: 'telefono', label: 'Teléfono' },
+    { key: 'pais', label: 'País' },
     { key: 'notas', label: 'Notas' },
     { key: 'producto_interes_id', label: 'Producto interés (id)' },
     { key: 'utm_source', label: 'UTM source' },
