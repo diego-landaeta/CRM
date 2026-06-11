@@ -13,21 +13,31 @@ export default function SalesPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
-  const valid = !!activeProject?.id && activeProject.id !== -1;
+  // -1 = "Todos los proyectos" del header. En ese caso pasamos null al backend
+  // para que agregue cross-proyecto. Si NO hay proyecto activo, ni siquiera el
+  // header está listo todavía.
+  const hasActiveCtx = !!activeProject?.id;
+  const allProjects = activeProject?.id === -1;
+  const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Ventas</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Ventas {allProjects && <span className="text-sm font-normal text-muted-foreground">· Todos los proyectos</span>}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.
+            {allProjects
+              ? 'Vista agregada de todos los proyectos. Para registrar una venta entra en un proyecto concreto.'
+              : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          disabled={!valid}
+          disabled={!hasActiveCtx || allProjects}
+          title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
           className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
         >
           <Plus size={14} weight="bold" />
@@ -35,32 +45,34 @@ export default function SalesPage() {
         </button>
       </header>
 
-      {!valid ? (
+      {!hasActiveCtx ? (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-          Selecciona un proyecto en la barra superior para ver tus ventas.
+          Cargando proyectos…
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Suspense fallback={null}>
-              <MyGoalCard projectId={activeProject!.id} />
+              <MyGoalCard projectId={projectIdParam} />
             </Suspense>
             <Suspense fallback={null}>
-              <TopProductsCard projectId={activeProject!.id} days={null} limit={5} title="Programas más vendidos" />
+              <TopProductsCard projectId={projectIdParam} days={null} limit={5} title="Programas más vendidos" />
             </Suspense>
           </div>
 
           {isAdmin && (
             <Suspense fallback={null}>
-              <GestoresStatsTable projectId={activeProject!.id} canEdit={true} />
+              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} />
             </Suspense>
           )}
 
-          <div className="bg-card border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
-            <Receipt size={32} weight="duotone" className="mx-auto mb-2 text-muted-foreground/50" />
-            Pulsa <strong>+ Nueva venta</strong> para registrar una sobre un cliente nuevo o existente.
-            <p className="text-xs mt-1 opacity-70">Por la fecha indicada se marca como histórica (anterior a hoy) o del día.</p>
-          </div>
+          {!allProjects && (
+            <div className="bg-card border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
+              <Receipt size={32} weight="duotone" className="mx-auto mb-2 text-muted-foreground/50" />
+              Pulsa <strong>+ Nueva venta</strong> para registrar una sobre un cliente nuevo o existente.
+              <p className="text-xs mt-1 opacity-70">Por la fecha indicada se marca como histórica (anterior a hoy) o del día.</p>
+            </div>
+          )}
         </>
       )}
 

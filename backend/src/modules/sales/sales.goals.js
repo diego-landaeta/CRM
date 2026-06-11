@@ -16,8 +16,16 @@ function currentPeriodo() {
 export async function getGestoresStats({ projectId = null, periodo = null } = {}) {
   const per = periodo || currentPeriodo();
   const params = [per];
+  // Si projectId está, filtramos:
+  //   - users: solo los que tienen acceso ACTIVO a ese proyecto via user_projects
+  //   - conversiones: solo del mismo proyecto
+  //   - metas: del proyecto concreto (o globales sin project_id como fallback)
+  // Si projectId NO está (vista "Todos los proyectos"), agregamos cross-proyecto.
   const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
   const projectGoalFilter = projectId ? `AND (g.project_id = $${params.length} OR g.project_id IS NULL)` : '';
+  const userProjectJoin = projectId
+    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${params.length} AND up.active = TRUE`
+    : '';
 
   // Stats agregados de conversiones del mes por responsable del lead.
   const { rows: stats } = await query(
@@ -26,6 +34,7 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
             COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
+     ${userProjectJoin}
      LEFT JOIN leads l ON l.responsable_id = u.id
      LEFT JOIN conversions c ON c.lead_id = l.id
        AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1
