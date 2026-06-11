@@ -211,6 +211,18 @@ export default function LeadsPage() {
   }, [searchParams, setSearchParams]);
 
   // Filtros rapidos client-side (sobre los leads ya cargados)
+  // Parser de DATE: viene como "2026-06-11" o "2026-06-11T00:00:00.000Z". JS con
+  // new Date(str) lo interpreta como UTC midnight, que desde TZ negativas
+  // (Caracas/México) cae en el día anterior LOCAL. Extraemos YYYY-MM-DD y
+  // construimos como fecha local 00:00 para comparar día con día.
+  function parseLocalDateOnly(dateStr: string | null | undefined): Date | null {
+    if (!dateStr) return null;
+    const s = String(dateStr).slice(0, 10);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  }
+
   const filteredLeads = useMemo(() => {
     if (!quickFilter) return leads;
     const now = new Date();
@@ -218,16 +230,16 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
-      const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
+      const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < now;
-      if (quickFilter === 'today') return next && next >= today && next < tomorrow;
-      if (quickFilter === 'tomorrow') return next && next >= tomorrow && next < new Date(tomorrow.getTime() + 86400000);
+      if (quickFilter === 'overdue') return next && next < today;
+      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
+      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
       if (quickFilter === 'week') return next && next >= today && next <= inWeek;
       if (quickFilter === 'no-reminder') return !next;
       if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
       if (quickFilter === 'urgent') {
-        if (next && next < tomorrow) return true;
+        if (next && next <= today) return true;
         if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
         return false;
       }
@@ -242,11 +254,11 @@ export default function LeadsPage() {
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
     leads.forEach(l => {
-      const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
+      const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (next && next < now) overdue++;
-      if (next && next >= today && next < tomorrow) todayCount++;
-      if (next && next >= tomorrow && next < new Date(tomorrow.getTime() + 86400000)) tomorrowCount++;
+      if (next && next < today) overdue++;
+      if (next && next.getTime() === today.getTime()) todayCount++;
+      if (next && next.getTime() === tomorrow.getTime()) tomorrowCount++;
       if (next && next >= today && next <= inWeek) weekCount++;
       if (!next) noReminder++;
       if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
