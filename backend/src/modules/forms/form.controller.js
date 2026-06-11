@@ -6,7 +6,7 @@ import * as matriculaModel from '../matriculas/matricula.model.js';
 import { autoMap } from './field-aliases.js';
 import { parseInboundEmail } from './mail-parser.js';
 import { query } from '../../shared/config/db.js';
-import { countryToPrefix } from '../../shared/utils/countryPrefix.js';
+import { countryToPrefix, phoneToCountryName } from '../../shared/utils/countryPrefix.js';
 
 // Normaliza URL para matching: quita protocol, www, query string, fragment, trailing slash
 function normalizeUrl(url) {
@@ -355,10 +355,13 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
     }
     delete final._phone_prefix;
 
-    // País: si el payload trae país mapeado (ej. "Venezuela") y el teléfono
-    // NO viene ya con prefijo internacional, le ponemos el prefijo del país.
-    // Si el teléfono ya empieza con + o 00, lo respetamos. Si no reconocemos
-    // el país, lo guardamos igual en custom_fields y no tocamos el teléfono.
+    // País — flujo bidireccional:
+    //   (a) Si está MAPEADO en el form (ej. "Venezuela") y el teléfono NO trae
+    //       prefijo internacional, le ponemos el prefijo del país.
+    //   (b) Si NO está mapeado pero el teléfono YA viene con prefijo (+xx),
+    //       deducimos el país desde ese prefijo y lo guardamos en custom_fields.
+    //   En ambos casos custom_fields.pais queda poblado para segmentar y
+    //   filtrar después.
     if (final.pais) {
       const paisStr = String(final.pais).trim();
       customFields.pais = paisStr;
@@ -371,6 +374,10 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
           final.telefono = `+${cc}${num.replace(/[\s\-().]/g, '')}`;
         }
       }
+    } else if (final.telefono) {
+      // No hay país mapeado — intenta deducir desde el prefijo del teléfono.
+      const inferred = phoneToCountryName(final.telefono);
+      if (inferred) customFields.pais = inferred;
     }
     delete final.pais;
 

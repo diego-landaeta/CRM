@@ -47,4 +47,44 @@ export function countryToPrefix(raw) {
   return PREFIX_BY_COUNTRY[k] || null;
 }
 
+// Inversa: dado un teléfono E.164 (con '+') o sin signo, devuelve el nombre
+// canónico del país que corresponde al prefijo. Útil para auto-detectar el
+// país cuando el form no lo manda explícito pero el número viene con prefijo
+// internacional.
+//
+// Estrategia: longest-match contra los códigos conocidos. Algunos códigos son
+// ambiguos (R. Dominicana, Puerto Rico y EEUU comparten '1'). En esos casos
+// devolvemos el más probable: "Estados Unidos" para '1' suelto, salvo que el
+// patrón sea claramente PR o DR (no resoluble desde el prefijo solo). Como
+// no podemos diferenciar sin NPA, marcamos como 'Estados Unidos / Canadá'.
+const PREFIX_TO_COUNTRY_NAME = {
+  // Códigos únicos por país
+  '34': 'España', '351': 'Portugal', '33': 'Francia', '39': 'Italia',
+  '49': 'Alemania', '44': 'Reino Unido',
+  '52': 'México', '54': 'Argentina', '55': 'Brasil', '56': 'Chile',
+  '57': 'Colombia', '58': 'Venezuela',
+  '51': 'Perú', '53': 'Cuba', '591': 'Bolivia', '593': 'Ecuador',
+  '594': 'Guyana Francesa', '595': 'Paraguay', '598': 'Uruguay',
+  '502': 'Guatemala', '503': 'El Salvador', '504': 'Honduras',
+  '505': 'Nicaragua', '506': 'Costa Rica', '507': 'Panamá',
+  '1': 'Estados Unidos / Canadá',
+};
+
+export function phoneToCountryName(rawPhone) {
+  if (rawPhone == null) return null;
+  let s = String(rawPhone).trim();
+  if (!s) return null;
+  // Limpia separadores y normaliza el "00" → "+"
+  s = s.replace(/[\s\-().·]/g, '');
+  if (s.startsWith('00')) s = '+' + s.slice(2);
+  if (!s.startsWith('+')) return null; // sin prefijo internacional → no podemos inferir país
+  const digits = s.slice(1);
+  // Longest-match: probamos 4, 3, 2, 1 dígitos
+  for (const len of [4, 3, 2, 1]) {
+    const head = digits.slice(0, len);
+    if (PREFIX_TO_COUNTRY_NAME[head]) return PREFIX_TO_COUNTRY_NAME[head];
+  }
+  return null;
+}
+
 export default countryToPrefix;
