@@ -187,11 +187,25 @@ export function useLeads(): UseLeadsResult {
 
   const fetchStats = useCallback(async (): Promise<void> => {
     try {
+      // Construye el querystring con los mismos filtros del listado para que
+      // los chips reflejen el subconjunto filtrado, no el total global.
+      const buildFilters = (): string => {
+        const p = new URLSearchParams();
+        if (debouncedSearch) p.set('search', debouncedSearch);
+        if (filterOrigen) p.set('canal', filterOrigen);
+        if (filterResponsable && filterResponsable !== 'unassigned') p.set('responsableId', filterResponsable);
+        if (filterProducto) p.set('productId', filterProducto);
+        if (dateFrom) p.set('dateFrom', dateFrom);
+        if (dateTo) p.set('dateTo', dateTo);
+        const qs = p.toString();
+        return qs ? `&${qs}` : '';
+      };
+      const extra = buildFilters();
       let merged: Record<string, number> = {};
       if (isAllProjects) {
         if (!projects || projects.length === 0) return;
         const results = await Promise.all(
-          projects.map((p) => client.get(`/leads/stats?projectId=${p.id}`).catch(() => ({ success: false } as any)))
+          projects.map((p) => client.get(`/leads/stats?projectId=${p.id}${extra}`).catch(() => ({ success: false } as any)))
         );
         results.forEach((r: any) => {
           if (r.success) {
@@ -203,7 +217,7 @@ export function useLeads(): UseLeadsResult {
         });
       } else {
         if (!pid) return;
-        const res = await client.get(`/leads/stats?projectId=${pid}`);
+        const res = await client.get(`/leads/stats?projectId=${pid}${extra}`);
         if (!res.success) return;
         merged = res.data || {};
       }
@@ -219,7 +233,7 @@ export function useLeads(): UseLeadsResult {
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid, isAllProjects, projects]);
+  }, [pid, isAllProjects, projects, debouncedSearch, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchLeads();
