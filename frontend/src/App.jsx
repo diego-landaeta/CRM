@@ -29,6 +29,7 @@ const ROUTE_TITLES = {
   '/finanzas/por-pagar': 'Cuentas por pagar',
   '/finanzas/comisiones': 'Comisiones',
   '/finanzas/nominas': 'Nóminas',
+  '/finanzas/integraciones': 'Integraciones',
   '/stripe': 'Stripe',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
@@ -119,6 +120,7 @@ const SettingsPage = lazy(() => import('./modules/settings/pages/SettingsPage'))
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
 const ExpensesPage = lazy(() => import('./modules/accounting/pages/ExpensesPage'));
 const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
+const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
@@ -225,6 +227,7 @@ function App() {
             <Route path="por-pagar" element={<AccountsPayablePage />} />
             <Route path="comisiones" element={<CommissionsPage />} />
             <Route path="nominas" element={<PayrollPage />} />
+            <Route path="integraciones" element={<IntegrationsPage />} />
           </Route>
 
           <Route path="/email-sequences" element={<EmailSequencesPage />} />
