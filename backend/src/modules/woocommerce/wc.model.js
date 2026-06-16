@@ -37,6 +37,7 @@ export async function upsertCreds(projectId, data) {
         active, auto_sync_enabled, sync_interval_minutes, default_currency,
         wp_user, wp_app_password,
         source_strategy, cpt_endpoints,
+        wp_query_token, wp_query_token_param, wp_meta_endpoint,
         scraper_enabled, scrape_strategy, section_keywords,
         field_mapping
      )
@@ -45,8 +46,9 @@ export async function upsertCreds(projectId, data) {
         COALESCE($5, true), COALESCE($6, false), COALESCE($7, 30), COALESCE($8, 'EUR'),
         $9, $10,
         COALESCE($11, 'wc_only'), COALESCE($12, '[]'::jsonb),
-        COALESCE($13, false), COALESCE($14, 'plain_text'), $15,
-        $16::jsonb
+        $13, COALESCE($14, '_token'), $15,
+        COALESCE($16, false), COALESCE($17, 'plain_text'), $18,
+        $19::jsonb
      )
      ON CONFLICT (project_id) DO UPDATE
        SET store_url = EXCLUDED.store_url,
@@ -61,6 +63,10 @@ export async function upsertCreds(projectId, data) {
                                   THEN wc_credentials.wp_app_password ELSE EXCLUDED.wp_app_password END,
            source_strategy = EXCLUDED.source_strategy,
            cpt_endpoints = EXCLUDED.cpt_endpoints,
+           wp_query_token = CASE WHEN EXCLUDED.wp_query_token = '' OR EXCLUDED.wp_query_token IS NULL
+                                 THEN wc_credentials.wp_query_token ELSE EXCLUDED.wp_query_token END,
+           wp_query_token_param = COALESCE(EXCLUDED.wp_query_token_param, wc_credentials.wp_query_token_param),
+           wp_meta_endpoint = COALESCE(EXCLUDED.wp_meta_endpoint, wc_credentials.wp_meta_endpoint),
            scraper_enabled = EXCLUDED.scraper_enabled,
            scrape_strategy = EXCLUDED.scrape_strategy,
            section_keywords = COALESCE(EXCLUDED.section_keywords, wc_credentials.section_keywords),
@@ -77,6 +83,7 @@ export async function upsertCreds(projectId, data) {
       data.active, data.auto_sync_enabled, data.sync_interval_minutes, data.default_currency,
       data.wp_user || null, data.wp_app_password || null,
       data.source_strategy, JSON.stringify(data.cpt_endpoints || []),
+      data.wp_query_token || null, data.wp_query_token_param || null, data.wp_meta_endpoint || null,
       data.scraper_enabled, data.scrape_strategy,
       data.section_keywords ? JSON.stringify(data.section_keywords) : null,
       JSON.stringify(DEFAULT_FIELD_MAPPING),
@@ -173,6 +180,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
     faqs_texto:               data.faqs_texto ?? null,
     profesores_texto:         data.profesores_texto ?? null,
     otras_secciones:          data.otras_secciones ? JSON.stringify(data.otras_secciones) : null,
+    source_type:        data.source_type ?? null,
+    source_id:          Number.isFinite(data.source_id) ? data.source_id : null,
   };
 
   if (existing) {
@@ -198,6 +207,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
            faqs_texto               = COALESCE($24, faqs_texto),
            profesores_texto         = COALESCE($25, profesores_texto),
            otras_secciones          = COALESCE($26::jsonb, otras_secciones),
+           source_type              = COALESCE($27, source_type),
+           source_id                = COALESCE($28, source_id),
            updated_at=NOW()
        WHERE id = $8 RETURNING id`,
       [data.nombre, data.precio, data.descripcion || null, data.sku || null,
@@ -207,7 +218,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
        sc.image_url, sc.url_info,
        sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
        sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
-       sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
+       sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones,
+       sc.source_type, sc.source_id]);
     return { action: 'updated', id: rows[0].id };
   }
   const { rows } = await query(
@@ -218,10 +230,11 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
                            presentacion_texto, objetivos_texto, beneficios_texto,
                            dirigido_a_texto, para_que_te_prepara_texto, por_que_estudiar_texto,
                            modulos_texto, metodologia_texto, faqs_texto, profesores_texto,
-                           otras_secciones)
+                           otras_secciones, source_type, source_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
              $10, $11, $12, $13, $14, $15, $16,
-             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::jsonb)
+             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::jsonb,
+             $28, $29)
      RETURNING id`,
     [projectId, data.nombre, data.precio, data.descripcion || null, data.sku || null,
      data.categoria_id || null, data.subcategoria_id || null,
@@ -230,7 +243,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
      sc.image_url, sc.url_info,
      sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
      sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
-     sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
+     sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones,
+     sc.source_type, sc.source_id]);
   return { action: 'created', id: rows[0].id };
 }
 

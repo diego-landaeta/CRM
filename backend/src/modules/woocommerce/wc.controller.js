@@ -7,12 +7,13 @@ import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
 import { scrapeProductPage } from './html-scraper.js';
-import { fetchCptAll, mapCptItemToProduct, findSeoPageForProduct } from './wp-rest.js';
+import { fetchCptAll, mapCptItemToProduct, findSeoPageForProduct, fetchPostMeta } from './wp-rest.js';
 
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
   store_url: z.string().url(),
-  consumer_key: z.string().min(1),
+  // En cpt_only no hay credenciales WC; el refine de abajo lo permite vacío
+  consumer_key: z.string().optional().default(''),
   consumer_secret: z.string().optional(),
   active: z.boolean().optional(),
   auto_sync_enabled: z.boolean().optional(),
@@ -21,13 +22,21 @@ const credsSchema = z.object({
   // WP REST API (para sacar ACF / pages / CPTs personalizados)
   wp_user: z.string().max(100).optional().nullable(),
   wp_app_password: z.string().max(500).optional().nullable(),
-  source_strategy: z.enum(['wc_only', 'wc_plus_cpt']).optional(),
+  source_strategy: z.enum(['wc_only', 'wc_plus_cpt', 'cpt_only']).optional(),
   cpt_endpoints: z.array(z.string()).max(20).optional(),
+  // Auth alternativa: token en query string (sitios sin Basic Auth, ej. ISAEG)
+  wp_query_token: z.string().max(100).optional().nullable(),
+  wp_query_token_param: z.string().max(50).optional().nullable(),
+  wp_meta_endpoint: z.string().max(200).optional().nullable(),
   // Scraper HTML del permalink
   scraper_enabled: z.boolean().optional(),
   scrape_strategy: z.enum(['plain_text', 'preserve_html']).optional(),
   section_keywords: z.record(z.string(), z.array(z.string())).optional(),
-});
+}).refine((d) => {
+  // Si NO es cpt_only, exigimos consumer_key (lo que requiere WC).
+  if (d.source_strategy === 'cpt_only') return true;
+  return !!(d.consumer_key && d.consumer_key.length > 0);
+}, { message: 'consumer_key requerido salvo en source_strategy=cpt_only', path: ['consumer_key'] });
 
 function pid(req) {
   const p = parseInt(req.query.projectId);
@@ -422,16 +431,28 @@ function mapWcProduct(wp, categoryMap, defaultCurrency = 'EUR') {
 // (wooCommerceSyncScheduler) para que ambos apliquen field_mapping y scraper.
 export async function runFullImport(creds, projectId, runId) {
       try {
-        // 1. Sincronizar categorías primero
-        logger.info({ projectId, runId }, 'WC: descargando categorías');
-        const wcCategories = await fetchWcCategories(creds);
-        const categoryMap = await syncCategories(projectId, wcCategories);
-        logger.info({ projectId, count: wcCategories.length }, 'WC: categorías sincronizadas');
+        // Si el sitio es solo CPTs (sin WC, p.ej. ISAEG con mu-plugin de token),
+        // saltamos toda la fase WC y vamos directo al import de CPTs abajo.
+        const isCptOnly = creds.source_strategy === 'cpt_only';
 
-        // 2. Descargar todos los productos paginados
-        logger.info({ projectId }, 'WC: descargando productos (paginado)');
-        const wcProducts = await fetchWcProducts(creds);
-        logger.info({ projectId, count: wcProducts.length }, 'WC: productos descargados');
+        // 1. Sincronizar categorías primero (solo si hay WC)
+        let categoryMap = {};
+        if (!isCptOnly) {
+          logger.info({ projectId, runId }, 'WC: descargando categorías');
+          const wcCategories = await fetchWcCategories(creds);
+          categoryMap = await syncCategories(projectId, wcCategories);
+          logger.info({ projectId, count: wcCategories.length }, 'WC: categorías sincronizadas');
+        }
+
+        // 2. Descargar todos los productos paginados (solo si hay WC)
+        let wcProducts = [];
+        if (!isCptOnly) {
+          logger.info({ projectId }, 'WC: descargando productos (paginado)');
+          wcProducts = await fetchWcProducts(creds);
+          logger.info({ projectId, count: wcProducts.length }, 'WC: productos descargados');
+        } else {
+          logger.info({ projectId, runId }, 'WP CPT-ONLY: omitiendo fase WC');
+        }
 
         // 3. Upsert productos con categoría + sku
         let created = 0, updated = 0, skipped = 0;
@@ -593,28 +614,52 @@ export async function runFullImport(creds, projectId, runId) {
         }
 
         // ─── Fase CPT (iseih y similares con CPTs custom + ACF rico) ───────
+        // Acepta dos estrategias:
+        //   - wc_plus_cpt: WC normal + CPTs como suplemento (auth Basic)
+        //   - cpt_only:    solo CPTs, sin WC (auth Basic O token-query)
         let cptCreated = 0, cptUpdated = 0, cptSkipped = 0;
-        if (creds.source_strategy === 'wc_plus_cpt' && Array.isArray(creds.cpt_endpoints) && creds.cpt_endpoints.length > 0) {
-          if (!creds.wp_user || !creds.wp_app_password) {
-            logger.warn({ projectId }, 'WC: source_strategy=wc_plus_cpt pero faltan wp_user/wp_app_password');
+        const cptEnabled = (creds.source_strategy === 'wc_plus_cpt' || creds.source_strategy === 'cpt_only')
+                        && Array.isArray(creds.cpt_endpoints) && creds.cpt_endpoints.length > 0;
+        if (cptEnabled) {
+          const useTokenQuery = !!creds.wp_query_token;
+          const hasBasicAuth = !!(creds.wp_user && creds.wp_app_password);
+          if (!useTokenQuery && !hasBasicAuth) {
+            logger.warn({ projectId, strategy: creds.source_strategy }, 'WP CPT: sin wp_user/wp_app_password ni wp_query_token — fase CPT skipeada');
           } else {
+            const fetchOpts = {
+              perPage: 100, maxPages: 50,
+              contextEdit: !useTokenQuery, // token-query no autoriza context=edit
+              queryToken: useTokenQuery ? creds.wp_query_token : null,
+              queryTokenParam: creds.wp_query_token_param || '_token',
+            };
             for (const cptSlug of creds.cpt_endpoints) {
               try {
-                logger.info({ projectId, cptSlug }, 'WP CPT: descargando');
-                const items = await fetchCptAll(creds.store_url, cptSlug, creds.wp_user, creds.wp_app_password, { perPage: 100, maxPages: 50, contextEdit: true });
+                logger.info({ projectId, cptSlug, auth: useTokenQuery ? 'token-query' : 'basic' }, 'WP CPT: descargando');
+                const items = await fetchCptAll(creds.store_url, cptSlug, creds.wp_user, creds.wp_app_password, fetchOpts);
                 logger.info({ projectId, cptSlug, count: items.length }, 'WP CPT: items descargados');
                 for (const item of items) {
                   if (!item || !item.id) { cptSkipped++; continue; }
+                  // Si el ACF estándar viene vacío y hay endpoint custom de meta,
+                  // hidratamos con el fetch a {token}/{id}.
+                  const acfEmpty = !item.acf || (typeof item.acf === 'object' && !Array.isArray(item.acf) && Object.keys(item.acf).length === 0)
+                                            || (Array.isArray(item.acf) && item.acf.length === 0);
+                  if (acfEmpty && useTokenQuery && creds.wp_meta_endpoint) {
+                    const meta = await fetchPostMeta(creds.store_url, item.id, creds.wp_query_token, creds.wp_meta_endpoint);
+                    if (meta) item.acf = meta;
+                  }
                   const mapped = mapCptItemToProduct(item, { cptSlug, defaultCurrency: creds.default_currency || 'EUR' });
                   if (!mapped.nombre) { cptSkipped++; continue; }
-                  // Aplicar field_mapping si lo hubiera
+                  // source_type + source_id ya los pone mapCptItemToProduct si así lo
+                  // queremos; por ahora le anexamos explícitamente para idempotencia.
+                  mapped.source_type = cptSlug;
+                  mapped.source_id = item.id;
                   if (hasUserMapping) {
                     const userMapped = applyWcFieldMapping(item, userMapping);
                     Object.assign(mapped, userMapped);
                   }
                   try {
-                    // wcId del CPT = source_id (lo guardamos en wc_product_id para idempotencia)
-                    // Prefijado para no chocar con IDs WC: cptSlug+id
+                    // Idempotencia: usamos un wcId negativo derivado del CPT + id
+                    // del item para no chocar con IDs WC reales.
                     const fakeWcId = -1 * (cptSlug.charCodeAt(0) * 100000 + item.id);
                     const r = await model.upsertProductFromWc({ projectId, wcId: fakeWcId, data: mapped });
                     if (r.action === 'created') cptCreated++;
@@ -635,20 +680,24 @@ export async function runFullImport(creds, projectId, runId) {
         created += cptCreated;
         updated += cptUpdated;
         skipped += cptSkipped;
-        // 4. Pasada extra: scrap del menú HTML — solo crea ramas con productos
+        // 4. Pasada extra: scrap del menú HTML — solo crea ramas con productos.
+        //    Skipeada en cpt_only: el menú HTML asume estructura WC (/product-category/...),
+        //    que no aplica a sitios solo-CPT como ISAEG.
         let menuStats = { cats: 0, assigned: 0, pruned: 0 };
-        try {
-          logger.info({ projectId }, 'WC: scrapeo menú HTML');
-          const menuTree = await fetchMenuTree(creds.store_url);
-          if (menuTree.length > 0) {
-            const slugMap = await buildSlugToProductMap(projectId);
-            const annotated = await annotateMenuWithProducts(menuTree, slugMap);
-            const r = await syncAnnotatedTree(projectId, annotated);
-            menuStats = { cats: r.cats, assigned: r.assigned };
-            logger.info({ projectId, ...menuStats }, 'WC: menú sincronizado');
+        if (!isCptOnly) {
+          try {
+            logger.info({ projectId }, 'WC: scrapeo menú HTML');
+            const menuTree = await fetchMenuTree(creds.store_url);
+            if (menuTree.length > 0) {
+              const slugMap = await buildSlugToProductMap(projectId);
+              const annotated = await annotateMenuWithProducts(menuTree, slugMap);
+              const r = await syncAnnotatedTree(projectId, annotated);
+              menuStats = { cats: r.cats, assigned: r.assigned };
+              logger.info({ projectId, ...menuStats }, 'WC: menú sincronizado');
+            }
+          } catch (menuErr) {
+            logger.warn({ err: menuErr.message, projectId }, 'WC: scrap del menú falló (no bloquea import)');
           }
-        } catch (menuErr) {
-          logger.warn({ err: menuErr.message, projectId }, 'WC: scrap del menú falló (no bloquea import)');
         }
 
         // 5. Pasada final: borrar categorías huérfanas (cualquier source, sin productos ni descendientes)

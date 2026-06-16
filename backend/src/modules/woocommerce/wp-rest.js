@@ -13,6 +13,50 @@ function basicHeader(user, pass) {
   return `Basic ${token}`;
 }
 
+/**
+ * Añade ?token=value (o el param configurado) a una URL.
+ * Usado para sitios sin Basic Auth que protegen su REST API con un mu-plugin
+ * que valida el token en query string (caso ISAEG).
+ */
+function appendQueryToken(url, tokenParam, tokenValue) {
+  if (!tokenParam || !tokenValue) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}${encodeURIComponent(tokenParam)}=${encodeURIComponent(tokenValue)}`;
+}
+
+/**
+ * Lee el meta de un post desde un endpoint custom (estilo isaeg.com).
+ *
+ * El endpoint se configura como patrón en wc_credentials.wp_meta_endpoint con
+ * placeholders {token} y {id}. Ejemplo ISAEG:
+ *   "/?read_meta={token}&post_id={id}"
+ *
+ * El sitio devuelve {success:true, data:{key:[value], ...}} — cada valor viene
+ * como array, normalmente con un único string. Aplanamos a un objeto plano
+ * compatible con el shape de ACF estándar.
+ */
+export async function fetchPostMeta(baseUrl, postId, queryToken, metaEndpointPattern) {
+  if (!postId || !queryToken || !metaEndpointPattern) return null;
+  const root = baseUrl.replace(/\/$/, '');
+  const path = metaEndpointPattern
+    .replace('{token}', encodeURIComponent(queryToken))
+    .replace('{id}', String(postId));
+  const url = `${root}${path.startsWith('/') ? path : '/' + path}`;
+  try {
+    const res = await getJson(url, null, 12000);
+    if (!res || !res.success || !res.data) return null;
+    const flat = {};
+    for (const [k, v] of Object.entries(res.data)) {
+      if (Array.isArray(v) && v.length === 1) flat[k] = v[0];
+      else flat[k] = v;
+    }
+    return flat;
+  } catch (err) {
+    logger.warn({ postId, err: err.message }, 'WP custom meta: fetch fallo');
+    return null;
+  }
+}
+
 async function getJson(url, auth, timeoutMs = 25000) {
   const ac = new AbortController();
   const to = setTimeout(() => ac.abort(), timeoutMs);
@@ -89,12 +133,20 @@ export async function findSeoPageForProduct(product, baseUrl, user, pass, opts =
 
 /** Lista items de un CPT (todas las páginas). */
 export async function fetchCptAll(baseUrl, cptSlug, user, pass, opts = {}) {
-  const { perPage = 100, maxPages = 50, contextEdit = true } = opts;
-  const auth = basicHeader(user, pass);
+  // opts.queryToken / opts.queryTokenParam: auth alternativa por query string
+  // cuando el sitio NO usa Basic Auth (caso ISAEG con mu-plugin de token).
+  // Si están presentes, prevalece sobre user/pass.
+  const { perPage = 100, maxPages = 50, contextEdit = true, queryToken = null, queryTokenParam = '_token' } = opts;
+  const useTokenQuery = !!queryToken;
+  const auth = useTokenQuery ? null : basicHeader(user, pass);
+  // Si auth es token-query, NO uses context=edit (requiere capability admin que
+  // el token NO siempre concede; muchos mu-plugins solo permiten lectura plain).
+  const queryExtras = useTokenQuery ? '' : (contextEdit ? '&context=edit&acf_format=standard' : '');
   const base = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/${cptSlug}`;
   const all = [];
   for (let page = 1; page <= maxPages; page++) {
-    const url = `${base}?per_page=${perPage}&page=${page}${contextEdit ? '&context=edit&acf_format=standard' : ''}`;
+    let url = `${base}?per_page=${perPage}&page=${page}${queryExtras}`;
+    if (useTokenQuery) url = appendQueryToken(url, queryTokenParam, queryToken);
     try {
       const items = await getJson(url, auth);
       if (!Array.isArray(items) || items.length === 0) break;
