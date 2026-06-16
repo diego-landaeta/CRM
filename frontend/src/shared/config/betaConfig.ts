@@ -22,6 +22,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/prospectos',             // Prospectos (listado, pipeline, audiencias)
   '/clientes',               // Clientes + Matrículas
   '/finanzas/ventas',        // Ventas (registro venta histórica + listado conversiones)
+  '/finanzas/integraciones', // Integraciones (Pruebas) — Stripe, Brevo
   '/sales',                  // Ventas (ruta alternativa)
   '/meta-ads',               // Meta Ads (metricas + ROI manual)
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
