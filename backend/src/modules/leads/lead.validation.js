@@ -37,7 +37,7 @@ export const listLeadsSchema = z.object({
   // Vista multi-proyecto: lista CSV de IDs ("1,2,3")
   projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
     .transform((v) => v ? v.split(',').map(Number) : undefined),
-  status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
+  status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
@@ -73,7 +73,7 @@ export const checkDuplicateSchema = z.object({
 // obligatorio cuando el destino es 'no_interesado' (que llega por LeadLossDialog
 // con motivo siempre rellenado).
 export const updateStatusSchema = z.object({
-  status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']),
+  status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']),
   motivo: z.string().max(500).optional().nullable(),
 }).refine(
   (data) => data.status !== 'no_interesado' || (data.motivo && data.motivo.trim().length >= 1),
