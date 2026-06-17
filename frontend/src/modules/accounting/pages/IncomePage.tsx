@@ -34,7 +34,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   useEffect(() => {
     if (!activeProject?.id || !isAdmin) return;
-    client.get('/sales/gestores-stats', { params: { projectId: activeProject.id } })
+    client.get('/sales/gestores-stats', { params: { projectId: activeProject.id, periodo: 'all' } })
       .then((r) => setGestores(r?.data?.gestores || []))
       .catch(() => setGestores([]));
   }, [activeProject?.id, isAdmin, reloadKey]);
