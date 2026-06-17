@@ -121,6 +121,7 @@ const NAV_SECTIONS = [
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },

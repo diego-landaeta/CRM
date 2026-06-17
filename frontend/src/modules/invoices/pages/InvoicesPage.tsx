@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -78,7 +79,16 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader title="Facturas" subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`} />
+      <PageHeader
+        title="Facturas"
+        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        actions={(
+          <Link to="configuracion"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+            <Gear size={14} weight="bold" /> Configuración
+          </Link>
+        )}
+      />
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
