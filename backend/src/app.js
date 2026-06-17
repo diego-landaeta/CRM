@@ -51,6 +51,7 @@ import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
+import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 
@@ -182,6 +183,7 @@ if (process.env.NODE_ENV !== 'test') {
     startEmailSequenceScheduler();
     startWooCommerceSyncScheduler();
     startReminderScheduler();
+    startStripePaymentsSyncScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
   });
