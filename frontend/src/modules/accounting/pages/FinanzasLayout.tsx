@@ -15,6 +15,7 @@ const TABS = [
   { label: 'Por pagar', to: '/finanzas/por-pagar', icon: Receipt },
   { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins },
   { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator },
+  { label: 'Pendientes facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle },
   { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected },
 ];
 
