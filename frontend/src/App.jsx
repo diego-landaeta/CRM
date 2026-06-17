@@ -32,6 +32,8 @@ const ROUTE_TITLES = {
   '/finanzas/integraciones': 'Integraciones',
   '/finanzas/pendiente-facturar': 'Pendientes de facturar',
   '/finanzas/pagos-stripe': 'Pagos Stripe',
+  '/finanzas/facturas': 'Facturas',
+  '/finanzas/facturas/configuracion': 'Configuración de facturación',
   '/stripe': 'Stripe',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
@@ -125,6 +127,8 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
+const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
+const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounting/pages/AccountsPayablePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
@@ -234,6 +238,8 @@ function App() {
             <Route path="integraciones" element={<IntegrationsPage />} />
             <Route path="pendiente-facturar" element={<PendienteFacturarPage />} />
             <Route path="pagos-stripe" element={<StripePaymentsPage />} />
+            <Route path="facturas" element={<InvoicesPage />} />
+            <Route path="facturas/configuracion" element={<InvoicingConfigPage />} />
           </Route>
 
           <Route path="/email-sequences" element={<EmailSequencesPage />} />

@@ -17,6 +17,7 @@ const TABS = [
   { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator },
   { label: 'Pendientes facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle },
   { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard },
+  { label: 'Facturas', to: '/finanzas/facturas', icon: Receipt },
   { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected },
 ];
 
