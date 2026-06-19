@@ -20,6 +20,16 @@ interface ConversionForm {
   fecha_compromiso_pago: string;
   fecha_conversion: string;
   notas_pago: string;
+  iva_pct: string;
+  iva_incluido: boolean;
+  iva_exento: boolean;
+}
+
+interface SaleItem {
+  product_id: number | null;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: string;
 }
 
 interface Installment {
@@ -96,7 +106,30 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     fecha_compromiso_pago: '',
     fecha_conversion: new Date().toISOString().slice(0, 10),
     notas_pago: '',
+    iva_pct: '21',
+    iva_incluido: false,
+    iva_exento: false,
   });
+  // Multi-item: si tiene >0 items se usan para calcular importe_total.
+  // Si la lista está vacía → comportamiento legacy (1 producto, importe manual).
+  const [items, setItems] = useState<SaleItem[]>([]);
+  const useMultiItem = items.length > 0;
+
+  // Recalcular importe_total automaticamente cuando hay items o cambia IVA
+  useEffect(() => {
+    if (!useMultiItem) return;
+    const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0);
+    const ivaPct = Number(form.iva_pct || 0);
+    let total = subtotal;
+    if (form.iva_exento) {
+      total = subtotal;
+    } else if (form.iva_incluido) {
+      total = subtotal; // ya incluye
+    } else {
+      total = subtotal + (subtotal * ivaPct / 100);
+    }
+    setForm(f => ({ ...f, importe_total: total.toFixed(2) }));
+  }, [items, form.iva_pct, form.iva_incluido, form.iva_exento, useMultiItem]);
 
   // Producto seleccionado por nombre exacto (CRM-140) — para mostrar sus enlaces de pago
   const selectedProduct = useMemo(
@@ -214,14 +247,25 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       const res = await conversionsApi.create({
         lead_id: lead.id,
         project_id: projectId,
-        producto_contratado: form.producto_contratado,
+        producto_contratado: useMultiItem
+          ? items.map(it => `${it.cantidad}x ${it.descripcion}`).join(' + ')
+          : form.producto_contratado,
         importe_total: Number(form.importe_total),
         importe_pagado: Number(form.importe_pagado || 0),
         metodo_pago: form.metodo_pago,
         fecha_compromiso_pago: form.fecha_compromiso_pago || null,
         fecha_conversion: form.fecha_conversion,
         notas_pago: form.notas_pago || null,
-      });
+        items: useMultiItem ? items.map(it => ({
+          product_id: it.product_id,
+          descripcion: it.descripcion,
+          cantidad: it.cantidad,
+          precio_unitario: Number(it.precio_unitario || 0),
+        })) : undefined,
+        iva_pct: form.iva_exento ? 0 : Number(form.iva_pct || 21),
+        iva_incluido: form.iva_incluido && !form.iva_exento,
+        iva_exento: form.iva_exento,
+      } as any);
       if (res.success && res.data) {
         // Si es fraccionado, genera las cuotas custom
         if (form.metodo_pago === 'fraccionado' && installments.length >= 2) {
@@ -269,47 +313,129 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Producto contratado *</label>
-              {products.length > 0 ? (
-                <Select<string>
+            {/* MODO 1: Producto único (legacy) */}
+            {!useMultiItem && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">Producto contratado *</label>
+                  <button type="button"
+                    onClick={() => setItems([{ product_id: null, descripcion: form.producto_contratado || '', cantidad: 1, precio_unitario: form.importe_total || '0' }])}
+                    className="text-[10px] text-primary hover:underline">
+                    + Añadir más productos
+                  </button>
+                </div>
+                {products.length > 0 ? (
+                  <Select<string>
+                    value={form.producto_contratado}
+                    onChange={(v) => update('producto_contratado', v)}
+                    options={[
+                      { value: '', label: 'Seleccionar o escribir abajo' },
+                      ...products.map(p => ({ value: p.nombre, label: p.nombre })),
+                    ]}
+                    ariaLabel="Producto contratado"
+                  />
+                ) : null}
+                <input
+                  list={products.length > 0 ? 'conversion-products-list' : undefined}
                   value={form.producto_contratado}
-                  onChange={(v) => update('producto_contratado', v)}
-                  options={[
-                    { value: '', label: 'Seleccionar o escribir abajo' },
-                    ...products.map(p => ({ value: p.nombre, label: p.nombre })),
-                  ]}
-                  ariaLabel="Producto contratado"
+                  onChange={e => update('producto_contratado', e.target.value)}
+                  placeholder={products.length > 0 ? 'Escribe o selecciona del listado' : 'Nombre del producto/curso'}
+                  className={inputClass}
+                  required={!useMultiItem}
+                  autoComplete="off"
                 />
-              ) : null}
-              <input
-                list={products.length > 0 ? 'conversion-products-list' : undefined}
-                value={form.producto_contratado}
-                onChange={e => update('producto_contratado', e.target.value)}
-                placeholder={products.length > 0 ? 'Escribe o selecciona del listado' : 'Nombre del producto/curso'}
-                className={inputClass}
-                required
-                autoComplete="off"
-              />
-              {products.length > 0 && (
-                <datalist id="conversion-products-list">
-                  {products.map(p => <option key={p.id} value={p.nombre} />)}
+                {products.length > 0 && (
+                  <datalist id="conversion-products-list">
+                    {products.map(p => <option key={p.id} value={p.nombre} />)}
+                  </datalist>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Puedes elegir uno del catálogo o escribir un nombre nuevo.
+                </p>
+              </div>
+            )}
+
+            {/* MODO 2: Multi-item */}
+            {useMultiItem && (
+              <div className="border border-border rounded-md p-3 space-y-2 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold uppercase text-muted-foreground">Productos contratados ({items.length})</label>
+                  <button type="button"
+                    onClick={() => { setItems([]); }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground">Volver a producto único</button>
+                </div>
+                {items.map((it, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                    <input list="conversion-products-list-multi" value={it.descripcion}
+                      onChange={e => {
+                        const v = e.target.value;
+                        const matched = products.find((p: any) => p.nombre === v);
+                        setItems(items.map((x, i) => i === idx ? { ...x, descripcion: v, product_id: matched?.id || null, precio_unitario: matched?.precio ? String(matched.precio) : x.precio_unitario } : x));
+                      }}
+                      placeholder="Descripción / nombre del curso"
+                      className="col-span-6 h-9 px-2 rounded border border-border bg-background text-sm" />
+                    <input type="number" min="1" value={it.cantidad}
+                      onChange={e => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value || 1) } : x))}
+                      title="Cantidad" placeholder="Cant"
+                      className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
+                    <input type="number" step="0.01" min="0" value={it.precio_unitario}
+                      onChange={e => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: e.target.value } : x))}
+                      title="Precio unitario" placeholder="€/u"
+                      className="col-span-3 h-9 px-2 rounded border border-border bg-background text-sm" />
+                    <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                      className="col-span-1 text-muted-foreground hover:text-red-500 text-base">×</button>
+                  </div>
+                ))}
+                <datalist id="conversion-products-list-multi">
+                  {products.map((p: any) => <option key={p.id} value={p.nombre} />)}
                 </datalist>
-              )}
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Puedes elegir uno del catálogo o escribir un nombre nuevo.
-              </p>
+                <button type="button"
+                  onClick={() => setItems([...items, { product_id: null, descripcion: '', cantidad: 1, precio_unitario: '0' }])}
+                  className="text-xs text-primary hover:underline">+ añadir otro producto</button>
+                <div className="text-[10px] text-muted-foreground italic">
+                  Subtotal: {items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0).toFixed(2)} €
+                </div>
+              </div>
+            )}
+
+            {/* IVA */}
+            <div className="border border-border rounded-md p-3 space-y-2 bg-muted/10">
+              <label className="text-[11px] font-bold uppercase text-muted-foreground">IVA</label>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="checkbox" checked={form.iva_exento} onChange={e => update('iva_exento', e.target.checked as any)} />
+                  Exento (sin IVA)
+                </label>
+                {!form.iva_exento && (
+                  <>
+                    <div className="inline-flex items-center gap-1">
+                      <span>%:</span>
+                      <input type="number" min="0" max="100" step="0.01" value={form.iva_pct}
+                        onChange={e => update('iva_pct', e.target.value)}
+                        className="w-16 h-7 px-2 rounded border border-border bg-background text-sm" />
+                    </div>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input type="checkbox" checked={form.iva_incluido} onChange={e => update('iva_incluido', e.target.checked as any)} />
+                      Precio ya incluye IVA (desglosar)
+                    </label>
+                  </>
+                )}
+              </div>
+              {form.iva_exento && <p className="text-[10px] text-muted-foreground italic">Operación exenta — art. 20 LIVA (servicios educativos)</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe total (EUR) *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                  Importe total (EUR) *
+                  {useMultiItem && <span className="text-[10px] text-muted-foreground ml-1">(auto: subtotal + IVA)</span>}
+                </label>
                 <input
                   type="number" step="0.01" min="0.01"
                   value={form.importe_total}
                   onChange={e => { update('importe_total', e.target.value); if (selectedProduct && !aplicaDescuento) setAplicaDescuento(true); }}
-                  readOnly={!!selectedProduct && !aplicaDescuento}
-                  className={inputClass + (selectedProduct && !aplicaDescuento ? ' bg-muted text-muted-foreground cursor-not-allowed' : '')}
+                  readOnly={useMultiItem || (!!selectedProduct && !aplicaDescuento)}
+                  className={inputClass + ((useMultiItem || (selectedProduct && !aplicaDescuento)) ? ' bg-muted text-muted-foreground cursor-not-allowed' : '')}
                   required
                 />
               </div>
