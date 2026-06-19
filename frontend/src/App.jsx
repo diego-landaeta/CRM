@@ -58,7 +58,12 @@ const ROUTE_TITLES = {
   '/prueba_ui_productos': 'Prueba UI Productos',
   '/prueba_ui_reportes': 'Prueba UI Reportes',
   '/prueba_ui_configuracion': 'Prueba UI Configuracion',
+  '/testeo2': 'Testeo2 CRM Workspace',
 };
+
+const APP_BASE_URL = import.meta.env.BASE_URL || '';
+const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/') || APP_BASE_URL.startsWith('/testeo2/');
+const IS_TESTEO2_BASE = APP_BASE_URL.startsWith('/testeo2/');
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -71,6 +76,10 @@ function DocumentTitle() {
   const { activeProject: project } = useProjectContext();
   useEffect(() => {
     const base = 'MultiCRM';
+    if (IS_TESTEO2_BASE && pathname === '/') {
+      document.title = `Testeo2 CRM Workspace — ${base}`;
+      return;
+    }
     const match = Object.keys(ROUTE_TITLES)
       .sort((a, b) => b.length - a.length)
       .find(k => pathname === k || pathname.startsWith(k + '/'));
@@ -171,6 +180,7 @@ const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/Ext
 const UiPreviewHomePage = lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage'));
 const LeadsUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage'));
 const GenericUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage'));
+const SuiteDashCrmPreviewPage = lazy(() => import('./modules/suitedash-preview/pages/SuiteDashCrmPreviewPage'));
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
@@ -178,7 +188,7 @@ const DevComponentsPage = import.meta.env.DEV
   ? lazy(() => import('./modules/dev/pages/DevComponentsPage'))
   : null;
 
-const UI_PREVIEW_ENABLED = import.meta.env.DEV || (import.meta.env.BASE_URL || '').startsWith('/testeo/');
+const UI_PREVIEW_ENABLED = import.meta.env.DEV || IS_TESTEO_PREVIEW_BASE;
 
 function UiPreviewRoute({ children }) {
   return UI_PREVIEW_ENABLED ? children : <NotFoundPage />;
@@ -193,8 +203,12 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        {IS_TESTEO2_BASE && (
+          <Route path="/" element={<ProtectedRoute><SuiteDashCrmPreviewPage /></ProtectedRoute>} />
+        )}
+        <Route path="/testeo2" element={<ProtectedRoute><UiPreviewRoute><SuiteDashCrmPreviewPage /></UiPreviewRoute></ProtectedRoute>} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-          <Route path="/" element={<DashboardPage />} />
+          {!IS_TESTEO2_BASE && <Route path="/" element={<DashboardPage />} />}
 
           {/* Prospectos — tabs */}
           <Route path="/prospectos" element={<ProspectosLayout />}>

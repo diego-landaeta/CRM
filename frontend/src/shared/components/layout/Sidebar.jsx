@@ -64,7 +64,9 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
-const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV || (import.meta.env.BASE_URL || '').startsWith('/testeo/');
+const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
+  || (import.meta.env.BASE_URL || '').startsWith('/testeo/')
+  || (import.meta.env.BASE_URL || '').startsWith('/testeo2/');
 
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
@@ -73,6 +75,7 @@ const NAV_SECTIONS = [
     label: 'Testeo',
     items: [
       { label: 'REDISEÑO', to: '/prueba_ui', icon: Sparkle, previewOnly: true, featured: true },
+      { label: 'TESTEO2', to: '/testeo2', icon: ChartBar, previewOnly: true, featured: true },
     ],
   },
   {

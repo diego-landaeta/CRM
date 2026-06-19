@@ -11,6 +11,12 @@ const env = loadEnv(mode, process.cwd(), '');
 const BASE = process.env.VITE_BASE_PATH || env.VITE_BASE_PATH || '/crm/';
 const ESC = BASE.replace(/\//g, '\\/');
 
+const makeApiProxy = () => ({
+  target: 'http://localhost:3001',
+  changeOrigin: true,
+  rewrite: (p) => p.replace(/^\/(?:testeo2|testeo|crm)/, ''),
+});
+
 export default defineConfig({
   plugins: [
     react(),
@@ -136,11 +142,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/crm/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/crm/, ''),
-      },
+      '/crm/api': makeApiProxy(),
+      '/testeo/api': makeApiProxy(),
+      '/testeo2/api': makeApiProxy(),
     },
   },
 });
