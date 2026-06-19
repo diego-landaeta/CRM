@@ -64,10 +64,17 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
+const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV || (import.meta.env.BASE_URL || '').startsWith('/testeo/');
 
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 const NAV_SECTIONS = [
+  {
+    label: 'Testeo',
+    items: [
+      { label: 'REDISEÑO', to: '/prueba_ui', icon: Sparkle, previewOnly: true, featured: true },
+    ],
+  },
   {
     label: 'Principal',
     items: [
@@ -171,6 +178,7 @@ export function applyLabel(original, overrides) {
 }
 
 function canSeeItem(item, role, modules, projectType) {
+  if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
   // soporte ve todo (rol generico tipo dev)
@@ -332,7 +340,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
-function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed }) {
+function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed, featured }) {
   const displayLabel = applyLabel(label, labelOverrides);
   const comingSoon = !isBetaAllowed(to);
   if (comingSoon) {
@@ -369,8 +377,12 @@ function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collap
             ? 'justify-center h-10'
             : 'gap-3 px-3 py-2.5',
           isActive
-            ? 'bg-primary/10 text-primary font-bold shadow-sm'
-            : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+            ? featured
+              ? 'bg-primary text-primary-foreground font-bold shadow-sm'
+              : 'bg-primary/10 text-primary font-bold shadow-sm'
+            : featured
+              ? 'border border-primary/20 bg-primary/5 text-primary font-bold hover:bg-primary/10'
+              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )
       }
     >
@@ -502,7 +514,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           if (it.children?.some((c) => location.pathname === c.to || location.pathname.startsWith((c.to || '') + '/'))) return true;
           return it.to && it.to !== '/' && location.pathname.startsWith(it.to + '/');
         });
-        out[s.label] = s.label === 'Principal' || has;
+        out[s.label] = s.label === 'Principal' || s.label === 'Testeo' || has;
       }
       return out;
     }

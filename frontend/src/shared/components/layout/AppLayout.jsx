@@ -34,6 +34,7 @@ const ALL_PROJECTS_OK = [
   /^\/soporte$/,
   /^\/status$/,
   /^\/ai-chat$/,
+  /^\/prueba_ui(?:_[a-z]+)?$/,
 ];
 
 function pathAllowsAll(pathname) {

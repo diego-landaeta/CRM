@@ -82,7 +82,7 @@ export default function WebhookCard({ webhook, onToggleActive, onToggleListen, o
       )}
 
       <Link
-        to={`/webhooks/${webhook.id}`}
+        to={`/captacion/webhooks/${webhook.id}`}
         className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
       >
         Detalle <ArrowRight size={12} weight="bold" />
