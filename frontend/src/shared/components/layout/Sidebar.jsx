@@ -75,7 +75,7 @@ const NAV_SECTIONS = [
   {
     label: 'Testeo',
     items: [
-      { label: 'TESTEO2', to: '/testeo2', icon: ChartBar, previewOnly: true, featured: true },
+      { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
     ],
   },
   {
@@ -344,9 +344,10 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
-function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collapsed, featured }) {
+function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, collapsed, featured }) {
   const displayLabel = applyLabel(label, labelOverrides);
-  const comingSoon = !isBetaAllowed(to);
+  const location = useLocation();
+  const comingSoon = !href && !isBetaAllowed(to);
   if (comingSoon) {
     return (
       <div
@@ -365,6 +366,53 @@ function NavItem({ to, icon: Icon, label, badge, labelOverrides, onClick, collap
           </>
         )}
       </div>
+    );
+  }
+  if (href) {
+    const isActive = typeof window !== 'undefined'
+      ? window.location.pathname === href || window.location.pathname.startsWith('/testeo2/')
+      : location.pathname === to;
+    return (
+      <a
+        href={href}
+        onClick={onClick}
+        title={collapsed ? displayLabel : undefined}
+        aria-label={collapsed ? displayLabel : undefined}
+        className={cn(
+          'relative flex items-center rounded-md text-[13px] transition-all',
+          collapsed
+            ? 'justify-center h-10'
+            : 'gap-3 px-3 py-2.5',
+          isActive
+            ? featured
+              ? 'bg-primary text-primary-foreground font-bold shadow-sm'
+              : 'bg-primary/10 text-primary font-bold shadow-sm'
+            : featured
+              ? 'border border-primary/20 bg-primary/5 text-primary font-bold hover:bg-primary/10'
+              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        {isActive && !collapsed && (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+          />
+        )}
+        <span className="relative">
+          <Icon size={18} weight={isActive ? 'duotone' : 'regular'} />
+          {collapsed && badge && (
+            <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-1 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center">
+              {badge > 9 ? '9+' : badge}
+            </span>
+          )}
+        </span>
+        {!collapsed && displayLabel}
+        {!collapsed && badge && (
+          <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+            {badge}
+          </span>
+        )}
+      </a>
     );
   }
   return (

@@ -58,12 +58,13 @@ const ROUTE_TITLES = {
   '/prueba_ui_productos': 'Prueba UI Productos',
   '/prueba_ui_reportes': 'Prueba UI Reportes',
   '/prueba_ui_configuracion': 'Prueba UI Configuracion',
-  '/testeo2': 'Testeo2 CRM Workspace',
+  '/testeo2': 'Prospectos',
 };
 
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
-const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/') || APP_BASE_URL.startsWith('/testeo2/');
+const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/');
 const IS_TESTEO2_BASE = APP_BASE_URL.startsWith('/testeo2/');
+const UI_PREVIEW_ENABLED = import.meta.env.DEV || IS_TESTEO_PREVIEW_BASE;
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -76,10 +77,6 @@ function DocumentTitle() {
   const { activeProject: project } = useProjectContext();
   useEffect(() => {
     const base = 'MultiCRM';
-    if (IS_TESTEO2_BASE && pathname === '/') {
-      document.title = `Testeo2 CRM Workspace — ${base}`;
-      return;
-    }
     const match = Object.keys(ROUTE_TITLES)
       .sort((a, b) => b.length - a.length)
       .find(k => pathname === k || pathname.startsWith(k + '/'));
@@ -178,21 +175,15 @@ const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/Documen
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
-const UiPreviewHomePage = lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage'));
-const LeadsUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage'));
-const GenericUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage'));
+const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
+const LeadsUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage')) : null;
+const GenericUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage')) : null;
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
 const DevComponentsPage = import.meta.env.DEV
   ? lazy(() => import('./modules/dev/pages/DevComponentsPage'))
   : null;
-
-const UI_PREVIEW_ENABLED = import.meta.env.DEV || IS_TESTEO_PREVIEW_BASE;
-
-function UiPreviewRoute({ children }) {
-  return UI_PREVIEW_ENABLED ? children : <NotFoundPage />;
-}
 
 function App() {
   return (
@@ -294,13 +285,17 @@ function App() {
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/prueba_ui" element={<UiPreviewRoute><UiPreviewHomePage /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_leads" element={<UiPreviewRoute><LeadsUiPreviewPage /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_clientes" element={<UiPreviewRoute><GenericUiPreviewPage area="clientes" /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_finanzas" element={<UiPreviewRoute><GenericUiPreviewPage area="finanzas" /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_productos" element={<UiPreviewRoute><GenericUiPreviewPage area="productos" /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_reportes" element={<UiPreviewRoute><GenericUiPreviewPage area="reportes" /></UiPreviewRoute>} />
-          <Route path="/prueba_ui_configuracion" element={<UiPreviewRoute><GenericUiPreviewPage area="configuracion" /></UiPreviewRoute>} />
+          {UI_PREVIEW_ENABLED && (
+            <>
+              <Route path="/prueba_ui" element={<UiPreviewHomePage />} />
+              <Route path="/prueba_ui_leads" element={<LeadsUiPreviewPage />} />
+              <Route path="/prueba_ui_clientes" element={<GenericUiPreviewPage area="clientes" />} />
+              <Route path="/prueba_ui_finanzas" element={<GenericUiPreviewPage area="finanzas" />} />
+              <Route path="/prueba_ui_productos" element={<GenericUiPreviewPage area="productos" />} />
+              <Route path="/prueba_ui_reportes" element={<GenericUiPreviewPage area="reportes" />} />
+              <Route path="/prueba_ui_configuracion" element={<GenericUiPreviewPage area="configuracion" />} />
+            </>
+          )}
           {DevComponentsPage && (
             <Route path="/dev/components" element={<DevComponentsPage />} />
           )}
