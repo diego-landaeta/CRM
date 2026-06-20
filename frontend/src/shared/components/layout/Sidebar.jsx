@@ -75,7 +75,6 @@ const NAV_SECTIONS = [
   {
     label: 'Testeo',
     items: [
-      { label: 'REDISEÑO', to: '/prueba_ui', icon: Sparkle, previewOnly: true, featured: true },
       { label: 'TESTEO2', to: '/testeo2', icon: ChartBar, previewOnly: true, featured: true },
     ],
   },

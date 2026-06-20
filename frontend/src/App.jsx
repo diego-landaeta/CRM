@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useProjectContext } from './contexts/ProjectContext';
 
@@ -181,7 +181,6 @@ const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/Ext
 const UiPreviewHomePage = lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage'));
 const LeadsUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage'));
 const GenericUiPreviewPage = lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage'));
-const SuiteDashCrmPreviewPage = lazy(() => import('./modules/suitedash-preview/pages/SuiteDashCrmPreviewPage'));
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
@@ -204,12 +203,9 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
-        {IS_TESTEO2_BASE && (
-          <Route path="/" element={<ProtectedRoute><SuiteDashCrmPreviewPage /></ProtectedRoute>} />
-        )}
-        <Route path="/testeo2" element={<ProtectedRoute><UiPreviewRoute><SuiteDashCrmPreviewPage /></UiPreviewRoute></ProtectedRoute>} />
+        <Route path="/testeo2" element={<ProtectedRoute><Navigate to="/prospectos" replace /></ProtectedRoute>} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-          {!IS_TESTEO2_BASE && <Route path="/" element={<DashboardPage />} />}
+          <Route path="/" element={IS_TESTEO2_BASE ? <Navigate to="/prospectos" replace /> : <DashboardPage />} />
 
           {/* Prospectos — tabs */}
           <Route path="/prospectos" element={<ProspectosLayout />}>
