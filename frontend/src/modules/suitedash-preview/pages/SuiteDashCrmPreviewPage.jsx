@@ -517,7 +517,7 @@ export default function SuiteDashCrmPreviewPage() {
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Buscar contacto, empresa, programa o email"
+                    placeholder="Buscar contacto, programa o email"
                     className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                   />
                 </label>
@@ -570,7 +570,7 @@ export default function SuiteDashCrmPreviewPage() {
               </div>
             </section>
 
-            {error ? (
+            {error && !usingFallback ? (
               <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
                 {error}
               </div>
@@ -618,7 +618,7 @@ export default function SuiteDashCrmPreviewPage() {
                         const stageLeads = grouped[stage.key] || [];
                         const stageValue = stageLeads.reduce((sum, lead) => sum + leadValue(lead), 0);
                         return (
-                          <div key={stage.key} className="min-w-[260px] rounded-md border border-slate-200 bg-slate-50 p-3">
+                          <div key={stage.key} className="min-w-[210px] rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
