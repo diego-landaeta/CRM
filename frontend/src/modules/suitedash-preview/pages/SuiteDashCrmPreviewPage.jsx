@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowClockwise,
   ArrowRight,
@@ -38,7 +38,7 @@ import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { cn } from '@/shared/lib/utils';
 
 const CRM_NAV = [
-  { label: 'Dashboard', icon: SquaresFour, active: true },
+  { label: 'Dashboard', icon: SquaresFour, area: 'Dashboard' },
   { label: 'Prospectos', icon: Users, children: ['Pipeline', 'Audiencias', 'Duplicados'] },
   { label: 'Clientes', icon: UserCircle, children: ['Directorio', 'Matriculas'] },
   { label: 'Captacion', icon: Globe, children: ['Email', 'Formularios', 'Make', 'Webhooks'] },
@@ -63,6 +63,45 @@ const CRM_AREAS = [
   { label: 'Documentos', detail: 'Archivos, contratos y plantillas', icon: FilePdf, tone: 'slate', metric: 'Docs' },
   { label: 'Config', detail: 'Roles, campos, canales y atajos', icon: Gear, tone: 'slate', metric: 'Admin' },
 ];
+
+const AREA_ROUTES = {
+  Dashboard: '/',
+  Prospectos: '/prospectos',
+  Clientes: '/clientes',
+  Captacion: '/captacion',
+  Campanas: '/campanas',
+  Productos: '/productos',
+  Finanzas: '/finanzas',
+  Reportes: '/reports',
+  Mensajes: '/messages',
+  Documentos: '/documentos',
+  Config: '/settings',
+  Configuracion: '/settings',
+};
+
+const CHILD_ROUTES = {
+  Pipeline: '/prospectos/pipeline',
+  Audiencias: '/prospectos/audiencias',
+  Duplicados: '/prospectos/revision-duplicados',
+  Directorio: '/clientes',
+  Matriculas: '/clientes/matriculas',
+  Email: '/email-sequences',
+  Formularios: '/captacion',
+  Make: '/captacion/make',
+  Webhooks: '/captacion/webhooks',
+  'Meta Ads': '/campanas/meta',
+  'Google Ads': '/campanas/google',
+  SEO: '/campanas/seo',
+  Catalogo: '/productos',
+  Cursos: '/productos/pendientes',
+  WooCommerce: '/productos/woocommerce',
+  Ventas: '/finanzas/ventas',
+  Ingresos: '/finanzas/ingresos',
+  Egresos: '/finanzas/egresos',
+  Facturas: '/finanzas/facturas',
+  Reportes: '/reports',
+  'Analisis IA': '/reports/ia',
+};
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -248,7 +287,7 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'default' }) {
   );
 }
 
-function AreaCard({ area }) {
+function AreaCard({ area, active, onClick }) {
   const Icon = area.icon;
   const tones = {
     cyan: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
@@ -261,7 +300,11 @@ function AreaCard({ area }) {
   return (
     <button
       type="button"
-      className="group flex min-h-[86px] items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+      onClick={onClick}
+      className={cn(
+        'group flex min-h-[86px] items-start gap-3 rounded-md border bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50',
+        active ? 'border-cyan-400 ring-2 ring-cyan-100' : 'border-slate-200',
+      )}
     >
       <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1', tones[area.tone] || tones.slate)}>
         <Icon size={18} weight="bold" />
@@ -340,14 +383,18 @@ function PipelineCard({ lead, selected, onSelect, onOpen }) {
   );
 }
 
-function AutomationCard({ icon: Icon, title, text, state, tone }) {
+function AutomationCard({ icon: Icon, title, text, state, tone, onClick }) {
   const toneClass = {
     active: 'bg-emerald-50 text-emerald-700',
     draft: 'bg-amber-50 text-amber-700',
     paused: 'bg-slate-100 text-slate-600',
   }[tone];
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+    >
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
           <Icon size={18} weight="bold" />
@@ -362,7 +409,7 @@ function AutomationCard({ icon: Icon, title, text, state, tone }) {
           <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
