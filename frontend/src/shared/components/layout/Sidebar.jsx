@@ -75,6 +75,7 @@ const NAV_SECTIONS = [
   {
     label: 'Testeo',
     items: [
+      { label: 'SUITEDASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
       { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
     ],
   },
@@ -369,8 +370,11 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
     );
   }
   if (href) {
+    const hrefPath = href.replace(/\/$/, '');
     const isActive = typeof window !== 'undefined'
-      ? window.location.pathname === href || window.location.pathname.startsWith('/testeo2/')
+      ? window.location.pathname === hrefPath
+        || window.location.pathname.startsWith(`${hrefPath}/`)
+        || (hrefPath === '/testeo2/prospectos' && (window.location.pathname === '/testeo2' || window.location.pathname === '/testeo2/'))
       : location.pathname === to;
     return (
       <a

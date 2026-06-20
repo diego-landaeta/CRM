@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowClockwise,
   ArrowRight,
@@ -61,7 +61,7 @@ const CRM_AREAS = [
   { label: 'Reportes', detail: 'KPIs, IA y analisis por proyecto', icon: TrendUp, tone: 'cyan', metric: 'BI' },
   { label: 'Mensajes', detail: 'Conversaciones y notificaciones', icon: ChatCircleText, tone: 'blue', metric: 'Inbox' },
   { label: 'Documentos', detail: 'Archivos, contratos y plantillas', icon: FilePdf, tone: 'slate', metric: 'Docs' },
-  { label: 'Config', detail: 'Roles, campos, canales y atajos', icon: Gear, tone: 'slate', metric: 'Admin' },
+  { label: 'Configuracion', detail: 'Roles, campos, canales y atajos', icon: Gear, tone: 'slate', metric: 'Admin' },
 ];
 
 const AREA_ROUTES = {
@@ -101,6 +101,10 @@ const CHILD_ROUTES = {
   Facturas: '/finanzas/facturas',
   Reportes: '/reports',
   'Analisis IA': '/reports/ia',
+  Messages: '/messages',
+  Files: '/documentos',
+  Billing: '/finanzas/facturas',
+  'Client Portal': '/clientes',
 };
 
 const STATUS_OPTIONS = [
@@ -443,6 +447,8 @@ export default function SuiteDashCrmPreviewPage() {
     refetch,
   } = useLeads();
   const [selectedId, setSelectedId] = useState(null);
+  const [activeArea, setActiveArea] = useState('Dashboard');
+  const [pipelineView, setPipelineView] = useState('board');
 
   const sourceLeads = leads.length ? leads : FALLBACK_LEADS;
   const selectedLead = sourceLeads.find((lead) => lead.id === selectedId) || sourceLeads[0] || null;
@@ -483,6 +489,60 @@ export default function SuiteDashCrmPreviewPage() {
     navigate(`/prospectos/${lead.id}`);
   }
 
+  function openRoute(path) {
+    if (!path) return;
+    navigate(path);
+  }
+
+  function openNavItem(item) {
+    const area = item.area || item.label;
+    setActiveArea(area);
+    if (!item.children) openRoute(AREA_ROUTES[area] || AREA_ROUTES[item.label]);
+  }
+
+  function exportCsv() {
+    const rows = sourceLeads.map((lead) => ({
+      nombre: lead.nombre || '',
+      email: lead.email || '',
+      telefono: lead.telefono || '',
+      estado: STATUS_LABELS[lead.estado || lead.status] || lead.estado || lead.status || '',
+      canal: lead.origen || lead.canal_detectado || lead.canal || '',
+      responsable: lead.responsable_nombre || lead.gestor || '',
+      programa: lead.producto_nombre || lead.producto_interes || '',
+      valor: leadValue(lead),
+    }));
+    const headers = Object.keys(rows[0] || {
+      nombre: '',
+      email: '',
+      telefono: '',
+      estado: '',
+      canal: '',
+      responsable: '',
+      programa: '',
+      valor: '',
+    });
+    const csv = [
+      headers.join(','),
+      ...rows.map((row) => headers.map((key) => `"${String(row[key] ?? '').replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${projectLabel.replace(/\s+/g, '-').toLowerCase()}-suite-dash.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  const viewButtonClass = (view) => cn(
+    'h-8 rounded-md px-3 text-xs font-bold transition-colors',
+    pipelineView === view
+      ? 'bg-slate-950 text-white'
+      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+  );
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <div className="grid min-h-screen lg:grid-cols-[256px_minmax(0,1fr)]">
@@ -501,6 +561,7 @@ export default function SuiteDashCrmPreviewPage() {
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Proyecto</p>
             <button
               type="button"
+              onClick={() => setActiveArea('Dashboard')}
               className="mt-2 flex h-10 w-full items-center gap-2 rounded-md bg-white/5 px-2 text-left text-sm font-semibold text-white ring-1 ring-white/10"
             >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white text-[10px] font-bold text-slate-950">
@@ -517,20 +578,22 @@ export default function SuiteDashCrmPreviewPage() {
                 <div key={item.label}>
                   <button
                     type="button"
+                    onClick={() => openNavItem(item)}
                     className={cn(
                       'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors',
-                      item.active ? 'bg-white text-slate-950 font-bold' : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                      activeArea === (item.area || item.label) ? 'bg-white text-slate-950 font-bold' : 'text-slate-300 hover:bg-white/10 hover:text-white',
                     )}
                   >
-                    <Icon size={18} weight={item.active ? 'bold' : 'regular'} />
+                    <Icon size={18} weight={activeArea === (item.area || item.label) ? 'bold' : 'regular'} />
                     <span className="truncate">{item.label}</span>
                   </button>
-                  {item.children && item.active ? (
+                  {item.children && activeArea === item.label ? (
                     <div className="ml-6 mt-1 space-y-1 border-l border-white/10 pl-3">
                       {item.children.map((child) => (
                         <button
                           key={child}
                           type="button"
+                          onClick={() => openRoute(CHILD_ROUTES[child] || AREA_ROUTES[item.label])}
                           className="block h-7 w-full rounded px-2 text-left text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
                         >
                           {child}
@@ -564,7 +627,7 @@ export default function SuiteDashCrmPreviewPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => navigate(testeo2Home)}
+                  onClick={() => navigate('/prospectos')}
                   className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
                 >
                   /testeo2
@@ -586,6 +649,7 @@ export default function SuiteDashCrmPreviewPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => navigate('/notificaciones')}
                   className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   aria-label="Notificaciones"
                 >
@@ -682,7 +746,12 @@ export default function SuiteDashCrmPreviewPage() {
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {CRM_AREAS.map((area) => (
-                  <AreaCard key={area.label} area={area} />
+                  <AreaCard
+                    key={area.label}
+                    area={area}
+                    active={activeArea === area.label}
+                    onClick={() => openRoute(AREA_ROUTES[area.label])}
+                  />
                 ))}
               </div>
             </section>
@@ -696,9 +765,9 @@ export default function SuiteDashCrmPreviewPage() {
                       <p className="text-sm text-slate-500">Vista Kanban para mover ventas, forecast y onboarding.</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" className="h-8 rounded-md bg-slate-950 px-3 text-xs font-bold text-white">Board</button>
-                      <button type="button" className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600">Table</button>
-                      <button type="button" className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600">Forecast</button>
+                      <button type="button" onClick={() => setPipelineView('board')} className={viewButtonClass('board')}>Board</button>
+                      <button type="button" onClick={() => setPipelineView('table')} className={viewButtonClass('table')}>Table</button>
+                      <button type="button" onClick={() => setPipelineView('forecast')} className={viewButtonClass('forecast')}>Forecast</button>
                     </div>
                   </div>
 
@@ -716,6 +785,51 @@ export default function SuiteDashCrmPreviewPage() {
                     </div>
                   ) : sourceLeads.length === 0 ? (
                     <div className="p-4"><EmptyState /></div>
+                  ) : pipelineView === 'table' ? (
+                    <div className="overflow-x-auto p-4">
+                      <table className="w-full min-w-[760px] text-sm">
+                        <thead className="text-xs uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-bold">Deal</th>
+                            <th className="px-3 py-2 text-left font-bold">Estado</th>
+                            <th className="px-3 py-2 text-left font-bold">Responsable</th>
+                            <th className="px-3 py-2 text-left font-bold">Siguiente</th>
+                            <th className="px-3 py-2 text-right font-bold">Valor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sourceLeads.map((lead) => (
+                            <tr key={lead.id} className="border-t border-slate-100">
+                              <td className="px-3 py-3 font-bold text-slate-950">{lead.producto_nombre || lead.producto_interes || lead.nombre || 'Deal sin nombre'}</td>
+                              <td className="px-3 py-3"><StatusBadge status={lead.estado || lead.status} showIcon /></td>
+                              <td className="px-3 py-3 text-slate-600">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
+                              <td className="px-3 py-3 text-slate-600">{reminderLabel(lead.next_reminder_at).label}</td>
+                              <td className="px-3 py-3 text-right font-bold">{money(leadValue(lead), lead.producto_moneda || 'EUR')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : pipelineView === 'forecast' ? (
+                    <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-5">
+                      {STAGES.map((stage) => {
+                        const stageLeads = grouped[stage.key] || [];
+                        const stageValue = stageLeads.reduce((sum, lead) => sum + leadValue(lead), 0);
+                        return (
+                          <button
+                            key={stage.key}
+                            type="button"
+                            onClick={() => setPipelineView('board')}
+                            className="rounded-md border border-slate-200 bg-slate-50 p-4 text-left hover:bg-white"
+                          >
+                            <span className={cn('block h-1 w-10 rounded-full', stage.stripe)} />
+                            <span className="mt-3 block text-sm font-bold text-slate-950">{stage.label}</span>
+                            <span className="mt-2 block text-2xl font-bold tabular-nums text-slate-950">{money(stageValue)}</span>
+                            <span className="mt-1 block text-xs text-slate-500">{stageLeads.length} oportunidades</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="grid gap-3 overflow-x-auto p-4 xl:grid-cols-5">
                       {STAGES.map((stage) => {
@@ -764,7 +878,11 @@ export default function SuiteDashCrmPreviewPage() {
                       <h2 className="text-lg font-bold text-slate-950">Directorio CRM</h2>
                       <p className="text-sm text-slate-500">Lista compacta de leads, clientes y siguientes acciones.</p>
                     </div>
-                    <button type="button" className="hidden h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 md:inline-flex">
+                    <button
+                      type="button"
+                      onClick={exportCsv}
+                      className="hidden h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 md:inline-flex"
+                    >
                       Export
                     </button>
                   </div>
@@ -874,10 +992,10 @@ export default function SuiteDashCrmPreviewPage() {
                     <Pulse size={22} weight="bold" className="text-cyan-600" />
                   </div>
                   <div className="mt-4 space-y-3">
-                    <AutomationCard icon={UserPlus} title="Nuevo lead a pipeline" text="Asigna responsable, crea recordatorio y registra origen." state="active" tone="active" />
-                    <AutomationCard icon={CalendarBlank} title="Follow-up programado" text="Genera evento comercial si el prospecto queda sin contacto." state="active" tone="active" />
-                    <AutomationCard icon={CheckCircle} title="Convertido a cliente" text="Activa documentos, matricula y carpeta de cliente." state="draft" tone="draft" />
-                    <AutomationCard icon={TrendUp} title="Forecast semanal" text="Resume valor abierto, deals vencidos y conversiones." state="paused" tone="paused" />
+                    <AutomationCard icon={UserPlus} title="Nuevo lead a pipeline" text="Asigna responsable, crea recordatorio y registra origen." state="active" tone="active" onClick={() => navigate('/prospectos?new=1')} />
+                    <AutomationCard icon={CalendarBlank} title="Follow-up programado" text="Genera evento comercial si el prospecto queda sin contacto." state="active" tone="active" onClick={() => navigate('/prospectos/pipeline')} />
+                    <AutomationCard icon={CheckCircle} title="Convertido a cliente" text="Activa documentos, matricula y carpeta de cliente." state="draft" tone="draft" onClick={() => navigate('/clientes')} />
+                    <AutomationCard icon={TrendUp} title="Forecast semanal" text="Resume valor abierto, deals vencidos y conversiones." state="paused" tone="paused" onClick={() => navigate('/reports')} />
                   </div>
                 </section>
 
@@ -892,7 +1010,12 @@ export default function SuiteDashCrmPreviewPage() {
                     ].map((item) => {
                       const Icon = item.icon;
                       return (
-                        <button key={item.label} type="button" className="rounded-md border border-slate-200 bg-slate-50 p-3 text-left hover:bg-white">
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => openRoute(CHILD_ROUTES[item.label])}
+                          className="rounded-md border border-slate-200 bg-slate-50 p-3 text-left hover:bg-white"
+                        >
                           <Icon size={18} weight="bold" className="text-slate-500" />
                           <span className="mt-2 block text-xs font-bold text-slate-700">{item.label}</span>
                         </button>

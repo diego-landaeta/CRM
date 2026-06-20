@@ -59,6 +59,7 @@ const ROUTE_TITLES = {
   '/prueba_ui_reportes': 'Prueba UI Reportes',
   '/prueba_ui_configuracion': 'Prueba UI Configuracion',
   '/testeo2': 'Prospectos',
+  '/suite-dash': 'Maqueta SuiteDash',
 };
 
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
@@ -178,6 +179,7 @@ const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/Ext
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
 const LeadsUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage')) : null;
 const GenericUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage')) : null;
+const SuiteDashCrmPreviewPage = IS_TESTEO2_BASE ? lazy(() => import('./modules/suitedash-preview/pages/SuiteDashCrmPreviewPage')) : null;
 
 // Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
 // en build de produccion Vite elimina la rama por dead-code elimination.
@@ -194,6 +196,9 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        {IS_TESTEO2_BASE && SuiteDashCrmPreviewPage && (
+          <Route path="/suite-dash" element={<ProtectedRoute><SuiteDashCrmPreviewPage /></ProtectedRoute>} />
+        )}
         <Route path="/testeo2" element={<ProtectedRoute><Navigate to="/prospectos" replace /></ProtectedRoute>} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={IS_TESTEO2_BASE ? <Navigate to="/prospectos" replace /> : <DashboardPage />} />
