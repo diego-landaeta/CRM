@@ -75,8 +75,8 @@ const NAV_SECTIONS = [
   {
     label: 'Testeo',
     items: [
-      { label: 'SUITEDASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
       { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
+      { label: 'SUITE DASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
     ],
   },
   {

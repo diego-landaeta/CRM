@@ -33,22 +33,116 @@ import {
 } from '@phosphor-icons/react';
 import { useLeads } from '@/modules/leads/hooks/useLeads';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
-import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import StatusBadge, { STATUS_KEYS, STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import { cn } from '@/shared/lib/utils';
 
-const CRM_NAV = [
-  { label: 'Dashboard', icon: SquaresFour, area: 'Dashboard' },
-  { label: 'Prospectos', icon: Users, children: ['Pipeline', 'Audiencias', 'Duplicados'] },
-  { label: 'Clientes', icon: UserCircle, children: ['Directorio', 'Matriculas'] },
-  { label: 'Captacion', icon: Globe, children: ['Email', 'Formularios', 'Make', 'Webhooks'] },
-  { label: 'Campanas', icon: ChartBar, children: ['Meta Ads', 'Google Ads', 'SEO'] },
-  { label: 'Productos', icon: Package, children: ['Catalogo', 'Cursos', 'WooCommerce'] },
-  { label: 'Finanzas', icon: Wallet, children: ['Ventas', 'Ingresos', 'Egresos', 'Facturas'] },
-  { label: 'Reportes', icon: TrendUp, children: ['Reportes', 'Analisis IA'] },
-  { label: 'Mensajes', icon: ChatCircleText },
-  { label: 'Documentos', icon: FilePdf },
-  { label: 'Configuracion', icon: Gear },
+const SUITEDASH_NAV_SECTIONS = [
+  {
+    label: 'Testeo',
+    items: [
+      { label: 'TESTEO2', detail: 'Panel funcional actual', icon: ChartBar, route: '/prospectos', tone: 'cyan' },
+      { label: 'SUITE DASH', detail: 'Rediseno SuiteDash', icon: Sparkle, area: 'Dashboard', tone: 'violet' },
+    ],
+  },
+  {
+    label: 'Principal',
+    items: [
+      { label: 'Dashboard', detail: 'Vista ejecutiva', icon: SquaresFour, area: 'Dashboard', tone: 'slate' },
+      {
+        label: 'Prospectos',
+        detail: 'Listado, pipeline y audiencias',
+        icon: Users,
+        route: '/prospectos',
+        tone: 'cyan',
+        children: [
+          { label: 'Listado', route: '/prospectos' },
+          { label: 'Pipeline', route: '/prospectos/pipeline' },
+          { label: 'Audiencias Meta', route: '/prospectos/audiencias' },
+          { label: 'Revision duplicados', route: '/prospectos/revision-duplicados' },
+        ],
+      },
+      {
+        label: 'Clientes',
+        detail: 'Clientes y matriculas',
+        icon: UserCircle,
+        route: '/clientes',
+        tone: 'emerald',
+        children: [
+          { label: 'Directorio', route: '/clientes' },
+          { label: 'Matriculas', route: '/clientes/matriculas' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Captacion',
+    items: [
+      { label: 'Email', detail: 'Secuencias y plantillas', icon: Envelope, route: '/email-sequences', tone: 'blue' },
+      { label: 'Formularios', detail: 'Forms y entradas', icon: Globe, route: '/captacion', tone: 'blue' },
+      { label: 'Make', detail: 'Automatizaciones Make', icon: Lightning, route: '/captacion/make', tone: 'amber' },
+      { label: 'Webhooks', detail: 'Integraciones entrantes', icon: Pulse, route: '/captacion/webhooks', tone: 'slate' },
+      { label: 'WhatsApp', detail: 'Widget y captacion', icon: ChatCircleText, route: '/captacion/whatsapp', tone: 'emerald' },
+    ],
+  },
+  {
+    label: 'Publicidad',
+    items: [
+      { label: 'Meta Ads', detail: 'Campanas Meta', icon: ChartBar, route: '/meta-ads', tone: 'blue' },
+      { label: 'Google Ads', detail: 'Campanas Google', icon: ChartBar, route: '/campanas/google', tone: 'amber' },
+      { label: 'Campanas', detail: 'Vista de campanas', icon: ChartBar, route: '/campanas', tone: 'slate' },
+      { label: 'Trafico organico', detail: 'SEO y busqueda', icon: MagnifyingGlass, route: '/campanas/seo', tone: 'emerald' },
+    ],
+  },
+  {
+    label: 'Catalogo',
+    items: [
+      { label: 'Productos', detail: 'Catalogo principal', icon: Package, route: '/productos', tone: 'violet' },
+      { label: 'Cursos pendientes', detail: 'Oferta por completar', icon: Clock, route: '/productos/pendientes', tone: 'amber' },
+      { label: 'WooCommerce', detail: 'Sincronizacion tienda', icon: Globe, route: '/productos/woocommerce', tone: 'emerald' },
+      { label: 'Arbol categorias', detail: 'Taxonomia comercial', icon: BookOpen, route: '/productos/arbol', tone: 'slate' },
+      { label: 'Documentos', detail: 'Archivos y plantillas', icon: FilePdf, route: '/documentos', tone: 'slate' },
+    ],
+  },
+  {
+    label: 'Finanzas',
+    items: [
+      { label: 'Dashboard finanzas', detail: 'Resumen contable', icon: Wallet, route: '/finanzas', tone: 'emerald' },
+      { label: 'Ventas', detail: 'Ventas registradas', icon: CreditCard, route: '/finanzas/ventas', tone: 'emerald' },
+      { label: 'Ingresos', detail: 'Entradas de caja', icon: TrendUp, route: '/finanzas/ingresos', tone: 'emerald' },
+      { label: 'Conversiones', detail: 'Leads convertidos', icon: CheckCircle, route: '/finanzas/conversiones', tone: 'violet' },
+      { label: 'Egresos', detail: 'Salidas y gastos', icon: Wallet, route: '/finanzas/egresos', tone: 'amber' },
+      { label: 'Por cobrar', detail: 'Cuentas pendientes', icon: Clock, route: '/finanzas/por-cobrar', tone: 'cyan' },
+      { label: 'Por pagar', detail: 'Obligaciones', icon: CreditCard, route: '/finanzas/por-pagar', tone: 'amber' },
+      { label: 'Comisiones', detail: 'Comisiones comerciales', icon: Users, route: '/finanzas/comisiones', tone: 'blue' },
+      { label: 'Nominas', detail: 'Equipo y pagos', icon: UserCircle, route: '/finanzas/nominas', tone: 'slate' },
+      { label: 'Pendiente facturar', detail: 'Facturacion pendiente', icon: FilePdf, route: '/finanzas/pendiente-facturar', tone: 'amber' },
+      { label: 'Pagos Stripe', detail: 'Pagos online', icon: CreditCard, route: '/finanzas/pagos-stripe', tone: 'violet' },
+      { label: 'Facturacion', detail: 'Facturas y series', icon: FilePdf, route: '/finanzas/facturas', tone: 'blue' },
+      { label: 'Integraciones', detail: 'Servicios conectados', icon: Lightning, route: '/finanzas/integraciones', tone: 'slate' },
+    ],
+  },
+  {
+    label: 'Analisis',
+    items: [
+      { label: 'Reportes', detail: 'KPIs por proyecto', icon: TrendUp, route: '/reports', tone: 'cyan' },
+      { label: 'Analisis IA', detail: 'Lectura inteligente', icon: Sparkle, route: '/reports/ia', tone: 'violet' },
+      { label: 'Chat IA', detail: 'Asistente interno', icon: ChatCircleText, route: '/ai-chat', tone: 'blue' },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { label: 'Mensajes', detail: 'Inbox interno', icon: ChatCircleText, route: '/messages', tone: 'blue' },
+      { label: 'Solicitudes cambio', detail: 'Gestion de cambios', icon: CheckCircle, route: '/solicitudes-cambio', tone: 'amber' },
+      { label: 'Notificaciones', detail: 'Avisos del sistema', icon: Bell, route: '/notificaciones', tone: 'cyan' },
+      { label: 'Preferencias', detail: 'Ajustes personales', icon: UserCircle, route: '/preferences', tone: 'slate' },
+      { label: 'Soporte', detail: 'Ayuda operativa', icon: BookOpen, route: '/soporte', tone: 'emerald' },
+      { label: 'Status', detail: 'Estado del sistema', icon: Pulse, route: '/status', tone: 'slate' },
+      { label: 'Manual', detail: 'Guia de usuario', icon: BookOpen, route: '/manual', tone: 'blue' },
+      { label: 'Configuracion', detail: 'Roles, campos y proyecto', icon: Gear, route: '/settings', tone: 'slate' },
+    ],
+  },
 ];
 
 const CRM_AREAS = [
@@ -108,23 +202,13 @@ const CHILD_ROUTES = {
 };
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'nuevo', label: 'Nuevo' },
-  { value: 'por_contactar', label: 'Por contactar' },
-  { value: 'contactado', label: 'Contactado' },
-  { value: 'en_seguimiento', label: 'En seguimiento' },
-  { value: 'convertido', label: 'Convertido' },
+  { value: '', label: 'Todos los estados' },
+  ...STATUS_KEYS.map((value) => ({ value, label: STATUS_LABELS[value] || value })),
 ];
 
 const CHANNEL_OPTIONS = [
-  { value: '', label: 'Canal' },
-  { value: 'meta_ads', label: 'Meta Ads' },
-  { value: 'google_ads', label: 'Google Ads' },
-  { value: 'tiktok_ads', label: 'TikTok Ads' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'organico', label: 'Organico' },
-  { value: 'referido', label: 'Referido' },
-  { value: 'directo', label: 'Directo' },
+  { value: '', label: 'Todos los canales' },
+  ...Object.entries(CHANNEL_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 const STAGES = [
@@ -417,6 +501,37 @@ function AutomationCard({ icon: Icon, title, text, state, tone, onClick }) {
   );
 }
 
+function ModuleButton({ item, active, onClick }) {
+  const Icon = item.icon || SquaresFour;
+  const tones = {
+    cyan: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group flex min-h-[76px] items-start gap-3 rounded-md border bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50',
+        active ? 'border-cyan-400 ring-2 ring-cyan-100' : 'border-slate-200',
+      )}
+    >
+      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1', tones[item.tone] || tones.slate)}>
+        <Icon size={18} weight="bold" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-slate-950">{item.label}</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span>
+      </span>
+      {item.route ? <ArrowRight size={14} weight="bold" className="mt-1 shrink-0 text-slate-300 transition-colors group-hover:text-cyan-600" /> : null}
+    </button>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -497,7 +612,7 @@ export default function SuiteDashCrmPreviewPage() {
   function openNavItem(item) {
     const area = item.area || item.label;
     setActiveArea(area);
-    if (!item.children) openRoute(AREA_ROUTES[area] || AREA_ROUTES[item.label]);
+    if (!item.children?.length && item.route) openRoute(item.route);
   }
 
   function exportCsv() {
@@ -546,14 +661,14 @@ export default function SuiteDashCrmPreviewPage() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <div className="grid min-h-screen lg:grid-cols-[256px_minmax(0,1fr)]">
-        <aside className="hidden border-r border-slate-800 bg-slate-950 text-white lg:flex lg:flex-col">
+        <aside className="hidden border-r border-slate-800 bg-slate-950 text-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
           <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
             <span className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-500 text-white">
               <Package size={19} weight="bold" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold">MultiCRM</p>
-              <p className="truncate text-xs text-slate-400">Testeo2 workspace</p>
+              <p className="truncate text-sm font-bold">{projectLabel}</p>
+              <p className="truncate text-xs text-slate-400">Suite Dash workspace</p>
             </div>
           </div>
 
@@ -571,39 +686,45 @@ export default function SuiteDashCrmPreviewPage() {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            {CRM_NAV.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label}>
-                  <button
-                    type="button"
-                    onClick={() => openNavItem(item)}
-                    className={cn(
-                      'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors',
-                      activeArea === (item.area || item.label) ? 'bg-white text-slate-950 font-bold' : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                    )}
-                  >
-                    <Icon size={18} weight={activeArea === (item.area || item.label) ? 'bold' : 'regular'} />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                  {item.children && activeArea === item.label ? (
-                    <div className="ml-6 mt-1 space-y-1 border-l border-white/10 pl-3">
-                      {item.children.map((child) => (
-                        <button
-                          key={child}
-                          type="button"
-                          onClick={() => openRoute(CHILD_ROUTES[child] || AREA_ROUTES[item.label])}
-                          className="block h-7 w-full rounded px-2 text-left text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
-                        >
-                          {child}
-                        </button>
-                      ))}
+          <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+            {SUITEDASH_NAV_SECTIONS.map((section) => (
+              <div key={section.label} className="space-y-1">
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">{section.label}</p>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeArea === (item.area || item.label);
+                  return (
+                    <div key={item.label}>
+                      <button
+                        type="button"
+                        onClick={() => openNavItem(item)}
+                        className={cn(
+                          'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors',
+                          isActive ? 'bg-white text-slate-950 font-bold' : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                        )}
+                      >
+                        <Icon size={18} weight={isActive ? 'bold' : 'regular'} />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                      {item.children?.length && isActive ? (
+                        <div className="ml-6 mt-1 space-y-1 border-l border-white/10 pl-3">
+                          {item.children.map((child) => (
+                            <button
+                              key={child.label}
+                              type="button"
+                              onClick={() => openRoute(child.route)}
+                              className="block h-7 w-full rounded px-2 text-left text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white"
+                            >
+                              {child.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           <div className="border-t border-white/10 p-4">
@@ -622,7 +743,7 @@ export default function SuiteDashCrmPreviewPage() {
                   <Sparkle size={14} weight="bold" />
                   CRM + funnels + client portal
                 </div>
-                <h1 className="mt-1 truncate text-xl font-bold text-slate-950 md:text-2xl">Testeo2 CRM Workspace</h1>
+                <h1 className="mt-1 truncate text-xl font-bold text-slate-950 md:text-2xl">{projectLabel} Suite Dash</h1>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -736,22 +857,37 @@ export default function SuiteDashCrmPreviewPage() {
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">Apartados conectados</h2>
-                  <p className="text-sm text-slate-500">Mapa rapido de todo el CRM, con los modulos actuales reunidos en una sola experiencia.</p>
+                  <h2 className="text-lg font-bold text-slate-950">Panel funcional Suite Dash</h2>
+                  <p className="text-sm text-slate-500">Mismos apartados del CRM actual, presentados como workspace limpio y navegable.</p>
                 </div>
                 <span className="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-slate-100 px-3 text-xs font-bold uppercase tracking-wide text-slate-600">
                   <Sparkle size={13} weight="bold" />
                   Suite-style workspace
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {CRM_AREAS.map((area) => (
-                  <AreaCard
-                    key={area.label}
-                    area={area}
-                    active={activeArea === area.label}
-                    onClick={() => openRoute(AREA_ROUTES[area.label])}
-                  />
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                {SUITEDASH_NAV_SECTIONS.filter((section) => section.label !== 'Testeo').map((section) => (
+                  <div key={section.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">{section.label}</h3>
+                      <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
+                        {section.items.length}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {section.items.map((item) => (
+                        <ModuleButton
+                          key={item.label}
+                          item={item}
+                          active={activeArea === (item.area || item.label)}
+                          onClick={() => {
+                            setActiveArea(item.area || item.label);
+                            if (item.route) openRoute(item.route);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </section>
