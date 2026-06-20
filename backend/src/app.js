@@ -20,6 +20,7 @@ import accountingModule from './modules/accounting/index.js';
 import integrationsModule from './modules/integrations/index.js';
 import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
+import widgetModule from './modules/widget/index.js';
 import fieldDefsModule from './modules/field-definitions/index.js';
 import credentialsModule from './modules/credentials/index.js';
 import projectsModule from './modules/projects/index.js';
@@ -114,6 +115,7 @@ const ALL_MODULES = [
   { name: 'integrations', mod: integrationsModule },
   { name: 'stripe-payments', mod: stripePaymentsModule },
   { name: 'invoices', mod: invoicesModule },
+  { name: 'widget', mod: widgetModule },
   { name: 'field-definitions', mod: fieldDefsModule },
   { name: 'credentials', mod: credentialsModule },
   { name: 'projects', mod: projectsModule },

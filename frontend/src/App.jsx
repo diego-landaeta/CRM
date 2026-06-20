@@ -143,6 +143,7 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
+const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
@@ -235,6 +236,7 @@ function App() {
             <Route path="webhooks/:id" element={<WebhookDetailPage />} />
             <Route path="make" element={<MakeWebhooksPage />} />
             <Route path="make/:id" element={<MakeWebhookDetailPage />} />
+            <Route path="whatsapp" element={<WhatsappWidgetPage />} />
           </Route>
 
           {/* Campañas — tabs */}

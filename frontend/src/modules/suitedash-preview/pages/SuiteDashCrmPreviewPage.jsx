@@ -39,16 +39,29 @@ import { cn } from '@/shared/lib/utils';
 
 const CRM_NAV = [
   { label: 'Dashboard', icon: SquaresFour, active: true },
-  { label: 'CRM', icon: Users, children: ['Companies', 'Contacts', 'Circles', 'Events', 'Deals'] },
-  { label: 'Funnels', icon: Funnel, children: ['Pipeline', 'Forecast', 'Forms'] },
-  { label: 'Marketing', icon: Envelope },
-  { label: 'Projects', icon: Package },
-  { label: 'Files', icon: FilePdf },
-  { label: 'Billing', icon: CreditCard },
-  { label: 'Messaging', icon: ChatCircleText },
-  { label: 'Automations', icon: Lightning },
-  { label: 'Academy', icon: BookOpen },
-  { label: 'Settings', icon: Gear },
+  { label: 'Prospectos', icon: Users, children: ['Pipeline', 'Audiencias', 'Duplicados'] },
+  { label: 'Clientes', icon: UserCircle, children: ['Directorio', 'Matriculas'] },
+  { label: 'Captacion', icon: Globe, children: ['Email', 'Formularios', 'Make', 'Webhooks'] },
+  { label: 'Campanas', icon: ChartBar, children: ['Meta Ads', 'Google Ads', 'SEO'] },
+  { label: 'Productos', icon: Package, children: ['Catalogo', 'Cursos', 'WooCommerce'] },
+  { label: 'Finanzas', icon: Wallet, children: ['Ventas', 'Ingresos', 'Egresos', 'Facturas'] },
+  { label: 'Reportes', icon: TrendUp, children: ['Reportes', 'Analisis IA'] },
+  { label: 'Mensajes', icon: ChatCircleText },
+  { label: 'Documentos', icon: FilePdf },
+  { label: 'Configuracion', icon: Gear },
+];
+
+const CRM_AREAS = [
+  { label: 'Prospectos', detail: 'Pipeline, estados y audiencias', icon: Users, tone: 'cyan', metric: 'Leads' },
+  { label: 'Clientes', detail: 'Ficha, matriculas y seguimiento', icon: UserCircle, tone: 'emerald', metric: 'Cuentas' },
+  { label: 'Captacion', detail: 'Forms, email, Make y webhooks', icon: Globe, tone: 'blue', metric: 'Entradas' },
+  { label: 'Campanas', detail: 'Meta, Google y trafico organico', icon: ChartBar, tone: 'amber', metric: 'Ads' },
+  { label: 'Productos', detail: 'Catalogo, cursos y WooCommerce', icon: Package, tone: 'violet', metric: 'Oferta' },
+  { label: 'Finanzas', detail: 'Ventas, ingresos, egresos y facturas', icon: Wallet, tone: 'emerald', metric: 'Caja' },
+  { label: 'Reportes', detail: 'KPIs, IA y analisis por proyecto', icon: TrendUp, tone: 'cyan', metric: 'BI' },
+  { label: 'Mensajes', detail: 'Conversaciones y notificaciones', icon: ChatCircleText, tone: 'blue', metric: 'Inbox' },
+  { label: 'Documentos', detail: 'Archivos, contratos y plantillas', icon: FilePdf, tone: 'slate', metric: 'Docs' },
+  { label: 'Config', detail: 'Roles, campos, canales y atajos', icon: Gear, tone: 'slate', metric: 'Admin' },
 ];
 
 const STATUS_OPTIONS = [
@@ -232,6 +245,32 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'default' }) {
       <div className="mt-3 truncate text-2xl font-bold tabular-nums text-slate-950">{value}</div>
       <div className="mt-1 truncate text-xs text-slate-500">{detail}</div>
     </div>
+  );
+}
+
+function AreaCard({ area }) {
+  const Icon = area.icon;
+  const tones = {
+    cyan: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+  };
+  return (
+    <button
+      type="button"
+      className="group flex min-h-[86px] items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+    >
+      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1', tones[area.tone] || tones.slate)}>
+        <Icon size={18} weight="bold" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-slate-950">{area.label}</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">{area.detail}</span>
+      </span>
+    </button>
   );
 }
 
@@ -576,14 +615,32 @@ export default function SuiteDashCrmPreviewPage() {
               </div>
             ) : null}
 
-            <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard icon={Users} label="Contactos CRM" value={total || stats?.total || sourceLeads.length} detail={usingFallback ? 'Datos demo visibles' : 'Datos vivos de testeo'} tone="cyan" />
               <MetricCard icon={Wallet} label="Forecast pipeline" value={money(summary.totalValue)} detail="Valor de oportunidades visibles" tone="emerald" />
               <MetricCard icon={Clock} label="Follow-ups vencidos" value={summary.overdue} detail="Eventos que requieren accion" tone="amber" />
               <MetricCard icon={Lightning} label="Automations" value={summary.activeAutomations} detail="Flujos listos para operar" />
             </section>
 
-            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-950">Apartados conectados</h2>
+                  <p className="text-sm text-slate-500">Mapa rapido de todo el CRM, con los modulos actuales reunidos en una sola experiencia.</p>
+                </div>
+                <span className="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-slate-100 px-3 text-xs font-bold uppercase tracking-wide text-slate-600">
+                  <Sparkle size={13} weight="bold" />
+                  Suite-style workspace
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                {CRM_AREAS.map((area) => (
+                  <AreaCard key={area.label} area={area} />
+                ))}
+              </div>
+            </section>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <section className="min-w-0 space-y-5">
                 <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="flex flex-col gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
