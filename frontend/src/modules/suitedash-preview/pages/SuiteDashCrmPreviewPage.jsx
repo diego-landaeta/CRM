@@ -145,6 +145,13 @@ const SUITEDASH_NAV_SECTIONS = [
   },
 ];
 
+const DASHBOARD_MODULES = [
+  { label: 'Prospectos', detail: 'Mesa comercial', icon: Users, route: '/prospectos', tone: 'cyan' },
+  { label: 'Clientes', detail: 'Cuentas activas', icon: UserCircle, route: '/clientes', tone: 'emerald' },
+  { label: 'Finanzas', detail: 'Caja y facturacion', icon: Wallet, route: '/finanzas', tone: 'emerald' },
+  { label: 'Reportes', detail: 'KPIs y analisis', icon: TrendUp, route: '/reports', tone: 'blue' },
+];
+
 const CRM_AREAS = [
   { label: 'Prospectos', detail: 'Pipeline, estados y audiencias', icon: Users, tone: 'cyan', metric: 'Leads' },
   { label: 'Clientes', detail: 'Ficha, matriculas y seguimiento', icon: UserCircle, tone: 'emerald', metric: 'Cuentas' },
@@ -375,6 +382,80 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'default' }) {
   );
 }
 
+function SidebarModuleItem({ item, active, onClick }) {
+  const Icon = item.icon || SquaresFour;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+        active
+          ? 'bg-white text-slate-950 shadow-sm'
+          : 'text-slate-300 hover:bg-white/10 hover:text-white',
+      )}
+    >
+      <Icon size={17} weight={active ? 'bold' : 'regular'} className="shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">{item.label}</span>
+        {item.detail ? (
+          <span className={cn('block truncate text-[11px]', active ? 'text-slate-500' : 'text-slate-500 group-hover:text-slate-400')}>
+            {item.detail}
+          </span>
+        ) : null}
+      </span>
+      {item.children?.length ? (
+        <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold', active ? 'bg-slate-100 text-slate-500' : 'bg-white/10 text-slate-400')}>
+          {item.children.length}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function DashboardQuickCard({ item, onClick }) {
+  const Icon = item.icon || SquaresFour;
+  const tones = {
+    cyan: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex min-h-[86px] items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+    >
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-md ring-1', tones[item.tone] || tones.slate)}>
+        <Icon size={19} weight="bold" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold text-slate-950">{item.label}</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">{item.detail}</span>
+      </span>
+      <ArrowRight size={14} weight="bold" className="mt-1 shrink-0 text-slate-300 transition-colors group-hover:text-cyan-600" />
+    </button>
+  );
+}
+
+function StatusMeter({ label, count, totalCount, color }) {
+  const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="truncate font-semibold text-slate-600">{label}</span>
+        <span className="font-bold tabular-nums text-slate-950">{count}</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={cn('h-full rounded-full', color)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function AreaCard({ area, active, onClick }) {
   const Icon = area.icon;
   const tones = {
@@ -592,6 +673,39 @@ export default function SuiteDashCrmPreviewPage() {
     return { totalValue, overdue, won, activeAutomations };
   }, [sourceLeads]);
 
+  const statusBreakdown = useMemo(() => (
+    STATUS_KEYS.map((status) => ({
+      status,
+      label: STATUS_LABELS[status] || status,
+      count: sourceLeads.filter((lead) => (lead.estado || lead.status) === status).length,
+    })).filter((item) => item.count > 0)
+  ), [sourceLeads]);
+
+  const channelBreakdown = useMemo(() => {
+    const counts = new Map();
+    sourceLeads.forEach((lead) => {
+      const key = lead.origen || lead.canal_detectado || lead.canal || 'otro';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([channel, count]) => ({ channel, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [sourceLeads]);
+
+  const upcomingLeads = useMemo(() => (
+    [...sourceLeads]
+      .filter((lead) => lead.next_reminder_at)
+      .sort((a, b) => (daysFromToday(a.next_reminder_at) ?? 999) - (daysFromToday(b.next_reminder_at) ?? 999))
+      .slice(0, 4)
+  ), [sourceLeads]);
+
+  const recentLeads = useMemo(() => (
+    [...sourceLeads]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 5)
+  ), [sourceLeads]);
+
   function clearFilters() {
     setSearch('');
     setFilterEstado('');
@@ -667,47 +781,38 @@ export default function SuiteDashCrmPreviewPage() {
               <Package size={19} weight="bold" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold">{projectLabel}</p>
-              <p className="truncate text-xs text-slate-400">Suite Dash workspace</p>
+              <p className="truncate text-sm font-bold">Suite Dash</p>
+              <p className="truncate text-xs text-slate-400">CRM workspace</p>
             </div>
           </div>
 
-          <div className="border-b border-white/10 px-4 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Proyecto</p>
+          <div className="border-b border-white/10 px-4 py-3">
             <button
               type="button"
               onClick={() => setActiveArea('Dashboard')}
-              className="mt-2 flex h-10 w-full items-center gap-2 rounded-md bg-white/5 px-2 text-left text-sm font-semibold text-white ring-1 ring-white/10"
+              className="flex w-full items-center gap-3 rounded-md bg-white/5 px-3 py-2 text-left ring-1 ring-white/10 transition-colors hover:bg-white/10"
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white text-[10px] font-bold text-slate-950">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-white text-[10px] font-bold text-slate-950">
                 CRM
               </span>
-              <span className="truncate">{projectLabel}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-white">{projectLabel}</span>
+                <span className="block truncate text-[11px] text-slate-400">Proyecto activo</span>
+              </span>
             </button>
           </div>
 
-          <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
             {SUITEDASH_NAV_SECTIONS.map((section) => (
               <div key={section.label} className="space-y-1">
                 <p className="px-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">{section.label}</p>
                 {section.items.map((item) => {
-                  const Icon = item.icon;
                   const isActive = activeArea === (item.area || item.label);
                   return (
                     <div key={item.label}>
-                      <button
-                        type="button"
-                        onClick={() => openNavItem(item)}
-                        className={cn(
-                          'flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors',
-                          isActive ? 'bg-white text-slate-950 font-bold' : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                        )}
-                      >
-                        <Icon size={18} weight={isActive ? 'bold' : 'regular'} />
-                        <span className="truncate">{item.label}</span>
-                      </button>
+                      <SidebarModuleItem item={item} active={isActive} onClick={() => openNavItem(item)} />
                       {item.children?.length && isActive ? (
-                        <div className="ml-6 mt-1 space-y-1 border-l border-white/10 pl-3">
+                        <div className="ml-5 mt-1 space-y-1 border-l border-white/10 pl-3">
                           {item.children.map((child) => (
                             <button
                               key={child.label}
@@ -743,7 +848,7 @@ export default function SuiteDashCrmPreviewPage() {
                   <Sparkle size={14} weight="bold" />
                   CRM + funnels + client portal
                 </div>
-                <h1 className="mt-1 truncate text-xl font-bold text-slate-950 md:text-2xl">{projectLabel} Suite Dash</h1>
+                <h1 className="mt-1 truncate text-xl font-bold text-slate-950 md:text-2xl">Dashboard</h1>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -854,41 +959,107 @@ export default function SuiteDashCrmPreviewPage() {
               <MetricCard icon={Lightning} label="Automations" value={summary.activeAutomations} detail="Flujos listos para operar" />
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-950">Panel funcional Suite Dash</h2>
-                  <p className="text-sm text-slate-500">Mismos apartados del CRM actual, presentados como workspace limpio y navegable.</p>
-                </div>
-                <span className="inline-flex h-8 w-fit items-center gap-2 rounded-md bg-slate-100 px-3 text-xs font-bold uppercase tracking-wide text-slate-600">
-                  <Sparkle size={13} weight="bold" />
-                  Suite-style workspace
-                </span>
-              </div>
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                {SUITEDASH_NAV_SECTIONS.filter((section) => section.label !== 'Testeo').map((section) => (
-                  <div key={section.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">{section.label}</h3>
-                      <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
-                        {section.items.length}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {section.items.map((item) => (
-                        <ModuleButton
-                          key={item.label}
-                          item={item}
-                          active={activeArea === (item.area || item.label)}
-                          onClick={() => {
-                            setActiveArea(item.area || item.label);
-                            if (item.route) openRoute(item.route);
-                          }}
-                        />
-                      ))}
-                    </div>
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)_minmax(300px,0.75fr)]">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Salud comercial</h2>
+                    <p className="text-sm text-slate-500">Estados y canales de los contactos visibles.</p>
                   </div>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/prospectos/pipeline')}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    Pipeline <ArrowRight size={12} weight="bold" />
+                  </button>
+                </div>
+                <div className="mt-4 grid gap-5 md:grid-cols-2">
+                  <div className="space-y-3">
+                    {(statusBreakdown.length ? statusBreakdown : [{ status: 'nuevo', label: 'Sin datos', count: 0 }]).slice(0, 6).map((item, index) => (
+                      <StatusMeter
+                        key={item.status}
+                        label={item.label}
+                        count={item.count}
+                        totalCount={sourceLeads.length}
+                        color={['bg-blue-500', 'bg-amber-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500', 'bg-cyan-500'][index] || 'bg-slate-400'}
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Canales principales</p>
+                    {channelBreakdown.map((item) => (
+                      <div key={item.channel} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2">
+                        <ChannelBadge channel={item.channel} />
+                        <span className="text-sm font-bold tabular-nums text-slate-950">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Siguientes acciones</h2>
+                    <p className="text-sm text-slate-500">Seguimientos ordenados por urgencia.</p>
+                  </div>
+                  <CalendarBlank size={22} weight="bold" className="text-cyan-600" />
+                </div>
+                <div className="mt-4 space-y-3">
+                  {(upcomingLeads.length ? upcomingLeads : sourceLeads.slice(0, 3)).map((lead) => {
+                    const reminder = reminderLabel(lead.next_reminder_at);
+                    return (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(lead.id);
+                          openLead(lead);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-left hover:bg-white"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                          {initials(lead.nombre)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-bold text-slate-950">{lead.nombre || 'Sin nombre'}</span>
+                          <span className="block truncate text-xs text-slate-500">{lead.producto_nombre || lead.producto_interes || 'Sin programa'}</span>
+                        </span>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded px-2 py-1 text-xs font-bold',
+                            reminder.tone === 'danger' && 'bg-rose-50 text-rose-700',
+                            reminder.tone === 'warning' && 'bg-amber-50 text-amber-700',
+                            reminder.tone === 'info' && 'bg-blue-50 text-blue-700',
+                            reminder.tone === 'muted' && 'bg-slate-100 text-slate-500',
+                          )}
+                        >
+                          {reminder.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-950">Accesos clave</h2>
+                    <p className="text-sm text-slate-500">El resto vive en el sidebar.</p>
+                  </div>
+                  <SquaresFour size={22} weight="bold" className="text-slate-400" />
+                </div>
+                <div className="mt-4 grid gap-2">
+                  {DASHBOARD_MODULES.map((item) => (
+                    <DashboardQuickCard
+                      key={item.label}
+                      item={item}
+                      onClick={() => openRoute(item.route)}
+                    />
+                  ))}
+                </div>
               </div>
             </section>
 
@@ -1136,27 +1307,34 @@ export default function SuiteDashCrmPreviewPage() {
                 </section>
 
                 <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                  <h2 className="text-lg font-bold text-slate-950">Portal modules</h2>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Client Portal', icon: Globe },
-                      { label: 'Billing', icon: CreditCard },
-                      { label: 'Messages', icon: ChatCircleText },
-                      { label: 'Files', icon: FilePdf },
-                    ].map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={() => openRoute(CHILD_ROUTES[item.label])}
-                          className="rounded-md border border-slate-200 bg-slate-50 p-3 text-left hover:bg-white"
-                        >
-                          <Icon size={18} weight="bold" className="text-slate-500" />
-                          <span className="mt-2 block text-xs font-bold text-slate-700">{item.label}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-950">Actividad reciente</h2>
+                      <p className="text-sm text-slate-500">Ultimos contactos captados.</p>
+                    </div>
+                    <Clock size={22} weight="bold" className="text-slate-400" />
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {recentLeads.map((lead) => (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(lead.id);
+                          openLead(lead);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-left hover:bg-white"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                          {initials(lead.nombre)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-bold text-slate-950">{lead.nombre || 'Sin nombre'}</span>
+                          <span className="block truncate text-xs text-slate-500">{dateLabel(lead.created_at)}</span>
+                        </span>
+                        <StatusBadge status={lead.estado || lead.status} />
+                      </button>
+                    ))}
                   </div>
                 </section>
               </aside>
