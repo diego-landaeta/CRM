@@ -56,6 +56,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
+import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -190,6 +191,7 @@ if (process.env.NODE_ENV !== 'test') {
     startStripePaymentsSyncScheduler();
     startDocumentOrphanScheduler();
     startGoogleAdsTokenScheduler();
+    startMetaAdsSyncScheduler();
   });
 }
 
