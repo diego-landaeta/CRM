@@ -577,7 +577,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           if (it.children?.some((c) => location.pathname === c.to || location.pathname.startsWith((c.to || '') + '/'))) return true;
           return it.to && it.to !== '/' && location.pathname.startsWith(it.to + '/');
         });
-        out[s.label] = s.label === 'Principal' || s.label === 'Testeo' || has;
+        // Por defecto solo "Principal" abierta (Dashboard + Leads). El resto cerrado;
+        // cada usuario abre/cierra según use (se persiste en localStorage).
+        out[s.label] = s.label === 'Principal' || has;
       }
       return out;
     }
@@ -620,8 +622,10 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     }
     return null;
   })();
-  const [openGroup, setOpenGroup] = useState(activeGroupLabel);
-  useEffect(() => { setOpenGroup(activeGroupLabel); }, [activeGroupLabel]);
+  // Por defecto abrimos el grupo "Prospectos" (Leads). Al entrar en otra sección con
+  // grupo, ese se abre y los demás se cierran. En páginas sin grupo, se mantiene el actual.
+  const [openGroup, setOpenGroup] = useState(activeGroupLabel || 'Prospectos');
+  useEffect(() => { if (activeGroupLabel) setOpenGroup(activeGroupLabel); }, [activeGroupLabel]);
 
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
