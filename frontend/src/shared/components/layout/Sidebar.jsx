@@ -115,7 +115,7 @@ const NAV_SECTIONS = [
       { label: 'Cursos pendientes', to: '/productos/pendientes', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
       { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Documentos', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
+      { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
     ],
   },
   {
