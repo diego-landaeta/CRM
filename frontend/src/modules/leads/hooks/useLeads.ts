@@ -310,24 +310,34 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Token de request: evita que una respuesta lenta de un lead anterior pise
+  // los datos del lead actual (race condition al navegar rápido entre fichas).
+  const reqIdRef = useRef(0);
+
   const fetchLead = useCallback(async (): Promise<void> => {
     if (!id) return;
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const res = await client.get(`/leads/${id}`);
+      if (reqIdRef.current !== myReq) return; // respuesta obsoleta: ignorar
       if (res.success) {
         setLead(normalizeLead(res.data));
       }
     } catch (err: any) {
+      if (reqIdRef.current !== myReq) return; // respuesta obsoleta: ignorar
       setError(err?.message || String(err));
       setLead(null);
     } finally {
-      setLoading(false);
+      if (reqIdRef.current === myReq) setLoading(false);
     }
   }, [id]);
 
+  // Al cambiar de id, limpiamos el lead anterior para no mostrar datos de otra ficha
+  // mientras carga la nueva.
   useEffect(() => {
+    setLead(null);
     fetchLead();
   }, [fetchLead]);
 
