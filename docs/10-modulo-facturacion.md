@@ -224,6 +224,16 @@ Lo **ya construido** (multi-emisor, editor Canva, plantillas condicionales, rect
 
 ---
 
+## 13.bis Decisiones confirmadas (2026-07-02)
+
+- **Sociedades:** se crean desde **Empresas emisoras** (ya existe). La **serie la escribe/edita el admin o superadmin** (ya editable). Datos fiscales reales los carga el equipo.
+- **Formato de numeración:** **configurable por el superadmin** (no fijo en código). El formato exacto (`SERIE-AÑO-NNNN` vs `AÑO/NNNN`) se decide al revisar las facturas reales.
+- **Auto-facturación de pagos (prioridad):** un cobro de **Stripe** genera factura + correlativo automáticamente; un pago por **transferencia**, al registrarse, también recibe su correlativo. (REQ-PAG-01/02, Fase C).
+- **Resumen descargable por mes/período** + **conteo de IVA aproximado** en el panel (Fase E). *IVA aprox. ya visible en la pantalla de Ventas.*
+- **Comisiones (nuevo módulo):** modelo **mixto** — cada persona puede tener **salario fijo** y/o **comisión** (por **venta individual** con % propio, o por **equipo** según su participación). Se **suman**. (Fase H).
+- **Ventas (simplificar):** mostrar nº de conversiones (hecho) + **eliminar conversión** (con salvaguardas: no borrar si tiene factura/pagos asociados).
+- **"Cuadro de períodos al pagar":** en pausa hasta que Manuel lo aclare.
+
 ## 14. Pendiente de Manuel / asesoría (antes de producción)
 
 - Validar **textos de coletillas** (§7.3).
