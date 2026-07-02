@@ -234,6 +234,33 @@ Lo **ya construido** (multi-emisor, editor Canva, plantillas condicionales, rect
 - **Ventas (simplificar):** mostrar nº de conversiones (hecho) + **eliminar conversión** (con salvaguardas: no borrar si tiene factura/pagos asociados).
 - **"Cuadro de períodos al pagar":** en pausa hasta que Manuel lo aclare.
 
+### 13.ter Requisitos nuevos (2026-07-02, 2ª tanda)
+
+- **REQ-GATE-01 — Bloqueo de emisión sin datos fiscales:** el CRM **no debe permitir crear/emitir facturas** hasta que la **sociedad emisora** tenga sus datos fiscales completos. Aviso claro + enlace al panel. El bloqueo aplica **sólo a la emisión de facturas**; el resto del CRM sigue funcionando (leads, ventas, etc.) — *no rompe el flujo actual*.
+- **REQ-GATE-02 — Validación exacta para España:** los datos fiscales del emisor deben validarse **para España**: razón social, **NIF/CIF válido** (DNI/NIE/CIF con dígito de control), dirección, ciudad, código postal y país. Sólo con todo correcto se habilita facturar.
+- **REQ-PANEL-01 — Panel de sociedades:** un panel (dentro de *Configuración de facturación → Empresas emisoras*) donde el admin/superadmin **completa y ve el estado** de cada sociedad (✓ completa / ⚠ faltan campos), y desde donde se resuelve el bloqueo.
+- **REQ-VISTA-01 — Vistas por sociedad:** las **vistas de proyectos se organizan por sociedad**. Cada proyecto pertenece a una sociedad (`projects.sociedad_emisora_id`) y el panel de facturación puede verse **por sociedad** y en **"ALL"** (consolidado). Depende de Fase A.
+- **Mapeo confirmado:** **Academia IA → Lateral Thinking Solutions SL.**
+
+## 15. Cómo trabajaremos en ambos CRMs (método de trabajo)
+
+El módulo de facturación es **idéntico** en los dos CRMs (regla de **paridad absoluta**): ISEIH (`360crm.tech/crm`) e ISEIE (`crm.iseie.com`) comparten el mismo código de `invoices` y del motor fiscal. Toda mejora se hace **en los dos**.
+
+**Reglas de trabajo:**
+1. **Paridad de código:** los archivos del módulo `invoices` (backend `backend/src/modules/invoices/*` y frontend `frontend/src/modules/invoices/*`) se mantienen espejo entre ambos repos. Se editan en uno y se replican al otro. **Excepción:** archivos de navegación/rutas (Sidebar, App.jsx) y de branding **NO** se copian enteros — se hacen ediciones puntuales, porque difieren (ISEIE usa base `/accounting`, ISEIH `/finanzas`; sidebars distintos).
+2. **Migraciones de DB:** cada cambio de esquema se aplica a **ambas** bases (`crm_prod_db` en ISEIH · `crm_iseie` en ISEIE). Numeración de migraciones independiente por repo.
+3. **Sociedades transversales:** una misma sociedad (ej. **CEDIA**) emite en **ambos CRMs**, porque sus proyectos viven repartidos. Las sociedades se dan de alta como *empresas emisoras* en **cada CRM donde tenga proyectos**. Si más adelante se centraliza, se evaluará una tabla compartida.
+4. **Reparto de proyectos → sociedad → CRM:**
+
+   | Sociedad | Proyectos | CRM |
+   |---|---|---|
+   | Lateral Thinking Solutions SL | Academia IA | (confirmar) |
+   | Ictess Ingeniería e Innovación SL | ICTESS · Veterinary AI | ISEIE |
+   | CEDIA Investigación y Desarrollo SL | Fono Aprende · Psiko Aprende · ISEIH · ISAEG · Psicólogo IA · Nutricionista IA · Tarot IA · Sexólogo IA | ISEIH (+ IA) |
+
+5. **Deploy:** cada cambio → build + deploy en los dos servidores (VPS ISEIH `187.124.128.126` vía SSH · VPS ISEIE `72.60.90.135` vía paramiko) + commit/push a `main` en ambos repos.
+6. **Orden de fases (aplican a ambos):** A (sociedades + numeración + **gating fiscal**) → C (auto-factura pagos) → E (resumen/export) → H (comisiones) → B (motor fiscal). Cada fase se cierra en los dos CRMs antes de pasar a la siguiente.
+
 ## 14. Pendiente de Manuel / asesoría (antes de producción)
 
 - Validar **textos de coletillas** (§7.3).
