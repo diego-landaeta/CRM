@@ -59,37 +59,47 @@
 }
 
 /* ============================================================
-   Tema SuiteDash — SOLO entorno testeo (clase .suitedash-shell
-   añadida por AppLayout cuando BASE_URL empieza por /testeo).
-   Reskin completo sin tocar cada página: se sobrescriben las
-   variables de tema (a) dentro del <aside> del sidebar → navy
-   oscuro en TODAS las páginas, y (b) del contenido → fondo slate
-   con tarjetas blancas (solo en modo claro).
+   Tema SuiteDash — SOLO entorno testeo. AppLayout añade la clase
+   `suitedash` a <html> cuando BASE_URL empieza por /testeo.
+   Replica la maqueta /suite-dash: FUERZA paleta clara (ignora el
+   modo oscuro — html.suitedash gana a .dark por especificidad),
+   fondo slate + tarjetas blancas, sidebar navy y acento cyan.
+   Al ir en <html> cubre TODO: contenido, portales, diálogos,
+   menús y dropdowns. Sin tocar ninguna página. Prod (/crm/) intacta.
    ============================================================ */
-/* (a) Sidebar navy oscuro — aplica en modo claro y oscuro */
-.suitedash-shell aside[aria-label="Menu principal"] {
-  --card: 222 47% 11%;            /* slate-900: fondo del sidebar */
-  --card-foreground: 0 0% 100%;
-  --foreground: 0 0% 100%;
-  --muted: 217 33% 17%;           /* slate-800 */
-  --muted-foreground: 215 20% 72%;/* slate-400 */
-  --secondary: 217 33% 24%;       /* hover sutil */
-  --secondary-foreground: 0 0% 100%;
-  --border: 217 33% 22%;          /* slate-700/800 divisores */
-  --primary: 213 94% 68%;         /* azul brillante para el acento activo */
-  --primary-foreground: 222 47% 11%;
-  --input: 217 33% 22%;
-  color-scheme: dark;
+html.suitedash {
+  --background: 210 40% 96%;       /* slate-100 */
+  --foreground: 222 47% 11%;       /* slate-900 */
+  --card: 0 0% 100%;               /* tarjetas blancas */
+  --card-foreground: 222 47% 11%;
+  --primary: 192 91% 36%;          /* cyan-600 (acento SuiteDash) */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 32% 93%;
+  --secondary-foreground: 222 47% 20%;
+  --muted: 214 32% 94%;
+  --muted-foreground: 215 16% 42%;
+  --accent: 199 89% 94%;           /* cyan-100 sutil */
+  --accent-foreground: 199 89% 24%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 192 91% 36%;
+  color-scheme: light;
 }
 
-/* (b) Contenido estilo SuiteDash (fondo slate, tarjetas blancas) — solo en claro */
-html:not(.dark) .suitedash-shell {
-  --background: 210 40% 96.5%;    /* slate-100 */
-  --secondary: 214 32% 93%;
-  --muted: 214 32% 93%;
-  --muted-foreground: 215 16% 47%;
-  --border: 214 32% 89%;
-  --input: 214 32% 89%;
+/* Sidebar navy oscuro (subárbol del <aside>) dentro del shell claro */
+html.suitedash aside[aria-label="Menu principal"] {
+  --card: 222 47% 11%;             /* slate-900/950 navy: fondo del sidebar */
+  --card-foreground: 0 0% 100%;
+  --foreground: 0 0% 100%;
+  --muted: 217 33% 17%;            /* slate-800 */
+  --muted-foreground: 214 20% 69%; /* slate-400 */
+  --secondary: 217 33% 22%;        /* hover sutil (white/10-ish) */
+  --secondary-foreground: 0 0% 100%;
+  --border: 216 34% 20%;           /* divisores tenues */
+  --primary: 190 95% 55%;          /* cyan brillante para el acento activo */
+  --primary-foreground: 222 47% 11%;
+  --input: 216 34% 20%;
+  color-scheme: dark;
 }
 
 @layer components {

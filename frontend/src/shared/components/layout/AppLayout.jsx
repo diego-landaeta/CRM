@@ -110,6 +110,14 @@ export default function AppLayout() {
     });
   }
 
+  // Reskin SuiteDash (solo testeo): añade la clase `suitedash` a <html> para que
+  // el tema claro forzado + sidebar navy cubran TODO (contenido, portales, diálogos).
+  useEffect(() => {
+    if (!IS_SUITEDASH_SHELL) return;
+    document.documentElement.classList.add('suitedash');
+    return () => document.documentElement.classList.remove('suitedash');
+  }, []);
+
   // Atajos globales de teclado
   useEffect(() => {
     function isTyping() {
@@ -188,7 +196,7 @@ export default function AppLayout() {
   }, [navigate, pathname]);
 
   return (
-    <div className={cn('min-h-screen bg-background', IS_SUITEDASH_SHELL && 'suitedash-shell')}>
+    <div className="min-h-screen bg-background">
       {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
       <a
         href="#main-content"
