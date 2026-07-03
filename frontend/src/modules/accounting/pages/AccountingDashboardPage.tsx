@@ -5,7 +5,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import KpiCard from '@/shared/components/ui/KpiCard';
+import StatTile from '@/shared/components/ui/StatTile';
+import SectionCard from '@/shared/components/ui/SectionCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import {
@@ -15,6 +16,7 @@ import {
   TrendDown,
   WarningCircle,
   Receipt,
+  ChartLineUp,
   ArrowRight,
   Plus,
 } from '@phosphor-icons/react';
@@ -118,38 +120,15 @@ export default function AccountingDashboardPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard
-          icon={CurrencyEur}
-          iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-          label="Ingresos cobrados"
-          value={fmt(ingresos.total_cobrado)}
-        />
-        <KpiCard
-          icon={Wallet}
-          iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-          label="Por cobrar"
-          value={fmt(ingresos.total_pendiente)}
-        />
-        <KpiCard
-          icon={TrendDown}
-          iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
-          label="Egresos"
-          value={fmt(egresos.total)}
-        />
-        <KpiCard
-          icon={balance >= 0 ? TrendUp : TrendDown}
-          iconBg={balance >= 0
-            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
-            : 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'}
-          label="Balance neto"
-          value={fmt(balance)}
-        />
+        <StatTile icon={CurrencyEur} tone="emerald" label="Ingresos cobrados" value={fmt(ingresos.total_cobrado)} />
+        <StatTile icon={Wallet} tone="orange" label="Por cobrar" value={fmt(ingresos.total_pendiente)} />
+        <StatTile icon={TrendDown} tone="rose" label="Egresos" value={fmt(egresos.total)} />
+        <StatTile icon={balance >= 0 ? TrendUp : TrendDown} tone={balance >= 0 ? 'emerald' : 'rose'} label="Balance neto" value={fmt(balance)} />
       </div>
 
       {/* Graficas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-semibold mb-3">Evolución mensual (12 meses)</h3>
+        <SectionCard icon={ChartLineUp} tone="emerald" title="Evolución mensual" subtitle="Ingresos vs egresos · 12 meses">
           <ResponsiveContainer width="100%" height={220} minHeight={200}>
             <LineChart data={trendData} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" />
@@ -161,10 +140,9 @@ export default function AccountingDashboardPage() {
               <Line type="monotone" dataKey="egresos" stroke="#ef4444" strokeWidth={2} name="Egresos" dot={{ fill: '#ef4444', r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </SectionCard>
 
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-semibold mb-3">Egresos por categoría</h3>
+        <SectionCard icon={Receipt} tone="rose" title="Egresos por categoría" subtitle="Distribución del gasto en el período">
           {egresos.por_categoria.length === 0 ? (
             <EmptyState icon={Receipt} title="Sin egresos" description="No hay gastos registrados en este período" />
           ) : (
@@ -178,26 +156,27 @@ export default function AccountingDashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+        </SectionCard>
       </div>
 
       {/* Cuentas por cobrar */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold">Cuentas por cobrar ({cuentas_por_cobrar.length})</h3>
-          {cuentas_por_cobrar.length > 0 && (
-            <div className="text-sm text-muted-foreground">
-              Total pendiente: <span className="font-bold tabular-nums text-orange-600 dark:text-orange-400">{fmt(cuentas_por_cobrar.reduce((s, r) => s + Number(r.importe_pendiente), 0))}</span>
-            </div>
-          )}
-        </div>
-
+      <SectionCard
+        icon={Wallet}
+        tone="orange"
+        title={`Cuentas por cobrar (${cuentas_por_cobrar.length})`}
+        subtitle="Importes pendientes de cobro"
+        action={cuentas_por_cobrar.length > 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Total: <span className="font-bold tabular-nums text-orange-600 dark:text-orange-400">{fmt(cuentas_por_cobrar.reduce((s, r) => s + Number(r.importe_pendiente), 0))}</span>
+          </div>
+        ) : null}
+      >
         {cuentas_por_cobrar.length === 0 ? (
           <EmptyState icon={CurrencyEur} title="Todo cobrado" description="No hay cuentas pendientes en este momento" />
         ) : (
           <>
             {/* Desktop table */}
-            <div className="hidden lg:block overflow-x-auto -mx-4">
+            <div className="hidden lg:block overflow-x-auto -mx-5">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
@@ -272,7 +251,7 @@ export default function AccountingDashboardPage() {
             </div>
           </>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
