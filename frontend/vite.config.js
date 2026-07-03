@@ -10,6 +10,11 @@ const env = loadEnv(mode, process.cwd(), '');
 // Base path por entorno: VITE_BASE_PATH=/crm/ (prod) o /testeo/ (staging)
 const BASE = process.env.VITE_BASE_PATH || env.VITE_BASE_PATH || '/crm/';
 const ESC = BASE.replace(/\//g, '\\/');
+// En testeo (staging/preview) NO reinyectamos el registro del SW: seguimos
+// publicando el sw.js autodestructivo (mata SWs viejos), pero sin volver a
+// registrarlo en cada carga — eso causaba bucles de recarga / pantalla en
+// blanco. Producción conserva su comportamiento.
+const IS_TESTEO = BASE.startsWith('/testeo');
 
 const makeApiProxy = () => ({
   target: 'http://localhost:3001',
@@ -28,7 +33,7 @@ export default defineConfig({
       // podremos reintroducir el PWA con cuidado.
       selfDestroying: true,
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      injectRegister: IS_TESTEO ? false : 'auto',
       base: BASE,
       scope: BASE,
       manifest: false,
