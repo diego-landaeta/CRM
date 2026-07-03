@@ -19,7 +19,10 @@ interface ProjectForm {
   active: boolean;
   producto_label?: string;
   producto_label_plural?: string;
+  sociedad_emisora_id?: number | null;
 }
+
+interface Sociedad { id: number; razon_social: string; serie?: string | null; nif?: string | null; }
 
 export default function ProjectDialog({ open, onClose, existing, onSaved }: { open: boolean; onClose: () => void; existing?: any; onSaved?: () => void }) {
   const [form, setForm] = useState<ProjectForm>({
@@ -27,9 +30,13 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
     meta_account_id: '', google_account_id: '', gsc_property: '', emoji: '', active: true,
   });
   const [saving, setSaving] = useState(false);
+  const [sociedades, setSociedades] = useState<Sociedad[]>([]);
+  const [newSoc, setNewSoc] = useState<{ razon_social: string; serie: string } | null>(null);
 
   useEffect(() => {
     if (open) {
+      setNewSoc(null);
+      client.get('/projects/sociedades').then(r => setSociedades(r.data?.data || [])).catch(() => setSociedades([]));
       if (existing) {
         setForm({
           nombre: existing.nombre || '',
@@ -43,6 +50,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
           active: existing.active !== false,
           producto_label: existing.producto_label || 'Producto',
           producto_label_plural: existing.producto_label_plural || 'Productos',
+          sociedad_emisora_id: existing.sociedad_emisora_id ?? null,
         });
       } else {
         setForm({
@@ -50,6 +58,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
           meta_account_id: '', google_account_id: '', gsc_property: '',
           emoji: '', active: true,
           producto_label: 'Producto', producto_label_plural: 'Productos',
+          sociedad_emisora_id: null,
         });
       }
     }
@@ -71,8 +80,21 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
       toast({ title: 'Slug inválido', description: 'Solo minúsculas, números y guiones.', variant: 'destructive' });
       return;
     }
+    if (newSoc && !newSoc.razon_social.trim()) {
+      toast({ title: 'Razón social requerida', description: 'Nombre de la nueva sociedad.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
+      // Si el usuario está creando una sociedad nueva, la damos de alta primero.
+      let sociedadId = form.sociedad_emisora_id ?? null;
+      if (newSoc) {
+        const r = await client.post('/projects/sociedades', {
+          razon_social: newSoc.razon_social.trim(),
+          serie: newSoc.serie.trim() || null,
+        });
+        sociedadId = r.data?.data?.id ?? null;
+      }
       const payload: Record<string, unknown> = {
         nombre: form.nombre,
         type: form.type,
@@ -83,6 +105,7 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
         gsc_property: form.gsc_property || null,
         producto_label: form.producto_label || 'Producto',
         producto_label_plural: form.producto_label_plural || 'Productos',
+        sociedad_emisora_id: sociedadId,
       };
       if (existing) {
         payload.active = form.active;
@@ -139,6 +162,42 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
                 <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: Number(e.target.value) })} className={inputClass} />
               </div>
+            </div>
+
+            <div className="p-3 bg-muted/20 rounded-lg border border-border space-y-2">
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground mb-0.5">Sociedad emisora (facturación)</p>
+                <p className="text-[11px] text-muted-foreground">Empresa que emite las facturas de este proyecto y su numeración.</p>
+              </div>
+              {newSoc ? (
+                <div className="grid grid-cols-3 gap-2 items-end">
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Razón social *</label>
+                    <input value={newSoc.razon_social} onChange={e => setNewSoc({ ...newSoc, razon_social: e.target.value })} className={inputClass} placeholder="Nueva Sociedad SL" autoFocus />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Serie</label>
+                    <input value={newSoc.serie} onChange={e => setNewSoc({ ...newSoc, serie: e.target.value.toUpperCase() })} className={inputClass + ' font-mono'} placeholder="NUEVA" />
+                  </div>
+                  <button type="button" onClick={() => setNewSoc(null)} className="col-span-3 text-[11px] text-muted-foreground hover:text-foreground text-left">← Elegir una sociedad existente</button>
+                </div>
+              ) : (
+                <select
+                  value={form.sociedad_emisora_id ?? ''}
+                  onChange={e => {
+                    if (e.target.value === '__new__') { setNewSoc({ razon_social: '', serie: '' }); return; }
+                    setForm({ ...form, sociedad_emisora_id: e.target.value ? Number(e.target.value) : null });
+                  }}
+                  className={inputClass + ' bg-background text-foreground [&>option]:bg-background [&>option]:text-foreground'}
+                  aria-label="Sociedad emisora"
+                >
+                  <option value="">— Sin sociedad —</option>
+                  {sociedades.map(s => (
+                    <option key={s.id} value={s.id}>{s.razon_social}{s.serie ? ` (${s.serie})` : ''}</option>
+                  ))}
+                  <option value="__new__">+ Crear nueva sociedad…</option>
+                </select>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-border">
