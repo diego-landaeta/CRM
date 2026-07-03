@@ -31,6 +31,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/documentos',              // Documentos comerciales
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
   '/notificaciones',         // Sistema básico
+  '/manual',                 // Manual de usuario
   '/preferences',            // Mis preferencias
   '/profile',                // Perfil
   '/settings',               // Ajustes (gestión de usuarios, proyectos, etc.)
