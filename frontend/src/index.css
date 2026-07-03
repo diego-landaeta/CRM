@@ -72,17 +72,17 @@ html.suitedash {
   --foreground: 222 47% 11%;       /* slate-900 */
   --card: 0 0% 100%;               /* tarjetas blancas */
   --card-foreground: 222 47% 11%;
-  --primary: 192 91% 36%;          /* cyan-600 (acento SuiteDash) */
+  --primary: 189 94% 40%;          /* cyan-500/600 vivo (acento SuiteDash) */
   --primary-foreground: 0 0% 100%;
-  --secondary: 214 32% 93%;
-  --secondary-foreground: 222 47% 20%;
-  --muted: 214 32% 94%;
-  --muted-foreground: 215 16% 42%;
-  --accent: 199 89% 94%;           /* cyan-100 sutil */
-  --accent-foreground: 199 89% 24%;
-  --border: 214 32% 88%;
-  --input: 214 32% 88%;
-  --ring: 192 91% 36%;
+  --secondary: 190 44% 94%;        /* gris con tinte cyan */
+  --secondary-foreground: 192 60% 22%;
+  --muted: 190 30% 94%;
+  --muted-foreground: 200 16% 40%;
+  --accent: 187 85% 92%;           /* cyan-100 */
+  --accent-foreground: 192 91% 24%;
+  --border: 195 32% 88%;
+  --input: 195 32% 88%;
+  --ring: 189 94% 40%;
   color-scheme: light;
 }
 
@@ -93,11 +93,14 @@ html.suitedash aside[aria-label="Menu principal"] {
   --foreground: 0 0% 100%;
   --muted: 217 33% 17%;            /* slate-800 */
   --muted-foreground: 214 20% 69%; /* slate-400 */
-  --secondary: 217 33% 22%;        /* hover sutil (white/10-ish) */
+  --secondary: 190 40% 30%;        /* hover con tinte cyan */
   --secondary-foreground: 0 0% 100%;
   --border: 216 34% 20%;           /* divisores tenues */
-  --primary: 190 95% 55%;          /* cyan brillante para el acento activo */
+  --primary: 187 92% 58%;          /* cyan brillante para el acento activo */
   --primary-foreground: 222 47% 11%;
+  --ring: 187 92% 58%;
+  --accent: 190 60% 24%;           /* hover/acento cyan sobre navy */
+  --accent-foreground: 0 0% 100%;
   --input: 216 34% 20%;
   color-scheme: dark;
 }
