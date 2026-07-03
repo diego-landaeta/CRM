@@ -882,11 +882,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
                 >
                   {(() => {
-                    // Orden: IAs primero, luego CRMs/academias. Dentro de cada grupo alfabetico.
+                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al final).
                     const sorted = [...projects].sort((a, b) => {
-                      const tA = a.type === 'ia' ? 0 : 1;
-                      const tB = b.type === 'ia' ? 0 : 1;
-                      if (tA !== tB) return tA - tB;
+                      const sA = a.sociedad_nombre || 'zzz';
+                      const sB = b.sociedad_nombre || 'zzz';
+                      if (sA !== sB) return sA.localeCompare(sB, 'es');
                       return (a.nombre || '').localeCompare(b.nombre || '', 'es');
                     });
                     const allEntry = projects.length > 1 ? (
@@ -905,14 +905,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                         </button>
                       </li>
                     ) : null;
-                    let lastType = null;
+                    let lastSoc = undefined;
                     const items = sorted.map((p) => {
                       const isActive = p.id === activeProject?.id;
-                      const showDivider = lastType !== null && lastType !== p.type;
-                      lastType = p.type;
+                      const soc = p.sociedad_nombre || null;
+                      const showHeader = soc !== lastSoc;
+                      lastSoc = soc;
                       return (
                         <div key={p.id}>
-                          {showDivider && <div className="my-1 mx-2 border-t border-border" />}
+                          {showHeader && (
+                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
+                              {soc || 'Sin sociedad'}
+                            </div>
+                          )}
                           <li role="option" aria-selected={isActive}>
                             <button
                               type="button"

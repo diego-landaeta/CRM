@@ -2,14 +2,17 @@ import { query } from '../../shared/config/db.js';
 import crypto from 'crypto';
 
 export async function findAll({ active }) {
-  const where = active === undefined ? '' : `WHERE active = ${active === 'true' || active === true}`;
+  const where = active === undefined ? '' : `WHERE p.active = ${active === 'true' || active === true}`;
   const { rows } = await query(
-    `SELECT id, nombre, slug, type, emoji, logo_url, logo_key, producto_label, producto_label_plural,
-            modules, shortcuts, external_panels, sidebar_labels, theme_color, auto_email_documents,
-            webhook_api_key, meta_account_id, google_account_id,
-            gsc_property, dias_alerta_inactividad, active, created_at, updated_at
-     FROM projects ${where}
-     ORDER BY nombre ASC`
+    `SELECT p.id, p.nombre, p.slug, p.type, p.emoji, p.logo_url, p.logo_key, p.producto_label, p.producto_label_plural,
+            p.modules, p.shortcuts, p.external_panels, p.sidebar_labels, p.theme_color, p.auto_email_documents,
+            p.webhook_api_key, p.meta_account_id, p.google_account_id,
+            p.gsc_property, p.dias_alerta_inactividad, p.active, p.created_at, p.updated_at,
+            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+     FROM projects p
+     LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
+     ${where}
+     ORDER BY s.razon_social NULLS LAST, p.nombre ASC`
   );
   return rows;
 }
