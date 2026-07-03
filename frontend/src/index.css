@@ -94,6 +94,25 @@ html.suitedash .bg-card {
 }
 html.suitedash aside[aria-label="Menu principal"] { box-shadow: none; }
 
+/* Tablas/listados estilo SuiteDash (aplica a todas las pantallas con <table>) */
+html.suitedash table thead th {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: hsl(var(--muted-foreground));
+  font-weight: 700;
+}
+html.suitedash tbody tr { transition: background-color 0.12s ease; }
+html.suitedash tbody tr:hover { background-color: hsl(var(--primary) / 0.05); }
+/* Inputs/select con foco cyan coherente */
+html.suitedash input:focus-visible,
+html.suitedash select:focus-visible,
+html.suitedash textarea:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary) / 0.55);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
+}
+
 /* Sidebar navy oscuro (subárbol del <aside>) dentro del shell claro */
 html.suitedash aside[aria-label="Menu principal"] {
   --card: 222 47% 11%;             /* slate-900/950 navy: fondo del sidebar */
