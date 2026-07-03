@@ -86,6 +86,14 @@ html.suitedash {
   color-scheme: light;
 }
 
+/* Pulido visual SuiteDash: bordes más redondeados + sombra suave en tarjetas.
+   Aplica a los contenedores con `bg-card` sin tocar ninguna página. */
+html.suitedash { --radius: 0.7rem; }
+html.suitedash .bg-card {
+  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+}
+html.suitedash aside[aria-label="Menu principal"] { box-shadow: none; }
+
 /* Sidebar navy oscuro (subárbol del <aside>) dentro del shell claro */
 html.suitedash aside[aria-label="Menu principal"] {
   --card: 222 47% 11%;             /* slate-900/950 navy: fondo del sidebar */
