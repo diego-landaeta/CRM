@@ -11,7 +11,7 @@ import { cn } from '@/shared/lib/utils';
  */
 export default function PageHeader({ title, subtitle = null, actions = null, breadcrumbs = null, className = '' }) {
   return (
-    <div className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
+    <div data-page-header className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
       <div className="min-w-0">
         {breadcrumbs && <div className="mb-1">{breadcrumbs}</div>}
         <h1 className="text-xl font-semibold truncate">{title}</h1>

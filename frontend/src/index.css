@@ -113,6 +113,61 @@ html.suitedash textarea:focus-visible {
   box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
 }
 
+/* ---- Componentes compartidos con estética SuiteDash (ganchos data-*) ---- */
+/* Tarjetas KPI/métricas: label en mayúscula, número grande, hover con elevación */
+html.suitedash [data-kpi] {
+  border-radius: 0.85rem;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+html.suitedash [data-kpi]:hover {
+  box-shadow: 0 6px 20px -6px rgb(15 23 42 / 0.14);
+  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.35);
+}
+html.suitedash [data-kpi] > p {          /* etiqueta */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  font-weight: 700;
+  color: hsl(var(--muted-foreground));
+}
+html.suitedash [data-kpi] > h3 {         /* valor */
+  font-size: 1.9rem;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Cabecera de página: título más presente estilo SuiteDash */
+html.suitedash [data-page-header] h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Estado vacío: icono con tinte cyan */
+html.suitedash [data-empty] [data-empty-icon] {
+  background: hsl(var(--primary) / 0.10);
+  color: hsl(var(--primary));
+}
+html.suitedash [data-empty] [data-empty-icon] svg { color: hsl(var(--primary)); }
+
+/* Barra de sub-navegación (tabs de sección): fondo tarjeta + activo cyan sólido */
+html.suitedash [data-subnav] {
+  background: hsl(var(--card));
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Botón primario: sombra sutil cyan al hover para dar sensación premium */
+html.suitedash button.bg-primary:hover,
+html.suitedash a.bg-primary:hover {
+  box-shadow: 0 4px 14px -4px hsl(var(--primary) / 0.5);
+}
+
 /* Sidebar navy oscuro (subárbol del <aside>) dentro del shell claro */
 html.suitedash aside[aria-label="Menu principal"] {
   --card: 222 47% 11%;             /* slate-900/950 navy: fondo del sidebar */

@@ -42,6 +42,7 @@ export default function KpiCard({
   const useAnimation = typeof numericValue === 'number' && Number.isFinite(numericValue);
   return (
     <div
+      data-kpi
       className={cn(
         'bg-card p-5 rounded-lg border border-border transition-colors hover:border-foreground/20',
         className,

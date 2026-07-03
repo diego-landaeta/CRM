@@ -11,9 +11,9 @@ import { cn } from '@/shared/lib/utils';
  */
 export default function EmptyState({ icon: Icon, title, description, action = null, className = '' }) {
   return (
-    <div className={cn('flex flex-col items-center justify-center py-16 text-center', className)}>
+    <div data-empty className={cn('flex flex-col items-center justify-center py-16 text-center', className)}>
       {Icon && (
-        <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center mb-3">
+        <div data-empty-icon className="w-12 h-12 rounded-md bg-muted flex items-center justify-center mb-3">
           <Icon size={24} weight="regular" className="text-muted-foreground" />
         </div>
       )}
