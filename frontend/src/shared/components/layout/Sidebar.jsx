@@ -83,10 +83,15 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
-      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
-      { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
+      { label: 'Prospectos', icon: Users, module: 'leads', children: [
+        { label: 'Listado', to: '/prospectos', end: true },
+        { label: 'Pipeline', to: '/prospectos/pipeline' },
+        { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', roles: ['superadmin', 'admin'] },
+      ] },
+      { label: 'Clientes', icon: UserCheck, module: 'clients', children: [
+        { label: 'Directorio', to: '/clientes', end: true },
+        { label: 'Matrículas', to: '/clientes/matriculas', module: 'matriculas' },
+      ] },
     ],
   },
   {
@@ -97,8 +102,6 @@ const NAV_SECTIONS = [
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
       { label: 'WhatsApp', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
-      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
-      { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -106,15 +109,19 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
       { label: 'Google Ads', to: '/google-ads', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
+      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
+      { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
   },
   {
     label: 'Catálogo',
     items: [
-      { label: 'Productos', to: '/productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
-      { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products', children: [
+        { label: 'Catálogo', to: '/productos', end: true },
+        { label: 'Cursos pendientes', to: '/productos/pendientes' },
+        { label: 'Árbol de categorías', to: '/productos/arbol' },
+        { label: 'WooCommerce', to: '/productos/woocommerce', module: 'woocommerce' },
+      ] },
       { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
     ],
   },
@@ -122,17 +129,21 @@ const NAV_SECTIONS = [
     label: 'Finanzas',
     items: [
       { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
-      { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
+      { label: 'Ventas', icon: Receipt, module: 'conversions', statusTag: 'Pruebas', children: [
+        { label: 'Listado', to: '/finanzas/ventas', end: true },
+        { label: 'Análisis', to: '/finanzas/conversiones', roles: ['superadmin', 'admin'] },
+      ] },
       { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
       { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', icon: Wallet, roles: ['superadmin', 'admin'], module: 'accounting_receivable', statusTag: 'Pruebas' },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
+      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte'] },
+      { label: 'Facturación', icon: Receipt, roles: ['superadmin', 'admin', 'soporte'], children: [
+        { label: 'Facturas', to: '/finanzas/facturas', end: true },
+        { label: 'Configuración', to: '/finanzas/facturas/configuracion' },
+      ] },
       { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },
@@ -195,15 +206,12 @@ function canSeeItem(item, role, modules, projectType) {
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar, open, onToggle, onOpen, badge }) {
   const visible = children
     .filter((c) => canSeeItem(c, role, modules, projectType))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
-  // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
-  const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
   if (!visible.length) return null;
   const displayLabel = applyLabel(label, labelOverrides);
 
@@ -213,7 +221,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
     return (
       <button
         type="button"
-        onClick={() => { onExpandSidebar?.(); setOpen(true); }}
+        onClick={() => { onExpandSidebar?.(); onOpen?.(); }}
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
@@ -229,7 +237,8 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
   return (
     <div>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={onToggle}
+        aria-expanded={open}
         className={cn(
           'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -237,7 +246,10 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
       >
         <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
         {displayLabel}
-        <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
+        {badge ? (
+          <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">{badge}</span>
+        ) : null}
+        <CaretRight size={12} weight="bold" className={cn('transition-transform', badge ? 'ml-1.5' : 'ml-auto', open && 'rotate-90')} />
       </button>
       {open && (
         <div className="ml-4 mt-0.5 pl-4 border-l border-border space-y-0.5">
@@ -255,7 +267,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting'}
+                end={child.end || child.to === '/accounting'}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -601,6 +613,21 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       return next;
     });
   }
+
+  // Acordeón de sub-grupos (Prospectos, Clientes, Ventas, Facturación…): SINGLE-OPEN.
+  // Solo uno abierto a la vez; sigue la ruta activa (al entrar en una sección los demás se cierran).
+  const activeGroupLabel = (() => {
+    for (const s of NAV_SECTIONS) {
+      for (const it of s.items) {
+        if (it.children?.some((c) => c.to && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')))) return it.label;
+      }
+    }
+    return null;
+  })();
+  // Por defecto abrimos "Prospectos". Al entrar en otra sección con grupo, ese se
+  // abre y los demás se cierran; en páginas sin grupo se mantiene el actual.
+  const [openGroup, setOpenGroup] = useState(activeGroupLabel || 'Prospectos');
+  useEffect(() => { if (activeGroupLabel) setOpenGroup(activeGroupLabel); }, [activeGroupLabel]);
 
   // Reset al cerrar el menu
   useEffect(() => { if (!userMenuOpen) setUserMenuView('main'); }, [userMenuOpen]);
@@ -1003,6 +1030,10 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 onNavigate={onNavigate}
                 collapsed={collapsed}
                 onExpandSidebar={onToggleCollapsed}
+                open={openGroup === item.label}
+                onToggle={() => setOpenGroup((g) => (g === item.label ? null : item.label))}
+                onOpen={() => setOpenGroup(item.label)}
+                badge={item.label === 'Prospectos' && newLeadsBadge > 0 ? newLeadsBadge : undefined}
               />
             ) : (
               <NavItem
