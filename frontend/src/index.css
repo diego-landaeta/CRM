@@ -58,6 +58,40 @@
   }
 }
 
+/* ============================================================
+   Tema SuiteDash — SOLO entorno testeo (clase .suitedash-shell
+   añadida por AppLayout cuando BASE_URL empieza por /testeo).
+   Reskin completo sin tocar cada página: se sobrescriben las
+   variables de tema (a) dentro del <aside> del sidebar → navy
+   oscuro en TODAS las páginas, y (b) del contenido → fondo slate
+   con tarjetas blancas (solo en modo claro).
+   ============================================================ */
+/* (a) Sidebar navy oscuro — aplica en modo claro y oscuro */
+.suitedash-shell aside[aria-label="Menu principal"] {
+  --card: 222 47% 11%;            /* slate-900: fondo del sidebar */
+  --card-foreground: 0 0% 100%;
+  --foreground: 0 0% 100%;
+  --muted: 217 33% 17%;           /* slate-800 */
+  --muted-foreground: 215 20% 72%;/* slate-400 */
+  --secondary: 217 33% 24%;       /* hover sutil */
+  --secondary-foreground: 0 0% 100%;
+  --border: 217 33% 22%;          /* slate-700/800 divisores */
+  --primary: 213 94% 68%;         /* azul brillante para el acento activo */
+  --primary-foreground: 222 47% 11%;
+  --input: 217 33% 22%;
+  color-scheme: dark;
+}
+
+/* (b) Contenido estilo SuiteDash (fondo slate, tarjetas blancas) — solo en claro */
+html:not(.dark) .suitedash-shell {
+  --background: 210 40% 96.5%;    /* slate-100 */
+  --secondary: 214 32% 93%;
+  --muted: 214 32% 93%;
+  --muted-foreground: 215 16% 47%;
+  --border: 214 32% 89%;
+  --input: 214 32% 89%;
+}
+
 @layer components {
   .crm-card {
     @apply bg-card text-card-foreground border border-border rounded-lg;

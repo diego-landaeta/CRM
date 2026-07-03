@@ -58,6 +58,13 @@ const OfflineBanner = lazy(() => import('./OfflineBanner'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
+// Reskin SuiteDash: activo solo en testeo (staging /testeo/ y /testeo2/) y en dev.
+// Añade la clase .suitedash-shell al root; el resto lo hace index.css (variables
+// de tema scopeadas). Producción (/crm/) queda intacta.
+const IS_SUITEDASH_SHELL = import.meta.env.DEV
+  || (import.meta.env.BASE_URL || '').startsWith('/testeo/')
+  || (import.meta.env.BASE_URL || '').startsWith('/testeo2/');
+
 // Mapa de "n" (nuevo) según ruta actual
 const NEW_ACTIONS = {
   '/prospectos': { url: '/prospectos?new=1', label: 'prospecto' },
@@ -181,7 +188,7 @@ export default function AppLayout() {
   }, [navigate, pathname]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={cn('min-h-screen bg-background', IS_SUITEDASH_SHELL && 'suitedash-shell')}>
       {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
       <a
         href="#main-content"
