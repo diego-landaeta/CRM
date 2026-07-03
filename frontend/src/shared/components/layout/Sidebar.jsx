@@ -71,10 +71,23 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
+// Color por sección (estilo SuiteDash): tiñe el icono del encabezado.
+// Funciona sobre sidebar navy (testeo) y sobre claro/oscuro (prod).
+const SECTION_TONES = {
+  rose: 'text-rose-500',
+  sky: 'text-sky-500',
+  amber: 'text-amber-500',
+  violet: 'text-violet-500',
+  emerald: 'text-emerald-500',
+  cyan: 'text-cyan-500',
+  slate: 'text-slate-400',
+};
+
 const NAV_SECTIONS = [
   {
     label: 'Testeo',
     icon: Sparkle,
+    tone: 'rose',
     items: [
       { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
       { label: 'SUITE DASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
@@ -100,6 +113,7 @@ const NAV_SECTIONS = [
   {
     label: 'Captación',
     icon: Globe,
+    tone: 'sky',
     items: [
       { label: 'Email', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
       { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
@@ -111,6 +125,7 @@ const NAV_SECTIONS = [
   {
     label: 'Publicidad',
     icon: Megaphone,
+    tone: 'amber',
     items: [
       { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
       { label: 'Google Ads', to: '/google-ads', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
@@ -121,6 +136,7 @@ const NAV_SECTIONS = [
   {
     label: 'Catálogo',
     icon: Package,
+    tone: 'violet',
     items: [
       { label: 'Productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products', children: [
         { label: 'Catálogo', to: '/productos', end: true },
@@ -134,6 +150,7 @@ const NAV_SECTIONS = [
   {
     label: 'Finanzas',
     icon: Wallet,
+    tone: 'emerald',
     items: [
       { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Ventas', icon: Receipt, module: 'conversions', statusTag: 'Pruebas', children: [
@@ -157,6 +174,7 @@ const NAV_SECTIONS = [
   {
     label: 'Análisis',
     icon: ChartLineUp,
+    tone: 'cyan',
     items: [
       { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
       { label: 'Análisis IA', to: '/reports/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
@@ -203,6 +221,12 @@ export function applyLabel(original, overrides) {
 
 function canSeeItem(item, role, modules, projectType) {
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
+  // En el rediseño (testeo) mostramos el menú COMPLETO: sin filtrar por módulos
+  // ni por tipo de proyecto (todos los ítems de todos). Prod mantiene su gating.
+  if (IS_REDESIGN_NAV_ENABLED) {
+    if (item.roles && role !== 'soporte' && role !== 'superadmin' && !item.roles.includes(role)) return false;
+    return true;
+  }
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
   // soporte ve todo (rol generico tipo dev)
@@ -1087,7 +1111,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 aria-expanded={isOpen}
                 className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
               >
-                {SectionIcon && <SectionIcon size={14} weight="bold" className="flex-shrink-0 text-muted-foreground/70" />}
+                {SectionIcon && <SectionIcon size={14} weight="bold" className={cn('flex-shrink-0', SECTION_TONES[section.tone] || 'text-muted-foreground/70')} />}
                 <span className="flex-1 text-left">{sectionLabel}</span>
                 <CaretDown
                   size={10}
