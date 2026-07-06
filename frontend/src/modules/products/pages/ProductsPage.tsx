@@ -97,7 +97,7 @@ export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject } = useProject();
   const projectId = activeProject?.id;
-  const { products, loading, error, refetch: refetchProducts, create, update, deactivate } = useProducts(projectId);
+  const { products, loading, error, refetch: refetchProducts, create, update, deactivate } = useProducts(projectId, true);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
