@@ -253,7 +253,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+        <form onSubmit={handleSubmit(handleFormSubmit, (errs) => {
+          const msgs = Object.values(errs).map((e: any) => e?.message).filter(Boolean);
+          toast({ title: 'Revisa el formulario', description: msgs.join(' · ') || 'Hay campos inválidos', variant: 'destructive' });
+        })} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Nombre *" error={errors.nombre?.message}>
               <input {...register('nombre')} placeholder={`Nombre del ${productoLabel.toLowerCase()}`} className={inputClass} />
