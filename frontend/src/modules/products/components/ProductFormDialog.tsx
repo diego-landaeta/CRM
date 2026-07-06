@@ -33,6 +33,8 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   const [categories, setCategories] = useState([]);
   const [categoriaSel, setCategoriaSel] = useState('');
   const [subcategoriaSel, setSubcategoriaSel] = useState('');
+  const [regimenes, setRegimenes] = useState<any[]>([]);
+  const [regimenSel, setRegimenSel] = useState('');
   // Enlaces de pago multiples (CRM-140). El primero queda como stripe_link
   // legacy si el backend aún no soporta product_payment_links.
   const [paymentLinks, setPaymentLinks] = useState([]);
@@ -65,6 +67,10 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       try {
         const res = await client.get(`/product-categories/project/${activeProject.id}`);
         if (res.success) setCategories(res.data || []);
+      } catch {}
+      try {
+        const rr = await client.get(`/invoices/regimenes?projectId=${activeProject.id}`);
+        if (rr.success) setRegimenes(rr.data || []);
       } catch {}
     })();
   }, [open, activeProject?.id]);
@@ -103,6 +109,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       });
       setCategoriaSel(product?.categoria_id ? String(product.categoria_id) : '');
       setSubcategoriaSel(product?.subcategoria_id ? String(product.subcategoria_id) : '');
+      setRegimenSel(product?.regimen_fiscal_id ? String(product.regimen_fiscal_id) : '');
       // Sincronizar links: usa product.payment_links si viene del backend (CRM-140),
       // sino bootstrap con stripe_link si existe.
       if (Array.isArray(product?.payment_links) && product.payment_links.length > 0) {
@@ -228,6 +235,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       precio: data.precio === '' || data.precio === null || Number.isNaN(data.precio) ? null : Number(data.precio),
       categoria_id: categoriaSel ? Number(categoriaSel) : null,
       subcategoria_id: subcategoriaSel ? Number(subcategoriaSel) : null,
+      regimen_fiscal_id: regimenSel ? Number(regimenSel) : null,
       // Backwards compat: si solo hay 1 link "completo", también va como stripe_link.
       stripe_link: cleanLinks[0]?.url || data.stripe_link || null,
       payment_links: cleanLinks,
@@ -299,6 +307,21 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 ariaLabel="Subcategoría"
                 disabled={!subs.length}
               />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground">Régimen fiscal (IVA)</label>
+              <Select<string>
+                value={regimenSel}
+                onChange={setRegimenSel}
+                options={[
+                  { value: '', label: 'Por defecto (según ubicación del cliente)' },
+                  ...regimenes.map((r: any) => ({ value: String(r.id), label: r.nombre })),
+                ]}
+                ariaLabel="Régimen fiscal"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Déjalo por defecto salvo que el producto tenga un régimen fijo (p. ej. formación exenta de IVA).
+              </p>
             </div>
           </div>
 

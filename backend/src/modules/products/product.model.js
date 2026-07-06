@@ -6,7 +6,7 @@ const LIST_COLS = [
   'p.duracion', 'p.horas', 'p.modalidad', 'p.fecha_inicio_texto', 'p.num_modulos',
   'p.image_url', 'p.url_info', 'p.stripe_link',
   'p.source_type', 'p.wc_product_id',
-  'p.categoria_id', 'p.subcategoria_id',
+  'p.categoria_id', 'p.subcategoria_id', 'p.regimen_fiscal_id',
   'p.active', 'p.created_at', 'p.updated_at',
   "LEFT(p.descripcion, 280) AS descripcion",
 ].join(', ');
@@ -43,13 +43,13 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
-export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info }) {
+export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id }) {
   const { rows } = await query(
-    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info)
-     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'EUR'), $8, $9, $10, $11)
+    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'EUR'), $8, $9, $10, $11, $12)
      RETURNING *`,
     [projectId, nombre, descripcion, categoria_id || null, subcategoria_id || null,
-     precio ?? null, moneda || null, stripe_link || null, sku || null, duracion || null, url_info || null]
+     precio ?? null, moneda || null, stripe_link || null, sku || null, duracion || null, url_info || null, regimen_fiscal_id || null]
   );
   return rows[0];
 }
@@ -57,7 +57,7 @@ export async function create({ projectId, nombre, descripcion, categoria_id, sub
 export async function update(id, data) {
   const allowed = ['nombre', 'descripcion', 'categoria_id', 'subcategoria_id',
                    'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info',
-                   'image_url',
+                   'image_url', 'regimen_fiscal_id',
                    'horas', 'num_modulos', 'modalidad', 'fecha_inicio_texto',
                    'presentacion_texto', 'objetivos_texto', 'beneficios_texto',
                    'dirigido_a_texto', 'para_que_te_prepara_texto', 'por_que_estudiar_texto',
