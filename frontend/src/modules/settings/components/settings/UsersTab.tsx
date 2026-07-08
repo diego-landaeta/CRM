@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Plus, X, PencilSimple, DotsThreeVertical, UserCircleMinus, UserCirclePlus,
-  WarningCircle, Clock,
+  WarningCircle, Clock, Key,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -15,7 +15,8 @@ import {
 } from './shared';
 
 export default function UsersTab() {
-  const { projects } = useAuth();
+  const { projects, user: me } = useAuth();
+  const isSuperadmin = me?.role === 'superadmin';
   const { activeProject } = useProjectContext();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,9 @@ export default function UsersTab() {
 
   const [editRole, setEditRole] = useState('');
   const [editProjects, setEditProjects] = useState<Array<{ projectId: number; recibeLeads: boolean }>>([]);
+  const [editPhone, setEditPhone] = useState('');
+  const [editNewPass, setEditNewPass] = useState('');
+  const [savingPass, setSavingPass] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -133,6 +137,8 @@ export default function UsersTab() {
       ? user.projects.map((p) => ({ projectId: p.projectId, recibeLeads: !!p.recibeLeads }))
       : (user.project_ids || []).map((id) => ({ projectId: id, recibeLeads: false }));
     setEditProjects(projs);
+    setEditPhone(user.whatsapp_phone || '');
+    setEditNewPass('');
     setOpenMenuId(null);
   }
 
@@ -141,8 +147,9 @@ export default function UsersTab() {
     if (!editingUser) return;
     setEditLoading(true);
     try {
-      const payload: { role: string; projects?: Array<{ projectId: number; recibeLeads: boolean }> } = { role: editRole };
+      const payload: { role: string; projects?: Array<{ projectId: number; recibeLeads: boolean }>; whatsapp_phone?: string } = { role: editRole };
       if (editProjects.length > 0) payload.projects = editProjects;
+      payload.whatsapp_phone = editPhone.trim();
       await client.patch(`/users/${editingUser.id}`, payload);
       toast({ title: 'Usuario actualizado', description: `${editingUser.nombre || editingUser.name} actualizado` });
       setEditingUser(null);
@@ -151,6 +158,24 @@ export default function UsersTab() {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setEditLoading(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!editingUser) return;
+    if (editNewPass.length < 8) {
+      toast({ title: 'Contraseña muy corta', description: 'Mínimo 8 caracteres', variant: 'destructive' });
+      return;
+    }
+    setSavingPass(true);
+    try {
+      await client.patch(`/users/${editingUser.id}/password`, { password: editNewPass });
+      toast({ title: '✓ Contraseña actualizada', description: `${editingUser.nombre || editingUser.name} deberá entrar con la nueva contraseña.` });
+      setEditNewPass('');
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally {
+      setSavingPass(false);
     }
   }
 
@@ -480,6 +505,23 @@ export default function UsersTab() {
               onToggleRecibeLeads={(id) => handleToggleRecibeLeads(id, editProjects, setEditProjects)}
               required={false}
             />
+          )}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1.5 block px-1">Teléfono (WhatsApp)</label>
+            <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="+34 600 000 000" className={inputClass} />
+            <p className="text-[10px] text-muted-foreground mt-1 px-1">Se usa para el widget de WhatsApp y el contacto del gestor.</p>
+          </div>
+          {isSuperadmin && (
+            <div className="border-t border-border pt-3 mt-1">
+              <label className="text-xs font-semibold flex items-center gap-1.5 mb-1.5 px-1"><Key size={12} weight="bold" /> Cambiar contraseña</label>
+              <div className="flex gap-2">
+                <input type="text" value={editNewPass} onChange={(e) => setEditNewPass(e.target.value)} placeholder="Nueva contraseña (mín. 8)" className={inputClass + ' font-mono'} />
+                <button type="button" onClick={handleChangePassword} disabled={savingPass} className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap">
+                  {savingPass ? '…' : 'Cambiar'}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1 px-1">Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+            </div>
           )}
         </UserDialog>
       )}
