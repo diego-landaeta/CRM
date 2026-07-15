@@ -143,7 +143,12 @@ export default function LeadsPage() {
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
-  const { products } = useProducts(activeProject?.id);
+  // Programas del filtro: con proyecto concreto activo, los suyos; en "Todos"
+  // solo si el filtro Proyecto tiene EXACTAMENTE un proyecto seleccionado.
+  const productsPid = activeProject?.id && activeProject.id > 0
+    ? activeProject.id
+    : (selectedProjectIds.length === 1 ? selectedProjectIds[0] : null);
+  const { products } = useProducts(productsPid);
   const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
 
   // Auto-polling de leads nuevos cada 30s + detección de nuevos por id

@@ -60,7 +60,7 @@ interface Props {
   projects: Array<{ id: number; nombre?: string }>;
   selectedProjectIds: number[];
   setSelectedProjectIds: (ids: number[]) => void;
-  gestores: Array<{ id: number; nombre: string }>;
+  gestores: Array<{ id: number; nombre: string; project_ids?: number[] }>;
   products: Array<{ id: number; nombre: string }>;
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
@@ -93,6 +93,21 @@ export default function LeadsFiltersBar(props: Props) {
   } = props;
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
+  // Cruce Gestor ↔ Proyecto:
+  // - Con proyectos seleccionados en el picker → solo gestores de esos proyectos.
+  // - Con una gestora filtrada → el picker solo muestra SUS proyectos.
+  const gestoresFiltrados = selectedProjectIds.length > 0
+    ? gestores.filter((g) => !Array.isArray(g.project_ids) || g.project_ids.some((pid) => selectedProjectIds.includes(pid)))
+    : gestores;
+  const gestorSeleccionado = filterResponsable && filterResponsable !== 'unassigned'
+    ? gestores.find((g) => String(g.id) === filterResponsable)
+    : null;
+  const projectsDelGestor = gestorSeleccionado && Array.isArray(gestorSeleccionado.project_ids) && gestorSeleccionado.project_ids.length > 0
+    ? projects.filter((p) => gestorSeleccionado.project_ids!.includes(p.id))
+    : projects;
+  // Programa: solo hay catálogo con proyecto concreto activo o con UN proyecto elegido en el picker.
+  const programasDisponibles = (activeProject?.id && activeProject.id > 0) || selectedProjectIds.length === 1;
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -216,7 +231,7 @@ export default function LeadsFiltersBar(props: Props) {
                       onChange={(v) => setFilterResponsable(v)}
                       options={[
                         { value: 'unassigned', label: '— Sin asignar —' },
-                        ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
+                        ...gestoresFiltrados.map((g) => ({ value: String(g.id), label: g.nombre })),
                       ]}
                       placeholder="Buscar gestor…"
                       allLabel="Todos los gestores"
@@ -226,20 +241,26 @@ export default function LeadsFiltersBar(props: Props) {
                   </Row>
                 )}
                 <Row label="Programa">
-                  <SearchableSelect
-                    value={filterProducto}
-                    onChange={(v) => setFilterProducto(v)}
-                    options={(products || []).map((p) => ({ value: String(p.id), label: p.nombre }))}
-                    placeholder="Buscar programa…"
-                    allLabel="Todos los programas"
-                    ariaLabel="Programa"
-                    maxWidth="100%"
-                  />
+                  {programasDisponibles ? (
+                    <SearchableSelect
+                      value={filterProducto}
+                      onChange={(v) => setFilterProducto(v)}
+                      options={(products || []).map((p) => ({ value: String(p.id), label: p.nombre }))}
+                      placeholder="Buscar programa…"
+                      allLabel="Todos los programas"
+                      ariaLabel="Programa"
+                      maxWidth="100%"
+                    />
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground italic px-1 py-2">
+                      Selecciona <strong>un</strong> proyecto (en el filtro Proyecto) para ver sus programas.
+                    </p>
+                  )}
                 </Row>
                 {projects && projects.length > 1 && (
                   <Row label="Proyecto">
                     <MultiProjectPicker
-                      projects={projects}
+                      projects={projectsDelGestor}
                       selected={selectedProjectIds}
                       onChange={(ids) => setSelectedProjectIds(ids)}
                       activeProjectId={activeProject?.id}
