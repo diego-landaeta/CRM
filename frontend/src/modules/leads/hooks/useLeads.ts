@@ -129,9 +129,10 @@ export function useLeads(): UseLeadsResult {
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchLeads = useCallback(async (): Promise<void> => {
-    // Modo "Todos los proyectos": cruza todos los IDs del usuario.
+    // Modo "Todos los proyectos": cruza todos los IDs del usuario, SALVO que
+    // el filtro "Proyecto" tenga una selección — esa manda (bug: antes se ignoraba).
     const effectiveIds = isAllProjects
-      ? (projects || []).map((p) => p.id)
+      ? (selectedProjectIds.length > 0 ? selectedProjectIds : (projects || []).map((p) => p.id))
       : selectedProjectIds;
     const hasMulti = effectiveIds.length > 0;
     if (!hasMulti && !pid) return;
@@ -204,8 +205,12 @@ export function useLeads(): UseLeadsResult {
       let merged: Record<string, number> = {};
       if (isAllProjects) {
         if (!projects || projects.length === 0) return;
+        // Respeta la selección del filtro "Proyecto" (igual que fetchLeads).
+        const statProjects = selectedProjectIds.length > 0
+          ? projects.filter((p) => selectedProjectIds.includes(p.id))
+          : projects;
         const results = await Promise.all(
-          projects.map((p) => client.get(`/leads/stats?projectId=${p.id}${extra}`).catch(() => ({ success: false } as any)))
+          statProjects.map((p) => client.get(`/leads/stats?projectId=${p.id}${extra}`).catch(() => ({ success: false } as any)))
         );
         results.forEach((r: any) => {
           if (r.success) {
@@ -233,7 +238,7 @@ export function useLeads(): UseLeadsResult {
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid, isAllProjects, projects, debouncedSearch, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo]);
+  }, [pid, isAllProjects, projects, multiRaw, debouncedSearch, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchLeads();
