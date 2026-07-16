@@ -185,7 +185,7 @@ export default function InvoiceCreatePage() {
       });
       if (res.success && res.data) {
         toast({ title: esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida', description: res.data.codigo });
-        window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
+        invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
