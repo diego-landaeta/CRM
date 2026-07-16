@@ -85,8 +85,9 @@ const NAV_SECTIONS = [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
-      { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
+      // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
+      // pasa a su propia sección al final (es consulta de datos, no ventas).
+      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
     ],
   },
   {
@@ -142,6 +143,14 @@ const NAV_SECTIONS = [
       { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
       { label: 'Análisis IA', to: '/reports/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
       { label: 'Chat IA', to: '/ai-chat', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+    ],
+  },
+  {
+    // Clientes = consulta de datos de clientes (no ventas). Va al final.
+    label: 'Clientes',
+    items: [
+      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
+      { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],
   },
   {
