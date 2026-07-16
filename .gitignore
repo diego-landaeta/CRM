@@ -69,3 +69,8 @@ reset-postgres-password.ps1
 backups/
 *.dump
 
+
+# Datos exportados (no versionar)
+*.xlsx
+*.xls
+*.csv
