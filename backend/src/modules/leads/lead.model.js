@@ -525,36 +525,40 @@ export async function findLeadByIdempotencyKey(projectId, key) {
 // ============================================================
 
 // Calcula el ORDER BY segun la preferencia del usuario.
-// - 'recent_value': agrupa por DIA mas reciente y dentro de cada día por precio DESC (DEFAULT)
-// - 'value':    precio DESC, fecha DESC (siempre los caros arriba aunque sean viejos)
-// - 'recent':   fecha DESC sin importar precio
-// - 'urgency':  score combinado: vencidos primero, luego valor*frescura exp
-function buildOrderBy(sort) {
-  if (sort === 'recent') {
-    return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
-  }
+// DEFAULT = 'recent': orden CRONOLÓGICO puro (fecha), más reciente primero.
+// `dir` ('asc'|'desc', def 'desc') invierte el orden cronológico en todos los modos.
+// - 'recent':       fecha (cronológico puro) — DEFAULT
+// - 'value':        precio DESC, luego fecha
+// - 'recent_value': agrupa por DIA y dentro de cada día por precio DESC
+// - 'urgency':      score combinado: vencidos primero, luego valor*frescura exp
+function buildOrderBy(sort, dir = 'desc') {
+  const D = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const FECHA = `COALESCE(l.fecha_solicitud, l.created_at)`;
   if (sort === 'value') {
-    return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+    return `COALESCE(prod.precio, 0) DESC NULLS LAST, ${FECHA} ${D}`;
   }
   if (sort === 'urgency') {
     // Score: precio * exp(-edad_dias / 7). Asi un lead de 100 hoy supera a uno
     // de 300 de hace 14 dias. Tambien empuja los que tienen recordatorio vencido.
     return `
       (CASE WHEN EXISTS (SELECT 1 FROM lead_reminders r WHERE r.lead_id = l.id AND r.completado = false AND r.fecha_recordatorio < CURRENT_DATE) THEN 1 ELSE 0 END) DESC,
-      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_solicitud, l.created_at))) / 604800)) DESC NULLS LAST,
-      COALESCE(l.fecha_solicitud, l.created_at) DESC
+      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - ${FECHA})) / 604800)) DESC NULLS LAST,
+      ${FECHA} ${D}
     `;
   }
-  // default 'recent_value' — los del DIA MAS RECIENTE arriba, dentro del dia los CAROS arriba.
-  // Trunca a fecha (sin hora) para que todos los leads del mismo dia compartan posición de "grupo".
-  return `
-    DATE(COALESCE(l.fecha_solicitud, l.created_at)) DESC,
-    COALESCE(prod.precio, 0) DESC NULLS LAST,
-    COALESCE(l.fecha_solicitud, l.created_at) DESC
-  `;
+  if (sort === 'recent_value') {
+    // Agrupa por DIA y dentro del día los caros arriba.
+    return `
+      DATE(${FECHA}) ${D},
+      COALESCE(prod.precio, 0) DESC NULLS LAST,
+      ${FECHA} ${D}
+    `;
+  }
+  // default 'recent' — CRONOLÓGICO puro. l.id como desempate estable.
+  return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated, reincidente }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -657,7 +661,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      ${where}
-     ORDER BY ${buildOrderBy(sort)}
+     ORDER BY ${buildOrderBy(sort, dir)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     [...params, limit, offset]
   );

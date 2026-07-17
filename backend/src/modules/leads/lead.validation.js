@@ -49,8 +49,9 @@ export const listLeadsSchema = z.object({
   // Filtro por rango de fechas (sobre fecha_solicitud o created_at)
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateFrom: YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
-  // Orden: value (default), recent, urgency
+  // Orden: recent = cronológico puro (DEFAULT). dir invierte asc/desc.
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
   // Filtro de duplicados (lead_duplicado_de IS NOT NULL) — solo admin/superadmin.
   duplicated: z.coerce.boolean().optional(),
   // Filtro de reincidentes — solo admin/superadmin.

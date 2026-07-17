@@ -134,6 +134,7 @@ export default function LeadsPage() {
     selectedProjectIds, setSelectedProjectIds,
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
+    sortDir, setSortDir,
     filterDup, setFilterDup,
     filterReincidente, setFilterReincidente,
     loading, error, refetch,
@@ -615,6 +616,7 @@ export default function LeadsPage() {
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
         dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
         sortMode={sortMode} setSortMode={setSortMode}
+        sortDir={sortDir} setSortDir={setSortDir}
         quickFilter={quickFilter} setQuickFilter={setQuickFilter}
         quickCounts={quickCounts}
         filterDup={filterDup} setFilterDup={setFilterDup}

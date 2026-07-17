@@ -49,10 +49,10 @@ const QUICK_LABELS: Record<string, string> = {
 };
 
 const SORT_LABELS: Record<string, string> = {
-  recent_value: '📅 Día reciente · más valor (default)',
+  recent: '🕒 Fecha — cronológico (default)',
+  recent_value: '📅 Día · más valor dentro del día',
   urgency: '⚡ Urgencia (valor × frescura)',
   value: '💰 Más valor primero',
-  recent: '🕒 Más recientes primero',
 };
 
 interface Props {
@@ -70,6 +70,7 @@ interface Props {
   filterProducto: string; setFilterProducto: (v: string) => void;
   dateFrom: string; dateTo: string; setDateRange: (from: string, to: string) => void;
   sortMode: string; setSortMode: (v: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
+  sortDir: 'asc' | 'desc'; setSortDir: (d: 'asc' | 'desc') => void;
   quickFilter: string; setQuickFilter: (v: string) => void;
   quickCounts: { overdue: number; today: number; tomorrow: number; week: number; noReminder: number; noContact: number; urgent: number };
   filterDup: boolean; setFilterDup: (v: boolean) => void;
@@ -87,7 +88,7 @@ export default function LeadsFiltersBar(props: Props) {
     search, setSearch, filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
-    sortMode, setSortMode, quickFilter, setQuickFilter, quickCounts,
+    sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
     filterDup, setFilterDup, filterReincidente, setFilterReincidente,
     stats, leadsCount, filteredCount, onAssignPending,
   } = props;
@@ -282,6 +283,20 @@ export default function LeadsFiltersBar(props: Props) {
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
+                </Row>
+                {/* Dirección del orden cronológico: descendente (más reciente
+                    primero, default) o ascendente (más antiguo primero). */}
+                <Row label="Dirección">
+                  <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
+                    <button type="button" onClick={() => setSortDir('desc')}
+                      className={`flex-1 h-9 ${sortDir === 'desc' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                      ↓ Más reciente
+                    </button>
+                    <button type="button" onClick={() => setSortDir('asc')}
+                      className={`flex-1 h-9 border-l border-border ${sortDir === 'asc' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                      ↑ Más antiguo
+                    </button>
+                  </div>
                 </Row>
               </Section>
 
