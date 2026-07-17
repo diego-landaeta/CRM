@@ -660,7 +660,7 @@ export default function LeadsPage() {
             <thead className="bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b sticky top-0 z-10">
               <tr>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
+                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Teléfono</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
                 {showProjectColumn && (
@@ -714,11 +714,11 @@ export default function LeadsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-muted-foreground">{lead.email}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{lead.telefono || <span className="text-muted-foreground/50">—</span>}</td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.producto_interes ? (
-                      <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded font-medium" title={lead.producto_interes}>
-                        {lead.producto_interes.length > 40 ? lead.producto_interes.slice(0, 38) + '…' : lead.producto_interes}
+                      <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded font-medium max-w-[260px] whitespace-normal leading-snug" title={lead.producto_interes}>
+                        {lead.producto_interes.length > 90 ? lead.producto_interes.slice(0, 88) + '…' : lead.producto_interes}
                       </span>
                     ) : lead.landing_url ? (
                       (() => {
