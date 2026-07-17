@@ -100,6 +100,15 @@ export async function exportWasapi(req, res, next) {
       producto_nombre: l.producto_interes,
     }));
 
+    // EXCLUIR estados (CSV): p.ej. excludeStatus=no_interesado,contactado.
+    // Complementa al filtro "status" (que incluye uno): aquí quitas los que no
+    // quieres que reciban el envío de WhatsApp.
+    const excluirEstados = String(req.query.excludeStatus || '')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    if (excluirEstados.length) {
+      leads = leads.filter((l) => !excluirEstados.includes(l.status));
+    }
+
     if (req.query.onlyWithPhone === 'true') {
       leads = leads.filter((l) => l.telefono && String(l.telefono).replace(/[^\d]/g, '').length >= 7);
     }
