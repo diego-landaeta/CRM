@@ -52,8 +52,14 @@ async function writeXlsx<T>(req: ExportRequest<T>): Promise<void> {
     else if (col.type === 'date') runtimeType = Date;
     else if (col.type === 'boolean') runtimeType = Boolean;
 
+    // Ancho por defecto: las columnas de fecha/número necesitan un mínimo o
+    // Excel las muestra como "####" (celda demasiado angosta para el valor).
+    // Para texto dejamos que la lib estime, con un mínimo razonable por header.
+    const fallbackWidth = col.type === 'date' ? 13
+      : col.type === 'number' ? 12
+      : Math.min(40, Math.max(12, String(cfg.label || col.label).length + 2));
     return {
-      width: col.width,
+      width: col.width ?? fallbackWidth,
       header: { value: cfg.label || col.label, type: String, fontWeight: 'bold' as const },
       cell: (row: T) => {
         const scalar = toScalar(col.value(row), col.type);
