@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
+import LeadsVentasDownload from '../components/LeadsVentasDownload';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -223,6 +224,9 @@ export default function ReportsPage() {
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
+
+      {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
+      <LeadsVentasDownload projectId={activeProject?.id} projectName={activeProject?.nombre} range={range} />
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
