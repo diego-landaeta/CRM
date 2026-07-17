@@ -136,6 +136,7 @@ export default function LeadsPage() {
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
     sortDir, setSortDir,
+    fetchAllForExport,
     filterDup, setFilterDup,
     filterReincidente, setFilterReincidente,
     loading, error, refetch,
@@ -193,6 +194,22 @@ export default function LeadsPage() {
   const [deletingLead, setDeletingLead] = useState<any>(null);
   const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  // El listado va paginado; el export debe llevarse TODO lo filtrado, así que
+  // pedimos todas las filas al backend antes de abrir el diálogo.
+  const [exportRows, setExportRows] = useState([]);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  async function abrirExport() {
+    setExportLoading(true);
+    try {
+      const todos = await fetchAllForExport();
+      // Los filtros rápidos son client-side: se aplican también al export.
+      setExportRows(aplicarQuickFilter(todos));
+      setExportOpen(true);
+    } catch (err) {
+      toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
+    } finally { setExportLoading(false); }
+  }
   const [wasapiOpen, setWasapiOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -254,6 +271,32 @@ export default function LeadsPage() {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return null;
     return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  }
+
+  // Filtros rápidos (client-side). Extraído a función para poder aplicarlo
+  // también al export, que trae TODAS las filas del backend (no solo la página).
+  function aplicarQuickFilter(lista) {
+    if (!quickFilter) return lista;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const inWeek = new Date(today.getTime() + 7 * 86400000);
+    return lista.filter(l => {
+      const next = parseLocalDateOnly(l.next_reminder_at);
+      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
+      if (quickFilter === 'overdue') return next && next < today;
+      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
+      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
+      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
+      if (quickFilter === 'no-reminder') return !next;
+      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
+      if (quickFilter === 'urgent') {
+        if (next && next <= today) return true;
+        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
+        return false;
+      }
+      return true;
+    });
   }
 
   const filteredLeads = useMemo(() => {
@@ -529,13 +572,14 @@ export default function LeadsPage() {
           </button>
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
-              onClick={() => setExportOpen(true)}
-              title="Exportar (Excel/CSV/JSON)"
+              onClick={abrirExport}
+              disabled={exportLoading}
+              title="Exportar (Excel/CSV/JSON) — todos los resultados filtrados"
               aria-label="Exportar"
               className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <DownloadSimple size={14} weight="bold" />
-              <span className="hidden md:inline">Exportar</span>
+              <span className="hidden md:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
             </button>
           )}
           <button
@@ -1022,7 +1066,7 @@ export default function LeadsPage() {
           title="Exportar prospectos"
           filename={`prospectos-${activeProject?.slug || activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}`}
           columns={getLeadExportColumns()}
-          rows={filteredLeads}
+          rows={exportRows}
         />
       </Suspense>
 
