@@ -21,6 +21,9 @@ interface Props<T> {
   title?: string;
   columns: ExportColumn<T>[];
   rows: T[];
+  /** Bloque opcional de "alcance" (p.ej. selector de proyectos + con/sin filtros)
+   *  que se muestra arriba del todo. Lo controla el padre. */
+  scope?: React.ReactNode;
   defaultFormat?: ExportFormat;
 }
 
@@ -36,7 +39,7 @@ const FORMAT_META: Record<ExportFormat, { label: string; icon: typeof FileXls; e
 
 export default function ExportDialog<T>({
   open, onClose, context, filename, title,
-  columns, rows, defaultFormat = 'xlsx',
+  columns, rows, defaultFormat = 'xlsx', scope,
 }: Props<T>) {
   const [format, setFormat] = useState<ExportFormat>(defaultFormat);
   const [config, setConfig] = useState<ExportColumnConfig[]>(() => defaultConfig(columns));
@@ -178,6 +181,9 @@ export default function ExportDialog<T>({
           </header>
 
           <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
+            {/* Alcance (proyectos / con-sin filtros) — lo aporta el padre */}
+            {scope}
+
             {/* Formato */}
             <section>
               <p className="text-xs font-medium text-muted-foreground mb-2">Formato</p>

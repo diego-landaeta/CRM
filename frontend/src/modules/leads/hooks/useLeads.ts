@@ -66,7 +66,7 @@ export interface UseLeadsResult {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
-  fetchAllForExport: () => Promise<Lead[]>;
+  fetchAllForExport: (opts?: { projectIds?: number[]; ignoreFilters?: boolean }) => Promise<Lead[]>;
 }
 
 // Backend devuelve `status` y `canal_detectado`; UI usa `estado` y `origen`.
@@ -193,28 +193,35 @@ export function useLeads(): UseLeadsResult {
   // Trae TODOS los leads que cumplen los filtros actuales (sin paginar) para
   // exportar. El listado va paginado de 20 en 20; el export debe llevarse todo
   // lo filtrado, no solo la página visible.
-  const fetchAllForExport = useCallback(async (): Promise<Lead[]> => {
-    const effectiveIds = isAllProjects
-      ? (selectedProjectIds.length > 0 ? selectedProjectIds : (projects || []).map((p) => p.id))
-      : selectedProjectIds;
-    const hasMulti = effectiveIds.length > 0;
+  const fetchAllForExport = useCallback(async (opts?: { projectIds?: number[]; ignoreFilters?: boolean }): Promise<Lead[]> => {
+    // Alcance de proyectos: override explícito del diálogo, o el de la vista actual.
+    const scopeIds = opts?.projectIds && opts.projectIds.length
+      ? opts.projectIds
+      : (isAllProjects
+          ? (selectedProjectIds.length > 0 ? selectedProjectIds : (projects || []).map((p) => p.id))
+          : selectedProjectIds);
+    const hasMulti = scopeIds.length > 0;
     if (!hasMulti && !pid) return [];
+    const ignoreFilters = !!opts?.ignoreFilters;
     const baseParams = () => {
       const p = new URLSearchParams();
-      if (hasMulti) p.set('projectIds', effectiveIds.join(','));
+      if (hasMulti) p.set('projectIds', scopeIds.join(','));
       else p.set('projectId', String(pid));
-      if (debouncedSearch) p.set('search', debouncedSearch);
-      if (filterEstado) p.set('status', filterEstado);
-      if (filterOrigen) p.set('canal', filterOrigen);
-      if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
-      else if (filterResponsable) p.set('responsableId', filterResponsable);
-      if (filterProducto) p.set('productId', filterProducto);
-      if (dateFrom) p.set('dateFrom', dateFrom);
-      if (dateTo) p.set('dateTo', dateTo);
+      // "Todo sin filtros" solo respeta el alcance de proyecto; ignora el resto.
+      if (!ignoreFilters) {
+        if (debouncedSearch) p.set('search', debouncedSearch);
+        if (filterEstado) p.set('status', filterEstado);
+        if (filterOrigen) p.set('canal', filterOrigen);
+        if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
+        else if (filterResponsable) p.set('responsableId', filterResponsable);
+        if (filterProducto) p.set('productId', filterProducto);
+        if (dateFrom) p.set('dateFrom', dateFrom);
+        if (dateTo) p.set('dateTo', dateTo);
+        if (filterDup === '1') p.set('duplicated', 'true');
+        if (filterReincidente === '1') p.set('reincidente', 'true');
+      }
       if (sortMode) p.set('sort', sortMode);
       if (sortDir) p.set('dir', sortDir);
-      if (filterDup === '1') p.set('duplicated', 'true');
-      if (filterReincidente === '1') p.set('reincidente', 'true');
       return p;
     };
     // El backend limita el page-size a 500 → paginamos hasta traer TODO lo filtrado.

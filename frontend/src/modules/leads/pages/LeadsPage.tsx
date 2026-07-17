@@ -198,17 +198,45 @@ export default function LeadsPage() {
   // pedimos todas las filas al backend antes de abrir el diálogo.
   const [exportRows, setExportRows] = useState([]);
   const [exportLoading, setExportLoading] = useState(false);
+  // Alcance del export, decidido EN EL DIÁLOGO: qué proyectos y si se respetan
+  // los filtros activos ('filtros') o se exporta todo del proyecto ('todos').
+  const [expProjectIds, setExpProjectIds] = useState([]);
+  const [expScope, setExpScope] = useState('filtros'); // 'filtros' | 'todos'
 
-  async function abrirExport() {
+  // Proyectos elegibles para el export (con nombre).
+  const exportableProjects = (projects || []).filter((p) => p.id > 0);
+
+  async function recomputeExport(projectIds, scope) {
     setExportLoading(true);
     try {
-      const todos = await fetchAllForExport();
-      // Los filtros rápidos son client-side: se aplican también al export.
-      setExportRows(aplicarQuickFilter(todos));
-      setExportOpen(true);
+      const ignoreFilters = scope === 'todos';
+      const todos = await fetchAllForExport({ projectIds, ignoreFilters });
+      // Los filtros rápidos son client-side: solo aplican en modo 'filtros'.
+      setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
     } catch (err) {
       toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
     } finally { setExportLoading(false); }
+  }
+
+  async function abrirExport() {
+    // Por defecto = lo que estás viendo: proyectos de la vista actual + con filtros.
+    const defIds = activeProject?.id && activeProject.id > 0
+      ? [activeProject.id]
+      : (selectedProjectIds.length > 0 ? selectedProjectIds : exportableProjects.map((p) => p.id));
+    setExpProjectIds(defIds);
+    setExpScope('filtros');
+    setExportOpen(true);
+    await recomputeExport(defIds, 'filtros');
+  }
+
+  function toggleExportProject(id) {
+    const next = expProjectIds.includes(id) ? expProjectIds.filter((x) => x !== id) : [...expProjectIds, id];
+    setExpProjectIds(next);
+    recomputeExport(next, expScope);
+  }
+  function setExportScope(scope) {
+    setExpScope(scope);
+    recomputeExport(expProjectIds, scope);
   }
   const [wasapiOpen, setWasapiOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
@@ -1067,6 +1095,49 @@ export default function LeadsPage() {
           filename={`prospectos-${activeProject?.slug || activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}`}
           columns={getLeadExportColumns()}
           rows={exportRows}
+          scope={
+            <section className="rounded-md border border-border bg-muted/20 p-3 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué leads exportar?</p>
+                <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
+                  <button type="button" onClick={() => setExportScope('filtros')}
+                    className={`flex-1 h-8 ${expScope === 'filtros' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                    Con los filtros activos
+                  </button>
+                  <button type="button" onClick={() => setExportScope('todos')}
+                    className={`flex-1 h-8 border-l border-border ${expScope === 'todos' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                    Todos (sin filtros)
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {expScope === 'filtros'
+                    ? 'Exporta exactamente lo que ves ahora (estado, fechas, búsqueda…).'
+                    : 'Exporta todos los leads de los proyectos elegidos, ignorando los filtros.'}
+                </p>
+              </div>
+
+              {exportableProjects.length > 1 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Proyectos a incluir</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {exportableProjects.map((p) => {
+                      const on = expProjectIds.includes(p.id);
+                      return (
+                        <button key={p.id} type="button" onClick={() => toggleExportProject(p.id)}
+                          className={`h-7 px-2.5 rounded-full border text-xs font-medium ${
+                            on ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted'}`}>
+                          {on ? '✓ ' : ''}{p.nombre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {expProjectIds.length === 0 && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Elige al menos un proyecto.</p>
+                  )}
+                </div>
+              )}
+            </section>
+          }
         />
       </Suspense>
 
