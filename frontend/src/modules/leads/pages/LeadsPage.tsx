@@ -206,16 +206,27 @@ export default function LeadsPage() {
   // Proyectos elegibles para el export (con nombre).
   const exportableProjects = (projects || []).filter((p) => p.id > 0);
 
+  // Token para evitar que respuestas lentas de un cálculo anterior pisen al
+  // último (al cambiar rápido de proyecto/alcance se combinaban datos).
+  const exportReqRef = useRef(0);
   async function recomputeExport(projectIds, scope) {
+    const myReq = ++exportReqRef.current;
     setExportLoading(true);
+    // Sin proyectos elegidos no hay nada que traer.
+    if (!projectIds || projectIds.length === 0) {
+      setExportRows([]);
+      if (exportReqRef.current === myReq) setExportLoading(false);
+      return;
+    }
     try {
       const ignoreFilters = scope === 'todos';
       const todos = await fetchAllForExport({ projectIds, ignoreFilters });
+      if (exportReqRef.current !== myReq) return; // llegó una petición más nueva → descartar
       // Los filtros rápidos son client-side: solo aplican en modo 'filtros'.
       setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
     } catch (err) {
-      toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
-    } finally { setExportLoading(false); }
+      if (exportReqRef.current === myReq) toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
+    } finally { if (exportReqRef.current === myReq) setExportLoading(false); }
   }
 
   async function abrirExport() {
