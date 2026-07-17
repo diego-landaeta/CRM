@@ -63,6 +63,7 @@ import {
   getInitials,
   getAvatarColor,
   formatRelative,
+  formatFecha,
 } from '../lib/leadFormat';
 
 
@@ -781,7 +782,7 @@ export default function LeadsPage() {
                     ) : <span className="text-muted-foreground/60">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">
-                    {lead.last_interaction_at ? formatRelative(lead.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
+                    {lead.last_interaction_at ? formatFecha(lead.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.next_reminder_at ? (
@@ -846,7 +847,7 @@ export default function LeadsPage() {
               <div className="flex items-center gap-2 flex-wrap text-[11px]">
                 <ChannelBadge channel={lead.origen} />
                 {lead.last_interaction_at && (
-                  <span className="text-muted-foreground">Último: <span className="text-foreground">{formatRelative(lead.last_interaction_at)}</span></span>
+                  <span className="text-muted-foreground">Último: <span className="text-foreground">{formatFecha(lead.last_interaction_at)}</span></span>
                 )}
                 {lead.next_reminder_at && (
                   <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
