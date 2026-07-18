@@ -41,8 +41,8 @@ const REPORTS: ReportDef[] = [
     desc: 'Por fecha de PAGO: cada cuota donde cae. Incluye mes de origen, país y pendiente de cobro.',
     cols: [
       { h: 'Fecha pago', k: 'fecha_pago', t: 'date' }, { h: 'Cliente', k: 'cliente' },
-      { h: 'Formación', k: 'formacion' }, { h: 'Cuota €', k: 'cuota', t: 'number' },
-      { h: 'Nº cuota', k: 'num_cuota' }, { h: 'Mes origen', k: 'mes_origen' }, { h: 'País', k: 'pais' },
+      { h: 'Formación', k: 'formacion' }, { h: 'Importe €', k: 'importe', t: 'number' },
+      { h: 'Plan de pago', k: 'plan_pago' }, { h: 'Mes origen', k: 'mes_origen' }, { h: 'País', k: 'pais' },
       { h: 'Pendiente €', k: 'pendiente', t: 'number' }, { h: 'Método', k: 'metodo_pago' },
     ],
   },
@@ -102,6 +102,7 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const ready = Boolean(from && to);
 
   async function run(report: ReportDef, format: 'xlsx' | 'csv') {
     setBusy(`${report.key}:${format}`);
@@ -148,7 +149,10 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">Reportes descargables</h2>
-          <p className="text-xs text-muted-foreground">Elige el rango de fechas y descarga en Excel o CSV. Vacío = histórico completo.</p>
+          <p className="text-xs text-muted-foreground">
+            Elige el rango de fechas (Desde y Hasta) y descarga en Excel o CSV.
+            {!ready && <span className="text-amber-600 dark:text-amber-500"> Selecciona ambas fechas para habilitar la descarga.</span>}
+          </p>
         </div>
         <div className="flex items-end gap-2">
           <label className="text-xs font-medium text-foreground">Desde
@@ -181,11 +185,11 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" disabled={busy !== null} onClick={() => run(r, 'xlsx')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'xlsx')}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> {busy === `${r.key}:xlsx` ? 'Generando…' : 'Excel'}
                 </button>
-                <button type="button" disabled={busy !== null} onClick={() => run(r, 'csv')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'csv')}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
                   <FileCsv size={13} weight="bold" /> {busy === `${r.key}:csv` ? 'Generando…' : 'CSV'}
                 </button>
