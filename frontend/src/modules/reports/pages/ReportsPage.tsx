@@ -11,7 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
-import LeadsVentasDownload from '../components/LeadsVentasDownload';
+import ReportsDownloadSection from '../components/ReportsDownloadSection';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -226,7 +226,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
-      <LeadsVentasDownload projectId={activeProject?.id} projectName={activeProject?.nombre} range={range} />
+      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
