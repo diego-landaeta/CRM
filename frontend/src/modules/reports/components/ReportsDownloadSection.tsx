@@ -74,11 +74,22 @@ const REPORTS: ReportDef[] = [
   },
 ];
 
-function scalar(c: Col, row: Record<string, unknown>) {
+// Fecha como texto dd/mm/aaaa (UTC para no correr el día). Así Excel la muestra
+// completa y no la reinterpreta como 'jul-26' según el locale.
+function fmtDate(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const d = new Date(v as string);
+  if (Number.isNaN(d.getTime())) return String(v);
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
+
+function scalar(c: Col, row: Record<string, unknown>): string | number | null {
   const v = row[c.k];
   if (v == null || v === '') return null;
   if (c.t === 'number') { const n = Number(v); return Number.isNaN(n) ? null : n; }
-  if (c.t === 'date') { const d = new Date(v as string); return Number.isNaN(d.getTime()) ? null : d; }
+  if (c.t === 'date') return fmtDate(v);
   if (c.t === 'estado') return ESTADO[v as string] || String(v);
   return String(v);
 }
@@ -87,7 +98,7 @@ function csvCell(c: Col, row: Record<string, unknown>) {
   const v = row[c.k];
   if (v == null) return '';
   if (c.t === 'estado') return ESTADO[v as string] || String(v);
-  if (c.t === 'date') { const d = new Date(v as string); return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('es-ES'); }
+  if (c.t === 'date') return fmtDate(v) || '';
   return String(v);
 }
 
@@ -129,7 +140,7 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
           cell: (row: Record<string, unknown>) => {
             const s = scalar(c, row);
             if (s == null) return null;
-            return { value: s, type: c.t === 'number' ? Number : c.t === 'date' ? Date : String };
+            return { value: s, type: c.t === 'number' ? Number : String };
           },
         }));
         await writeXlsxFile(rows, { columns, sheet: 'Datos', dateFormat: 'yyyy-mm-dd' }).toFile(`${base}.xlsx`);
@@ -157,7 +168,8 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
             {!ready && <span className="text-amber-600 dark:text-amber-500"> Selecciona ambas fechas para habilitar la descarga.</span>}
           </p>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 rounded-lg border-2 border-primary/40 bg-primary/5 px-3 py-2">
+          <span className="hidden lg:block self-center text-xs font-semibold text-primary">Fechas del<br />reporte</span>
           <label className="text-xs font-medium text-foreground">Desde
             <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
               <CalendarBlank size={14} className="text-muted-foreground" />
