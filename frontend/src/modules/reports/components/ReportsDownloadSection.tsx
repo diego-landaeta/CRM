@@ -2,7 +2,7 @@
 // reporte con botones Excel/CSV. Cada tarjeta pega a /reports/<key> y arma el
 // archivo en el navegador (Excel con write-excel-file, CSV manual).
 import { useState } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice } from '@phosphor-icons/react';
+import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -57,6 +57,15 @@ const REPORTS: ReportDef[] = [
       { h: 'Cobrado', k: 'venta_cobrado', t: 'number' }, { h: 'Pendiente', k: 'venta_pendiente', t: 'number' },
       { h: 'Método', k: 'metodo_pago' }, { h: 'Fecha entrada', k: 'fecha_entrada', t: 'date' },
       { h: 'Fecha venta', k: 'fecha_venta', t: 'date' },
+    ],
+  },
+  {
+    key: 'ventas-vendedora', label: 'Ventas por vendedora', icon: Trophy,
+    desc: 'Ventas agrupadas por el responsable del lead: nº de ventas, clientes, total, cobrado y pendiente.',
+    cols: [
+      { h: 'Vendedora', k: 'vendedora' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' }, { h: 'Total €', k: 'total', t: 'number' },
+      { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
     ],
   },
   {
