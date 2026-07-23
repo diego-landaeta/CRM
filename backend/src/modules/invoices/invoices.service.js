@@ -230,7 +230,7 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const metodoLabels = {
     transferencia: 'Transferencia bancaria',
     tarjeta: 'Tarjeta',
-    tarjeta_stripe: 'Tarjeta (Stripe)',
+    tarjeta_stripe: 'Tarjeta',   // forma de pago = Tarjeta; Stripe es el ORIGEN, no el método
     efectivo: 'Efectivo',
     bizum: 'Bizum',
     fraccionado: 'Pago fraccionado',
@@ -319,7 +319,7 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
 }
 
 const METODO_LABELS = {
-  transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta (Stripe)',
+  transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
   efectivo: 'Efectivo', bizum: 'Bizum', fraccionado: 'Pago fraccionado', otro: 'Otro',
 };
 
