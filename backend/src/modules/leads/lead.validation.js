@@ -56,6 +56,8 @@ export const listLeadsSchema = z.object({
   duplicated: z.coerce.boolean().optional(),
   // Filtro de reincidentes — solo admin/superadmin.
   reincidente: z.coerce.boolean().optional(),
+  // "Clientes" = leads con al menos una venta (conversión).
+  conConversion: z.coerce.boolean().optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] }
