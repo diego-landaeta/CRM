@@ -126,7 +126,7 @@ const NAV_SECTIONS = [
       { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
       { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
       { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
-      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', icon: Wallet, roles: ['superadmin', 'admin'], module: 'accounting_receivable', statusTag: 'Pruebas' },
+      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
       { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
