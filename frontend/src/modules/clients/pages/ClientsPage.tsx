@@ -154,7 +154,7 @@ export default function ClientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [saleOpen, setSaleOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 500;
 
   // Debounce búsqueda 350ms
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,10 +167,11 @@ export default function ClientsPage() {
   // Cargar gestores (solo admin/superadmin)
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
-    client.get('/users?limit=200').then((r) => {
+    const projectFilter = !isAllProjects && activeProject?.id ? `&projectId=${activeProject.id}` : '';
+    client.get(`/users?active=true&role=gestor&limit=100${projectFilter}`).then((r) => {
       if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
-    }).catch(() => { /* ignore */ });
-  }, [user?.role]);
+    }).catch(() => setGestores([]));
+  }, [user?.role, activeProject?.id, isAllProjects]);
 
   // Cargar productos del proyecto activo
   useEffect(() => {
@@ -212,25 +213,7 @@ export default function ClientsPage() {
       if (controller.signal.aborted) return;
       if (res.success) {
         setTotalBackend(Number((res as { pagination?: { total?: number } }).pagination?.total) || 0);
-        const enriched = await Promise.all(((res.data as Array<Client>) || []).map(async (l) => {
-          try {
-            const cr = await client.get(`/conversions/by-lead/${l.id}`);
-            const convs = cr.success ? (cr.data as Array<{ importe_total?: number; importe_pagado?: number; fecha_compra?: string; created_at?: string; producto_contratado?: string }>) : [];
-            const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
-            const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
-            const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-            // Cursos/programas comprados (únicos, en orden de compra más reciente).
-            const cursos = [...new Set(convs.map((c) => (c.producto_contratado || '').trim()).filter(Boolean))];
-            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv, cursos } as Client;
-          } catch {
-            return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 } as Client;
-          }
-        }));
-        // El enriquecimiento es async y no lleva signal: si el proyecto cambió
-        // mientras tanto, no pisar la lista del proyecto activo (bug: cargaba
-        // clientes de otro proyecto).
-        if (controller.signal.aborted) return;
-        setClients(enriched);
+        setClients(((res.data as Array<Client>) || []));
       }
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
@@ -287,26 +270,10 @@ export default function ClientsPage() {
     setDeleteClient(c);
   }
 
-  async function handleUpsellCreated() {
+  function handleUpsellCreated() {
     setUpsellLead(null);
     toast({ title: 'Venta registrada', description: 'Se actualizó el historial del cliente' });
-    // Recargar datos del cliente
-    if (activeProject?.id) {
-      const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
-      if (res.success) {
-        const enriched = await Promise.all((res.data || []).map(async (l) => {
-          try {
-            const cr = await client.get(`/conversions/by-lead/${l.id}`);
-            const convs = cr.success ? cr.data : [];
-            const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
-            const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
-            const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv };
-          } catch { return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 }; }
-        }));
-        setClients(enriched);
-      }
-    }
+    setReloadKey((k) => k + 1);
   }
 
   return (
@@ -331,7 +298,9 @@ export default function ClientsPage() {
       <Suspense fallback={null}>
         <RegisterSaleDialog
           open={saleOpen}
-          project={activeProject}
+          project={activeProject?.id
+            ? { id: activeProject.id, nombre: activeProject.nombre }
+            : null}
           onClose={() => setSaleOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />

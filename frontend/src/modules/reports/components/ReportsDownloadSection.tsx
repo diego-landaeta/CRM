@@ -8,7 +8,7 @@ import { toast } from '@/shared/hooks/useToast';
 
 type ColType = 'string' | 'number' | 'date' | 'estado';
 interface Col { h: string; k: string; t?: ColType }
-interface ReportDef { key: string; label: string; desc: string; icon: React.ComponentType<{ size?: number; weight?: 'regular' | 'bold' | 'fill' }>; cols: Col[] }
+interface ReportDef { key: string; label: string; desc: string; icon: React.ElementType; cols: Col[] }
 
 const ESTADO: Record<string, string> = {
   nuevo: 'Nuevo', por_contactar: 'Por contactar', contactado: 'Contactado',
@@ -37,13 +37,15 @@ const REPORTS: ReportDef[] = [
     ],
   },
   {
-    key: 'ventas', label: 'Ventas (cobros)', icon: Receipt,
-    desc: 'Por fecha de PAGO: cada cuota donde cae. Incluye mes de origen, país y pendiente de cobro.',
+    key: 'ventas', label: 'Ventas (conversiones)', icon: Receipt,
+    desc: 'Una fila por venta, según su fecha de conversión. No incluye cuotas ni abonos como ventas adicionales.',
     cols: [
-      { h: 'Fecha pago', k: 'fecha_pago', t: 'date' }, { h: 'Cliente', k: 'cliente' },
-      { h: 'Formación', k: 'formacion' }, { h: 'Importe €', k: 'importe', t: 'number' },
-      { h: 'Plan de pago', k: 'plan_pago' }, { h: 'Mes origen', k: 'mes_origen' }, { h: 'País', k: 'pais' },
-      { h: 'Pendiente €', k: 'pendiente', t: 'number' }, { h: 'Método', k: 'metodo_pago' },
+      { h: 'Fecha venta', k: 'fecha_venta', t: 'date' }, { h: 'Cliente', k: 'cliente' },
+      { h: 'Formación', k: 'formacion' }, { h: 'Venta total €', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Estado lead', k: 'estado', t: 'estado' },
+      { h: 'Responsable', k: 'responsable' }, { h: 'País', k: 'pais' },
+      { h: 'Método', k: 'metodo_pago' }, { h: 'Proyecto', k: 'proyecto' },
     ],
   },
   {

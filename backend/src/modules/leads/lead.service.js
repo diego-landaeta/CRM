@@ -698,7 +698,11 @@ export async function updateLead(leadId, data, opts = {}) {
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
   if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
-    data.telefono = normalizePhone(data.telefono);
+    const telefonoOriginal = data.telefono;
+    data.telefono = normalizePhone(telefonoOriginal);
+    if (telefonoOriginal && !data.telefono) {
+      throw new AppError('El teléfono no tiene un formato válido. Incluye el código de país y al menos 7 dígitos.', 400, 'INVALID_PHONE');
+    }
   }
   if (Object.prototype.hasOwnProperty.call(data, 'email') && (data.email === '' || !data.email)) {
     data.email = null;
@@ -720,7 +724,10 @@ export async function updateLead(leadId, data, opts = {}) {
     if (oldCanal !== newCanal) auditableData.canal = { old: oldCanal, new: newCanal };
   }
 
-  const updated = await leadModel.updateLead(leadId, data);
+  // Un cambio exclusivo de canal no toca la tabla leads; aun así es válido.
+  const updated = Object.keys(data).length > 0
+    ? await leadModel.updateLead(leadId, data)
+    : lead;
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
 
   if (newCanal !== undefined) {

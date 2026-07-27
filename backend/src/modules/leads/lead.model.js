@@ -611,7 +611,17 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(canal);
   }
   if (productId) {
-    conditions.push(`l.producto_interes_id = $${paramIdx++}`);
+    conditions.push(conConversion
+      ? `EXISTS (
+          SELECT 1 FROM conversions cprod
+          WHERE cprod.lead_id = l.id
+            AND (
+              cprod.producto_contratado_id = $${paramIdx}
+              OR (cprod.producto_contratado_id IS NULL AND l.producto_interes_id = $${paramIdx})
+            )
+        )`
+      : `l.producto_interes_id = $${paramIdx}`);
+    paramIdx++;
     params.push(productId);
   }
   if (search) {
@@ -626,14 +636,28 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   // descuadra ±2h en Madrid (verano). Resultado: "Hoy" muestra leads de "Ayer"
   // y viceversa. Forzamos interpretación en la TZ de la app.
   const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
-  if (dateFrom) {
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
-    params.push(dateFrom);
-  }
-  if (dateTo) {
-    // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
-    params.push(dateTo);
+  if (conConversion) {
+    // En Clientes, el rango corresponde a la última compra, no a la fecha en
+    // que se creó/importó el lead.
+    const lastPurchase = `(SELECT MAX(cdate.fecha_conversion) FROM conversions cdate WHERE cdate.lead_id = l.id)`;
+    if (dateFrom) {
+      conditions.push(`${lastPurchase} >= $${paramIdx++}::date`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push(`${lastPurchase} < ($${paramIdx++}::date + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
+  } else {
+    if (dateFrom) {
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
@@ -642,11 +666,37 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   const countResult = await query(`SELECT COUNT(*) FROM leads l ${where}`, params);
   const total = parseInt(countResult.rows[0].count);
 
+  const clientStatsSelect = conConversion ? `,
+            client_stats.conversiones,
+            client_stats.total_compras,
+            client_stats.total_pagado,
+            client_stats.pendiente,
+            client_stats.ultima_compra,
+            client_stats.cursos` : '';
+  const clientStatsJoin = conConversion ? `
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS conversiones,
+              COALESCE(SUM(cstat.importe_total), 0)::numeric AS total_compras,
+              COALESCE(SUM(cstat.importe_pagado), 0)::numeric AS total_pagado,
+              COALESCE(SUM(cstat.importe_total - cstat.importe_pagado), 0)::numeric AS pendiente,
+              MAX(cstat.fecha_conversion) AS ultima_compra,
+              ARRAY(
+                SELECT DISTINCT ccourse.producto_contratado
+                FROM conversions ccourse
+                WHERE ccourse.lead_id = l.id
+                  AND NULLIF(BTRIM(ccourse.producto_contratado), '') IS NOT NULL
+                ORDER BY ccourse.producto_contratado
+              ) AS cursos
+       FROM conversions cstat
+       WHERE cstat.lead_id = l.id
+     ) client_stats ON TRUE` : '';
+
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
+            l.responsable_id,
             proj.nombre AS proyecto_nombre,
             proj.slug AS proyecto_slug,
             u.nombre as responsable_nombre,
@@ -660,12 +710,14 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
             p.dias_alerta_inactividad,
             EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo,
             EXISTS(SELECT 1 FROM lead_spam_reports sr WHERE sr.lead_id = l.id AND sr.status = 'pending') AS has_pending_spam_report
+            ${clientStatsSelect}
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
+     ${clientStatsJoin}
      ${where}
      ORDER BY ${buildOrderBy(sort, dir)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

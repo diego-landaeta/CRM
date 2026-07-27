@@ -58,6 +58,7 @@ const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
+  const isEdit = !!lead;
   const { activeProject, projects, isAllProjects } = useProjectContext() as {
     activeProject: any;
     projects: Array<{ id: number; nombre?: string }>;
@@ -67,8 +68,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   // El form NECESITA un proyecto concreto, asi que mostramos un selector
   // al inicio para que el usuario elija a cual asignar el lead.
   const [pickedProjectId, setPickedProjectId] = useState<number | null>(null);
-  const effectiveProjectId = isAllProjects ? pickedProjectId : (activeProject?.id ?? null);
-  const effectiveProject = isAllProjects
+  // Al editar, el proyecto siempre es el del propio lead. Antes, con la vista
+  // global "Todos los proyectos", effectiveProjectId quedaba null y Guardar
+  // terminaba sin enviar la actualización.
+  const effectiveProjectId = isEdit
+    ? (lead?.project_id ?? null)
+    : (isAllProjects ? pickedProjectId : (activeProject?.id ?? null));
+  const effectiveProject = isEdit
+    ? (projects || []).find((p) => p.id === lead?.project_id) || activeProject
+    : isAllProjects
     ? (projects || []).find((p) => p.id === pickedProjectId) || null
     : activeProject;
 
@@ -79,7 +87,6 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   const { user } = useAuth() as any;
   const isGestor = user?.role === 'gestor';
   const { products, refetch: refetchProducts } = useProducts(effectiveProjectId);
-  const isEdit = !!lead;
   const productoLabel = (effectiveProject as any)?.producto_label || 'Producto';
 
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
@@ -130,7 +137,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
         origen: ((lead.origen as string)?.toLowerCase().replace(' ', '_') || 'directo') as LeadFormData['origen'],
         pais: lead.pais || '',
         producto_interes: lead.producto_interes || '',
-        notas: '',
+        notas: lead.notas || '',
       } : {
         nombre: '', email: '', telefono: '', origen: 'directo', producto_interes: '', notas: '',
       });

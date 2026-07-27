@@ -71,6 +71,7 @@ backups/
 
 
 # Datos exportados (no versionar)
+/outputs/
 *.xlsx
 *.xls
 *.csv
