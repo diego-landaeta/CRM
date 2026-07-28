@@ -25,6 +25,7 @@ const ROUTE_TITLES = {
   '/finanzas/ingresos': 'Ingresos',
   '/finanzas/conversiones': 'Conversiones',
   '/finanzas/egresos': 'Egresos',
+  '/finanzas/ventas-analisis': 'Análisis de ventas',
   '/finanzas/por-cobrar': 'Cuentas por cobrar',
   '/finanzas/por-pagar': 'Cuentas por pagar',
   '/finanzas/comisiones': 'Comisiones',
@@ -152,6 +153,8 @@ const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetailPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
+const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
@@ -253,6 +256,8 @@ function App() {
           {/* Finanzas — tabs */}
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
+            <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
+            <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             <Route path="ingresos" element={<IncomePage />} />
             <Route path="conversiones" element={<RevenuePage />} />

@@ -9,6 +9,7 @@ import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 const TABS = [
   { label: 'Dashboard', to: '/finanzas', icon: ChartBar },
   { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt },
+  { label: 'Análisis de ventas', to: '/finanzas/ventas-analisis', icon: ChartBar },
   { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp },
   { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur },
   { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown },
