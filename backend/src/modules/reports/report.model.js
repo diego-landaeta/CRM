@@ -416,7 +416,7 @@ export async function ventasPorAsesoraReport({ projectId, from, to }) {
             (SELECT COUNT(*) FROM invoices i
               WHERE i.conversion_id = c.id AND i.estado NOT IN ('cancelada','borrador'))::int AS facturas,
             l.status AS estado_lead,
-            l.created_at::date AS fecha_entrada,
+            ${ENTRY}::date AS fecha_entrada,
             p.nombre AS proyecto
        FROM conversions c
        LEFT JOIN leads l ON l.id = c.lead_id
@@ -433,7 +433,9 @@ export async function ventasPorAsesoraReport({ projectId, from, to }) {
 export async function asesorasPorMes({ projectId, from, to }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
-  const fl = buildFilter({ projectId, from, to }, 'l.created_at', 'l.project_id');
+  // Los leads van por su FECHA DE SOLICITUD, no por cuando se metieron en el CRM:
+  // con created_at, enero-abril salian con 0 leads y mayo con 11.892 (la carga masiva).
+  const fl = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
   const fv = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
   const fc = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
   const off1 = fl.params.length;
@@ -443,7 +445,7 @@ export async function asesorasPorMes({ projectId, from, to }) {
 
   const { rows } = await query(
     `WITH leads_mes AS (
-       SELECT to_char(date_trunc('month', l.created_at), 'YYYY-MM') AS mes,
+       SELECT to_char(date_trunc('month', ${ENTRY}), 'YYYY-MM') AS mes,
               l.responsable_id AS uid,
               COUNT(*)::int AS leads,
               COUNT(*) FILTER (WHERE l.status = 'convertido')::int AS leads_convertidos
@@ -467,8 +469,9 @@ export async function asesorasPorMes({ projectId, from, to }) {
               COALESCE(SUM(cp.importe), 0) AS cobrado,
               -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no
               -- con JOIN: un mismo pago puede saldar varias y se contaria dos veces.
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS cobrado_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS cobrado_cuotas
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS cobrado_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS cobrado_cuotas,
+              COUNT(*) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))::int AS mensualidades
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -492,6 +495,7 @@ export async function asesorasPorMes({ projectId, from, to }) {
             ROUND(COALESCE(cm.cobrado, 0), 2) AS cobrado,
             ROUND(COALESCE(cm.cobrado_venta, 0), 2) AS cobrado_venta,
             ROUND(COALESCE(cm.cobrado_cuotas, 0), 2) AS cobrado_cuotas,
+            COALESCE(cm.mensualidades, 0) AS mensualidades,
             ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
                        THEN COALESCE(vm.vendido, 0) / vm.ventas ELSE 0 END, 2) AS ticket_medio
        FROM todo t
@@ -524,14 +528,15 @@ export async function panelReportes({ projectId, from, to }) {
   async function bloque(d, h) {
     const { rows: le } = await query(
       `SELECT COUNT(*)::int AS n FROM leads l
-        WHERE l.created_at::date BETWEEN $1 AND $2 ${pl}`, par(d, h));
+        WHERE ${ENTRY}::date BETWEEN $1 AND $2 ${pl}`, par(d, h));
     const { rows: ve } = await query(
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(c.importe_total), 0) AS vendido
          FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const { rows: co } = await query(
       `SELECT COALESCE(SUM(cp.importe), 0) AS cobrado,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_cuotas
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_cuotas,
+              COUNT(*) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))::int AS n_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const prospectos = le[0].n;
@@ -543,6 +548,7 @@ export async function panelReportes({ projectId, from, to }) {
       ingresos: Number(co[0].cobrado),
       ingresos_venta: Number(co[0].de_venta),
       ingresos_cuotas: Number(co[0].de_cuotas),
+      mensualidades: Number(co[0].n_cuotas || 0),
       tasa: prospectos > 0 ? Number((ventas * 100 / prospectos).toFixed(1)) : 0,
     };
   }
@@ -563,8 +569,8 @@ export async function panelReportes({ projectId, from, to }) {
                 ('1 ${grano}')::interval)::date AS p
      ),
      le AS (
-       SELECT date_trunc('${grano}', l.created_at)::date AS p, COUNT(*)::int AS n
-         FROM leads l WHERE l.created_at::date BETWEEN $1 AND $2 ${pl} GROUP BY 1
+       SELECT date_trunc('${grano}', ${ENTRY})::date AS p, COUNT(*)::int AS n
+         FROM leads l WHERE ${ENTRY}::date BETWEEN $1 AND $2 ${pl} GROUP BY 1
      ),
      ve AS (
        SELECT date_trunc('${grano}', c.fecha_conversion)::date AS p, COUNT(*)::int AS n,
@@ -573,8 +579,8 @@ export async function panelReportes({ projectId, from, to }) {
      ),
      co AS (
        SELECT date_trunc('${grano}', cp.fecha)::date AS p, COALESCE(SUM(cp.importe), 0) AS cobrado,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_cuotas
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc} GROUP BY 1
      )
@@ -604,6 +610,7 @@ export async function panelReportes({ projectId, from, to }) {
       ingresos:   { value: actual.ingresos,   prev: previo.ingresos,   trend: variacion(actual.ingresos, previo.ingresos) },
       ingresos_venta:  { value: actual.ingresos_venta,  prev: previo.ingresos_venta,  trend: variacion(actual.ingresos_venta, previo.ingresos_venta) },
       ingresos_cuotas: { value: actual.ingresos_cuotas, prev: previo.ingresos_cuotas, trend: variacion(actual.ingresos_cuotas, previo.ingresos_cuotas) },
+      mensualidades:   { value: actual.mensualidades,   prev: previo.mensualidades,   trend: variacion(actual.mensualidades, previo.mensualidades) },
       tasa:       { value: actual.tasa,       prev: previo.tasa,       trend: variacion(actual.tasa, previo.tasa) },
     },
     serie: serie.map((r) => ({
