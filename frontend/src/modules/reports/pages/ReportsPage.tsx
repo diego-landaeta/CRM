@@ -12,6 +12,7 @@ import {
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
+import AsesorasPanel from '../components/AsesorasPanel';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -226,6 +227,9 @@ export default function ReportsPage() {
       </div>
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
+      {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
+      <AsesorasPanel from={`${new Date().getFullYear()}-01-01`} to={new Date().toISOString().slice(0, 10)} />
+
       <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
 
       {/* Pipeline de leads + ingresos mensual */}
