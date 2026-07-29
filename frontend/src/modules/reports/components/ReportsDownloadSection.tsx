@@ -2,7 +2,7 @@
 // reporte con botones Excel/CSV. Cada tarjeta pega a /reports/<key> y arma el
 // archivo en el navegador (Excel con write-excel-file, CSV manual).
 import { useState, useEffect } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
+import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -261,6 +261,16 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
             Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={bajarTodo}
+          disabled={bajandoTodo}
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          title="Un solo Excel con resumen, evolución, asesoras, países, formaciones y el detalle de ventas"
+        >
+          <DownloadSimple size={16} weight="bold" />
+          {bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
+        </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
