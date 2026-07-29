@@ -228,9 +228,9 @@ export default function ReportsPage() {
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
       {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
-      <AsesorasPanel from={`${new Date().getFullYear()}-01-01`} to={new Date().toISOString().slice(0, 10)} />
+      <AsesorasPanel from={range.from} to={range.to} />
 
-      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={range.from} to={range.to} />
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
