@@ -193,6 +193,21 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
   const to = hastaArriba || '';
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ report: ReportDef; rows: Record<string, unknown>[]; base: string } | null>(null);
+  const [bajandoTodo, setBajandoTodo] = useState(false);
+
+  // Todo junto, una hoja por bloque. Es lo que se pide cuando alguien quiere
+  // mirar los numeros fuera del CRM sin ir juntando ficheros sueltos.
+  async function bajarTodo() {
+    setBajandoTodo(true);
+    try {
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({ projectId, projectName, from, to });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Reporte principal descargado', description: `${r.hojas} hojas · ${r.nombre}` });
+    } catch (err) {
+      toast({ title: 'No se pudo generar el reporte', description: (err as Error)?.message, variant: 'destructive' });
+    } finally { setBajandoTodo(false); }
+  }
   const ready = Boolean(from && to);
 
   async function fetchRows(report: ReportDef): Promise<{ rows: Record<string, unknown>[]; base: string }> {

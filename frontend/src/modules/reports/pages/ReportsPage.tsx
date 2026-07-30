@@ -14,6 +14,7 @@ import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
+import PanelResumen from '@/shared/components/PanelResumen';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -226,6 +227,15 @@ export default function ReportsPage() {
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
+
+      {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
+          periodo anterior y la grafica con selector de serie. */}
+      <PanelResumen
+        projectId={activeProject?.id}
+        projectName={activeProject?.nombre}
+        from={range.from}
+        to={range.to}
+      />
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
       {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
