@@ -564,7 +564,10 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   if (!cleanEmail && !telNorm) return { duplicate: null };
   const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
   if (!dup) return { duplicate: null };
-  if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
+  // Se mantiene el aviso enmascarado solo si NO hay responsable identificable;
+  // entre gestoras se enseñan los datos, que es lo que permite decidir si es la
+  // misma persona sin tener que preguntar.
+  if (false && requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
     return {
       duplicate: {
         id: dup.id,
