@@ -53,15 +53,22 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
   const [saving, setSaving] = useState(false);
   const [lossOpen, setLossOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // El menu va en un portal, fuera de `ref`. Sin esta referencia, el clic
+  // en una opcion se toma por 'fuera' y cierra el menu antes de aplicarla.
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const isOwner = responsableId === user?.userId;
-  const canEdit = isAdmin || isOwner;
+  // Las gestoras tienen el mismo permiso entre ellas: cualquiera puede mover el
+  // estado de cualquier lead. Antes solo podía la responsable — y encima la
+  // comparación miraba user.userId, que no existe en este objeto (es user.id),
+  // así que ni la responsable podía.
+  const canEdit = Boolean(user);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -119,6 +126,7 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
 
         {open && menuPos && createPortal(
           <div
+            ref={menuRef}
             role="menu"
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
             className="z-[100] min-w-[200px] rounded-md shadow-2xl py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
