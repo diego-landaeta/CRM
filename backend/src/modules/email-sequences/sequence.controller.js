@@ -45,7 +45,7 @@ export async function create(req, res, next) {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos: ' + parsed.error.issues[0]?.message, 400, 'VALIDATION_ERROR');
-    const created = await model.create({ ...parsed.data, created_by: req.user.id });
+    const created = await model.create({ ...parsed.data, created_by: req.user.userId });
     res.status(201).json({ success: true, data: created });
   } catch (err) { next(err); }
 }
