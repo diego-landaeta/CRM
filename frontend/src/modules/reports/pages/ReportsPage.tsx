@@ -15,6 +15,7 @@ import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import PanelResumen from '@/shared/components/PanelResumen';
+import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -245,6 +246,9 @@ export default function ReportsPage() {
       <RankingsPanel from={range.from} to={range.to} />
 
       <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={range.from} to={range.to} />
+
+      {/* El catálogo de reportes por tema, igual que en el CRM hermano. */}
+      <ReportesDisponibles />
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
