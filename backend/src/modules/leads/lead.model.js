@@ -672,7 +672,13 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
             client_stats.total_pagado,
             client_stats.pendiente,
             client_stats.ultima_compra,
-            client_stats.cursos` : '';
+            client_stats.cursos,
+            client_stats.programas,
+            client_stats.total_cuotas,
+            client_stats.cuotas_pagadas,
+            client_stats.cuotas_pendientes,
+            client_stats.total_pagos,
+            client_stats.proximo_vencimiento` : '';
   const clientStatsJoin = conConversion ? `
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS conversiones,
@@ -686,7 +692,45 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
                 WHERE ccourse.lead_id = l.id
                   AND NULLIF(BTRIM(ccourse.producto_contratado), '') IS NOT NULL
                 ORDER BY ccourse.producto_contratado
-              ) AS cursos
+              ) AS cursos,
+              -- El programa contratado, y si no hay venta todavia, el que pidio.
+              ARRAY(
+                SELECT program_name FROM (
+                  SELECT DISTINCT COALESCE(
+                    NULLIF(BTRIM(ccourse.producto_contratado), ''),
+                    pcourse.nombre,
+                    pcontact.nombre
+                  ) AS program_name
+                  FROM conversions ccourse
+                  LEFT JOIN products pcourse  ON pcourse.id  = ccourse.producto_contratado_id
+                  LEFT JOIN products pcontact ON pcontact.id = l.producto_interes_id
+                  WHERE ccourse.lead_id = l.id
+                  UNION ALL
+                  SELECT pcontact.nombre
+                  FROM products pcontact
+                  WHERE pcontact.id = l.producto_interes_id
+                    AND NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id)
+                ) client_programs
+                WHERE program_name IS NOT NULL
+                ORDER BY program_name
+              ) AS programas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id) AS total_cuotas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NOT NULL) AS cuotas_pagadas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NULL) AS cuotas_pendientes,
+              -- Los apuntes de la carga inicial no son cobros de verdad.
+              (SELECT COUNT(*)::int FROM conversion_payments cp
+                 JOIN conversions cp_conv ON cp_conv.id = cp.conversion_id
+                WHERE cp_conv.lead_id = l.id
+                  AND COALESCE(cp.notas, '') NOT ILIKE 'Backfill%') AS total_pagos,
+              (SELECT MIN(ci.fecha_vencimiento) FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NULL) AS proximo_vencimiento
        FROM conversions cstat
        WHERE cstat.lead_id = l.id
      ) client_stats ON TRUE` : '';

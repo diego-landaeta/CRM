@@ -18,13 +18,17 @@ import { useAuth } from '@/contexts/AuthContext';
 function exportCSV(clients: Client[], filename: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
   const rows = [
-    ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Curso / Programa', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
+    ['Nombre', 'Email', 'Teléfono', 'Gestora', 'Curso / Programa', 'Cuotas totales', 'Cuotas pagadas', 'Cuotas pendientes', 'Próximo vencimiento', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
     ...clients.map(c => [
       c.nombre || '',
       c.email || '',
       c.telefono || '',
       c.responsable_nombre || '',
-      (c.cursos || []).join(' · '),
+      ((c.programas && c.programas.length ? c.programas : c.cursos) || []).join(' · '),
+      Number(c.total_cuotas) || 0,
+      Number(c.cuotas_pagadas) || 0,
+      Number(c.cuotas_pendientes) || 0,
+      c.proximo_vencimiento ? String(c.proximo_vencimiento).slice(0, 10) : '',
       c.conversiones,
       fmtNum(c.total_compras),
       fmtNum(c.total_pagado),
@@ -61,6 +65,29 @@ function formatRelative(dateStr: string | null | undefined, { future = false }: 
   if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
   if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+}
+
+// El plan de cuotas de un vistazo: cuántas hay, cuántas se han cobrado y
+// cuántas quedan. Es lo que se mira para saber por dónde va un cliente.
+function CeldaCuotas({ client: c }: { client: Client }) {
+  const total = Number(c.total_cuotas) || 0;
+  const pagadas = Number(c.cuotas_pagadas) || 0;
+  const pendientes = Number(c.cuotas_pendientes) || 0;
+  if (total === 0) return <span className="text-xs text-muted-foreground/60">Sin plan</span>;
+  return (
+    <div className="min-w-[145px]">
+      <span className="inline-flex px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">
+        {total} {total === 1 ? 'cuota' : 'cuotas'}
+      </span>
+      <div className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap">
+        <span className="text-green-700 dark:text-green-400">{pagadas} pagadas</span>
+        <span> · </span>
+        <span className={pendientes > 0 ? 'text-orange-700 dark:text-orange-400' : ''}>
+          {pendientes} pendientes
+        </span>
+      </div>
+    </div>
+  );
 }
 
 // Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
@@ -368,7 +395,10 @@ export default function ClientsPage() {
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                     <th className="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Teléfono</th>
                     <th className="text-left px-4 py-2.5 font-bold">Curso / Programa</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Gestora</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Cuotas</th>
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
                     <th className="text-right px-4 py-2.5 font-bold">Facturado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
@@ -382,19 +412,25 @@ export default function ClientsPage() {
                     <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{c.nombre}</div>
-                        <div className="text-xs text-muted-foreground">{c.responsable_nombre || '—'}</div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">{c.telefono || '—'}</td>
                       <td className="px-4 py-3">
-                        {c.cursos && c.cursos.length > 0 ? (
-                          <div className="flex flex-col gap-0.5 max-w-[220px]">
-                            <span className="text-xs font-medium text-foreground truncate" title={c.cursos.join(' · ')}>{c.cursos[0]}</span>
-                            {c.cursos.length > 1 && (
-                              <span className="text-[10px] text-muted-foreground">+{c.cursos.length - 1} más</span>
-                            )}
-                          </div>
-                        ) : <span className="text-xs text-muted-foreground/60">—</span>}
+                        {(() => {
+                          // El programa contratado; si no hay venta todavía, el que pidió.
+                          const progs = (c.programas && c.programas.length ? c.programas : c.cursos) || [];
+                          return progs.length > 0 ? (
+                            <div className="flex flex-col gap-0.5 max-w-[220px]">
+                              <span className="text-xs font-medium text-foreground truncate" title={progs.join(' · ')}>{progs[0]}</span>
+                              {progs.length > 1 && (
+                                <span className="text-[10px] text-muted-foreground">+{progs.length - 1} más</span>
+                              )}
+                            </div>
+                          ) : <span className="text-xs text-muted-foreground/60">—</span>;
+                        })()}
                       </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{c.responsable_nombre || '—'}</td>
+                      <td className="px-4 py-3"><CeldaCuotas client={c} /></td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>

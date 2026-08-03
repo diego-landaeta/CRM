@@ -148,6 +148,13 @@ export interface Client {
   origen?: LeadOrigen | null;
   notas?: string | null;
   cursos?: string[];
+  // El programa contratado y su plan de cuotas, igual que en ISEIE.
+  programas?: string[];
+  total_cuotas?: number;
+  cuotas_pagadas?: number;
+  cuotas_pendientes?: number;
+  total_pagos?: number;
+  proximo_vencimiento?: string | null;
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';
