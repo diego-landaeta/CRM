@@ -14,6 +14,7 @@ import productsModule from './modules/products/index.js';
 import dossiersModule from './modules/dossiers/index.js';
 import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
+import whatsappModule from './modules/whatsapp/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import accountingModule from './modules/accounting/index.js';
@@ -110,6 +111,7 @@ const ALL_MODULES = [
   { name: 'dossiers', mod: dossiersModule },
   { name: 'conversions', mod: conversionsModule },
   { name: 'sales', mod: salesModule },
+  { name: 'whatsapp', mod: whatsappModule },
   { name: 'notifications', mod: notificationsModule },
   { name: 'meta-ads', mod: metaAdsModule },
   { name: 'accounting', mod: accountingModule },
