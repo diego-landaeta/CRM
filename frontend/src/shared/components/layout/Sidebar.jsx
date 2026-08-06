@@ -50,6 +50,7 @@ import {
   HandCoins,
   GitMerge,
   WhatsappLogo,
+  ChatText,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -85,6 +86,7 @@ const NAV_SECTIONS = [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'WhatsApp', to: '/whatsapp', icon: WhatsappLogo, module: 'whatsapp' },
+      { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, module: 'whatsapp' },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },

@@ -145,6 +145,7 @@ const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/Pend
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 const WhatsappPage = lazy(() => import('./modules/whatsapp/pages/WhatsappPage'));
+const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -229,6 +230,7 @@ function App() {
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
 
           <Route path="/whatsapp" element={<WhatsappPage />} />
+          <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
 
           {/* Captación — tabs */}
           <Route path="/captacion" element={<CaptacionLayout />}>
