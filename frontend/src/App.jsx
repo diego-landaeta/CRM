@@ -5,6 +5,7 @@ import { useProjectContext } from './contexts/ProjectContext';
 const ROUTE_TITLES = {
   '/': 'Dashboard',
   '/prospectos': 'Prospectos',
+  '/whatsapp': 'WhatsApp',
   '/prospectos/pipeline': 'Pipeline',
   '/prospectos/audiencias': 'Audiencias',
   '/clientes': 'Clientes',
@@ -143,6 +144,7 @@ const IntegrationsPage = lazy(() => import('./modules/accounting/pages/Integrati
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
+const WhatsappPage = lazy(() => import('./modules/whatsapp/pages/WhatsappPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -225,6 +227,8 @@ function App() {
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
+
+          <Route path="/whatsapp" element={<WhatsappPage />} />
 
           {/* Captación — tabs */}
           <Route path="/captacion" element={<CaptacionLayout />}>
