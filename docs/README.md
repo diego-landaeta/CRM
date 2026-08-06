@@ -18,74 +18,74 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 
 | # | Archivo | Qué hace |
 |---|---|---|
-| 001 | 001_initial_schema.sql | CRM MultiProyecto — Migracion 001: Schema inicial |
-| 002 | 002_products_dossiers.sql | Migración 002: Tablas products y dossiers |
-| 003 | 003_refresh_tokens.sql | Migracion 003: Tabla refresh tokens |
-| 004 | 004_reincidente.sql | Migracion 004: Campo reincidente en leads |
-| 005 | 005_expenses.sql | Migracion 005: Tabla expenses (egresos) |
-| 006 | 006_custom_fields.sql | Migracion 006: Campos custom en leads |
-| 007 | 007_api_credentials.sql | Migracion 007: Tabla api_credentials |
-| 008 | 008_accounts_payable.sql | Migracion 008: Tabla accounts_payable (cuentas por pagar) |
-| 009 | 009_product_categories.sql | Migracion 009: Categorias y subcategorias de productos |
-| 010 | 010_logos_and_product_pricing.sql | Migracion 010: Logo empresa + campos comerciales de productos |
-| 011 | 011_commissions.sql | Migracion 011: Panel de comisiones por gestora (CRM-129) |
-| 012 | 012_conversions_product_id.sql | Migracion 012: Vincular conversion a producto (FK) |
-| 013 | 013_platform_users.sql | Migracion 013: Usuarios de plataforma (modo IA) |
-| 014 | 014_user_avatar.sql | Migracion 014: Avatar de usuario (CRM-186) |
-| 015 | 015_project_modules.sql | Migracion 015: Modulos configurables por proyecto (CRM-178) |
-| 016 | 016_commissions_rediseno.sql | Migracion 016: Rediseño comisiones (CRM-180) |
-| 017 | 017_conversion_installments.sql | Migracion 017: Cuotas en cuentas por cobrar (CRM-183) |
-| 018 | 018_lead_form_columns.sql | 018: Configuracion de campos base y columnas del listado de leads |
-| 019 | 019_matriculas.sql | 019: Matriculas (post-conversion) |
-| 020 | 020_email_sequences.sql | 020: Secuencias de email seguimiento (CRM-185) |
-| 021 | 021_forms.sql | 021: Editor de forms (CRM-175) |
-| 022 | 022_payroll.sql | 022: Nominas (CRM-171, CRM-173) |
-| 023 | 023_woocommerce.sql | 023: WooCommerce import + mapeo (CRM-177) |
-| 024 | 024_forms_webhook_matriculas_admision_wc_autosync.sql | 024: 3 mejoras |
-| 025 | 025_webhook_listen_mode.sql | 025: Modo escucha tipo Make/Zapier para webhook tokens |
-| 026 | 026_role_soporte.sql | 026: Rol "Desarrollador - Soporte" (rol generico que ve todos los proyectos) |
-| 027 | 027_form_destination.sql | 027: Webhook destination + listen mode default |
-| 028 | 028_audiences_ia_reports_chat.sql | 028: Tablas para audiences, ia metrics, reports, chat IA |
-| 029 | 029_documents.sql | 029: Módulo de documentos — facturas y certificados |
-| 029 | 029_user_views.sql | 029: Vistas personalizadas por usuario (CRM-301) |
-| 030 | 030_field_definitions_multi_entity.sql | Migracion 030: Campos custom multi-entidad (lead, client, product) |
-| 030 | 030_installation_bundles.sql | 030: Bundles de instalacion (CRM-302) |
-| 031 | 031_performance_indexes.sql | Migración 031: índices FK faltantes + columna notificado_at en lead_reminders |
-| 032 | 032_project_channels.sql | Migración 032: canales embebidos por proyecto (CRM-208 / CRM-211) |
-| 033 | 033_roles_permissions.sql | Migración 033: Custom roles + overrides de permisos por usuario |
-| 037 | 037_status.sql | Migración 037: Página de status del sistema |
-| 038 | 038_lead_emails_and_shortcuts.sql | Migración 038: lead_emails (CRM-231) + projects.shortcuts (CRM-235) |
-| 039 | 039_categories_tree.sql | Migración 039: árbol N niveles para product_categories |
-| 039 | 039_document_audit_log.sql | 038: Audit log de documentos (factura/certificado) |
-| 040 | 040_documents_r2_and_email.sql | 039: Documents — almacenamiento en R2 + auto-email |
-| 040 | 040_role_views.sql | Migración 040: vista por defecto de roles custom |
+| 001 | 001_initial_schema.sql | Schema inicial |
+| 002 | 002_products_dossiers.sql | Tablas products y dossiers |
+| 003 | 003_refresh_tokens.sql | Tabla refresh tokens |
+| 004 | 004_reincidente.sql | Campo reincidente en leads |
+| 005 | 005_expenses.sql | Tabla expenses (egresos) |
+| 006 | 006_custom_fields.sql | Campos custom en leads |
+| 007 | 007_api_credentials.sql | Tabla api_credentials |
+| 008 | 008_accounts_payable.sql | Tabla accounts_payable (cuentas por pagar) |
+| 009 | 009_product_categories.sql | Categorias y subcategorias de productos |
+| 010 | 010_logos_and_product_pricing.sql | Logo empresa + campos comerciales de productos |
+| 011 | 011_commissions.sql | Panel de comisiones por gestora (CRM-129) |
+| 012 | 012_conversions_product_id.sql | Vincular conversion a producto (FK) |
+| 013 | 013_platform_users.sql | Usuarios de plataforma (modo IA) |
+| 014 | 014_user_avatar.sql | Avatar de usuario (CRM-186) |
+| 015 | 015_project_modules.sql | Modulos configurables por proyecto (CRM-178) |
+| 016 | 016_commissions_rediseno.sql | Rediseño comisiones (CRM-180) |
+| 017 | 017_conversion_installments.sql | Cuotas en cuentas por cobrar (CRM-183) |
+| 018 | 018_lead_form_columns.sql | Configuracion de campos base y columnas del listado de leads |
+| 019 | 019_matriculas.sql | Matriculas (post-conversion) |
+| 020 | 020_email_sequences.sql | Secuencias de email seguimiento (CRM-185) |
+| 021 | 021_forms.sql | Editor de forms (CRM-175) |
+| 022 | 022_payroll.sql | Nominas (CRM-171, CRM-173) |
+| 023 | 023_woocommerce.sql | WooCommerce import + mapeo (CRM-177) |
+| 024 | 024_forms_webhook_matriculas_admision_wc_autosync.sql | 3 mejoras |
+| 025 | 025_webhook_listen_mode.sql | Modo escucha tipo Make/Zapier para webhook tokens |
+| 026 | 026_role_soporte.sql | Rol "Desarrollador - Soporte" (rol generico que ve todos los proyectos) |
+| 027 | 027_form_destination.sql | Webhook destination + listen mode default |
+| 028 | 028_audiences_ia_reports_chat.sql | Tablas para audiences, ia metrics, reports, chat IA |
+| 029 | 029_documents.sql | Módulo de documentos — facturas y certificados |
+| 029 | 029_user_views.sql | Vistas personalizadas por usuario (CRM-301) |
+| 030 | 030_field_definitions_multi_entity.sql | Campos custom multi-entidad (lead, client, product) |
+| 030 | 030_installation_bundles.sql | Bundles de instalacion (CRM-302) |
+| 031 | 031_performance_indexes.sql | índices FK faltantes + columna notificado_at en lead_reminders |
+| 032 | 032_project_channels.sql | canales embebidos por proyecto (CRM-208 / CRM-211) |
+| 033 | 033_roles_permissions.sql | Custom roles + overrides de permisos por usuario |
+| 037 | 037_status.sql | Página de status del sistema |
+| 038 | 038_lead_emails_and_shortcuts.sql | lead_emails (CRM-231) + projects.shortcuts (CRM-235) |
+| 039 | 039_categories_tree.sql | árbol N niveles para product_categories |
+| 039 | 039_document_audit_log.sql | Audit log de documentos (factura/certificado) |
+| 040 | 040_documents_r2_and_email.sql | Documents — almacenamiento en R2 + auto-email |
+| 040 | 040_role_views.sql | vista por defecto de roles custom |
 | 041 | 041_product_image.sql | 041_product_image.sql |
 | 042 | 042_email_templates.sql | 042_email_templates.sql |
-| 043 | 043_external_panels.sql | Migración 043: paneles externos por proyecto (CRM-155) |
-| 044 | 044_sidebar_labels.sql | Migración 044: etiquetas custom del sidebar por proyecto (CRM-217) |
-| 045 | 045_product_modules.sql | Migración 045: módulos/temario de productos |
-| 045 | 045_theme_color.sql | Migración 045: color primario por proyecto (CRM-191) |
-| 046 | 046_project_connectors.sql | Migración 046: Conectores configurables por proyecto |
-| 047 | 047_webhook_subtype.sql | Migración 047: distinguir webhook JSON vs mailhook (email entrante) |
-| 048 | 048_wc_field_mapping.sql | Migración 048: mapping configurable para WC import |
-| 049 | 049_webhook_default_product.sql | Migración 049: producto por defecto + matching por URL en webhooks |
-| 050 | 050_form_template_events.sql | Migración 050: historial de eventos recibidos por webhook/mailhook/form |
-| 051 | 051_wc_default_currency.sql | Migración 051: divisa por defecto del WC import (no por producto) |
-| 052 | 052_wp_acf_importer.sql | Migración 052: importer multi-fuente WP REST + ACF |
-| 053 | 053_unify_sections_as_text.sql | Migración 053: simplificar — secciones como TEXT unificado |
+| 043 | 043_external_panels.sql | paneles externos por proyecto (CRM-155) |
+| 044 | 044_sidebar_labels.sql | etiquetas custom del sidebar por proyecto (CRM-217) |
+| 045 | 045_product_modules.sql | módulos/temario de productos |
+| 045 | 045_theme_color.sql | color primario por proyecto (CRM-191) |
+| 046 | 046_project_connectors.sql | Conectores configurables por proyecto |
+| 047 | 047_webhook_subtype.sql | distinguir webhook JSON vs mailhook (email entrante) |
+| 048 | 048_wc_field_mapping.sql | mapping configurable para WC import |
+| 049 | 049_webhook_default_product.sql | producto por defecto + matching por URL en webhooks |
+| 050 | 050_form_template_events.sql | historial de eventos recibidos por webhook/mailhook/form |
+| 051 | 051_wc_default_currency.sql | divisa por defecto del WC import (no por producto) |
+| 052 | 052_wp_acf_importer.sql | importer multi-fuente WP REST + ACF |
+| 053 | 053_unify_sections_as_text.sql | simplificar — secciones como TEXT unificado |
 | 054 | 054_products_modalidad.sql | Añadir columna modalidad que el scraper rellena ("Online", "Presencial", etc.) |
-| 055 | 055_leads_email_nullable.sql | Migración 055: email del lead pasa a ser NULLABLE |
-| 056 | 056_add_whatsapp_canal.sql | Migración 056: añadir 'whatsapp' al enum utm_channel |
-| 057 | 057_user_availability.sql | Migración 057: disponibilidad de gestores |
-| 058 | 058_leads_soft_delete.sql | Migración 058: soft delete de leads + auditoría |
-| 059 | 059_leads_propuesto.sql | Migración 059: flag "propuesto" |
-| 060 | 060_conversion_refunds.sql | Migración 060: devoluciones (refunds) por conversión |
-| 061 | 061_lead_spam_reports.sql | Migración 061: reportes de spam |
-| 062 | 062_product_url_aliases.sql | Migración 062: alias de URLs por producto |
+| 055 | 055_leads_email_nullable.sql | email del lead pasa a ser NULLABLE |
+| 056 | 056_add_whatsapp_canal.sql | añadir 'whatsapp' al enum utm_channel |
+| 057 | 057_user_availability.sql | disponibilidad de gestores |
+| 058 | 058_leads_soft_delete.sql | soft delete de leads + auditoría |
+| 059 | 059_leads_propuesto.sql | flag "propuesto" |
+| 060 | 060_conversion_refunds.sql | devoluciones (refunds) por conversión |
+| 061 | 061_lead_spam_reports.sql | reportes de spam |
+| 062 | 062_product_url_aliases.sql | alias de URLs por producto |
 | 063 | 063_make_webhooks.sql | Make.com webhooks: cada proyecto puede tener N "conectores" hacia Make. |
 | 064 | 064_messaging.sql | 064_messaging.sql — Sistema de mensajeria interna |
 | 065 | 065_normalize_phones.sql | Normaliza todos los teléfonos al formato E.164 con +. |
-| 066 | 066_products_list_index.sql | products_list_index |
+| 066 | 066_products_list_index.sql | 066_products_list_index.sql |
 | 066 | 066_sales_goals.sql | Metas de venta por gestor + periodo (mensual). |
 | 067 | 067_admin_notifications.sql | Notificaciones para admin/superadmin (eventos que necesitan visibilidad operativa). |
 | 068 | 068_sales_goal_history.sql | Historial de cambios en metas de venta. Snapshot del estado anterior cada |
@@ -108,19 +108,39 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 085 | 085_cpt_only_strategy.sql | 085 — Modo importer "cpt_only": sitios WP con CPTs custom pero SIN WooCommerce. |
 | 086 | 086_project_integrations.sql | 086 — project_integrations: credenciales por proyecto para Stripe / Brevo / etc. |
 | 087 | 087_lead_status_proxima_convocatoria.sql | 087 — Añade el valor 'proxima_convocatoria' al enum lead_status. |
-| 088 | 088_stripe_payments.sql | Migracion 088: stripe_payments |
+| 088 | 088_stripe_payments.sql | stripe_payments |
 | 089 | 089_stripe_disputes_extra.sql | Campos extra para gestion de disputas: |
-| 090 | 090_invoices.sql | Migracion 090: Facturacion (modelo aprobado 2026-06-17) |
-| 091 | 091_invoices_extras.sql | Migracion 091: metodo_pago, pie_pago, y reset de secuencia por admin |
-| 092 | 092_conversion_items_iva.sql | Migracion 092: multi-item en conversiones + IVA configurable |
-| 093 | 093_whatsapp_widget.sql | Migracion 093: Widget WhatsApp rotativo por proyecto |
-| 094 | 094_invoices_rectificativa.sql | Migracion 094: Facturas rectificativas (de abono) |
-| 095 | 095_descuentos.sql | Migracion 095: Descuentos por cuadros en conversiones y facturas |
-| 096 | 096_invoice_issuers.sql | Migracion 096: Multi-emisor de facturas |
-| 097 | 097_issuer_logo_key.sql | issuer_logo_key |
+| 090 | 090_invoices.sql | Facturacion (modelo aprobado 2026-06-17) |
+| 091 | 091_invoices_extras.sql | metodo_pago, pie_pago, y reset de secuencia por admin |
+| 092 | 092_conversion_items_iva.sql | multi-item en conversiones + IVA configurable |
+| 093 | 093_whatsapp_widget.sql | Widget WhatsApp rotativo por proyecto |
+| 094 | 094_invoices_rectificativa.sql | Facturas rectificativas (de abono) |
+| 095 | 095_descuentos.sql | Descuentos por cuadros en conversiones y facturas |
+| 096 | 096_invoice_issuers.sql | Multi-emisor de facturas |
+| 097 | 097_issuer_logo_key.sql | 097_issuer_logo_key.sql |
 | 098 | 098_invoice_templates.sql | Plantillas visuales de factura (editor tipo Canva). Cada plantilla guarda un |
-| 099 | 099_issuer_serie.sql | issuer_serie |
-| 100 | 100_template_condicion.sql | template_condicion |
+| 099 | 099_issuer_serie.sql | 099_issuer_serie.sql |
+| 100 | 100_template_condicion.sql | 100_template_condicion.sql |
+| 101 | 101_fiscal_regimenes.sql | Regímenes fiscales + coletillas parametrizadas (editables desde el panel). |
+| 102 | 102_sociedades.sql | Sociedades emisoras (agrupación de proyectos) + asignación proyecto→sociedad. |
+| 103 | 103_facturacion_cimientos.sql | Cimientos de datos del módulo de facturación (spec v1.0, paso 1). |
+| 104 | 104_numeracion_por_sociedad.sql | Numeración por sociedad (spec REQ-NUM-01/02): el contador de facturas es por |
+| 105 | 105_proformas.sql | Proformas / presupuestos |
+| 106 | 106_invoices_borrador.sql | Facturas en BORRADOR (preliminares) |
+| 107 | 107_invoice_per_payment.sql | 107_invoice_per_payment.sql |
+| 108 | 108_installment_concepto.sql | Concepto editable por cuota (mensualidades/fraccionados): predefinidos + otros. |
+| 109 | 109_factura_manager.sql | Permiso factura_manager: gestora que puede gestionar (editar, corregir, abonar, |
+| 110 | 110_editar_fechas_factura.sql | Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de |
+| 111 | 111_conversion_vendedora.sql | Vendedora POR VENTA. El responsable del lead (leads.responsable_id) es quien |
+| 112 | 112_factura_equivalente_eur.sql | Doble moneda MANUAL en facturas y pagos. |
+| 113 | 113_stripe_fee_neto.sql | Comisión y neto liquidado por Stripe en cada cobro. |
+| 115 | 115_facturacion_al_dia.sql | Corte de facturacion: hasta que dia esta la facturacion puesta al dia. |
+| 116 | 116_stripe_revisado_y_proforma_aprobacion.sql | 1) Hasta que fecha estan ya revisados los cobros de Stripe. |
+| 117 | 117_conversion_es_mensualidad.sql | Marcar una venta como "esto en realidad es una mensualidad". |
+| 118 | 118_payment_method_valores_que_faltaban.sql | 118 · El enum payment_method se habia quedado corto |
+| 119 | 119_invoices_cliente_tipo.sql | 119 · La factura necesita saber si el cliente es empresa o persona |
+| 120 | 120_invoice_issuers_alias.sql | Un nombre corto para distinguir emisoras que comparten datos fiscales. |
+| 121 | 121_conversion_payments_metodo.sql | conversion_payments.metodo |
 
 ---
 
