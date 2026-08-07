@@ -1,48 +1,52 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
+import client from '@/shared/api/client';
 import type { Lead } from '@/shared/types';
 
+// Las plantillas de WhatsApp, leídas de la base de datos.
+//
+// Antes vivían en el localStorage del navegador, y eso traía dos problemas:
+// cada gestora tenía las suyas en su equipo —nadie podía revisarlas y si
+// cambiaba de ordenador las perdía— y los dos CRMs las guardaban con formatos
+// distintos que ni siquiera coincidían entre sí.
+//
+// Aquí solo se leen. Crear, cambiar y borrar vive en la pantalla de Plantillas,
+// para que no haya dos sitios donde editar lo mismo.
+
 export interface WhatsappTemplate {
-  id: string;
+  id: number | string;
   label: string;
   text: string;
+  ambito?: 'compartida' | 'personal';
 }
 
-// Templates por defecto si el proyecto aun no configura
-const DEFAULT_TEMPLATES: WhatsappTemplate[] = [
-  { id: 'saludo', label: 'Saludo inicial', text: 'Hola {nombre}, te escribimos desde {proyecto}. Vimos tu interés por {producto} y queremos ayudarte. ¿Tienes 2 minutos para una llamada rápida?' },
-  { id: 'seguimiento', label: 'Seguimiento', text: 'Hola {nombre}, ¿pudiste revisar la información sobre {producto} que te enviamos? Quedo atenta a tus dudas.' },
-  { id: 'oferta', label: 'Oferta limitada', text: 'Hola {nombre}, tenemos una oferta especial sobre {producto} hasta el viernes. ¿Te llamo para contártelo?' },
-  { id: 'inactividad', label: 'Reactivar lead', text: 'Hola {nombre}, hace días que no hablamos sobre {producto}. ¿Sigue siendo de tu interés?' },
-];
-
-const STORAGE_KEY_PREFIX = 'crm.wa-templates.';
+interface FilaApi {
+  id: number;
+  label: string;
+  body: string;
+  ambito: 'compartida' | 'personal';
+}
 
 export function useWhatsappTemplates(projectId: number | string | null | undefined) {
-  const storageKey = projectId ? `${STORAGE_KEY_PREFIX}${projectId}` : null;
-  const [templates, setTemplates] = useState<WhatsappTemplate[]>(DEFAULT_TEMPLATES);
+  const [templates, setTemplates] = useState<WhatsappTemplate[]>([]);
 
-  // Cargar al cambiar proyecto
   useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) setTemplates(JSON.parse(stored) as WhatsappTemplate[]);
-      else setTemplates(DEFAULT_TEMPLATES);
-    } catch {
-      setTemplates(DEFAULT_TEMPLATES);
-    }
-  }, [storageKey]);
+    // -1 es «Todos los proyectos» del selector: no hay plantillas que traer.
+    const pid = Number(projectId);
+    if (!pid || pid === -1) { setTemplates([]); return undefined; }
 
-  const save = useCallback((newTemplates: WhatsappTemplate[]) => {
-    setTemplates(newTemplates);
-    if (storageKey) {
-      try { localStorage.setItem(storageKey, JSON.stringify(newTemplates)); } catch { /* ignore */ }
-    }
-  }, [storageKey]);
+    let vivo = true;
+    client.get(`/whatsapp/templates?projectId=${pid}`)
+      .then((r) => {
+        if (!vivo) return;
+        const filas = (r.success ? (r.data as FilaApi[] | undefined) : undefined) || [];
+        // El campo se llama `body` en la base y `text` en las pantallas viejas.
+        setTemplates(filas.map((t) => ({ id: t.id, label: t.label, text: t.body, ambito: t.ambito })));
+      })
+      .catch(() => { if (vivo) setTemplates([]); });
+    return () => { vivo = false; };
+  }, [projectId]);
 
-  const reset = useCallback(() => save(DEFAULT_TEMPLATES), [save]);
-
-  return { templates, save, reset };
+  return { templates };
 }
 
 /** Subset de Lead que fillTemplate consume (laxo para aceptar tipos parciales). */
