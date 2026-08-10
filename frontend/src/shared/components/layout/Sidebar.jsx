@@ -88,9 +88,6 @@ const NAV_SECTIONS = [
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'WhatsApp', to: '/whatsapp', icon: WhatsappLogo, module: 'whatsapp' },
       { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, module: 'whatsapp' },
-      // Tutores colaboradores: solo para quien gestiona colaboraciones.
-      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'] },
-      { label: 'Comisiones tutores', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'] },
       // Solo para quien manda: entrar en el WhatsApp de cada gestora.
       { label: 'WhatsApp · Equipo', to: '/whatsapp/equipo', icon: UsersThree, module: 'whatsapp', roles: ['superadmin', 'admin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
@@ -125,6 +122,13 @@ const NAV_SECTIONS = [
       { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
       { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
+    ],
+  },
+  {
+    label: 'Tutores',
+    items: [
+      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
   },
   {
