@@ -88,6 +88,9 @@ const NAV_SECTIONS = [
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'WhatsApp', to: '/whatsapp', icon: WhatsappLogo, module: 'whatsapp' },
       { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, module: 'whatsapp' },
+      // Tutores colaboradores: solo para quien gestiona colaboraciones.
+      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'] },
+      { label: 'Comisiones tutores', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'] },
       // Solo para quien manda: entrar en el WhatsApp de cada gestora.
       { label: 'WhatsApp · Equipo', to: '/whatsapp/equipo', icon: UsersThree, module: 'whatsapp', roles: ['superadmin', 'admin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
@@ -794,7 +797,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   }, []);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
-  const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
+  const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '';
 
   async function handleLogout() {
     await logout();
