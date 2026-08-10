@@ -51,6 +51,7 @@ import {
   GitMerge,
   WhatsappLogo,
   ChatText,
+  UsersThree,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -87,6 +88,8 @@ const NAV_SECTIONS = [
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
       { label: 'WhatsApp', to: '/whatsapp', icon: WhatsappLogo, module: 'whatsapp' },
       { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, module: 'whatsapp' },
+      // Solo para quien manda: entrar en el WhatsApp de cada gestora.
+      { label: 'WhatsApp · Equipo', to: '/whatsapp/equipo', icon: UsersThree, module: 'whatsapp', roles: ['superadmin', 'admin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
