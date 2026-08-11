@@ -28,6 +28,9 @@ export const BETA_ROUTES: readonly string[] = [
   '/reports',                // Análisis › Reportes (overview + descargables prospectos/ventas)
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
   '/captacion',              // Captación: Formularios, Webhooks, Make
+  '/whatsapp',               // WhatsApp: cola, plantillas y el panel del equipo
+  '/tutores',                // Tutores: alta, colaboraciones y comisiones
+  '/mis-cursos',             // La pantalla del propio tutor
   '/email-sequences',         // Email de seguimiento
   '/documentos',              // Documentos comerciales
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)

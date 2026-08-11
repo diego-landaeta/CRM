@@ -86,10 +86,19 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
-      { label: 'WhatsApp', to: '/whatsapp', icon: WhatsappLogo, module: 'whatsapp' },
-      { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, module: 'whatsapp' },
-      // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-      { label: 'WhatsApp · Equipo', to: '/whatsapp/equipo', icon: UsersThree, module: 'whatsapp', roles: ['superadmin', 'admin'] },
+      // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
+      // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
+      {
+        label: 'WhatsApp',
+        icon: WhatsappLogo,
+        module: 'whatsapp',
+        children: [
+          { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
+          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
+          { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
+        ],
+      },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
@@ -128,6 +137,8 @@ const NAV_SECTIONS = [
     label: 'Tutores',
     items: [
       { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
+      { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
       { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
   },
@@ -226,6 +237,10 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, lab
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
   const [open, setOpen] = useState(hasActiveChild);
+  // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
+  // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
+  // quedaria escondido. Cerrarlo a mano se respeta.
+  useEffect(() => { if (hasActiveChild) setOpen(true); }, [hasActiveChild]);
   if (!visible.length) return null;
   const displayLabel = applyLabel(label, labelOverrides);
 

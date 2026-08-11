@@ -149,6 +149,7 @@ const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/Plant
 const EquipoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/EquipoPage'));
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
+const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -237,6 +238,7 @@ function App() {
           <Route path="/whatsapp/equipo" element={<EquipoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
+          <Route path="/mis-cursos" element={<MisCursosPage />} />
 
           {/* Captación — tabs */}
           <Route path="/captacion" element={<CaptacionLayout />}>
