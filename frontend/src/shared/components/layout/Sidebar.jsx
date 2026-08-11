@@ -183,7 +183,8 @@ const NAV_SECTIONS = [
       { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
-      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
+      // El tutor entra aqui: es donde cambia su contraseña.
+      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
@@ -218,6 +219,10 @@ function canSeeItem(item, role, modules, projectType) {
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
+  // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
+  // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
+  // es un tutor paseandose por Prospectos o por Finanzas.
+  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
   // soporte ve todo (rol generico tipo dev)
   if (role === 'soporte' || role === 'superadmin') {
     if (item.module && modules && modules[item.module] === false) return false;
