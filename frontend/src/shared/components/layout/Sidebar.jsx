@@ -92,6 +92,7 @@ const NAV_SECTIONS = [
         label: 'WhatsApp',
         icon: WhatsappLogo,
         module: 'whatsapp',
+        apagable: 'whatsapp',
         children: [
           { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
@@ -215,7 +216,17 @@ export function applyLabel(original, overrides) {
   return typeof o === 'string' && o.trim().length > 0 ? o : original;
 }
 
+// Interruptor de compilacion para dejar una parte fuera de una instalacion sin
+// borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
+// —esta en revision— pero viaja en el mismo build que el resto.
+//
+// Va aqui y no en los bundles del servidor porque esto es el menu: el modulo del
+// backend puede estar montado y aun asi no querer enseñarlo.
+const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
 function canSeeItem(item, role, modules, projectType) {
+  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
