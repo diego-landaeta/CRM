@@ -90,8 +90,9 @@ antes de asociar nada: cada asociación crea una factura.
 
 ## Cómo trabajar
 
-- Rama `feat/stripe-ia` desde `staging`. Pull request **a `staging`**, nunca a
-  `main`.
+- **La rama ya está creada y subida: `feat/stripe-ia`.** Sale de `staging`, que
+  está al día. Basta con `git fetch && git checkout feat/stripe-ia`.
+- Pull request **a `staging`**, nunca a `main`. Lo revisa y lo mezcla Diego.
 - **Todo en local.** `docker-compose.dev.yml` levanta la base de pruebas y
   `npm run db:preparar` la deja lista. No hace falta entrar en ningún servidor.
 - **Nada de ejecutar SQL en producción.** Si hace falta un cambio de esquema, va
