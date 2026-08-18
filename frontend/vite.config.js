@@ -11,10 +11,26 @@ const env = loadEnv(mode, process.cwd(), '');
 const BASE = process.env.VITE_BASE_PATH || env.VITE_BASE_PATH || '/crm/';
 const ESC = BASE.replace(/\//g, '\\/');
 
+// A que backend habla el `npm run dev`.
+//
+// Por defecto, el de tu maquina. Con VITE_API_TARGET se apunta a staging y
+// entonces NO hace falta levantar backend ni base de datos — util para quien
+// trabaja solo el diseño.
+//
+// Va por el proxy de Vite a proposito: el navegador solo habla con localhost,
+// asi que no hay CORS de por medio ni hay que abrir nada en el servidor.
+const API_TARGET = process.env.VITE_API_TARGET || env.VITE_API_TARGET || 'http://localhost:3001';
+const ES_REMOTO = /^https?:\/\/(?!localhost|127\.)/.test(API_TARGET);
+
 const makeApiProxy = () => ({
-  target: 'http://localhost:3001',
+  target: API_TARGET,
   changeOrigin: true,
-  rewrite: (p) => p.replace(/^\/(?:testeo2|testeo|crm)/, ''),
+  // Contra staging la direccion ya viene bien (/testeo/api/...); contra el
+  // backend local hay que quitarle el prefijo, que ahi no existe.
+  ...(ES_REMOTO ? {} : { rewrite: (p) => p.replace(/^\/(?:testeo2|testeo|crm)/, '') }),
+  // La sesion viaja en una cookie de 360crm.tech: sin quitarle el dominio, el
+  // navegador la tira y no se puede ni entrar.
+  cookieDomainRewrite: { '*': '' },
 });
 
 export default defineConfig({
