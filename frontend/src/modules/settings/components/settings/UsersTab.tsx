@@ -14,6 +14,13 @@ import {
   ROLE_STYLES, AVATAR_COLORS, getInitials, inputClass,
 } from './shared';
 
+// Como se llama cada quien en la lista. Quien lleva las colaboraciones tiene rol
+// de gestora por dentro —es el unico que la limita a ver solo lo suyo— pero
+// llamarla «gestora» en pantalla es lo que hace que se le asignen prospectos.
+// Se la llama por lo que hace.
+const comoSeLlama = (u: { role?: string; gestor_colaboraciones?: boolean }) =>
+  (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
+
 export default function UsersTab() {
   const { projects, user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
@@ -53,7 +60,7 @@ export default function UsersTab() {
       } else if (projectFilter !== 'active' && projectFilter !== 'all') {
         projectIdParam = `&projectId=${projectFilter}`;
       }
-      const res = await client.get(`/users?limit=100${projectIdParam}`);
+      const res = await client.get(`/users?limit=100&incluirTodos=true${projectIdParam}`);
       if (res.success) setUsers(res.data || []);
     } catch (err) {
       setError(err.message);
@@ -332,7 +339,7 @@ export default function UsersTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden 2xl:table-cell truncate max-w-[200px]">{u.email}</td>
-                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>{u.role}</span></td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>{comoSeLlama(u)}</span></td>
                     <td className="px-4 py-3 text-muted-foreground max-w-[160px] truncate" title={formatProjectNames(u)}>{formatProjectNames(u)}</td>
                     <td className="px-4 py-3 text-muted-foreground hidden 2xl:table-cell">
                       {u.last_login_at ? (
@@ -398,7 +405,7 @@ export default function UsersTab() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>{u.role}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[u.role] || 'bg-muted text-muted-foreground'}`}>{comoSeLlama(u)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isActive ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-400'}`}>
                     {isActive ? 'activo' : 'inactivo'}
                   </span>

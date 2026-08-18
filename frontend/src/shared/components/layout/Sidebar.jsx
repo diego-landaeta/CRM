@@ -844,7 +844,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const soloColab = user?.gestor_colaboraciones === true
     && !['superadmin', 'admin', 'soporte'].includes(user?.role);
 
-  const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '';
+  // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
+  // que es dar de alta profesores y ajustarles el porcentaje.
+  const rolLabel = user?.gestor_colaboraciones
+    ? 'Colaboraciones'
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
