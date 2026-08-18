@@ -1,0 +1,33 @@
+# La rama del rediseño es de frontend y nada más.
+#
+# No es desconfianza: un cambio en backend o en migrations desde una rama de
+# diseño se cuela sin que nadie lo mire, y las migraciones las aprueba una sola
+# persona. Que salte este aviso cuesta treinta segundos; que se cuele son dos
+# horas buscando por qué producción hace algo raro.
+name: Solo frontend
+
+on:
+  push:
+    branches: [feat/rediseno, 'feat/rediseno-**']
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirar qué se ha tocado
+        run: |
+          BASE=$(git merge-base origin/main HEAD)
+          TOCADO=$(git diff --name-only "$BASE" HEAD -- backend/ || true)
+          if [ -n "$TOCADO" ]; then
+            echo "Esta rama es solo de frontend, y toca el servidor:"
+            echo "$TOCADO"
+            echo ""
+            echo "Si necesitas algo del backend, pídelo y se hace."
+            echo "Las migraciones las aprueba Diego, una por una."
+            exit 1
+          fi
+          echo "Solo frontend. Correcto."
