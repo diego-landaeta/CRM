@@ -23,6 +23,9 @@ export interface ProspectoCola {
   gestora: string | null;
   ultimo_contacto: string | null;
   contactos: number;
+  /** Cuantos cumplen el filtro en total, no cuantos se han traido. Igual en
+   *  todas las filas: el servidor lo calcula antes de aplicar el tope. */
+  total?: number;
 }
 
 type Params = Record<string, string | number | null | undefined> | undefined;
