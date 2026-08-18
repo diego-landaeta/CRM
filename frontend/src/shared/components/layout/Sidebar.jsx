@@ -225,7 +225,7 @@ export function applyLabel(original, overrides) {
 const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
-function canSeeItem(item, role, modules, projectType) {
+function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
@@ -234,6 +234,13 @@ function canSeeItem(item, role, modules, projectType) {
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
   if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
+  // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
+  // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
+  if (soloColaboraciones) {
+    return ['/tutores', '/tutores/comisiones', '/preferences'].includes(item.to);
+  }
+
   // soporte ve todo (rol generico tipo dev)
   if (role === 'soporte' || role === 'superadmin') {
     if (item.module && modules && modules[item.module] === false) return false;
@@ -244,9 +251,9 @@ function canSeeItem(item, role, modules, projectType) {
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType))
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
@@ -832,6 +839,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   }, []);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+  // Vanessa y quien lleve las colaboraciones: solo tutores, nada mas.
+  // Un admin con la casilla NO se recorta: ya lo ve todo por su rol.
+  const soloColab = user?.gestor_colaboraciones === true
+    && !['superadmin', 'admin', 'soporte'].includes(user?.role);
+
   const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '';
 
   async function handleLogout() {
@@ -1040,7 +1052,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type));
+          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
@@ -1052,6 +1064,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 role={user?.role}
                 modules={activeProject?.modules}
                 projectType={activeProject?.type}
+                soloColab={soloColab}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}

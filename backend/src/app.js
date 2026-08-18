@@ -60,6 +60,7 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -198,6 +199,7 @@ if (process.env.NODE_ENV !== 'test') {
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
     startTutorCommissionsScheduler();
+    startVigilanteCatalogoScheduler();
   });
 }
 

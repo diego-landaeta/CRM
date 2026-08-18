@@ -194,6 +194,27 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ report: ReportDef; rows: Record<string, unknown>[]; base: string } | null>(null);
   const [bajandoTodo, setBajandoTodo] = useState(false);
+  // Lo que el informe «por factura» va a dejar fuera. Se pregunta ANTES de
+  // descargar: una venta cobrada y aun sin facturar no aparece —el informe
+  // cuenta por fecha de factura— y quien descarga se lleva un total mas bajo
+  // sin enterarse. Paso el fin de semana del 15 y 16 de agosto.
+  const [aviso, setAviso] = useState<{ ventas: number; importe: number; detalle: Array<{ id: number; cliente: string; cobrado: string; ultimo_cobro: string; curso: string }> } | null>(null);
+  const [pendiente, setPendiente] = useState<null | (() => void)>(null);
+  const [comprobando, setComprobando] = useState(false);
+
+  // Devuelve true si se puede seguir; si hay ventas sin facturar, abre el aviso
+  // y deja la descarga en espera de que la persona decida.
+  async function comprobarAntes(seguir: () => void) {
+    if (!from || !to) { seguir(); return; }
+    setComprobando(true);
+    try {
+      const r = await client.get(`/reports/aviso-sin-factura?from=${from}&to=${to}${projectId ? `&projectId=${projectId}` : ''}`);
+      const d = r?.success ? r.data : null;
+      if (d && d.ventas > 0) { setAviso(d); setPendiente(() => seguir); return; }
+    } catch { /* si la comprobacion falla no se bloquea la descarga */ }
+    finally { setComprobando(false); }
+    seguir();
+  }
 
   // Todo junto, una hoja por bloque. Es lo que se pide cuando alguien quiere
   // mirar los numeros fuera del CRM sin ir juntando ficheros sueltos.
@@ -278,13 +299,13 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
         </div>
         <button
           type="button"
-          onClick={bajarTodo}
+          onClick={() => comprobarAntes(bajarTodo)}
           disabled={bajandoTodo}
           className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50"
           title="Un solo Excel con resumen, evolución, asesoras, países, formaciones y el detalle de ventas"
         >
           <DownloadSimple size={16} weight="bold" />
-          {bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
+          {comprobando ? 'Comprobando…' : bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
         </button>
       </div>
 
@@ -307,11 +328,11 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
                   <Eye size={13} weight="bold" /> {busy === `${r.key}:preview` ? 'Cargando…' : 'Vista previa'}
                 </button>
-                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'xlsx')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => comprobarAntes(() => run(r, 'xlsx'))}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> {busy === `${r.key}:xlsx` ? 'Generando…' : 'Excel'}
                 </button>
-                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'csv')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => comprobarAntes(() => run(r, 'csv'))}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
                   <FileCsv size={13} weight="bold" /> {busy === `${r.key}:csv` ? 'Generando…' : 'CSV'}
                 </button>
@@ -332,11 +353,11 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
                 <p className="text-[11px] text-muted-foreground">{preview.rows.length} fila{preview.rows.length === 1 ? '' : 's'} · mostrando las primeras {Math.min(50, preview.rows.length)}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => run(preview.report, 'xlsx', preview)} disabled={busy !== null}
+                <button onClick={() => comprobarAntes(() => run(preview.report, 'xlsx', preview))} disabled={busy !== null}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> Excel
                 </button>
-                <button onClick={() => run(preview.report, 'csv', preview)} disabled={busy !== null}
+                <button onClick={() => comprobarAntes(() => run(preview.report, 'csv', preview))} disabled={busy !== null}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-xs font-medium">
                   <FileCsv size={13} weight="bold" /> CSV
                 </button>
@@ -360,6 +381,53 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+      {aviso && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => { setAviso(null); setPendiente(null); }}>
+          <div onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-lg p-5 space-y-3">
+            <h2 className="font-bold text-base">
+              Hay {aviso.ventas} {aviso.ventas === 1 ? 'venta cobrada sin facturar' : 'ventas cobradas sin facturar'}
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Suman <strong className="text-foreground tabular-nums">
+                {Number(aviso.importe).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+              </strong> y <strong className="text-foreground">no van a salir en este informe</strong>,
+              porque cuenta por la fecha de la factura. En cuanto se les emita la factura aparecerán solas.
+            </p>
+
+            <ul className="max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-md text-xs">
+              {aviso.detalle.map((v) => (
+                <li key={v.id} className="px-3 py-1.5 flex items-center gap-2">
+                  <span className="flex-1 truncate">{v.cliente}</span>
+                  <span className="text-muted-foreground truncate max-w-[10rem] hidden sm:block">{v.curso}</span>
+                  <span className="tabular-nums text-muted-foreground">{String(v.ultimo_cobro).slice(0, 10)}</span>
+                  <span className="tabular-nums font-semibold">
+                    {Number(v.cobrado).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <p className="text-xs text-muted-foreground">
+              Si lo que quieres es ver el dinero que entró —esté facturado o no—, descarga igual y
+              consulta el informe en su vista por cobro.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button type="button" onClick={() => { setAviso(null); setPendiente(null); }}
+                className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted/50">
+                Cancelar
+              </button>
+              <button type="button"
+                onClick={() => { const f = pendiente; setAviso(null); setPendiente(null); f?.(); }}
+                className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold">
+                Descargar igual
+              </button>
             </div>
           </div>
         </div>
