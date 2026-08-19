@@ -51,7 +51,7 @@ import {
   GitMerge,
   WhatsappLogo,
   ChatText,
-  UsersThree,
+  UsersThree, QrCode,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -94,10 +94,15 @@ const NAV_SECTIONS = [
         module: 'whatsapp',
         apagable: 'whatsapp',
         children: [
+          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
+          // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
+          // la deja tocar el suyo. Estaba solo para administradores, asi que la
+          // pantalla existia pero ninguna gestora podia llegar a ella.
+          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
