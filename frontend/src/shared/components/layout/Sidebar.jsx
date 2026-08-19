@@ -98,7 +98,12 @@ const NAV_SECTIONS = [
           { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-          { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
+          // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
+          // cada gestora a traves del navegador remoto, y ese metodo se ha
+          // retirado. La pantalla sigue existiendo pero llamaria a un servicio
+          // que ya no corre, asi que ensenaria un error. Vuelve cuando se
+          // rehaga con el chat nuevo, que ya guarda las conversaciones.
+          // { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
