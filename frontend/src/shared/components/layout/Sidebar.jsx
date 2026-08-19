@@ -99,7 +99,10 @@ const NAV_SECTIONS = [
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
-          { label: 'Conexion', to: '/whatsapp/conexion', icon: QrCode, roles: ['superadmin', 'admin'] },
+          // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
+          // la deja tocar el suyo. Estaba solo para administradores, asi que la
+          // pantalla existia pero ninguna gestora podia llegar a ella.
+          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes

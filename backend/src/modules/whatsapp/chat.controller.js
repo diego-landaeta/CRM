@@ -336,7 +336,21 @@ export async function emparejar(req, res, next) {
  */
 export async function webhook(req, res) {
   try {
+    // El secreto es OBLIGATORIO en produccion, no «si esta puesto».
+    //
+    // Tal como estaba, olvidarse de la variable dejaba la puerta abierta: esta
+    // ruta va antes del verifyToken —la llama el contenedor, no un navegador—
+    // asi que cualquiera que supiera la direccion podia meter mensajes
+    // inventados en la conversacion de una gestora, o marcarlos como enviados.
+    // Es el mismo agujero que ya tuvimos con el webhook de Stripe.
     const secreto = process.env.EVOLUTION_WEBHOOK_SECRET;
+    if (!secreto) {
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('WhatsApp: falta EVOLUTION_WEBHOOK_SECRET — se rechaza el webhook');
+        return res.status(503).json({ success: false, error: 'Webhook sin configurar' });
+      }
+      logger.warn('WhatsApp: webhook SIN secreto (solo aceptable fuera de produccion)');
+    }
     if (secreto && req.get('x-webhook-secret') !== secreto) {
       logger.warn({ ip: req.ip }, 'WhatsApp: webhook con secreto incorrecto');
       return res.status(401).json({ success: false });
