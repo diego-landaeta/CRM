@@ -11,6 +11,11 @@ const router = Router();
 // secreto compartido y porque Evolution solo escucha en 127.0.0.1.
 router.post('/webhook', chat.webhook);
 
+// Los adjuntos van tambien antes del verifyToken: los pide el navegador desde
+// un <img> o un <audio>, que no mandan cabeceras. Lo que autoriza es la firma
+// temporal de la propia direccion.
+router.get('/media/:mensajeId', chat.verMedia);
+
 router.use(verifyToken);
 
 // Sin roleGuard a proposito: esta pantalla es de las gestoras. El recorte va en
@@ -38,9 +43,12 @@ router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);
 router.post('/chats/:id/enviar', chat.enviar);
 router.post('/chats/:id/adjunto', uploadWhatsapp.single('archivo'), chat.adjunto);
-router.get('/media/:mensajeId', chat.verMedia);
 router.post('/chats/:id/no-escribir', chat.noEscribir);
+router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
 router.get('/conexion', chat.conexion);
+router.get('/sincronizacion', chat.sincronizacion);
+router.post('/reintentar-archivos', chat.reintentarArchivos);
 router.post('/emparejar', chat.emparejar);
+router.post('/desconectar', chat.desconectar);
 
 export default router;

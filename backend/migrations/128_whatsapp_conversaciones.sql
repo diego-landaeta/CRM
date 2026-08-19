@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS wa_conversaciones (
   -- Como se llama en WhatsApp. A veces no coincide con el nombre del CRM, y
   -- saberlo ayuda a la gestora a reconocer con quien habla.
   nombre_push   VARCHAR(160),
+  -- La foto de perfil de WhatsApp. Es una direccion temporal que caduca, asi
+  -- que se refresca cuando entra un mensaje nuevo de esa persona.
+  avatar_url    TEXT,
 
   lead_id       INTEGER      REFERENCES leads(id) ON DELETE SET NULL,
   project_id    INTEGER      REFERENCES projects(id) ON DELETE SET NULL,

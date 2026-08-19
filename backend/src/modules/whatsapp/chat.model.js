@@ -46,22 +46,29 @@ export async function leadPorTelefono(telefono, projectId = null) {
 }
 
 /** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush }) {
-  const telefono = jidATelefono(jid) || jid;
-  const lead = await leadPorTelefono(telefono);
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
+  const esGrupo = String(jid).endsWith('@g.us');
+  // En un grupo el identificador no es un telefono, asi que no se normaliza ni
+  // se busca prospecto: no hay una persona detras a la que atarlo.
+  const telefono = esGrupo ? String(jid).split('@')[0] : (jidATelefono(jid) || jid);
+  const lead = esGrupo ? null : await leadPorTelefono(telefono);
 
   const { rows } = await query(
-    `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, lead_id, project_id, ultimo_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
      ON CONFLICT (instancia, jid) DO UPDATE
        SET nombre_push = COALESCE(EXCLUDED.nombre_push, wa_conversaciones.nombre_push),
+           -- La foto caduca, asi que la nueva manda; pero si viene vacia se
+           -- conserva la que habia en vez de dejar el hueco.
+           avatar_url  = COALESCE(EXCLUDED.avatar_url, wa_conversaciones.avatar_url),
            -- Si el lead aparece despues (se creo el prospecto mas tarde), se
            -- ata solo. Pero nunca se desata uno ya atado.
            lead_id     = COALESCE(wa_conversaciones.lead_id, EXCLUDED.lead_id),
            project_id  = COALESCE(wa_conversaciones.project_id, EXCLUDED.project_id),
            ultimo_at   = NOW()
      RETURNING *`,
-    [instancia, jid, telefono, nombrePush || null, lead?.id || null, lead?.project_id || null]
+    [instancia, jid, telefono, nombrePush || null, avatarUrl || null,
+     lead?.id || null, lead?.project_id || null]
   );
   return rows[0];
 }
@@ -85,9 +92,15 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   const fila = rows[0] || null;
   if (fila) {
     await query(
+      // Solo cuenta como «sin leer» lo que llega DE VERDAD ahora, no el
+      // historial. Al emparejar entran miles de mensajes viejos y salian
+      // contadores de 1.320 sin leer en conversaciones que ya habias leido
+      // hace meses en el movil.
       `UPDATE wa_conversaciones
           SET ultimo_at = GREATEST(COALESCE(ultimo_at, $2), $2),
-              no_leidos = CASE WHEN $3 = 'entrante' THEN no_leidos + 1 ELSE no_leidos END
+              no_leidos = CASE
+                WHEN $3 = 'entrante' AND $2 > NOW() - INTERVAL '2 minutes'
+                THEN no_leidos + 1 ELSE no_leidos END
         WHERE id = $1`,
       [conversacionId, fila.ts, direccion]
     );
@@ -102,6 +115,7 @@ export async function listar({ instancia, projectId = null, limite = 50 }) {
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
+            (c.jid LIKE '%@g.us') AS es_grupo,
             (SELECT m.texto FROM wa_mensajes m
               WHERE m.conversacion_id = c.id ORDER BY m.ts DESC LIMIT 1) AS ultimo_texto
        FROM wa_conversaciones c
@@ -144,6 +158,13 @@ export async function salientesRecientes(instancia, minutos) {
        FROM wa_mensajes m
        JOIN wa_conversaciones c ON c.id = m.conversacion_id
       WHERE c.instancia = $1 AND m.direccion = 'saliente'
+        -- Solo lo que ha mandado el CRM. Y esto no es un detalle: al enlazar,
+        -- todo lo que esa persona escribio desde su MOVIL entra como saliente,
+        -- y el freno lo contaba como si lo hubiera disparado el CRM. Con 341
+        -- mensajes de su propio historial ya saltaba «llevas 341 hoy, se retoma
+        -- manana» sin haber enviado ni uno. Lo enviado desde aqui lleva firma:
+        -- enviado_por.
+        AND m.enviado_por IS NOT NULL
         AND m.ts > NOW() - ($2 || ' minutes')::interval`,
     [instancia, String(minutos)]
   );
@@ -180,7 +201,7 @@ export async function ultimoEntranteSinLeer(conversacionId) {
 /** Un mensaje con su conversacion, para servir el adjunto comprobando permisos. */
 export async function mensajeConAdjunto(id) {
   const { rows } = await query(
-    `SELECT m.id, m.media_url, m.media_mime, m.nombre_archivo, c.project_id
+    `SELECT m.id, m.media_url, m.media_mime, m.nombre_archivo, c.project_id, c.instancia
        FROM wa_mensajes m JOIN wa_conversaciones c ON c.id = m.conversacion_id
       WHERE m.id = $1 AND m.media_url IS NOT NULL`,
     [id]
@@ -188,5 +209,45 @@ export async function mensajeConAdjunto(id) {
   return rows[0] || null;
 }
 
+/** Apunta el archivo que se acaba de bajar para un mensaje. */
+export async function guardarAdjunto(id, { ruta, mime, nombreArchivo }) {
+  await query(
+    `UPDATE wa_mensajes
+        SET media_url = $2, media_mime = COALESCE($3, media_mime),
+            nombre_archivo = COALESCE(nombre_archivo, $4)
+      WHERE id = $1`,
+    [id, ruta, mime, nombreArchivo]
+  );
+}
+
+/** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
+export async function mensajePorId(id) {
+  const { rows } = await query(
+    `SELECT m.id, m.wa_id, m.direccion, m.tipo, m.media_url, c.jid, c.instancia
+       FROM wa_mensajes m JOIN wa_conversaciones c ON c.id = m.conversacion_id
+      WHERE m.id = $1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 export const leadPorId = async (id) =>
   (await query('SELECT id, nombre, telefono, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0] || null;
+
+/** Cuanto hay y cuando entro lo ultimo, para saber si sigue sincronizando. */
+export async function actividad(instancia) {
+  // Se cuenta SOLO lo de esta sesion. Contando todo, a quien acababa de enlazar
+  // le salian los miles de mensajes de sus companeros como si fueran suyos.
+  const { rows } = await query(
+    `SELECT (SELECT COUNT(*)::int FROM wa_conversaciones WHERE instancia = $1) AS conversaciones,
+            (SELECT COUNT(*)::int FROM wa_mensajes m
+               JOIN wa_conversaciones c ON c.id = m.conversacion_id
+              WHERE c.instancia = $1) AS mensajes,
+            (SELECT EXTRACT(EPOCH FROM (NOW() - MAX(m.created_at)))::int
+               FROM wa_mensajes m
+               JOIN wa_conversaciones c ON c.id = m.conversacion_id
+              WHERE c.instancia = $1) AS hace_segundos`,
+    [instancia]
+  );
+  return rows[0];
+}

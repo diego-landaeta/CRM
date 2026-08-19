@@ -81,10 +81,12 @@ export interface ChatWhatsapp {
   jid: string;
   telefono: string;
   nombre_push: string | null;
+  avatar_url: string | null;
   lead_id: number | null;
   lead_nombre: string | null;
   lead_status: string | null;
   project_id: number | null;
+  es_grupo: boolean;
   no_escribir: boolean;
   motivo_no_escribir: string | null;
   ultimo_at: string | null;
@@ -101,6 +103,11 @@ export interface MensajeWhatsapp {
   media_url: string | null;
   media_mime: string | null;
   nombre_archivo: string | null;
+  /** El permiso para pedir el adjunto: «?c=...&f=...». Un <img> no puede
+   *  mandar cabeceras, asi que lo que autoriza es esta firma temporal. Se pega
+   *  detras de urlMedia(id) — la direccion la arma el frontend, que es quien
+   *  sabe si el CRM cuelga de /crm/ o de /testeo/. */
+  media_firma: string | null;
   estado: 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
   enviado_por: number | null;
   ts: string;
@@ -117,11 +124,15 @@ export interface ConexionWhatsapp {
 }
 
 export const chatApi = {
+  /** Pide el adjunto de un mensaje que no se bajo en su momento. */
+  descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
+    client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
+
   lista: (projectId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
     client.get(`/whatsapp/chats${qs({ projectId })}`),
 
-  hilo: (id: number): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
-    client.get(`/whatsapp/chats/${id}`),
+  hilo: (id: number, limite = 100): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
+    client.get(`/whatsapp/chats/${id}${qs({ limite })}`),
 
   enviar: (id: number, texto: string): Promise<ApiResponse<MensajeWhatsapp>> =>
     client.post(`/whatsapp/chats/${id}/enviar`, { texto }),
@@ -134,9 +145,18 @@ export const chatApi = {
   abrir: (leadId: number): Promise<ApiResponse<ChatWhatsapp>> =>
     client.post('/whatsapp/chats', { leadId }),
 
+  // Abrir con un contacto de WhatsApp que no es prospecto. El freno de
+  // consentimiento sigue vigente: si nunca ha escrito, no se le puede escribir.
+  abrirPorTelefono: (telefono: string): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { telefono }),
+
   // Prospectos con telefono, para elegir a quien escribir.
   buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
     client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
+
+  // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
+  sincronizacion: (): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
+    client.get('/whatsapp/sincronizacion'),
 
   conexion: (): Promise<ApiResponse<ConexionWhatsapp>> =>
     client.get('/whatsapp/conexion'),

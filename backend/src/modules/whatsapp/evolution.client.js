@@ -10,7 +10,29 @@ import { logger } from '../../shared/utils/logger.js';
 
 const BASE = (process.env.EVOLUTION_URL || '').replace(/\/+$/, '');
 const API_KEY = process.env.EVOLUTION_API_KEY || '';
-export const INSTANCIA = process.env.EVOLUTION_INSTANCIA || 'crm';
+// El prefijo de las instancias. Cada usuario del CRM tiene la suya: `crm-u7`.
+//
+// Antes esto era EL nombre de la unica instancia que habia, y por eso el CRM
+// entero compartia un solo WhatsApp: quien lo enlazaba dejaba sus
+// conversaciones a la vista de todos los demas usuarios.
+//
+// El nombre lleva dentro el id del usuario a proposito: asi no hace falta una
+// tabla nueva ni una migracion para saber de quien es cada sesion, y la columna
+// `instancia` que ya existia en wa_conversaciones sirve tal cual.
+export const PREFIJO = process.env.EVOLUTION_INSTANCIA || 'crm';
+
+/** La instancia de WhatsApp de una persona. */
+export const instanciaDe = (userId) => `${PREFIJO}-u${parseInt(userId, 10)}`;
+
+/** Al reves: de que usuario es esta instancia. Devuelve null si no encaja. */
+export function usuarioDeInstancia(instancia) {
+  const m = /-u(\d+)$/.exec(String(instancia || ''));
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Se conserva para lo que todavia no distingue por usuario. Nada que sirva
+// conversaciones debe usarlo.
+export const INSTANCIA = PREFIJO;
 
 export const configurado = () => Boolean(BASE && API_KEY);
 
@@ -43,11 +65,14 @@ async function pedir(ruta, { metodo = 'GET', cuerpo = null, esperaMs = 15000 } =
  * Crea la sesion y devuelve el QR. Se escanea UNA vez desde el movil del
  * numero que se vaya a usar, y la sesion queda guardada en el contenedor.
  */
-export async function crearInstancia(nombre = INSTANCIA) {
+export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
   return pedir('/instance/create', {
     metodo: 'POST',
     cuerpo: {
       instanceName: nombre,
+      // Cuanto historial traer: 'cero' | 'rapido' | 'todo'. Va aqui y no en
+      // otra llamada porque hay que saberlo ANTES de abrir el socket.
+      modo,
       integration: 'WHATSAPP-BAILEYS',
       qrcode: true,
       // No entrar en grupos: este numero es para escribir a prospectos, y cada
@@ -152,3 +177,7 @@ export const presencia = (numero, estado, nombre = INSTANCIA) =>
 
 /** Que numero esta conectado ahora mismo. */
 export const instancias = () => pedir('/instance/fetchInstances');
+
+/** Cerrar la sesion: el numero deja de estar vinculado al CRM. */
+export const cerrarSesion = (nombre = INSTANCIA) =>
+  pedir(`/instance/logout/${nombre}`, { metodo: 'DELETE', esperaMs: 30000 });

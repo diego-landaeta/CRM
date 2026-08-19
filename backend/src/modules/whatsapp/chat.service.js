@@ -160,46 +160,79 @@ export async function recibir(cuerpo) {
   const key = datos?.key;
   if (!key?.remoteJid) return { ignorado: 'sin remoteJid' };
 
-  // Solo conversaciones con una persona. WhatsApp entrega ademas grupos
-  // (@g.us), canales y listas de difusion (@newsletter, @broadcast) y los
-  // estados (status@broadcast). Todo eso llega con un identificador largo que
-  // NO es un telefono —120363160757210405 es un grupo, no un movil— y si se
-  // deja pasar acaba en la lista de chats como si fuera un prospecto.
+  // Personas y grupos, si. Canales, listas de difusion y estados, no: esos son
+  // emisiones de una via a las que no se puede contestar, y solo ensucian la
+  // lista.
   const destino = String(key.remoteJid);
-  if (!destino.endsWith('@s.whatsapp.net')) {
-    return { ignorado: `no es una persona (${destino.split('@')[1] || destino})` };
+  const esGrupo = destino.endsWith('@g.us');
+  if (!esGrupo && !destino.endsWith('@s.whatsapp.net')) {
+    return { ignorado: `ni persona ni grupo (${destino.split('@')[1] || destino})` };
+  }
+  // «0@s.whatsapp.net» y similares: WhatsApp cuela identificadores basura que
+  // aparecian en la lista como una conversacion mas.
+  const digitos = destino.split('@')[0].replace(/[^0-9]/g, '');
+  if (digitos.length < 8) return { ignorado: `identificador invalido (${digitos})` };
+
+  // Ruido del protocolo: acuses, claves de cifrado, reacciones, encuestas,
+  // llamadas... Si se dejan pasar, crean conversaciones vacias en la lista.
+  if (media.esRuido(datos?.message)) {
+    return { ignorado: `sin contenido (${Object.keys(datos?.message || {}).join(',') || 'vacio'})` };
   }
 
-  const instancia = cuerpo?.instance || cuerpo?.instanceName || evolution.INSTANCIA;
+  // La instancia dice DE QUIEN es esta conversacion. Antes, si no venia, se
+  // caia al nombre generico y el mensaje acababa en una sesion de nadie: nadie
+  // lo veria nunca y encima ensuciaria la base. Mejor decirlo y no guardarlo.
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+  if (!instancia) {
+    logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
+    return { ignorado: 'sin instancia' };
+  }
   const conv = await model.conversacionDe({
-    instancia, jid: key.remoteJid, nombrePush: datos?.pushName,
+    instancia, jid: key.remoteJid,
+    nombrePush: datos?.pushName,
+    avatarUrl: datos?.avatar || null,
   });
 
   const m = datos?.message || {};
   const { tipo } = media.tipoDeMensaje(m);
 
-  // Si trae adjunto se baja AHORA. WhatsApp no da URL publica —los ficheros van
-  // cifrados— y si se deja para cuando la gestora abra el chat, puede que ya no
-  // esten disponibles.
-  let adjunto = null;
-  if (tipo !== 'texto' && tipo !== 'otro') {
-    adjunto = await media.bajarYGuardar({ key, message: m, instancia });
-  }
-
+  // El adjunto NO se baja aqui. Se apunta en la cola y se descarga despues.
+  //
+  // Bajarlo dentro del webhook parecia lo natural y resulto ser el fallo mas
+  // caro de la sesion: al emparejar llegan miles de mensajes, y por cada uno el
+  // CRM le pedia el fichero de vuelta al mismo servicio que se los estaba
+  // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
+  // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
+  // failed». El webhook tiene que contestar rapido y soltar.
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,
     direccion: key.fromMe ? 'saliente' : 'entrante',
     tipo,
     texto: media.textoDe(m),
-    mediaUrl: adjunto?.ruta || null,
-    mediaMime: adjunto?.mime || m.audioMessage?.mimetype || m.imageMessage?.mimetype || null,
-    nombreArchivo: adjunto?.nombreArchivo || m.documentMessage?.fileName || null,
+    mediaMime: m.audioMessage?.mimetype || m.imageMessage?.mimetype
+      || m.videoMessage?.mimetype || m.documentMessage?.mimetype || null,
+    nombreArchivo: m.documentMessage?.fileName || null,
     // messageTimestamp viene en segundos.
     ts: datos?.messageTimestamp ? new Date(Number(datos.messageTimestamp) * 1000) : new Date(),
   });
 
-  return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo, conAdjunto: Boolean(adjunto) };
+  // Lo de AHORA se baja delante de todo; lo viejo del historial, con criterio.
+  //
+  // Antes entraba todo por igual y en orden de llegada: una foto recien enviada
+  // se ponia detras de los 17.893 adjuntos del historial y tardaba mas de una
+  // hora en verse. En el chat salia «no se pudo descargar», que ademas era
+  // mentira: no habia fallado, es que no le habia llegado el turno.
+  const esHistorial = Boolean(cuerpo?.historial);
+  let enCola = false;
+  if (fila && tipo !== 'texto' && tipo !== 'otro') {
+    if (media.mereceDescarga({ tipo, ts: fila.ts, esHistorial })) {
+      media.encolar({ mensajeId: fila.id, key, message: m, instancia }, !esHistorial);
+      enCola = true;
+    }
+  }
+
+  return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo, enCola };
 }
 
 /** messages.update: WhatsApp dice que un mensaje nuestro llego o se leyo. */
