@@ -923,14 +923,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         )}
         {!collapsed && (
           <>
-            <span className="flex-1 min-w-0 leading-tight">
-              <span className="block font-semibold text-sm text-foreground truncate">MultiCRM</span>
-              <span className="block text-[11px] text-muted-foreground truncate">
-                {activeProject?.id === -1
-                  ? 'todas las marcas'
-                  : (activeProject?.nombre || 'sin marca elegida')}
-              </span>
-            </span>
+            {/* Solo «MultiCRM». El nombre de la marca iba aqui debajo y quedaba
+                cortado —«Multi…» y «Fono Ap…»— porque con la chapa de BETA no
+                caben dos lineas en 240 pixeles. Y sobraba: el selector de justo
+                abajo ya dice en que marca estas, entero y sin cortar. Lo que si
+                se queda es el logo, que identifica de un vistazo. */}
+            <span className="font-semibold text-sm text-foreground flex-1 min-w-0 truncate">MultiCRM</span>
             {BETA_MODE && (
               <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
                 BETA {BETA_VERSION}
