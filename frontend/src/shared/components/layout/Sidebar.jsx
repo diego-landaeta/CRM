@@ -582,7 +582,7 @@ function tonoDe(nombre = '') {
 function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
   const [falloImagen, setFalloImagen] = useState(false);
-  const dim = size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
+  const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
 
   // «Todos los proyectos» va primero: no es una marca, es una vista.
   if (project?.isAll) {
@@ -625,7 +625,7 @@ function ProjectAvatar({ project, size = 'md' }) {
 
   if (project?.emoji) {
     return (
-      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'sm' ? 'text-base' : 'text-lg'}`}>
+      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-lg'}`}>
         {project.emoji}
       </div>
     );
@@ -636,7 +636,7 @@ function ProjectAvatar({ project, size = 'md' }) {
   // de un vistazo, que es justo para lo que sirve un icono.
   return (
     <div
-      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
+      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'lg' ? 'text-base' : size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
       title={project?.nombre || ''}
     >
       {inicialesDe(project?.nombre)}
@@ -909,54 +909,53 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* La cabecera: el logo de la marca en la que se esta trabajando y su
-          nombre debajo del producto. Antes habia un cubo generico igual para
-          todas, y con nueve marcas el sitio donde estas es lo primero que hay
-          que saber al entrar — sobre todo antes de tocar dinero. */}
-      <div className={cn('flex items-center mb-6', collapsed ? 'flex-col gap-2' : 'gap-2.5 px-2')}>
-        {activeProject && activeProject.id !== -1 ? (
-          <ProjectAvatar project={activeProject} size="md" />
-        ) : (
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0">
-            <Package size={16} weight="bold" />
-          </div>
-        )}
+      {/* La cabecera: el logo grande arriba y los textos debajo.
+          En una linea no cabia: con el logo, «MultiCRM» y la chapa de BETA en
+          240 pixeles, el nombre acababa cortado en «Multi…». Apilado, el logo
+          se ve de verdad —es lo que dice en que marca estas— y el texto cabe
+          entero. */}
+      <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
+        <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
+          {activeProject && activeProject.id !== -1 ? (
+            <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
+          ) : (
+            <div className={cn(
+              'rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0',
+              collapsed ? 'w-8 h-8' : 'w-12 h-12',
+            )}>
+              <Package size={collapsed ? 16 : 22} weight="bold" />
+            </div>
+          )}
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+              title={collapsed ? 'Expandir (Ctrl+B)' : 'Contraer (Ctrl+B)'}
+              className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
+            >
+              {collapsed ? <CaretRight size={14} weight="bold" /> : <CaretLeft size={14} weight="bold" />}
+            </button>
+          )}
+        </div>
+
         {!collapsed && (
-          <>
-            {/* Solo «MultiCRM». El nombre de la marca iba aqui debajo y quedaba
-                cortado —«Multi…» y «Fono Ap…»— porque con la chapa de BETA no
-                caben dos lineas en 240 pixeles. Y sobraba: el selector de justo
-                abajo ya dice en que marca estas, entero y sin cortar. Lo que si
-                se queda es el logo, que identifica de un vistazo. */}
-            <span className="font-semibold text-sm text-foreground flex-1 min-w-0 truncate">MultiCRM</span>
-            {BETA_MODE && (
-              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
-                BETA {BETA_VERSION}
-              </span>
-            )}
-            {onToggleCollapsed && (
-              <button
-                type="button"
-                onClick={onToggleCollapsed}
-                aria-label="Contraer barra lateral"
-                title="Contraer (Ctrl+B)"
-                className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <CaretLeft size={14} weight="bold" />
-              </button>
-            )}
-          </>
-        )}
-        {collapsed && onToggleCollapsed && (
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label="Expandir barra lateral"
-            title="Expandir (Ctrl+B)"
-            className="hidden lg:flex w-8 h-8 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <CaretRight size={14} weight="bold" />
-          </button>
+          <div className="mt-2 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
+              {BETA_MODE && (
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                  BETA {BETA_VERSION}
+                </span>
+              )}
+            </div>
+            {/* La marca, ya con toda la anchura para ella: aqui si cabe entera. */}
+            <span className="block text-[11px] text-muted-foreground truncate">
+              {activeProject?.id === -1
+                ? 'todas las marcas'
+                : (activeProject?.nombre || 'sin marca elegida')}
+            </span>
+          </div>
         )}
       </div>
 
