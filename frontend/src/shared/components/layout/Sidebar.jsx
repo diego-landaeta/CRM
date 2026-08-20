@@ -94,9 +94,12 @@ const NAV_SECTIONS = [
         module: 'whatsapp',
         apagable: 'whatsapp',
         children: [
-          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
-          { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
-          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          // Solo administradores POR AHORA. Enlazar un numero por esta via puede
+          // acabar con el bloqueado por WhatsApp, y quien lo paga es la gestora con
+          // su telefono. Se abre a todo el mundo cuando este el aviso previo (#45).
+          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText, roles: ['superadmin', 'admin'] },
+          { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin'] },
+          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText, roles: ['superadmin', 'admin'] },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
           // cada gestora a traves del navegador remoto, y ese metodo se ha
@@ -107,7 +110,7 @@ const NAV_SECTIONS = [
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
-          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode, roles: ['superadmin', 'admin'] },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
