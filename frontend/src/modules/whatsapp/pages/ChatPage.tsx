@@ -489,7 +489,7 @@ export default function ChatPage() {
   //
   // Antes: el ultimo texto, y si no habia, el telefono. Pero un grupo no tiene
   // telefono: tiene un identificador de 18 cifras, y eso es lo que salia
-  // pintado —«120363412958104027»— cada vez que el ultimo mensaje era una foto
+  // pintado —dieciocho cifras seguidas— cada vez que el ultimo mensaje era una foto
   // o un sticker. Ahora se dice QUE fue, como en WhatsApp.
   const ADELANTO: Record<string, string> = {
     imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',

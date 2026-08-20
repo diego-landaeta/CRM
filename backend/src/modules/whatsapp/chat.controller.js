@@ -162,8 +162,8 @@ export async function abrirChat(req, res, next) {
     //
     // Tecleando a mano es facil colar el cero de tronco nacional —«0412...» en
     // Venezuela, «06...» en Italia— y con el delante WhatsApp no conoce a
-    // nadie: se abria una conversacion muerta contra 5804129543569 en vez de
-    // 584129543569, y al escribir salia un error que no explicaba nada.
+    // nadie: se abria una conversacion muerta contra un numero con ese cero
+    // metido en medio, y al escribir salia un error que no explicaba nada.
     //
     // Se pregunta en vez de adivinar. Ir anadiendo reglas pais por pais es una
     // carrera que no se gana: quien sabe si ese numero existe es WhatsApp.
