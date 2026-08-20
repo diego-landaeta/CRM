@@ -42,12 +42,23 @@ export default function ConexionPage() {
   // anos manda decenas de miles de mensajes por tandas y la pantalla tarda un
   // buen rato en estar usable, que es justo la queja de siempre.
   const [modo, setModo] = useState<'cero' | 'rapido' | 'todo'>('rapido');
+  // Enterarse ANTES, no despues.
+  //
+  // Enlazar por esta via no es la forma oficial de WhatsApp y quien paga si sale
+  // mal es la persona con su numero. El aviso estaba al pie de la pagina, debajo
+  // del codigo: para cuando alguien lo leyera, ya habia escaneado. Ahora va
+  // primero y sin marcarlo no sale el codigo. El servidor lo exige tambien, que
+  // si no bastaria con llamar al endpoint a mano.
+  const [enterado, setEnterado] = useState(false);
   const [sync, setSync] = useState<{ conversaciones: number; mensajes: number; entrando: boolean; adjuntosPendientes: number } | null>(null);
   // De quien es la sesion que se esta viendo. Para una gestora siempre la suya
   // —el selector ni se pinta—; quien manda puede enlazar la de otra persona
   // teniendola al lado con su movil, que es mas rapido que explicarselo.
   const [sesion, setSesion] = useState<SesionElegida>({ usuarioId: null, nombre: '', esMia: true });
   const deQuien = sesion.usuarioId;
+  // Al cambiar de persona se desmarca: haber aceptado por una no es haber
+  // aceptado por otra, y el registro tiene que decir la verdad.
+  useEffect(() => { setEnterado(false); }, [deQuien]);
 
   const buscandoQR = useRef(false);
 
@@ -99,7 +110,7 @@ export default function ConexionPage() {
     try {
       for (let n = 1; n <= INTENTOS; n++) {
         try {
-          const r = await client.post('/whatsapp/emparejar', { modo, usuarioId: deQuien });
+          const r = await client.post('/whatsapp/emparejar', { modo, usuarioId: deQuien, enterado: true });
           if (!r.success) throw new Error(r.error || 'No se pudo pedir el codigo');
           if (r.data?.qr) { setQr(r.data.qr); buscandoQR.current = true; return; }
           await mirar();
@@ -194,6 +205,41 @@ export default function ConexionPage() {
         </div>
 
         {estado?.configurado && !conectado && !qr && (
+          <div className="mt-4 border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
+            <p className="font-semibold text-amber-900 dark:text-amber-200 mb-2 text-sm">
+              {sesion.esMia
+                ? 'Antes de enlazar tu numero, lee esto'
+                : `Vas a enlazar el numero de ${sesion.nombre}. Que lo lea esa persona:`}
+            </p>
+            <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-1.5 leading-relaxed">
+              <li>· El numero queda vinculado al CRM. Esta <strong>no es la via oficial de
+                  WhatsApp</strong> y WhatsApp <strong>puede bloquearlo</strong>.</li>
+              <li>· Mejor un <strong>numero de empresa, nunca el personal</strong>. Si lo
+                  bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
+              <li>· Las conversaciones <strong>se guardan en la base del CRM</strong>, en el
+                  servidor de la empresa. Los demas del equipo no las ven, pero
+                  <strong> la administracion si puede</strong>.</li>
+              <li>· Se puede <strong>desvincular cuando se quiera</strong>, desde aqui o desde
+                  Dispositivos vinculados en el movil.</li>
+            </ul>
+            <label className="flex items-start gap-2 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 cursor-pointer">
+              <input type="checkbox" checked={enterado} className="mt-0.5"
+                onChange={(e) => setEnterado(e.target.checked)} />
+              <span className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                {sesion.esMia
+                  ? 'Lo he leido y enlazo mi numero sabiendolo'
+                  : `${sesion.nombre} lo ha leido y enlaza su numero sabiendolo`}
+              </span>
+            </label>
+            {!sesion.esMia && (
+              <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-2">
+                Queda escrito que lo enlazaste tu en su nombre.
+              </p>
+            )}
+          </div>
+        )}
+
+        {estado?.configurado && !conectado && !qr && (
           <div className="mt-4">
             <p className="text-sm font-semibold mb-2">¿Cuanto quieres traerte del movil?</p>
             <div className="grid gap-2">
@@ -219,12 +265,13 @@ export default function ConexionPage() {
 
         <div className="mt-4 flex flex-wrap gap-2">
           {estado?.configurado && !conectado && (
-            <button type="button" onClick={() => pedirQR()} disabled={pidiendo}
+            <button type="button" onClick={() => pedirQR()} disabled={pidiendo || (!enterado && !qr)}
               className="h-9 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50">
               <QrCode size={16} weight="bold" />
               {pidiendo
                 ? (reintento ? `Reintentando (${reintento} de 3)…` : 'Pidiendo codigo…')
-                : qr ? 'Pedir otro codigo' : 'Enlazar mi numero'}
+                : qr ? 'Pedir otro codigo'
+                : sesion.esMia ? 'Enlazar mi numero' : `Enlazar el numero de ${sesion.nombre}`}
             </button>
           )}
           {conectado && (

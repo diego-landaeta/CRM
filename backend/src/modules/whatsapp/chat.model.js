@@ -209,6 +209,51 @@ export async function mensajeConAdjunto(id) {
   return rows[0] || null;
 }
 
+/**
+ * Deja escrito que se acepto enlazar un numero.
+ *
+ * `userId` es de quien es la linea; `aceptadoPor`, quien pulso. Casi siempre el
+ * mismo — pero un administrador puede enlazar el numero de una gestora que
+ * tiene al lado, y entonces ella NO leyo el aviso. Esa diferencia es justo lo
+ * que hay que poder ver despues.
+ *
+ * No revienta si la tabla no existe todavia: la migracion 129 la aplica Diego, y
+ * hasta entonces el aviso con casilla ya funciona. Lo que falta es el registro,
+ * no la advertencia — y dejar WhatsApp inservible por eso seria peor.
+ */
+export async function apuntarConsentimiento({ userId, aceptadoPor, instancia, versionAviso = 1, ip, navegador }) {
+  try {
+    await query(
+      `INSERT INTO wa_consentimientos
+         (user_id, aceptado_por, instancia, version_aviso, ip, navegador)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, aceptadoPor, instancia, versionAviso, ip || null, navegador || null]
+    );
+    return true;
+  } catch (err) {
+    if (err.code === '42P01') return false;   // la tabla aun no esta
+    throw err;
+  }
+}
+
+/** ¿Cuando acepto esta persona por ultima vez, y quien pulso? */
+export async function ultimoConsentimiento(userId) {
+  try {
+    const { rows } = await query(
+      `SELECT c.aceptado_at, c.version_aviso, c.aceptado_por, u.nombre AS acepto_nombre
+         FROM wa_consentimientos c
+         LEFT JOIN users u ON u.id = c.aceptado_por
+        WHERE c.user_id = $1
+        ORDER BY c.aceptado_at DESC LIMIT 1`,
+      [userId]
+    );
+    return rows[0] || null;
+  } catch (err) {
+    if (err.code === '42P01') return null;
+    throw err;
+  }
+}
+
 /** Apunta el archivo que se acaba de bajar para un mensaje. */
 export async function guardarAdjunto(id, { ruta, mime, nombreArchivo }) {
   await query(

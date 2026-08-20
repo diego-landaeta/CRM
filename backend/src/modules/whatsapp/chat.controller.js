@@ -9,6 +9,11 @@ import { query } from '../../shared/config/db.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
+// Version del aviso que se acepta al enlazar. Se sube al cambiar el TEXTO, no
+// al mover un boton: sirve para saber que leyo cada persona el dia que haga
+// falta demostrarlo.
+const VERSION_AVISO = 1;
+
 /**
  * De quien es la sesion sobre la que se esta trabajando.
  *
@@ -335,6 +340,31 @@ export async function emparejar(req, res, next) {
     // Cuanto historial quiere quien enlaza. Si manda cualquier otra cosa, lo
     // rapido: es lo que deja la pantalla usable en segundos.
     const modo = ['cero', 'rapido', 'todo'].includes(req.body?.modo) ? req.body.modo : 'rapido';
+
+    // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
+    //
+    // Sin esto la casilla de la pantalla no vale nada: bastaria con llamar al
+    // endpoint a mano. Y hace falta guardarlo porque el numero es de una
+    // persona — si WhatsApp se lo bloquea, tiene que poder verse que se le
+    // advirtio, cuando, y con que texto.
+    if (req.body?.enterado !== true) {
+      throw new AppError(
+        'Hay que leer y aceptar el aviso antes de enlazar un numero',
+        400, 'FALTA_CONSENTIMIENTO'
+      );
+    }
+    const objetivo = await usuarioObjetivo(req);
+    const apuntado = await model.apuntarConsentimiento({
+      userId: objetivo,
+      aceptadoPor: req.user.userId,
+      instancia,
+      versionAviso: VERSION_AVISO,
+      ip: req.ip,
+      navegador: req.get('user-agent'),
+    });
+    if (!apuntado) {
+      logger.warn({ instancia }, 'WhatsApp: falta la migracion 129, el consentimiento no queda registrado');
+    }
 
     let r = null;
     let ultimo = '';
