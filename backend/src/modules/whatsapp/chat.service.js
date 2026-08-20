@@ -38,6 +38,19 @@ const TOPE_POR_DIA = Number(process.env.WA_TOPE_DIA || 300);
 
 // Espera entre mensajes seguidos, para que no salgan todos de golpe.
 const PAUSA_MS = Number(process.env.WA_PAUSA_MS || 1500);
+
+// El freno de «solo a quien lo pidio». Encendido salvo que se apague a mano.
+//
+// Se apaga para probar: al probar se escribe al numero de uno mismo, que ni es
+// prospecto ni ha escrito nunca, asi que el freno salta con razon y no deja
+// hacer nada. En produccion va encendido y no se toca.
+const EXIGIR_CONSENTIMIENTO = process.env.WA_EXIGIR_CONSENTIMIENTO !== 'false';
+if (!EXIGIR_CONSENTIMIENTO) {
+  logger.warn(
+    'WhatsApp: FRENO DE CONSENTIMIENTO APAGADO (WA_EXIGIR_CONSENTIMIENTO=false). '
+    + 'Se puede escribir a cualquiera. Esto es para probar: en produccion no puede quedarse asi.'
+  );
+}
 let ultimoEnvio = 0;
 
 async function limites(instancia) {
@@ -69,12 +82,20 @@ async function permitirEnvio(conversacionId) {
   // 2. Escribir a quien no pidio informacion es lo que acaba en bloqueos. Si
   //    el numero no esta atado a ningun lead y nunca nos ha escrito, no salio
   //    de un formulario nuestro.
-  const yaHablamos = (await model.mensajes(conversacionId, 1)).length > 0;
-  if (!conv.lead_id && !yaHablamos) {
-    throw new AppError(
-      'Este numero no es de ningun prospecto y nunca ha escrito. Escribir a quien no pidio informacion es lo que hace que suspendan el numero.',
-      409, 'SIN_CONSENTIMIENTO'
-    );
+  //
+  //    Se puede apagar para PROBAR —al probar escribes a tu propio numero, que
+  //    obviamente no es prospecto ni te ha escrito nunca— pero no se borra: es
+  //    el freno que de verdad protege la linea, y lo que se borra del codigo
+  //    acaba faltando en produccion sin que nadie se de cuenta. Con el apagado
+  //    se avisa en cada arranque para que no se quede asi por olvido.
+  if (EXIGIR_CONSENTIMIENTO) {
+    const yaHablamos = (await model.mensajes(conversacionId, 1)).length > 0;
+    if (!conv.lead_id && !yaHablamos) {
+      throw new AppError(
+        'Este numero no es de ningun prospecto y nunca ha escrito. Escribir a quien no pidio informacion es lo que hace que suspendan el numero.',
+        409, 'SIN_CONSENTIMIENTO'
+      );
+    }
   }
 
   // 3. Ritmo.
@@ -184,7 +205,13 @@ export async function recibir(cuerpo) {
   // lista.
   const destino = String(key.remoteJid);
   const esGrupo = destino.endsWith('@g.us');
-  if (!esGrupo && !destino.endsWith('@s.whatsapp.net')) {
+  // `@lid` es el direccionamiento nuevo de WhatsApp: identifica a una PERSONA
+  // sin revelar su telefono. Se aceptaba solo `@s.whatsapp.net`, asi que esos
+  // mensajes se descartaban junto con los canales. El puente intenta
+  // traducirlo a su numero antes de mandarlo; cuando no puede, llega asi y
+  // vale mas guardarlo con un nombre raro que perderlo.
+  const esPersona = destino.endsWith('@s.whatsapp.net') || destino.endsWith('@lid');
+  if (!esGrupo && !esPersona) {
     return { ignorado: `ni persona ni grupo (${destino.split('@')[1] || destino})` };
   }
   // «0@s.whatsapp.net» y similares: WhatsApp cuela identificadores basura que
@@ -195,7 +222,7 @@ export async function recibir(cuerpo) {
   // Ruido del protocolo: acuses, claves de cifrado, reacciones, encuestas,
   // llamadas... Si se dejan pasar, crean conversaciones vacias en la lista.
   if (media.esRuido(datos?.message)) {
-    return { ignorado: `sin contenido (${Object.keys(datos?.message || {}).join(',') || 'vacio'})` };
+    return { ignorado: `ruido de protocolo (${Object.keys(datos?.message || {}).join(',') || 'vacio'})` };
   }
 
   // La instancia dice DE QUIEN es esta conversacion. Antes, si no venia, se
@@ -214,6 +241,12 @@ export async function recibir(cuerpo) {
 
   const m = datos?.message || {};
   const { tipo } = media.tipoDeMensaje(m);
+  if (tipo === 'otro') {
+    logger.warn(
+      { instancia, claves: Object.keys(m).join(','), jid: destino.split('@')[0] },
+      'WhatsApp: tipo de mensaje que no se sabe leer — se guarda igual, pero revisar'
+    );
+  }
 
   // El adjunto NO se baja aqui. Se apunta en la cola y se descarga despues.
   //

@@ -48,10 +48,16 @@ export async function leadPorTelefono(telefono, projectId = null) {
 /** La conversacion de este numero, creandola si es la primera vez. */
 export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
   const esGrupo = String(jid).endsWith('@g.us');
+  // Un `@lid` no es un telefono: es un identificador de WhatsApp. Buscar un
+  // prospecto con ese numero no encontraria nada y ademas podria cruzarse con
+  // el telefono de otra persona por casualidad.
+  const esIdentificador = String(jid).endsWith('@lid');
   // En un grupo el identificador no es un telefono, asi que no se normaliza ni
   // se busca prospecto: no hay una persona detras a la que atarlo.
-  const telefono = esGrupo ? String(jid).split('@')[0] : (jidATelefono(jid) || jid);
-  const lead = esGrupo ? null : await leadPorTelefono(telefono);
+  const telefono = (esGrupo || esIdentificador)
+    ? String(jid).split('@')[0]
+    : (jidATelefono(jid) || jid);
+  const lead = (esGrupo || esIdentificador) ? null : await leadPorTelefono(telefono);
 
   const { rows } = await query(
     `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at)
@@ -116,8 +122,13 @@ export async function listar({ instancia, projectId = null, limite = 50 }) {
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
             (c.jid LIKE '%@g.us') AS es_grupo,
+            -- El ultimo mensaje, con su tipo: si fue una foto o un audio no hay
+            -- texto que ensenar, y la lista caia a pintar el telefono — o el
+            -- identificador del grupo, que son 18 cifras sin ningun sentido.
             (SELECT m.texto FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC LIMIT 1) AS ultimo_texto
+              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_texto,
+            (SELECT m.tipo FROM wa_mensajes m
+              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_tipo
        FROM wa_conversaciones c
        LEFT JOIN leads l ON l.id = c.lead_id
       WHERE c.instancia = $1 ${filtro}
@@ -142,7 +153,13 @@ export async function mensajes(conversacionId, limite = 100) {
 }
 
 export const porId = async (id) =>
-  (await query('SELECT * FROM wa_conversaciones WHERE id = $1', [id])).rows[0] || null;
+  // es_grupo hace falta AQUI tambien, no solo en la lista: la cabecera del chat
+  // lo usa para decidir que ensena debajo del nombre, y sin el pintaba el
+  // identificador del grupo —un numero de 18 cifras— como si fuera un telefono.
+  (await query(
+    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo
+       FROM wa_conversaciones c WHERE c.id = $1`, [id]
+  )).rows[0] || null;
 
 export const marcarLeida = (id) =>
   query('UPDATE wa_conversaciones SET no_leidos = 0 WHERE id = $1', [id]);

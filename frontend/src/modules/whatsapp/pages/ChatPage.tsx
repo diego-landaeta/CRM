@@ -283,6 +283,41 @@ export default function ChatPage() {
     } catch (e) { fallo(e); } finally { setEnviando(false); }
   }
 
+  /**
+   * Pegar o arrastrar una imagen manda la imagen.
+   *
+   * La caja de escribir es un contenteditable, asi que al pegar una foto el
+   * navegador la mete DENTRO como <img> a tamano real: se comia la barra
+   * entera y tapaba media pantalla. Y al darle a enviar no salia nada, porque
+   * el texto se limpia de etiquetas antes de mandarlo — la foto desaparecia sin
+   * decir por que.
+   *
+   * En WhatsApp Web pegar una foto la envia. Aqui igual.
+   */
+  function archivosDe(dt: DataTransfer | null): File[] {
+    if (!dt) return [];
+    const items = [...(dt.files || [])];
+    if (items.length) return items;
+    return [...(dt.items || [])]
+      .filter((i) => i.kind === 'file')
+      .map((i) => i.getAsFile())
+      .filter((f): f is File => Boolean(f));
+  }
+
+  async function pegarOSoltar(e: React.ClipboardEvent | React.DragEvent) {
+    const dt = 'clipboardData' in e ? e.clipboardData : e.dataTransfer;
+    const archivos = archivosDe(dt);
+    if (!archivos.length) return;          // texto normal: que siga su camino
+    e.preventDefault();
+    e.stopPropagation();
+    if (!abierto) {
+      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    // De uno en uno: cada envio pasa por los frenos y por su pausa.
+    for (const f of archivos) await mandarArchivo(f);
+  }
+
   async function alternarGrabacion() {
     if (grabando) { grabadora.current?.stop(); return; }
     try {
@@ -366,6 +401,25 @@ export default function ChatPage() {
 
   const nombreDe = (c: ChatWhatsapp) =>
     c.lead_nombre || c.nombre_push || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
+
+  // Lo que se ensena debajo del nombre.
+  //
+  // Antes: el ultimo texto, y si no habia, el telefono. Pero un grupo no tiene
+  // telefono: tiene un identificador de 18 cifras, y eso es lo que salia
+  // pintado —«120363412958104027»— cada vez que el ultimo mensaje era una foto
+  // o un sticker. Ahora se dice QUE fue, como en WhatsApp.
+  const ADELANTO: Record<string, string> = {
+    imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
+    documento: '📄 Documento', sticker: 'Sticker',
+  };
+  const adelantoDe = (c: ChatWhatsapp) => {
+    if (c.no_escribir) return 'no escribir';
+    if (c.ultimo_texto) return c.ultimo_texto;
+    if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
+    // Sin nada que adelantar: el telefono si es una persona, y para un grupo
+    // nada — su identificador no le dice nada a nadie.
+    return c.es_grupo ? 'Grupo' : c.telefono;
+  };
   const visibles = filtro
     ? chats.filter((c) => `${nombreDe(c)} ${c.telefono}`.toLowerCase().includes(filtro.toLowerCase()))
     : chats;
@@ -406,7 +460,10 @@ export default function ChatPage() {
         </Link>
       </div>
 
-      <div ref={marco} className="wa-marco" style={{ height: alto }}>
+      <div ref={marco} className="wa-marco" style={{ height: alto }}
+        onPaste={pegarOSoltar}
+        onDrop={pegarOSoltar}
+        onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}>
         <MainContainer responsive>
           <Sidebar position="left" scrollable>
             <div className="wa-barra-sesion">
@@ -434,7 +491,7 @@ export default function ChatPage() {
             <ConversationList>
               {visibles.map((c) => (
                 <Conversation key={c.id} name={nombreDe(c)}
-                  info={c.no_escribir ? 'no escribir' : (c.ultimo_texto || c.telefono)}
+                  info={adelantoDe(c)}
                   active={abierto === c.id}
                   unreadCnt={c.no_leidos || undefined}
                   onClick={() => setAbierto(c.id)}>

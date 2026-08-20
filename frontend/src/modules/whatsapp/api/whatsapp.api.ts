@@ -92,6 +92,8 @@ export interface ChatWhatsapp {
   ultimo_at: string | null;
   no_leidos: number;
   ultimo_texto: string | null;
+  /** De que tipo fue el ultimo mensaje: si fue foto o audio no hay texto. */
+  ultimo_tipo?: string | null;
 }
 
 export interface MensajeWhatsapp {

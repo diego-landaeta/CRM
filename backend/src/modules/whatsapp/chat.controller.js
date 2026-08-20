@@ -143,9 +143,32 @@ export async function abrirChat(req, res, next) {
     const digitos = String(tel).replace(/[^0-9]/g, '');
     if (digitos.length < 9) throw new AppError('Ese telefono no es valido', 400, 'TELEFONO_INVALIDO');
 
+    const instancia = await instanciaObjetivo(req);
+
+    // Se le pregunta a WhatsApp cual es la direccion buena de ese numero.
+    //
+    // Tecleando a mano es facil colar el cero de tronco nacional —«0412...» en
+    // Venezuela, «06...» en Italia— y con el delante WhatsApp no conoce a
+    // nadie: se abria una conversacion muerta contra 5804129543569 en vez de
+    // 584129543569, y al escribir salia un error que no explicaba nada.
+    //
+    // Se pregunta en vez de adivinar. Ir anadiendo reglas pais por pais es una
+    // carrera que no se gana: quien sabe si ese numero existe es WhatsApp.
+    let jid = `${digitos}@s.whatsapp.net`;
+    const { existe, jid: jidBueno } = await evolution.comprobarNumero(digitos, instancia);
+    if (existe === false) {
+      throw new AppError(
+        `No hay ninguna cuenta de WhatsApp con el numero ${digitos}. Revisa el prefijo del pais: si tu pais usa un 0 delante al marcar dentro, ese 0 no va.`,
+        404, 'NO_ESTA_EN_WHATSAPP'
+      );
+    }
+    // Con `existe: null` no se pudo comprobar —sesion caida—: se sigue con lo
+    // tecleado en vez de bloquear, porque no saber no es lo mismo que no estar.
+    if (jidBueno) jid = jidBueno;
+
     const conv = await model.conversacionDe({
-      instancia: await instanciaObjetivo(req),
-      jid: `${digitos}@s.whatsapp.net`,
+      instancia,
+      jid,
       nombrePush: null,
     });
     res.status(201).json({ success: true, data: conv });
@@ -465,6 +488,22 @@ export async function webhook(req, res) {
       return res.status(401).json({ success: false });
     }
     const r = await servicio.recibir(req.body);
+    // Cada mensaje deja rastro de en que acabo.
+    //
+    // Antes no se registraba nada: buscando por que no llegaba un audio no
+    // habia forma de saber si el aviso ni siquiera llego, si se descarto por
+    // algo, o si se guardo y el fallo estaba en la pantalla. Se registra el
+    // TIPO y el resultado, nunca el contenido: son conversaciones de clientes.
+    if (r?.ignorado) {
+      logger.info({ instancia: req.body?.instance, motivo: r.ignorado }, 'WhatsApp: aviso descartado');
+    } else if (r?.duplicado) {
+      logger.debug({ instancia: req.body?.instance, tipo: r.tipo }, 'WhatsApp: mensaje repetido');
+    } else if (r?.guardado) {
+      logger.info({
+        instancia: req.body?.instance, tipo: r.tipo,
+        conversacion: r.conversacionId, adjuntoEnCola: r.enCola,
+      }, 'WhatsApp: mensaje guardado');
+    }
     return res.json({ success: true, data: r });
   } catch (err) {
     logger.error({ err: err.message }, 'WhatsApp: fallo procesando el webhook');

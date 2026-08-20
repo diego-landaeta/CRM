@@ -175,6 +175,23 @@ export const presencia = (numero, estado, nombre = INSTANCIA) =>
     cuerpo: { number: numero, presence: estado, delay: 1200 },
   });
 
+/**
+ * ¿Existe este numero en WhatsApp, y cual es su direccion buena?
+ *
+ * Devuelve { existe, jid }. `existe: null` significa que no se pudo comprobar
+ * —sesion caida, por ejemplo—, que no es lo mismo que «no existe».
+ */
+export async function comprobarNumero(numero, nombre = INSTANCIA) {
+  const r = await pedir(`/chat/whatsappNumbers/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { numbers: [String(numero).replace(/[^0-9]/g, '')] },
+    esperaMs: 15000,
+  });
+  if (!r.ok) return { existe: null, jid: null };
+  const uno = Array.isArray(r.datos) ? r.datos[0] : r.datos;
+  return { existe: uno?.exists ?? null, jid: uno?.jid || null };
+}
+
 /** Que numero esta conectado ahora mismo. */
 export const instancias = () => pedir('/instance/fetchInstances');
 

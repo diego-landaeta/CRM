@@ -424,3 +424,44 @@
   border-bottom: 1px solid var(--border, #e5e7eb);
   background: var(--card, #fff);
 }
+
+/* ── El selector de sesion ───────────────────────────────────────────────────
+ *
+ * Viene pintado con los colores del CRM —bg-card, border-border— y va DENTRO
+ * del marco de WhatsApp, que tiene su propia paleta oscura. El resultado era un
+ * recuadro claro flotando sobre el panel oscuro, que es justo lo que canta.
+ *
+ * Es el mismo fallo que ya tenian los dialogos: un componente del CRM metido en
+ * una pantalla que no usa los colores del CRM. Aqui se reapunta, sin tocar el
+ * componente — que fuera del marco tiene que seguir viendose como el resto.
+ */
+
+.wa-marco .wa-barra-sesion > div > button {
+  background: var(--wa-hover);
+  border-color: var(--wa-borde);
+  color: var(--wa-texto);
+}
+.wa-marco .wa-barra-sesion > div > button:hover { background: var(--wa-cabecera); }
+.wa-marco .wa-barra-sesion svg { color: var(--wa-verde); }
+
+/* El desplegable sale por encima del marco, asi que se apunta por su sitio. */
+.wa-marco .wa-barra-sesion [class*="absolute"] {
+  background: var(--wa-panel);
+  border-color: var(--wa-borde);
+  color: var(--wa-texto);
+}
+.wa-marco .wa-barra-sesion [class*="absolute"] p { color: var(--wa-apagado); border-color: var(--wa-borde); }
+.wa-marco .wa-barra-sesion [class*="absolute"] button:hover { background: var(--wa-hover); }
+
+/* Red de seguridad: nada dentro de la caja de escribir puede desbordarla.
+ *
+ * Es un contenteditable: si algo se cuela pegado —una imagen, una tabla— el
+ * navegador lo pinta a tamano real y se come la pantalla. Pegar una foto ya se
+ * intercepta y se envia, pero esto cubre lo que no se haya previsto. */
+.wa-marco .cs-message-input img,
+.wa-marco .cs-message-input__content-editor img {
+  max-width: 120px;
+  max-height: 60px;
+  object-fit: contain;
+}
+.wa-marco .cs-message-input__content-editor { max-height: 140px; overflow-y: auto; }
