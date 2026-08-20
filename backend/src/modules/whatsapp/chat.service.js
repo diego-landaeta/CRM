@@ -4,6 +4,25 @@ import * as media from './media.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
+/**
+ * Cuando entro el ultimo mensaje de cada sesion.
+ *
+ * La pantalla pregunta cada cuatro segundos si sigue llegando historial, y eso
+ * se contestaba contando la tabla entera de mensajes: con 380.000 filas y diez
+ * pantallas abiertas eran dos escaneos completos por segundo para pintar un
+ * «sincronizando…».
+ *
+ * Quien sabe si esta entrando algo es el webhook, que es por donde entra. Se
+ * apunta aqui al vuelo y la pantalla lo lee de memoria, sin tocar la base.
+ *
+ * Vive en memoria a proposito: si el servidor se reinicia, lo peor que pasa es
+ * que durante unos segundos diga «ya esta» en vez de «entrando», y el primer
+ * mensaje que llegue lo corrige. No merece una tabla.
+ */
+const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
+
+export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+
 // Los frenos. Esto es lo que de verdad protege el numero.
 //
 // Lo que hace que WhatsApp suspenda una linea no es tanto detectar el cliente
@@ -223,6 +242,9 @@ export async function recibir(cuerpo) {
   // se ponia detras de los 17.893 adjuntos del historial y tardaba mas de una
   // hora en verse. En el chat salia «no se pudo descargar», que ademas era
   // mentira: no habia fallado, es que no le habia llegado el turno.
+  // Aunque el mensaje resulte duplicado, ha entrado: cuenta como señal de vida.
+  pulso.set(instancia, Date.now());
+
   const esHistorial = Boolean(cuerpo?.historial);
   let enCola = false;
   if (fila && tipo !== 'texto' && tipo !== 'otro') {
@@ -251,7 +273,14 @@ async function acuse(cuerpo) {
 }
 
 /** Marca leidos los entrantes de una conversacion, tambien en WhatsApp. */
-export async function marcarLeida(conversacionId) {
+export async function marcarLeida(conversacionId, noLeidos = null) {
+  // Si no hay nada sin leer, no hay nada que marcar.
+  //
+  // La pantalla vuelve a pedir el hilo cada cinco segundos, y esto se hacia en
+  // cada vuelta: tres consultas y una llamada a WhatsApp para no cambiar nada.
+  // Con diez pantallas abiertas eran seis consultas y dos llamadas por segundo
+  // de puro trabajo tirado.
+  if (noLeidos === 0) return;
   await model.marcarLeida(conversacionId);
   const conv = await model.porId(conversacionId);
   const ultimo = (await model.ultimoEntranteSinLeer(conversacionId));

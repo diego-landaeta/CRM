@@ -100,7 +100,8 @@ export async function chat(req, res, next) {
       media_firma: m.media_url ? firma.firma(m.id) : null,
     }));
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
-    await servicio.marcarLeida(id).catch(() => {});
+    // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
+    await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
     res.json({ success: true, data: { conversacion: conv, mensajes: msgs } });
   } catch (err) { next(err); }
 }
@@ -255,16 +256,46 @@ export async function noEscribir(req, res, next) {
  * esto la pantalla no sabe si sigue trabajando o se quedo parada, que es
  * exactamente lo que no se podia distinguir.
  */
+// Los recuentos, guardados un rato.
+//
+// Contar 380.000 mensajes cada cuatro segundos por pantalla abierta es tirar la
+// maquina para pintar un numero que ademas nadie mira al detalle: es un
+// indicador de avance, no una cuenta contable. Se guarda el resultado un rato y
+// todas las pestanas de esa persona comparten el mismo.
+//
+// El plazo se adapta: mientras entra historial se refresca a menudo, porque ahi
+// el numero SI cambia y es lo unico que dice que la cosa avanza. Cuando ya no
+// entra nada, cada medio minuto sobra.
+const recuentos = new Map();   // instancia -> { hasta, datos }
+
+async function recuentoDe(instancia, entrando) {
+  const guardado = recuentos.get(instancia);
+  if (guardado && guardado.hasta > Date.now()) return guardado.datos;
+  const datos = await model.actividad(instancia);
+  recuentos.set(instancia, { hasta: Date.now() + (entrando ? 3000 : 30000), datos });
+  return datos;
+}
+
 export async function sincronizacion(req, res, next) {
   try {
     const instancia = await instanciaObjetivo(req);
-    const d = await model.actividad(instancia);
+
+    // Quien sabe si sigue entrando historial es el webhook, que es por donde
+    // entra. Se pregunta a la memoria, no a la base: contestarlo contando la
+    // tabla entera costaba un escaneo de 380.000 filas cada cuatro segundos por
+    // cada pantalla abierta.
+    const latido = servicio.ultimoLatido(instancia);
+    const haceSegundos = latido ? Math.round((Date.now() - latido) / 1000) : null;
+    const entrando = haceSegundos !== null && haceSegundos < 30;
+
+    const d = await recuentoDe(instancia, entrando);
     res.json({ success: true, data: {
       conversaciones: d.conversaciones,
       mensajes: d.mensajes,
-      // Si entro algo en el ultimo medio minuto, sigue llegando.
-      entrando: d.hace_segundos !== null && d.hace_segundos < 30,
-      haceSegundos: d.hace_segundos,
+      entrando,
+      // Si el servidor acaba de arrancar no hay latido en memoria; entonces vale
+      // lo que sepa la base, que para eso ya se ha consultado.
+      haceSegundos: haceSegundos ?? d.hace_segundos,
       adjuntosPendientes: media.pendientes(instancia),
     }});
   } catch (err) { next(err); }

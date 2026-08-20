@@ -81,9 +81,14 @@ decide al abrir la sesión, no después):
 
 | Opción | Qué trae | Cuándo usarla |
 |---|---|---|
-| **Lo reciente** *(por defecto)* | Conversaciones de los últimos meses | Casi siempre. Usable en segundos |
-| **Empezar de cero** | Nada del pasado, solo lo que llegue a partir de ahora | Número nuevo, o no quieres historial en el CRM |
-| **Todo el historial** | Todo lo que tenga el móvil | Solo si de verdad hace falta lo viejo |
+| **Empezar de cero** *(por defecto)* | Nada del pasado, solo lo que llegue a partir de ahora | **Casi siempre.** Es lo que hace falta para trabajar, y lo único que no mete conversaciones antiguas en el servidor de la empresa |
+| **El último mes** | Los últimos 30 días | Si vienes atendiendo a gente por ese número y no quieres perder el hilo |
+| **Todo el historial** | Todo lo que tenga el móvil, incluido lo personal y los grupos | Piénsatelo. Decenas de miles de mensajes y un buen rato de espera |
+
+El recorte del mes se hace **en el puente, no en el CRM**: lo viejo no llega a
+salir del móvil ni a viajar por la red. Antes quedaba en manos de WhatsApp —«lo
+reciente» era lo que a él le pareciera— y en un móvil con años de uso llegaban
+decenas de miles de mensajes igualmente.
 
 Con «Todo el historial» en un número con años de uso llegan **decenas de miles**
 de mensajes por tandas, durante bastante rato. Medido: 76.580 mensajes y 17.894

@@ -41,7 +41,10 @@ export default function ConexionPage() {
   // Cuanto historial traer. Por defecto lo rapido: con «todo», un numero de
   // anos manda decenas de miles de mensajes por tandas y la pantalla tarda un
   // buen rato en estar usable, que es justo la queja de siempre.
-  const [modo, setModo] = useState<'cero' | 'rapido' | 'todo'>('rapido');
+  // Empezar de cero por defecto, y no es una preferencia estetica: traerse anos
+  // de conversaciones privadas a la base de la empresa casi nunca es lo que hace
+  // falta para trabajar, y una vez estan ahi ya no se quitan solas.
+  const [modo, setModo] = useState<'cero' | 'rapido' | 'todo'>('cero');
   // Enterarse ANTES, no despues.
   //
   // Enlazar por esta via no es la forma oficial de WhatsApp y quien paga si sale
@@ -241,12 +244,29 @@ export default function ConexionPage() {
 
         {estado?.configurado && !conectado && !qr && (
           <div className="mt-4">
-            <p className="text-sm font-semibold mb-2">¿Cuanto quieres traerte del movil?</p>
+            <p className="text-sm font-semibold mb-1">¿Que se trae del movil?</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Lo que traigas se guarda en la base del CRM y ya no se quita solo.
+            </p>
             <div className="grid gap-2">
               {([
-                { id: 'rapido', titulo: 'Lo reciente', pie: 'Listo en segundos. Las conversaciones de los ultimos meses.' },
-                { id: 'cero', titulo: 'Empezar de cero', pie: 'Sin nada del pasado. Solo lo que llegue a partir de ahora.' },
-                { id: 'todo', titulo: 'Todo el historial', pie: 'Todo lo que tenga el movil. Puede tardar bastante y llega por tandas.' },
+                {
+                  id: 'cero',
+                  titulo: 'Empezar de cero',
+                  etiqueta: 'recomendado',
+                  pie: 'Nada del pasado: solo lo que llegue a partir de ahora. Es lo que hace falta para trabajar, y lo unico que no mete tus conversaciones antiguas en el servidor de la empresa.',
+                },
+                {
+                  id: 'rapido',
+                  titulo: 'El ultimo mes',
+                  pie: 'Las conversaciones de los ultimos 30 dias. Util si vienes atendiendo a gente por ese numero y no quieres perder el hilo.',
+                },
+                {
+                  id: 'todo',
+                  titulo: 'Todo el historial',
+                  etiqueta: 'piensatelo',
+                  pie: 'TODO lo que tenga el movil, incluido lo personal y los grupos. En un numero con anos de uso son decenas de miles de mensajes, tarda un buen rato y llega por tandas.',
+                },
               ] as const).map((o) => (
                 <label key={o.id}
                   className={`flex gap-2.5 items-start p-2.5 rounded-md border cursor-pointer ${
@@ -255,6 +275,14 @@ export default function ConexionPage() {
                     onChange={() => setModo(o.id)} className="mt-0.5" />
                   <span className="text-sm leading-tight">
                     <strong>{o.titulo}</strong>
+                    {'etiqueta' in o && o.etiqueta && (
+                      <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded font-semibold ${
+                        o.etiqueta === 'recomendado'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'}`}>
+                        {o.etiqueta}
+                      </span>
+                    )}
                     <span className="block text-xs text-muted-foreground mt-0.5">{o.pie}</span>
                   </span>
                 </label>
