@@ -111,6 +111,9 @@ const NAV_SECTIONS = [
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
           { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          // La guia, en el menu y no escondida: si hay que preguntar donde esta,
+          // ya se ha perdido a quien tenia que leerla.
+          { label: 'Como se usa', to: '/whatsapp/ayuda', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes

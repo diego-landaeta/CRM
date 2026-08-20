@@ -102,10 +102,12 @@ export const estado = (nombre = INSTANCIA) => pedir(`/instance/connectionState/$
  * Devuelve el key.id de WhatsApp, que es lo que luego permite casar el acuse
  * de entrega con el mensaje guardado.
  */
-export async function enviarTexto(numero, texto, nombre = INSTANCIA) {
+export async function enviarTexto(numero, texto, nombre = INSTANCIA, citarWaId = null) {
   const r = await pedir(`/message/sendText/${nombre}`, {
     metodo: 'POST',
-    cuerpo: { number: numero, text: texto },
+    // `quoted` es el identificador del mensaje al que se responde. Al otro lado
+    // sale con la cita encima, como en WhatsApp.
+    cuerpo: { number: numero, text: texto, quoted: citarWaId || undefined },
     esperaMs: 20000,
   });
   if (!r.ok) return r;
@@ -190,6 +192,23 @@ export async function comprobarNumero(numero, nombre = INSTANCIA) {
   if (!r.ok) return { existe: null, jid: null };
   const uno = Array.isArray(r.datos) ? r.datos[0] : r.datos;
   return { existe: uno?.exists ?? null, jid: uno?.jid || null };
+}
+
+/**
+ * ¿Hay alguien escribiendo en esta conversacion?
+ *
+ * Devuelve { quien, que } o null. Nunca lanza: que no se sepa si el otro esta
+ * escribiendo no puede impedir abrir el chat.
+ */
+export async function quienEscribe(jid, nombre = INSTANCIA) {
+  const r = await pedir(`/chat/presence/${nombre}?jid=${encodeURIComponent(jid)}`, { esperaMs: 5000 });
+  return r.ok ? (r.datos?.escribiendo || null) : null;
+}
+
+/** La agenda de esa sesion: contactos y nombres de grupo. */
+export async function agenda(nombre = INSTANCIA) {
+  const r = await pedir(`/agenda?instancia=${encodeURIComponent(nombre)}`, { esperaMs: 10000 });
+  return r.ok ? (r.datos?.contactos || []) : [];
 }
 
 /** Que numero esta conectado ahora mismo. */

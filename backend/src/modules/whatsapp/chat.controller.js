@@ -99,10 +99,16 @@ export async function chat(req, res, next) {
       ...m,
       media_firma: m.media_url ? firma.firma(m.id) : null,
     }));
+    // Quien esta escribiendo viaja con el hilo: la pantalla ya lo pide cada
+    // pocos segundos, asi que no hace falta otra ronda de peticiones.
+    const escribiendo = evolution.configurado()
+      ? await evolution.quienEscribe(conv.jid, conv.instancia).catch(() => null)
+      : null;
+
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
     await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
-    res.json({ success: true, data: { conversacion: conv, mensajes: msgs } });
+    res.json({ success: true, data: { conversacion: conv, mensajes: msgs, escribiendo } });
   } catch (err) { next(err); }
 }
 
@@ -113,8 +119,15 @@ export async function enviar(req, res, next) {
     if (!texto) throw new AppError('El mensaje esta vacio', 400, 'VACIO');
     if (texto.length > 4000) throw new AppError('El mensaje es demasiado largo', 400, 'MUY_LARGO');
     const conv = await miConversacion(req, parseInt(req.params.id));
+    // A que mensaje se responde. Se comprueba que es de ESTA conversacion: sin
+    // eso se podria citar el mensaje de otra persona en un chat ajeno.
+    let citarWaId = null;
+    if (req.body?.citarId) {
+      const original = await model.mensajePorId(parseInt(req.body.citarId));
+      if (original && original.jid === conv.jid) citarWaId = original.wa_id;
+    }
     const fila = await servicio.enviar({
-      conversacionId: conv.id, texto, usuarioId: req.user.userId,
+      conversacionId: conv.id, texto, usuarioId: req.user.userId, citarWaId,
     });
     res.status(201).json({ success: true, data: fila });
   } catch (err) { next(err); }
@@ -345,10 +358,49 @@ export async function desconectar(req, res, next) {
   try {
     // Cada uno desvincula el suyo. Un administrador no necesita poder tirar la
     // sesion de otro desde aqui: eso es el WhatsApp personal de esa persona.
-    const r = await evolution.cerrarSesion(await instanciaObjetivo(req));
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.cerrarSesion(instancia);
     if (!r.ok) throw new AppError('No se pudo cerrar la sesion en WhatsApp', 502, 'SIN_CERRAR');
-    res.json({ success: true, data: { cerrada: true } });
+
+    // Y lo guardado en el CRM, solo si se pide.
+    //
+    // Nunca por defecto: son conversaciones con clientes y borrarlas de mas es
+    // irreversible. Pero tampoco se puede no ofrecerlo — desvincular y volver a
+    // enlazar «desde cero» devolvia los chats de siempre, porque «cero» era
+    // cero para WhatsApp y no para la base.
+    let borradas = null;
+    if (req.body?.borrarConversaciones === true) {
+      const { conversaciones, archivos } = await model.borrarConversaciones(instancia);
+      // Los ficheros tambien: si no, quedan adjuntos de conversaciones que ya
+      // no existen ocupando disco y sin forma de llegar a ellos.
+      const { deleteLocal } = await import('../../shared/services/localStorage.service.js');
+      let ficheros = 0;
+      for (const ruta of archivos) {
+        try { await deleteLocal(ruta); ficheros++; } catch { /* ya no estaba */ }
+      }
+      borradas = { conversaciones, ficheros };
+      logger.info({ instancia, ...borradas }, 'WhatsApp: conversaciones borradas al desvincular');
+    }
+    res.json({ success: true, data: { cerrada: true, borradas } });
   } catch (err) { next(err); }
+}
+
+// Cuando se refrescaron por ultima vez los nombres de cada sesion.
+const nombresRefrescados = new Map();
+const CADA_CUANTO_NOMBRES = 15 * 60 * 1000;
+
+async function refrescarNombresSiToca(instancia) {
+  const ultima = nombresRefrescados.get(instancia) || 0;
+  if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
+  nombresRefrescados.set(instancia, Date.now());
+  const contactos = await evolution.agenda(instancia);
+  const pares = (contactos || [])
+    .filter((c) => c?.jid && c?.nombre)
+    .map((c) => ({ jid: c.jid, nombre: String(c.nombre) }));
+  const puestos = await model.refrescarNombres(instancia, pares);
+  if (puestos) {
+    logger.info({ instancia, puestos, deLaAgenda: pares.length }, 'WhatsApp: nombres puestos al dia');
+  }
 }
 
 // GET /api/whatsapp/conexion — ¿esta emparejado el numero?
@@ -364,6 +416,25 @@ export async function conexion(req, res, next) {
     // encontraba, y con varias sesiones eso es ensenar el numero de otro.
     const mia = lista.find((i) => (i?.name || i?.instance?.instanceName) === instancia) || null;
     const crudo = est.datos?.instance?.state || est.datos?.state || null;
+
+    // Aprovechando que aqui se sabe quien eres, se quita tu nombre de las
+    // conversaciones de otros. Es barato —una consulta que casi siempre no
+    // toca nada— y arregla lo que quedo mal antes del cerrojo.
+    const miNumero = mia?.ownerJid?.split('@')[0] || mia?.number || null;
+    if (crudo === 'open' && mia?.profileName) {
+      const limpiadas = await model.limpiarNombrePropio(instancia, mia.profileName, miNumero)
+        .catch(() => 0);
+      if (limpiadas) {
+        logger.info({ instancia, limpiadas }, 'WhatsApp: quitado el nombre propio de conversaciones ajenas');
+      }
+      // Y se ponen al dia los nombres desde la agenda de WhatsApp, que es la
+      // fuente buena: tus contactos y los nombres REALES de los grupos.
+      //
+      // De vez en cuando, no en cada consulta: la pantalla pregunta por la
+      // conexion cada treinta segundos y traerse la agenda entera cada vez
+      // seria absurdo. Un cuarto de hora basta — los nombres no cambian tanto.
+      await refrescarNombresSiToca(instancia).catch(() => {});
+    }
     res.json({ success: true, data: {
       configurado: true,
       instancia,

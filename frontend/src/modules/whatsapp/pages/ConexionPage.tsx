@@ -38,6 +38,12 @@ export default function ConexionPage() {
   // todo. Ademas hay navegadores que las bloquean y la accion se perdia sin que
   // nadie se enterase.
   const [confirmando, setConfirmando] = useState(false);
+  // Al desvincular, ¿se borra tambien lo guardado en el CRM?
+  //
+  // Por defecto NO: son conversaciones con clientes y eso no se deshace. Pero
+  // hay que ofrecerlo — desvincular y volver a enlazar «desde cero» devolvia
+  // los chats de siempre, porque «cero» era cero para WhatsApp, no para la base.
+  const [borrarTodo, setBorrarTodo] = useState(false);
   // Cuanto historial traer. Por defecto lo rapido: con «todo», un numero de
   // anos manda decenas de miles de mensajes por tandas y la pantalla tarda un
   // buen rato en estar usable, que es justo la queja de siempre.
@@ -143,13 +149,20 @@ export default function ConexionPage() {
     setConfirmando(false);
     setCerrando(true);
     try {
-      const r = await client.post('/whatsapp/desconectar', { usuarioId: deQuien });
+      const r = await client.post('/whatsapp/desconectar', { usuarioId: deQuien, borrarConversaciones: borrarTodo });
       // Si ya no habia sesion, el resultado es el que se buscaba: no es un
       // fallo que haya que enseñar en rojo.
       if (!r.success && !/no.*sesion|sin sesion|not.*connect/i.test(r.error || '')) {
         throw new Error(r.error || 'No se pudo desconectar');
       }
-      toast({ title: 'Numero desvinculado', description: 'Ya no aparece en «Dispositivos vinculados» del movil.' });
+      const borradas = r.data?.borradas;
+      toast({
+        title: 'Numero desvinculado',
+        description: borradas
+          ? `Ya no aparece en «Dispositivos vinculados». Borradas ${borradas.conversaciones} conversaciones y ${borradas.ficheros} archivos.`
+          : 'Ya no aparece en «Dispositivos vinculados» del movil. Las conversaciones guardadas siguen aqui.',
+      });
+      setBorrarTodo(false);
       setQr(null);
       await mirar();
     } catch (e) {
@@ -160,11 +173,15 @@ export default function ConexionPage() {
   const conectado = estado?.conectado;
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4">
       <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-start gap-3">
+        {/* Se parte en dos filas cuando no cabe. Antes era una sola fila con el
+            titulo, el selector y dos botones: en un telefono el titulo se
+            quedaba con dos centimetros y salia una palabra por linea. El ancho
+            minimo del bloque de texto es lo que fuerza a los botones a bajar. */}
+        <div className="flex flex-wrap items-start gap-3">
           <WhatsappLogo size={32} weight="duotone" className="text-emerald-600 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-[220px]">
             <h1 className="text-lg font-bold">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}
             </h1>
@@ -174,11 +191,17 @@ export default function ConexionPage() {
                 : `Estas enlazando el numero de ${sesion.nombre}. Necesitas su movil delante para meter el codigo.`}
             </p>
           </div>
-          <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
-          <button type="button" onClick={mirar} title="Comprobar ahora"
-            className="p-2 rounded-md hover:bg-muted text-muted-foreground">
-            <ArrowClockwise size={16} />
-          </button>
+          <div className="flex items-center gap-1 ml-auto shrink-0">
+            <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
+            <Link to="/whatsapp/ayuda" title="Como se usa"
+              className="p-2 rounded-md hover:bg-muted text-muted-foreground text-xs font-medium whitespace-nowrap">
+              ¿Como se hace?
+            </Link>
+            <button type="button" onClick={mirar} title="Comprobar ahora"
+              className="p-2 rounded-md hover:bg-muted text-muted-foreground">
+              <ArrowClockwise size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex items-center gap-2 text-sm">
@@ -207,6 +230,9 @@ export default function ConexionPage() {
           )}
         </div>
 
+        {/* En pantalla ancha, el aviso y las opciones van uno al lado del otro:
+            apilados dejaban media pantalla vacia a la derecha. */}
+        <div className="grid lg:grid-cols-2 gap-4 items-start">
         {estado?.configurado && !conectado && !qr && (
           <div className="mt-4 border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
             <p className="font-semibold text-amber-900 dark:text-amber-200 mb-2 text-sm">
@@ -290,6 +316,7 @@ export default function ConexionPage() {
             </div>
           </div>
         )}
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           {estado?.configurado && !conectado && (
@@ -366,6 +393,29 @@ export default function ConexionPage() {
         </div>
       )}
 
+      {/* El aviso, para releerlo cuando ya se enlazo.
+          Antes solo se pintaba sin sesion: en cuanto enlazabas desaparecia y no
+          habia forma de volver a ver lo que habias aceptado. Es la tercera
+          casilla del punto 1 de la tarea #45. */}
+      {conectado && (
+        <details className="bg-card border border-border rounded-lg text-sm">
+          <summary className="px-4 py-3 cursor-pointer font-semibold select-none">
+            Lo que aceptaste al enlazar
+          </summary>
+          <ul className="px-4 pb-4 text-muted-foreground space-y-1.5 leading-relaxed">
+            <li>· El numero queda vinculado al CRM. Esta <strong className="text-foreground">no es la
+                via oficial de WhatsApp</strong> y WhatsApp puede bloquearlo.</li>
+            <li>· Mejor un <strong className="text-foreground">numero de empresa, nunca el personal</strong>.
+                Si lo bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
+            <li>· Las conversaciones <strong className="text-foreground">se guardan en la base del CRM</strong>,
+                en el servidor de la empresa. Los demas del equipo no las ven, pero la
+                administracion si puede.</li>
+            <li>· Se puede <strong className="text-foreground">desvincular cuando se quiera</strong>, desde
+                aqui o desde Dispositivos vinculados en el movil.</li>
+          </ul>
+        </details>
+      )}
+
       {confirmando && (
         <div className="wa-velo" onClick={() => setConfirmando(false)}>
           <div className="wa-panel" onClick={(e) => e.stopPropagation()}>
@@ -386,25 +436,47 @@ export default function ConexionPage() {
                 volver a enlazar cuando quieras.
               </p>
             </div>
+            <div className="wa-panel-cuerpo" style={{ paddingTop: 0 }}>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={borrarTodo} className="mt-0.5"
+                  onChange={(e) => setBorrarTodo(e.target.checked)} />
+                <span className="wa-panel-nota">
+                  <strong>Borrar tambien las conversaciones guardadas</strong> y sus archivos.
+                  Empiezas limpio la proxima vez que enlaces. <strong>Esto no se puede deshacer.</strong>
+                </span>
+              </label>
+            </div>
             <div className="wa-panel-pie">
               <button type="button" onClick={() => setConfirmando(false)} className="wa-btn-suave">Cancelar</button>
-              <button type="button" onClick={desconectar} className="wa-btn-rojo">Desvincular</button>
+              <button type="button" onClick={desconectar} className="wa-btn-rojo">
+                {borrarTodo ? 'Desvincular y borrar' : 'Desvincular'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* No es burocracia: es tu linea, y si WhatsApp la suspende pierdes
-          tambien tus conversaciones personales. */}
-      <div className="border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 text-sm">
-        <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">Antes de enlazar</p>
-        <ul className="text-amber-800 dark:text-amber-300/90 space-y-1 leading-relaxed">
-          <li>· Mejor un numero <strong>de trabajo</strong>. Al enlazar se descarga a la base del CRM lo que ese movil tenga guardado — solo lo ves tu, pero queda en el servidor de la empresa.</li>
-          <li>· Es <strong>tu sesion</strong>: nadie mas del equipo ve estas conversaciones, ni un administrador desde esta pantalla.</li>
-          <li>· El CRM se niega a escribir a quien no dejo su telefono en un formulario. Es lo que evita los bloqueos.</li>
-          <li>· Si alguien pide que no le escribas, marcalo en el chat y no se le vuelve a escribir.</li>
-          <li>· Los topes de ritmo son <strong>por numero</strong>: lo que mande un companero no te frena a ti.</li>
+      {/* Este recuadro NO repite el aviso de arriba.
+          Arriba va lo que se acepta al enlazar; aqui, como trabajar con ello sin
+          que te bloqueen. Estaban diciendo casi lo mismo, en amarillo los dos, y
+          leidos seguidos no se distinguian. */}
+      <div className="border border-border bg-card rounded-lg p-5 text-sm">
+        <p className="font-semibold mb-2">Como no acabar bloqueado</p>
+        <ul className="text-muted-foreground space-y-1.5 leading-relaxed">
+          <li>· <strong className="text-foreground">No escribas a quien no dejo su telefono</strong> en un
+              formulario nuestro. Es lo que hace que la gente reporte un numero, y los reportes son
+              lo que hace que lo suspendan. El CRM ya se niega — no le busques la vuelta.</li>
+          <li>· <strong className="text-foreground">Nada de envios masivos</strong> ni el mismo mensaje en
+              cadena. Hay topes: 6 por minuto, 60 por hora, 300 al dia. Son por numero, asi que lo
+              que mande un companero no te frena a ti.</li>
+          <li>· Si alguien pide que no le escribas, <strong className="text-foreground">marcalo en el
+              chat</strong>. No se le envia nada mas, ni con plantilla.</li>
+          <li>· Si se desconecta —pasa, sobre todo con el movil sin cobertura—, vuelve aqui y enlaza
+              otra vez. Lo guardado no se pierde.</li>
         </ul>
+        <Link to="/whatsapp/ayuda" className="text-primary hover:underline font-medium mt-3 inline-block">
+          Ver la guia completa →
+        </Link>
       </div>
     </div>
   );

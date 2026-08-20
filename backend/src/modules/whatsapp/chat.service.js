@@ -117,17 +117,20 @@ async function permitirEnvio(conversacionId) {
 const numeroDe = (conv) => String(conv.jid).split('@')[0];
 
 /** Manda un texto. */
-export async function enviar({ conversacionId, texto, usuarioId }) {
+export async function enviar({ conversacionId, texto, usuarioId, citarWaId = null }) {
   const conv = await permitirEnvio(conversacionId);
 
   // «Escribiendo…» antes de soltar el mensaje. No es adorno: un numero que
   // contesta al instante y sin escribir parece exactamente lo que es.
   await evolution.presencia(numeroDe(conv), 'composing', conv.instancia).catch(() => {});
 
-  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia);
+  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia, citarWaId);
   const fila = await model.guardarMensaje({
     conversacionId, waId: r.waId, direccion: 'saliente', tipo: 'texto',
     texto, estado: r.ok ? 'enviado' : 'fallido', enviadoPor: usuarioId, ts: new Date(),
+    // Se guarda tambien de nuestro lado: si no, la cita solo se veria en el
+    // movil del otro y aqui el mensaje saldria suelto.
+    respondeA: citarWaId || null,
   });
   if (!r.ok) {
     logger.error({ conversacionId, error: r.error }, 'WhatsApp: no se pudo enviar');
@@ -265,6 +268,8 @@ export async function recibir(cuerpo) {
     mediaMime: m.audioMessage?.mimetype || m.imageMessage?.mimetype
       || m.videoMessage?.mimetype || m.documentMessage?.mimetype || null,
     nombreArchivo: m.documentMessage?.fileName || null,
+    // A que mensaje responde, si responde a alguno. Lo manda el puente.
+    respondeA: datos?.respondeA || null,
     // messageTimestamp viene en segundos.
     ts: datos?.messageTimestamp ? new Date(Number(datos.messageTimestamp) * 1000) : new Date(),
   });
