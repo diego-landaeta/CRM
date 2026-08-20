@@ -996,12 +996,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
                 >
                   {(() => {
-                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al final).
+                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
+                    // final) y, dentro de cada una, por antiguedad.
+                    //
+                    // Antes iba por orden alfabetico y eso mezclaba las marcas
+                    // con las que se trabaja todos los dias con las que aun no
+                    // tienen ni web: ISEIH quedaba la quinta, detras de ISAEG,
+                    // ISECD e ISEF. Por antiguedad, lo que mas se usa queda
+                    // arriba, que es donde se busca sin leer.
                     const sorted = [...projects].sort((a, b) => {
                       const sA = a.sociedad_nombre || 'zzz';
                       const sB = b.sociedad_nombre || 'zzz';
                       if (sA !== sB) return sA.localeCompare(sB, 'es');
-                      return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+                      return (a.id || 0) - (b.id || 0);
                     });
                     const allEntry = projects.length > 1 ? (
                       <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
