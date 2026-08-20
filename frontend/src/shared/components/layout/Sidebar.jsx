@@ -909,16 +909,30 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* Logo + toggle */}
+      {/* La cabecera: el logo de la marca en la que se esta trabajando y su
+          nombre debajo del producto. Antes habia un cubo generico igual para
+          todas, y con nueve marcas el sitio donde estas es lo primero que hay
+          que saber al entrar — sobre todo antes de tocar dinero. */}
       <div className={cn('flex items-center mb-6', collapsed ? 'flex-col gap-2' : 'gap-2.5 px-2')}>
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0">
-          <Package size={16} weight="bold" />
-        </div>
+        {activeProject && activeProject.id !== -1 ? (
+          <ProjectAvatar project={activeProject} size="md" />
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0">
+            <Package size={16} weight="bold" />
+          </div>
+        )}
         {!collapsed && (
           <>
-            <span className="font-semibold text-sm text-foreground flex-1">MultiCRM</span>
+            <span className="flex-1 min-w-0 leading-tight">
+              <span className="block font-semibold text-sm text-foreground truncate">MultiCRM</span>
+              <span className="block text-[11px] text-muted-foreground truncate">
+                {activeProject?.id === -1
+                  ? 'todas las marcas'
+                  : (activeProject?.nombre || 'sin marca elegida')}
+              </span>
+            </span>
             {BETA_MODE && (
-              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
                 BETA {BETA_VERSION}
               </span>
             )}

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect } from 'react';
+import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { useAuth } from './AuthContext';
 import { hexToHslTriplet } from '@/shared/lib/color';
 
@@ -66,7 +67,14 @@ export function ProjectProvider({ children }) {
   // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
   useEffect(() => {
     // El title lo construye App.jsx (ruta + proyecto + MultiCRM) — aquí solo favicon.
-    if (activeProject?.logo_url) {
+    // El logo local del repositorio cuenta como logo: ISEIH, Psiko y Fono no
+    // tienen logo_url —el suyo viene con la aplicacion— y por eso la pestaña
+    // del navegador les enseñaba el icono generico mientras el menu si mostraba
+    // su marca. Dos iconos distintos para la misma pantalla.
+    const local = getLocalLogo(activeProject?.slug, 'light');
+    if (!activeProject?.logo_url && local) {
+      setFavicon(local, DEFAULT_FAVICON);
+    } else if (activeProject?.logo_url) {
       // El logo puede ser una direccion de la web del proyecto o un fichero
       // subido al CRM. En el primer caso se usa tal cual; en el segundo hay que
       // pasar por el endpoint, con la base delante —si no, en /crm o /testeo se
