@@ -94,10 +94,12 @@ const NAV_SECTIONS = [
         module: 'whatsapp',
         apagable: 'whatsapp',
         children: [
+          // Un solo sitio: el Chat. «Mi WhatsApp» y el panel del equipo eran del
+          // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
+          // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
           // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
-          { label: 'Mi WhatsApp', to: '/whatsapp', icon: WhatsappLogo },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
@@ -105,7 +107,6 @@ const NAV_SECTIONS = [
           // retirado. La pantalla sigue existiendo pero llamaria a un servicio
           // que ya no corre, asi que ensenaria un error. Vuelve cuando se
           // rehaga con el chat nuevo, que ya guarda las conversaciones.
-          // { label: 'WhatsApp del equipo', to: '/whatsapp/equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.

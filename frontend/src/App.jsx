@@ -5,7 +5,7 @@ import { useProjectContext } from './contexts/ProjectContext';
 const ROUTE_TITLES = {
   '/': 'Dashboard',
   '/prospectos': 'Prospectos',
-  '/whatsapp': 'WhatsApp',
+  '/whatsapp': 'Chat de WhatsApp',
   '/whatsapp/chat': 'Chat de WhatsApp',
   '/whatsapp/conexion': 'Conexion de WhatsApp',
   '/prospectos/pipeline': 'Pipeline',
@@ -146,12 +146,12 @@ const IntegrationsPage = lazy(() => import('./modules/accounting/pages/Integrati
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
-const WhatsappPage = lazy(() => import('./modules/whatsapp/pages/WhatsappPage'));
-const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
-const EquipoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/EquipoPage'));
-// El chat de verdad: las conversaciones viven en el CRM, no en un navegador remoto.
+// Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
+// plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
+// navegador remoto— y se han retirado con el.
 const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
 const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
+const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
@@ -238,11 +238,10 @@ function App() {
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
 
-          <Route path="/whatsapp" element={<WhatsappPage />} />
+          <Route path="/whatsapp" element={<ChatWhatsappPage />} />
           <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
           <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
-          <Route path="/whatsapp/equipo" element={<EquipoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />

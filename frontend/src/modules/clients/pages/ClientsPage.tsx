@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, lazy, Suspense, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
@@ -108,14 +109,32 @@ interface QuickActionsProps {
 }
 
 function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
+  const navigate = useNavigate();
   const wa = c.telefono ? cleanPhone(c.telefono) : null;
+
+  // Se abre el chat DENTRO del CRM. Antes esto lanzaba wa.me en otra pestaña:
+  // se salia del CRM, no quedaba registro, y con varias sesiones enlazadas
+  // abria la del navegador —que puede ser la personal— en vez de la del CRM.
+  async function abrirAqui() {
+    const destino = await abrirChatCrm({ leadId: c.id, telefono: c.telefono });
+    if (!destino) {
+      toast({
+        title: 'No se ha podido abrir el chat',
+        description: 'Comprueba en WhatsApp / Conexion que tu numero sigue enlazado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    navigate(destino);
+  }
+
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Abrir WhatsApp"
+        <button type="button" onClick={() => abrirAqui()} title="WhatsApp" aria-label="Abrir WhatsApp"
           className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <WhatsappLogo size={14} weight="regular" />
-        </a>
+        </button>
       )}
       {c.email && (
         <a href={`mailto:${c.email}`} title="Email" aria-label="Enviar email"
