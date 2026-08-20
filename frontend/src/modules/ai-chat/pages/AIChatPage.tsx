@@ -35,7 +35,7 @@ export default function AIChatPage() {
               Mientras tanto, los reportes generados con Claude AI ya están disponibles para proyectos IA.
             </p>
             <Link
-              to="/reports/ia"
+              to="/informes/ia"
               className="inline-block mt-2 text-xs text-primary font-medium hover:underline"
             >
               Ver Análisis IA →
@@ -53,7 +53,7 @@ export default function AIChatPage() {
               Las métricas y dashboards tradicionales del CRM siguen activos.
             </p>
             <Link
-              to="/reports"
+              to="/informes"
               className="inline-block mt-2 text-xs text-primary font-medium hover:underline"
             >
               Ver Reportes →

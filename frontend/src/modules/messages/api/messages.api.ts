@@ -32,47 +32,47 @@ export interface AvailableUser {
 }
 
 export function getConversations(page = 1, limit = 20) {
-  return client.get(`/messages/conversations?page=${page}&limit=${limit}`);
+  return client.get(`/mensajes/conversations?page=${page}&limit=${limit}`);
 }
 
 export function getUnreadCount() {
-  return client.get('/messages/conversations/unread-count');
+  return client.get('/mensajes/conversations/unread-count');
 }
 
 export function createConversation(participantId: number, leadId?: number) {
-  return client.post('/messages/conversations', { participantId, leadId });
+  return client.post('/mensajes/conversations', { participantId, leadId });
 }
 
 export function getMessages(conversationId: number, page = 1, limit = 50, after?: number) {
-  let url = `/messages/conversations/${conversationId}/messages?page=${page}&limit=${limit}`;
+  let url = `/mensajes/conversations/${conversationId}/messages?page=${page}&limit=${limit}`;
   if (after) url += `&after=${after}`;
   return client.get(url);
 }
 
 export function sendMessage(conversationId: number, body: string, referencedLeadId?: number) {
-  return client.post(`/messages/conversations/${conversationId}/messages`, { body, referencedLeadId });
+  return client.post(`/mensajes/conversations/${conversationId}/messages`, { body, referencedLeadId });
 }
 
 export function markConversationRead(conversationId: number) {
-  return client.patch(`/messages/conversations/${conversationId}/read`);
+  return client.patch(`/mensajes/conversations/${conversationId}/read`);
 }
 
 export function postTyping(conversationId: number) {
-  return client.post(`/messages/conversations/${conversationId}/typing`);
+  return client.post(`/mensajes/conversations/${conversationId}/typing`);
 }
 
 export function getTypingStatus(conversationId: number) {
-  return client.get(`/messages/conversations/${conversationId}/typing`);
+  return client.get(`/mensajes/conversations/${conversationId}/typing`);
 }
 
 export function deleteMessage(msgId: number) {
-  return client.delete(`/messages/messages/${msgId}`);
+  return client.delete(`/mensajes/messages/${msgId}`);
 }
 
 export function getOnlineUsers() {
-  return client.get('/messages/users/online');
+  return client.get('/mensajes/users/online');
 }
 
 export function getAvailableUsers(search = '') {
-  return client.get(`/messages/users/available?search=${encodeURIComponent(search)}`);
+  return client.get(`/mensajes/users/available?search=${encodeURIComponent(search)}`);
 }

@@ -121,7 +121,7 @@ const NAV_SECTIONS = [
   {
     label: 'Captación',
     items: [
-      { label: 'Email', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
+      { label: 'Email', to: '/secuencias-email', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
       { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
@@ -177,9 +177,9 @@ const NAV_SECTIONS = [
   {
     label: 'Análisis',
     items: [
-      { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
-      { label: 'Análisis IA', to: '/reports/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/ai-chat', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      { label: 'Reportes', to: '/informes', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+      { label: 'Análisis IA', to: '/informes/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Chat IA', to: '/chat-ia', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -194,11 +194,11 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
-      { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
+      { label: 'Mensajes', to: '/mensajes', icon: ChatsCircle },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
+      { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
@@ -251,7 +251,7 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferences'].includes(item.to);
+    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
   }
 
   // soporte ve todo (rol generico tipo dev)
@@ -874,7 +874,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     let cancelled = false;
     async function fetchMsgCount() {
       try {
-        const res = await client.get('/messages/conversations/unread-count');
+        const res = await client.get('/mensajes/conversations/unread-count');
         if (!cancelled && res.success) setMsgUnreadBadge(res.data?.count || 0);
       } catch {}
     }
@@ -1144,7 +1144,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 badge={
                   item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                   : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
-                  : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
+                  : item.to === '/mensajes' && msgUnreadBadge > 0 ? msgUnreadBadge
                   : undefined
                 }
                 labelOverrides={activeProject?.sidebar_labels}
@@ -1265,13 +1265,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 <UserMenuItem
                   icon={UserCircle}
                   label="Mi perfil"
-                  onClick={() => { setUserMenuOpen(false); navigate('/profile'); onNavigate?.(); }}
+                  onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
                   <UserMenuItem
                     icon={Gear}
                     label="Configuración"
-                    onClick={() => { setUserMenuOpen(false); navigate('/settings'); onNavigate?.(); }}
+                    onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
                 <UserMenuItem

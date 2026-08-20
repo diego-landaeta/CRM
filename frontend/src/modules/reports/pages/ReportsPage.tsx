@@ -108,7 +108,7 @@ export default function ReportsPage() {
       try {
         const params = { ...(activeProject?.id ? { projectId: activeProject.id } : {}), from: range.from, to: range.to };
         const qs = new URLSearchParams(params).toString();
-        const res = await client.get(`/reports/overview?${qs}`);
+        const res = await client.get(`/informes/overview?${qs}`);
         if (res.success) setData(res.data);
       } catch (err) {
         toast({ title: 'Error cargando reportes', description: err?.data?.error || err.message, variant: 'destructive' });

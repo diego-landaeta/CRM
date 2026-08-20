@@ -42,18 +42,18 @@ const ROUTE_TITLES = {
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
   '/notificaciones': 'Notificaciones',
-  '/email-sequences': 'Email seguimiento',
+  '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
   '/configuracion/documentos': 'Numeración de documentos',
-  '/configuracion/email-templates': 'Plantillas de email',
-  '/reports': 'Reportes',
-  '/messages': 'Mensajes',
+  '/configuracion/plantillas-email': 'Plantillas de email',
+  '/informes': 'Reportes',
+  '/mensajes': 'Mensajes',
   '/manual': 'Manual',
-  '/settings': 'Configuración',
-  '/profile': 'Mi perfil',
+  '/configuracion': 'Configuración',
+  '/perfil': 'Mi perfil',
   '/dev/components': 'Catálogo UI',
   '/prueba_ui': 'Laboratorio UI',
   '/prueba_ui_leads': 'Prueba UI Prospectos',
@@ -233,7 +233,7 @@ function App() {
             <Route index element={<ClientsPage />} />
             <Route path="matriculas" element={<MatriculasPage />} />
           </Route>
-          <Route path="/sales" element={<SalesPage />} />
+          <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
@@ -295,7 +295,7 @@ function App() {
             <Route path="facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           </Route>
 
-          <Route path="/email-sequences" element={<EmailSequencesPage />} />
+          <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
@@ -303,22 +303,22 @@ function App() {
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
-          <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/reports/ia" element={<ReportsIAPage />} />
-          <Route path="/ai-chat" element={<AIChatPage />} />
+          <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
+          <Route path="/informes" element={<ReportsPage />} />
+          <Route path="/informes/ia" element={<ReportsIAPage />} />
+          <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/mensajes" element={<MessagesPage />} />
           <Route path="/solicitudes-cambio" element={<ChangeRequestsPage />} />
           <Route path="/solicitudes-cambio/:id" element={<ChangeRequestDetailPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
-          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/preferencias" element={<PreferencesPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/configuracion" element={<SettingsPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
           {UI_PREVIEW_ENABLED && (
             <>
               <Route path="/prueba_ui" element={<UiPreviewHomePage />} />
@@ -334,6 +334,21 @@ function App() {
             <Route path="/dev/components" element={<DevComponentsPage />} />
           )}
           {/* Catch-all 404 dentro del layout (mantiene sidebar y header) */}
+
+          {/* Las direcciones de antes, en ingles, siguen funcionando.
+              Sin esto se rompen los favoritos de todo el equipo y los enlaces
+              que haya en correos ya enviados: quien pulse uno veria «pagina no
+              encontrada» y pensaria que el CRM esta roto. */}
+          <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
+          <Route path="/reports/ia" element={<Navigate to="/informes/ia" replace />} />
+          <Route path="/reports" element={<Navigate to="/informes" replace />} />
+          <Route path="/sales" element={<Navigate to="/ventas" replace />} />
+          <Route path="/profile" element={<Navigate to="/perfil" replace />} />
+          <Route path="/preferences" element={<Navigate to="/preferencias" replace />} />
+          <Route path="/messages" element={<Navigate to="/mensajes" replace />} />
+          <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
+          <Route path="/ai-chat" element={<Navigate to="/chat-ia" replace />} />
+          <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
