@@ -542,58 +542,49 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
   );
 }
 
+// Las iniciales con las que se reconoce una marca sin logo.
+//
+// Casi todas empiezan por «IS» —ISECD, ISEF, ISSLOGG, ISAEG, ISEIH—, asi que
+// coger las dos primeras letras las deja a todas igual: «IS, IS, IS». Se quita
+// ese prefijo comun y se cogen las dos siguientes: EC, EF, SL, AE, EI. Cada una
+// distinta, y siguen siendo su nombre.
+function inicialesDe(nombre = '') {
+  const limpio = String(nombre).trim();
+  if (!limpio) return '··';
+  const palabras = limpio.split(/\s+/).filter(Boolean);
+  if (palabras.length > 1) {
+    return (palabras[0][0] + palabras[1][0]).toUpperCase();
+  }
+  const sola = palabras[0].toUpperCase();
+  const sinPrefijo = sola.length > 4 && sola.startsWith('IS') ? sola.slice(2) : sola;
+  return sinPrefijo.slice(0, 2);
+}
+
+// El color sale del propio nombre, siempre el mismo para la misma marca. Asi
+// ISECD es verde hoy y verde mañana: la memoria visual funciona porque el color
+// no cambia, no porque sea bonito.
+const TONOS = [
+  'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
+  'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
+];
+function tonoDe(nombre = '') {
+  let n = 0;
+  for (const ch of String(nombre)) n = (n * 31 + ch.charCodeAt(0)) % 9973;
+  return TONOS[n % TONOS.length];
+}
+
 function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
-  const dim = size === 'sm' ? 'w-7 h-7 text-base' : 'w-8 h-8 text-lg';
+  const [falloImagen, setFalloImagen] = useState(false);
+  const dim = size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
 
-  // 1) logo_url configurado en DB. Si es URL externa la usa directo;
-  //    si es solo un flag (sistema antiguo de upload), usa el endpoint API.
-  if (project?.logo_url) {
-    const isExternalUrl = /^https?:\/\//i.test(project.logo_url);
-    const src = isExternalUrl
-      ? project.logo_url
-      : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`;
-    return (
-      <img
-        src={src}
-        alt=""
-        width={24}
-        height={24}
-        loading="lazy"
-        decoding="async"
-        className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-
-  // 2) logo local segun slug (con variante por tema)
-  const localSrc = getLocalLogo(project?.slug, theme);
-  if (localSrc) {
-    return (
-      <img
-        src={localSrc}
-        alt={project.nombre || ''}
-        width={24}
-        height={24}
-        loading="lazy"
-        decoding="async"
-        className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-
-  // 3) emoji fallback
-  if (project?.emoji) {
-    return (
-      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0`}>
-        {project.emoji}
-      </div>
-    );
-  }
-
-  // 4) Caso especial "Todos los proyectos"
+  // «Todos los proyectos» va primero: no es una marca, es una vista.
   if (project?.isAll) {
     return (
       <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
@@ -602,12 +593,53 @@ function ProjectAvatar({ project, size = 'md' }) {
     );
   }
 
-  // 5) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
-  //    ni logo subido, ni logo local por slug, ni emoji). Antes se mostraba un
-  //    rectángulo vacío feo.
+  const externo = project?.logo_url && /^https?:\/\//i.test(project.logo_url);
+  const src = project?.logo_url
+    ? (externo
+        ? project.logo_url
+        : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`)
+    : getLocalLogo(project?.slug, theme);
+
+  if (src && !falloImagen) {
+    return (
+      // Fondo claro SIEMPRE, tambien en modo oscuro: estos logos vienen de las
+      // webs y muchos son de tinta oscura sobre transparente. Sin el fondo
+      // desaparecen en el panel oscuro y queda un cuadro vacio.
+      <span className={`${dim} rounded-lg bg-white ring-1 ring-black/5 dark:ring-white/10 flex items-center justify-center overflow-hidden flex-shrink-0`}>
+        <img
+          src={src}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-contain p-[3px]"
+          // Si el logo no carga —una web caida, una direccion cambiada— se
+          // enseñan las iniciales. Antes se escondia la imagen y quedaba un
+          // hueco, que parece que la pantalla esta rota.
+          onError={() => setFalloImagen(true)}
+        />
+      </span>
+    );
+  }
+
+  if (project?.emoji) {
+    return (
+      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'sm' ? 'text-base' : 'text-lg'}`}>
+        {project.emoji}
+      </div>
+    );
+  }
+
+  // Sin logo y sin emoji: iniciales con su color. Antes las tres marcas sin
+  // logo compartian el mismo icono de cajita y no habia forma de distinguirlas
+  // de un vistazo, que es justo para lo que sirve un icono.
   return (
-    <div className={`${dim} rounded-lg bg-primary/15 text-primary flex items-center justify-center flex-shrink-0`}>
-      <Package size={size === 'sm' ? 14 : 16} weight="duotone" />
+    <div
+      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
+      title={project?.nombre || ''}
+    >
+      {inicialesDe(project?.nombre)}
     </div>
   );
 }
