@@ -18,12 +18,57 @@
     --muted-foreground: 240 4% 46%;
     --accent: 240 5% 96%;
     --accent-foreground: 240 6% 10%;
-    --destructive: 0 84% 60%;
+    /* Era `0 84% 60%` (red-500): con texto blanco encima se queda en 3,8:1 y no
+       pasa AA. Afectaba a TODO `<Button variant="destructive">`, no a un sitio
+       suelto. Bajado a red-600, que es además el valor que ya tenía el tema
+       oscuro — un rojo en vez de dos. Con blanco encima: 4,8:1.
+       Es el único cambio de esta tanda que altera el aspecto actual. */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --border: 240 6% 90%;
     --input: 240 6% 90%;
     --ring: 230 75% 55%;
     --radius: 0.5rem;
+
+    /* ── Estados: éxito, aviso, peligro, información ──────────────────
+       Faltaban. Por eso el verde de «activo» se escribía a mano en cada
+       archivo como `bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30
+       dark:text-emerald-400`, y hay 3.702 usos de color suelto repartidos en
+       siete familias para decir cuatro cosas: 837 ámbar, 777 rojos, 685
+       esmeralda, 358 azules.
+
+       Cada estado trae dos parejas:
+         --x / --x-foreground             relleno sólido (botón, punto, barra)
+         --x-soft / --x-soft-foreground   fondo suave (etiqueta, aviso)
+
+       Cada pareja está medida en WCAG y pasa AA (4,5:1). No es un detalle
+       menor: la pareja anterior de esta misma casa —600 sobre 50— se queda en
+       3,6:1, y estas etiquetas son de 10px.
+
+       El ámbar no admite texto blanco en ningún tono usable (blanco sobre
+       amber-600 son 3,2:1), así que el aviso lleva texto oscuro. Para eso está
+       el `-foreground`: quien use el token no tiene que saberlo. */
+
+    --success: 163 94% 24%;                 /* emerald-700 · blanco encima 5,5:1 */
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 81% 96%;            /* emerald-50 */
+    --success-soft-foreground: 163 94% 24%; /* emerald-700 · 5,2:1 */
+
+    --warning: 38 92% 50%;                  /* amber-500 · texto oscuro 7,0:1 */
+    --warning-foreground: 21 92% 14%;       /* amber-950 */
+    --warning-soft: 48 100% 96%;            /* amber-50 */
+    --warning-soft-foreground: 26 90% 37%;  /* amber-700 · 4,8:1 */
+
+    --info: 221 83% 53%;                    /* blue-600 · blanco encima 5,2:1 */
+    --info-foreground: 0 0% 100%;
+    --info-soft: 214 100% 97%;              /* blue-50 */
+    --info-soft-foreground: 224 76% 48%;    /* blue-700 · 6,2:1 */
+
+    /* El peligro NO estrena variable: ya existe --destructive y tener dos
+       rojos es justo el problema que esto viene a quitar. Solo se le añade
+       la pareja suave que le faltaba. */
+    --destructive-soft: 0 86% 97%;             /* red-50 */
+    --destructive-soft-foreground: 0 74% 42%;  /* red-700 */
   }
 
   .dark {
@@ -44,6 +89,31 @@
     --border: 240 6% 15%;
     --input: 240 6% 15%;
     --ring: 230 75% 60%;
+
+    /* En oscuro se invierte la pareja suave: el fondo pasa al tono 950 y el
+       texto al 400 — que es lo que ya hacía a mano media aplicación.
+
+       Y el relleno sólido se aclara, así que su texto se oscurece. Blanco sobre
+       un verde claro son 2,5:1: ilegible. Cada pareja de aquí también está
+       medida y pasa AA. */
+
+    --success: 160 84% 39%;                 /* emerald-500 · texto oscuro 6,0:1 */
+    --success-foreground: 166 91% 9%;       /* emerald-950 */
+    --success-soft: 166 91% 9%;             /* emerald-950 */
+    --success-soft-foreground: 158 64% 52%; /* emerald-400 · 7,9:1 */
+
+    --warning: 43 96% 56%;                  /* amber-400 · texto oscuro 9,0:1 */
+    --warning-foreground: 21 92% 14%;       /* amber-950 */
+    --warning-soft: 21 92% 14%;             /* amber-950 */
+    --warning-soft-foreground: 43 96% 56%;  /* amber-400 · 9,0:1 */
+
+    --info: 213 94% 68%;                    /* blue-400 · texto oscuro 5,8:1 */
+    --info-foreground: 226 57% 21%;         /* blue-950 */
+    --info-soft: 226 57% 21%;               /* blue-950 */
+    --info-soft-foreground: 213 94% 68%;    /* blue-400 · 5,8:1 */
+
+    --destructive-soft: 0 75% 15%;             /* red-950 */
+    --destructive-soft-foreground: 0 91% 71%;  /* red-400 */
   }
 }
 

@@ -1,0 +1,296 @@
+import { useMemo, useState } from 'react';
+import { Plus, WarningCircle, Lock } from '@phosphor-icons/react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import { toast } from '@/shared/hooks/useToast';
+import {
+  createUser, deactivateUser, reactivateUser, setUserPassword, updateUser, type CrmUser,
+} from '../api/users.api';
+import useUsers from '../hooks/useUsers';
+import useAvailabilityMap from '../hooks/useAvailabilityMap';
+import UsersToolbar from './UsersToolbar';
+import UsersTable from './UsersTable';
+import TablePagination from './TablePagination';
+import UserFormDialog, { type UserFormValues } from './UserFormDialog';
+import InviteLinkBanner from './InviteLinkBanner';
+import AvailabilityDialog from './AvailabilityDialog';
+
+export default function UsersPanel() {
+  const { projects, user: me } = useAuth();
+  const { activeProject } = useProjectContext();
+  const esSuperadmin = me?.role === 'superadmin';
+
+  const [projectFilter, setProjectFilter] = useState('active');
+  const projectId = useMemo(() => {
+    if (projectFilter === 'all') return undefined;
+    if (projectFilter === 'active') {
+      // En «todos los proyectos» activeProject.id vale -1: no es un proyecto.
+      return activeProject?.id && activeProject.id > 0 ? activeProject.id : undefined;
+    }
+    return Number(projectFilter) || undefined;
+  }, [projectFilter, activeProject?.id]);
+
+  const lista = useUsers(projectId);
+  const disponibilidad = useAvailabilityMap();
+
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [dialogo, setDialogo] = useState<{ modo: 'crear' } | { modo: 'editar'; user: CrmUser } | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [porDesactivar, setPorDesactivar] = useState<CrmUser | null>(null);
+  const [desactivando, setDesactivando] = useState(false);
+  const [invitacion, setInvitacion] = useState<{ email: string; url: string } | null>(null);
+  const [porAusencias, setPorAusencias] = useState<CrmUser | null>(null);
+
+  async function guardar(values: UserFormValues) {
+    setGuardando(true);
+    try {
+      if (dialogo?.modo === 'crear') {
+        const { setPasswordToken } = await createUser({
+          nombre: values.nombre,
+          email: values.email,
+          role: values.role,
+          projects: values.projects,
+        });
+        if (setPasswordToken) {
+          const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
+          setInvitacion({
+            email: values.email,
+            url: `${window.location.origin}${base}/set-password?token=${setPasswordToken}`,
+          });
+          toast({ title: 'Usuario creado', description: 'Comparte el link de invitación que aparece arriba.' });
+        } else {
+          toast({ title: 'Usuario creado', description: `Email de bienvenida enviado a ${values.email}` });
+        }
+      } else if (dialogo?.modo === 'editar') {
+        const sinProyectos = values.projects.length === 0;
+        await updateUser(dialogo.user.id, {
+          nombre: values.nombre,
+          role: values.role,
+          // Desmarcarlos todos tiene que quitarlos de verdad, y para eso hay que
+          // mandar el formato viejo: `projects: []` el backend lo ignora.
+          ...(sinProyectos ? { projectIds: [] } : { projects: values.projects }),
+          whatsapp_phone: values.whatsapp_phone,
+        });
+        toast(sinProyectos
+          ? {
+            title: 'Usuario actualizado, sin proyectos',
+            description: `${values.nombre} ya no tiene ningún proyecto asignado: al entrar no verá nada.`,
+          }
+          : { title: 'Usuario actualizado', description: values.nombre });
+      }
+      setDialogo(null);
+      lista.recargar();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function reiniciarPassword(password: string) {
+    if (dialogo?.modo !== 'editar') return;
+    try {
+      await setUserPassword(dialogo.user.id, password);
+      toast({
+        title: 'Contraseña actualizada',
+        description: `${dialogo.user.nombre} deberá entrar con la nueva. Sus sesiones se han cerrado.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  async function alternarActivo(user: CrmUser) {
+    setOpenMenuId(null);
+    if (user.active) {
+      // Desactivar reparte sus prospectos entre el resto. No es reversible con
+      // un clic, asi que se pregunta antes.
+      setPorDesactivar(user);
+      return;
+    }
+    try {
+      await reactivateUser(user.id);
+      toast({ title: 'Usuario reactivado', description: user.nombre });
+      lista.recargar();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  async function confirmarDesactivar() {
+    if (!porDesactivar) return;
+    setDesactivando(true);
+    try {
+      const r = await deactivateUser(porDesactivar.id);
+      const reasignados = r.leads_reasignados || 0;
+      toast({
+        title: 'Usuario desactivado',
+        description: reasignados > 0
+          ? `${porDesactivar.nombre}. ${reasignados} prospecto${reasignados !== 1 ? 's' : ''} repartido${reasignados !== 1 ? 's' : ''} entre el resto.`
+          : porDesactivar.nombre,
+      });
+      setPorDesactivar(null);
+      lista.recargar();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    } finally {
+      setDesactivando(false);
+    }
+  }
+
+  if (lista.loading) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <div className="w-40 h-5 bg-muted rounded animate-pulse mb-2" />
+          <div className="w-60 h-4 bg-muted rounded animate-pulse" />
+        </div>
+        <SkeletonTable rows={5} columns={6} />
+      </div>
+    );
+  }
+
+  // Sin permiso no es un fallo: reintentar no lo arregla, y pintarlo en rojo con
+  // un botón de «reintentar» manda a la gente a pulsarlo hasta cansarse. La ruta
+  // /settings no filtra por rol —solo se esconde del menú—, así que aquí llega
+  // cualquiera que escriba la dirección a mano.
+  if (lista.error?.status === 403) {
+    return (
+      <div className="bg-muted/40 border border-border rounded-lg p-8 text-center">
+        <Lock size={36} className="text-muted-foreground mx-auto mb-3" weight="regular" />
+        <p className="text-sm font-semibold mb-1">Esta pantalla es para administradores</p>
+        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+          Tu cuenta ({me?.role}) no puede ver ni gestionar usuarios. Si necesitas acceso, pídeselo a un superadministrador.
+        </p>
+      </div>
+    );
+  }
+
+  if (lista.error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-8 text-center">
+        <WarningCircle size={40} className="text-red-500 mx-auto mb-3" weight="regular" />
+        <p className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">No se pudieron cargar los usuarios</p>
+        <p className="text-xs text-red-500/80 dark:text-red-400/80 mb-4">{lista.error.mensaje}</p>
+        <button
+          onClick={lista.recargar}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Gestión de usuarios</h2>
+          <p className="text-[13px] text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
+        </div>
+        <button
+          onClick={() => setDialogo({ modo: 'crear' })}
+          aria-label="Crear usuario"
+          className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+        >
+          <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Crear usuario</span>
+        </button>
+      </div>
+
+      {invitacion && (
+        <InviteLinkBanner email={invitacion.email} url={invitacion.url} onClose={() => setInvitacion(null)} />
+      )}
+
+      {lista.truncado && (
+        <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs flex items-start gap-2">
+          <WarningCircle size={15} weight="duotone" className="text-amber-600 flex-shrink-0 mt-px" />
+          <p className="text-amber-900 dark:text-amber-200">
+            Se muestran <strong>{lista.cargados}</strong> de <strong>{lista.total}</strong> usuarios.
+            El buscador solo mira los cargados — buscar sobre el total necesita que el endpoint acepte búsqueda.
+          </p>
+        </div>
+      )}
+
+      <UsersToolbar
+        filters={lista.filters}
+        onFilterChange={lista.setFilter}
+        onClear={lista.limpiarFiltros}
+        hayFiltroActivo={lista.hayFiltroActivo}
+        projectFilter={projectFilter}
+        onProjectFilterChange={setProjectFilter}
+        projects={projects || []}
+        activeProjectName={activeProject?.nombre}
+        totalFiltrados={lista.totalFiltrados}
+        cargados={lista.cargados}
+      />
+
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
+        <UsersTable
+          users={lista.visibles}
+          projects={projects || []}
+          disponibilidad={disponibilidad.porUsuario}
+          openMenuId={openMenuId}
+          onOpenMenu={setOpenMenuId}
+          onEdit={(u) => { setOpenMenuId(null); setDialogo({ modo: 'editar', user: u }); }}
+          onToggleActive={alternarActivo}
+          onAvailability={(u) => { setOpenMenuId(null); setPorAusencias(u); }}
+          hayFiltroActivo={lista.hayFiltroActivo}
+          onClearFilters={lista.limpiarFiltros}
+        />
+        <TablePagination
+          page={lista.page}
+          totalPaginas={lista.totalPaginas}
+          totalElementos={lista.totalFiltrados}
+          porPagina={lista.porPagina}
+          onPageChange={lista.setPage}
+        />
+      </div>
+
+      {dialogo && (
+        <UserFormDialog
+          // Sin key, pasar de editar a una persona a editar a otra reutilizaria la
+          // instancia y el formulario se quedaria con los datos del anterior.
+          key={dialogo.modo === 'editar' ? dialogo.user.id : 'nuevo'}
+          user={dialogo.modo === 'editar' ? dialogo.user : null}
+          projects={projects || []}
+          canResetPassword={esSuperadmin}
+          loading={guardando}
+          onClose={() => setDialogo(null)}
+          onSubmit={guardar}
+          onResetPassword={reiniciarPassword}
+        />
+      )}
+
+      {porAusencias && (
+        <AvailabilityDialog
+          key={porAusencias.id}
+          user={porAusencias}
+          estadoInicial={disponibilidad.porUsuario.get(porAusencias.id)}
+          onClose={() => setPorAusencias(null)}
+          onChange={disponibilidad.recargar}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!porDesactivar}
+        tone="destructive"
+        title={`¿Desactivar a ${porDesactivar?.nombre || ''}?`}
+        message={
+          <>
+            No podrá entrar y se le cerrará la sesión al momento.
+            Sus prospectos se reparten automáticamente entre el resto del equipo del proyecto.
+            <br />
+            Se puede reactivar después, pero los prospectos ya no vuelven solos.
+          </>
+        }
+        confirmLabel="Desactivar"
+        loading={desactivando}
+        onConfirm={confirmarDesactivar}
+        onCancel={() => setPorDesactivar(null)}
+      />
+    </div>
+  );
+}
