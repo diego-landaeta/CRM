@@ -191,7 +191,7 @@ export default function DocumentsConfigPage() {
   if (!isAdmin) {
     return (
       <div className="space-y-6 pb-8">
-        <PageHeader title="Configuración de documentos" subtitle="Numeración de facturas y certificados" />
+        <PageHeader title="Configuración de documentos" backTo="/settings" backLabel="Configuración" subtitle="Numeración de facturas y certificados" />
         <div className="bg-card border border-border rounded-xl p-8 flex items-start gap-4">
           <ShieldWarning size={28} className="text-amber-500 shrink-0" />
           <div>
@@ -209,6 +209,8 @@ export default function DocumentsConfigPage() {
     <div className="space-y-6 pb-8">
       <PageHeader
         title="Configuración de documentos"
+        backTo="/settings"
+        backLabel="Configuración"
         subtitle="Próximo número de factura/certificado por proyecto y resumen de emisión"
       />
 

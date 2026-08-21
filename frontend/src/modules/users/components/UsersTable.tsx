@@ -1,12 +1,12 @@
-import { Users, Clock, CalendarBlank } from '@phosphor-icons/react';
+import { Users, Clock } from '@phosphor-icons/react';
 import type { Project } from '@/shared/types';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import StatusDot from '@/shared/components/ui/StatusDot';
 import { avatarColorFor, getInitials } from '@/shared/lib/ui';
 import type { AvailabilityUser } from '../api/availability.api';
 import type { CrmUser } from '../api/users.api';
 import {
-  ACCESS_STATE_STYLES, ROLE_STYLES, accessStateOf, formatFecha, formatLastLogin,
-  roleKeyOf, roleLabelOf,
+  ACCESS_STATE_STYLES, ROLE_CHIP, accessStateOf, formatFecha, formatLastLogin, roleLabelCortoOf, roleLabelOf,
 } from '../lib/usersUi';
 import UserActionsMenu from './UserActionsMenu';
 
@@ -33,23 +33,16 @@ function AusenciaBadge({ estado }: { estado?: AvailabilityUser }) {
   if (!estado) return null;
   if (estado.bloque_activo) {
     return (
-      <span
-        title={estado.bloque_activo.motivo || 'Ausencia programada'}
-        className="px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap inline-flex items-center gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-      >
-        <CalendarBlank size={10} weight="bold" />
-        hasta {formatFecha(estado.bloque_activo.fecha_fin)}
-      </span>
+      <StatusDot tono="warning" title={estado.bloque_activo.motivo || 'Ausencia programada'}>
+        Ausente hasta {formatFecha(estado.bloque_activo.fecha_fin)}
+      </StatusDot>
     );
   }
   if (!estado.is_available) {
     return (
-      <span
-        title={estado.unavailable_reason || 'Marcado no disponible'}
-        className="px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
-      >
-        no disponible
-      </span>
+      <StatusDot tono="warning" title={estado.unavailable_reason || 'Marcado no disponible'}>
+        No disponible
+      </StatusDot>
     );
   }
   return null;
@@ -68,19 +61,16 @@ function nombresDeProyectos(user: CrmUser, projects: Project[]): string {
 function EstadoBadge({ user }: { user: CrmUser }) {
   const estilo = ACCESS_STATE_STYLES[accessStateOf(user)];
   return (
-    <span
-      title={estilo.title}
-      className={`px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${estilo.className}`}
-    >
+    <StatusDot tono={estilo.tono} title={estilo.title}>
       {estilo.label}
-    </span>
+    </StatusDot>
   );
 }
 
 function RolBadge({ user }: { user: CrmUser }) {
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_STYLES[roleKeyOf(user)] || 'bg-muted text-muted-foreground'}`}>
-      {roleLabelOf(user)}
+    <span title={roleLabelOf(user)} className={`px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${ROLE_CHIP}`}>
+      {roleLabelCortoOf(user)}
     </span>
   );
 }
@@ -158,7 +148,7 @@ export default function UsersTable({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className="flex flex-col gap-1">
                       <EstadoBadge user={u} />
                       <AusenciaBadge estado={disponibilidad.get(u.id)} />
                     </div>

@@ -9,11 +9,10 @@ interface Props {
   onFilterChange: <K extends keyof UsersFilters>(key: K, value: UsersFilters[K]) => void;
   onClear: () => void;
   hayFiltroActivo: boolean;
-  /** Filtro de proyecto: dispara una peticion nueva, por eso va aparte. */
+  /** Filtro de proyecto: 'all' o el id. Dispara petición, por eso va aparte. */
   projectFilter: string;
   onProjectFilterChange: (value: string) => void;
   projects: Project[];
-  activeProjectName?: string;
   totalFiltrados: number;
   cargados: number;
 }
@@ -27,7 +26,7 @@ const ESTADOS: Array<{ value: EstadoFiltro; label: string }> = [
 
 export default function UsersToolbar({
   filters, onFilterChange, onClear, hayFiltroActivo,
-  projectFilter, onProjectFilterChange, projects, activeProjectName,
+  projectFilter, onProjectFilterChange, projects,
   totalFiltrados, cargados,
 }: Props) {
   const rolOptions: Array<{ value: RolFiltro; label: string }> = [
@@ -82,32 +81,30 @@ export default function UsersToolbar({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-md border border-border bg-card">
-        <span className="text-[11px] font-medium text-muted-foreground">Proyecto:</span>
-        <button
-          onClick={() => onProjectFilterChange('active')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'active' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-        >
-          {activeProjectName || 'Proyecto activo'}
-        </button>
-        <button
-          onClick={() => onProjectFilterChange('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${projectFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-        >
-          Todos los proyectos
-        </button>
+      {/*
+        Un solo filtro de proyecto, no dos.
+        Antes convivían las pastillas («Fono Aprende» / «Todos los proyectos») y
+        un desplegable de «proyecto específico». Hacían lo mismo, y mientras
+        estuvieran los dos siempre habría alguien mirando una lista filtrada por
+        el que no tocó. Se queda el desplegable: aguanta las nueve marcas, y las
+        pastillas se quedaban cortas en cuanto pasan de tres.
+      */}
+      <div className="flex flex-wrap items-center gap-3 p-3 rounded-md border border-border bg-card">
+        <label htmlFor="filtro-proyecto" className="text-[11px] font-medium text-muted-foreground">
+          Proyecto
+        </label>
         <Select<string>
-          value={projectFilter !== 'active' && projectFilter !== 'all' ? projectFilter : ''}
-          onChange={(v) => { if (v) onProjectFilterChange(v); }}
+          value={projectFilter}
+          onChange={onProjectFilterChange}
           options={[
-            { value: '', label: 'Proyecto específico…' },
+            { value: 'all', label: 'Todos los proyectos' },
             ...(projects || []).map((p) => ({ value: String(p.id), label: p.nombre })),
           ]}
-          ariaLabel="Filtrar por proyecto especifico"
+          ariaLabel="Filtrar por proyecto"
           size="sm"
-          className="ml-auto max-w-[180px] w-full"
+          className="max-w-[220px] w-full"
         />
-        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap ml-auto">
           {hayFiltroActivo
             ? `${totalFiltrados} de ${cargados} usuario${cargados !== 1 ? 's' : ''}`
             : `${cargados} usuario${cargados !== 1 ? 's' : ''}`}
