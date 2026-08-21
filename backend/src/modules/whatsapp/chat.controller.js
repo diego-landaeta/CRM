@@ -804,11 +804,26 @@ export async function usuarios(req, res, next) {
                 WHERE active AND role IN ('superadmin','admin','gestor','soporte')
                   AND NOT COALESCE(gestor_colaboraciones, false)
                 ORDER BY (id = $1) DESC, nombre`
-            : `SELECT DISTINCT u.id, u.nombre, u.email, u.role FROM users u
-                 JOIN user_projects b ON b.user_id = u.id AND b.active
-                 JOIN user_projects a ON a.project_id = b.project_id AND a.active AND a.user_id = $1
+            // EXISTS y no DISTINCT con dos JOIN.
+            //
+            // Tal como estaba, Postgres rechazaba la consulta entera: «for
+            // SELECT DISTINCT, ORDER BY expressions must appear in select
+            // list», porque `(u.id = $1)` no esta en la lista de campos. O sea
+            // que CUALQUIER admin que abriera el selector de sesion recibia un
+            // 500. Un superadmin no lo veia nunca, porque va por la rama de
+            // arriba — por eso podia estar roto sin que nadie se enterara.
+            //
+            // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
+            // pregunta si comparte algun proyecto y se para en el primero.
+            : `SELECT u.id, u.nombre, u.email, u.role FROM users u
                 WHERE u.active AND u.role IN ('superadmin','admin','gestor','soporte')
                   AND NOT COALESCE(u.gestor_colaboraciones, false)
+                  AND EXISTS (
+                    SELECT 1 FROM user_projects b
+                      JOIN user_projects a ON a.project_id = b.project_id
+                                          AND a.active AND a.user_id = $1
+                     WHERE b.user_id = u.id AND b.active
+                  )
                 ORDER BY (u.id = $1) DESC, u.nombre`),
       [yo]);
 

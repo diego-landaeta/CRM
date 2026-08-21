@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PhoneCall, VideoCamera, X, BellRinging } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
@@ -34,7 +34,7 @@ type Sonando = {
   segundos: number;
 };
 
-export default function AvisoDeLlamada() {
+function Cartel() {
   const navigate = useNavigate();
   // Con WhatsApp apagado no hay nada que avisar, y esto se monta en el layout:
   // sin la comprobacion estaria preguntando al servidor desde todas las
@@ -188,4 +188,39 @@ export default function AvisoDeLlamada() {
       </div>
     </div>
   );
+}
+
+/**
+ * Su propia red, y no la de la raiz.
+ *
+ * Esto se monta en `AppLayout`, o sea en TODAS las pantallas del CRM. El unico
+ * ErrorBoundary que hay esta en la raiz y pinta una pagina de error a pantalla
+ * completa: un fallo aqui —un dato raro que llegue del servidor, un navegador
+ * sin `Notification`— no dejaria a la gestora sin aviso de llamada, la dejaria
+ * sin CRM.
+ *
+ * Un cartel de aviso que falla tiene que DESAPARECER. Se devuelve null y el
+ * resto sigue funcionando; el fallo queda en la consola para quien lo mire.
+ */
+class SinRomper extends Component<{ children: ReactNode }, { roto: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { roto: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { roto: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('AvisoDeLlamada se rompio y se ha quitado de en medio:', error);
+  }
+
+  render() {
+    return this.state.roto ? null : this.props.children;
+  }
+}
+
+export default function AvisoDeLlamada() {
+  return <SinRomper><Cartel /></SinRomper>;
 }
