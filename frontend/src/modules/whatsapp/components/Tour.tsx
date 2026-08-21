@@ -32,12 +32,12 @@ const PASOS: Paso[] = [
   {
     donde: '.wa-btn-nuevo',
     titulo: 'Escribir a alguien nuevo',
-    texto: 'Busca al prospecto y abre su chat. Si nunca te ha escrito y no esta en la base, el CRM se negara a enviar: es lo que evita que bloqueen tu numero.',
+    texto: 'Busca al prospecto y abre su chat, o escribe a un numero suelto. Si esa persona no esta en el CRM se puede escribir igual, pero queda anotado: escribir a quien no pidio informacion es lo que hace que reporten un numero.',
   },
   {
     donde: '.cs-message-input',
     titulo: 'Escribe, manda archivos o graba',
-    texto: 'El clip para adjuntar, el microfono para una nota de voz. Tambien puedes pegar una imagen aqui directamente o arrastrarla.',
+    texto: 'El clip para adjuntar, el microfono para una nota de voz. Antes de enviar veras lo que mandas, con su pie de foto. Tambien puedes pegar una imagen aqui o arrastrarla.',
   },
   {
     donde: '.wa-btn-prohibir',
@@ -58,17 +58,46 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
 
   // Se mide donde esta lo que se señala, cada vez. Guardar la posicion no vale:
   // la ventana cambia de tamaño y la lista crece mientras entra el historial.
+  //
+  // Y si NO se encuentra, el paso se salta — que es lo que decia el comentario
+  // del tipo `Paso` y el codigo no hacia: pintaba el cartel igual, sin recuadro
+  // y centrado en mitad de la pantalla. Cuatro de los seis pasos apuntan a
+  // cosas que solo existen con una conversacion abierta, asi que quien lo veia
+  // sin chats abiertos recibia una lista de carteles, no un recorrido.
+  //
+  // Antes de saltarlo se ESPERA: en esa pantalla la lista se llena por tandas
+  // mientras entra el historial, y el objetivo puede tardar un segundo en
+  // existir. Rendirse a la primera saltaria pasos que si eran validos.
   useEffect(() => {
+    if (!actual?.donde) { setHueco(null); return undefined; }
+
+    let esperando = 0;
     const medir = () => {
-      if (!actual?.donde) { setHueco(null); return; }
-      const el = document.querySelector(actual.donde);
-      setHueco(el ? el.getBoundingClientRect() : null);
+      const el = document.querySelector(actual.donde!);
+      if (el) { esperando = 0; setHueco(el.getBoundingClientRect()); return; }
+      setHueco(null);
+      // Kilometro y medio de margen: 1,5 s de espera antes de darlo por perdido.
+      esperando += 1;
+      if (esperando > 3) saltar();
     };
     medir();
     window.addEventListener('resize', medir);
     const t = setInterval(medir, 500);
     return () => { window.removeEventListener('resize', medir); clearInterval(t); };
-  }, [actual]);
+  }, [actual, paso]);
+
+  /**
+   * Al siguiente paso que SI tenga algo que señalar.
+   *
+   * Si no queda ninguno se cierra: mejor nada que un recorrido que no recorre.
+   */
+  function saltar() {
+    for (let i = paso + 1; i < PASOS.length; i++) {
+      const p = PASOS[i];
+      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+    }
+    cerrar();
+  }
 
   function cerrar() {
     try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
@@ -115,7 +144,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
             {ultimo ? (
               <button type="button" className="wa-btn-verde" onClick={cerrar}>Entendido</button>
             ) : (
-              <button type="button" className="wa-btn-verde" onClick={() => setPaso(paso + 1)}>
+              <button type="button" className="wa-btn-verde" onClick={saltar}>
                 Siguiente <ArrowRight size={13} />
               </button>
             )}
@@ -129,6 +158,16 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
 /** ¿Toca enseñarlo? Solo la primera vez de cada persona en este navegador. */
 export function tourPendiente() {
   try { return localStorage.getItem(VISTO) !== '1'; } catch { return false; }
+}
+
+/**
+ * ¿Hay algo que señalar ahora mismo?
+ *
+ * Si ningun paso encuentra su objetivo, el recorrido serian seis carteles
+ * sueltos. En ese caso no se abre.
+ */
+export function hayQueSeñalar() {
+  return PASOS.some((p) => p.donde && document.querySelector(p.donde));
 }
 
 /** Para poder volver a verlo desde la guia. */

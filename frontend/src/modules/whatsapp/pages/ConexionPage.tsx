@@ -463,9 +463,10 @@ export default function ConexionPage() {
       <div className="border border-border bg-card rounded-lg p-5 text-sm">
         <p className="font-semibold mb-2">Como no acabar bloqueado</p>
         <ul className="text-muted-foreground space-y-1.5 leading-relaxed">
-          <li>· <strong className="text-foreground">No escribas a quien no dejo su telefono</strong> en un
-              formulario nuestro. Es lo que hace que la gente reporte un numero, y los reportes son
-              lo que hace que lo suspendan. El CRM ya se niega — no le busques la vuelta.</li>
+          <li>· <strong className="text-foreground">Piensatelo antes de escribir a quien no dejo su
+              telefono</strong> en un formulario nuestro. El CRM te deja —a veces hay motivo— pero queda
+              anotado, y es lo que hace que la gente reporte un numero. Los reportes son lo que hace
+              que lo suspendan.</li>
           <li>· <strong className="text-foreground">Nada de envios masivos</strong> ni el mismo mensaje en
               cadena. Hay topes: 6 por minuto, 60 por hora, 300 al dia. Son por numero, asi que lo
               que mande un companero no te frena a ti.</li>

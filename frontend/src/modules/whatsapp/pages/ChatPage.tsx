@@ -14,8 +14,9 @@ import {
   type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
-import Tour, { tourPendiente } from '../components/Tour';
+import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
 import NotaDeVoz from '../components/NotaDeVoz';
+import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -157,6 +158,15 @@ export default function ChatPage() {
   // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
   // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
   const [aPantalla, setAPantalla] = useState(false);
+  // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
+  // elegir el fichero y no habia forma de ver que era hasta despues — y en
+  // WhatsApp un mensaje no se recoge pasados unos minutos.
+  const [porEnviar, setPorEnviar] = useState<File[]>([]);
+  // Mientras se abre el microfono. Son decimas, pero sin decirlo el usuario ya
+  // esta hablando contra un boton que todavia no graba.
+  const [abriendoMicro, setAbriendoMicro] = useState(false);
+  // La nota de voz que esta saliendo, para pintarla en el hilo mientras va.
+  const [vozSaliendo, setVozSaliendo] = useState<number | null>(null);
   // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
   // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
   const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
@@ -170,6 +180,8 @@ export default function ChatPage() {
   const [alto, setAlto] = useState(520);
   const ficheroRef = useRef<HTMLInputElement>(null);
   const grabadora = useRef<MediaRecorder | null>(null);
+  // El microfono, abierto de antemano. Ver prepararMicro().
+  const micro = useRef<MediaStream | null>(null);
   const trozos = useRef<Blob[]>([]);
 
   useEffect(() => {
@@ -235,6 +247,13 @@ export default function ChatPage() {
 
   useEffect(() => { setCuantos(100); setCitando(null); }, [abierto]);
 
+  // Al salir de la pantalla se suelta el microfono. Dejarlo abierto mantiene el
+  // punto rojo del navegador encendido, y eso inquieta con razon.
+  useEffect(() => () => {
+    micro.current?.getTracks().forEach((t) => t.stop());
+    micro.current = null;
+  }, []);
+
   // Escape para salir. Es lo que todo el mundo intenta primero, y sin esto hay
   // que buscar el boton con el raton.
   useEffect(() => {
@@ -250,9 +269,22 @@ export default function ChatPage() {
     };
   }, [aPantalla]);
 
+  // El recorrido, AL ENTRAR.
+  //
+  // Antes esperaba a `chats.length && conv`: a que hubiera conversaciones Y una
+  // abierta. Quien acababa de enlazar no tenia ninguna, asi que el recorrido
+  // saltaba cuando ya llevaba un rato trabajando — «medio ano despues me sale
+  // el tutorial», textual. Justo cuando ya no hace falta.
+  //
+  // Ahora basta con que haya algo que señalar. Los pasos que apunten a cosas
+  // que aun no existen se saltan solos.
   useEffect(() => {
-    if (chats.length && conv && tourPendiente()) setTour(true);
-  }, [chats.length, conv]);
+    if (!tourPendiente() || cargando) return undefined;
+    // Un respiro para que la pantalla acabe de pintarse: medir antes de que
+    // exista la lista daria «no hay nada que señalar» siempre.
+    const t = setTimeout(() => { if (hayQueSeñalar()) setTour(true); }, 700);
+    return () => clearTimeout(t);
+  }, [cargando]);
   useEffect(() => { if (abierto) cargarHilo(abierto); }, [abierto, cargarHilo]);
 
   // El alto se MIDE, no se adivina.
@@ -350,14 +382,45 @@ export default function ChatPage() {
     } catch (e) { fallo(e); } finally { setReintentando(null); }
   }
 
-  async function mandarArchivo(f: File) {
-    if (!abierto) return;
+  /** Los pone en la vista previa. No envia nada todavia. */
+  function proponerArchivos(fs: File[]) {
+    if (!abierto) {
+      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    if (fs.length) setPorEnviar(fs);
+  }
+
+  /** Ahora si: manda lo que hay en la vista previa, con su pie. */
+  async function enviarLoPropuesto(pie: string) {
+    if (!abierto || !porEnviar.length) return;
     setEnviando(true);
     try {
-      const r = await chatApi.adjunto(abierto, f);
-      if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      // De uno en uno: cada envio pasa por sus frenos y por su pausa. El pie
+      // va solo en el primero, que es lo que hace WhatsApp — repetirlo en cada
+      // uno seria mandar el mismo texto tres veces.
+      for (const [i, f] of porEnviar.entries()) {
+        const r = await chatApi.adjunto(abierto, f, i === 0 ? pie : '');
+        if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      }
+      setPorEnviar([]);
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  async function mandarArchivo(f: File, extra?: { segundos?: number }) {
+    if (!abierto) return;
+    setEnviando(true);
+    // Una nota de voz se manda sin vista previa —ya la has grabado tu— pero
+    // tiene que verse que esta saliendo: antes se soltaba el boton y no pasaba
+    // nada visible hasta que aparecia en el hilo. Con la red lenta, quien graba
+    // no sabe si salio y vuelve a grabar.
+    if (extra?.segundos) setVozSaliendo(extra.segundos);
+    try {
+      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos);
+      if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      await cargarHilo(abierto); cargarLista();
+    } catch (e) { fallo(e); } finally { setEnviando(false); setVozSaliendo(null); }
   }
 
   /**
@@ -387,39 +450,83 @@ export default function ChatPage() {
     if (!archivos.length) return;          // texto normal: que siga su camino
     e.preventDefault();
     e.stopPropagation();
-    if (!abierto) {
-      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
-      return;
+    // Tambien por la vista previa. Este es el camino donde mas facil es mandar
+    // lo que no era: se pega una captura sin mirar.
+    proponerArchivos(archivos);
+  }
+
+  /**
+   * Abre el microfono y lo deja abierto.
+   *
+   * Pedirlo tarda entre dos y ocho decimas —mas la primera vez, que hay que dar
+   * permiso—. Si se pide al pulsar, se pierde el principio: o sale «grabando»
+   * cuando ya has dicho media palabra, o empiezas a hablar antes de que el
+   * microfono este abierto y esa parte no se graba.
+   *
+   * Se pide al pasar por encima del boton, que es medio segundo antes de
+   * pulsarlo. Cuando llega el clic, ya esta listo.
+   */
+  async function prepararMicro() {
+    if (micro.current) return micro.current;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micro.current = stream;
+      return stream;
+    } catch {
+      return null;
     }
-    // De uno en uno: cada envio pasa por los frenos y por su pausa.
-    for (const f of archivos) await mandarArchivo(f);
   }
 
   async function alternarGrabacion() {
     if (grabando) { grabadora.current?.stop(); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // WhatsApp espera opus. Chrome graba en webm y Firefox puede en ogg, pero
-      // el codec de dentro es opus en los dos: se pide ogg primero porque es lo
-      // que WhatsApp entiende sin convertir, y si no se puede, webm con opus.
-      const formatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
-      const formato = formatos.find((f) => MediaRecorder.isTypeSupported(f));
-      const mr = new MediaRecorder(stream, formato ? { mimeType: formato } : undefined);
-      trozos.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size) trozos.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setGrabando(false);
-        const blob = new Blob(trozos.current, { type: mr.mimeType || 'audio/webm' });
-        const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
-        if (blob.size > 800) {
-          await mandarArchivo(new File([blob], `nota-de-voz.${ext}`, { type: blob.type }));
-        }
-      };
-      mr.start(); grabadora.current = mr; setGrabando(true);
-    } catch {
-      toast({ title: 'Sin microfono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
+
+    // Si el microfono aun no esta abierto se dice, en vez de dejar al usuario
+    // hablando contra un boton que todavia no graba.
+    let stream = micro.current;
+    if (!stream) {
+      setAbriendoMicro(true);
+      stream = await prepararMicro();
+      setAbriendoMicro(false);
     }
+    if (!stream) {
+      toast({ title: 'Sin microfono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
+      return;
+    }
+
+    // WhatsApp espera opus. Chrome NO graba ogg aunque se le pida —
+    // isTypeSupported('audio/ogg;codecs=opus') devuelve false— y cae a webm.
+    // El codec de dentro es opus igualmente, asi que WhatsApp lo entiende.
+    const formatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+    const formato = formatos.find((f) => MediaRecorder.isTypeSupported(f));
+    const mr = new MediaRecorder(stream, formato ? { mimeType: formato } : undefined);
+    trozos.current = [];
+    const empezo = Date.now();
+
+    mr.ondataavailable = (e) => { if (e.data.size) trozos.current.push(e.data); };
+    mr.onstop = async () => {
+      setGrabando(false);
+      const blob = new Blob(trozos.current, { type: mr.mimeType || 'audio/webm' });
+      const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+      if (blob.size <= 800) return;   // un toque sin querer, no una nota
+
+      // La duracion MEDIDA, no la del fichero.
+      //
+      // Lo que graba Chrome es webm, y ese contenedor sale sin duracion en la
+      // cabecera porque es un flujo en vivo. WhatsApp entonces enseña una
+      // duracion rara, casi siempre mas larga que la real: eso era «el retraso
+      // que se envia». Se le manda cuanto duro de verdad.
+      const segundos = Math.max(1, Math.round((Date.now() - empezo) / 1000));
+      await mandarArchivo(
+        new File([blob], `nota-de-voz.${ext}`, { type: blob.type }),
+        { segundos },
+      );
+    };
+
+    // El estado se pone cuando el MediaRecorder esta DE VERDAD en marcha, no
+    // antes: asi lo que ve el usuario coincide con lo que se esta grabando.
+    mr.onstart = () => setGrabando(true);
+    mr.start();
+    grabadora.current = mr;
   }
 
   async function abrirPorTelefono() {
@@ -436,7 +543,7 @@ export default function ChatPage() {
       await cargarLista(); setAbierto(r.data.id);
       toast({
         title: 'Chat abierto',
-        description: 'Si nunca te ha escrito y no es prospecto, el CRM se negara a enviar.',
+        description: 'Si no es prospecto y nunca te ha escrito, se puede escribir igual — pero queda anotado.',
       });
     } catch (e) { fallo(e); }
   }
@@ -798,18 +905,27 @@ export default function ChatPage() {
         {/* El microfono va aparte: el kit no trae boton de nota de voz. */}
         {conv && !conv.no_escribir && (
           <button type="button" onClick={alternarGrabacion} disabled={enviando}
-            title={grabando ? 'Parar y enviar la nota de voz' : 'Grabar una nota de voz'}
-            className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''}`}>
+            onMouseEnter={prepararMicro} onFocus={prepararMicro}
+            title={grabando ? 'Parar y enviar la nota de voz'
+              : abriendoMicro ? 'Abriendo el microfono…' : 'Grabar una nota de voz'}
+            className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''} ${abriendoMicro ? 'wa-abriendo' : ''}`}>
             {grabando ? <Stop size={17} weight="fill" /> : <Microphone size={18} />}
           </button>
         )}
       </div>
 
+      <VistaPreviaAdjunto
+        archivos={porEnviar}
+        enviando={enviando}
+        alEnviar={enviarLoPropuesto}
+        alCancelar={() => setPorEnviar([])} />
+
       {tour && <Tour alCerrar={() => setTour(false)} />}
 
       <input ref={ficheroRef} type="file" className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) mandarArchivo(f); e.target.value = ''; }} />
+        multiple
+        onChange={(e) => { proponerArchivos([...(e.target.files || [])]); e.target.value = ''; }} />
 
       {/* Escribir a un numero suelto. Antes era un window.prompt del navegador:
           una caja gris del sistema encima del chat, imposible de dar estilo. */}
@@ -829,7 +945,7 @@ export default function ChatPage() {
                 placeholder="34600111222" className="wa-campo" />
               <p className="wa-panel-nota">
                 Con prefijo de pais y sin signos. Si esa persona no es prospecto y nunca
-                te ha escrito, el CRM se negara a enviarle nada.
+                te ha escrito, queda anotado quien fue el primero en escribir.
               </p>
             </div>
             <div className="wa-panel-pie">

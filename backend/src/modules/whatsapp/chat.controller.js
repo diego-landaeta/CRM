@@ -199,6 +199,8 @@ export async function adjunto(req, res, next) {
       mimetype: req.file.mimetype,
       nombreArchivo: req.file.originalname,
       pie: req.body?.pie || null,
+      // La duracion medida al grabar, para las notas de voz.
+      segundos: parseInt(req.body?.segundos, 10) || null,
       usuarioId: req.user.userId,
     });
     res.status(201).json({ success: true, data: fila });
@@ -407,7 +409,22 @@ async function refrescarNombresSiToca(instancia) {
 export async function conexion(req, res, next) {
   try {
     if (!evolution.configurado()) {
-      return res.json({ success: true, data: { configurado: false, motivo: 'Falta EVOLUTION_URL o EVOLUTION_API_KEY' } });
+      // Los nombres de las variables van al REGISTRO, no a la pantalla.
+      //
+      // Aqui ponia «Falta EVOLUTION_URL o EVOLUTION_API_KEY». No era falso,
+      // pero le hablaba al programador delante de la gestora: dos nombres de
+      // variables de entorno de los que ella no sabe nada y con los que no
+      // puede hacer nada. Lo unico que entendia es que algo estaba roto.
+      //
+      // Y en pruebas no es que este roto: es que ahi no hay WhatsApp montado.
+      // Decirlo cambia por completo lo que entiende quien lo lee.
+      logger.warn('WhatsApp sin configurar: faltan EVOLUTION_URL o EVOLUTION_API_KEY');
+      return res.json({ success: true, data: {
+        configurado: false,
+        motivo: process.env.NODE_ENV === 'production'
+          ? 'WhatsApp no esta disponible ahora mismo. Avisa a quien lleva el CRM.'
+          : 'WhatsApp todavia no esta disponible en este entorno de pruebas. En produccion funciona con normalidad.',
+      }});
     }
     const instancia = await instanciaObjetivo(req);
     const [est, inst] = await Promise.all([evolution.estado(instancia), evolution.instancias()]);

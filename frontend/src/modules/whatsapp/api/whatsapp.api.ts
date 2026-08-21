@@ -172,10 +172,16 @@ export const chatApi = {
 
   // El adjunto va en multipart, no en JSON: el cliente de axios ya pone el
   // Content-Type con su boundary si se le pasa un FormData.
-  adjunto: (id: number, archivo: File, pie?: string): Promise<ApiResponse<MensajeWhatsapp>> => {
+  /**
+   * `segundos` solo para las notas de voz: es la duracion MEDIDA al grabar.
+   * Lo que graba Chrome es webm y ese contenedor no la lleva en la cabecera,
+   * asi que WhatsApp enseñaba una duracion inventada, mas larga que la real.
+   */
+  adjunto: (id: number, archivo: File, pie?: string, segundos?: number): Promise<ApiResponse<MensajeWhatsapp>> => {
     const fd = new FormData();
     fd.append('archivo', archivo);
     if (pie) fd.append('pie', pie);
+    if (segundos) fd.append('segundos', String(segundos));
     return client.post(`/whatsapp/chats/${id}/adjunto`, fd);
   },
 };

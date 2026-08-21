@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { reiniciarTour } from '../components/Tour';
 import {
   DeviceMobile, QrCode, WarningCircle, Prohibit, ChatText, PaperPlaneTilt,
@@ -41,6 +41,7 @@ function Bloque({ icono, titulo, children }: { icono: React.ReactNode; titulo: s
 }
 
 export default function AyudaPage() {
+  const navigate = useNavigate();
   return (
     <div className="max-w-3xl space-y-4 pb-8">
       <div className="bg-card border border-border rounded-lg p-5">
@@ -49,7 +50,10 @@ export default function AyudaPage() {
           Enlazar tu numero, escribir a un prospecto, y que no te bloqueen la linea.
           Se lee en cinco minutos.
         </p>
-        <button type="button" onClick={() => { reiniciarTour(); window.location.href = '../whatsapp/chat'; }}
+        {/* navigate() y no window.location: lo segundo recarga la aplicacion
+            entera y ademas depende de la ruta relativa, asi que se rompe segun
+            de donde cuelgue el CRM (/crm, /testeo). */}
+        <button type="button" onClick={() => { reiniciarTour(); navigate('/whatsapp/chat'); }}
           className="mt-3 h-9 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">
           Ver el recorrido por el chat
         </button>
@@ -234,8 +238,10 @@ export default function AyudaPage() {
           lo de abajo lleva a eso.
         </p>
         <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
-          <li>· <strong>Escribir a quien no dejo su telefono</strong> en un formulario nuestro. El CRM ya
-            se niega; no le busques la vuelta con otro numero.</li>
+          <li>· <strong>Escribir a quien no dejo su telefono</strong> en un formulario nuestro. El CRM
+            te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
+            hijo— pero <strong>queda anotado</strong>, y es lo que mas rapido lleva a que reporten
+            un numero. Piensatelo antes.</li>
           <li>· <strong>Envios masivos</strong> o el mismo mensaje en cadena a mucha gente seguida.</li>
           <li>· <strong>Insistir a quien no contesta.</strong> Si alguien pide que no le escribas,
             marcalo con el icono <Prohibit size={12} className="inline" /> de la cabecera del chat:

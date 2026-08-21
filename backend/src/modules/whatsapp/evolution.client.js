@@ -43,7 +43,9 @@ export const configurado = () => Boolean(BASE && API_KEY);
 
 async function pedir(ruta, { metodo = 'GET', cuerpo = null, esperaMs = 15000 } = {}) {
   if (!configurado()) {
-    return { ok: false, error: 'Falta EVOLUTION_URL o EVOLUTION_API_KEY en el servidor' };
+    // Este texto puede acabar en pantalla, asi que no nombra variables. El
+    // detalle de cual falta ya se registra en el arranque y en /conexion.
+    return { ok: false, error: 'WhatsApp no esta disponible en este entorno' };
   }
   try {
     const r = await fetch(`${BASE}${ruta}`, {
@@ -136,10 +138,13 @@ export async function enviarTexto(numero, texto, nombre = INSTANCIA, citarWaId =
  * `audioBase64` va SIN el prefijo `data:audio/ogg;base64,`. Con el prefijo,
  * Evolution contesta 400.
  */
-export async function enviarAudio(numero, audioBase64, nombre = INSTANCIA) {
+export async function enviarAudio(numero, audioBase64, nombre = INSTANCIA, segundos = null) {
   const r = await pedir(`/message/sendWhatsAppAudio/${nombre}`, {
     metodo: 'POST',
-    cuerpo: { number: numero, audio: audioBase64, encoding: true },
+    // `seconds` es la duracion medida al grabar. Sin ella WhatsApp la calcula
+    // del fichero, y lo que graba Chrome —webm— no la lleva: enseñaba una
+    // duracion mas larga que la real.
+    cuerpo: { number: numero, audio: audioBase64, encoding: true, seconds: segundos || undefined },
     esperaMs: 60000,
   });
   if (!r.ok) return r;

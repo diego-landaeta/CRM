@@ -728,3 +728,38 @@
 }
 .wa-voz-tiempo { font-size: 11px; color: var(--wa-apagado); flex-shrink: 0; min-width: 30px; }
 .wa-voz-mia .wa-voz-tiempo { color: rgba(233, 237, 239, 0.65); }
+
+/* ── Ver lo que vas a mandar, antes de mandarlo ──────────────────────────── */
+
+.wa-previa { max-width: 460px; }
+
+.wa-previa-lienzo {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  justify-content: center;
+  padding: 14px;
+  max-height: 46vh; overflow-y: auto;
+  background: var(--wa-fondo);
+  border-bottom: 1px solid var(--wa-borde);
+}
+.wa-previa-uno {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  max-width: 190px;
+}
+.wa-previa-img {
+  max-width: 190px; max-height: 200px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.wa-previa-doc {
+  display: grid; place-items: center;
+  width: 90px; height: 90px;
+  border-radius: 6px;
+  background: var(--wa-hover);
+  color: var(--wa-apagado);
+}
+.wa-previa-nombre {
+  max-width: 190px;
+  font-size: 12px; color: var(--wa-texto);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wa-previa-peso { font-size: 11px; color: var(--wa-apagado); }

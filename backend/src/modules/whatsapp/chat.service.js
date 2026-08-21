@@ -44,8 +44,8 @@ export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
 //
 // Lo que hace que WhatsApp suspenda una linea no es tanto detectar el cliente
 // como que la gente la bloquee y la reporte. Por eso aqui no hay trucos para
-// esconderse: hay limites de ritmo y una negativa a escribir a quien no lo
-// pidio. Es menos vistoso y funciona mucho mejor.
+// esconderse: hay limites de ritmo y la negativa a escribir a quien pidio que
+// no le escriban. Es menos vistoso y funciona mucho mejor.
 
 // Ritmo humano. Una persona no manda 40 mensajes en un minuto, y un numero
 // nuevo que lo hace el primer dia es la señal mas clara que existe.
@@ -56,18 +56,6 @@ const TOPE_POR_DIA = Number(process.env.WA_TOPE_DIA || 300);
 // Espera entre mensajes seguidos, para que no salgan todos de golpe.
 const PAUSA_MS = Number(process.env.WA_PAUSA_MS || 1500);
 
-// El freno de «solo a quien lo pidio». Encendido salvo que se apague a mano.
-//
-// Se apaga para probar: al probar se escribe al numero de uno mismo, que ni es
-// prospecto ni ha escrito nunca, asi que el freno salta con razon y no deja
-// hacer nada. En produccion va encendido y no se toca.
-const EXIGIR_CONSENTIMIENTO = process.env.WA_EXIGIR_CONSENTIMIENTO !== 'false';
-if (!EXIGIR_CONSENTIMIENTO) {
-  logger.warn(
-    'WhatsApp: FRENO DE CONSENTIMIENTO APAGADO (WA_EXIGIR_CONSENTIMIENTO=false). '
-    + 'Se puede escribir a cualquiera. Esto es para probar: en produccion no puede quedarse asi.'
-  );
-}
 let ultimoEnvio = 0;
 
 async function limites(instancia) {
@@ -175,7 +163,7 @@ export async function enviar({ conversacionId, texto, usuarioId, citarWaId = nul
  * de reproducir—, que es como trabajan las gestoras; mandarlo como fichero
  * adjunto seria inutil.
  */
-export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreArchivo, pie, usuarioId }) {
+export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreArchivo, pie, usuarioId, segundos = null }) {
   const conv = await permitirEnvio(conversacionId);
   const numero = numeroDe(conv);
   const base64 = buffer.toString('base64');
@@ -184,7 +172,7 @@ export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreAr
   await evolution.presencia(numero, esAudio ? 'recording' : 'composing', conv.instancia).catch(() => {});
 
   const r = esAudio
-    ? await evolution.enviarAudio(numero, base64, conv.instancia)
+    ? await evolution.enviarAudio(numero, base64, conv.instancia, segundos)
     : await evolution.enviarMedia(numero, {
         tipo: /^image\//.test(mimetype) ? 'image' : /^video\//.test(mimetype) ? 'video' : 'document',
         base64, nombreArchivo, mimetype, pie,

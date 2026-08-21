@@ -169,9 +169,7 @@ suspendan la línea.
 
 1. **A quien pidió que no le escribieran.** Ni con plantilla, ni «solo una última
    vez».
-2. **A quien no es prospecto y nunca ha escrito.** Si ese número no salió de un
-   formulario nuestro, escribirle es escribir en frío.
-3. **Cuando se va demasiado rápido.** 6 por minuto, 60 por hora, 300 al día
+2. **Cuando se va demasiado rápido.** 6 por minuto, 60 por hora, 300 al día
    (`WA_TOPE_MINUTO`, `WA_TOPE_HORA`, `WA_TOPE_DIA`), más una pausa de 1,5
    segundos entre mensajes seguidos.
 
