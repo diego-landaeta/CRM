@@ -134,25 +134,34 @@ cerrar y asignar lo hace él. Es acuerdo, no candado: GitHub no sabe separar
 
 ## A1 · Terminar WhatsApp
 
-Hoy la gestora tiene un botón en la lista de prospectos que abre WhatsApp, y ya.
-Las plantillas **viven en el navegador de cada una**: nadie más las ve y nadie
-puede revisarlas. En ISEIE hay además dos versiones incompatibles entre sí.
+**Hecho** *(21/08/2026, rama `feat/angel`)*. Se deja escrito qué era y en qué
+quedó, porque lo de arriba describía un estado que ya no existe.
 
-**Terminado cuando:**
-- Las plantillas están en base de datos, compartidas por proyecto, y se pueden
-  crear y editar desde el panel. *(La migración 122 ya está escrita, sin aplicar
-  — la aplica Diego.)*
-- El botón existe también **en la ficha abierta** del prospecto y en Clientes, no
-  solo en el listado.
-- Al pulsarlo **queda registrada la interacción**. Hoy se hace un POST que si
-  falla no dice nada: WhatsApp se abre igual y no queda rastro. Si falla, se
-  avisa en pantalla.
-- El teléfono se arma con las reglas del backend (`phoneCanonical`), que ya sabe
-  lo del `1` de México y el `9` de Argentina. Hoy el frontal quita todo lo que no
-  sea número y un `0034…` genera un enlace roto.
+- [x] **Plantillas en base de datos**, compartidas por proyecto, con ámbito
+      `compartida` / `personal` — una personal no la ve nadie más, ni un
+      administrador. Se crean y editan en `/whatsapp/plantillas`; el listado de
+      prospectos solo lee, para que no haya dos sitios donde editar lo mismo.
+      **Sigue haciendo falta aplicar la migración 122** (tarea #21, la aplica
+      Diego). Sin ella no hay plantillas, pero nada revienta: se devuelve lista
+      vacía y al intentar crear una se dice que falta un paso de instalación.
+- [x] **El botón, también en la ficha abierta** del prospecto y en Clientes.
+- [x] **La interacción queda registrada, y si falla se dice.** Antes el `catch`
+      estaba vacío con el comentario «silent fail, el link igual abre» — y eso
+      es justo lo que hacía que no se notara: la gestora hablaba con la persona
+      creyendo que quedaba apuntado y en la ficha no había nada.
+- [x] **El teléfono, con el criterio del backend.** Había **tres** `cleanPhone`
+      copiados que no coincidían entre sí, y el helper bueno (`telefono.ts`) no
+      lo usaba nadie. Con el viejo, un `0034…` y un `600123456.0` de Excel
+      pasaban el filtro: se enseñaba el botón, se pulsaba, y el chat no abría.
+      Ahora queda un solo criterio, con sus tests.
 
-**No entra aquí:** el navegador remoto de WhatsApp dentro del CRM. Eso necesita
-servidor propio y coste mensual; es otra decisión.
+**Lo de ISEIE no entra aquí:** es el otro repositorio. En este no hay dos
+implementaciones que unificar.
+
+**No entra aquí tampoco:** el navegador remoto de WhatsApp dentro del CRM. Eso
+necesita servidor propio y coste mensual; es otra decisión. *(El `ChannelPanel`
+que lo intentaba ya no existe, así que los pendientes G y M de
+`backend/PENDIENTE-BACK.md` se quedaron sin objeto.)*
 
 ## A2 · Página de estado del sistema
 

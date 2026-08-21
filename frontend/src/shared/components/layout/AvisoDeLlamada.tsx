@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PhoneCall, VideoCamera, X, BellRinging } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import { moduloApagado } from '@/shared/lib/modulos';
 
 /**
  * «Te estan llamando por WhatsApp».
@@ -35,6 +36,10 @@ type Sonando = {
 
 export default function AvisoDeLlamada() {
   const navigate = useNavigate();
+  // Con WhatsApp apagado no hay nada que avisar, y esto se monta en el layout:
+  // sin la comprobacion estaria preguntando al servidor desde todas las
+  // pantallas del CRM y para todos los usuarios por un modulo que no se enseña.
+  const apagado = moduloApagado('whatsapp');
   const [llamada, setLlamada] = useState<Sonando | null>(null);
   const [enlazada, setEnlazada] = useState(false);
   // La que se ha cerrado a mano. Sin esto, la siguiente vuelta la vuelve a
@@ -66,6 +71,8 @@ export default function AvisoDeLlamada() {
     let vivo = true;
     let temporizador: ReturnType<typeof setTimeout>;
 
+    if (apagado) return undefined;
+
     const vuelta = async () => {
       // Con la pestaña de fondo no se pregunta: el navegador ya frena los
       // temporizadores y ademas no hay nadie mirando el cartel.
@@ -84,7 +91,7 @@ export default function AvisoDeLlamada() {
       clearTimeout(temporizador);
       document.removeEventListener('visibilitychange', alVolver);
     };
-  }, [preguntar, enlazada]);
+  }, [preguntar, enlazada, apagado]);
 
   // El aviso del sistema, solo si YA hay permiso. Una por llamada.
   useEffect(() => {
@@ -100,7 +107,7 @@ export default function AvisoDeLlamada() {
     } catch { /* si el navegador no deja, el cartel sigue estando */ }
   }, [llamada]);
 
-  if (!llamada) return null;
+  if (apagado || !llamada) return null;
 
   // El `+` solo si falta. Se guarda ya normalizado con prefijo —lo pone
   // normalizePhone al crear la conversacion—, asi que ponerselo a ciegas daba
@@ -113,7 +120,7 @@ export default function AvisoDeLlamada() {
     <div
       role="alert"
       aria-live="assertive"
-      className="fixed z-[60] bottom-4 right-4 left-4 sm:left-auto sm:w-[340px]
+      className="fixed z-[70] bottom-4 right-4 left-4 sm:left-auto sm:w-[340px]
                  rounded-lg border border-emerald-300 dark:border-emerald-800
                  bg-emerald-50 dark:bg-emerald-950/90 shadow-lg p-4"
     >

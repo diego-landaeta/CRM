@@ -238,11 +238,12 @@ export function applyLabel(original, overrides) {
 //
 // Va aqui y no en los bundles del servidor porque esto es el menu: el modulo del
 // backend puede estar montado y aun asi no querer enseñarlo.
-const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
-  .split(',').map((s) => s.trim()).filter(Boolean);
+// El criterio vive en shared/lib/modulos: no es solo el menu, tambien lo usa el
+// aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
+// que si y el otro que no.
 
 function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
-  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+  if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;

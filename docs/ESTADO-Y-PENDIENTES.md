@@ -220,6 +220,18 @@ adjuntos, y las métricas de cuánto se tarda en responder y en cerrar.
 Las **plantillas de WhatsApp** ya están resueltas en la migración 122, pero esa
 migración **no se ha aplicado en producción** porque WhatsApp está en espera.
 
+Desde el 21/08/2026 eso ya no rompe nada: sin la 122 se devuelve lista vacía y
+al intentar crear una plantilla se dice que falta un paso de instalación. Antes
+subía un 500 en **cada carga del listado de prospectos** —de ahí sale el
+desplegable— y el manejador escribe todos los 5xx en la tabla de errores, así
+que una migración pendiente iba llenando el panel de soporte de ruido sin que
+nadie relacionara una cosa con la otra.
+
+Y recordar que **encender WhatsApp en producción es quitar
+`VITE_MODULOS_APAGADOS=whatsapp`**, no solo aplicar migraciones. Mientras esté
+puesto, el módulo viaja en el build pero ni se enseña en el menú ni consulta
+nada por detrás.
+
 ---
 
 ## Automatismos de correo · nada de esto existe
