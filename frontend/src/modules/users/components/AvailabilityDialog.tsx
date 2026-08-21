@@ -139,7 +139,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
             role="dialog"
             aria-modal="true"
             aria-label={`Ausencias de ${user.nombre}`}
-            className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-xl mx-4 p-4 sm:p-6 overflow-y-auto max-h-[90vh] animate-in"
+            className="relative bg-card rounded-lg border border-border shadow-dialog w-full max-w-xl mx-4 p-4 sm:p-6 overflow-y-auto max-h-[90vh] animate-in"
           >
             <div className="flex items-start justify-between mb-5 gap-3">
               <div className="min-w-0">
@@ -173,7 +173,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">Estado ahora mismo</p>
                   {!disponible && motivoActual && (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">Motivo: {motivoActual}</p>
+                    <p className="text-meta text-amber-700 dark:text-amber-400 mt-0.5">Motivo: {motivoActual}</p>
                   )}
                 </div>
                 <button
@@ -243,7 +243,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
                     última «a». */}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="f-inicio" className="text-[10px] text-muted-foreground block mb-1">Desde</label>
+                    <label htmlFor="f-inicio" className="text-micro text-muted-foreground block mb-1">Desde</label>
                     <input
                       id="f-inicio"
                       type="date"
@@ -254,7 +254,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
                     />
                   </div>
                   <div>
-                    <label htmlFor="f-fin" className="text-[10px] text-muted-foreground block mb-1">Hasta</label>
+                    <label htmlFor="f-fin" className="text-micro text-muted-foreground block mb-1">Hasta</label>
                     <input
                       id="f-fin"
                       type="date"
@@ -268,7 +268,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
 
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
                   <div className="flex-1 min-w-0">
-                    <label htmlFor="f-motivo" className="text-[10px] text-muted-foreground block mb-1">Motivo</label>
+                    <label htmlFor="f-motivo" className="text-micro text-muted-foreground block mb-1">Motivo</label>
                     <input
                       id="f-motivo"
                       type="text"
@@ -312,7 +312,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
                         {formatFecha(b.fecha_inicio)} → {formatFecha(b.fecha_fin)}
                       </span>
                       {b.activo && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200 font-bold whitespace-nowrap">
+                        <span className="text-micro px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200 font-bold whitespace-nowrap">
                           ACTIVO HOY
                         </span>
                       )}
@@ -329,7 +329,7 @@ export default function AvailabilityDialog({ user, estadoInicial, onClose, onCha
                 </div>
               )}
 
-              <p className="text-[10px] text-muted-foreground mt-3">
+              <p className="text-micro text-muted-foreground mt-3">
                 Se listan las ausencias que sigan vigentes y las de los últimos 30 días.
               </p>
             </section>

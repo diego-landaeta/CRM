@@ -128,17 +128,29 @@
   }
 }
 
-@layer components {
-  .crm-card {
-    @apply bg-card text-card-foreground border border-border rounded-lg;
-  }
-  .crm-card-interactive {
-    @apply crm-card transition-colors;
-  }
-  .crm-card-interactive:hover {
-    @apply border-foreground/20;
-  }
+/*
+  Radios: una regla, no cuatro.
 
+  El patrón de tarjeta —`bg-card border border-border rounded-*`— está escrito
+  a mano 337 veces en 13 variantes, y con cuatro esquinas distintas para lo
+  mismo: 191 con `lg`, 30 con `xl`, 24 con `2xl` y 22 con `md`. Por eso la
+  pantalla 40 no se parece a la 3.
+
+  Lo que se sigue a partir de ahora:
+
+    rounded-lg     tarjetas, paneles y diálogos      (usar <Card>)
+    rounded-md     controles: campos, botones, menús
+    rounded-full   chips, puntos y avatares
+    rounded-sm     detalles pequeños dentro de un control
+
+  Todos cuelgan de --radius, así que se mueven juntos.
+
+  (Aquí vivían `.crm-card` y `.crm-card-interactive`. Se han quitado: cero usos
+  en todo el frontal. Lo que hacen ahora lo hace la primitiva Card, que además
+  se puede tipar y componer.)
+*/
+
+@layer components {
   /* Markdown viewer (CRM-113) */
   .markdown-body {
     @apply text-sm leading-relaxed text-foreground;
