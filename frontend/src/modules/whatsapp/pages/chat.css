@@ -709,7 +709,13 @@
 .wa-tour-pie.wa-tour-con-accion { flex-wrap: wrap; }
 .wa-tour-pie.wa-tour-con-accion .wa-tour-accion {
   flex: 1 0 100%;
+  /* La alineacion, aqui: al sacar el boton de `.wa-tour-botones` dejo de
+     heredar el `inline-flex` de aquel grupo, y el texto y la flecha se
+     apilaban en dos lineas con la flecha suelta debajo, a la izquierda. */
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
 }
 
 /* Cuanto queda, sin tener que leerlo. Va pegada al borde de arriba del pie. */

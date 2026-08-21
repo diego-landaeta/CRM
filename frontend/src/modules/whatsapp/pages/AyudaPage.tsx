@@ -41,7 +41,7 @@ function Paso({ n, titulo, children }: { n: number; titulo: string; children: Re
 function CaminoEnElMovil() {
   const pantallas = [
     { titulo: 'WhatsApp', filas: ['Chats', 'Novedades', 'Llamadas'], marca: null, pie: 'Menú ⋮ → Ajustes' },
-    { titulo: 'Ajustes', filas: ['Cuenta', 'Privacidad', 'Dispositivos vinculados'], marca: 'Dispositivos vinculados', pie: 'Pulsa ahi' },
+    { titulo: 'Ajustes', filas: ['Cuenta', 'Privacidad', 'Dispositivos vinculados'], marca: 'Dispositivos vinculados', pie: 'Pulsa ahí' },
     { titulo: 'Dispositivos vinculados', filas: ['Vincular un dispositivo'], marca: 'Vincular un dispositivo', pie: 'Y apunta al código' },
   ];
   return (
@@ -121,7 +121,7 @@ export default function AyudaPage() {
             puede bloquear el número y que tus conversaciones se guardan en el servidor de la
             empresa. Hasta que no lo marques, el botón no hace nada.
           </Paso>
-          <Paso n={3} titulo="Elige que traerte del móvil">
+          <Paso n={3} titulo="Elige qué traerte del móvil">
             Por defecto viene <strong>«Empezar de cero»</strong>, y casi siempre es lo que quieres:
             solo lo que llegue a partir de ahora. Si vienes atendiendo gente por ese número, «El
             ultimo mes». «Todo el historial» tarda un buen rato y se trae también lo personal.
@@ -137,7 +137,7 @@ export default function AyudaPage() {
               <span className="text-muted-foreground/60">→</span> <strong>Dispositivos vinculados</strong>
               <span className="text-muted-foreground/60">→</span> <strong>Vincular un dispositivo</strong>
             </span>
-            <span className="block mt-1">Apunta la camara al código de la pantalla.</span>
+            <span className="block mt-1">Apunta la cámara al código de la pantalla.</span>
             <CaminoEnElMovil />
           </Paso>
           <Paso n={6} titulo="Espera a que entren las conversaciones">
@@ -173,7 +173,7 @@ export default function AyudaPage() {
             <Clock size={16} className="text-muted-foreground shrink-0 mt-0.5" />
             <span>
               <strong className="text-foreground">Lo guardado no se pierde.</strong> Las conversaciones
-              siguen ahi. Lo unico que para es enviar y recibir.
+              siguen ahi. Lo único que para es enviar y recibir.
             </span>
           </li>
         </ul>
@@ -344,11 +344,11 @@ export default function AyudaPage() {
           lo de abajo lleva a eso.
         </p>
         <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
-          <li>· <strong>Escribir a quien no dejo su teléfono</strong> en un formulario nuestro. El CRM
+          <li>· <strong>Escribir a quien no dejó su teléfono</strong> en un formulario nuestro. El CRM
             te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
             hijo— pero <strong>queda anotado</strong>, y es lo que mas rápido lleva a que reporten
             un número. Piensatelo antes.</li>
-          <li>· <strong>Envios masivos</strong> o el mismo mensaje en cadena a mucha gente seguida.</li>
+          <li>· <strong>Envíos masivos</strong> o el mismo mensaje en cadena a mucha gente seguida.</li>
           <li>· <strong>Insistir a quien no contesta.</strong> Si alguien pide que no le escribas,
             márcalo con el icono <Prohibit size={12} className="inline" /> de la cabecera del chat:
             no se le vuelve a enviar nada, ni con plantilla.</li>
@@ -379,7 +379,7 @@ export default function AyudaPage() {
       </Bloque>
 
       <p className="text-xs text-muted-foreground text-center">
-        ¿Algo no encaja con lo que ves en pantalla? Dilo — esta guia se queda vieja antes que el
+        ¿Algo no encaja con lo que ves en pantalla? Dilo — esta guía se queda vieja antes que el
         código.
       </p>
     </div>

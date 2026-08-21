@@ -234,8 +234,8 @@ export default function ConexionPage() {
             </h1>
             <p className="text-sm text-muted-foreground">
               {sesion.esMia
-                ? 'Tu número, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
-                : `Estas enlazando el número de ${sesion.nombre}. Necesitas su móvil delante para meter el código.`}
+                ? 'Tu número, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie más ve lo tuyo.'
+                : `Estás enlazando el número de ${sesion.nombre}. Necesitas su móvil delante para meter el código.`}
             </p>
           </div>
           <div className="flex items-center gap-1 ml-auto shrink-0">
@@ -303,8 +303,8 @@ export default function ConexionPage() {
                 onChange={(e) => setEnterado(e.target.checked)} />
               <span className="text-sm font-medium text-amber-900 dark:text-amber-200">
                 {sesion.esMia
-                  ? 'Lo he leido y enlazo mi número sabiendolo'
-                  : `${sesion.nombre} lo ha leido y enlaza su número sabiendolo`}
+                  ? 'Lo he leído y enlazo mi número sabiéndolo'
+                  : `${sesion.nombre} lo ha leído y enlaza su número sabiéndolo`}
               </span>
             </label>
             {!sesion.esMia && (
@@ -327,7 +327,7 @@ export default function ConexionPage() {
                   id: 'cero',
                   titulo: 'Empezar de cero',
                   etiqueta: 'recomendado',
-                  pie: 'Nada del pasado: solo lo que llegue a partir de ahora. Es lo que hace falta para trabajar, y lo unico que no mete tus conversaciones antiguas en el servidor de la empresa.',
+                  pie: 'Nada del pasado: solo lo que llegue a partir de ahora. Es lo que hace falta para trabajar, y lo único que no mete tus conversaciones antiguas en el servidor de la empresa.',
                 },
                 {
                   id: 'rápido',
@@ -337,8 +337,8 @@ export default function ConexionPage() {
                 {
                   id: 'todo',
                   titulo: 'Todo el historial',
-                  etiqueta: 'piensatelo',
-                  pie: 'TODO lo que tenga el móvil, incluido lo personal y los grupos. En un número con anos de uso son decenas de miles de mensajes, tarda un buen rato y llega por tandas.',
+                  etiqueta: 'piénsatelo',
+                  pie: 'TODO lo que tenga el móvil, incluido lo personal y los grupos. En un número con años de uso son decenas de miles de mensajes, tarda un buen rato y llega por tandas.',
                 },
               ] as const).map((o) => (
                 <label key={o.id}
@@ -565,22 +565,22 @@ export default function ConexionPage() {
           que te bloqueen. Estaban diciendo casi lo mismo, en amarillo los dos, y
           leidos seguidos no se distinguian. */}
       <div className="border border-border bg-card rounded-lg p-5 text-sm">
-        <p className="font-semibold mb-2">Como no acabar bloqueado</p>
+        <p className="font-semibold mb-2">Cómo no acabar bloqueado</p>
         <ul className="text-muted-foreground space-y-1.5 leading-relaxed">
-          <li>· <strong className="text-foreground">Piensatelo antes de escribir a quien no dejo su
+          <li>· <strong className="text-foreground">Piénsatelo antes de escribir a quien no dejó su
               teléfono</strong> en un formulario nuestro. El CRM te deja —a veces hay motivo— pero queda
               anotado, y es lo que hace que la gente reporte un número. Los reportes son lo que hace
               que lo suspendan.</li>
-          <li>· <strong className="text-foreground">Nada de envios masivos</strong> ni el mismo mensaje en
+          <li>· <strong className="text-foreground">Nada de envíos masivos</strong> ni el mismo mensaje en
               cadena. Hay topes: 6 por minuto, 60 por hora, 300 al día. Son por número, así que lo
               que mande un companero no te frena a ti.</li>
           <li>· Si alguien pide que no le escribas, <strong className="text-foreground">márcalo en el
-              chat</strong>. No se le envia nada mas, ni con plantilla.</li>
+              chat</strong>. No se le envía nada más, ni con plantilla.</li>
           <li>· Si se desconecta —pasa, sobre todo con el móvil sin cobertura—, vuelve aquí y enlaza
               otra vez. Lo guardado no se pierde.</li>
         </ul>
         <Link to="/whatsapp/ayuda" className="text-primary hover:underline font-medium mt-3 inline-block">
-          Ver la guia completa →
+          Ver la guía completa →
         </Link>
       </div>
     </div>

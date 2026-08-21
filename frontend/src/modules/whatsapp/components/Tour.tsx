@@ -56,7 +56,7 @@ const PASOS: Paso[] = [
     enElCorto: true,
     donde: '.wa-sin-enlazar',
     titulo: 'Te falta conectar el tuyo',
-    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos. Si prefieres seguir viendo la pantalla antes, dale a «Siguiente».',
+    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos, y cuando vuelvas te enseño el resto con tus conversaciones ya delante.',
     accion: { texto: 'Enlazar mi número', a: '/whatsapp/conexion' },
   },
   {
