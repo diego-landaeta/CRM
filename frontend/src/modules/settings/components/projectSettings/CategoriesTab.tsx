@@ -60,7 +60,7 @@ export default function CategoriesTab({ project }) {
       <SectionTitle title="Categorias y subcategorias" subtitle={`Organiza ${productoLabel} en grupos (ej: Cursos, Presenciales, Talleres)`} />
 
       <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
-        <p className="text-[11px] font-medium text-muted-foreground">Añadir categoría</p>
+        <p className="text-meta font-medium text-muted-foreground">Añadir categoría</p>
         <div className="flex gap-2">
           <input value={newCat.nombre} onChange={e => setNewCat({ ...newCat, nombre: e.target.value })} placeholder="Nombre" className={inputClass + ' flex-1'} required />
           <Select
@@ -96,7 +96,7 @@ export default function CategoriesTab({ project }) {
                   <Tag size={14} className="text-primary" weight="fill" />
                   <span className="font-bold text-sm">{p.nombre}</span>
                   {childrenByParent[p.id]?.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    <span className="text-micro px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                       {childrenByParent[p.id].length} subcategoria{childrenByParent[p.id].length > 1 ? 's' : ''}
                     </span>
                   )}

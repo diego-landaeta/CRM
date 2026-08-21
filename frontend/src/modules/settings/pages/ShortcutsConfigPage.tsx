@@ -222,7 +222,7 @@ export default function ShortcutsConfigPage() {
               <article key={p.id} className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
                   <h3 className="font-semibold text-sm truncate">{p.nombre}</h3>
-                  <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                  <span className="text-meta text-muted-foreground tabular-nums shrink-0">
                     {inner.size} / {catalog.length} activos
                   </span>
                 </div>
@@ -249,14 +249,14 @@ export default function ShortcutsConfigPage() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium truncate">{item.label}</div>
-                            <div className="text-[11px] text-muted-foreground truncate">
+                            <div className="text-meta text-muted-foreground truncate">
                               {item.route || item.action || ''}
                             </div>
                           </div>
                         </div>
                         {isOn && (
                           <div className="mt-2 ml-7 pl-3 flex items-center flex-wrap gap-1.5 border-l border-border/60">
-                            <span className="text-[10px] text-muted-foreground mr-0.5">Visible para:</span>
+                            <span className="text-micro text-muted-foreground mr-0.5">Visible para:</span>
                             {ROLES.map(r => {
                               const checked = showAll || (itemRoles?.includes(r.id) ?? false);
                               return (
@@ -265,7 +265,7 @@ export default function ShortcutsConfigPage() {
                                   type="button"
                                   onClick={() => toggleRole(p.id, item.id, r.id)}
                                   title={`${r.full}${showAll ? ' (todos seleccionados — clic restringe solo a este)' : ''}`}
-                                  className={`text-[10px] font-semibold h-5 px-1.5 rounded border transition-all ${
+                                  className={`text-micro font-semibold h-5 px-1.5 rounded border transition-all ${
                                     checked
                                       ? 'bg-primary/15 border-primary/40 text-primary'
                                       : 'bg-muted border-border text-muted-foreground hover:border-primary/40'
@@ -276,7 +276,7 @@ export default function ShortcutsConfigPage() {
                               );
                             })}
                             {showAll && (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 ml-1">todos</span>
+                              <span className="text-micro text-emerald-600 dark:text-emerald-400 ml-1">todos</span>
                             )}
                           </div>
                         )}
@@ -286,7 +286,7 @@ export default function ShortcutsConfigPage() {
                 </ul>
                 <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
                   {isDirty && !isSaving && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400">Cambios sin guardar</span>
+                    <span className="text-meta text-amber-600 dark:text-amber-400">Cambios sin guardar</span>
                   )}
                   <button
                     type="button"

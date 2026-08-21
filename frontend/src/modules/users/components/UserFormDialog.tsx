@@ -105,7 +105,7 @@ export default function UserFormDialog({
         <div
           role="dialog"
           aria-modal="true"
-          className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in"
+          className="relative bg-card rounded-lg border border-border shadow-dialog w-full max-w-lg mx-4 p-4 sm:p-8 overflow-y-auto max-h-[90vh] animate-in"
         >
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -133,7 +133,7 @@ export default function UserFormDialog({
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold text-sm truncate">{user!.nombre}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{user!.email}</p>
+                  <p className="text-meta text-muted-foreground truncate">{user!.email}</p>
                 </div>
               </div>
             )}
@@ -168,7 +168,7 @@ export default function UserFormDialog({
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block px-1">Email</label>
                 <input value={user!.email} readOnly disabled className={`${inputClass} opacity-60 cursor-not-allowed`} />
-                <p className="text-[10px] text-muted-foreground mt-1 px-1 flex items-start gap-1">
+                <p className="text-micro text-muted-foreground mt-1 px-1 flex items-start gap-1">
                   <Info size={11} className="mt-px flex-shrink-0" />
                   El email es la identidad de la cuenta y hoy no se puede cambiar desde aquí.
                 </p>
@@ -183,7 +183,7 @@ export default function UserFormDialog({
                 options={ASSIGNABLE_ROLES.map((r) => ({ value: r.value, label: r.label }))}
                 ariaLabel="Rol"
               />
-              <p className="text-[10px] text-muted-foreground mt-1 px-1">
+              <p className="text-micro text-muted-foreground mt-1 px-1">
                 {ASSIGNABLE_ROLES.find((r) => r.value === role)?.hint}
               </p>
             </div>
@@ -210,7 +210,7 @@ export default function UserFormDialog({
                   maxLength={30}
                   className={inputClass}
                 />
-                <p className="text-[10px] text-muted-foreground mt-1 px-1">
+                <p className="text-micro text-muted-foreground mt-1 px-1">
                   Se usa para el widget de WhatsApp y el contacto del gestor.
                 </p>
               </div>
@@ -218,7 +218,7 @@ export default function UserFormDialog({
 
             {esEdicion && !canResetPassword && (
               <div className="border-t border-border pt-3 mt-1">
-                <p className="text-[11px] text-muted-foreground px-1 flex items-start gap-1.5">
+                <p className="text-meta text-muted-foreground px-1 flex items-start gap-1.5">
                   <Lock size={12} className="mt-px flex-shrink-0" />
                   Reiniciar la contraseña de otra persona solo lo puede hacer un superadministrador.
                   El servidor lo rechaza aunque el campo estuviera aquí.
@@ -250,7 +250,7 @@ export default function UserFormDialog({
                     {guardandoPass ? '…' : 'Cambiar'}
                   </button>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1 px-1">
+                <p className="text-micro text-muted-foreground mt-1 px-1">
                   Se la comunicas tú al usuario. Al cambiarla se cierran sus sesiones activas.
                 </p>
               </div>
