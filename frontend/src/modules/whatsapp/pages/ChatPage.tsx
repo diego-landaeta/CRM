@@ -743,6 +743,17 @@ export default function ChatPage() {
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
           <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
         </button>
+        {/* El recorrido, aqui y no en la cabecera del chat.
+
+            Estaba dentro de <ConversationHeader>, que solo se pinta cuando hay
+            una conversacion abierta. Quien acababa de llegar y no tenia ninguna
+            no podia volver a verlo de ninguna manera — y es exactamente quien lo
+            necesita, porque el recorrido salta solo una vez por navegador. */}
+        <button type="button" onClick={() => setTour(true)} className="wa-btn-tour"
+          title="Ver el recorrido por esta pantalla">
+          <Question size={14} weight="bold" />
+          <span className="font-medium">Cómo va esto</span>
+        </button>
         <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
@@ -846,14 +857,6 @@ export default function ChatPage() {
                   <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
                     title="No volver a escribir a este numero">
                     <Prohibit size={17} />
-                  </button>
-                  {/* El recorrido, a mano. Aparece solo la primera vez, y quien lo
-                      cierra sin querer —o quiere repasarlo en un mes— no tiene por
-                      que buscarlo: se pide desde aqui. Va en la cabecera y no en la
-                      barra lateral porque con la pantalla ampliada la barra no esta. */}
-                  <button type="button" onClick={() => setTour(true)} className="wa-btn-ayuda"
-                    title="Ver el recorrido por la pantalla">
-                    <Question size={17} />
                   </button>
                 </ConversationHeader.Actions>
               </ConversationHeader>

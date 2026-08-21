@@ -284,6 +284,18 @@
 }
 .wa-btn-prohibir:hover { color: #f15c6d; }
 .wa-btn-ayuda:hover { color: var(--wa-verde); }
+
+/* El «?» de la barra de arriba. Va con el mismo aspecto que «Ampliar» y
+ * «Conexion», que son sus vecinos: son tres accesos de la misma fila. */
+.wa-btn-tour {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--wa-apagado);
+  font-size: inherit;
+}
+.wa-btn-tour:hover { background: var(--wa-hover); color: var(--wa-texto); }
 .wa-btn-llamar:hover { color: var(--wa-verde); }
 
 /* El microfono flota sobre la barra: el kit no trae boton de nota de voz.
