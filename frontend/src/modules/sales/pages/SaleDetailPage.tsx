@@ -174,7 +174,7 @@ export default function SaleDetailPage() {
             <EmptyState icon={Calendar} title="Sin plan de cuotas" description="Esta venta no está fraccionada." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="text-[11px] text-muted-foreground border-b border-border">
                   <tr>
                     <th className="text-left py-2 font-bold">#</th>
@@ -226,7 +226,7 @@ export default function SaleDetailPage() {
           <EmptyState icon={CreditCard} title="Sin pagos" description="Todavía no se ha registrado ningún cobro." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead className="text-[11px] text-muted-foreground border-b border-border">
                 <tr>
                   <th className="text-left py-2 font-bold">Fecha</th>

@@ -46,7 +46,7 @@ export default function ChannelsConfigPage() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="font-semibold text-base">Backend pendiente</h2>
-            <span className="text-micro font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 uppercase tracking-wide">
+            <span className="text-secundario font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 uppercase tracking-wide">
               En breve
             </span>
           </div>

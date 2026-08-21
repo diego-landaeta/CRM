@@ -320,7 +320,7 @@ export default function CommissionsPage() {
           <>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     {isAdmin && (

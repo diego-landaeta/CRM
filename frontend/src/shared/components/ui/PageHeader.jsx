@@ -33,16 +33,16 @@ export default function PageHeader({
         {backTo && (
           <Link
             to={backTo}
-            className="inline-flex items-center gap-1 -ml-1 mb-1 px-1 py-0.5 rounded text-xs font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className="inline-flex items-center gap-1 -ml-1 mb-1 px-1 py-0.5 rounded text-secundario font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <CaretLeft size={12} weight="bold" />
             {backLabel}
           </Link>
         )}
         {breadcrumbs && <div className="mb-1">{breadcrumbs}</div>}
-        <h1 className="text-xl font-semibold truncate">{title}</h1>
+        <h1 className="text-titulo truncate">{title}</h1>
         {subtitle && (
-          <p className="text-muted-foreground text-sm mt-0.5 truncate">{subtitle}</p>
+          <p className="text-muted-foreground text-secundario mt-0.5 truncate">{subtitle}</p>
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

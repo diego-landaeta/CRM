@@ -142,7 +142,7 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="tabla-cifras w-full text-xs">
           <thead>
             <tr className="text-muted-foreground border-b border-border">
               <th className="text-left font-semibold py-1.5 pr-2">País</th>
