@@ -26,7 +26,7 @@ const CADA_SIN_ENLAZAR_MS = 60000;
 
 type Sonando = {
   id: string;
-  telefono: string;
+  teléfono: string;
   nombre: string | null;
   conversacionId: number;
   esVideo: boolean;
@@ -100,8 +100,8 @@ function Cartel() {
     if (avisado.current === llamada.id) return;
     avisado.current = llamada.id;
     try {
-      new Notification('Te estan llamando por WhatsApp', {
-        body: `${llamada.nombre || llamada.telefono} · cogelo en el movil`,
+      new Notification('Te están llamando por WhatsApp', {
+        body: `${llamada.nombre || llamada.telefono} · cogelo en el móvil`,
         tag: llamada.id,   // que no se apilen si el navegador repite
       });
     } catch { /* si el navegador no deja, el cartel sigue estando */ }

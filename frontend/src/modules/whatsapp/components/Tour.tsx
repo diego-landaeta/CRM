@@ -18,6 +18,10 @@ type Paso = {
   donde?: string;
   titulo: string;
   texto: string;
+  /** Solo tiene sentido si NO hay numero enlazado. */
+  soloSinNumero?: boolean;
+  /** Sale tambien en el recorrido corto, el de quien todavia no ha enlazado. */
+  enElCorto?: boolean;
   /**
    * A donde lleva, si el paso pide hacer algo.
    *
@@ -37,6 +41,7 @@ const PASOS: Paso[] = [
     // Se presenta la pantalla ANTES de pedir nada. Quien llega aqui no sabe
     // todavia que es esto: mandarla a enlazar un numero de entrada es pedirle
     // que conecte su telefono a algo que no le han explicado.
+    enElCorto: true,
     titulo: 'Esto es tu WhatsApp',
     texto: 'Desde aquí escribes a los prospectos sin salir del CRM, con tu propio número. Las conversaciones quedan guardadas y atadas a su ficha, y solo las ves tú — ni el resto del equipo ni las demás gestoras. En {pasos} pasos te enseño por dónde va cada cosa.',
   },
@@ -47,6 +52,8 @@ const PASOS: Paso[] = [
     // el paso se salta solo con el mecanismo que ya existe. Sin el, quien abria
     // el chat sin enlazar recibia un recorrido sobre buscar, escribir y llamar
     // —todo cosas que aun no puede hacer— y nadie le decia por donde empezar.
+    soloSinNumero: true,
+    enElCorto: true,
     donde: '.wa-sin-enlazar',
     titulo: 'Te falta conectar el tuyo',
     texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos. Si prefieres seguir viendo la pantalla antes, dale a «Siguiente».',
@@ -90,6 +97,27 @@ const PASOS: Paso[] = [
 
 export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   const navegar = useNavigate();
+
+  /**
+   * Sin numero enlazado, el recorrido es CORTO: presentar y mandar a enlazar.
+   *
+   * Enseñar nueve pasos sobre buscar, escribir, llamar y responder a alguien que
+   * tiene la pantalla vacia es hacerle perder el tiempo — no puede probar nada
+   * de lo que se le cuenta, y para cuando lo tenga se le habra olvidado. Dos
+   * carteles y a enlazar.
+   *
+   * El recorrido no se marca como visto al salir por ese boton, asi que cuando
+   * vuelva con el numero puesto lo tendra entero, y ya con conversaciones
+   * delante. Se decide una vez al abrir: si cambiara a mitad, la cuenta de pasos
+   * bailaria.
+   */
+  const [pasos] = useState<Paso[]>(() => {
+    const sinNumero = Boolean(document.querySelector('.wa-sin-enlazar'));
+    return sinNumero
+      ? PASOS.filter((p) => p.enElCorto)
+      : PASOS.filter((p) => !p.soloSinNumero);
+  });
+
   const [paso, setPaso] = useState(0);
   const [hueco, setHueco] = useState<DOMRect | null>(null);
   // El alto real del cartel y el tamaño de la ventana. Los dos hacen falta para
@@ -110,7 +138,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     if (cartel.current) setAltoCartel(cartel.current.offsetHeight);
   }, [paso]);
 
-  const actual = PASOS[paso];
+  const actual = pasos[paso];
 
   /**
    * Cierra el recorrido. `marcar` decide si cuenta como visto.
@@ -133,8 +161,8 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   // el temporizador de medir se reiniciaria sin parar y no llegaria nunca a los
   // 1,5 segundos de espera que hacen que un paso valido no se salte.
   const saltar = useCallback(() => {
-    for (let i = paso + 1; i < PASOS.length; i++) {
-      const p = PASOS[i];
+    for (let i = paso + 1; i < pasos.length; i++) {
+      const p = pasos[i];
       if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
     }
     cerrar();
@@ -195,7 +223,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    */
   const atras = useCallback(() => {
     for (let i = paso - 1; i >= 0; i--) {
-      const p = PASOS[i];
+      const p = pasos[i];
       if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
     }
   }, [paso]);
@@ -208,7 +236,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     return () => window.removeEventListener('keydown', alPulsar);
   }, [cerrar]);
 
-  const ultimo = paso === PASOS.length - 1;
+  const ultimo = paso === pasos.length - 1;
 
   // El cartel, pegado a lo que señala pero sin salirse de la pantalla.
   //
@@ -247,27 +275,25 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
             <X size={14} />
           </button>
         </div>
-        <p className="wa-tour-texto">{actual.texto.replace('{pasos}', String(PASOS.length))}</p>
+        <p className="wa-tour-texto">{actual.texto.replace('{pasos}', String(pasos.length))}</p>
         {/* Cuanto queda, sin tener que leer «4 de 8». */}
         <div className="wa-tour-avance" aria-hidden="true">
-          <span style={{ width: `${((paso + 1) / PASOS.length) * 100}%` }} />
+          <span style={{ width: `${((paso + 1) / pasos.length) * 100}%` }} />
         </div>
-        <div className="wa-tour-pie">
-          <span className="wa-tour-cuenta">{paso + 1} de {PASOS.length}</span>
+        <div className={`wa-tour-pie ${actual.accion ? 'wa-tour-con-accion' : ''}`}>
+          <span className="wa-tour-cuenta">{paso + 1} de {pasos.length}</span>
           <div className="wa-tour-botones">
             {paso > 0 && (
               <button type="button" className="wa-btn-suave" onClick={atras}>
                 <ArrowLeft size={13} /> Atrás
               </button>
             )}
+            {/* «Siguiente» solo si queda algo detras: en el recorrido corto
+                este es el ultimo paso, y ofrecerlo llevaria a ninguna parte. */}
             {actual.accion ? (
-              <>
+              !ultimo && (
                 <button type="button" className="wa-btn-suave" onClick={saltar}>Siguiente</button>
-                <button type="button" className="wa-btn-verde"
-                  onClick={() => { cerrar(false); navegar(actual.accion!.a); }}>
-                  {actual.accion.texto} <ArrowRight size={13} />
-                </button>
-              </>
+              )
             ) : ultimo ? (
               <button type="button" className="wa-btn-verde" onClick={() => cerrar()}>Entendido</button>
             ) : (
@@ -276,6 +302,16 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
               </button>
             )}
           </div>
+
+          {/* El boton que LLEVA va fuera del grupo y a fila entera.
+              Dentro del grupo empujaba a «Atras» a otra linea y el pie quedaba
+              en tres filas: cuenta, Atras y accion, cada una por su lado. */}
+          {actual.accion && (
+            <button type="button" className="wa-btn-verde wa-tour-accion"
+              onClick={() => { cerrar(false); navegar(actual.accion!.a); }}>
+              {actual.accion.texto} <ArrowRight size={13} />
+            </button>
+          )}
         </div>
       </div>
     </div>

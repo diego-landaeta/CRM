@@ -1,0 +1,152 @@
+import { test, expect } from '@playwright/test';
+import { login } from './helpers.js';
+
+// WhatsApp, abierto de verdad en un navegador.
+//
+// Existe por una tanda de fallos que ninguna otra comprobacion vio, porque
+// todas miraban la API o el codigo:
+//
+//   · Un `moduloApagado(...)` sin importar dejo el CRM en blanco. Paso lint,
+//     paso typecheck y paso el build: TypeScript no mira los `.jsx`.
+//   · El boton para volver a abrir el recorrido vivia dentro de la cabecera de
+//     conversacion, que solo existe con un chat abierto. Quien acababa de
+//     llegar no podia recuperarlo.
+//   · El paso «pulsa enlazar mi numero» señalaba un enlace que el propio velo
+//     del recorrido tapaba: al pulsarlo se cerraba el recorrido y ya.
+//
+// Los tres se ven en dos segundos abriendo la pantalla, y en ninguna otra parte.
+
+// Angel es admin: es el rol con el que se trabaja, y el que destapo el 500 del
+// selector de sesion —un superadmin iba por otra rama y no lo veia—.
+const GESTOR = { email: 'angel@empresa.com', password: 'CrmTemp2026!' };
+
+/** Lo que ningun test debe encontrarse: la pantalla de «Algo se ha roto». */
+async function noSeHaRoto(page) {
+  await expect(page.getByText('Algo se ha roto')).toHaveCount(0);
+}
+
+/**
+ * Cierra el recorrido si esta abierto.
+ *
+ * Salta solo la primera vez en cada navegador, y Playwright arranca con uno
+ * limpio en cada prueba — asi que esta SIEMPRE abierto y su velo tapa la
+ * pantalla entera. Lo que se prueba en cada test no es eso, asi que se quita de
+ * en medio; el arranque automatico tiene su propia prueba.
+ */
+async function sinRecorrido(page) {
+  const cerrar = page.getByTitle('Cerrar');
+  if (await cerrar.count()) await cerrar.first().click();
+  await expect(page.locator('.wa-tour')).toHaveCount(0);
+}
+
+test.describe('WhatsApp · que la pantalla abra', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page, GESTOR);
+  });
+
+  test('el CRM carga y el menu lleva a WhatsApp', async ({ page }) => {
+    await noSeHaRoto(page);
+    // El menu de WhatsApp cuelga de su propia entrada, con lo suyo debajo.
+    await expect(page.getByRole('link', { name: 'Chat', exact: true }).or(
+      page.getByText('WhatsApp', { exact: true }).first(),
+    )).toBeVisible();
+  });
+
+  test('el chat abre sin romperse', async ({ page }) => {
+    await page.goto('/crm/whatsapp/chat');
+    await page.waitForLoadState('networkidle');
+    await noSeHaRoto(page);
+    // La barra de arriba sale siempre, con numero enlazado y sin el.
+    // Sale dos veces —el del menu lateral y el de la barra del chat—, asi que
+    // se comprueba el de la barra, que es el que se añadio.
+    await expect(page.getByRole('link', { name: /Conexión/i }).last()).toBeVisible();
+  });
+
+  test('el recorrido se puede pedir SIN conversaciones', async ({ page }) => {
+    // Esto es lo que fallaba: el boton estaba dentro de la cabecera del chat, y
+    // esa solo se pinta con una conversacion abierta. Quien no tenia ninguna se
+    // quedaba sin forma de volver a verlo.
+    await page.goto('/crm/whatsapp/chat');
+    await page.waitForLoadState('networkidle');
+    await sinRecorrido(page);
+    const boton = page.getByRole('button', { name: /Cómo va esto/i });
+    await expect(boton).toBeVisible();
+    await boton.click();
+    // Presentacion primero: que es esto, antes de pedirle nada.
+    await expect(page.getByText('Esto es tu WhatsApp')).toBeVisible();
+    await expect(page.getByText(/1 de \d/)).toBeVisible();
+  });
+
+  test('sin numero enlazado, el segundo paso LLEVA a Conexión', async ({ page }) => {
+    await page.goto('/crm/whatsapp/chat');
+    await page.waitForLoadState('networkidle');
+
+    const aviso = page.locator('.wa-sin-enlazar');
+    if (await aviso.count() === 0) {
+      test.skip(true, 'hay un numero enlazado: ese paso se salta solo, que es lo correcto');
+    }
+
+    await sinRecorrido(page);
+    await page.getByRole('button', { name: /Cómo va esto/i }).click();
+    await page.getByRole('button', { name: /Siguiente/i }).click();
+    await expect(page.getByText('Te falta conectar el tuyo')).toBeVisible();
+
+    // Y aqui lo que importa: que el boton lleve. Antes decia «pulsa enlazar mi
+    // numero» y el velo del recorrido tapaba ese enlace.
+    await page.getByRole('button', { name: /Enlazar mi número/i }).click();
+    await expect(page).toHaveURL(/\/whatsapp\/conexion/);
+    await noSeHaRoto(page);
+  });
+
+  test('el recorrido salta solo la primera vez, y no la segunda', async ({ page }) => {
+    await page.goto('/crm/whatsapp/chat');
+    await page.waitForLoadState('networkidle');
+    // Navegador limpio: tiene que aparecer sin pedirlo.
+    await expect(page.getByText('Esto es tu WhatsApp')).toBeVisible();
+
+    await page.getByTitle('Cerrar').first().click();
+    await page.goto('/crm/whatsapp/chat');
+    await page.waitForLoadState('networkidle');
+    // Y ya no. Un recorrido que reaparece en cada visita es una molestia.
+    await expect(page.locator('.wa-tour')).toHaveCount(0);
+  });
+
+  test('Conexión abre con su aviso antes del código', async ({ page }) => {
+    await page.goto('/crm/whatsapp/conexion');
+    await page.waitForLoadState('networkidle');
+    await noSeHaRoto(page);
+    // El aviso va ANTES del codigo, y con casilla: es el punto 1 de la tarea #45.
+    await expect(page.getByText(/no es la vía oficial/i)).toBeVisible();
+    await expect(page.getByRole('checkbox')).toBeVisible();
+  });
+
+  test('la guía abre con el camino del móvil dibujado', async ({ page }) => {
+    await page.goto('/crm/whatsapp/ayuda');
+    await page.waitForLoadState('networkidle');
+    await noSeHaRoto(page);
+    await expect(page.getByText(/5 · Llamadas/)).toBeVisible();
+    await expect(page.getByText('Vincular un dispositivo').first()).toBeVisible();
+  });
+
+  test('las plantillas abren y traen las del proyecto', async ({ page }) => {
+    await page.goto('/crm/whatsapp/plantillas');
+    await page.waitForLoadState('networkidle');
+    await noSeHaRoto(page);
+  });
+
+  test('ninguna pantalla deja errores en la consola', async ({ page }) => {
+    // Un `x is not defined` sale por aqui aunque la pantalla parezca entera.
+    const errores = [];
+    page.on('pageerror', (e) => errores.push(e.message));
+    page.on('console', (m) => { if (m.type() === 'error') errores.push(m.text()); });
+
+    for (const ruta of ['/crm/whatsapp/chat', '/crm/whatsapp/conexion', '/crm/whatsapp/ayuda', '/crm/whatsapp/plantillas']) {
+      await page.goto(ruta);
+      await page.waitForLoadState('networkidle');
+    }
+    // Los 404 de imagenes y avisos del navegador no cuentan; lo que no puede
+    // haber es codigo que revienta.
+    const graves = errores.filter((e) => /is not defined|is not a function|Cannot read|undefined is not/i.test(e));
+    expect(graves, `errores de codigo:\n${graves.join('\n')}`).toEqual([]);
+  });
+});

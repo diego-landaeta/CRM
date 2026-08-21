@@ -29,7 +29,7 @@ const RENUEVA_QR_MS = 18000;
 
 // Lo que se contesta si no se escribe otra cosa. Corto y sin promesas de
 // horario: «te llamamos en 5 minutos» es lo que genera la queja siguiente.
-const RESPUESTA_POR_DEFECTO = 'Ahora no podemos atenderte por llamada. Escribenos por aqui y te respondemos lo antes posible.';
+const RESPUESTA_POR_DEFECTO = 'Ahora no podemos atenderte por llamada. Escribenos por aquí y te respondemos lo antes posible.';
 
 export default function ConexionPage() {
   const [estado, setEstado] = useState<ConexionWhatsapp | null>(null);
@@ -185,7 +185,7 @@ export default function ConexionPage() {
         title: activa ? 'Respuesta automática activada' : 'Respuesta automática desactivada',
         description: activa
           ? 'Las llamadas se rechazaran y se contestara con ese texto.'
-          : 'Las llamadas entrantes sonaran en tu movil como siempre.',
+          : 'Las llamadas entrantes sonaran en tu móvil como siempre.',
       });
     } catch (e) {
       toast({ title: 'No se pudo guardar', description: (e as Error).message, variant: 'destructive' });
@@ -204,10 +204,10 @@ export default function ConexionPage() {
       }
       const borradas = r.data?.borradas;
       toast({
-        title: 'Numero desvinculado',
+        title: 'Número desvinculado',
         description: borradas
           ? `Ya no aparece en «Dispositivos vinculados». Borradas ${borradas.conversaciones} conversaciones y ${borradas.ficheros} archivos.`
-          : 'Ya no aparece en «Dispositivos vinculados» del movil. Las conversaciones guardadas siguen aqui.',
+          : 'Ya no aparece en «Dispositivos vinculados» del móvil. Las conversaciones guardadas siguen aquí.',
       });
       setBorrarTodo(false);
       setQr(null);
@@ -234,8 +234,8 @@ export default function ConexionPage() {
             </h1>
             <p className="text-sm text-muted-foreground">
               {sesion.esMia
-                ? 'Tu numero, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
-                : `Estas enlazando el numero de ${sesion.nombre}. Necesitas su movil delante para meter el codigo.`}
+                ? 'Tu número, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
+                : `Estas enlazando el número de ${sesion.nombre}. Necesitas su móvil delante para meter el código.`}
             </p>
           </div>
           <div className="flex items-center gap-1 ml-auto shrink-0">
@@ -271,7 +271,7 @@ export default function ConexionPage() {
             <>
               <WarningCircle size={18} weight="fill" className="text-amber-500 shrink-0" />
               <span className="text-amber-700 dark:text-amber-400">
-                Todavia no has enlazado tu numero.
+                Todavía no has enlazado tu número.
               </span>
             </>
           )}
@@ -284,27 +284,27 @@ export default function ConexionPage() {
           <div className="mt-4 border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
             <p className="font-semibold text-amber-900 dark:text-amber-200 mb-2 text-sm">
               {sesion.esMia
-                ? 'Antes de enlazar tu numero, lee esto'
-                : `Vas a enlazar el numero de ${sesion.nombre}. Que lo lea esa persona:`}
+                ? 'Antes de enlazar tu número, lee esto'
+                : `Vas a enlazar el número de ${sesion.nombre}. Que lo lea esa persona:`}
             </p>
             <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-1.5 leading-relaxed">
-              <li>· El número queda vinculado al CRM. Esta <strong>no es la via oficial de
+              <li>· El número queda vinculado al CRM. Esta <strong>no es la vía oficial de
                   WhatsApp</strong> y WhatsApp <strong>puede bloquearlo</strong>.</li>
               <li>· Mejor un <strong>número de empresa, nunca el personal</strong>. Si lo
-                  bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
+                  bloquean se pierden también las conversaciones privadas de esa línea.</li>
               <li>· Las conversaciones <strong>se guardan en la base del CRM</strong>, en el
-                  servidor de la empresa. Los demas del equipo no las ven, pero
+                  servidor de la empresa. Los demás del equipo no las ven, pero
                   <strong> la administración si puede</strong>.</li>
-              <li>· Se puede <strong>desvincular cuando se quiera</strong>, desde aqui o desde
-                  Dispositivos vinculados en el movil.</li>
+              <li>· Se puede <strong>desvincular cuando se quiera</strong>, desde aquí o desde
+                  Dispositivos vinculados en el móvil.</li>
             </ul>
             <label className="flex items-start gap-2 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 cursor-pointer">
               <input type="checkbox" checked={enterado} className="mt-0.5"
                 onChange={(e) => setEnterado(e.target.checked)} />
               <span className="text-sm font-medium text-amber-900 dark:text-amber-200">
                 {sesion.esMia
-                  ? 'Lo he leido y enlazo mi numero sabiendolo'
-                  : `${sesion.nombre} lo ha leido y enlaza su numero sabiendolo`}
+                  ? 'Lo he leido y enlazo mi número sabiendolo'
+                  : `${sesion.nombre} lo ha leido y enlaza su número sabiendolo`}
               </span>
             </label>
             {!sesion.esMia && (
@@ -332,13 +332,13 @@ export default function ConexionPage() {
                 {
                   id: 'rápido',
                   titulo: 'El último mes',
-                  pie: 'Las conversaciones de los ultimos 30 dias. Util si vienes atendiendo a gente por ese numero y no quieres perder el hilo.',
+                  pie: 'Las conversaciones de los últimos 30 días. Util si vienes atendiendo a gente por ese número y no quieres perder el hilo.',
                 },
                 {
                   id: 'todo',
                   titulo: 'Todo el historial',
                   etiqueta: 'piensatelo',
-                  pie: 'TODO lo que tenga el movil, incluido lo personal y los grupos. En un numero con anos de uso son decenas de miles de mensajes, tarda un buen rato y llega por tandas.',
+                  pie: 'TODO lo que tenga el móvil, incluido lo personal y los grupos. En un número con anos de uso son decenas de miles de mensajes, tarda un buen rato y llega por tandas.',
                 },
               ] as const).map((o) => (
                 <label key={o.id}
@@ -371,16 +371,16 @@ export default function ConexionPage() {
               className="h-9 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50">
               <QrCode size={16} weight="bold" />
               {pidiendo
-                ? (reintento ? `Reintentando (${reintento} de 3)…` : 'Pidiendo codigo…')
+                ? (reintento ? `Reintentando (${reintento} de 3)…` : 'Pidiendo código…')
                 : qr ? 'Pedir otro código'
-                : sesion.esMia ? 'Enlazar mi numero' : `Enlazar el numero de ${sesion.nombre}`}
+                : sesion.esMia ? 'Enlazar mi número' : `Enlazar el número de ${sesion.nombre}`}
             </button>
           )}
           {conectado && (
             <button type="button" onClick={() => setConfirmando(true)} disabled={cerrando}
               className="h-9 px-3 rounded-md border border-red-300 dark:border-red-900 text-red-700 dark:text-red-400 text-sm font-semibold inline-flex items-center gap-2 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">
               <SignOut size={16} weight="bold" />
-              {cerrando ? 'Desvinculando…' : 'Desvincular mi numero'}
+              {cerrando ? 'Desvinculando…' : 'Desvincular mi número'}
             </button>
           )}
         </div>
@@ -389,7 +389,7 @@ export default function ConexionPage() {
       {qr && !conectado && (
         <div className="bg-card border border-border rounded-lg p-5 text-center">
           <h2 className="font-semibold mb-3 flex items-center justify-center gap-2">
-            <DeviceMobile size={18} weight="duotone" /> Escanea con el movil de tu numero
+            <DeviceMobile size={18} weight="duotone" /> Escanea con el móvil de tu número
           </h2>
           <ol className="text-sm text-muted-foreground mb-4 inline-block text-left leading-relaxed">
             <li><strong>1.</strong> Abre WhatsApp</li>
@@ -401,7 +401,7 @@ export default function ConexionPage() {
           </div>
           <p className="text-xs text-muted-foreground mt-3 flex items-center justify-center gap-1.5">
             <ArrowsClockwise size={12} className="animate-spin" />
-            El codigo se renueva solo cada 18 segundos. No hace falta hacer nada.
+            El código se renueva solo cada 18 segundos. No hace falta hacer nada.
           </p>
         </div>
       )}
@@ -424,7 +424,7 @@ export default function ConexionPage() {
               <p className="font-semibold">Todo listo</p>
               <p className="text-muted-foreground">
                 {sync ? `${sync.conversaciones} chats · ${sync.mensajes} mensajes.` : ''}
-                {' '}Las conversaciones nuevas aparecen solas y se atan al prospecto que tenga ese telefono.
+                {' '}Las conversaciones nuevas aparecen solas y se atan al prospecto que tenga ese teléfono.
                 Solo las ves tu.
               </p>
             </>
@@ -451,7 +451,7 @@ export default function ConexionPage() {
           </p>
           <p className="text-muted-foreground">
             Las llamadas <strong className="text-foreground">se cogen desde tu móvil</strong>, no desde
-            aqui: WhatsApp no deja hablar por esta via. Lo que si hace el CRM es{' '}
+            aquí: WhatsApp no deja hablar por esta vía. Lo que si hace el CRM es{' '}
             <strong className="text-foreground">apuntarlas</strong> — las perdidas salen en el chat con
             su hora, para que no se te escape ninguna.
           </p>
@@ -471,7 +471,7 @@ export default function ConexionPage() {
                 <span>
                   Rechazar las llamadas y contestar con un mensaje.
                   <span className="block text-xs text-muted-foreground mt-0.5">
-                    Si lo dejas apagado, el telefono suena como siempre y la llamada se apunta igual.
+                    Si lo dejas apagado, el teléfono suena como siempre y la llamada se apunta igual.
                   </span>
                 </span>
               </label>
@@ -508,14 +508,14 @@ export default function ConexionPage() {
           </summary>
           <ul className="px-4 pb-4 text-muted-foreground space-y-1.5 leading-relaxed">
             <li>· El número queda vinculado al CRM. Esta <strong className="text-foreground">no es la
-                via oficial de WhatsApp</strong> y WhatsApp puede bloquearlo.</li>
+                vía oficial de WhatsApp</strong> y WhatsApp puede bloquearlo.</li>
             <li>· Mejor un <strong className="text-foreground">número de empresa, nunca el personal</strong>.
-                Si lo bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
+                Si lo bloquean se pierden también las conversaciones privadas de esa línea.</li>
             <li>· Las conversaciones <strong className="text-foreground">se guardan en la base del CRM</strong>,
-                en el servidor de la empresa. Los demas del equipo no las ven, pero la
+                en el servidor de la empresa. Los demás del equipo no las ven, pero la
                 administracion si puede.</li>
             <li>· Se puede <strong className="text-foreground">desvincular cuando se quiera</strong>, desde
-                aqui o desde Dispositivos vinculados en el movil.</li>
+                aquí o desde Dispositivos vinculados en el móvil.</li>
           </ul>
         </details>
       )}
@@ -532,11 +532,11 @@ export default function ConexionPage() {
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
                 El CRM dejara de recibir y de enviar mensajes con{' '}
-                <strong>{estado?.nombre || (estado?.numero ? `+${estado.numero}` : 'tu numero')}</strong>,
-                y desaparecera de «Dispositivos vinculados» en tu movil.
+                <strong>{estado?.nombre || (estado?.numero ? `+${estado.numero}` : 'tu número')}</strong>,
+                y desaparecera de «Dispositivos vinculados» en tu móvil.
               </p>
               <p className="wa-panel-nota">
-                Las conversaciones que ya estan guardadas <strong>se quedan</strong>. Puedes
+                Las conversaciones que ya están guardadas <strong>se quedan</strong>. Puedes
                 volver a enlazar cuando quieras.
               </p>
             </div>
@@ -546,7 +546,7 @@ export default function ConexionPage() {
                   onChange={(e) => setBorrarTodo(e.target.checked)} />
                 <span className="wa-panel-nota">
                   <strong>Borrar también las conversaciones guardadas</strong> y sus archivos.
-                  Empiezas limpio la proxima vez que enlaces. <strong>Esto no se puede deshacer.</strong>
+                  Empiezas limpio la próxima vez que enlaces. <strong>Esto no se puede deshacer.</strong>
                 </span>
               </label>
             </div>
@@ -568,15 +568,15 @@ export default function ConexionPage() {
         <p className="font-semibold mb-2">Como no acabar bloqueado</p>
         <ul className="text-muted-foreground space-y-1.5 leading-relaxed">
           <li>· <strong className="text-foreground">Piensatelo antes de escribir a quien no dejo su
-              telefono</strong> en un formulario nuestro. El CRM te deja —a veces hay motivo— pero queda
-              anotado, y es lo que hace que la gente reporte un numero. Los reportes son lo que hace
+              teléfono</strong> en un formulario nuestro. El CRM te deja —a veces hay motivo— pero queda
+              anotado, y es lo que hace que la gente reporte un número. Los reportes son lo que hace
               que lo suspendan.</li>
           <li>· <strong className="text-foreground">Nada de envios masivos</strong> ni el mismo mensaje en
-              cadena. Hay topes: 6 por minuto, 60 por hora, 300 al dia. Son por numero, asi que lo
+              cadena. Hay topes: 6 por minuto, 60 por hora, 300 al día. Son por número, así que lo
               que mande un companero no te frena a ti.</li>
-          <li>· Si alguien pide que no le escribas, <strong className="text-foreground">marcalo en el
+          <li>· Si alguien pide que no le escribas, <strong className="text-foreground">márcalo en el
               chat</strong>. No se le envia nada mas, ni con plantilla.</li>
-          <li>· Si se desconecta —pasa, sobre todo con el movil sin cobertura—, vuelve aqui y enlaza
+          <li>· Si se desconecta —pasa, sobre todo con el móvil sin cobertura—, vuelve aquí y enlaza
               otra vez. Lo guardado no se pierde.</li>
         </ul>
         <Link to="/whatsapp/ayuda" className="text-primary hover:underline font-medium mt-3 inline-block">

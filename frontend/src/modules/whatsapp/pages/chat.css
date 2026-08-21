@@ -686,7 +686,31 @@
   background: var(--wa-cabecera);
   border-top: 1px solid var(--wa-borde);
 }
-.wa-tour-cuenta { font-size: 11.5px; color: var(--wa-apagado); }
+/* El pie no se parte.
+ *
+ * Con la cuenta y dos botones en 300 px, el navegador partia las palabras: «2 de
+ * 9» en tres lineas y «Enlazar mi numero» en otras tres. Los botones no rompen
+ * texto, la cuenta no se encoge por debajo de lo que ocupa, y si aun asi no
+ * cabe, el pie pasa a dos filas en vez de deformarse. */
+.wa-tour-pie { flex-wrap: wrap; row-gap: 8px; }
+.wa-tour-cuenta {
+  font-size: 11.5px; color: var(--wa-apagado);
+  white-space: nowrap; flex: 0 0 auto;
+}
+.wa-tour-botones { flex-wrap: wrap; justify-content: flex-end; }
+.wa-tour-botones button { white-space: nowrap; }
+
+/* Cuando el paso LLEVA a algun sitio, ese boton ocupa su propia fila entera.
+ *
+ * «Atras» + «Enlazar mi numero» + la cuenta no caben en 300 px: se iban a una
+ * segunda fila igualmente, pero descolgados a la derecha y con el conjunto
+ * desequilibrado. Puesto a proposito y a todo lo ancho se lee como lo que es:
+ * lo que hay que pulsar. */
+.wa-tour-pie.wa-tour-con-accion { flex-wrap: wrap; }
+.wa-tour-pie.wa-tour-con-accion .wa-tour-accion {
+  flex: 1 0 100%;
+  justify-content: center;
+}
 
 /* Cuanto queda, sin tener que leerlo. Va pegada al borde de arriba del pie. */
 .wa-tour-avance {

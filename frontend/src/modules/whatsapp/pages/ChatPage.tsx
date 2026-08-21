@@ -557,7 +557,7 @@ export default function ChatPage() {
       setAbriendoMicro(false);
     }
     if (!stream) {
-      toast({ title: 'Sin microfono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
+      toast({ title: 'Sin micrófono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
       return;
     }
 
@@ -600,7 +600,7 @@ export default function ChatPage() {
   async function abrirPorTelefono() {
     const t = telefonoNuevo.replace(/[^0-9]/g, '');
     if (t.length < 9) {
-      toast({ title: 'Ese telefono no vale', description: 'Ponlo con prefijo de pais y sin signos.', variant: 'destructive' });
+      toast({ title: 'Ese teléfono no vale', description: 'Ponlo con prefijo de pais y sin signos.', variant: 'destructive' });
       return;
     }
     try {
@@ -646,7 +646,7 @@ export default function ChatPage() {
     const r = await chatApi.noEscribir(abierto, motivoNuevo.trim());
     setPidiendoMotivo(false); setMotivoNuevo('');
     if (r.success) {
-      toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este numero.' });
+      toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este número.' });
       cargarHilo(abierto); cargarLista();
     }
   }
@@ -695,7 +695,7 @@ export default function ChatPage() {
         <p className="font-semibold mb-1">WhatsApp no esta conectado</p>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">{conexion.motivo}</p>
         <Link to="/whatsapp/conexion" className="text-sm text-primary hover:underline mt-3 inline-block">
-          Ir a conectar el numero
+          Ir a conectar el número
         </Link>
       </div>
     );
@@ -710,13 +710,13 @@ export default function ChatPage() {
     ? {
         icono: <WarningCircle size={15} weight="fill" />,
         texto: 'WhatsApp no esta conectado, no se puede enviar.',
-        marcador: 'Sin conexion con WhatsApp',
+        marcador: 'Sin conexión con WhatsApp',
       }
     : conv?.no_escribir
     ? {
         icono: <Prohibit size={15} weight="bold" />,
-        texto: `Esta persona pidio que no se le escriba.${conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}`,
-        marcador: 'No se escribe a este numero',
+        texto: `Esta persona pidió que no se le escriba.${conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}`,
+        marcador: 'No se escribe a este número',
       }
     : null;
 
@@ -754,7 +754,7 @@ export default function ChatPage() {
           <Question size={14} weight="bold" />
           <span className="font-medium">Cómo va esto</span>
         </button>
-        <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
+        <Link to="/whatsapp/conexion" title="Conectar o desvincular el número"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
           <span className="font-medium">Conexión</span>
@@ -850,12 +850,12 @@ export default function ChatPage() {
                       prometer algo que no va a pasar. */}
                   {!conv.es_grupo && (
                     <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
-                      title={`Llamar a ${conv.telefono} desde el movil`}>
+                      title={`Llamar a ${conv.telefono} desde el móvil`}>
                       <PhoneCall size={17} />
                     </button>
                   )}
                   <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
-                    title="No volver a escribir a este numero">
+                    title="No volver a escribir a este número">
                     <Prohibit size={17} />
                   </button>
                 </ConversationHeader.Actions>
@@ -879,13 +879,13 @@ export default function ChatPage() {
                     y envolver cada mensaje en un <div> para colgarle el
                     separador del dia le rompia la estructura. Van sueltos. */}
                 {mensajes.flatMap((m, i) => {
-                  const dia = diaDe(m.ts);
-                  const nuevoDia = dia !== ultimoDia;
-                  if (nuevoDia) ultimoDia = dia;
+                  const día = diaDe(m.ts);
+                  const nuevoDia = día !== ultimoDia;
+                  if (nuevoDia) ultimoDia = día;
                   const prev = mensajes[i - 1];
                   const sig = mensajes[i + 1];
                   const mismoQuePrev = !nuevoDia && prev?.direccion === m.direccion;
-                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === dia;
+                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === día;
                   const posicion = mismoQuePrev && mismoQueSig ? 'normal'
                     : mismoQuePrev ? 'last' : mismoQueSig ? 'first' : 'single';
                   const mia = m.direccion === 'saliente';
@@ -893,7 +893,7 @@ export default function ChatPage() {
                   // ni se puede responder ni reintentar. Sale antes de todo eso.
                   if (m.tipo === 'llamada') {
                     return [
-                      nuevoDia ? <MessageSeparator key={`d${m.id}`} content={dia} /> : null,
+                      nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
                       <Message key={m.id} className="wa-msg-llamada"
                         model={{ direction: 'incoming', position: 'single', type: 'custom' }}>
                         <Message.CustomContent><Llamada m={m} /></Message.CustomContent>
@@ -901,7 +901,7 @@ export default function ChatPage() {
                     ].filter(Boolean);
                   }
                   return [
-                    nuevoDia ? <MessageSeparator key={`d${m.id}`} content={dia} /> : null,
+                    nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
                     <Message key={m.id} className={m.tipo === 'sticker' ? 'wa-msg-sticker' : undefined}
                       model={{
                         direction: mia ? 'outgoing' : 'incoming',
@@ -1023,7 +1023,7 @@ export default function ChatPage() {
               <MessageList>
                 <MessageList.Content className="wa-vacio">
                   {chats.length === 0 && !cargando
-                    ? 'Aqui apareceran tus conversaciones en cuanto enlaces tu numero.'
+                    ? 'Aquí apareceran tus conversaciones en cuanto enlaces tu número.'
                     : 'Elige una conversacion, o escribe a un prospecto con el lapiz de la izquierda.'}
                 </MessageList.Content>
               </MessageList>
@@ -1036,7 +1036,7 @@ export default function ChatPage() {
           <button type="button" onClick={alternarGrabacion} disabled={enviando}
             onMouseEnter={prepararMicro} onFocus={prepararMicro}
             title={grabando ? 'Parar y enviar la nota de voz'
-              : abriendoMicro ? 'Abriendo el microfono…' : 'Grabar una nota de voz'}
+              : abriendoMicro ? 'Abriendo el micrófono…' : 'Grabar una nota de voz'}
             className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''} ${abriendoMicro ? 'wa-abriendo' : ''}`}>
             {grabando ? <Stop size={17} weight="fill" /> : <Microphone size={18} />}
           </button>
@@ -1099,10 +1099,10 @@ export default function ChatPage() {
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
                 El CRM no le enviara nada mas a <strong>{conv ? nombreDe(conv) : ''}</strong>,
-                ni con plantilla ni «solo una ultima vez». Se puede quitar despues.
+                ni con plantilla ni «solo una última vez». Se puede quitar después.
               </p>
               <input autoFocus value={motivoNuevo} onChange={(e) => setMotivoNuevo(e.target.value)}
-                placeholder="Motivo (opcional): pidio que no le escribieran…" className="wa-campo" />
+                placeholder="Motivo (opcional): pidió que no le escribieran…" className="wa-campo" />
             </div>
             <div className="wa-panel-pie">
               <button type="button" onClick={() => setPidiendoMotivo(false)} className="wa-btn-suave">Cancelar</button>
@@ -1128,17 +1128,17 @@ export default function ChatPage() {
               <div className="relative">
                 <MagnifyingGlass size={14} className="wa-lupa" />
                 <input autoFocus value={busca} onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Nombre, email o telefono…" className="wa-campo wa-campo-lupa" />
+                  placeholder="Nombre, email o teléfono…" className="wa-campo wa-campo-lupa" />
               </div>
             </div>
             <div className="wa-lista-panel">
               <button type="button" onClick={() => { setPidiendoTelefono(true); setNuevoAbierto(false); }}
                 className="wa-fila wa-fila-accion">
-                + Escribir a un numero que no esta en la base
+                + Escribir a un número que no esta en la base
               </button>
               {candidatos.length === 0 && (
                 <p className="wa-panel-nota" style={{ padding: '14px', textAlign: 'center' }}>
-                  Sin prospectos con telefono. Solo se puede escribir a quien dejo el suyo.
+                  Sin prospectos con teléfono. Solo se puede escribir a quien dejo el suyo.
                 </p>
               )}
               {candidatos.map((l) => (

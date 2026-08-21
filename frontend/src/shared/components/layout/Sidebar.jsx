@@ -115,7 +115,7 @@ const NAV_SECTIONS = [
           { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
           // La guia, en el menu y no escondida: si hay que preguntar donde esta,
           // ya se ha perdido a quien tenia que leerla.
-          { label: 'Como se usa', to: '/whatsapp/ayuda', icon: BookOpen },
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes

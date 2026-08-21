@@ -40,9 +40,9 @@ function Paso({ n, titulo, children }: { n: number; titulo: string; children: Re
  */
 function CaminoEnElMovil() {
   const pantallas = [
-    { titulo: 'WhatsApp', filas: ['Chats', 'Novedades', 'Llamadas'], marca: null, pie: 'Menu ⋮ → Ajustes' },
+    { titulo: 'WhatsApp', filas: ['Chats', 'Novedades', 'Llamadas'], marca: null, pie: 'Menú ⋮ → Ajustes' },
     { titulo: 'Ajustes', filas: ['Cuenta', 'Privacidad', 'Dispositivos vinculados'], marca: 'Dispositivos vinculados', pie: 'Pulsa ahi' },
-    { titulo: 'Dispositivos vinculados', filas: ['Vincular un dispositivo'], marca: 'Vincular un dispositivo', pie: 'Y apunta al codigo' },
+    { titulo: 'Dispositivos vinculados', filas: ['Vincular un dispositivo'], marca: 'Vincular un dispositivo', pie: 'Y apunta al código' },
   ];
   return (
     <div className="flex flex-wrap items-start gap-3 mt-3">
@@ -93,7 +93,7 @@ export default function AyudaPage() {
       <div className="bg-card border border-border rounded-lg p-5">
         <h1 className="text-lg font-bold">Cómo se usa el WhatsApp del CRM</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Enlazar tu numero, escribir a un prospecto, y que no te bloqueen la linea.
+          Enlazar tu número, escribir a un prospecto, y que no te bloqueen la línea.
           Se lee en cinco minutos.
         </p>
         {/* navigate() y no window.location: lo segundo recarga la aplicacion
@@ -106,31 +106,31 @@ export default function AyudaPage() {
       </div>
 
       {/* ── Enlazar ─────────────────────────────────────────────────────── */}
-      <Bloque icono={<QrCode size={20} weight="duotone" />} titulo="1 · Enlazar tu numero">
+      <Bloque icono={<QrCode size={20} weight="duotone" />} titulo="1 · Enlazar tu número">
         <p className="text-sm text-muted-foreground mb-3">
-          Se hace <strong className="text-foreground">una vez</strong>. Necesitas el movil de ese
-          numero en la mano.
+          Se hace <strong className="text-foreground">una vez</strong>. Necesitas el móvil de ese
+          número en la mano.
         </p>
         <ol className="space-y-3">
-          <Paso n={1} titulo="Entra en Conexion">
-            En el menu, <strong>WhatsApp → Conexión</strong>. O{' '}
+          <Paso n={1} titulo="Entra en Conexión">
+            En el menú, <strong>WhatsApp → Conexión</strong>. O{' '}
             <Link to="/whatsapp/conexion" className="text-primary hover:underline">desde aquí</Link>.
           </Paso>
           <Paso n={2} titulo="Lee el aviso y marca la casilla">
-            Sale en amarillo, antes del codigo. <strong>No es relleno</strong>: dice que WhatsApp
-            puede bloquear el numero y que tus conversaciones se guardan en el servidor de la
-            empresa. Hasta que no lo marques, el boton no hace nada.
+            Sale en amarillo, antes del código. <strong>No es relleno</strong>: dice que WhatsApp
+            puede bloquear el número y que tus conversaciones se guardan en el servidor de la
+            empresa. Hasta que no lo marques, el botón no hace nada.
           </Paso>
           <Paso n={3} titulo="Elige que traerte del móvil">
             Por defecto viene <strong>«Empezar de cero»</strong>, y casi siempre es lo que quieres:
-            solo lo que llegue a partir de ahora. Si vienes atendiendo gente por ese numero, «El
-            ultimo mes». «Todo el historial» tarda un buen rato y se trae tambien lo personal.
+            solo lo que llegue a partir de ahora. Si vienes atendiendo gente por ese número, «El
+            ultimo mes». «Todo el historial» tarda un buen rato y se trae también lo personal.
           </Paso>
-          <Paso n={4} titulo="Pulsa «Enlazar mi numero»">
-            Sale un codigo QR en pantalla. Se renueva solo cada 18 segundos, no hace falta que
+          <Paso n={4} titulo="Pulsa «Enlazar mi número»">
+            Sale un código QR en pantalla. Se renueva solo cada 18 segundos, no hace falta que
             hagas nada.
           </Paso>
-          <Paso n={5} titulo="En el movil: Ajustes → Dispositivos vinculados">
+          <Paso n={5} titulo="En el móvil: Ajustes → Dispositivos vinculados">
             <span className="flex items-center gap-1.5 flex-wrap">
               <DeviceMobile size={14} /> Abre WhatsApp
               <span className="text-muted-foreground/60">→</span> Ajustes
@@ -141,7 +141,7 @@ export default function AyudaPage() {
             <CaminoEnElMovil />
           </Paso>
           <Paso n={6} titulo="Espera a que entren las conversaciones">
-            Arriba de la lista veras <strong>«Sincronizando…»</strong> con lo que lleva entrando.
+            Arriba de la lista verás <strong>«Sincronizando…»</strong> con lo que lleva entrando.
             Con «Empezar de cero» es inmediato; con el historial completo puede tardar minutos y
             llega por tandas.
           </Paso>
@@ -151,7 +151,7 @@ export default function AyudaPage() {
       {/* ── Se desconecto ───────────────────────────────────────────────── */}
       <Bloque icono={<PlugsConnected size={20} weight="duotone" />} titulo="2 · Si se desconecta">
         <p className="text-sm text-muted-foreground mb-3">
-          Pasa, sobre todo si el movil se queda sin internet o sin bateria mucho rato. No es que
+          Pasa, sobre todo si el móvil se queda sin internet o sin bateria mucho rato. No es que
           se haya roto nada.
         </p>
         <ul className="text-sm text-muted-foreground space-y-2 leading-relaxed">
@@ -165,8 +165,8 @@ export default function AyudaPage() {
           <li className="flex gap-2">
             <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Qué hacer:</strong> ve a Conexion y vuelve a enlazar.
-              Muchas veces se reconecta solo en cuanto el movil recupera internet.
+              <strong className="text-foreground">Qué hacer:</strong> ve a Conexión y vuelve a enlazar.
+              Muchas veces se reconecta solo en cuanto el móvil recupera internet.
             </span>
           </li>
           <li className="flex gap-2">
@@ -184,20 +184,20 @@ export default function AyudaPage() {
       </Bloque>
 
       {/* ── El dia a dia ────────────────────────────────────────────────── */}
-      <Bloque icono={<ChatText size={20} weight="duotone" />} titulo="3 · El dia a dia">
+      <Bloque icono={<ChatText size={20} weight="duotone" />} titulo="3 · El día a día">
         <ul className="text-sm text-muted-foreground space-y-2.5 leading-relaxed">
           <li className="flex gap-2">
             <PaperPlaneTilt size={16} className="shrink-0 mt-0.5" />
             <span>
               <strong className="text-foreground">Escribir a un prospecto:</strong> el lapiz encima de la
-              lista. Busca por nombre, email o telefono. Si esa persona ya te escribio, su
+              lista. Busca por nombre, email o teléfono. Si esa persona ya te escribio, su
               conversacion ya esta en la lista.
             </span>
           </li>
           <li className="flex gap-2">
             <ArrowBendUpLeft size={16} className="shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Responder a un mensaje concreto:</strong> pasa el raton
+              <strong className="text-foreground">Responder a un mensaje concreto:</strong> pasa el ratón
               por encima y pulsa la flecha. Sale citado, como en WhatsApp.
             </span>
           </li>
@@ -211,8 +211,8 @@ export default function AyudaPage() {
           <li className="flex gap-2">
             <Microphone size={16} className="shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Nota de voz:</strong> el microfono. Se graba, se para
-              con el mismo boton y se manda sola.
+              <strong className="text-foreground">Nota de voz:</strong> el micrófono. Se graba, se para
+              con el mismo botón y se manda sola.
             </span>
           </li>
           <li className="flex gap-2">
@@ -236,13 +236,13 @@ export default function AyudaPage() {
       {/* ── Plantillas y cola ───────────────────────────────────────────── */}
       <Bloque icono={<ChatText size={20} weight="duotone" />} titulo="4 · Plantillas y cola de prospectos">
         <p className="text-sm text-muted-foreground mb-3">
-          Lo que se repite veinte veces al dia no se escribe veinte veces.
+          Lo que se repite veinte veces al día no se escribe veinte veces.
         </p>
         <ul className="text-sm text-muted-foreground space-y-2.5 leading-relaxed">
           <li className="flex gap-2">
             <ChatText size={16} className="shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Plantillas</strong> (en el menu, debajo de Chat):
+              <strong className="text-foreground">Plantillas</strong> (en el menú, debajo de Chat):
               mensajes guardados para lo de siempre — el primer contacto, el recordatorio, el envio
               del temario. Se crean una vez y se usan cuando toca.
             </span>
@@ -253,7 +253,7 @@ export default function AyudaPage() {
               Admiten <strong className="text-foreground">huecos</strong>: escribe{' '}
               <code className="px-1 rounded bg-muted text-foreground">{'{nombre}'}</code> o{' '}
               <code className="px-1 rounded bg-muted text-foreground">{'{producto}'}</code> y se
-              rellenan con los datos de esa persona. Asi no sales con un «Hola {'{nombre}'}» tal cual.
+              rellenan con los datos de esa persona. Así no sales con un «Hola {'{nombre}'}» tal cual.
             </span>
           </li>
           <li className="flex gap-2">
@@ -269,7 +269,7 @@ export default function AyudaPage() {
             <span>
               <strong className="text-foreground">Una plantilla no es permiso para el envio masivo.</strong>{' '}
               Mandar el mismo texto identico a cincuenta personas seguidas es de las cosas que mas
-              rapido acaban con un numero bloqueado. Cambia algo, y respeta el ritmo.
+              rápido acaban con un número bloqueado. Cambia algo, y respeta el ritmo.
             </span>
           </li>
         </ul>
@@ -281,7 +281,7 @@ export default function AyudaPage() {
             boton de descolgar durante diez minutos, el manual ha fallado. */}
         <p className="text-sm text-muted-foreground mb-3">
           <strong className="text-foreground">Las llamadas se hacen y se cogen desde tu móvil.</strong>{' '}
-          Por aqui no se puede hablar — WhatsApp no lo permite fuera de su aplicacion, y no es
+          Por aquí no se puede hablar — WhatsApp no lo permite fuera de su aplicacion, y no es
           que falte por hacer: no existe. Lo que hace el CRM es que{' '}
           <strong className="text-foreground">no se pierda ninguna</strong>.
         </p>
@@ -290,8 +290,8 @@ export default function AyudaPage() {
             <PhoneX size={16} className="shrink-0 mt-0.5 text-rose-500" />
             <span>
               <strong className="text-foreground">Si te llaman y no lo coges</strong>, sale en el chat
-              como una linea con su hora — «Llamada perdida, 16:42» — y la conversacion se te marca
-              sin leer. Si esa persona es un prospecto, <strong className="text-foreground">tambien
+              como una línea con su hora — «Llamada perdida, 16:42» — y la conversacion se te marca
+              sin leer. Si esa persona es un prospecto, <strong className="text-foreground">también
               queda en su ficha</strong>, junto al resto de contactos. Antes no quedaba rastro en
               ningun sitio: ni tu sabias que te habian llamado, ni el CRM.
             </span>
@@ -299,19 +299,19 @@ export default function AyudaPage() {
           <li className="flex gap-2">
             <BellRinging size={16} className="shrink-0 mt-0.5 text-emerald-600" />
             <span>
-              <strong className="text-foreground">Mientras suena te avisa el CRM</strong>, estes donde
-              estes dentro de el — en Prospectos, en Facturacion, donde sea. Sale un cartel abajo a la
+              <strong className="text-foreground">Mientras suena te avisa el CRM</strong>, estés donde
+              estés dentro de el — en Prospectos, en Facturacion, donde sea. Sale un cartel abajo a la
               derecha con quien llama. <strong className="text-foreground">Cógela en el móvil</strong>:
-              el cartel esta para que te de tiempo a sacarlo, no para contestar desde aqui.
+              el cartel esta para que te de tiempo a sacarlo, no para contestar desde aquí.
             </span>
           </li>
           <li className="flex gap-2">
             <PhoneCall size={16} className="shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Para llamar tu</strong>, el boton del telefono
-              arriba en el chat — y tambien lo tienes en la ficha del prospecto, al lado del
-              telefono. Abre la llamada en tu movil con ese numero ya marcado, y de paso lo apunta.
-              Sin ese boton, las llamadas que salen no aparecian en ningun historial.
+              <strong className="text-foreground">Para llamar tu</strong>, el botón del teléfono
+              arriba en el chat — y también lo tienes en la ficha del prospecto, al lado del
+              teléfono. Abre la llamada en tu móvil con ese número ya marcado, y de paso lo apunta.
+              Sin ese botón, las llamadas que salen no aparecian en ningun historial.
             </span>
           </li>
           <li className="flex gap-2">
@@ -320,13 +320,13 @@ export default function AyudaPage() {
               <strong className="text-foreground">Si no quieres que te llamen</strong>, en{' '}
               <Link to="/whatsapp/conexion" className="text-primary hover:underline">Conexión</Link>{' '}
               puedes activar que se rechacen solas y se conteste con un mensaje tuyo. Va por persona:
-              si tu si coges el telefono, dejalo apagado y sonara como siempre.
+              si tu si coges el teléfono, dejalo apagado y sonara como siempre.
             </span>
           </li>
           <li className="flex gap-2">
             <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
             <span>
-              Si activas el rechazo automatico, <strong className="text-foreground">no prometas
+              Si activas el rechazo automático, <strong className="text-foreground">no prometas
               horarios</strong> en el mensaje. Un «te llamamos en cinco minutos» que no se cumple
               es la queja siguiente.
             </span>
@@ -337,7 +337,7 @@ export default function AyudaPage() {
       {/* ── Lo que no hay que hacer ─────────────────────────────────────── */}
       <section className="border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-5">
         <h2 className="font-bold flex items-center gap-2 mb-1 text-amber-900 dark:text-amber-200">
-          <Prohibit size={20} weight="duotone" /> 6 · Lo que hace que bloqueen un numero
+          <Prohibit size={20} weight="duotone" /> 6 · Lo que hace que bloqueen un número
         </h2>
         <p className="text-sm text-amber-800 dark:text-amber-300/90 mb-3 leading-relaxed">
           No es que WhatsApp descubra que usas el CRM. Es que <strong>la gente te reporte</strong>. Todo
@@ -346,19 +346,19 @@ export default function AyudaPage() {
         <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
           <li>· <strong>Escribir a quien no dejo su teléfono</strong> en un formulario nuestro. El CRM
             te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
-            hijo— pero <strong>queda anotado</strong>, y es lo que mas rapido lleva a que reporten
-            un numero. Piensatelo antes.</li>
+            hijo— pero <strong>queda anotado</strong>, y es lo que mas rápido lleva a que reporten
+            un número. Piensatelo antes.</li>
           <li>· <strong>Envios masivos</strong> o el mismo mensaje en cadena a mucha gente seguida.</li>
           <li>· <strong>Insistir a quien no contesta.</strong> Si alguien pide que no le escribas,
-            marcalo con el icono <Prohibit size={12} className="inline" /> de la cabecera del chat:
+            márcalo con el icono <Prohibit size={12} className="inline" /> de la cabecera del chat:
             no se le vuelve a enviar nada, ni con plantilla.</li>
-          <li>· <strong>Usar tu número personal.</strong> Si lo bloquean pierdes tambien tus
+          <li>· <strong>Usar tu número personal.</strong> Si lo bloquean pierdes también tus
             conversaciones privadas.</li>
         </ul>
         <p className="text-sm text-amber-800 dark:text-amber-300/90 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 leading-relaxed">
           El CRM tiene topes puestos: <strong>6 mensajes por minuto, 60 por hora, 300 al día</strong>, y
-          una pausa entre uno y otro. Son por numero — lo que mande un companero no te frena a ti.
-          Si te sale «vas muy rapido», espera: te esta protegiendo.
+          una pausa entre uno y otro. Son por número — lo que mande un companero no te frena a ti.
+          Si te sale «vas muy rápido», espera: te esta protegiendo.
         </p>
       </section>
 
@@ -371,16 +371,16 @@ export default function AyudaPage() {
             abrir el WhatsApp de las personas de sus proyectos. Cuando lo hace, la pantalla dice
             siempre de quien es lo que se esta viendo.</li>
           <li>· <strong className="text-foreground">Todo queda en el servidor de la empresa.</strong> Lo que
-            traigas del movil al enlazar se guarda en la base del CRM y no se quita solo. Por eso
+            traigas del móvil al enlazar se guarda en la base del CRM y no se quita solo. Por eso
             «Empezar de cero» viene marcado por defecto.</li>
           <li>· <strong className="text-foreground">Puedes desvincular cuando quieras</strong>, desde
-            Conexion o desde Dispositivos vinculados en tu movil.</li>
+            Conexión o desde Dispositivos vinculados en tu móvil.</li>
         </ul>
       </Bloque>
 
       <p className="text-xs text-muted-foreground text-center">
         ¿Algo no encaja con lo que ves en pantalla? Dilo — esta guia se queda vieja antes que el
-        codigo.
+        código.
       </p>
     </div>
   );
