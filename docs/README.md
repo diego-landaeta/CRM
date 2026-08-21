@@ -141,6 +141,24 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 119 | 119_invoices_cliente_tipo.sql | 119 · La factura necesita saber si el cliente es empresa o persona |
 | 120 | 120_invoice_issuers_alias.sql | Un nombre corto para distinguir emisoras que comparten datos fiscales. |
 | 121 | 121_conversion_payments_metodo.sql | conversion_payments.metodo |
+| 122 | 122_whatsapp_templates.sql | Plantillas de WhatsApp en base de datos, por proyecto y con ambito compartida/personal. **Sin aplicar en produccion** (tarea #21). |
+| 123 | 123_tutores_rol.sql | Tutores · el rol nuevo. |
+| 124 | 124_tutores.sql | Tutores y colaboraciones · las tablas. |
+| 125 | 125_reembolsos_y_comisiones.sql | Reembolsos: de que pago son, y que pasa con la comision del tutor. |
+| 126 | 126_gestor_colaboraciones.sql | Permiso gestor_colaboraciones: da de alta tutores y les asigna cursos sin ser administrador. |
+| 128 | 128_whatsapp_conversaciones.sql | Conversaciones y mensajes de WhatsApp. Es la tabla base del chat. |
+| 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando. Sin ella el aviso se ve pero no queda registro. |
+| 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje. Sin ella el mensaje se guarda igual, pero se pierde la cita. |
+
+> **Las de WhatsApp (122, 128, 129, 130) no estan todas aplicadas en produccion.**
+> El modulo esta apagado alli con `VITE_MODULOS_APAGADOS=whatsapp`, asi que
+> encenderlo es quitar esa linea *y* aplicar las que falten. Nada revienta si no
+> estan: el codigo comprueba y se degrada — sin la 122 no hay plantillas, sin la
+> 129 no queda registro de quien acepto el aviso, sin la 130 se pierde a que
+> mensaje contestaba una respuesta citada.
+>
+> La **127** no aparece porque todavia no esta en el repositorio.
+
 
 ---
 

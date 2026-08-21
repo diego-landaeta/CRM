@@ -98,15 +98,16 @@ const NAV_SECTIONS = [
           // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
           // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
-          // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
+          // que puede pasarle a su numero— ya esta, con su casilla y su registro
+          // de quien lo acepto (tarea #45).
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
-          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-          // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
-          // cada gestora a traves del navegador remoto, y ese metodo se ha
-          // retirado. La pantalla sigue existiendo pero llamaria a un servicio
-          // que ya no corre, asi que ensenaria un error. Vuelve cuando se
-          // rehaga con el chat nuevo, que ya guarda las conversaciones.
+          // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
+          // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
+          // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
+          // ruta que llegara a ellos. Vuelve cuando se rehaga sobre el chat
+          // nuevo, que ya guarda las conversaciones: sera leerlas, no meterse en
+          // la sesion de nadie.
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
