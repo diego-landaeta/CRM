@@ -1,4 +1,5 @@
 import type { UserRole } from '@/shared/types';
+import type { TonoEstado } from '@/shared/components/ui/StatusDot';
 import type { CrmUser } from '../api/users.api';
 
 /**
@@ -17,6 +18,23 @@ export const ROLE_LABELS: Record<string, string> = {
   colaboraciones: 'Colaboraciones',
 };
 
+/**
+ * El mismo rol, en una palabra, para la tabla.
+ *
+ * «Desarrollador / Soporte» y «Tutor / Profesor» parten en dos líneas dentro de
+ * la celda y descuadran la altura de las filas. En un listado denso el rol es
+ * una referencia rápida; la versión larga se queda donde hay sitio para
+ * explicarla, que es el formulario.
+ */
+export const ROLE_LABELS_CORTOS: Record<string, string> = {
+  superadmin: 'Superadmin',
+  admin: 'Admin',
+  gestor: 'Gestor',
+  soporte: 'Soporte',
+  tutor: 'Tutor',
+  colaboraciones: 'Colaboraciones',
+};
+
 /** Roles que se pueden asignar desde la pantalla. El superadmin no se otorga. */
 export const ASSIGNABLE_ROLES: ReadonlyArray<{ value: UserRole; label: string; hint: string }> = [
   { value: 'admin', label: ROLE_LABELS.admin, hint: 'Acceso operativo completo. No gestiona usuarios.' },
@@ -25,14 +43,18 @@ export const ASSIGNABLE_ROLES: ReadonlyArray<{ value: UserRole; label: string; h
   { value: 'tutor', label: ROLE_LABELS.tutor, hint: 'Colaborador externo: solo sus formaciones y sus comisiones.' },
 ];
 
-export const ROLE_STYLES: Record<string, string> = {
-  superadmin: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
-  soporte: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
-  admin: 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400',
-  gestor: 'bg-muted text-muted-foreground',
-  tutor: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
-  colaboraciones: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-400',
-};
+/**
+ * El rol se pinta igual para todos: una etiqueta neutra.
+ *
+ * Antes cada rol tenía su color —violeta, esmeralda, azul, ámbar, cian— y en
+ * una tabla de cinco filas salían cuatro colores distintos compitiendo con los
+ * estados, que son los que sí hay que mirar de un vistazo. El rol es un dato
+ * secundario y se lee: no hace falta memorizar que ámbar significa tutor.
+ *
+ * Es lo que hacen Zoho y SuiteDash en sus pantallas de administración: el color
+ * se reserva para lo que avisa, y todo lo demás va en tono de texto.
+ */
+export const ROLE_CHIP = 'bg-muted text-muted-foreground';
 
 /**
  * Quien lleva las colaboraciones tiene rol de gestora por dentro —es el unico
@@ -52,6 +74,12 @@ export function roleLabelOf(u: Pick<CrmUser, 'role' | 'gestor_colaboraciones'>):
   return ROLE_LABELS[key] || key;
 }
 
+/** Versión de una palabra, para celdas de tabla. */
+export function roleLabelCortoOf(u: Pick<CrmUser, 'role' | 'gestor_colaboraciones'>): string {
+  const key = roleKeyOf(u);
+  return ROLE_LABELS_CORTOS[key] || key;
+}
+
 export type AccessState = 'nunca_entro' | 'activo' | 'inactivo';
 
 /**
@@ -67,20 +95,27 @@ export function accessStateOf(u: Pick<CrmUser, 'active' | 'last_login_at'>): Acc
   return u.last_login_at ? 'activo' : 'nunca_entro';
 }
 
-export const ACCESS_STATE_STYLES: Record<AccessState, { label: string; className: string; title: string }> = {
+/**
+ * Cada estado, con su tono y su explicación.
+ *
+ * Ya no lleva clases de color escritas a mano: el tono lo resuelve StatusDot
+ * contra los tokens, que es lo que hace que valga en claro y en oscuro sin
+ * repetir la variante `dark:` en cada sitio.
+ */
+export const ACCESS_STATE_STYLES: Record<AccessState, { label: string; tono: TonoEstado; title: string }> = {
   activo: {
-    label: 'activo',
-    className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400',
+    label: 'Activo',
+    tono: 'success',
     title: 'Ha entrado al CRM al menos una vez',
   },
   nunca_entro: {
-    label: 'nunca ha entrado',
-    className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-    title: 'Nunca ha iniciado sesion. Puede que no le llegara el correo de alta.',
+    label: 'Nunca ha entrado',
+    tono: 'warning',
+    title: 'Nunca ha iniciado sesión. Puede que no le llegara el correo de alta.',
   },
   inactivo: {
-    label: 'inactivo',
-    className: 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-400',
+    label: 'Desactivado',
+    tono: 'neutral',
     title: 'Desactivado: no puede entrar',
   },
 };

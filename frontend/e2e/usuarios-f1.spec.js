@@ -166,11 +166,11 @@ test.describe('Issue #31 · Administración de usuarios', () => {
     await expect(fila(page, 'Bruno Admin')).toBeVisible();
 
     // Estado de acceso: quien nunca entró se distingue de quien está activo.
-    await expect(fila(page, 'Bruno Admin').getByText('nunca ha entrado')).toBeVisible();
-    await expect(fila(page, 'Carla Baja').getByText('inactivo', { exact: true })).toBeVisible();
+    await expect(fila(page, 'Bruno Admin').getByText('Nunca ha entrado')).toBeVisible();
+    await expect(fila(page, 'Carla Baja').getByText('Desactivado')).toBeVisible();
 
     // Ausencias: Bruno tiene bloque activo hasta el 30/08.
-    await expect(fila(page, 'Bruno Admin').getByText('hasta 30/08/2026')).toBeVisible();
+    await expect(fila(page, 'Bruno Admin').getByText('Ausente hasta 30/08/2026')).toBeVisible();
 
     // Proyectos por nombre, no por id.
     await expect(page.getByRole('cell', { name: 'Psiko Aprende', exact: true }).first()).toBeVisible();

@@ -22,15 +22,17 @@ export default function UsersPanel() {
   const { activeProject } = useProjectContext();
   const esSuperadmin = me?.role === 'superadmin';
 
-  const [projectFilter, setProjectFilter] = useState('active');
-  const projectId = useMemo(() => {
-    if (projectFilter === 'all') return undefined;
-    if (projectFilter === 'active') {
-      // En «todos los proyectos» activeProject.id vale -1: no es un proyecto.
-      return activeProject?.id && activeProject.id > 0 ? activeProject.id : undefined;
-    }
-    return Number(projectFilter) || undefined;
-  }, [projectFilter, activeProject?.id]);
+  // Mientras nadie toque el filtro vale el proyecto activo; en cuanto se elige
+  // algo, manda la elección. Se deriva en vez de guardarse para no necesitar un
+  // efecto que lo sincronice cuando el proyecto activo llega más tarde.
+  const [elegido, setElegido] = useState<string | null>(null);
+  const projectFilter = elegido
+    // En «todos los proyectos» activeProject.id vale -1: no es un proyecto.
+    ?? (activeProject?.id && activeProject.id > 0 ? String(activeProject.id) : 'all');
+  const projectId = useMemo(
+    () => (projectFilter === 'all' ? undefined : Number(projectFilter) || undefined),
+    [projectFilter],
+  );
 
   const lista = useUsers(projectId);
   const disponibilidad = useAvailabilityMap();
@@ -220,9 +222,8 @@ export default function UsersPanel() {
         onClear={lista.limpiarFiltros}
         hayFiltroActivo={lista.hayFiltroActivo}
         projectFilter={projectFilter}
-        onProjectFilterChange={setProjectFilter}
+        onProjectFilterChange={setElegido}
         projects={projects || []}
-        activeProjectName={activeProject?.nombre}
         totalFiltrados={lista.totalFiltrados}
         cargados={lista.cargados}
       />
