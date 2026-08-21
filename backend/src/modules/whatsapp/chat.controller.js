@@ -55,6 +55,21 @@ async function usuarioObjetivo(req) {
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
   }
+
+  // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
+  // intento rechazado no es una mirada, y apuntarlo antes dejaria en el registro
+  // «entro a ver a Fulana» de alguien a quien se le nego el paso.
+  //
+  // Puede hacerlo, y hace falta: para ayudar a una gestora y para supervisar.
+  // Pero son sus conversaciones con clientes, y algunas seran personales — que
+  // se pueda mirar sin dejar rastro es lo que convierte esto en vigilancia.
+  //
+  // No se espera al resultado: apuntarlo no puede retrasar la pantalla, y si
+  // falla ya se avisa por dentro. Una cada media hora por pareja, que esto se
+  // llama en cada vuelta del chat.
+  model.apuntarMirada?.({ quienMira: propio, aQuien: pedido, ip: req.ip })
+    ?.catch(() => { /* ya se registra dentro */ });
+
   return pedido;
 }
 

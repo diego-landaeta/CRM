@@ -282,6 +282,35 @@ La otra es la **API oficial de WhatsApp Business**, que tiene llamadas desde
 2025 — pero el número registrado ahí deja de funcionar en la app del móvil, y las
 gestoras trabajan desde el móvil. Es cambio de modelo, no mejora.
 
+## Quién entra a mirar la sesión de otra persona
+
+Un administrador puede abrir el WhatsApp de una gestora — hace falta para
+ayudarla y para supervisar. Pero son sus conversaciones con clientes, y algunas
+serán personales: **poder mirarlas sin dejar rastro es lo que convierte una
+herramienta de trabajo en una de vigilancia.**
+
+Queda escrito en `user_activity_log` con la acción `whatsapp.mirar_sesion` y el
+id de la gestora en `details`. Esa tabla ya existía y ya la usa auth, así que
+**no hizo falta migración**: esto funciona esté como esté la base.
+
+Se apunta **una vez cada media hora por pareja** (quien mira, a quién mira). La
+pantalla del chat pregunta cada pocos segundos, así que sin el freno una tarde
+mirando dejaría miles de filas idénticas y el registro no serviría para leerlo,
+que es justo para lo que está.
+
+Para consultarlo:
+
+```sql
+SELECT a.created_at, u.nombre AS miro, a.details->>'gestora' AS a_quien, a.ip_address
+  FROM user_activity_log a
+  JOIN users u ON u.id = a.user_id
+ WHERE a.action = 'whatsapp.mirar_sesion'
+ ORDER BY a.created_at DESC;
+```
+
+Y si el registro falla no se bloquea a nadie: quien está ayudando a una gestora
+sigue trabajando, y el fallo va al registro del servidor.
+
 ## Para quien toca el código
 
 ### La forma

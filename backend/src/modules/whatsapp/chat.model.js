@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { normalizePhone, phoneCanonical } from '../../shared/utils/normalizePhone.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // Las conversaciones de WhatsApp. Antes esto no existia: se veian en el
 // navegador remoto y se perdian. Ahora viven aqui, y por eso se pueden buscar,
@@ -401,6 +402,46 @@ export async function guardarAdjunto(id, { ruta, mime, nombreArchivo }) {
       WHERE id = $1`,
     [id, ruta, mime, nombreArchivo]
   );
+}
+
+/**
+ * Deja escrito que alguien entro a mirar el WhatsApp de otra persona.
+ *
+ * Un administrador puede abrir la sesion de una gestora — hace falta para
+ * ayudarla y para supervisar. Pero son sus conversaciones con clientes, y
+ * algunas seran personales: que se pueda mirar sin dejar rastro es lo que
+ * convierte una herramienta de trabajo en una de vigilancia.
+ *
+ * Va a `user_activity_log`, que ya existe y ya usa auth. No hace falta tabla
+ * nueva ni migracion — o sea que esto funciona esté como esté la base.
+ *
+ * SE LIMITA A UNA CADA MEDIA HORA por pareja (quien mira, a quien mira). La
+ * pantalla del chat pregunta cada pocos segundos: sin el freno, una tarde
+ * mirando dejaria miles de filas y el registro no serviria para leerlo, que es
+ * justo para lo que esta.
+ */
+const MIRADAS_TTL_MS = 1800000;
+const miradas = new Map();   // "quien>aquien" -> milisegundos de la ultima apuntada
+
+export async function apuntarMirada({ quienMira, aQuien, ip }) {
+  if (!quienMira || !aQuien || quienMira === aQuien) return false;
+  const clave = `${quienMira}>${aQuien}`;
+  const ultima = miradas.get(clave);
+  if (ultima && Date.now() - ultima < MIRADAS_TTL_MS) return false;
+  miradas.set(clave, Date.now());
+  try {
+    await query(
+      `INSERT INTO user_activity_log (user_id, action, details, ip_address)
+       VALUES ($1, 'whatsapp.mirar_sesion', $2, $3)`,
+      [quienMira, JSON.stringify({ gestora: aQuien }), ip || null]
+    );
+    return true;
+  } catch (err) {
+    // Que no se pueda apuntar no puede dejar sin trabajar a quien esta
+    // ayudando a una gestora. Se avisa al registro del servidor y se sigue.
+    logger.warn({ quienMira, aQuien, err: err.message }, 'WhatsApp: no se pudo apuntar quien miro la sesion');
+    return false;
+  }
 }
 
 /**

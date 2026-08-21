@@ -29,6 +29,52 @@ function Paso({ n, titulo, children }: { n: number; titulo: string; children: Re
   );
 }
 
+/**
+ * El camino dentro de WhatsApp, dibujado.
+ *
+ * La tarea pedia capturas. Poner capturas de verdad significa meter imagenes de
+ * la aplicacion de otro en el repositorio, y ademas envejecen: WhatsApp cambia
+ * el menu y la captura pasa a enseñar algo que ya no esta. Esto es un dibujo de
+ * las tres pantallas por las que hay que pasar, con los nombres exactos de los
+ * botones — que es lo que se buscaba con la captura: saber donde mirar.
+ */
+function CaminoEnElMovil() {
+  const pantallas = [
+    { titulo: 'WhatsApp', filas: ['Chats', 'Novedades', 'Llamadas'], marca: null, pie: 'Menu ⋮ → Ajustes' },
+    { titulo: 'Ajustes', filas: ['Cuenta', 'Privacidad', 'Dispositivos vinculados'], marca: 'Dispositivos vinculados', pie: 'Pulsa ahi' },
+    { titulo: 'Dispositivos vinculados', filas: ['Vincular un dispositivo'], marca: 'Vincular un dispositivo', pie: 'Y apunta al codigo' },
+  ];
+  return (
+    <div className="flex flex-wrap items-start gap-3 mt-3">
+      {pantallas.map((p, i) => (
+        <div key={p.titulo} className="flex items-center gap-3">
+          <div className="w-[132px] rounded-lg border border-border bg-muted/40 overflow-hidden">
+            <div className="bg-emerald-700 text-white text-[10px] font-semibold px-2 py-1.5 truncate">
+              {p.titulo}
+            </div>
+            <ul className="p-1.5 space-y-1">
+              {p.filas.map((f) => (
+                <li key={f}
+                  className={`text-[10px] leading-tight px-1.5 py-1 rounded ${
+                    f === p.marca
+                      ? 'bg-emerald-600 text-white font-semibold'
+                      : 'text-muted-foreground'
+                  }`}>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <p className="text-[9px] text-muted-foreground px-2 pb-1.5 border-t border-border pt-1">{p.pie}</p>
+          </div>
+          {i < pantallas.length - 1 && (
+            <span className="text-muted-foreground/50 text-lg" aria-hidden="true">→</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Bloque({ icono, titulo, children }: { icono: React.ReactNode; titulo: string; children: React.ReactNode }) {
   return (
     <section className="bg-card border border-border rounded-lg p-5">
@@ -92,6 +138,7 @@ export default function AyudaPage() {
               <span className="text-muted-foreground/60">→</span> <strong>Vincular un dispositivo</strong>
             </span>
             <span className="block mt-1">Apunta la camara al codigo de la pantalla.</span>
+            <CaminoEnElMovil />
           </Paso>
           <Paso n={6} titulo="Espera a que entren las conversaciones">
             Arriba de la lista veras <strong>«Sincronizando…»</strong> con lo que lleva entrando.
