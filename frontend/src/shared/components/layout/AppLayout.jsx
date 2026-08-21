@@ -65,7 +65,7 @@ const NEW_ACTIONS = {
   '/productos': { url: '/productos?new=1', label: 'producto' },
   '/captacion': { url: '/captacion?new=1', label: 'formulario' },
   '/captacion/webhooks': { url: '/captacion/webhooks?new=1', label: 'webhook' },
-  '/email-sequences': { url: '/email-sequences?new=1', label: 'secuencia' },
+  '/secuencias-email': { url: '/secuencias-email?new=1', label: 'secuencia' },
   '/accounting/expenses': { url: '/accounting/expenses?new=1', label: 'egreso' },
   '/accounting/payable': { url: '/accounting/payable?new=1', label: 'cuenta por pagar' },
 };
@@ -76,9 +76,9 @@ const G_TARGETS = {
   l: '/prospectos',
   c: '/clientes',
   p: '/productos',
-  r: '/reports',
+  r: '/informes',
   a: '/accounting',
-  s: '/settings',
+  s: '/configuracion',
 };
 
 export default function AppLayout() {

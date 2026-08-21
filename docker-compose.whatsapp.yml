@@ -1,0 +1,99 @@
+# Evolution API — el motor de WhatsApp del CRM.
+#
+# Sustituye a las salas de neko. La diferencia de fondo: neko manda PIXELES
+# (un navegador entero por gestora, retransmitido por video, con los 326 ms de
+# ida y vuelta hasta España) y esto manda DATOS. Un mensaje son unos cientos de
+# bytes: el retardo deja de notarse, igual que no se nota al guardar un lead.
+#
+# Levantarlo:
+#   docker compose -f docker-compose.whatsapp.yml up -d
+#   curl -X POST http://127.0.0.1:8080/instance/create \
+#        -H "apikey: $EVOLUTION_API_KEY" -H 'Content-Type: application/json' \
+#        -d '{"instanceName":"crm","integration":"WHATSAPP-BAILEYS","qrcode":true}'
+#   → devuelve el QR en base64. Se escanea UNA vez y ya no se toca.
+#
+# La lista completa de variables esta en el .env.example del propio proyecto:
+# aqui van solo las que hacen falta para arrancar.
+
+services:
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    container_name: crm-whatsapp
+    restart: unless-stopped
+    # Solo escucha en local: quien habla con el es el backend del CRM, que vive
+    # en la misma maquina. Nunca se expone a internet — con la apikey en la
+    # cabecera, cualquiera que llegue a el puede mandar mensajes por vuestro
+    # numero.
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?falta EVOLUTION_API_KEY}
+
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD:?falta EVOLUTION_DB_PASSWORD}@evolution-db:5432/evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      # Los mensajes los guarda el CRM en SU base, que es donde sirven de algo
+      # (ficha del lead, busqueda, informes). Aqui solo se guarda la sesion.
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: crm
+
+      # A donde avisa cuando entra un mensaje. Lo recibe el CRM.
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: ${EVOLUTION_WEBHOOK_URL:?falta EVOLUTION_WEBHOOK_URL}
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+      # Lo demas no interesa: son eventos de grupos, presencia y estados que
+      # solo generarian ruido en la base del CRM.
+      WEBHOOK_EVENTS_MESSAGES_SET: "false"
+      WEBHOOK_EVENTS_CONTACTS_SET: "false"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
+
+      # No contestar llamadas ni entrar en grupos: este numero es para escribir
+      # a prospectos, y cada interaccion rara suma para que lo suspendan.
+      CONFIG_SESSION_PHONE_CLIENT: CRM
+      DEL_INSTANCE: "false"
+      LOG_LEVEL: ERROR
+    depends_on:
+      evolution-db:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_started
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  evolution-db:
+    image: postgres:17-alpine
+    container_name: crm-whatsapp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:?falta EVOLUTION_DB_PASSWORD}
+      POSTGRES_DB: evolution
+    # Base propia, aparte de la del CRM: si hay que borrarla y volver a
+    # emparejar, no se toca nada de los leads.
+    volumes:
+      - evolution_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: crm-whatsapp-redis
+    restart: unless-stopped
+    command: redis-server --save 20 1 --loglevel warning
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_instances:
+  evolution_db:
+  evolution_redis:

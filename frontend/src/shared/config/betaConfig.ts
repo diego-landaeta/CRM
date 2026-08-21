@@ -23,22 +23,22 @@ export const BETA_ROUTES: readonly string[] = [
   '/clientes',               // Clientes + Matrículas
   '/finanzas',               // Finanzas completo: dashboard, ventas, ingresos, conversiones,
                              // egresos, por-cobrar, por-pagar, comisiones, nóminas, integraciones
-  '/sales',                  // Ventas (ruta alternativa)
+  '/ventas',                  // Ventas (ruta alternativa)
   '/meta-ads',               // Meta Ads (metricas + ROI manual)
-  '/reports',                // Análisis › Reportes (overview + descargables prospectos/ventas)
+  '/informes',                // Análisis › Reportes (overview + descargables prospectos/ventas)
   '/productos',              // Productos (catálogo, árbol, pendientes, woocommerce)
   '/captacion',              // Captación: Formularios, Webhooks, Make
   '/whatsapp',               // WhatsApp: cola, plantillas y el panel del equipo
   '/tutores',                // Tutores: alta, colaboraciones y comisiones
   '/mis-cursos',             // La pantalla del propio tutor
-  '/email-sequences',         // Email de seguimiento
+  '/secuencias-email',         // Email de seguimiento
   '/documentos',              // Documentos comerciales
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
   '/notificaciones',         // Sistema básico
   '/manual',                 // Manual de usuario
-  '/preferences',            // Mis preferencias
-  '/profile',                // Perfil
-  '/settings',               // Ajustes (gestión de usuarios, proyectos, etc.)
+  '/preferencias',            // Mis preferencias
+  '/perfil',                // Perfil
+  '/configuracion',               // Ajustes (gestión de usuarios, proyectos, etc.)
   '/set-password',           // Flujo de bienvenida
 ];
 

@@ -208,7 +208,7 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     if (!from || !to) { seguir(); return; }
     setComprobando(true);
     try {
-      const r = await client.get(`/reports/aviso-sin-factura?from=${from}&to=${to}${projectId ? `&projectId=${projectId}` : ''}`);
+      const r = await client.get(`/informes/aviso-sin-factura?from=${from}&to=${to}${projectId ? `&projectId=${projectId}` : ''}`);
       const d = r?.success ? r.data : null;
       if (d && d.ventas > 0) { setAviso(d); setPendiente(() => seguir); return; }
     } catch { /* si la comprobacion falla no se bloquea la descarga */ }
@@ -238,7 +238,7 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     if (projectId) p.set('projectId', String(projectId));
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
-    const res = await client.get(`/reports/${report.key}?${p.toString()}`);
+    const res = await client.get(`/informes/${report.key}?${p.toString()}`);
     const rows: Record<string, unknown>[] = (res as { data?: Record<string, unknown>[] }).data || [];
     const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
     return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };

@@ -14,14 +14,20 @@ hacerlo. Una tarea sin criterio de terminada se da por hecha tres veces.
 3. **Se trabaja sobre MultiCRM y yo lo replico a ISEIE.** Los dos CRMs tienen
    que acabar iguales salvo la marca, pero duplicar a mano mientras se
    desarrolla es lo que los desincroniza.
-4. **Cada uno en su rama.** Nada va directo a `main` ni a `staging`.
+4. **Cada uno en su rama, con su nombre.** A `main` no se empuja: se pide
+   y Diego aprueba. GitHub lo impide, no es un acuerdo de palabra.
 
 | | Rama |
 |---|---|
 | Ángel | `feat/angel` |
-| Fabián | `feat/rediseno` |
-| Diego | `feat/ventas` |
+| Fabián | `feat/fabian` |
+| Diego | `feat/diego` |
 | Yo | la que toque, por tarea |
+
+**Nada llega a `main` sin que Diego lo apruebe.** `main` es lo que está aprobado:
+no se puede empujar a ella directamente ni con prisa. Se abre una petición de
+cambios desde tu rama, él la mira y la aprueba. Es el único camino, y vale
+también para mí.
 
 ---
 
@@ -69,6 +75,58 @@ flowchart TB
 Recordatorios, reporte semanal y análisis con IA salen todos por Brevo y por una
 tarea programada. Si se hace primero el envío y luego los tres contenidos, son
 una tarea y media. Si se hacen por separado, son tres veces el mismo trabajo.
+
+---
+
+## Cómo tiene que verse esto
+
+La referencia es **SuiteDash y Zoho CRM**: sobrio, denso, con jerarquía clara.
+No hay que inventar nada — mirar cómo resuelven ellos una pantalla de
+administración y hacer eso.
+
+**Tipografía.** Una sola familia para la interfaz, **Inter**, con tres pesos:
+400 normal, 500 etiquetas y cabeceras, 600 títulos. Y **números de ancho fijo**
+(`tabular-nums`) en toda columna de dinero, fecha o cantidad: sin eso las cifras
+bailan de fila en fila y no se pueden comparar de un vistazo, que es justo para
+lo que se miran. Los códigos —números de factura, NIF, identificadores— en
+monoespaciada: un `2026/0695` así se lee de un golpe.
+
+> Hoy hay un fallo ahí: `tailwind.config.js` declara «Plus Jakarta Sans» y
+> **nadie la carga**, así que cae a la fuente del sistema y el CRM se ve
+> distinto en cada ordenador. Se arregla en la tarea #50.
+
+**Iconos: Phosphor, nunca emojis.** Un emoji cambia de dibujo según el sistema,
+no se puede colorear ni alinear con el texto, y delante de un cliente hace que
+el CRM parezca un chat. Mismo grosor y mismo tamaño por contexto.
+
+**Los estados, con punto de color _y_ palabra.** Nunca solo color: quien no
+distingue rojo de verde se queda sin la mitad de la información.
+
+**Quién hace qué.** La estructura —rutas, layout, navegación— la llevamos
+nosotros. El aspecto lo lleva Fabián. Así no se pisan: uno mueve dónde están las
+cosas, el otro cómo se ven.
+
+---
+
+## Decisiones que ya se tomaron
+
+Están aquí para no volver a discutirlas cada vez que alguien las encuentra en el
+código. Si una deja de tener sentido, se habla con Diego **antes** de cambiarla.
+
+**WhatsApp · se puede escribir a cualquier número** *(21/08/2026)*. Había un
+freno que impedía el primer mensaje a quien no fuera prospecto y nunca hubiera
+escrito. Parecía proteger la línea y hacía lo contrario: cuando el CRM se
+negaba, la gestora escribía **desde su móvil** — el mensaje salía igual, pero
+sin registro, sin plantilla y sin los topes de ritmo. Queda apagado y solo se
+apunta en el registro. Se puede reactivar con `WA_BLOQUEO_DESCONOCIDOS=true`.
+
+**Lo que sí sigue frenando, y no se toca:** «no escribir» —si alguien lo pide,
+no se le escribe ni con plantilla— y los topes de ritmo: 6 por minuto, 60 por
+hora, 300 al día, por número.
+
+**Las tareas del CRM las lleva Diego.** Cualquiera comenta en ellas; crear,
+cerrar y asignar lo hace él. Es acuerdo, no candado: GitHub no sabe separar
+«subir código» de «gestionar tareas».
 
 ---
 
@@ -203,6 +261,43 @@ no es lo que ve un superadministrador.
 
 ---
 
+# Compartida · Ángel y Fabián
+
+## Sincronizar los proyectos de IA con el CRM
+
+Psicólogo IA, Nutricionista IA y Tarot IA tienen que quedar dentro del CRM como
+cualquier otra marca: sus ventas, sus cobros y sus clientes.
+
+**La hacen los dos, y lo primero es sentarse media hora a repartírsela.** La
+mitad del servidor y la de la pantalla se tocan constantemente; si cada uno
+decide por su lado sale un panel que no cuadra con los datos.
+
+**Cómo se hace, decidido por Diego:** con las **claves secretas de Stripe de cada
+proyecto** y **una API que los conecte**. Nada a mano, nada de subir un Excel.
+
+Lo que eso obliga:
+
+- **Una clave por proyecto**, nunca la compartida — así se puede cortar uno solo.
+- **Cifradas en la base** (`api_credentials`, AES-256), donde ya viven las demás.
+  Nunca en el repositorio ni en el frontal.
+- **Su secreto de webhook, uno por proyecto.** Hoy no lo tiene ninguno, y el
+  webhook acepta eventos sin firma cuando falta: quien sepa la dirección puede
+  inventarse un cobro. Con dinero automático detrás, eso es fabricar ingresos.
+- **Token propio para la API** — el CRM ya tiene esa pieza (`webhook-tokens`).
+
+**La regla que no se negocia:** cada proyecto **factura desde el día que entra al
+CRM, no desde antes**. Si lleva meses cobrando, ese histórico no se importa:
+entraría como ventas de este mes e inflaría las cifras y las comisiones.
+
+Lo que tienen que decidir ellos antes de escribir código: **hacia dónde va la
+API** —si el CRM pregunta cada X tiempo o si cada plataforma avisa al CRM—, qué
+se trae además de los cobros, y cada cuánto.
+
+**Terminada cuando** se cobra algo de verdad en un proyecto de IA, aparece solo
+en el CRM una vez, y el total del mes sube exactamente ese importe.
+
+---
+
 # Diego
 
 ## D1 · Proceso de ventas, y que sea editable
@@ -255,15 +350,20 @@ Con su desglose «¿de dónde sale este número?». Y hay que **unificar la tarj
 conversión** que hoy usa otra fórmula: dos porcentajes distintos en la misma
 pantalla es exactamente lo que hace que no se crea ninguno.
 
-## C5 · Limpieza de datos
+## C5 · Datos que no cuadran
 
-| Qué | Cuánto |
-|---|---|
-| Cargos de Stripe de 2026 sin enlazar | 501 · 152.098 € |
-| Enlazables por importe y fecha | 241 |
-| Teléfonos que `normalizePhone` estropea | 188 |
-| Leads de CETLAT sin cruzar con su programa | 382 |
-| Segundas cuotas registradas como venta nueva | por barrer |
+Contado el 18/08 en las dos bases. **Los cargos de Stripe sin enlazar quedan
+fuera por decisión del owner**, y lo de Carlos y su WiFi está resuelto con
+Cloudflare.
+
+| Qué | Cuánto | Qué es |
+|---|---|---|
+| **Ventas sin formación identificada** | 321 | Cobradas, pero sin curso del catálogo detrás: **ningún profesor cobra comisión** por ellas y en los informes salen como «servicio académico». 272 en ISEIE, 49 en MultiCRM |
+| **Leads que no dicen qué curso quieren** | 3.369 | En MultiCRM son 1.301 de 2.245 — más de la mitad. De aquí salen las ventas de arriba; se arregla en el origen, con lo de Make |
+| Alumnos con más de una venta | 7 | Puede ser que compraran dos cursos, o que la segunda cuota se metiera como venta nueva. Eso infla las ventas y parte el plan de pago |
+| Proformas que gastaron número | 7 | Un presupuesto se llevó un número de la serie: la numeración queda con huecos |
+| Teléfonos inservibles | 12 | Guardados a medias (`+340`, `+5823232`): el enlace de WhatsApp abre un chat que no existe |
+| Comprobaciones en rojo | 10 de 180 | Fallan por datos de ejemplo. Con diez siempre rojas, nadie mira el día que se pone roja la once |
 
 ## C6 · Lo que quedó a medias
 

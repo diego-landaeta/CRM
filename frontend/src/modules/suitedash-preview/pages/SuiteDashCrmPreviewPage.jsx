@@ -78,7 +78,7 @@ const SUITEDASH_NAV_SECTIONS = [
   {
     label: 'Captacion',
     items: [
-      { label: 'Email', detail: 'Secuencias y plantillas', icon: Envelope, route: '/email-sequences', tone: 'blue' },
+      { label: 'Email', detail: 'Secuencias y plantillas', icon: Envelope, route: '/secuencias-email', tone: 'blue' },
       { label: 'Formularios', detail: 'Forms y entradas', icon: Globe, route: '/captacion', tone: 'blue' },
       { label: 'Make', detail: 'Automatizaciones Make', icon: Lightning, route: '/captacion/make', tone: 'amber' },
       { label: 'Webhooks', detail: 'Integraciones entrantes', icon: Pulse, route: '/captacion/webhooks', tone: 'slate' },
@@ -125,22 +125,22 @@ const SUITEDASH_NAV_SECTIONS = [
   {
     label: 'Analisis',
     items: [
-      { label: 'Reportes', detail: 'KPIs por proyecto', icon: TrendUp, route: '/reports', tone: 'cyan' },
-      { label: 'Analisis IA', detail: 'Lectura inteligente', icon: Sparkle, route: '/reports/ia', tone: 'violet' },
-      { label: 'Chat IA', detail: 'Asistente interno', icon: ChatCircleText, route: '/ai-chat', tone: 'blue' },
+      { label: 'Reportes', detail: 'KPIs por proyecto', icon: TrendUp, route: '/informes', tone: 'cyan' },
+      { label: 'Analisis IA', detail: 'Lectura inteligente', icon: Sparkle, route: '/informes/ia', tone: 'violet' },
+      { label: 'Chat IA', detail: 'Asistente interno', icon: ChatCircleText, route: '/chat-ia', tone: 'blue' },
     ],
   },
   {
     label: 'Sistema',
     items: [
-      { label: 'Mensajes', detail: 'Inbox interno', icon: ChatCircleText, route: '/messages', tone: 'blue' },
+      { label: 'Mensajes', detail: 'Inbox interno', icon: ChatCircleText, route: '/mensajes', tone: 'blue' },
       { label: 'Solicitudes cambio', detail: 'Gestion de cambios', icon: CheckCircle, route: '/solicitudes-cambio', tone: 'amber' },
       { label: 'Notificaciones', detail: 'Avisos del sistema', icon: Bell, route: '/notificaciones', tone: 'cyan' },
-      { label: 'Preferencias', detail: 'Ajustes personales', icon: UserCircle, route: '/preferences', tone: 'slate' },
+      { label: 'Preferencias', detail: 'Ajustes personales', icon: UserCircle, route: '/preferencias', tone: 'slate' },
       { label: 'Soporte', detail: 'Ayuda operativa', icon: BookOpen, route: '/soporte', tone: 'emerald' },
       { label: 'Status', detail: 'Estado del sistema', icon: Pulse, route: '/status', tone: 'slate' },
       { label: 'Manual', detail: 'Guia de usuario', icon: BookOpen, route: '/manual', tone: 'blue' },
-      { label: 'Configuracion', detail: 'Roles, campos y proyecto', icon: Gear, route: '/settings', tone: 'slate' },
+      { label: 'Configuracion', detail: 'Roles, campos y proyecto', icon: Gear, route: '/configuracion', tone: 'slate' },
     ],
   },
 ];
@@ -149,7 +149,7 @@ const DASHBOARD_MODULES = [
   { label: 'Prospectos', detail: 'Mesa comercial', icon: Users, route: '/prospectos', tone: 'cyan' },
   { label: 'Clientes', detail: 'Cuentas activas', icon: UserCircle, route: '/clientes', tone: 'emerald' },
   { label: 'Finanzas', detail: 'Caja y facturacion', icon: Wallet, route: '/finanzas', tone: 'emerald' },
-  { label: 'Reportes', detail: 'KPIs y analisis', icon: TrendUp, route: '/reports', tone: 'blue' },
+  { label: 'Reportes', detail: 'KPIs y analisis', icon: TrendUp, route: '/informes', tone: 'blue' },
 ];
 
 const CRM_AREAS = [
@@ -173,11 +173,11 @@ const AREA_ROUTES = {
   Campanas: '/campanas',
   Productos: '/productos',
   Finanzas: '/finanzas',
-  Reportes: '/reports',
-  Mensajes: '/messages',
+  Reportes: '/informes',
+  Mensajes: '/mensajes',
   Documentos: '/documentos',
-  Config: '/settings',
-  Configuracion: '/settings',
+  Config: '/configuracion',
+  Configuracion: '/configuracion',
 };
 
 const CHILD_ROUTES = {
@@ -186,7 +186,7 @@ const CHILD_ROUTES = {
   Duplicados: '/prospectos/revision-duplicados',
   Directorio: '/clientes',
   Matriculas: '/clientes/matriculas',
-  Email: '/email-sequences',
+  Email: '/secuencias-email',
   Formularios: '/captacion',
   Make: '/captacion/make',
   Webhooks: '/captacion/webhooks',
@@ -200,9 +200,9 @@ const CHILD_ROUTES = {
   Ingresos: '/finanzas/ingresos',
   Egresos: '/finanzas/egresos',
   Facturas: '/finanzas/facturas',
-  Reportes: '/reports',
-  'Analisis IA': '/reports/ia',
-  Messages: '/messages',
+  Reportes: '/informes',
+  'Analisis IA': '/informes/ia',
+  Messages: '/mensajes',
   Files: '/documentos',
   Billing: '/finanzas/facturas',
   'Client Portal': '/clientes',
@@ -1302,7 +1302,7 @@ export default function SuiteDashCrmPreviewPage() {
                     <AutomationCard icon={UserPlus} title="Nuevo lead a pipeline" text="Asigna responsable, crea recordatorio y registra origen." state="active" tone="active" onClick={() => navigate('/prospectos?new=1')} />
                     <AutomationCard icon={CalendarBlank} title="Follow-up programado" text="Genera evento comercial si el prospecto queda sin contacto." state="active" tone="active" onClick={() => navigate('/prospectos/pipeline')} />
                     <AutomationCard icon={CheckCircle} title="Convertido a cliente" text="Activa documentos, matricula y carpeta de cliente." state="draft" tone="draft" onClick={() => navigate('/clientes')} />
-                    <AutomationCard icon={TrendUp} title="Forecast semanal" text="Resume valor abierto, deals vencidos y conversiones." state="paused" tone="paused" onClick={() => navigate('/reports')} />
+                    <AutomationCard icon={TrendUp} title="Forecast semanal" text="Resume valor abierto, deals vencidos y conversiones." state="paused" tone="paused" onClick={() => navigate('/informes')} />
                   </div>
                 </section>
 

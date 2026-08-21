@@ -31,7 +31,7 @@ export default function ReportsIAPage() {
           description="Los reportes con Claude AI solo se generan para proyectos de tipo IA (Psicólogo IA, Nutricionista IA, Tarot IA). Cambia de proyecto en la barra superior para acceder."
           action={
             <Link
-              to="/reports"
+              to="/informes"
               className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
             >
               <ChartBar size={14} weight="bold" /> Ver reportes CRM
