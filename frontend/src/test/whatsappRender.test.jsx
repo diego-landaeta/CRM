@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // Que las piezas nuevas de WhatsApp PINTEN sin reventar.
@@ -27,7 +27,7 @@ vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 // tarda varios segundos en jsdom y se comia el plazo del primer test, que caia
 // por tiempo sin que el componente tuviera nada que ver.
 import Aviso from '@/shared/components/layout/AvisoDeLlamada';
-import Tour, { hayQueSeñalar } from '@/modules/whatsapp/components/Tour';
+import Tour, { hayQueSeñalar, tourPendiente } from '@/modules/whatsapp/components/Tour';
 import Ayuda from '@/modules/whatsapp/pages/AyudaPage';
 
 const envolver = (nodo) => render(<MemoryRouter>{nodo}</MemoryRouter>);
@@ -79,6 +79,12 @@ describe('AvisoDeLlamada · el cartel de llamada entrante', () => {
 
 describe('Tour · el recorrido guiado', () => {
   beforeEach(() => { try { localStorage.clear(); } catch { /* da igual */ } });
+  // Se quita SIEMPRE, aunque el test caiga: si se queda, el siguiente encuentra
+  // un objetivo que no puso el y falla por una razon que no es la suya.
+  afterEach(() => { document.querySelectorAll('.wa-sin-enlazar').forEach((e) => e.remove()); });
+
+  const sinEnlazar = () =>
+    document.body.insertAdjacentHTML('beforeend', '<div class="wa-sin-enlazar">No tienes WhatsApp enlazado</div>');
 
   it('se monta y enseña el primer paso', async () => {
     envolver(<Tour />);
@@ -93,6 +99,34 @@ describe('Tour · el recorrido guiado', () => {
     envolver(<Tour />);
     expect(screen.queryByText(/Atrás/)).toBeNull();
     expect(screen.getByText(/Siguiente/)).toBeTruthy();
+  });
+
+  it('el paso de enlazar LLEVA, no solo lo cuenta', () => {
+    // Diego lo resumio asi: «no me guia, me muestra un paso a paso». El velo del
+    // recorrido tapa la pantalla entera, asi que decir «pulsa enlazar mi
+    // numero» y dejar que la gestora lo pulse cerraba el recorrido sin ir a
+    // ninguna parte. Ahora el cartel lleva su propio boton.
+    sinEnlazar();
+    envolver(<Tour />);
+    fireEvent.click(screen.getByText(/Siguiente/));
+    expect(screen.getByText('Te falta conectar el tuyo')).toBeTruthy();
+    expect(screen.getByText(/Enlazar mi número/)).toBeTruthy();
+  });
+
+  it('seguir la guia no marca el recorrido como visto', () => {
+    // Si se marcara, iria a enlazar, volveria al chat y el recorrido ya no
+    // estaria — habiendo visto dos de nueve pasos.
+    sinEnlazar();
+    envolver(<Tour />);
+    fireEvent.click(screen.getByText(/Siguiente/));
+    fireEvent.click(screen.getByText(/Enlazar mi número/));
+    expect(tourPendiente()).toBe(true);
+  });
+
+  it('pero cerrarlo con la X si lo marca', () => {
+    envolver(<Tour />);
+    fireEvent.click(screen.getByTitle('Cerrar'));
+    expect(tourPendiente()).toBe(false);
   });
 
   it('hayQueSeñalar dice que no cuando no hay nada en pantalla', async () => {

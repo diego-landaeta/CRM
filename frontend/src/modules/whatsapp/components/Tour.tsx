@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
 
 // El tour del chat.
@@ -17,6 +18,18 @@ type Paso = {
   donde?: string;
   titulo: string;
   texto: string;
+  /**
+   * A donde lleva, si el paso pide hacer algo.
+   *
+   * Diego lo resumio asi: «no me guia, me muestra un paso a paso». Y el que
+   * decia «pulsa enlazar mi numero» era el peor ejemplo: el velo del recorrido
+   * tapa toda la pantalla, asi que al pulsar lo que se estaba señalando se
+   * cerraba el recorrido y no pasaba nada mas. Se le decia a la gestora que
+   * hiciera algo y acto seguido se le impedia hacerlo.
+   *
+   * Con esto el cartel lleva su propio boton y va.
+   */
+  accion?: { texto: string; a: string };
 };
 
 const PASOS: Paso[] = [
@@ -36,7 +49,8 @@ const PASOS: Paso[] = [
     // —todo cosas que aun no puede hacer— y nadie le decia por donde empezar.
     donde: '.wa-sin-enlazar',
     titulo: 'Te falta conectar el tuyo',
-    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Pulsa «enlazar mi número»: leerás un aviso sobre lo que supone —merece la pena— y saldrá un código para escanear con el móvil. Son dos minutos, y en «Cómo se usa» tienes el paso a paso con las pantallas del teléfono.',
+    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos. Si prefieres seguir viendo la pantalla antes, dale a «Siguiente».',
+    accion: { texto: 'Enlazar mi número', a: '/whatsapp/conexion' },
   },
   {
     donde: '.wa-barra-lista .cs-search',
@@ -75,6 +89,7 @@ const PASOS: Paso[] = [
 ];
 
 export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
+  const navegar = useNavigate();
   const [paso, setPaso] = useState(0);
   const [hueco, setHueco] = useState<DOMRect | null>(null);
   // El alto real del cartel y el tamaño de la ventana. Los dos hacen falta para
@@ -97,8 +112,19 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
 
   const actual = PASOS[paso];
 
-  const cerrar = useCallback(() => {
-    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
+  /**
+   * Cierra el recorrido. `marcar` decide si cuenta como visto.
+   *
+   * Cuando se sale por un boton que LLEVA a otro sitio no se marca: la gestora
+   * esta siguiendo lo que se le dijo, no abandonando. Si se marcara, iria a
+   * enlazar su numero, volveria al chat y el recorrido ya no estaria — habiendo
+   * visto dos de nueve pasos. Al volver sigue pendiente, y el paso de enlazar
+   * se salta solo porque su aviso ya no esta.
+   */
+  const cerrar = useCallback((marcar = true) => {
+    if (marcar) {
+      try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
+    }
     alCerrar?.();
   }, [alCerrar]);
 
@@ -139,7 +165,12 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
         // recuadro se dibujaba donde nadie lo ve y el cartel apuntaba a la nada.
         if (!traido) {
           traido = true;
-          el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          // Se comprueba que exista: no lo traen todos los entornos, y sin la
+          // comprobacion el recorrido revienta entero por no poder hacer un
+          // desplazamiento — que es lo menos importante de todo lo que hace.
+          if (typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          }
         }
         setHueco(el.getBoundingClientRect());
         return;
@@ -199,7 +230,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   }
 
   return (
-    <div className="wa-tour" onClick={cerrar}>
+    <div className="wa-tour" onClick={() => cerrar()}>
       {/* El recuadro que rodea lo que se esta explicando. */}
       {hueco && (
         <div className="wa-tour-foco" style={{
@@ -212,7 +243,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
         onClick={(e) => e.stopPropagation()}>
         <div className="wa-tour-cabecera">
           <span>{actual.titulo}</span>
-          <button type="button" onClick={cerrar} className="wa-panel-cerrar" title="Cerrar">
+          <button type="button" onClick={() => cerrar()} className="wa-panel-cerrar" title="Cerrar">
             <X size={14} />
           </button>
         </div>
@@ -229,8 +260,16 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
                 <ArrowLeft size={13} /> Atrás
               </button>
             )}
-            {ultimo ? (
-              <button type="button" className="wa-btn-verde" onClick={cerrar}>Entendido</button>
+            {actual.accion ? (
+              <>
+                <button type="button" className="wa-btn-suave" onClick={saltar}>Siguiente</button>
+                <button type="button" className="wa-btn-verde"
+                  onClick={() => { cerrar(false); navegar(actual.accion!.a); }}>
+                  {actual.accion.texto} <ArrowRight size={13} />
+                </button>
+              </>
+            ) : ultimo ? (
+              <button type="button" className="wa-btn-verde" onClick={() => cerrar()}>Entendido</button>
             ) : (
               <button type="button" className="wa-btn-verde" onClick={saltar}>
                 Siguiente <ArrowRight size={13} />
