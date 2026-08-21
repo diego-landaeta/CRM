@@ -156,7 +156,7 @@ export default function UsersPanel() {
 
   // Sin permiso no es un fallo: reintentar no lo arregla, y pintarlo en rojo con
   // un botón de «reintentar» manda a la gente a pulsarlo hasta cansarse. La ruta
-  // /settings no filtra por rol —solo se esconde del menú—, así que aquí llega
+  // /configuracion no filtra por rol —solo se esconde del menú—, así que aquí llega
   // cualquiera que escriba la dirección a mano.
   if (lista.error?.status === 403) {
     return (

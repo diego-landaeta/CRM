@@ -177,7 +177,7 @@ export default function ShortcutsConfigPage() {
   if (!isAdmin) {
     return (
       <div className="space-y-6 pb-8">
-        <PageHeader title="Atajos rápidos" backTo="/settings" backLabel="Configuración" subtitle="Acciones rápidas configurables por proyecto" />
+        <PageHeader title="Atajos rápidos" backTo="/configuracion" backLabel="Configuración" subtitle="Acciones rápidas configurables por proyecto" />
         <div className="bg-card border border-border rounded-xl p-8 flex items-start gap-4">
           <ShieldWarning size={28} className="text-amber-500 shrink-0" />
           <div>
@@ -195,7 +195,7 @@ export default function ShortcutsConfigPage() {
     <div className="space-y-6 pb-8">
       <PageHeader
         title="Atajos rápidos"
-        backTo="/settings"
+        backTo="/configuracion"
         backLabel="Configuración"
         subtitle="Selecciona qué acciones rápidas estarán disponibles en cada proyecto"
       />

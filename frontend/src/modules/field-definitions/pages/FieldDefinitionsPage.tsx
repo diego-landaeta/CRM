@@ -156,7 +156,7 @@ export default function FieldDefinitionsPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Campos personalizados"
-        backTo="/settings"
+        backTo="/configuracion"
         backLabel="Configuración"
         subtitle={`Configura campos extra para ${tabMeta?.label.toLowerCase() || ''} de ${activeProject?.nombre || 'este proyecto'}`}
         actions={

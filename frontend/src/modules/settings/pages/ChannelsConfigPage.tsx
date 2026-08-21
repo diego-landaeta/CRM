@@ -34,7 +34,7 @@ export default function ChannelsConfigPage() {
     <div className="space-y-6 pb-8">
       <PageHeader
         title="Canales del proyecto"
-        backTo="/settings"
+        backTo="/configuracion"
         backLabel="Configuración"
         subtitle="Configura los canales de comunicación por proyecto: WhatsApp, Email, SMS"
       />

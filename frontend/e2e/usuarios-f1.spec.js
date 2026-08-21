@@ -134,7 +134,7 @@ async function mockApi(page, { usuarios = USUARIOS, usersStatus = 200, espia = [
  * esperarlo ahí es esperar algo que no va a existir.
  */
 async function abrirUsuarios(page, { esperarPanel = true } = {}) {
-  await page.goto(`${BASE}/settings`);
+  await page.goto(`${BASE}/configuracion`);
   await page.getByRole('button', { name: 'Usuarios', exact: true }).click();
   if (esperarPanel) {
     await expect(page.getByRole('heading', { name: 'Gestión de usuarios' })).toBeVisible();
