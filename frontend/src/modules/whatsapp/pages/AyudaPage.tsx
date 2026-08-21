@@ -91,7 +91,7 @@ export default function AyudaPage() {
   return (
     <div className="max-w-3xl space-y-4 pb-8">
       <div className="bg-card border border-border rounded-lg p-5">
-        <h1 className="text-lg font-bold">Como se usa el WhatsApp del CRM</h1>
+        <h1 className="text-lg font-bold">Cómo se usa el WhatsApp del CRM</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Enlazar tu numero, escribir a un prospecto, y que no te bloqueen la linea.
           Se lee en cinco minutos.
@@ -113,15 +113,15 @@ export default function AyudaPage() {
         </p>
         <ol className="space-y-3">
           <Paso n={1} titulo="Entra en Conexion">
-            En el menu, <strong>WhatsApp → Conexion</strong>. O{' '}
-            <Link to="/whatsapp/conexion" className="text-primary hover:underline">desde aqui</Link>.
+            En el menu, <strong>WhatsApp → Conexión</strong>. O{' '}
+            <Link to="/whatsapp/conexion" className="text-primary hover:underline">desde aquí</Link>.
           </Paso>
           <Paso n={2} titulo="Lee el aviso y marca la casilla">
             Sale en amarillo, antes del codigo. <strong>No es relleno</strong>: dice que WhatsApp
             puede bloquear el numero y que tus conversaciones se guardan en el servidor de la
             empresa. Hasta que no lo marques, el boton no hace nada.
           </Paso>
-          <Paso n={3} titulo="Elige que traerte del movil">
+          <Paso n={3} titulo="Elige que traerte del móvil">
             Por defecto viene <strong>«Empezar de cero»</strong>, y casi siempre es lo que quieres:
             solo lo que llegue a partir de ahora. Si vienes atendiendo gente por ese numero, «El
             ultimo mes». «Todo el historial» tarda un buen rato y se trae tambien lo personal.
@@ -137,7 +137,7 @@ export default function AyudaPage() {
               <span className="text-muted-foreground/60">→</span> <strong>Dispositivos vinculados</strong>
               <span className="text-muted-foreground/60">→</span> <strong>Vincular un dispositivo</strong>
             </span>
-            <span className="block mt-1">Apunta la camara al codigo de la pantalla.</span>
+            <span className="block mt-1">Apunta la camara al código de la pantalla.</span>
             <CaminoEnElMovil />
           </Paso>
           <Paso n={6} titulo="Espera a que entren las conversaciones">
@@ -158,14 +158,14 @@ export default function AyudaPage() {
           <li className="flex gap-2">
             <WarningCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Como se nota:</strong> arriba del chat pone «No tienes
+              <strong className="text-foreground">Cómo se nota:</strong> arriba del chat pone «No tienes
               WhatsApp enlazado», y la caja de escribir se pone gris. No te deja escribir al vacio.
             </span>
           </li>
           <li className="flex gap-2">
             <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-foreground">Que hacer:</strong> ve a Conexion y vuelve a enlazar.
+              <strong className="text-foreground">Qué hacer:</strong> ve a Conexion y vuelve a enlazar.
               Muchas veces se reconecta solo en cuanto el movil recupera internet.
             </span>
           </li>
@@ -226,7 +226,7 @@ export default function AyudaPage() {
           <li className="flex gap-2">
             <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
             <span>
-              <strong className="text-foreground">Un mensaje con ⚠ no salio.</strong> Debajo tiene
+              <strong className="text-foreground">Un mensaje con ⚠ no salió.</strong> Debajo tiene
               «Reintentar»: lo vuelve a mandar con el mismo texto, no hay que reescribirlo.
             </span>
           </li>
@@ -280,7 +280,7 @@ export default function AyudaPage() {
         {/* Lo primero y bien claro: lo que NO se puede. Si alguien busca el
             boton de descolgar durante diez minutos, el manual ha fallado. */}
         <p className="text-sm text-muted-foreground mb-3">
-          <strong className="text-foreground">Las llamadas se hacen y se cogen desde tu movil.</strong>{' '}
+          <strong className="text-foreground">Las llamadas se hacen y se cogen desde tu móvil.</strong>{' '}
           Por aqui no se puede hablar — WhatsApp no lo permite fuera de su aplicacion, y no es
           que falte por hacer: no existe. Lo que hace el CRM es que{' '}
           <strong className="text-foreground">no se pierda ninguna</strong>.
@@ -301,7 +301,7 @@ export default function AyudaPage() {
             <span>
               <strong className="text-foreground">Mientras suena te avisa el CRM</strong>, estes donde
               estes dentro de el — en Prospectos, en Facturacion, donde sea. Sale un cartel abajo a la
-              derecha con quien llama. <strong className="text-foreground">Cogela en el movil</strong>:
+              derecha con quien llama. <strong className="text-foreground">Cógela en el móvil</strong>:
               el cartel esta para que te de tiempo a sacarlo, no para contestar desde aqui.
             </span>
           </li>
@@ -318,7 +318,7 @@ export default function AyudaPage() {
             <Prohibit size={16} className="shrink-0 mt-0.5" />
             <span>
               <strong className="text-foreground">Si no quieres que te llamen</strong>, en{' '}
-              <Link to="/whatsapp/conexion" className="text-primary hover:underline">Conexion</Link>{' '}
+              <Link to="/whatsapp/conexion" className="text-primary hover:underline">Conexión</Link>{' '}
               puedes activar que se rechacen solas y se conteste con un mensaje tuyo. Va por persona:
               si tu si coges el telefono, dejalo apagado y sonara como siempre.
             </span>
@@ -344,7 +344,7 @@ export default function AyudaPage() {
           lo de abajo lleva a eso.
         </p>
         <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
-          <li>· <strong>Escribir a quien no dejo su telefono</strong> en un formulario nuestro. El CRM
+          <li>· <strong>Escribir a quien no dejo su teléfono</strong> en un formulario nuestro. El CRM
             te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
             hijo— pero <strong>queda anotado</strong>, y es lo que mas rapido lleva a que reporten
             un numero. Piensatelo antes.</li>
@@ -352,11 +352,11 @@ export default function AyudaPage() {
           <li>· <strong>Insistir a quien no contesta.</strong> Si alguien pide que no le escribas,
             marcalo con el icono <Prohibit size={12} className="inline" /> de la cabecera del chat:
             no se le vuelve a enviar nada, ni con plantilla.</li>
-          <li>· <strong>Usar tu numero personal.</strong> Si lo bloquean pierdes tambien tus
+          <li>· <strong>Usar tu número personal.</strong> Si lo bloquean pierdes tambien tus
             conversaciones privadas.</li>
         </ul>
         <p className="text-sm text-amber-800 dark:text-amber-300/90 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 leading-relaxed">
-          El CRM tiene topes puestos: <strong>6 mensajes por minuto, 60 por hora, 300 al dia</strong>, y
+          El CRM tiene topes puestos: <strong>6 mensajes por minuto, 60 por hora, 300 al día</strong>, y
           una pausa entre uno y otro. Son por numero — lo que mande un companero no te frena a ti.
           Si te sale «vas muy rapido», espera: te esta protegiendo.
         </p>
@@ -367,7 +367,7 @@ export default function AyudaPage() {
         <ul className="text-sm text-muted-foreground space-y-2 leading-relaxed">
           <li>· <strong className="text-foreground">Tus companeros, no.</strong> Cada persona ve solo su
             propio WhatsApp.</li>
-          <li>· <strong className="text-foreground">La administracion, si.</strong> Un administrador puede
+          <li>· <strong className="text-foreground">La administración, sí.</strong> Un administrador puede
             abrir el WhatsApp de las personas de sus proyectos. Cuando lo hace, la pantalla dice
             siempre de quien es lo que se esta viendo.</li>
           <li>· <strong className="text-foreground">Todo queda en el servidor de la empresa.</strong> Lo que

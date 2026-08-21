@@ -118,7 +118,7 @@ const LLAMADA = {
   contestada: { texto: 'Llamada contestada', video: 'Videollamada contestada', grave: false },
   // La que sale del boton. Se dice «desde el movil» a proposito: el CRM apunta
   // que se marco, no sabe si descolgaron. Prometer mas seria mentir.
-  intento:    { texto: 'Llamaste desde el movil', video: 'Llamaste desde el movil', grave: false },
+  intento:    { texto: 'Llamaste desde el móvil', video: 'Llamaste desde el móvil', grave: false },
 } as const;
 
 /**
@@ -732,8 +732,8 @@ export default function ChatPage() {
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
-          : <span className="text-amber-700 dark:text-amber-400">
-              No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi numero</Link>
+          : <span className="wa-sin-enlazar text-amber-700 dark:text-amber-400">
+              No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link>
             </span>}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
@@ -746,7 +746,7 @@ export default function ChatPage() {
         <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
-          <span className="font-medium">Conexion</span>
+          <span className="font-medium">Conexión</span>
         </Link>
       </div>
 
@@ -1060,7 +1060,7 @@ export default function ChatPage() {
           <form className="wa-panel" onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => { e.preventDefault(); abrirPorTelefono(); }}>
             <div className="wa-panel-cabecera">
-              <span>Escribir a un numero</span>
+              <span>Escribir a un número</span>
               <button type="button" onClick={() => setPidiendoTelefono(false)} className="wa-panel-cerrar">
                 <X size={15} />
               </button>

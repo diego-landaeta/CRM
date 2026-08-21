@@ -86,7 +86,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
   async function llamar() {
     setLlamando(true);
     try {
-      await onLlamada?.('Llamada desde el movil (marcada desde la ficha)');
+      await onLlamada?.('Llamada desde el móvil (marcada desde la ficha)');
     } catch {
       // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
       // la persona, no alimentar el historial.

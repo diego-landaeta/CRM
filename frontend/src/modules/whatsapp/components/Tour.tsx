@@ -22,41 +22,50 @@ type Paso = {
 const PASOS: Paso[] = [
   {
     titulo: 'Esto es tu WhatsApp',
-    texto: 'Tu numero, tus conversaciones. Nadie mas del equipo las ve. {pasos} pasos y te dejo trabajar.',
+    texto: 'Tu número, tus conversaciones. Nadie más del equipo las ve. {pasos} pasos y te dejo trabajar.',
+  },
+  {
+    // Solo sale si NO hay numero enlazado: ese aviso desaparece en cuanto lo
+    // hay, y entonces el paso se salta solo. Sin esto, quien abria el chat sin
+    // enlazar recibia un recorrido sobre buscar, escribir y llamar — todo cosas
+    // que aun no puede hacer— y nadie le decia lo primero que tenia que hacer.
+    donde: '.wa-sin-enlazar',
+    titulo: 'Primero, enlaza tu número',
+    texto: 'Todavía no tienes ninguno conectado, así que aquí no hay nada que leer ni a quién escribir. Pulsa «enlazar mi número», acepta el aviso y escanea el código con tu móvil. En «Cómo se usa» está el paso a paso con las pantallas del teléfono.',
   },
   {
     donde: '.wa-barra-lista .cs-search',
-    titulo: 'Busca por aqui',
-    texto: 'Por nombre o por telefono. Con muchas conversaciones es mas rapido que bajar la lista.',
+    titulo: 'Busca por aquí',
+    texto: 'Por nombre o por teléfono. Con muchas conversaciones es más rápido que bajar la lista.',
   },
   {
     donde: '.wa-btn-nuevo',
     titulo: 'Escribir a alguien nuevo',
-    texto: 'Busca al prospecto y abre su chat, o escribe a un numero suelto. Si esa persona no esta en el CRM se puede escribir igual, pero queda anotado: escribir a quien no pidio informacion es lo que hace que reporten un numero.',
+    texto: 'Busca al prospecto y abre su chat, o escribe a un número suelto. Si esa persona no está en el CRM se puede escribir igual, pero queda anotado: escribir a quien no pidió información es lo que hace que reporten un número.',
   },
   {
     donde: '.cs-message-input',
     titulo: 'Escribe, manda archivos o graba',
-    texto: 'El clip para adjuntar, el microfono para una nota de voz. Antes de enviar veras lo que mandas, con su pie de foto. Tambien puedes pegar una imagen aqui o arrastrarla.',
+    texto: 'El clip para adjuntar, el micrófono para una nota de voz. Antes de enviar verás lo que mandas, con su pie de foto. También puedes pegar una imagen aquí o arrastrarla.',
   },
   {
     donde: '.wa-btn-llamar',
     titulo: 'Llamar, y las que te llegan',
-    texto: 'Este boton abre la llamada en TU movil: desde el CRM no se puede hablar, WhatsApp no lo permite. Lo que si hace es apuntarla. Y si te llaman, sale un aviso aunque estes en otra pantalla del CRM — cogela en el movil. Las perdidas quedan en el chat y en la ficha del prospecto.',
+    texto: 'Este botón abre la llamada en TU móvil: desde el CRM no se puede hablar, WhatsApp no lo permite. Lo que sí hace es apuntarla. Y si te llaman, sale un aviso aunque estés en otra pantalla del CRM — cógela en el móvil. Las perdidas quedan en el chat y en la ficha del prospecto.',
   },
   {
     donde: '.wa-btn-prohibir',
     titulo: 'Si te piden que no escribas',
-    texto: 'Marcalo aqui y el CRM no le vuelve a enviar nada, ni con plantilla. Es la regla que mas protege tu linea.',
+    texto: 'Márcalo aquí y el CRM no le vuelve a enviar nada, ni con plantilla. Es la regla que más protege tu línea.',
   },
   {
     donde: '.wa-btn-ampliar',
-    titulo: 'Si vas a pasar la mañana aqui',
-    texto: 'Amplia y desaparece todo lo demas del CRM: menu, cabecera y selector de proyecto. Se sale con Escape o con el mismo boton. Al lado tienes «Conexion», por si algun dia se desvincula el numero.',
+    titulo: 'Si vas a pasar la mañana aquí',
+    texto: 'Amplía y desaparece todo lo demás del CRM: menú, cabecera y selector de proyecto. Se sale con Escape o con el mismo botón. Al lado tienes «Conexión», que es donde se enlaza el número.',
   },
   {
-    titulo: 'Un par de cosas mas',
-    texto: 'Pasa el raton por un mensaje para responderlo citandolo. Si sale con ⚠ es que no salio, y debajo tiene «Reintentar». En el menu lateral estan «Plantillas» —los mensajes de siempre, que ve todo el equipo— y la cola de prospectos. Este recorrido vuelve con el «?» de arriba cuando quieras.',
+    titulo: 'Un par de cosas más',
+    texto: 'Pasa el ratón por un mensaje para responderlo citándolo. Si sale con ⚠ es que no salió, y debajo tiene «Reintentar». En el menú lateral están «Plantillas» —los mensajes de siempre, que ve todo el equipo— y la cola de prospectos. Este recorrido vuelve con el «?» de arriba cuando quieras.',
   },
 ];
 
@@ -212,7 +221,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
           <div className="wa-tour-botones">
             {paso > 0 && (
               <button type="button" className="wa-btn-suave" onClick={atras}>
-                <ArrowLeft size={13} /> Atras
+                <ArrowLeft size={13} /> Atrás
               </button>
             )}
             {ultimo ? (

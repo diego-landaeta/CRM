@@ -142,7 +142,7 @@ function Cartel() {
           <p className="text-sm text-emerald-900 dark:text-emerald-200 truncate">{quien}</p>
           {/* Lo importante, y por eso va en negrita: aqui no se coge. */}
           <p className="text-xs text-emerald-800 dark:text-emerald-300/90 mt-1 leading-relaxed">
-            <strong>Cogela en tu movil</strong> — desde el CRM no se puede hablar.
+            <strong>Cógela en tu móvil</strong> — desde el CRM no se puede hablar.
             Si no llegas, quedara apuntada como perdida.
           </p>
 

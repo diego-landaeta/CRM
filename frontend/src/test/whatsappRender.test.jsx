@@ -56,7 +56,7 @@ describe('AvisoDeLlamada · el cartel de llamada entrante', () => {
     envolver(<Aviso />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect(screen.getByText('Marta Ruiz')).toBeTruthy();
-    expect(screen.getByText(/Cogela en tu movil/i)).toBeTruthy();
+    expect(screen.getByText(/Cógela en tu móvil/i)).toBeTruthy();
     expect(screen.getByText(/sonando 7s/)).toBeTruthy();
     // Y no promete un boton de contestar, que no existe.
     expect(screen.queryByText(/contestar|descolgar/i)).toBeNull();
@@ -85,19 +85,19 @@ describe('Tour · el recorrido guiado', () => {
     expect(screen.getByText('Esto es tu WhatsApp')).toBeTruthy();
     // El numero de pasos se calcula: escrito a mano se queda viejo en cuanto se
     // añade uno, que es exactamente lo que paso con las llamadas.
-    expect(screen.getByText(/8 pasos y te dejo trabajar/)).toBeTruthy();
-    expect(screen.getByText('1 de 8')).toBeTruthy();
+    expect(screen.getByText(/9 pasos y te dejo trabajar/)).toBeTruthy();
+    expect(screen.getByText('1 de 9')).toBeTruthy();
   });
 
   it('en el primer paso no hay «Atras», y el ultimo cierra', async () => {
     envolver(<Tour />);
-    expect(screen.queryByText(/Atras/)).toBeNull();
+    expect(screen.queryByText(/Atrás/)).toBeNull();
     expect(screen.getByText(/Siguiente/)).toBeTruthy();
   });
 
   it('hayQueSeñalar dice que no cuando no hay nada en pantalla', async () => {
     // Sin la pantalla del chat montada, ningun paso encuentra su objetivo: el
-    // recorrido serian ocho carteles sueltos, asi que no se abre.
+    // recorrido serian nueve carteles sueltos, asi que no se abre.
     expect(hayQueSeñalar()).toBe(false);
   });
 });
@@ -116,7 +116,7 @@ describe('La guia, dentro del CRM', () => {
 
   it('empieza diciendo lo que NO se puede con las llamadas', async () => {
     envolver(<Ayuda />);
-    expect(screen.getByText(/se hacen y se cogen desde tu movil/i)).toBeTruthy();
+    expect(screen.getByText(/se hacen y se cogen desde tu móvil/i)).toBeTruthy();
   });
 });
 

@@ -54,7 +54,7 @@ export default function ConexionPage() {
   // Empezar de cero por defecto, y no es una preferencia estetica: traerse anos
   // de conversaciones privadas a la base de la empresa casi nunca es lo que hace
   // falta para trabajar, y una vez estan ahi ya no se quitan solas.
-  const [modo, setModo] = useState<'cero' | 'rapido' | 'todo'>('cero');
+  const [modo, setModo] = useState<'cero' | 'rápido' | 'todo'>('cero');
   // Enterarse ANTES, no despues.
   //
   // Enlazar por esta via no es la forma oficial de WhatsApp y quien paga si sale
@@ -128,7 +128,7 @@ export default function ConexionPage() {
       for (let n = 1; n <= INTENTOS; n++) {
         try {
           const r = await client.post('/whatsapp/emparejar', { modo, usuarioId: deQuien, enterado: true });
-          if (!r.success) throw new Error(r.error || 'No se pudo pedir el codigo');
+          if (!r.success) throw new Error(r.error || 'No se pudo pedir el código');
           if (r.data?.qr) { setQr(r.data.qr); buscandoQR.current = true; return; }
           await mirar();
           return;
@@ -182,7 +182,7 @@ export default function ConexionPage() {
       if (!r.success) throw new Error(r.error || 'No se pudo guardar');
       setLlamada({ ...r.data, disponible: true });
       toast({
-        title: activa ? 'Respuesta automatica activada' : 'Respuesta automatica desactivada',
+        title: activa ? 'Respuesta automática activada' : 'Respuesta automática desactivada',
         description: activa
           ? 'Las llamadas se rechazaran y se contestara con ese texto.'
           : 'Las llamadas entrantes sonaran en tu movil como siempre.',
@@ -242,7 +242,7 @@ export default function ConexionPage() {
             <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
             <Link to="/whatsapp/ayuda" title="Como se usa"
               className="p-2 rounded-md hover:bg-muted text-muted-foreground text-xs font-medium whitespace-nowrap">
-              ¿Como se hace?
+              ¿Cómo se hace?
             </Link>
             <button type="button" onClick={mirar} title="Comprobar ahora"
               className="p-2 rounded-md hover:bg-muted text-muted-foreground">
@@ -288,13 +288,13 @@ export default function ConexionPage() {
                 : `Vas a enlazar el numero de ${sesion.nombre}. Que lo lea esa persona:`}
             </p>
             <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-1.5 leading-relaxed">
-              <li>· El numero queda vinculado al CRM. Esta <strong>no es la via oficial de
+              <li>· El número queda vinculado al CRM. Esta <strong>no es la via oficial de
                   WhatsApp</strong> y WhatsApp <strong>puede bloquearlo</strong>.</li>
-              <li>· Mejor un <strong>numero de empresa, nunca el personal</strong>. Si lo
+              <li>· Mejor un <strong>número de empresa, nunca el personal</strong>. Si lo
                   bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
               <li>· Las conversaciones <strong>se guardan en la base del CRM</strong>, en el
                   servidor de la empresa. Los demas del equipo no las ven, pero
-                  <strong> la administracion si puede</strong>.</li>
+                  <strong> la administración si puede</strong>.</li>
               <li>· Se puede <strong>desvincular cuando se quiera</strong>, desde aqui o desde
                   Dispositivos vinculados en el movil.</li>
             </ul>
@@ -317,7 +317,7 @@ export default function ConexionPage() {
 
         {estado?.configurado && !conectado && !qr && (
           <div className="mt-4">
-            <p className="text-sm font-semibold mb-1">¿Que se trae del movil?</p>
+            <p className="text-sm font-semibold mb-1">¿Qué se trae del móvil?</p>
             <p className="text-xs text-muted-foreground mb-2">
               Lo que traigas se guarda en la base del CRM y ya no se quita solo.
             </p>
@@ -330,8 +330,8 @@ export default function ConexionPage() {
                   pie: 'Nada del pasado: solo lo que llegue a partir de ahora. Es lo que hace falta para trabajar, y lo unico que no mete tus conversaciones antiguas en el servidor de la empresa.',
                 },
                 {
-                  id: 'rapido',
-                  titulo: 'El ultimo mes',
+                  id: 'rápido',
+                  titulo: 'El último mes',
                   pie: 'Las conversaciones de los ultimos 30 dias. Util si vienes atendiendo a gente por ese numero y no quieres perder el hilo.',
                 },
                 {
@@ -372,7 +372,7 @@ export default function ConexionPage() {
               <QrCode size={16} weight="bold" />
               {pidiendo
                 ? (reintento ? `Reintentando (${reintento} de 3)…` : 'Pidiendo codigo…')
-                : qr ? 'Pedir otro codigo'
+                : qr ? 'Pedir otro código'
                 : sesion.esMia ? 'Enlazar mi numero' : `Enlazar el numero de ${sesion.nombre}`}
             </button>
           )}
@@ -394,10 +394,10 @@ export default function ConexionPage() {
           <ol className="text-sm text-muted-foreground mb-4 inline-block text-left leading-relaxed">
             <li><strong>1.</strong> Abre WhatsApp</li>
             <li><strong>2.</strong> Ajustes → <strong>Dispositivos vinculados</strong></li>
-            <li><strong>3.</strong> <strong>Vincular un dispositivo</strong> y apunta aqui</li>
+            <li><strong>3.</strong> <strong>Vincular un dispositivo</strong> y apunta aquí</li>
           </ol>
           <div className="grid place-items-center">
-            <img src={qr} alt="Codigo QR de WhatsApp" className="w-64 h-64 rounded-lg bg-white p-2" />
+            <img src={qr} alt="Código QR de WhatsApp" className="w-64 h-64 rounded-lg bg-white p-2" />
           </div>
           <p className="text-xs text-muted-foreground mt-3 flex items-center justify-center gap-1.5">
             <ArrowsClockwise size={12} className="animate-spin" />
@@ -450,7 +450,7 @@ export default function ConexionPage() {
             Si te llaman por WhatsApp
           </p>
           <p className="text-muted-foreground">
-            Las llamadas <strong className="text-foreground">se cogen desde tu movil</strong>, no desde
+            Las llamadas <strong className="text-foreground">se cogen desde tu móvil</strong>, no desde
             aqui: WhatsApp no deja hablar por esta via. Lo que si hace el CRM es{' '}
             <strong className="text-foreground">apuntarlas</strong> — las perdidas salen en el chat con
             su hora, para que no se te escape ninguna.
@@ -507,9 +507,9 @@ export default function ConexionPage() {
             Lo que aceptaste al enlazar
           </summary>
           <ul className="px-4 pb-4 text-muted-foreground space-y-1.5 leading-relaxed">
-            <li>· El numero queda vinculado al CRM. Esta <strong className="text-foreground">no es la
+            <li>· El número queda vinculado al CRM. Esta <strong className="text-foreground">no es la
                 via oficial de WhatsApp</strong> y WhatsApp puede bloquearlo.</li>
-            <li>· Mejor un <strong className="text-foreground">numero de empresa, nunca el personal</strong>.
+            <li>· Mejor un <strong className="text-foreground">número de empresa, nunca el personal</strong>.
                 Si lo bloquean se pierden tambien las conversaciones privadas de esa linea.</li>
             <li>· Las conversaciones <strong className="text-foreground">se guardan en la base del CRM</strong>,
                 en el servidor de la empresa. Los demas del equipo no las ven, pero la
@@ -524,7 +524,7 @@ export default function ConexionPage() {
         <div className="wa-velo" onClick={() => setConfirmando(false)}>
           <div className="wa-panel" onClick={(e) => e.stopPropagation()}>
             <div className="wa-panel-cabecera">
-              <span>Desvincular tu numero</span>
+              <span>Desvincular tu número</span>
               <button type="button" onClick={() => setConfirmando(false)} className="wa-panel-cerrar">
                 <X size={15} />
               </button>
@@ -545,7 +545,7 @@ export default function ConexionPage() {
                 <input type="checkbox" checked={borrarTodo} className="mt-0.5"
                   onChange={(e) => setBorrarTodo(e.target.checked)} />
                 <span className="wa-panel-nota">
-                  <strong>Borrar tambien las conversaciones guardadas</strong> y sus archivos.
+                  <strong>Borrar también las conversaciones guardadas</strong> y sus archivos.
                   Empiezas limpio la proxima vez que enlaces. <strong>Esto no se puede deshacer.</strong>
                 </span>
               </label>
