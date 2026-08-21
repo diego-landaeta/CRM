@@ -85,7 +85,7 @@ describe('Tour · el recorrido guiado', () => {
     expect(screen.getByText('Esto es tu WhatsApp')).toBeTruthy();
     // El numero de pasos se calcula: escrito a mano se queda viejo en cuanto se
     // añade uno, que es exactamente lo que paso con las llamadas.
-    expect(screen.getByText(/9 pasos y te dejo trabajar/)).toBeTruthy();
+    expect(screen.getByText(/En 9 pasos te enseño por dónde va cada cosa/)).toBeTruthy();
     expect(screen.getByText('1 de 9')).toBeTruthy();
   });
 

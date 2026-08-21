@@ -21,17 +21,22 @@ type Paso = {
 
 const PASOS: Paso[] = [
   {
+    // Se presenta la pantalla ANTES de pedir nada. Quien llega aqui no sabe
+    // todavia que es esto: mandarla a enlazar un numero de entrada es pedirle
+    // que conecte su telefono a algo que no le han explicado.
     titulo: 'Esto es tu WhatsApp',
-    texto: 'Tu número, tus conversaciones. Nadie más del equipo las ve. {pasos} pasos y te dejo trabajar.',
+    texto: 'Desde aquí escribes a los prospectos sin salir del CRM, con tu propio número. Las conversaciones quedan guardadas y atadas a su ficha, y solo las ves tú — ni el resto del equipo ni las demás gestoras. En {pasos} pasos te enseño por dónde va cada cosa.',
   },
   {
-    // Solo sale si NO hay numero enlazado: ese aviso desaparece en cuanto lo
-    // hay, y entonces el paso se salta solo. Sin esto, quien abria el chat sin
-    // enlazar recibia un recorrido sobre buscar, escribir y llamar — todo cosas
-    // que aun no puede hacer— y nadie le decia lo primero que tenia que hacer.
+    // Y AHORA se guia a enlazar, ya sabiendo para que sirve.
+    //
+    // Solo sale si NO hay numero: ese aviso desaparece en cuanto lo hay, asi que
+    // el paso se salta solo con el mecanismo que ya existe. Sin el, quien abria
+    // el chat sin enlazar recibia un recorrido sobre buscar, escribir y llamar
+    // —todo cosas que aun no puede hacer— y nadie le decia por donde empezar.
     donde: '.wa-sin-enlazar',
-    titulo: 'Primero, enlaza tu número',
-    texto: 'Todavía no tienes ninguno conectado, así que aquí no hay nada que leer ni a quién escribir. Pulsa «enlazar mi número», acepta el aviso y escanea el código con tu móvil. En «Cómo se usa» está el paso a paso con las pantallas del teléfono.',
+    titulo: 'Te falta conectar el tuyo',
+    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Pulsa «enlazar mi número»: leerás un aviso sobre lo que supone —merece la pena— y saldrá un código para escanear con el móvil. Son dos minutos, y en «Cómo se usa» tienes el paso a paso con las pantallas del teléfono.',
   },
   {
     donde: '.wa-barra-lista .cs-search',
