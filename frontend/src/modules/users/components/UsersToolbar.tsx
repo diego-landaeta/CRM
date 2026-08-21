@@ -91,7 +91,7 @@ export default function UsersToolbar({
         pastillas se quedaban cortas en cuanto pasan de tres.
       */}
       <CardSection className="flex flex-wrap items-center gap-3">
-        <label htmlFor="filtro-proyecto" className="text-meta font-medium text-muted-foreground">
+        <label htmlFor="filtro-proyecto" className="text-secundario font-medium text-muted-foreground">
           Proyecto
         </label>
         <Select<string>
@@ -105,7 +105,7 @@ export default function UsersToolbar({
           size="sm"
           className="max-w-[220px] w-full"
         />
-        <span className="text-meta text-muted-foreground whitespace-nowrap ml-auto">
+        <span className="text-secundario text-muted-foreground whitespace-nowrap ml-auto">
           {hayFiltroActivo
             ? `${totalFiltrados} de ${cargados} usuario${cargados !== 1 ? 's' : ''}`
             : `${cargados} usuario${cargados !== 1 ? 's' : ''}`}

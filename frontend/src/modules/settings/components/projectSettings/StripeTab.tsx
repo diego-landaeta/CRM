@@ -53,7 +53,7 @@ export default function StripeTab({ project }) {
                 <Icon size={16} weight="duotone" />
               </div>
               {delta && (
-                <span className={`text-micro font-bold ${delta.growing ? 'text-emerald-600' : 'text-red-500'}`}>
+                <span className={`text-secundario font-bold ${delta.growing ? 'text-emerald-600' : 'text-red-500'}`}>
                   {delta.growing ? '↑' : '↓'} {Math.abs(delta.pct)}%
                 </span>
               )}

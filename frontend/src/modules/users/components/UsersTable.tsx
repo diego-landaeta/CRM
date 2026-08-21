@@ -69,7 +69,7 @@ function EstadoBadge({ user }: { user: CrmUser }) {
 
 function RolBadge({ user }: { user: CrmUser }) {
   return (
-    <span title={roleLabelOf(user)} className={`px-2 py-0.5 rounded-full text-micro font-medium whitespace-nowrap ${ROLE_CHIP}`}>
+    <span title={roleLabelOf(user)} className={`px-2 py-0.5 rounded-full text-secundario font-medium whitespace-nowrap ${ROLE_CHIP}`}>
       {roleLabelCortoOf(user)}
     </span>
   );
@@ -103,16 +103,16 @@ export default function UsersTable({
     <>
       {/* Tabla en pantallas anchas */}
       <div className="hidden xl:block">
-        <table className="w-full text-body">
+        <table className="w-full text-normal">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Usuario</th>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground hidden 2xl:table-cell">Email</th>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Rol</th>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Proyectos</th>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground hidden 2xl:table-cell">Última conexión</th>
-              <th className="px-4 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
-              <th className="px-4 py-2.5 text-right text-xs text-muted-foreground">Acciones</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap">Usuario</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap hidden 2xl:table-cell">Email</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap">Rol</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap">Proyectos</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap hidden 2xl:table-cell">Última conexión</th>
+              <th className="px-4 py-2.5 text-left text-tabla uppercase text-muted-foreground whitespace-nowrap">Estado</th>
+              <th className="px-4 py-2.5 text-right text-tabla uppercase text-muted-foreground whitespace-nowrap">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -125,12 +125,12 @@ export default function UsersTable({
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-micro font-semibold flex-shrink-0 ${avatarColorFor(u.id)}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-secundario font-semibold flex-shrink-0 ${avatarColorFor(u.id)}`}>
                         {getInitials(u.nombre)}
                       </div>
                       <div className="min-w-0">
                         <span className="font-semibold block truncate">{u.nombre || 'Sin nombre'}</span>
-                        <span className="text-meta text-muted-foreground 2xl:hidden truncate block">{u.email}</span>
+                        <span className="text-secundario text-muted-foreground 2xl:hidden truncate block">{u.email}</span>
                       </div>
                     </div>
                   </td>
@@ -139,12 +139,12 @@ export default function UsersTable({
                   <td className="px-4 py-3 text-muted-foreground max-w-[160px] truncate" title={proyectos}>{proyectos}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden 2xl:table-cell">
                     {u.last_login_at ? (
-                      <span className="flex items-center gap-1.5 text-meta">
+                      <span className="flex items-center gap-1.5 text-secundario">
                         <Clock size={12} weight="regular" />
                         {formatLastLogin(u.last_login_at)}
                       </span>
                     ) : (
-                      <span className="text-meta italic text-muted-foreground/60">Nunca</span>
+                      <span className="text-secundario italic text-muted-foreground/60">Nunca</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -180,12 +180,12 @@ export default function UsersTable({
           return (
             <div key={u.id} className={`p-4 space-y-2 ${!u.active ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2.5">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-micro font-semibold ${avatarColorFor(u.id)}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-secundario font-semibold ${avatarColorFor(u.id)}`}>
                   {getInitials(u.nombre)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-body font-semibold block truncate">{u.nombre || 'Sin nombre'}</span>
-                  <span className="text-meta text-muted-foreground truncate block">{u.email}</span>
+                  <span className="text-normal font-semibold block truncate">{u.nombre || 'Sin nombre'}</span>
+                  <span className="text-secundario text-muted-foreground truncate block">{u.email}</span>
                 </div>
                 {u.role !== 'superadmin' && (
                   <UserActionsMenu
@@ -203,14 +203,14 @@ export default function UsersTable({
                 <RolBadge user={u} />
                 <EstadoBadge user={u} />
                 <AusenciaBadge estado={disponibilidad.get(u.id)} />
-                <span className="text-micro text-muted-foreground truncate max-w-[200px]" title={proyectos}>{proyectos}</span>
+                <span className="text-secundario text-muted-foreground truncate max-w-[200px]" title={proyectos}>{proyectos}</span>
                 {u.last_login_at ? (
-                  <span className="text-micro text-muted-foreground/70 flex items-center gap-1 ml-auto">
+                  <span className="text-secundario text-muted-foreground/70 flex items-center gap-1 ml-auto">
                     <Clock size={10} weight="regular" />
                     {new Date(u.last_login_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                   </span>
                 ) : (
-                  <span className="text-micro text-muted-foreground/60 italic ml-auto">Nunca</span>
+                  <span className="text-secundario text-muted-foreground/60 italic ml-auto">Nunca</span>
                 )}
               </div>
             </div>

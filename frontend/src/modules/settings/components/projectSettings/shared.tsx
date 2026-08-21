@@ -49,7 +49,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
     <div>
       <label className="text-xs text-muted-foreground mb-1 block">{label}</label>
       {children}
-      {hint && <p className="text-meta text-muted-foreground mt-1">{hint}</p>}
+      {hint && <p className="text-secundario text-muted-foreground mt-1">{hint}</p>}
     </div>
   );
 }

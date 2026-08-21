@@ -15,8 +15,8 @@ export default function SecurityTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold">Seguridad</h2>
-        <p className="text-body text-muted-foreground mt-0.5">Configuración de seguridad del sistema</p>
+        <h2 className="text-seccion">Seguridad</h2>
+        <p className="text-normal text-muted-foreground mt-0.5">Configuración de seguridad del sistema</p>
       </div>
       <div className="space-y-3">
         {ITEMS.map((s) => (
@@ -26,11 +26,11 @@ export default function SecurityTab() {
                 <ShieldCheck size={16} className="text-emerald-600" weight="regular" />
               </div>
               <div>
-                <p className="text-body font-semibold">{s.label}</p>
-                <p className="text-meta text-muted-foreground">{s.value}</p>
+                <p className="text-normal font-semibold">{s.label}</p>
+                <p className="text-secundario text-muted-foreground">{s.value}</p>
               </div>
             </div>
-            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 px-2.5 py-1 rounded-full text-micro font-medium">OK</span>
+            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 px-2.5 py-1 rounded-full text-secundario font-medium">OK</span>
           </div>
         ))}
       </div>
