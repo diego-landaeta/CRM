@@ -96,7 +96,7 @@ export default function ColumnsTab({ project, onSaved }) {
                 }}
                 className="w-full h-8 px-2 rounded-md bg-card border border-border text-sm outline-none focus:border-primary"
               />
-              <p className="font-mono text-micro text-muted-foreground mt-0.5">{c.key}</p>
+              <p className="font-mono text-secundario text-muted-foreground mt-0.5">{c.key}</p>
             </div>
             <label className="flex items-center gap-1.5 text-xs cursor-pointer">
               <input type="checkbox" checked={c.visible} onChange={() => toggle(idx)} />
@@ -109,7 +109,7 @@ export default function ColumnsTab({ project, onSaved }) {
 
       {extraOptions.length > 0 && (
         <div>
-          <p className="text-meta font-bold uppercase text-muted-foreground mb-2">Añadir columna</p>
+          <p className="text-secundario font-bold uppercase text-muted-foreground mb-2">Añadir columna</p>
           <div className="flex flex-wrap gap-2">
             {extraOptions.map(c => (
               <button

@@ -5,7 +5,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
+        // Inter, la misma que el body. Antes decia 'Plus Jakarta Sans', que no
+        // se descargaba en ninguna parte: `font-sans` caia a la del sistema.
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        // Codigos: factura, NIF, identificadores, claves.
+        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -69,20 +73,31 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
 
-      // Los tres tamaños que el CRM usa de verdad, con nombre.
+      // La escala del apartado de administración (#50).
       //
-      // Hay 1.106 tamaños escritos a pelo repartidos en diez valores: 584
-      // `text-[11px]`, 390 `text-[10px]`, 69 `text-[13px]`, y luego 9, 12, 8 y
-      // 14. La escala de Tailwind (12/14/16) no encaja en un panel denso, así
-      // que se le pone nombre a la que ya se usaba.
+      // Sustituye a micro/meta/body, que salieron de medir lo que había —10,
+      // 11 y 13px— y no de una decisión. Esta viene decidida y es más calmada:
+      // 12 y 14 en vez de 10, 11 y 13. Denso no quiere decir diminuto.
       //
-      // No se tocan `xs`, `sm` ni `base`: redefinirlos movería las 83 pantallas
-      // a la vez, y eso no se puede revisar. Estas se añaden y se van adoptando
-      // según se toca cada pantalla.
+      // Cada nombre dice para qué es, así que no hay que elegir tamaño en cada
+      // pantalla: se elige el papel del texto.
+      //
+      // Sigue sin tocarse `xs`, `sm` ni `base`: redefinirlos movería las 83
+      // pantallas a la vez y eso no hay quien lo revise.
       fontSize: {
-        micro: ['0.625rem', { lineHeight: '0.875rem' }],   // 10px · etiquetas y chips
-        meta: ['0.6875rem', { lineHeight: '1rem' }],       // 11px · datos secundarios
-        body: ['0.8125rem', { lineHeight: '1.25rem' }],    // 13px · tablas y formularios
+        // 20px · el título de la pantalla
+        titulo: ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600' }],
+        // 16px · el título de un bloque dentro de la pantalla
+        seccion: ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        // 14px · el texto de siempre
+        normal: ['0.875rem', { lineHeight: '1.25rem' }],
+        // 12px · lo que acompaña: ayudas, metadatos, pies
+        secundario: ['0.75rem', { lineHeight: '1rem' }],
+        // 11px · cabecera de tabla. Va con `uppercase`; el espaciado y el peso
+        // ya vienen puestos, que a este tamaño en mayúsculas hacen falta.
+        tabla: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.06em', fontWeight: '600' }],
+        // 28px · las cifras que se miran de lejos. Siempre con tabular-nums.
+        cifra: ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],
       },
 
       boxShadow: {

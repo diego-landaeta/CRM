@@ -1,4 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/*
+  Dos familias, y solo dos.
+
+  Antes habia dos fuentes de interfaz y una no cargaba: index.css importaba
+  Inter y la ponia en el body, mientras tailwind.config declaraba
+  `sans: ['Plus Jakarta Sans']` que no se descargaba en ninguna parte. Todo lo
+  que usara `font-sans` caia a la fuente del sistema — distinta en cada
+  ordenador. Por eso el CRM se veia de una forma en un equipo y de otra en el
+  siguiente.
+
+  · Inter para la interfaz. A 12-14px se lee sin cansar y sus cifras tienen
+    ancho fijo. Pesos: 400 normal, 500 etiquetas, 600 titulos. El 700 solo
+    para el nombre del producto.
+  · IBM Plex Mono para codigos: numeros de factura, NIF, identificadores y
+    claves. Un 2026/0695 en monoespaciada se lee de un golpe. Ya habia 124
+    usos de `font-mono` cayendo a la monoespaciada del sistema.
+
+  Las dos en una sola peticion.
+*/
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -151,6 +170,30 @@
 */
 
 @layer components {
+  /*
+    Un código: número de factura, NIF, identificador, clave.
+
+    Monoespaciada y de ancho fijo en las cifras. `2026/0695` así se lee de un
+    golpe; en proporcional hay que deletrearlo. Se usa en el dato, no en la
+    etiqueta que lo acompaña.
+  */
+  .codigo {
+    @apply font-mono tabular-nums;
+  }
+
+  /*
+    Una columna de números que se comparan entre filas: dinero, fechas,
+    cantidades.
+
+    Sin ancho fijo las cifras bailan de fila en fila y hay que leerlas una a
+    una — que es justo lo contrario de para lo que se miran. Se pone en el
+    `<table>` y lo heredan todas las celdas; solo afecta a los dígitos, así
+    que el texto de las otras columnas no cambia.
+  */
+  .tabla-cifras {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Markdown viewer (CRM-113) */
   .markdown-body {
     @apply text-sm leading-relaxed text-foreground;
@@ -224,7 +267,7 @@
     display: block !important;
     position: absolute; left: 0; top: 0; width: 100%;
     color: #000; background: #fff;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-size: 11pt; line-height: 1.45;
   }
   .rfc-cover { page-break-after: always; min-height: 90vh; display: flex; flex-direction: column; }

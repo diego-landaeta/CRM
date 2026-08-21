@@ -164,7 +164,7 @@ export default function UsersPanel() {
       <Card padding="none" className="bg-muted/40 p-8 text-center">
         <Lock size={36} className="text-muted-foreground mx-auto mb-3" weight="regular" />
         <p className="text-sm font-semibold mb-1">Esta pantalla es para administradores</p>
-        <p className="text-meta text-muted-foreground max-w-sm mx-auto">
+        <p className="text-secundario text-muted-foreground max-w-sm mx-auto">
           Tu cuenta ({me?.role}) no puede ver ni gestionar usuarios. Si necesitas acceso, pídeselo a un superadministrador.
         </p>
       </Card>
@@ -180,10 +180,10 @@ export default function UsersPanel() {
         <p className="text-sm font-semibold mb-1 text-destructive-soft-foreground">
           No se pudieron cargar los usuarios
         </p>
-        <p className="text-meta text-destructive-soft-foreground/80 mb-4">{lista.error.mensaje}</p>
+        <p className="text-secundario text-destructive-soft-foreground/80 mb-4">{lista.error.mensaje}</p>
         <button
           onClick={lista.recargar}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/30 text-meta font-semibold text-destructive-soft-foreground hover:bg-destructive/10 transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/30 text-secundario font-semibold text-destructive-soft-foreground hover:bg-destructive/10 transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
         >
           Reintentar
         </button>
@@ -195,8 +195,8 @@ export default function UsersPanel() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold">Gestión de usuarios</h2>
-          <p className="text-body text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
+          <h2 className="text-seccion">Gestión de usuarios</h2>
+          <p className="text-normal text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
         </div>
         <button
           onClick={() => setDialogo({ modo: 'crear' })}

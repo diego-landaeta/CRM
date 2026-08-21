@@ -39,7 +39,7 @@ export default function InviteLinkBanner({ email, url, onClose }: Props) {
           readOnly
           value={url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 h-8 px-2 rounded-md border border-amber-300 dark:border-amber-700 bg-white/80 dark:bg-black/30 text-meta font-mono"
+          className="flex-1 h-8 px-2 rounded-md border border-amber-300 dark:border-amber-700 bg-white/80 dark:bg-black/30 text-secundario font-mono"
         />
         <button onClick={copiar} className="h-8 px-3 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700">
           Copiar
