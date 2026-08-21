@@ -21,7 +21,7 @@ const ICONO_TAM = 16;
 const ICONO_GROSOR = 'regular' as const;
 
 const ITEM_BASE =
-  'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] whitespace-nowrap transition-colors';
+  'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-md text-body whitespace-nowrap transition-colors';
 
 const TAB_CONTENT = {
   users: UsersTab,

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import Card from '@/shared/components/ui/Card';
 import { toast } from '@/shared/hooks/useToast';
 import {
   createUser, deactivateUser, reactivateUser, setUserPassword, updateUser, type CrmUser,
@@ -160,29 +161,33 @@ export default function UsersPanel() {
   // cualquiera que escriba la dirección a mano.
   if (lista.error?.status === 403) {
     return (
-      <div className="bg-muted/40 border border-border rounded-lg p-8 text-center">
+      <Card padding="none" className="bg-muted/40 p-8 text-center">
         <Lock size={36} className="text-muted-foreground mx-auto mb-3" weight="regular" />
         <p className="text-sm font-semibold mb-1">Esta pantalla es para administradores</p>
-        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+        <p className="text-meta text-muted-foreground max-w-sm mx-auto">
           Tu cuenta ({me?.role}) no puede ver ni gestionar usuarios. Si necesitas acceso, pídeselo a un superadministrador.
         </p>
-      </div>
+      </Card>
     );
   }
 
   if (lista.error) {
+    // Sobre tokens: seis clases de rojo escritas a mano —incluidas las variantes
+    // `dark:`— se quedan en dos que ya saben qué rojo toca en cada tema.
     return (
-      <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-8 text-center">
-        <WarningCircle size={40} className="text-red-500 mx-auto mb-3" weight="regular" />
-        <p className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">No se pudieron cargar los usuarios</p>
-        <p className="text-xs text-red-500/80 dark:text-red-400/80 mb-4">{lista.error.mensaje}</p>
+      <Card padding="none" className="bg-destructive-soft border-destructive/30 p-8 text-center">
+        <WarningCircle size={36} className="text-destructive-soft-foreground mx-auto mb-3" weight="regular" />
+        <p className="text-sm font-semibold mb-1 text-destructive-soft-foreground">
+          No se pudieron cargar los usuarios
+        </p>
+        <p className="text-meta text-destructive-soft-foreground/80 mb-4">{lista.error.mensaje}</p>
         <button
           onClick={lista.recargar}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/30 text-meta font-semibold text-destructive-soft-foreground hover:bg-destructive/10 transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
         >
           Reintentar
         </button>
-      </div>
+      </Card>
     );
   }
 
@@ -191,7 +196,7 @@ export default function UsersPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold">Gestión de usuarios</h2>
-          <p className="text-[13px] text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
+          <p className="text-body text-muted-foreground mt-0.5">Quién entra al CRM, con qué rol y en qué proyectos</p>
         </div>
         <button
           onClick={() => setDialogo({ modo: 'crear' })}
@@ -228,7 +233,7 @@ export default function UsersPanel() {
         cargados={lista.cargados}
       />
 
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <Card padding="none" overflowHidden>
         <UsersTable
           users={lista.visibles}
           projects={projects || []}
@@ -248,7 +253,7 @@ export default function UsersPanel() {
           porPagina={lista.porPagina}
           onPageChange={lista.setPage}
         />
-      </div>
+      </Card>
 
       {dialogo && (
         <UserFormDialog

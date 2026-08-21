@@ -80,7 +80,7 @@ export default function GeneralTab({ project, onSaved }) {
             placeholder="https://misitio.com/logo.png"
             className={inputClass}
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Si la dejas vacia se muestra el emoji. La URL debe ser publica y servir CORS para imagenes.
           </p>
         </div>
