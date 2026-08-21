@@ -40,6 +40,75 @@ const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
 
+/**
+ * Quien esta llamando AHORA MISMO.
+ *
+ * Lo de guardar solo el desenlace vale para el historial, pero llega tarde para
+ * avisar: cuando entra el `timeout` la llamada ya se perdio. Para dar el aviso
+ * mientras suena hace falta el `offer`, que no se guarda en la base —no es un
+ * hecho todavia, es algo que esta pasando— y vive aqui mientras dura.
+ *
+ * En memoria como el pulso: si el servidor se reinicia se pierde un aviso, y el
+ * peor caso es que la gestora vea la llamada perdida en el chat medio minuto
+ * despues. No merece una tabla.
+ */
+const sonando = new Map();   // instancia -> { id, telefono, nombre, conversacionId, esVideo, desde }
+
+// WhatsApp deja de llamar sobre los 30 segundos. Se da margen hasta 45 por si
+// el aviso de que termino no llega nunca —un webhook que se pierde, el
+// contenedor reiniciandose—: sin esto el cartel se quedaria puesto para siempre
+// y habria que recargar la pagina para quitarlo.
+const SUENA_MAX_MS = 45000;
+
+/**
+ * ¿Tiene WhatsApp enlazado? — para decidir cada cuanto pregunta la pantalla.
+ *
+ * El pulso vale cuando hay trafico, pero no basta: una gestora enlazada y
+ * tranquila no tiene pulso ninguno despues de reiniciar el servidor, y entonces
+ * la pantalla se pondria a preguntar cada minuto. Una llamada dura treinta
+ * segundos: el aviso no llegaria nunca, que es justo lo que se venia a resolver.
+ *
+ * Asi que cuando no hay pulso se mira la base UNA vez y se guarda el resultado
+ * cinco minutos. Es una consulta por persona cada cinco minutos, y ademas un
+ * EXISTS; lo que no puede es ir una por vuelta, porque esto lo pregunta cada
+ * pestaña abierta del CRM cada pocos segundos.
+ */
+const SESION_TTL_MS = 300000;
+const sesionConocida = new Map();   // instancia -> { hay, hasta }
+
+export async function tieneSesion(instancia) {
+  if (pulso.get(instancia)) return true;
+  const guardado = sesionConocida.get(instancia);
+  if (guardado && guardado.hasta > Date.now()) return guardado.hay;
+  try {
+    const hay = await model.hayConversaciones(instancia);
+    sesionConocida.set(instancia, { hay, hasta: Date.now() + SESION_TTL_MS });
+    return hay;
+  } catch (err) {
+    // Que esto falle NO puede tumbar la peticion.
+    //
+    // Lo pregunta cada pestaña abierta del CRM cada pocos segundos, y el
+    // manejador de errores escribe cada 5xx en la tabla de errores. Un mal
+    // momento de la base se convertiria en una inundacion de escrituras a esa
+    // misma base — el fallo alimentandose a si mismo.
+    //
+    // Se contesta que no hay sesion, que como mucho hace que la pantalla
+    // pregunte mas despacio hasta que se recupere. Y se guarda medio minuto
+    // para no repetir la consulta rota en cada vuelta.
+    logger.warn({ instancia, err: err.message }, 'WhatsApp: no se pudo mirar si hay sesion');
+    sesionConocida.set(instancia, { hay: false, hasta: Date.now() + 30000 });
+    return false;
+  }
+}
+
+/** La llamada en curso de esta sesion, o null. Se cae sola al caducar. */
+export function llamadaSonando(instancia) {
+  const l = sonando.get(instancia);
+  if (!l) return null;
+  if (Date.now() - l.desde > SUENA_MAX_MS) { sonando.delete(instancia); return null; }
+  return l;
+}
+
 // Los frenos. Esto es lo que de verdad protege el numero.
 //
 // Lo que hace que WhatsApp suspenda una linea no es tanto detectar el cliente
@@ -216,6 +285,8 @@ export async function recibir(cuerpo) {
 
   // Acuses de entrega y lectura: es lo que pinta el doble tic.
   if (/messages[._]update/i.test(evento)) return acuse(cuerpo);
+  // Llamadas. Van por su propio evento, no por messages.upsert.
+  if (/^call$/i.test(evento)) return llamada(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -312,6 +383,145 @@ export async function recibir(cuerpo) {
   }
 
   return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo, enCola };
+}
+
+/**
+ * Cuando paso, venga como venga.
+ *
+ * Baileys manda un Date y al pasar por JSON llega como texto ISO, que es lo
+ * normal. Pero no se puede dar por hecho: si llegara en segundos —como hace
+ * `messageTimestamp` en los mensajes— saldria una llamada fechada en 1970, y si
+ * llegara rota, `new Date()` daria «Invalid Date», Postgres rechazaria la fila y
+ * la llamada se perderia entera sin que nadie se entere.
+ *
+ * Ante la duda, la hora de ahora: una llamada fechada con un segundo de
+ * diferencia sigue siendo util; una llamada que no se guarda, no.
+ */
+function cuandoFue(valor) {
+  if (valor == null) return new Date();
+  // Un numero es marca de tiempo. Por debajo de 10^11 son segundos: en
+  // milisegundos esa cifra seria 1973, y no hay llamadas de WhatsApp de 1973.
+  if (typeof valor === 'number' || /^\d+$/.test(String(valor))) {
+    const n = Number(valor);
+    const d = new Date(n < 1e11 ? n * 1000 : n);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  const d = new Date(valor);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * call: alguien ha llamado.
+ *
+ * Hoy una llamada perdida no dejaba rastro en ningun sitio — ni la gestora sabia
+ * que la habian llamado ni el CRM se enteraba. Se apunta como una linea mas del
+ * hilo, que es donde se mira.
+ *
+ * Evolution manda un aviso por CADA cambio de estado de la misma llamada
+ * (`offer`, `ringing`, `timeout`...), asi que si se guardaran todos saldrian
+ * cinco lineas por una sola llamada. Se guarda solo el desenlace, y ademas el
+ * identificador va como `call:<id>`: el indice unico de `wa_id` remata el
+ * duplicado aunque el aviso se reintente.
+ *
+ * No hace falta migracion: `tipo` no tiene lista cerrada de valores.
+ */
+async function llamada(cuerpo) {
+  const datos = cuerpo?.data || cuerpo;
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+  if (!instancia) return { ignorado: 'llamada sin instancia' };
+
+  const id = datos?.id;
+  if (!id) return { ignorado: 'llamada sin id' };
+
+  const estado = String(datos?.status || '').toLowerCase();
+  // Solo el desenlace se GUARDA. Lo de en medio no es un hecho todavia.
+  const COMO_ACABO = { timeout: 'perdida', reject: 'rechazada', accept: 'contestada' };
+  const desenlace = COMO_ACABO[estado];
+
+  // `from` puede venir como `@lid`, que identifica a la persona sin dar su
+  // numero. Baileys manda el telefono aparte en `callerPn` cuando lo sabe.
+  const quienLlama = datos?.callerPn || datos?.from;
+  if (!quienLlama) return { ignorado: 'llamada sin origen' };
+  // En grupo, la conversacion es el grupo; en persona, quien llama.
+  const jid = datos?.isGroup ? (datos?.chatId || datos?.groupJid || quienLlama) : quienLlama;
+
+  // `terminate` dice que la llamada acabo, pero no COMO: llega detras de un
+  // accept o un reject que ya se guardaron. No se guarda nada —seria adivinar—
+  // pero si se apaga el cartel. Sin esto se quedaria puesto hasta caducar solo,
+  // y son 45 segundos avisando de una llamada que ya no existe.
+  if (estado === 'terminate') {
+    sonando.delete(instancia);
+    return { ignorado: 'llamada terminada' };
+  }
+  // Ni `offer` ni el desenlace: son estados intermedios del protocolo.
+  if (!desenlace && estado !== 'offer') return { ignorado: `llamada en curso (${estado})` };
+
+  const conv = await model.conversacionDe({ instancia, jid });
+
+  // Esta sonando. Se apunta en memoria para que la pantalla lo cante, se busca
+  // el nombre AQUI —una vez, y es un aviso raro— y no en cada consulta de la
+  // pantalla, que se repite cada pocos segundos y seria una consulta por vuelta.
+  if (!desenlace) {
+    sonando.set(instancia, {
+      id: datos.id,
+      telefono: conv.telefono,
+      nombre: conv.nombre_push || null,
+      conversacionId: conv.id,
+      esVideo: Boolean(datos?.isVideo),
+      esGrupo: Boolean(datos?.isGroup),
+      desde: Date.now(),
+    });
+    return { conversacionId: conv.id, sonando: true, tipo: 'llamada' };
+  }
+
+  // Ya no suena: se quita el cartel. Da igual como acabara — contestada en el
+  // movil, rechazada o perdida—, lo que no puede es seguir avisando.
+  sonando.delete(instancia);
+  const fila = await model.guardarMensaje({
+    conversacionId: conv.id,
+    waId: `call:${id}`,
+    direccion: 'entrante',
+    tipo: 'llamada',
+    // El desenlace en seco, no la frase. La pantalla decide como se dice, y asi
+    // se puede filtrar por «perdidas» sin buscar dentro de un texto.
+    texto: desenlace,
+    // Para una llamada, «de que tipo de medio es» si significa algo.
+    mediaMime: datos?.isVideo ? 'video' : 'audio',
+    ts: cuandoFue(datos?.date),
+  });
+
+  // Y en la ficha del prospecto, que es donde mira quien no entra en WhatsApp.
+  //
+  // Solo si el mensaje se guardo de verdad: cuando `fila` viene vacia es que ese
+  // aviso ya habia entrado —Evolution reintenta— y sin esta condicion la misma
+  // llamada saldria dos y tres veces en el historial de contactos.
+  if (fila && conv.lead_id) {
+    // Escritas enteras, las dos formas. Pegar «Video» delante daba
+    // «VideoLlamada rechazada», con la ele en mayuscula en mitad de la palabra.
+    const COMO_SE_CUENTA = {
+      perdida:    { voz: 'Llamada perdida por WhatsApp',    video: 'Videollamada perdida por WhatsApp' },
+      rechazada:  { voz: 'Llamada rechazada por WhatsApp',  video: 'Videollamada rechazada por WhatsApp' },
+      contestada: { voz: 'Llamada contestada por WhatsApp', video: 'Videollamada contestada por WhatsApp' },
+    };
+    const comoSeCuenta = COMO_SE_CUENTA[desenlace];
+    try {
+      await model.apuntarInteraccion({
+        leadId: conv.lead_id,
+        nota: comoSeCuenta
+          ? (datos?.isVideo ? comoSeCuenta.video : comoSeCuenta.voz)
+          : 'Llamada por WhatsApp',
+        userId: evolution.usuarioDeInstancia(instancia),
+        fecha: fila.ts,
+      });
+    } catch (err) {
+      // Que no se apunte en la ficha no puede tirar el webhook: la llamada YA
+      // esta guardada en el chat, que es lo que no se puede perder.
+      logger.warn({ instancia, err: err.message }, 'WhatsApp: llamada guardada pero no apuntada en la ficha');
+    }
+  }
+
+  pulso.set(instancia, Date.now());
+  return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo: 'llamada', desenlace };
 }
 
 /** messages.update: WhatsApp dice que un mensaje nuestro llego o se leyo. */

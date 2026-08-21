@@ -230,6 +230,50 @@ export async function agenda(nombre = INSTANCIA) {
   return r.ok ? (r.datos?.contactos || []) : [];
 }
 
+/**
+ * Los ajustes de una sesion tal como los tiene Evolution.
+ *
+ * Devuelve null si no se pudieron leer, que NO es lo mismo que «no hay
+ * ninguno»: la diferencia importa en guardarAjustes().
+ */
+export async function ajustes(nombre = INSTANCIA) {
+  const r = await pedir(`/settings/find/${nombre}`, { esperaMs: 10000 });
+  return r.ok ? (r.datos || {}) : null;
+}
+
+/**
+ * Cambia SOLO lo que se le pasa, dejando el resto como estaba.
+ *
+ * `/settings/set` no parchea: reemplaza el bloque entero, y lo que no vaya en
+ * el cuerpo se queda vacio. Mandar `{ rejectCall: true }` a secas apagaria
+ * `syncFullHistory` —con lo que la siguiente vinculacion entraria sin
+ * historial— y borraria el token de voz si algun dia se pone.
+ *
+ * Por eso se lee antes y se manda todo junto. Y si la lectura falla no se
+ * escribe nada: guardar a ciegas seria justamente arrasar esos ajustes.
+ */
+export async function guardarAjustes(nombre = INSTANCIA, cambios = {}) {
+  const actuales = await ajustes(nombre);
+  if (actuales === null) {
+    return { ok: false, error: 'No se pudieron leer los ajustes de la sesion' };
+  }
+  const r = await pedir(`/settings/set/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      rejectCall: actuales.rejectCall ?? false,
+      msgCall: actuales.msgCall ?? '',
+      groupsIgnore: actuales.groupsIgnore ?? false,
+      alwaysOnline: actuales.alwaysOnline ?? false,
+      readMessages: actuales.readMessages ?? false,
+      readStatus: actuales.readStatus ?? false,
+      syncFullHistory: actuales.syncFullHistory ?? true,
+      ...cambios,
+    },
+    esperaMs: 15000,
+  });
+  return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
+}
+
 /** Que numero esta conectado ahora mismo. */
 export const instancias = () => pedir('/instance/fetchInstances');
 

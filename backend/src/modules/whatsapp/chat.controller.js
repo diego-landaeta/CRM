@@ -6,6 +6,7 @@ import * as firma from './media.firma.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
@@ -284,6 +285,165 @@ export async function noEscribir(req, res, next) {
     const conv = await miConversacion(req, parseInt(req.params.id));
     await model.noEscribir(conv.id, req.body?.motivo);
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/whatsapp/chats/:id/llamada — apunta que se ha llamado.
+ *
+ * Llamar no se puede hacer desde aqui: WhatsApp no deja: no hay canal de audio
+ * por esta via. Lo que hace el boton es abrir la llamada en el movil de la
+ * gestora, y lo que hace el CRM es apuntar que se intento.
+ *
+ * Sin esto, la mitad de las llamadas seguirian sin aparecer en el historial:
+ * quedan las que entran —esas si las cuenta WhatsApp— y se pierden todas las
+ * que salen, que suelen ser las que importan para saber si se atendio a alguien.
+ *
+ * El identificador lleva el minuto dentro a proposito. Pulsar dos veces porque
+ * no dio tono, o que la pantalla mande el aviso otra vez, no son dos llamadas:
+ * el indice unico de `wa_id` los junta en una sola.
+ */
+export async function registrarLlamada(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const minuto = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const fila = await model.guardarMensaje({
+      conversacionId: conv.id,
+      waId: `try:${conv.id}:${minuto}`,
+      direccion: 'saliente',
+      tipo: 'llamada',
+      texto: 'intento',
+      mediaMime: 'audio',
+      enviadoPor: req.user.userId,
+      ts: new Date(),
+    });
+
+    // Y en la ficha del prospecto. Solo si el mensaje entro: `fila` vacia
+    // significa que ya se habia apuntado este minuto —doble clic porque no dio
+    // tono— y no son dos llamadas.
+    if (fila && conv.lead_id) {
+      try {
+        await model.apuntarInteraccion({
+          leadId: conv.lead_id,
+          nota: 'Llamada desde el movil (marcada desde el CRM)',
+          userId: req.user.userId,
+          fecha: fila.ts,
+        });
+      } catch (err) {
+        // Que no quede en la ficha no puede impedir llamar: el trabajo es hablar
+        // con la persona.
+        logger.warn({ conv: conv.id, err: err.message }, 'WhatsApp: llamada no apuntada en la ficha');
+      }
+    }
+    res.json({ success: true, data: { telefono: conv.telefono } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/sonando — ¿te estan llamando ahora mismo?
+ *
+ * Lo consulta TODO el CRM, no solo la pantalla de WhatsApp: la gracia es
+ * enterarse estando en Prospectos o en Facturacion, que es donde se pierde una
+ * llamada porque el movil esta en el bolso.
+ *
+ * Por eso no toca la base. Ni una consulta: el nombre y el telefono ya se
+ * buscaron una vez cuando entro el aviso, y aqui solo se lee un Map. Con diez
+ * gestoras y una vuelta cada pocos segundos, cualquier consulta aqui se
+ * multiplica por todas las pestañas abiertas del dia.
+ *
+ * Y es SIEMPRE la sesion de uno mismo, nunca la de otro: un administrador que
+ * esta mirando el WhatsApp de una gestora no tiene por que saltar cuando a ella
+ * la llaman, ni interrumpir lo que este haciendo.
+ */
+export async function sonando(req, res, next) {
+  try {
+    const instancia = evolution.instanciaDe(req.user.userId);
+    const l = servicio.llamadaSonando(instancia);
+    res.json({
+      success: true,
+      data: {
+        sonando: l
+          ? {
+              id: l.id,
+              telefono: l.telefono,
+              nombre: l.nombre,
+              conversacionId: l.conversacionId,
+              esVideo: l.esVideo,
+              esGrupo: l.esGrupo,
+              // Cuanto lleva sonando, para que la pantalla cuente los segundos
+              // sin depender de que el reloj del navegador vaya igual que el
+              // del servidor.
+              segundos: Math.round((Date.now() - l.desde) / 1000),
+            }
+          : null,
+        // Si esta sesion nunca ha dado señales, la pantalla espacia las
+        // vueltas: no tiene sentido preguntar cada tres segundos por un
+        // WhatsApp que no esta enlazado, y la mayoria del CRM no lo tiene.
+        enlazada: await servicio.tieneSesion(instancia),
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/respuesta-llamada — que se contesta a quien llama.
+ *
+ * Va por sesion, no global: no todas la quieren. Una gestora que si coge el
+ * telefono no debe rechazar automaticamente a nadie.
+ */
+export async function respuestaLlamada(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    const a = await evolution.ajustes(instancia);
+    if (a === null) {
+      // Que no se puedan leer no es un error de la pantalla: es que la sesion
+      // no esta levantada. Se dice y se ensena apagada, no se rompe.
+      return res.json({ success: true, data: { activa: false, texto: '', disponible: false } });
+    }
+    res.json({
+      success: true,
+      data: { activa: Boolean(a.rejectCall), texto: a.msgCall || '', disponible: true },
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/whatsapp/respuesta-llamada — cambiarla.
+ *
+ * Rechaza la llamada y contesta con un texto. Es lo unico que se puede hacer:
+ * por esta via WhatsApp no da canal de audio, asi que coger la llamada desde el
+ * CRM no existe. Al menos quien llama recibe una respuesta en vez de silencio.
+ */
+export async function guardarRespuestaLlamada(req, res, next) {
+  try {
+    // safeParse y no parse: un ZodError suelto no lleva statusCode, asi que el
+    // manejador lo toma por fallo interno y contesta «error del sistema» — que
+    // es justo lo contrario de lo que pasa, porque el usuario SI puede
+    // arreglarlo. Es el patron que ya usan los demas modulos.
+    const v = respuestaLlamadaSchema.safeParse(req.body || {});
+    if (!v.success) {
+      throw new AppError(v.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
+    }
+    const datos = v.data;
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.guardarAjustes(instancia, {
+      rejectCall: datos.activa,
+      // Al apagarla se vacia el texto: dejarlo puesto haria que Evolution
+      // siguiera contestando aunque la casilla se vea desmarcada.
+      msgCall: datos.activa ? datos.texto : '',
+    });
+    // 409 y no 502: que la sesion no este levantada no es una averia del
+    // servidor, es un estado que la gestora puede resolver enlazando. Con 5xx
+    // el manejador tapa el motivo con «error del sistema» y no se entera de
+    // que lo que falta es conectar su WhatsApp.
+    if (!r.ok) {
+      throw new AppError(
+        'Tu WhatsApp no esta conectado ahora mismo, asi que esto no se puede cambiar. Enlazalo y vuelve a intentarlo.',
+        409, 'WHATSAPP_DESCONECTADO',
+      );
+    }
+    logger.info({ instancia, activa: datos.activa }, 'WhatsApp: respuesta a llamadas cambiada');
+    res.json({ success: true, data: { activa: datos.activa, texto: datos.activa ? datos.texto : '' } });
   } catch (err) { next(err); }
 }
 

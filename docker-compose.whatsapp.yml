@@ -53,9 +53,16 @@ services:
       WEBHOOK_EVENTS_MESSAGES_SET: "false"
       WEBHOOK_EVENTS_CONTACTS_SET: "false"
       WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
+      # Las llamadas SI interesan, y hay que pedirlas: sin esta linea Evolution
+      # las procesa pero no avisa a nadie, y una llamada perdida no deja rastro
+      # en ningun sitio — ni la gestora sabe que la llamaron.
+      WEBHOOK_EVENTS_CALL: "true"
 
-      # No contestar llamadas ni entrar en grupos: este numero es para escribir
-      # a prospectos, y cada interaccion rara suma para que lo suspendan.
+      # El numero es para escribir a prospectos, y cada interaccion rara suma
+      # para que lo suspendan. Las llamadas no se contestan desde aqui —no se
+      # puede, no hay canal de audio— pero SI se apuntan: ver WEBHOOK_EVENTS_CALL
+      # arriba. Rechazarlas automaticamente y contestar con un texto es ajuste
+      # por instancia (`rejectCall` y `msgCall`), no variable de entorno.
       CONFIG_SESSION_PHONE_CLIENT: CRM
       DEL_INSTANCE: "false"
       LOG_LEVEL: ERROR

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
 
 // El tour del chat.
@@ -22,7 +22,7 @@ type Paso = {
 const PASOS: Paso[] = [
   {
     titulo: 'Esto es tu WhatsApp',
-    texto: 'Tu numero, tus conversaciones. Nadie mas del equipo las ve. Seis pasos y te dejo trabajar.',
+    texto: 'Tu numero, tus conversaciones. Nadie mas del equipo las ve. {pasos} pasos y te dejo trabajar.',
   },
   {
     donde: '.wa-barra-lista .cs-search',
@@ -40,21 +40,65 @@ const PASOS: Paso[] = [
     texto: 'El clip para adjuntar, el microfono para una nota de voz. Antes de enviar veras lo que mandas, con su pie de foto. Tambien puedes pegar una imagen aqui o arrastrarla.',
   },
   {
+    donde: '.wa-btn-llamar',
+    titulo: 'Llamar, y las que te llegan',
+    texto: 'Este boton abre la llamada en TU movil: desde el CRM no se puede hablar, WhatsApp no lo permite. Lo que si hace es apuntarla. Y si te llaman, sale un aviso aunque estes en otra pantalla del CRM — cogela en el movil. Las perdidas quedan en el chat y en la ficha del prospecto.',
+  },
+  {
     donde: '.wa-btn-prohibir',
     titulo: 'Si te piden que no escribas',
     texto: 'Marcalo aqui y el CRM no le vuelve a enviar nada, ni con plantilla. Es la regla que mas protege tu linea.',
   },
   {
+    donde: '.wa-btn-ampliar',
+    titulo: 'Si vas a pasar la mañana aqui',
+    texto: 'Amplia y desaparece todo lo demas del CRM: menu, cabecera y selector de proyecto. Se sale con Escape o con el mismo boton. Al lado tienes «Conexion», por si algun dia se desvincula el numero.',
+  },
+  {
     titulo: 'Un par de cosas mas',
-    texto: 'Pasa el raton por un mensaje para responderlo citandolo. Si alguno sale con ⚠ es que no salio, y debajo tiene «Reintentar». Todo lo demas esta en «Como se usa», en el menu.',
+    texto: 'Pasa el raton por un mensaje para responderlo citandolo. Si sale con ⚠ es que no salio, y debajo tiene «Reintentar». En el menu lateral estan «Plantillas» —los mensajes de siempre, que ve todo el equipo— y la cola de prospectos. Este recorrido vuelve con el «?» de arriba cuando quieras.',
   },
 ];
 
 export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   const [paso, setPaso] = useState(0);
   const [hueco, setHueco] = useState<DOMRect | null>(null);
+  // El alto real del cartel y el tamaño de la ventana. Los dos hacen falta para
+  // colocarlo, y los dos cambian: el alto con cada paso, la ventana al girar el
+  // movil o al ampliar la pantalla del chat.
+  const cartel = useRef<HTMLDivElement | null>(null);
+  const [altoCartel, setAltoCartel] = useState(0);
+  const [ventana, setVentana] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+
+  useEffect(() => {
+    const alRedimensionar = () => setVentana({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', alRedimensionar);
+    return () => window.removeEventListener('resize', alRedimensionar);
+  }, []);
+
+  // Despues de pintar: el texto de cada paso ocupa distinto.
+  useEffect(() => {
+    if (cartel.current) setAltoCartel(cartel.current.offsetHeight);
+  }, [paso]);
 
   const actual = PASOS[paso];
+
+  const cerrar = useCallback(() => {
+    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
+    alCerrar?.();
+  }, [alCerrar]);
+
+  // Estables a proposito. El efecto que mide llama a `saltar`, asi que tiene que
+  // poder declararlo como dependencia; si cambiara de identidad en cada render,
+  // el temporizador de medir se reiniciaria sin parar y no llegaria nunca a los
+  // 1,5 segundos de espera que hacen que un paso valido no se salte.
+  const saltar = useCallback(() => {
+    for (let i = paso + 1; i < PASOS.length; i++) {
+      const p = PASOS[i];
+      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+    }
+    cerrar();
+  }, [paso, cerrar]);
 
   // Se mide donde esta lo que se señala, cada vez. Guardar la posicion no vale:
   // la ventana cambia de tamaño y la lista crece mientras entra el historial.
@@ -72,9 +116,20 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     if (!actual?.donde) { setHueco(null); return undefined; }
 
     let esperando = 0;
+    let traido = false;
     const medir = () => {
       const el = document.querySelector(actual.donde!);
-      if (el) { esperando = 0; setHueco(el.getBoundingClientRect()); return; }
+      if (el) {
+        esperando = 0;
+        // Una vez por paso: si lo que se señala esta fuera de la vista, el
+        // recuadro se dibujaba donde nadie lo ve y el cartel apuntaba a la nada.
+        if (!traido) {
+          traido = true;
+          el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        }
+        setHueco(el.getBoundingClientRect());
+        return;
+      }
       setHueco(null);
       // Kilometro y medio de margen: 1,5 s de espera antes de darlo por perdido.
       esperando += 1;
@@ -84,35 +139,50 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     window.addEventListener('resize', medir);
     const t = setInterval(medir, 500);
     return () => { window.removeEventListener('resize', medir); clearInterval(t); };
-  }, [actual, paso]);
+  }, [actual, saltar]);
 
   /**
-   * Al siguiente paso que SI tenga algo que señalar.
+   * Al paso ANTERIOR que tenga algo que señalar.
    *
-   * Si no queda ninguno se cierra: mejor nada que un recorrido que no recorre.
+   * Sin esto, «Atras» volvia a ciegas: caia en un paso cuyo objetivo no existe
+   * —por ejemplo el de llamar, que no sale en un grupo— y ese se salta solo
+   * hacia adelante. O sea que pulsar «Atras» te llevaba al siguiente.
    */
-  function saltar() {
-    for (let i = paso + 1; i < PASOS.length; i++) {
+  const atras = useCallback(() => {
+    for (let i = paso - 1; i >= 0; i--) {
       const p = PASOS[i];
       if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
     }
-    cerrar();
-  }
+  }, [paso]);
 
-  function cerrar() {
-    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
-    alCerrar?.();
-  }
+  // Escape cierra, como cualquier otra cosa que se abre encima. Sin esto habia
+  // que buscar la X con el raton.
+  useEffect(() => {
+    const alPulsar = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrar(); };
+    window.addEventListener('keydown', alPulsar);
+    return () => window.removeEventListener('keydown', alPulsar);
+  }, [cerrar]);
 
   const ultimo = paso === PASOS.length - 1;
 
   // El cartel, pegado a lo que señala pero sin salirse de la pantalla.
+  //
+  // El alto se MIDE. Antes estaba puesto a 190 px a ojo, y con un paso de texto
+  // largo el cartel es bastante mas alto: se salia por abajo y las unicas dos
+  // cosas que hay que poder pulsar —«Siguiente» y «Atras»— quedaban fuera de la
+  // pantalla. Se mide despues de pintar y se recoloca.
   const margen = 12;
   const anchoCartel = 300;
-  let izquierda = hueco ? hueco.left : window.innerWidth / 2 - anchoCartel / 2;
-  let arriba = hueco ? hueco.bottom + margen : window.innerHeight / 2 - 90;
-  izquierda = Math.max(margen, Math.min(izquierda, window.innerWidth - anchoCartel - margen));
-  if (arriba + 190 > window.innerHeight) arriba = Math.max(margen, (hueco?.top ?? 0) - 190);
+  const alto = altoCartel || 190;
+  let izquierda = hueco ? hueco.left : ventana.w / 2 - anchoCartel / 2;
+  let arriba = hueco ? hueco.bottom + margen : ventana.h / 2 - alto / 2;
+  izquierda = Math.max(margen, Math.min(izquierda, ventana.w - anchoCartel - margen));
+  // Si no cabe debajo, encima. Y si tampoco cabe encima —pantalla corta—, se
+  // pega arriba del todo: mejor tapar algo que dejar los botones fuera.
+  if (arriba + alto + margen > ventana.h) {
+    const encima = (hueco?.top ?? ventana.h) - alto - margen;
+    arriba = encima >= margen ? encima : margen;
+  }
 
   return (
     <div className="wa-tour" onClick={cerrar}>
@@ -124,7 +194,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
         }} />
       )}
 
-      <div className="wa-tour-cartel" style={{ left: izquierda, top: arriba }}
+      <div ref={cartel} className="wa-tour-cartel" style={{ left: izquierda, top: arriba }}
         onClick={(e) => e.stopPropagation()}>
         <div className="wa-tour-cabecera">
           <span>{actual.titulo}</span>
@@ -132,12 +202,16 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
             <X size={14} />
           </button>
         </div>
-        <p className="wa-tour-texto">{actual.texto}</p>
+        <p className="wa-tour-texto">{actual.texto.replace('{pasos}', String(PASOS.length))}</p>
+        {/* Cuanto queda, sin tener que leer «4 de 8». */}
+        <div className="wa-tour-avance" aria-hidden="true">
+          <span style={{ width: `${((paso + 1) / PASOS.length) * 100}%` }} />
+        </div>
         <div className="wa-tour-pie">
           <span className="wa-tour-cuenta">{paso + 1} de {PASOS.length}</span>
           <div className="wa-tour-botones">
             {paso > 0 && (
-              <button type="button" className="wa-btn-suave" onClick={() => setPaso(paso - 1)}>
+              <button type="button" className="wa-btn-suave" onClick={atras}>
                 <ArrowLeft size={13} /> Atras
               </button>
             )}

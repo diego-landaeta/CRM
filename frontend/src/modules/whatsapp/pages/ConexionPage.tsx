@@ -3,7 +3,7 @@ import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSe
 import { Link } from 'react-router-dom';
 import {
   WhatsappLogo, QrCode, CheckCircle, WarningCircle, ArrowClockwise,
-  SignOut, DeviceMobile, ArrowsClockwise, X,
+  SignOut, DeviceMobile, ArrowsClockwise, X, PhoneX,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
@@ -26,6 +26,10 @@ import './chat.css';
 // eso pase: si no, la persona escanea un codigo muerto y no entiende por que
 // no funciona.
 const RENUEVA_QR_MS = 18000;
+
+// Lo que se contesta si no se escribe otra cosa. Corto y sin promesas de
+// horario: «te llamamos en 5 minutos» es lo que genera la queja siguiente.
+const RESPUESTA_POR_DEFECTO = 'Ahora no podemos atenderte por llamada. Escribenos por aqui y te respondemos lo antes posible.';
 
 export default function ConexionPage() {
   const [estado, setEstado] = useState<ConexionWhatsapp | null>(null);
@@ -64,6 +68,10 @@ export default function ConexionPage() {
   // —el selector ni se pinta—; quien manda puede enlazar la de otra persona
   // teniendola al lado con su movil, que es mas rapido que explicarselo.
   const [sesion, setSesion] = useState<SesionElegida>({ usuarioId: null, nombre: '', esMia: true });
+  // Que se le contesta a quien llama. `disponible` en false significa que no se
+  // pudieron leer los ajustes —sesion caida—, no que este apagada.
+  const [llamada, setLlamada] = useState<{ activa: boolean; texto: string; disponible: boolean } | null>(null);
+  const [guardandoLlamada, setGuardandoLlamada] = useState(false);
   const deQuien = sesion.usuarioId;
   // Al cambiar de persona se desmarca: haber aceptado por una no es haber
   // aceptado por otra, y el registro tiene que decir la verdad.
@@ -136,7 +144,10 @@ export default function ConexionPage() {
         toast({ title: 'No se pudo emparejar', description: ultimo, variant: 'destructive' });
       }
     } finally { if (!silencioso) { setPidiendo(false); setReintento(0); } }
-  }, [mirar, modo]);
+    // `deQuien` va explicito aunque hoy `mirar` ya cambie con el: depender de
+    // eso es una carambola, y el dia que alguien toque `mirar` esto emparejaria
+    // la sesion equivocada — la de la gestora que estuviera antes seleccionada.
+  }, [mirar, modo, deQuien]);
 
   // Renovar el codigo antes de que caduque, mientras nadie lo haya escaneado.
   useEffect(() => {
@@ -144,6 +155,42 @@ export default function ConexionPage() {
     const t = setInterval(() => pedirQR(true), RENUEVA_QR_MS);
     return () => clearInterval(t);
   }, [qr, estado?.conectado, pedirQR]);
+
+  // Se leen al conectar, no antes: sin sesion levantada Evolution no tiene
+  // ajustes que dar y saldria un error que no significa nada.
+  const conectadoAhora = Boolean(estado?.conectado);
+  useEffect(() => {
+    if (!conectadoAhora) { setLlamada(null); return; }
+    let vivo = true;
+    client.get('/whatsapp/respuesta-llamada')
+      .then((r) => { if (vivo && r.success) setLlamada(r.data); })
+      .catch(() => { /* que no se lea no rompe la pantalla */ });
+    return () => { vivo = false; };
+  }, [conectadoAhora, sesion.usuarioId]);
+
+  /**
+   * Guarda la respuesta a las llamadas.
+   *
+   * Rechaza y contesta con un texto: es lo unico que se puede hacer, porque por
+   * esta via WhatsApp no da canal de audio y coger la llamada desde el CRM no
+   * existe. Al menos quien llama recibe algo en vez de silencio.
+   */
+  async function guardarLlamada(activa: boolean, texto: string) {
+    setGuardandoLlamada(true);
+    try {
+      const r = await client.post('/whatsapp/respuesta-llamada', { activa, texto });
+      if (!r.success) throw new Error(r.error || 'No se pudo guardar');
+      setLlamada({ ...r.data, disponible: true });
+      toast({
+        title: activa ? 'Respuesta automatica activada' : 'Respuesta automatica desactivada',
+        description: activa
+          ? 'Las llamadas se rechazaran y se contestara con ese texto.'
+          : 'Las llamadas entrantes sonaran en tu movil como siempre.',
+      });
+    } catch (e) {
+      toast({ title: 'No se pudo guardar', description: (e as Error).message, variant: 'destructive' });
+    } finally { setGuardandoLlamada(false); }
+  }
 
   async function desconectar() {
     setConfirmando(false);
@@ -390,6 +437,63 @@ export default function ConexionPage() {
           <Link to="/whatsapp/chat" className="text-primary hover:underline font-medium inline-block">
             Ir al chat →
           </Link>
+        </div>
+      )}
+
+      {/* Que se le contesta a quien llama.
+          Va por sesion y se puede apagar: una gestora que si coge el telefono no
+          debe rechazar automaticamente a nadie. Es el punto 2 de la tarea #47. */}
+      {conectado && llamada && (
+        <div className="bg-card border border-border rounded-lg p-5 text-sm space-y-3">
+          <p className="font-semibold flex items-center gap-2">
+            <PhoneX size={16} className="text-muted-foreground" />
+            Si te llaman por WhatsApp
+          </p>
+          <p className="text-muted-foreground">
+            Las llamadas <strong className="text-foreground">se cogen desde tu movil</strong>, no desde
+            aqui: WhatsApp no deja hablar por esta via. Lo que si hace el CRM es{' '}
+            <strong className="text-foreground">apuntarlas</strong> — las perdidas salen en el chat con
+            su hora, para que no se te escape ninguna.
+          </p>
+          {!llamada.disponible ? (
+            <p className="text-xs text-muted-foreground">
+              Ahora mismo no se pueden leer estos ajustes. Vuelve a intentarlo en un momento.
+            </p>
+          ) : (
+            <>
+              <label className="flex items-start gap-2 pt-2 border-t border-border cursor-pointer">
+                <input type="checkbox" checked={llamada.activa} className="mt-0.5"
+                  disabled={guardandoLlamada}
+                  onChange={(e) => guardarLlamada(
+                    e.target.checked,
+                    llamada.texto || RESPUESTA_POR_DEFECTO,
+                  )} />
+                <span>
+                  Rechazar las llamadas y contestar con un mensaje.
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    Si lo dejas apagado, el telefono suena como siempre y la llamada se apunta igual.
+                  </span>
+                </span>
+              </label>
+              {llamada.activa && (
+                <div className="space-y-2">
+                  <textarea
+                    className="w-full rounded-md border border-border bg-background p-2 text-sm"
+                    rows={3} maxLength={500} disabled={guardandoLlamada}
+                    value={llamada.texto}
+                    onChange={(e) => setLlamada({ ...llamada, texto: e.target.value })} />
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="wa-btn-verde"
+                      disabled={guardandoLlamada || !llamada.texto.trim()}
+                      onClick={() => guardarLlamada(true, llamada.texto)}>
+                      {guardandoLlamada ? 'Guardando…' : 'Guardar el mensaje'}
+                    </button>
+                    <span className="text-xs text-muted-foreground">{llamada.texto.length}/500</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

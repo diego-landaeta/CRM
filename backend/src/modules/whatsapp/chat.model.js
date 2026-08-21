@@ -403,6 +403,48 @@ export async function guardarAdjunto(id, { ruta, mime, nombreArchivo }) {
   );
 }
 
+/**
+ * Apunta la llamada en la ficha del prospecto.
+ *
+ * El chat guarda la conversacion; la ficha guarda el HISTORIAL DE CONTACTO, y
+ * son cosas distintas. Quien abre a un prospecto para ver por donde va no entra
+ * en WhatsApp: mira su lista de contactos, y hasta ahora las llamadas no
+ * estaban ahi — ni las que entraban ni las que salian.
+ *
+ * `created_by` es NOT NULL y en una llamada entrante no hay ningun usuario del
+ * CRM detras. Se apunta a nombre de la gestora cuya linea la recibio, que es
+ * quien de verdad tuvo el contacto.
+ *
+ * SQL directo y no un import del modulo de leads: este modulo ya consulta la
+ * tabla de leads por su cuenta (ver leadPorTelefono) y atarlos crearia una
+ * dependencia entre modulos que hoy no existe.
+ */
+export async function apuntarInteraccion({ leadId, nota, userId, fecha }) {
+  if (!leadId || !userId) return null;
+  const { rows } = await query(
+    `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+     VALUES ($1, 'llamada', $2, $3, COALESCE($4::timestamptz, NOW()))
+     RETURNING id`,
+    [leadId, nota, userId, fecha || null]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * ¿Esta sesion ha llegado a enlazarse alguna vez?
+ *
+ * `EXISTS` y no `COUNT`: para saber si hay alguna, Postgres para en la primera
+ * que encuentra en vez de recorrerlas todas. Con sesiones de 380.000 mensajes
+ * la diferencia no es teorica.
+ */
+export async function hayConversaciones(instancia) {
+  const { rows } = await query(
+    'SELECT EXISTS (SELECT 1 FROM wa_conversaciones WHERE instancia = $1) AS hay',
+    [instancia]
+  );
+  return Boolean(rows[0]?.hay);
+}
+
 /** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
 export async function mensajePorId(id) {
   const { rows } = await query(

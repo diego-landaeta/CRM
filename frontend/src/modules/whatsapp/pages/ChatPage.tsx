@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
-  MessageSeparator, InfoButton, Loader, InputToolbox,
+  MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -104,6 +104,43 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
 }
 
 const TIC = { enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '⚠' } as const;
+
+/**
+ * Como se cuenta una llamada.
+ *
+ * En la base solo se guarda el desenlace en seco («perdida»), no la frase: asi
+ * se puede filtrar por llamadas perdidas sin buscar dentro de un texto, y la
+ * forma de decirlo se cambia aqui sin tocar ni un registro.
+ */
+const LLAMADA = {
+  perdida:    { texto: 'Llamada perdida',    video: 'Videollamada perdida',    grave: true },
+  rechazada:  { texto: 'Llamada rechazada',  video: 'Videollamada rechazada',  grave: false },
+  contestada: { texto: 'Llamada contestada', video: 'Videollamada contestada', grave: false },
+  // La que sale del boton. Se dice «desde el movil» a proposito: el CRM apunta
+  // que se marco, no sabe si descolgaron. Prometer mas seria mentir.
+  intento:    { texto: 'Llamaste desde el movil', video: 'Llamaste desde el movil', grave: false },
+} as const;
+
+/**
+ * Una llamada en el hilo.
+ *
+ * No lleva burbuja: no es algo que nadie escribiera. Va centrada, como el
+ * separador de fecha, porque es un hecho de la conversacion y no un mensaje.
+ * Tiene que ir dentro de un <Message>: el kit descarta los hijos de MessageList
+ * que no reconoce, asi que un <div> suelto no se pintaria.
+ */
+function Llamada({ m }: { m: MensajeWhatsapp }) {
+  const cual = LLAMADA[(m.texto || 'perdida') as keyof typeof LLAMADA] || LLAMADA.perdida;
+  const esVideo = m.media_mime === 'video';
+  const Icono = esVideo ? VideoCamera : cual.grave ? PhoneX : PhoneCall;
+  return (
+    <div className={`wa-llamada ${cual.grave ? 'wa-llamada-perdida' : ''}`}>
+      <Icono size={15} weight="fill" />
+      <span>{esVideo ? cual.video : cual.texto}</span>
+      <span className="wa-llamada-hora">{hora(m.ts)}</span>
+    </div>
+  );
+}
 
 export default function ChatPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
@@ -335,6 +372,11 @@ export default function ChatPage() {
   // mirando si la lista crece: al emparejar hay tandas de varios minutos con
   // pausas largas en medio, y por el tamaño de la lista parecia que se habia
   // parado cuando no.
+  //
+  // Y depende de `deQuien`: sin eso se quedaba preguntando por la sesion con la
+  // que se abrio la pantalla. Un administrador que cambiaba a la sesion de otra
+  // gestora seguia viendo el avance de la anterior, y ni el numero ni el «esta
+  // entrando historial» eran de quien creia estar mirando.
   useEffect(() => {
     const mirar = () => chatApi.sincronizacion(deQuien)
       .then((r) => { if (r.success) setSync(r.data); })
@@ -342,7 +384,7 @@ export default function ChatPage() {
     mirar();
     const t = setInterval(mirar, 4000);
     return () => clearInterval(t);
-  }, []);
+  }, [deQuien]);
 
   useEffect(() => {
     if (!nuevoAbierto) return undefined;
@@ -380,6 +422,32 @@ export default function ChatPage() {
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setReintentando(null); }
+  }
+
+  /**
+   * Llamar: lo apunta el CRM, lo marca el telefono.
+   *
+   * Por esta via WhatsApp no da canal de audio —no es que sea dificil, es que
+   * no existe—, asi que la llamada la hace el movil de la gestora. Lo que se
+   * arregla aqui es el otro problema: hoy una llamada que sale no aparece en
+   * ningun historial, y media conversacion con un prospecto se pierde.
+   *
+   * El registro va PRIMERO y el marcado despues. Al reves, `tel:` cambia de
+   * aplicacion y en un movil eso puede congelar la pestaña antes de que salga
+   * el aviso: se llamaria sin que quedara constancia, que es justo lo que se
+   * viene a resolver.
+   */
+  async function llamar(c: ChatWhatsapp) {
+    try {
+      await chatApi.apuntarLlamada(c.id);
+      await cargarHilo(c.id);
+      cargarLista();
+    } catch {
+      // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
+      // la persona, no alimentar el historial.
+      toast({ title: 'No se pudo apuntar la llamada', description: 'Se marca igual.' });
+    }
+    window.location.href = `tel:+${String(c.telefono).replace(/[^0-9]/g, '')}`;
   }
 
   /** Los pone en la vista previa. No envia nada todavia. */
@@ -600,10 +668,17 @@ export default function ChatPage() {
   // o un sticker. Ahora se dice QUE fue, como en WhatsApp.
   const ADELANTO: Record<string, string> = {
     imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
-    documento: '📄 Documento', sticker: 'Sticker',
+    documento: '📄 Documento', sticker: 'Sticker', llamada: '📞 Llamada',
   };
   const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
+    // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
+    // desenlace en seco, asi que la lista ponia «perdida» a secas, sin decir de
+    // que. Se mira el tipo primero y se dice la frase entera.
+    if (c.ultimo_tipo === 'llamada') {
+      const cual = LLAMADA[(c.ultimo_texto || 'perdida') as keyof typeof LLAMADA];
+      return `📞 ${cual ? cual.texto : 'Llamada'}`;
+    }
     if (c.ultimo_texto) return c.ultimo_texto;
     if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
     // Sin nada que adelantar: el telefono si es una persona, y para un grupo
@@ -664,7 +739,7 @@ export default function ChatPage() {
             el menu lateral y desde el chat no habia forma de llegar. */}
         <button type="button" onClick={() => setAPantalla((v) => !v)}
           title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
-          className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          className="wa-btn-ampliar ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
           <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
         </button>
@@ -758,9 +833,27 @@ export default function ChatPage() {
                       <InfoButton />
                     </Link>
                   )}
+                  {/* Llamar. El CRM prepara, el telefono llama.
+                      Solo en conversaciones de una persona: a un grupo no se
+                      puede llamar desde un enlace `tel:`, y ofrecerlo seria
+                      prometer algo que no va a pasar. */}
+                  {!conv.es_grupo && (
+                    <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
+                      title={`Llamar a ${conv.telefono} desde el movil`}>
+                      <PhoneCall size={17} />
+                    </button>
+                  )}
                   <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
                     title="No volver a escribir a este numero">
                     <Prohibit size={17} />
+                  </button>
+                  {/* El recorrido, a mano. Aparece solo la primera vez, y quien lo
+                      cierra sin querer —o quiere repasarlo en un mes— no tiene por
+                      que buscarlo: se pide desde aqui. Va en la cabecera y no en la
+                      barra lateral porque con la pantalla ampliada la barra no esta. */}
+                  <button type="button" onClick={() => setTour(true)} className="wa-btn-ayuda"
+                    title="Ver el recorrido por la pantalla">
+                    <Question size={17} />
                   </button>
                 </ConversationHeader.Actions>
               </ConversationHeader>
@@ -793,6 +886,17 @@ export default function ChatPage() {
                   const posicion = mismoQuePrev && mismoQueSig ? 'normal'
                     : mismoQuePrev ? 'last' : mismoQueSig ? 'first' : 'single';
                   const mia = m.direccion === 'saliente';
+                  // Una llamada no es un mensaje: no tiene burbuja, ni autor,
+                  // ni se puede responder ni reintentar. Sale antes de todo eso.
+                  if (m.tipo === 'llamada') {
+                    return [
+                      nuevoDia ? <MessageSeparator key={`d${m.id}`} content={dia} /> : null,
+                      <Message key={m.id} className="wa-msg-llamada"
+                        model={{ direction: 'incoming', position: 'single', type: 'custom' }}>
+                        <Message.CustomContent><Llamada m={m} /></Message.CustomContent>
+                      </Message>,
+                    ].filter(Boolean);
+                  }
                   return [
                     nuevoDia ? <MessageSeparator key={`d${m.id}`} content={dia} /> : null,
                     <Message key={m.id} className={m.tipo === 'sticker' ? 'wa-msg-sticker' : undefined}
@@ -843,6 +947,28 @@ export default function ChatPage() {
                     </Message>,
                   ].filter(Boolean);
                 })}
+
+                {/* La nota de voz, mientras sale.
+                    Aparece en cuanto se suelta el boton y se confirma cuando
+                    contesta el servidor — es lo mismo que hace WhatsApp. Antes
+                    no pasaba nada visible hasta que el audio estaba en el hilo,
+                    asi que con la red lenta quien grababa no sabia si habia
+                    salido y volvia a grabar. Si el envio falla, desaparece y el
+                    aviso dice por que. */}
+                {vozSaliendo !== null && (
+                  <Message model={{ direction: 'outgoing', position: 'single', type: 'custom' }}>
+                    <Message.CustomContent>
+                      <div className="wa-voz wa-voz-mia wa-voz-saliendo">
+                        <span className="wa-voz-boton"><Microphone size={15} weight="fill" /></span>
+                        <div className="wa-voz-barra"><span className="wa-voz-hecho" style={{ width: '100%' }} /></div>
+                        <span className="wa-voz-tiempo">
+                          {Math.floor(vozSaliendo / 60)}:{String(vozSaliendo % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <span className="wa-meta">enviando…</span>
+                    </Message.CustomContent>
+                  </Message>
+                )}
               </MessageList>
 
               {/* Un solo InputToolbox, y el campo SIEMPRE presente.

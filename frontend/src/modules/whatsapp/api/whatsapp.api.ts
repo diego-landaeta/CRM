@@ -149,6 +149,12 @@ export const chatApi = {
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
 
+  // Apunta que se ha llamado. La llamada la hace el movil, no el CRM: por esta
+  // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo
+  // que hoy se pierde de todas las llamadas que salen.
+  apuntarLlamada: (id: number): Promise<ApiResponse<{ telefono: string }>> =>
+    client.post(`/whatsapp/chats/${id}/llamada`),
+
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
   abrir: (leadId: number): Promise<ApiResponse<ChatWhatsapp>> =>

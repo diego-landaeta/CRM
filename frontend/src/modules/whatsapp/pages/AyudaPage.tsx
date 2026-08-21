@@ -3,7 +3,7 @@ import { reiniciarTour } from '../components/Tour';
 import {
   DeviceMobile, QrCode, WarningCircle, Prohibit, ChatText, PaperPlaneTilt,
   Microphone, Paperclip, ArrowBendUpLeft, DownloadSimple, PlugsConnected,
-  CheckCircle, Clock, Users,
+  CheckCircle, Clock, Users, PhoneX, PhoneCall, BellRinging,
 } from '@phosphor-icons/react';
 
 // La guia de WhatsApp, dentro del CRM.
@@ -228,10 +228,69 @@ export default function AyudaPage() {
         </ul>
       </Bloque>
 
+      {/* ── Llamadas ────────────────────────────────────────────────────── */}
+      <Bloque icono={<PhoneCall size={20} weight="duotone" />} titulo="5 · Llamadas">
+        {/* Lo primero y bien claro: lo que NO se puede. Si alguien busca el
+            boton de descolgar durante diez minutos, el manual ha fallado. */}
+        <p className="text-sm text-muted-foreground mb-3">
+          <strong className="text-foreground">Las llamadas se hacen y se cogen desde tu movil.</strong>{' '}
+          Por aqui no se puede hablar — WhatsApp no lo permite fuera de su aplicacion, y no es
+          que falte por hacer: no existe. Lo que hace el CRM es que{' '}
+          <strong className="text-foreground">no se pierda ninguna</strong>.
+        </p>
+        <ul className="text-sm text-muted-foreground space-y-2.5 leading-relaxed">
+          <li className="flex gap-2">
+            <PhoneX size={16} className="shrink-0 mt-0.5 text-rose-500" />
+            <span>
+              <strong className="text-foreground">Si te llaman y no lo coges</strong>, sale en el chat
+              como una linea con su hora — «Llamada perdida, 16:42» — y la conversacion se te marca
+              sin leer. Si esa persona es un prospecto, <strong className="text-foreground">tambien
+              queda en su ficha</strong>, junto al resto de contactos. Antes no quedaba rastro en
+              ningun sitio: ni tu sabias que te habian llamado, ni el CRM.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <BellRinging size={16} className="shrink-0 mt-0.5 text-emerald-600" />
+            <span>
+              <strong className="text-foreground">Mientras suena te avisa el CRM</strong>, estes donde
+              estes dentro de el — en Prospectos, en Facturacion, donde sea. Sale un cartel abajo a la
+              derecha con quien llama. <strong className="text-foreground">Cogela en el movil</strong>:
+              el cartel esta para que te de tiempo a sacarlo, no para contestar desde aqui.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <PhoneCall size={16} className="shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-foreground">Para llamar tu</strong>, el boton del telefono
+              arriba en el chat — y tambien lo tienes en la ficha del prospecto, al lado del
+              telefono. Abre la llamada en tu movil con ese numero ya marcado, y de paso lo apunta.
+              Sin ese boton, las llamadas que salen no aparecian en ningun historial.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <Prohibit size={16} className="shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-foreground">Si no quieres que te llamen</strong>, en{' '}
+              <Link to="/whatsapp/conexion" className="text-primary hover:underline">Conexion</Link>{' '}
+              puedes activar que se rechacen solas y se conteste con un mensaje tuyo. Va por persona:
+              si tu si coges el telefono, dejalo apagado y sonara como siempre.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+            <span>
+              Si activas el rechazo automatico, <strong className="text-foreground">no prometas
+              horarios</strong> en el mensaje. Un «te llamamos en cinco minutos» que no se cumple
+              es la queja siguiente.
+            </span>
+          </li>
+        </ul>
+      </Bloque>
+
       {/* ── Lo que no hay que hacer ─────────────────────────────────────── */}
       <section className="border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-5">
         <h2 className="font-bold flex items-center gap-2 mb-1 text-amber-900 dark:text-amber-200">
-          <Prohibit size={20} weight="duotone" /> 5 · Lo que hace que bloqueen un numero
+          <Prohibit size={20} weight="duotone" /> 6 · Lo que hace que bloqueen un numero
         </h2>
         <p className="text-sm text-amber-800 dark:text-amber-300/90 mb-3 leading-relaxed">
           No es que WhatsApp descubra que usas el CRM. Es que <strong>la gente te reporte</strong>. Todo
@@ -257,7 +316,7 @@ export default function AyudaPage() {
       </section>
 
       {/* ── Privacidad ──────────────────────────────────────────────────── */}
-      <Bloque icono={<WarningCircle size={20} weight="duotone" />} titulo="6 · Quien ve tus conversaciones">
+      <Bloque icono={<WarningCircle size={20} weight="duotone" />} titulo="7 · Quien ve tus conversaciones">
         <ul className="text-sm text-muted-foreground space-y-2 leading-relaxed">
           <li>· <strong className="text-foreground">Tus companeros, no.</strong> Cada persona ve solo su
             propio WhatsApp.</li>
