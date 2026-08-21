@@ -724,8 +724,8 @@ export default function ChatPage() {
 
   return (
     <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
-      <div className="flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
-        <span className={`w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      <div className="wa-barra-superior flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
+        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         {conexion?.conectado
           ? <span className="text-muted-foreground">
               Tu WhatsApp: <strong className="text-foreground">
@@ -738,6 +738,7 @@ export default function ChatPage() {
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
         <button type="button" onClick={() => setAPantalla((v) => !v)}
+          aria-label={aPantalla ? 'Salir' : 'Ampliar'}
           title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
           className="wa-btn-ampliar ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
@@ -750,11 +751,12 @@ export default function ChatPage() {
             no podia volver a verlo de ninguna manera — y es exactamente quien lo
             necesita, porque el recorrido salta solo una vez por navegador. */}
         <button type="button" onClick={() => setTour(true)} className="wa-btn-tour"
+          aria-label="Cómo va esto"
           title="Ver el recorrido por esta pantalla">
           <Question size={14} weight="bold" />
           <span className="font-medium">Cómo va esto</span>
         </button>
-        <Link to="/whatsapp/conexion" title="Conectar o desvincular el número"
+        <Link to="/whatsapp/conexion" aria-label="Conexión" title="Conectar o desvincular el número"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
           <span className="font-medium">Conexión</span>
@@ -1023,7 +1025,7 @@ export default function ChatPage() {
               <MessageList>
                 <MessageList.Content className="wa-vacio">
                   {chats.length === 0 && !cargando
-                    ? 'Aquí apareceran tus conversaciones en cuanto enlaces tu número.'
+                    ? 'Aquí aparecerán tus conversaciones en cuanto enlaces tu número.'
                     : 'Elige una conversacion, o escribe a un prospecto con el lapiz de la izquierda.'}
                 </MessageList.Content>
               </MessageList>

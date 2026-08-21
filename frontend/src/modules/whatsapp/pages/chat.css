@@ -867,3 +867,26 @@
 /* La nota de voz mientras sale: en gris, sin poder tocarla. */
 .wa-voz-saliendo { opacity: 0.6; pointer-events: none; }
 .wa-voz-saliendo .wa-voz-barra { animation: wa-latido 1.2s ease-in-out infinite; }
+
+
+/* ── La barra de arriba del chat, en movil ───────────────────────────────────
+ *
+ * Cuatro cosas en 393 px —el estado de la conexion, «Ampliar», «Como va esto» y
+ * «Conexion»— no caben, y el navegador las apretaba: «No tienes WhatsApp
+ * enlazado» salia partido en cinco lineas y «Como va esto» en tres.
+ *
+ * En pantalla estrecha el estado ocupa su fila y los tres accesos van debajo,
+ * en la suya. Y sin sus etiquetas: el icono basta, y con el `title` puesto
+ * quien dude lo tiene. */
+@media (max-width: 640px) {
+  .wa-barra-superior { flex-wrap: wrap; row-gap: 6px; }
+  /* El estado ocupa su fila entera. El puntito NO: es un circulo de 8 px y
+     estirarlo lo convertia en una barra naranja de lado a lado. */
+  .wa-barra-superior > span:not(.wa-punto-estado) { flex: 1 1 auto; }
+  .wa-barra-superior > .wa-punto-estado { flex: 0 0 auto; }
+  .wa-barra-superior > .wa-btn-ampliar { margin-left: 0; }
+  /* Solo los iconos: las tres etiquetas juntas no caben en una fila. */
+  .wa-barra-superior .wa-btn-ampliar span,
+  .wa-barra-superior .wa-btn-tour span,
+  .wa-barra-superior a span { display: none; }
+}

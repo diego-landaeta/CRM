@@ -44,12 +44,15 @@ test.describe('WhatsApp · que la pantalla abra', () => {
     await login(page, GESTOR);
   });
 
-  test('el CRM carga y el menu lleva a WhatsApp', async ({ page }) => {
+  test('el CRM carga y el menu lleva a WhatsApp', async ({ page, isMobile }) => {
     await noSeHaRoto(page);
+    // En movil el menu vive detras de la hamburguesa: hay que abrirlo. No es un
+    // fallo, es como esta hecho el CRM.
+    if (isMobile) {
+      await page.getByRole('button', { name: 'Abrir menu' }).click();
+    }
     // El menu de WhatsApp cuelga de su propia entrada, con lo suyo debajo.
-    await expect(page.getByRole('link', { name: 'Chat', exact: true }).or(
-      page.getByText('WhatsApp', { exact: true }).first(),
-    )).toBeVisible();
+    await expect(page.getByText('WhatsApp', { exact: true }).first()).toBeVisible();
   });
 
   test('el chat abre sin romperse', async ({ page }) => {
