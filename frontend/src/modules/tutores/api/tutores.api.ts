@@ -91,6 +91,9 @@ export interface ResumenComision {
   pagada: string;
   revertida: string;
   ultima_liquidacion: string | null;
+  /** Para poder pagarle sin ir a buscar su ficha. */
+  tutor_email: string | null;
+  tutor_iban: string | null;
 }
 
 export interface PagoSinFormacion {
