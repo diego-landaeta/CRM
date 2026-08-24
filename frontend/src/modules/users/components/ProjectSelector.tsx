@@ -35,7 +35,7 @@ export default function ProjectSelector({
       <label className="text-xs text-muted-foreground mb-1.5 block px-1">
         Proyectos asignados{required && ' *'}
       </label>
-      <p className="text-[11px] text-muted-foreground mb-2 px-1">
+      <p className="text-meta text-muted-foreground mb-2 px-1">
         {required
           ? 'Selecciona al menos un proyecto al que tendrá acceso.'
           : 'Selecciona los proyectos a los que tendrá acceso.'}
@@ -60,7 +60,7 @@ export default function ProjectSelector({
                 <span className="truncate">{p.nombre}</span>
               </label>
               {marcado && (mostrarToggle ? (
-                <label className="flex items-center gap-1.5 text-[11px] cursor-pointer text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+                <label className="flex items-center gap-1.5 text-meta cursor-pointer text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
                   <input
                     type="checkbox"
                     checked={!!sel?.recibeLeads}
@@ -70,7 +70,7 @@ export default function ProjectSelector({
                   <span>Recibe leads</span>
                 </label>
               ) : role === 'gestor' ? (
-                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded flex-shrink-0">
+                <span className="text-micro font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded flex-shrink-0">
                   Recibe leads
                 </span>
               ) : null)}

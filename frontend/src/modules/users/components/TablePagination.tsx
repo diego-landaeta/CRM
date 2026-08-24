@@ -16,7 +16,7 @@ export default function TablePagination({ page, totalPaginas, totalElementos, po
 
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-border bg-muted/20">
-      <span className="text-[11px] text-muted-foreground">
+      <span className="text-meta text-muted-foreground">
         {desde}–{hasta} de {totalElementos}
       </span>
       <div className="flex items-center gap-1">
@@ -28,7 +28,7 @@ export default function TablePagination({ page, totalPaginas, totalElementos, po
         >
           <CaretLeft size={14} weight="bold" />
         </button>
-        <span className="text-[11px] font-medium tabular-nums px-2">
+        <span className="text-meta font-medium tabular-nums px-2">
           {page} / {totalPaginas}
         </span>
         <button

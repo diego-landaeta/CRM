@@ -46,7 +46,7 @@ export default function WebhookTab({ project }) {
 
       <div className="space-y-3 bg-muted/30 rounded-md p-4 border border-border">
         <div>
-          <label className="text-[10px] font-medium text-muted-foreground block mb-1">URL del webhook</label>
+          <label className="text-micro font-medium text-muted-foreground block mb-1">URL del webhook</label>
           <div className="flex gap-2">
             <input readOnly value={url} className={inputClass + ' font-mono text-xs'} />
             <button onClick={() => doCopy(url, 'url')} className="h-10 px-3 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted flex items-center gap-1">
@@ -55,7 +55,7 @@ export default function WebhookTab({ project }) {
           </div>
         </div>
         <div>
-          <label className="text-[10px] font-medium text-muted-foreground block mb-1">API Key</label>
+          <label className="text-micro font-medium text-muted-foreground block mb-1">API Key</label>
           <div className="flex gap-2">
             <input readOnly value={revealed ? apiKey : '•'.repeat(Math.min(40, (apiKey || '').length))} className={inputClass + ' font-mono text-xs'} />
             <button onClick={() => setRevealed(!revealed)} className="h-10 px-3 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted">
@@ -72,14 +72,14 @@ export default function WebhookTab({ project }) {
       </div>
 
       <SectionTitle title="Como usar el webhook" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[12px]">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-meta">
         <div className="p-3 rounded-lg bg-muted/40">
           <p className="font-bold mb-1">1. Campos aceptados</p>
-          <p className="text-muted-foreground"><code className="font-mono text-[11px]">nombre, email, telefono, canal, utm_source, utm_campaign, producto_interes</code></p>
+          <p className="text-muted-foreground"><code className="font-mono text-meta">nombre, email, telefono, canal, utm_source, utm_campaign, producto_interes</code></p>
         </div>
         <div className="p-3 rounded-lg bg-muted/40">
           <p className="font-bold mb-1">2. Autenticación</p>
-          <p className="text-muted-foreground">Header <code className="font-mono text-[11px]">X-API-Key</code> o <code className="font-mono text-[11px]">Authorization: Bearer</code></p>
+          <p className="text-muted-foreground">Header <code className="font-mono text-meta">X-API-Key</code> o <code className="font-mono text-meta">Authorization: Bearer</code></p>
         </div>
         <div className="p-3 rounded-lg bg-muted/40">
           <p className="font-bold mb-1">3. Asignación automática</p>

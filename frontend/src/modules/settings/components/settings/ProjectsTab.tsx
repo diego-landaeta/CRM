@@ -33,7 +33,7 @@ export default function ProjectsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold">Proyectos</h2>
-          <p className="text-[13px] text-muted-foreground mt-0.5">Psiko, ISEIH, Fono Aprende + plataformas IA</p>
+          <p className="text-body text-muted-foreground mt-0.5">Psiko, ISEIH, Fono Aprende + plataformas IA</p>
         </div>
         {canCreate && (
           <button onClick={() => { setEditing(null); setDialogOpen(true); }} className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 whitespace-nowrap flex-shrink-0">
@@ -57,20 +57,20 @@ export default function ProjectsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-bold text-sm truncate">{p.nombre}</p>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${p.type === 'ia' ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>{p.type}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-micro font-medium ${p.type === 'ia' ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'}`}>{p.type}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-micro font-medium ${p.active ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
                       {p.active ? 'activo' : 'inactivo'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground font-mono">/{p.slug}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">
+                  <p className="text-meta text-muted-foreground font-mono">/{p.slug}</p>
+                  <p className="text-meta text-muted-foreground mt-1">
                     {p.producto_label_plural || 'Productos'} &middot; Alerta {p.dias_alerta_inactividad}d
                   </p>
                 </div>
               </div>
               {canCreate && (
                 <div className="border-t border-border bg-muted/20 px-5 py-2.5 flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">Gestión completa del proyecto</span>
+                  <span className="text-meta text-muted-foreground">Gestión completa del proyecto</span>
                   <button onClick={() => setConfigProject(p)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 shadow">
                     <Gear size={13} weight="bold" /> Configurar
                   </button>

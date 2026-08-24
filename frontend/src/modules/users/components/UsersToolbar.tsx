@@ -1,6 +1,7 @@
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import type { Project } from '@/shared/types';
 import Select from '@/shared/components/ui/Select';
+import Card, { CardSection } from '@/shared/components/ui/Card';
 import { ASSIGNABLE_ROLES, ROLE_LABELS } from '../lib/usersUi';
 import type { EstadoFiltro, RolFiltro, UsersFilters } from '../hooks/useUsers';
 
@@ -36,8 +37,8 @@ export default function UsersToolbar({
   ];
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-md border border-border bg-card">
+    <Card padding="none">
+      <CardSection className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <MagnifyingGlass
             size={14}
@@ -79,7 +80,7 @@ export default function UsersToolbar({
             <X size={12} weight="bold" /> Limpiar
           </button>
         )}
-      </div>
+      </CardSection>
 
       {/*
         Un solo filtro de proyecto, no dos.
@@ -89,8 +90,8 @@ export default function UsersToolbar({
         el que no tocó. Se queda el desplegable: aguanta las nueve marcas, y las
         pastillas se quedaban cortas en cuanto pasan de tres.
       */}
-      <div className="flex flex-wrap items-center gap-3 p-3 rounded-md border border-border bg-card">
-        <label htmlFor="filtro-proyecto" className="text-[11px] font-medium text-muted-foreground">
+      <CardSection className="flex flex-wrap items-center gap-3">
+        <label htmlFor="filtro-proyecto" className="text-meta font-medium text-muted-foreground">
           Proyecto
         </label>
         <Select<string>
@@ -104,12 +105,12 @@ export default function UsersToolbar({
           size="sm"
           className="max-w-[220px] w-full"
         />
-        <span className="text-[11px] text-muted-foreground whitespace-nowrap ml-auto">
+        <span className="text-meta text-muted-foreground whitespace-nowrap ml-auto">
           {hayFiltroActivo
             ? `${totalFiltrados} de ${cargados} usuario${cargados !== 1 ? 's' : ''}`
             : `${cargados} usuario${cargados !== 1 ? 's' : ''}`}
         </span>
-      </div>
-    </div>
+      </CardSection>
+    </Card>
   );
 }
