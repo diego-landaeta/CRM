@@ -38,7 +38,18 @@ if (process.env.WA_EXIGIR_CONSENTIMIENTO !== undefined) {
  */
 const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 
+// Y el del HISTORIAL, aparte.
+//
+// «Sincronizando…» no se iba nunca. Miraba el pulso general, que se actualiza
+// con CUALQUIER mensaje — incluidos los que manda una misma, que vuelven por el
+// webhook como salientes. O sea que mientras estabas chateando, la pantalla
+// creia que seguia entrando historial y dejaba el aviso puesto para siempre.
+//
+// El historial es lo unico que hay que esperar; una conversacion normal no.
+const pulsoHistorial = new Map();
+
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+export const ultimoDelHistorial = (instancia) => pulsoHistorial.get(instancia) || null;
 
 /**
  * Quien esta llamando AHORA MISMO.
@@ -374,6 +385,9 @@ export async function recibir(cuerpo) {
   pulso.set(instancia, Date.now());
 
   const esHistorial = Boolean(cuerpo?.historial);
+  // Solo lo viejo cuenta como «sigue entrando historial». Lo de ahora es
+  // conversacion, y no hay nada que esperar.
+  if (esHistorial) pulsoHistorial.set(instancia, Date.now());
   let enCola = false;
   if (fila && tipo !== 'texto' && tipo !== 'otro') {
     if (media.mereceDescarga({ tipo, ts: fila.ts, esHistorial })) {

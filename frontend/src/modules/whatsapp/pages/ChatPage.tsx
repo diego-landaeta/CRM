@@ -6,7 +6,7 @@ import {
   MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -204,6 +204,9 @@ export default function ChatPage() {
   const [abriendoMicro, setAbriendoMicro] = useState(false);
   // La nota de voz que esta saliendo, para pintarla en el hilo mientras va.
   const [vozSaliendo, setVozSaliendo] = useState<number | null>(null);
+  // La nota grabada esperando a que se decida: enviarla o tirarla.
+  const [vozGrabada, setVozGrabada] = useState<
+    { blob: Blob; ext: string; segundos: number; url: string } | null>(null);
   // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
   // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
   const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
@@ -584,6 +587,18 @@ export default function ChatPage() {
       // duracion rara, casi siempre mas larga que la real: eso era «el retraso
       // que se envia». Se le manda cuanto duro de verdad.
       const segundos = Math.max(1, Math.round((Date.now() - empezo) / 1000));
+
+      // PARAR NO ES ENVIAR.
+      //
+      // Antes se soltaba el boton y la nota salia disparada: sin oirla, sin
+      // poder arrepentirse, y en WhatsApp un audio no se recoge pasados unos
+      // minutos. Cualquiera que se equivoque de palabra o le entre un ruido de
+      // fondo se queda con eso mandado.
+      //
+      // Ahora se para, se escucha si se quiere, y se decide. Es lo mismo que ya
+      // se hace con las imagenes desde la tarea #45.
+      setVozGrabada({ blob, ext, segundos, url: URL.createObjectURL(blob) });
+      return;
       await mandarArchivo(
         new File([blob], `nota-de-voz.${ext}`, { type: blob.type }),
         { segundos },
@@ -986,8 +1001,36 @@ export default function ChatPage() {
                   El campo no se quita cuando no se puede escribir: se
                   desactiva. Quitarlo mueve la pantalla entera de sitio cada vez
                   que la sesion parpadea. */}
-              <InputToolbox className={bloqueo ? 'wa-bloqueado' : citando ? 'wa-citando' : 'wa-toolbox-vacia'}>
-                {bloqueo ? (
+                <InputToolbox className={
+                  bloqueo ? 'wa-bloqueado'
+                    : vozGrabada ? 'wa-citando wa-voz-revisar'
+                      : citando ? 'wa-citando' : 'wa-toolbox-vacia'}>
+                  {vozGrabada ? (
+                    <>
+                      {/* Grabada y esperando. Se escucha y se decide: parar no
+                          es enviar. Antes salia disparada al soltar el boton, sin
+                          poder oirla ni arrepentirse — y en WhatsApp un audio no
+                          se recoge pasados unos minutos. */}
+                      <audio src={vozGrabada.url} controls className="wa-voz-revisar-audio" />
+                      <button type="button" className="wa-btn-suave"
+                        onClick={() => { URL.revokeObjectURL(vozGrabada.url); setVozGrabada(null); }}
+                        title="Tirar esta nota y no enviarla">
+                        <Trash size={14} /> Borrar
+                      </button>
+                      <button type="button" className="wa-btn-verde" disabled={enviando}
+                        onClick={async () => {
+                          const v = vozGrabada;
+                          URL.revokeObjectURL(v.url);
+                          setVozGrabada(null);
+                          await mandarArchivo(
+                            new File([v.blob], `nota-de-voz.${v.ext}`, { type: v.blob.type }),
+                            { segundos: v.segundos },
+                          );
+                        }}>
+                        {enviando ? 'Enviando…' : <>Enviar <PaperPlaneRight size={13} weight="fill" /></>}
+                      </button>
+                    </>
+                  ) : bloqueo ? (
                   <>
                     {bloqueo.icono}
                     <span>{bloqueo.texto}</span>
@@ -1049,7 +1092,8 @@ export default function ChatPage() {
         archivos={porEnviar}
         enviando={enviando}
         alEnviar={enviarLoPropuesto}
-        alCancelar={() => setPorEnviar([])} />
+        alCancelar={() => setPorEnviar([])}
+        alAnadir={(fs) => setPorEnviar((p) => [...p, ...fs])} />
 
       {tour && <Tour alCerrar={() => setTour(false)} />}
 

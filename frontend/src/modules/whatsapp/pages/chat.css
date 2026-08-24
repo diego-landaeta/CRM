@@ -900,3 +900,17 @@
   .wa-barra-superior .wa-btn-tour span,
   .wa-barra-superior a span { display: none; }
 }
+
+
+/* ── La nota de voz, antes de mandarla ───────────────────────────────────────
+ *
+ * Parar dejo de ser enviar: se escucha y se decide. Ocupa la barra de escribir,
+ * igual que la cita, porque mientras hay una nota pendiente no se escribe. */
+.wa-marco .cs-input-toolbox.wa-voz-revisar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+}
+.wa-voz-revisar-audio {
+  flex: 1 1 auto; min-width: 0;
+  height: 34px;
+}

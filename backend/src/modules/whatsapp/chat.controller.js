@@ -198,7 +198,17 @@ export async function abrirChat(req, res, next) {
     const conv = await model.conversacionDe({
       instancia,
       jid,
-      nombrePush: null,
+      // El nombre, de TU agenda y no del perfil de esa persona.
+      //
+      // Aqui iba `null`, asi que la conversacion nacia sin nombre y se quedaba
+      // con el primero que llegara — que es el `pushName`, o sea como se llama
+      // esa persona en WhatsApp. Si la tienes guardada como «Diego fontanero» y
+      // ella se puso «Dieguis», veias «Dieguis»: y el nombre con el que TU la
+      // tienes agendada es el unico que te dice quien es.
+      //
+      // Solo al ABRIR un chat nuevo, que es raro. El resto del tiempo los
+      // nombres se ponen al dia en bloque cada cuarto de hora.
+      nombrePush: await nombreEnLaAgenda(instancia, jid).catch(() => null),
     });
     res.status(201).json({ success: true, data: conv });
   } catch (err) { next(err); }
@@ -497,7 +507,10 @@ export async function sincronizacion(req, res, next) {
     // entra. Se pregunta a la memoria, no a la base: contestarlo contando la
     // tabla entera costaba un escaneo de 380.000 filas cada cuatro segundos por
     // cada pantalla abierta.
-    const latido = servicio.ultimoLatido(instancia);
+    // «Sigue entrando» se mide con el latido del HISTORIAL, no con el general:
+    // ese se actualiza con cada mensaje normal y dejaba el aviso de
+    // «Sincronizando…» puesto mientras la gestora chateaba.
+    const latido = servicio.ultimoDelHistorial(instancia);
     const haceSegundos = latido ? Math.round((Date.now() - latido) / 1000) : null;
     const entrando = haceSegundos !== null && haceSegundos < 30;
 
@@ -565,6 +578,24 @@ export async function desconectar(req, res, next) {
 // Cuando se refrescaron por ultima vez los nombres de cada sesion.
 const nombresRefrescados = new Map();
 const CADA_CUANTO_NOMBRES = 15 * 60 * 1000;
+
+/**
+ * Como tienes guardada a esa persona en TU agenda.
+ *
+ * Devuelve null si no esta —un numero suelto que nunca guardaste— y entonces
+ * vale lo que WhatsApp diga de ella.
+ */
+async function nombreEnLaAgenda(instancia, jid) {
+  const contactos = await evolution.agenda(instancia);
+  const numero = String(jid).split('@')[0];
+  const suyo = (contactos || []).find((c) => {
+    if (!c?.jid || !c?.nombre) return false;
+    // Por numero y no por jid entero: la agenda puede traerlo con `@lid` o con
+    // `@s.whatsapp.net` segun de donde venga, y es la misma persona.
+    return String(c.jid).split('@')[0] === numero;
+  });
+  return suyo?.nombre ? String(suyo.nombre) : null;
+}
 
 async function refrescarNombresSiToca(instancia) {
   const ultima = nombresRefrescados.get(instancia) || 0;
