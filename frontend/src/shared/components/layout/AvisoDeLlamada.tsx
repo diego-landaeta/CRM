@@ -26,7 +26,9 @@ const CADA_SIN_ENLAZAR_MS = 60000;
 
 type Sonando = {
   id: string;
-  teléfono: string;
+  // Sin tilde a proposito: es como lo manda el servidor. Lo que se ENSEÑA
+  // lleva tilde, pero el nombre de un campo que viaja por la red no se toca.
+  telefono: string;
   nombre: string | null;
   conversacionId: number;
   esVideo: boolean;

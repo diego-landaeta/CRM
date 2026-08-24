@@ -597,12 +597,8 @@ export default function ChatPage() {
       //
       // Ahora se para, se escucha si se quiere, y se decide. Es lo mismo que ya
       // se hace con las imagenes desde la tarea #45.
+      // Aqui se acaba: lo manda el boton «Enviar» de la barra de revision.
       setVozGrabada({ blob, ext, segundos, url: URL.createObjectURL(blob) });
-      return;
-      await mandarArchivo(
-        new File([blob], `nota-de-voz.${ext}`, { type: blob.type }),
-        { segundos },
-      );
     };
 
     // El estado se pone cuando el MediaRecorder esta DE VERDAD en marcha, no
@@ -1056,7 +1052,7 @@ export default function ChatPage() {
               <MessageInput
                 placeholder={
                   bloqueo ? bloqueo.marcador
-                  : grabando ? 'Grabando nota de voz…'
+                  : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
                 onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
@@ -1080,8 +1076,9 @@ export default function ChatPage() {
         {conv && !conv.no_escribir && (
           <button type="button" onClick={alternarGrabacion} disabled={enviando}
             onMouseEnter={prepararMicro} onFocus={prepararMicro}
-            title={grabando ? 'Parar y enviar la nota de voz'
+            title={grabando ? 'Terminar la nota — luego la escuchas antes de enviarla'
               : abriendoMicro ? 'Abriendo el micrófono…' : 'Grabar una nota de voz'}
+            aria-label={grabando ? 'Terminar la nota de voz' : 'Grabar una nota de voz'}
             className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''} ${abriendoMicro ? 'wa-abriendo' : ''}`}>
             {grabando ? <Stop size={17} weight="fill" /> : <Microphone size={18} />}
           </button>

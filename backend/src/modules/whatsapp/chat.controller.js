@@ -115,11 +115,17 @@ export async function chat(req, res, next) {
       ...m,
       media_firma: m.media_url ? firma.firma(m.id) : null,
     }));
-    // Quien esta escribiendo viaja con el hilo: la pantalla ya lo pide cada
-    // pocos segundos, asi que no hace falta otra ronda de peticiones.
-    const escribiendo = evolution.configurado()
-      ? await evolution.quienEscribe(conv.jid, conv.instancia).catch(() => null)
-      : null;
+      // Quien esta escribiendo: de momento, nadie.
+      //
+      // Evolution no deja preguntarlo —solo mandar la presencia propia— y el
+      // endpoint que se usaba era del puente de Baileys: en produccion daba 404
+      // cada cinco segundos por cada chat abierto, 136 en diez minutos. Eso
+      // enterraba los errores de verdad (tarea #63).
+      //
+      // Se deja el campo en la respuesta para que la pantalla no cambie: cuando
+      // se encienda el evento `presence.update` del webhook volvera a llenarse
+      // sin tocar el frontal.
+      const escribiendo = null;
 
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.

@@ -20,6 +20,21 @@ import { login } from './helpers.js';
 // selector de sesion —un superadmin iba por otra rama y no lo veia—.
 const GESTOR = { email: 'angel@empresa.com', password: 'CrmTemp2026!' };
 
+/**
+ * Espera a que la pantalla este montada.
+ *
+ * Antes se usaba `waitForLoadState('networkidle')` y no vale aqui: el aviso de
+ * llamada entrante consulta cada tres segundos desde CUALQUIER pantalla del
+ * CRM, asi que la red no queda en reposo nunca y la espera agota su plazo. En
+ * movil, que va mas lento, fallaba casi siempre.
+ *
+ * Se espera a que haya algo pintado, que es lo que de verdad importa.
+ */
+async function pantallaLista(page) {
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('#main-content, main, .wa-chat').first().waitFor({ timeout: 15000 });
+}
+
 /** Lo que ningun test debe encontrarse: la pantalla de «Algo se ha roto». */
 async function noSeHaRoto(page) {
   await expect(page.getByText('Algo se ha roto')).toHaveCount(0);
@@ -57,7 +72,7 @@ test.describe('WhatsApp · que la pantalla abra', () => {
 
   test('el chat abre sin romperse', async ({ page }) => {
     await page.goto('/crm/whatsapp/chat');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     await noSeHaRoto(page);
     // La barra de arriba sale siempre, con numero enlazado y sin el.
     // Sale dos veces —el del menu lateral y el de la barra del chat—, asi que
@@ -70,7 +85,7 @@ test.describe('WhatsApp · que la pantalla abra', () => {
     // esa solo se pinta con una conversacion abierta. Quien no tenia ninguna se
     // quedaba sin forma de volver a verlo.
     await page.goto('/crm/whatsapp/chat');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     await sinRecorrido(page);
     const boton = page.getByRole('button', { name: /Cómo va esto/i });
     await expect(boton).toBeVisible();
@@ -82,7 +97,7 @@ test.describe('WhatsApp · que la pantalla abra', () => {
 
   test('sin numero enlazado, el segundo paso LLEVA a Conexión', async ({ page }) => {
     await page.goto('/crm/whatsapp/chat');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
 
     const aviso = page.locator('.wa-sin-enlazar');
     if (await aviso.count() === 0) {
@@ -103,29 +118,40 @@ test.describe('WhatsApp · que la pantalla abra', () => {
 
   test('el recorrido salta solo la primera vez, y no la segunda', async ({ page }) => {
     await page.goto('/crm/whatsapp/chat');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     // Navegador limpio: tiene que aparecer sin pedirlo.
     await expect(page.getByText('Esto es tu WhatsApp')).toBeVisible();
 
     await page.getByTitle('Cerrar').first().click();
     await page.goto('/crm/whatsapp/chat');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     // Y ya no. Un recorrido que reaparece en cada visita es una molestia.
     await expect(page.locator('.wa-tour')).toHaveCount(0);
   });
 
   test('Conexión abre con su aviso antes del código', async ({ page }) => {
     await page.goto('/crm/whatsapp/conexion');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     await noSeHaRoto(page);
+
+    // El aviso solo existe MIENTRAS no hay nada enlazado: se pinta con
+    // `!conectado`, porque a quien ya tiene su numero puesto no se le pide
+    // consentimiento otra vez. Con una sesion viva hay que comprobar la otra
+    // mitad — que se ve conectado— o esto falla por el estado, no por el codigo.
+    const yaEnlazado = await page.getByText(/Desvincular|Conectado/i).count();
+    if (yaEnlazado) {
+      await expect(page.getByText(/Desvincular|Conectado/i).first()).toBeVisible();
+      return;
+    }
+
     // El aviso va ANTES del codigo, y con casilla: es el punto 1 de la tarea #45.
-    await expect(page.getByText(/no es la vía oficial/i)).toBeVisible();
+    await expect(page.getByText(/no es la vía oficial/i).first()).toBeVisible();
     await expect(page.getByRole('checkbox')).toBeVisible();
   });
 
   test('la guía abre con el camino del móvil dibujado', async ({ page }) => {
     await page.goto('/crm/whatsapp/ayuda');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     await noSeHaRoto(page);
     await expect(page.getByText(/5 · Llamadas/)).toBeVisible();
     await expect(page.getByText('Vincular un dispositivo').first()).toBeVisible();
@@ -133,7 +159,7 @@ test.describe('WhatsApp · que la pantalla abra', () => {
 
   test('las plantillas abren y traen las del proyecto', async ({ page }) => {
     await page.goto('/crm/whatsapp/plantillas');
-    await page.waitForLoadState('networkidle');
+    await pantallaLista(page);
     await noSeHaRoto(page);
   });
 
@@ -145,7 +171,7 @@ test.describe('WhatsApp · que la pantalla abra', () => {
 
     for (const ruta of ['/crm/whatsapp/chat', '/crm/whatsapp/conexion', '/crm/whatsapp/ayuda', '/crm/whatsapp/plantillas']) {
       await page.goto(ruta);
-      await page.waitForLoadState('networkidle');
+      await pantallaLista(page);
     }
     // Los 404 de imagenes y avisos del navegador no cuentan; lo que no puede
     // haber es codigo que revienta.

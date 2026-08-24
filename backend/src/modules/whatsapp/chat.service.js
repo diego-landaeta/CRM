@@ -223,7 +223,20 @@ export async function enviar({ conversacionId, texto, usuarioId, citarWaId = nul
   // contesta al instante y sin escribir parece exactamente lo que es.
   await evolution.presencia(numeroDe(conv), 'composing', conv.instancia).catch(() => {});
 
-  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia, citarWaId);
+  // Para citar hace falta mas que el identificador: Evolution quiere el jid de
+  // la conversacion y si el mensaje citado era nuestro. Los dos estan guardados.
+  let cita = null;
+  if (citarWaId) {
+    const citado = await model.mensajePorWaId(citarWaId).catch(() => null);
+    cita = {
+      waId: citarWaId,
+      jid: conv.jid,
+      mio: citado?.direccion === 'saliente',
+      texto: citado?.texto || '',
+    };
+  }
+
+  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia, cita);
   const fila = await model.guardarMensaje({
     conversacionId, waId: r.waId, direccion: 'saliente', tipo: 'texto',
     texto, estado: r.ok ? 'enviado' : 'fallido', enviadoPor: usuarioId, ts: new Date(),
@@ -246,13 +259,55 @@ export async function enviar({ conversacionId, texto, usuarioId, citarWaId = nul
 export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreArchivo, pie, usuarioId, segundos = null }) {
   const conv = await permitirEnvio(conversacionId);
   const numero = numeroDe(conv);
-  const base64 = buffer.toString('base64');
-  const esAudio = /^audio\//.test(mimetype || '');
+  let esAudio = /^audio\//.test(mimetype || '');
 
-  await evolution.presencia(numero, esAudio ? 'recording' : 'composing', conv.instancia).catch(() => {});
+  // La nota de voz se convierte AQUI, antes de mandarla.
+  //
+  // Lo que graba el navegador es webm, porque Chrome no sabe grabar otra cosa.
+  // Mandandolo tal cual, la nota llegaba muda al movil; mandando el MISMO audio
+  // ya convertido a ogg, se oia. Comprobado con la misma grabacion por los dos
+  // caminos, con identica duracion y onda: lo unico distinto era quien convertia.
+  //
+  // Convirtiendo aqui sale lo mismo desde produccion y desde local, en vez de
+  // depender de los ajustes de Evolution en un sitio y del puente en el otro.
+  if (esAudio) {
+    const { aNotaDeVoz } = await import('./audio.service.js');
+    const ogg = await aNotaDeVoz(buffer);
+    if (ogg) {
+      buffer = ogg;
+      mimetype = 'audio/ogg; codecs=opus';
+      nombreArchivo = 'nota-de-voz.ogg';
+    } else {
+      // Sin conversion NO se manda como nota de voz: llegaria muda y en el chat
+      // parece enviada. Mejor que salga como fichero adjunto, que se puede
+      // descargar y abrir, y que quede dicho en el registro.
+      logger.warn({ conversacionId }, 'WhatsApp: nota de voz sin convertir, va como adjunto');
+      esAudio = false;
+    }
+  }
+
+  const base64 = buffer.toString('base64');
+
+  // El «grabando audio…» NO se manda antes de una nota de voz.
+  //
+  // Es la unica cosa que hacia el camino del CRM y no hacia el envio directo al
+  // puente — y en las pruebas todo lo que salio por aqui llego mudo al movil
+  // («este audio ya no esta disponible») mientras que lo mismo, byte por byte,
+  // enviado sin esta linea, sonaba. La presencia abre un aviso de estado sobre
+  // el mismo chat y programa su apagado a los ~1,2 s, que cae justo encima de
+  // la subida del audio.
+  //
+  // Ademas no aporta nada: la nota YA esta grabada cuando se llama, asi que el
+  // aviso dura un suspiro y acto seguido aparece el audio. Es decorado.
+  //
+  // Para lo demas —imagenes, documentos— se mantiene: ahi si tiene sentido y
+  // ahi nunca ha dado problema.
+  if (!esAudio) {
+    await evolution.presencia(numero, 'composing', conv.instancia).catch(() => {});
+  }
 
   const r = esAudio
-    ? await evolution.enviarAudio(numero, base64, conv.instancia, segundos)
+    ? await evolution.enviarAudio(numero, base64, conv.instancia)
     : await evolution.enviarMedia(numero, {
         tipo: /^image\//.test(mimetype) ? 'image' : /^video\//.test(mimetype) ? 'video' : 'document',
         base64, nombreArchivo, mimetype, pie,
@@ -260,15 +315,48 @@ export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreAr
 
   // Se guarda una copia nuestra: WhatsApp no deja recuperar despues lo que se
   // mando, y sin esto el chat del CRM enseñaria un hueco.
+  //
+  // OJO CON LAS NOTAS DE VOZ. Lo que graba el navegador es **webm**, porque
+  // Chrome no sabe grabar otra cosa. A WhatsApp le llega convertido a ogg/opus
+  // —lo hace Evolution—, pero la copia que se guardaba aqui era el webm crudo,
+  // y esa es la que reproduce el CRM.
+  //
+  // Resultado: la nota se oye en el navegador de un ordenador y NO se oye en el
+  // movil. Safari de iOS no reproduce webm, ni en audio ni en video, y ahi no
+  // hay apaño de reproductor que valga. Se veia como «el audio ya no esta
+  // disponible» y parecia un fallo del envio, cuando el envio estaba bien.
+  //
+  // Asi que para el audio la copia NO es lo que subio el navegador: se pide de
+  // vuelta el fichero ya convertido, el mismo que tiene quien lo recibe. Un
+  // viaje mas, solo al mandar una nota de voz, y queda igual en local y en
+  // produccion — el camino de bajada ya existe y es el que usa «descargar».
   let guardado = null;
-  try {
-    const ext = (nombreArchivo || '').split('.').pop() || 'bin';
-    const ruta = `whatsapp/${conv.instancia}/env-${Date.now()}-${Math.random().toString(16).slice(2, 10)}.${ext}`;
-    const { saveLocal } = await import('../../shared/services/localStorage.service.js');
-    await saveLocal(ruta, buffer);
-    guardado = ruta;
-  } catch (err) {
-    logger.warn({ err: err.message }, 'WhatsApp: no se pudo guardar copia del adjunto enviado');
+  let mimeGuardado = mimetype;
+  if (esAudio && r.ok && r.waId) {
+    const media = await import('./media.service.js');
+    const bajado = await media.bajarYGuardar({
+      key: { remoteJid: conv.jid, fromMe: true, id: r.waId },
+      message: null,
+      instancia: conv.instancia,
+    }).catch(() => null);
+    if (bajado?.ruta) {
+      guardado = bajado.ruta;
+      mimeGuardado = bajado.mime || 'audio/ogg; codecs=opus';
+    }
+  }
+
+  // Para todo lo demas —y si lo de arriba no salio— se guarda lo que subio el
+  // navegador, que es exactamente lo que se mando.
+  if (!guardado) {
+    try {
+      const ext = (nombreArchivo || '').split('.').pop() || 'bin';
+      const ruta = `whatsapp/${conv.instancia}/env-${Date.now()}-${Math.random().toString(16).slice(2, 10)}.${ext}`;
+      const { saveLocal } = await import('../../shared/services/localStorage.service.js');
+      await saveLocal(ruta, buffer);
+      guardado = ruta;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'WhatsApp: no se pudo guardar copia del adjunto enviado');
+    }
   }
 
   const fila = await model.guardarMensaje({
@@ -276,7 +364,7 @@ export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreAr
     direccion: 'saliente',
     tipo: esAudio ? 'audio' : /^image\//.test(mimetype) ? 'imagen' : /^video\//.test(mimetype) ? 'video' : 'documento',
     texto: pie || null,
-    mediaUrl: guardado, mediaMime: mimetype,
+    mediaUrl: guardado, mediaMime: mimeGuardado,
     nombreArchivo,
     estado: r.ok ? 'enviado' : 'fallido', enviadoPor: usuarioId, ts: new Date(),
   });

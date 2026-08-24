@@ -486,6 +486,20 @@ export async function hayConversaciones(instancia) {
   return Boolean(rows[0]?.hay);
 }
 
+/**
+ * Un mensaje por su identificador de WhatsApp.
+ *
+ * Hace falta al responder citando: Evolution quiere saber si el mensaje citado
+ * era nuestro y que decia, no solo su identificador.
+ */
+export async function mensajePorWaId(waId) {
+  const { rows } = await query(
+    `SELECT id, wa_id, direccion, tipo, texto FROM wa_mensajes WHERE wa_id = $1 LIMIT 1`,
+    [waId]
+  );
+  return rows[0] || null;
+}
+
 /** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
 export async function mensajePorId(id) {
   const { rows } = await query(

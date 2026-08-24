@@ -118,12 +118,32 @@ export const estado = (nombre = INSTANCIA) => pedir(`/instance/connectionState/$
  * Devuelve el key.id de WhatsApp, que es lo que luego permite casar el acuse
  * de entrega con el mensaje guardado.
  */
-export async function enviarTexto(numero, texto, nombre = INSTANCIA, citarWaId = null) {
+export async function enviarTexto(numero, texto, nombre = INSTANCIA, cita = null) {
   const r = await pedir(`/message/sendText/${nombre}`, {
     metodo: 'POST',
     // `quoted` es el identificador del mensaje al que se responde. Al otro lado
     // sale con la cita encima, como en WhatsApp.
-    cuerpo: { number: numero, text: texto, quoted: citarWaId || undefined },
+    // La cita va como OBJETO, no como el identificador suelto.
+    //
+    // Aqui iba `quoted: citarWaId` —una cadena— y Evolution hace por dentro
+    // `quoted.key.fromMe`: con un texto revienta con «Cannot read properties of
+    // undefined (reading 'fromMe')» y contesta 400. O sea que **responder a un
+    // mensaje fallaba siempre en produccion**, y reintentar volvia a fallar.
+    // El error venia de dentro de Evolution, asi que en nuestro registro solo
+    // se veia «HTTP_400 · no se pudo enviar».
+    //
+    // Hacen falta el jid de la conversacion y si el mensaje citado era nuestro;
+    // los dos estan en `wa_mensajes` y los pasa quien llama.
+    cuerpo: {
+      number: numero,
+      text: texto,
+      ...(cita?.waId ? {
+        quoted: {
+          key: { id: cita.waId, remoteJid: cita.jid, fromMe: Boolean(cita.mio) },
+          message: { conversation: cita.texto || '' },
+        },
+      } : {}),
+    },
     esperaMs: 20000,
   });
   if (!r.ok) return r;
@@ -138,13 +158,24 @@ export async function enviarTexto(numero, texto, nombre = INSTANCIA, citarWaId =
  * `audioBase64` va SIN el prefijo `data:audio/ogg;base64,`. Con el prefijo,
  * Evolution contesta 400.
  */
-export async function enviarAudio(numero, audioBase64, nombre = INSTANCIA, segundos = null) {
+export async function enviarAudio(numero, audioBase64, nombre = INSTANCIA) {
   const r = await pedir(`/message/sendWhatsAppAudio/${nombre}`, {
     metodo: 'POST',
-    // `seconds` es la duracion medida al grabar. Sin ella WhatsApp la calcula
-    // del fichero, y lo que graba Chrome —webm— no la lleva: enseñaba una
-    // duracion mas larga que la real.
-    cuerpo: { number: numero, audio: audioBase64, encoding: true, seconds: segundos || undefined },
+    // NO se manda `seconds`.
+    //
+    // Se mandaba la duracion medida en el navegador con `Date.now()`, para que
+    // WhatsApp no la sacara del webm de Chrome —que no la lleva en la cabecera—.
+    // El razonamiento estaba bien y la consecuencia era mala: esa medida cuenta
+    // desde antes de que el grabador arranque de verdad, asi que nunca coincide
+    // con el audio. Y una duracion que no cuadra deja la nota MUDA: al darle a
+    // reproducir sale «Este audio ya no esta disponible».
+    //
+    // Comprobado mandando el mismo audio con la duracion buena y con una
+    // inventada: con la buena suena, con la inventada no.
+    //
+    // Quien convierte —Evolution, o el puente en local— ya tiene el ogg
+    // delante, y ahi la duracion si esta. Que la ponga quien puede medirla.
+    cuerpo: { number: numero, audio: audioBase64, encoding: true },
     esperaMs: 60000,
   });
   if (!r.ok) return r;
@@ -219,15 +250,46 @@ export async function comprobarNumero(numero, nombre = INSTANCIA) {
  * Devuelve { quien, que } o null. Nunca lanza: que no se sepa si el otro esta
  * escribiendo no puede impedir abrir el chat.
  */
-export async function quienEscribe(jid, nombre = INSTANCIA) {
-  const r = await pedir(`/chat/presence/${nombre}?jid=${encodeURIComponent(jid)}`, { esperaMs: 5000 });
-  return r.ok ? (r.datos?.escribiendo || null) : null;
+export async function quienEscribe() {
+  // Evolution no deja LEER la presencia de otro: solo `sendPresence`, que es
+  // para mandar la tuya. `/chat/presence` era del puente de Baileys y en
+  // produccion daba 404 — **136 en diez minutos**, porque la pantalla lo pedia
+  // cada cinco segundos con cada chat abierto. Eso enterraba los errores de
+  // verdad: a Diego le costo encontrar el fallo de las citas por culpa de esto.
+  //
+  // La via buena es el evento `presence.update` del webhook, que hay que
+  // encender en el contenedor y guardar en memoria. Hasta que eso este, no se
+  // pide: mejor quedarse sin el «escribiendo…» que llenar el registro.
+  return null;
 }
 
-/** La agenda de esa sesion: contactos y nombres de grupo. */
+/**
+ * La agenda de esa sesion: como tienes guardado a cada uno.
+ *
+ * Iba a `/agenda`, que **solo existe en el puente de Baileys** que se usa en
+ * local: en el Evolution de verdad devuelve 404. Lo caza Diego en la tarea #63.
+ * El endpoint real es `/chat/findContacts/<instancia>`.
+ */
 export async function agenda(nombre = INSTANCIA) {
-  const r = await pedir(`/agenda?instancia=${encodeURIComponent(nombre)}`, { esperaMs: 10000 });
-  return r.ok ? (r.datos?.contactos || []) : [];
+  const r = await pedir(`/chat/findContacts/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {},
+    esperaMs: 15000,
+  });
+  if (!r.ok) return [];
+  // Evolution devuelve la lista pelada; el puente la envuelve en `contactos`.
+  const filas = Array.isArray(r.datos) ? r.datos : (r.datos?.contactos || []);
+  return filas
+    .map((c) => ({
+      jid: c?.remoteJid || c?.id || c?.jid || null,
+      // Ojo con `pushName`, que significa dos cosas distintas segun la tabla:
+      // en un mensaje es como se llama esa persona a si misma, pero en la ficha
+      // de contacto Evolution mete ahi el nombre de TU agenda —guarda
+      // `contact.name || contact.verifiedName || el numero`—. Que es justo el
+      // que se quiere: como tu la tienes apuntada, no como se anuncia ella.
+      nombre: c?.name || c?.nombre || c?.pushName || null,
+    }))
+    .filter((c) => c.jid && c.nombre);
 }
 
 /**

@@ -802,6 +802,20 @@
  * sistema —blanco, de 250 px, con sus botones— que no se puede pintar de otro
  * color. En medio de un chat oscuro cantaba muchisimo. */
 
+/* La nota que este navegador no sabe reproducir.
+   Sale como enlace y no como un reproductor muerto: pulsar un boton que no
+   hace nada es peor que no tener boton. Lo unico que se puede hacer con ella
+   es bajarla y oirla con otra cosa, asi que es lo que se ofrece. */
+.wa-voz-rota { min-width: 0; padding: 2px 0; }
+.wa-voz-descargar {
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: underline;
+  opacity: .85;
+  cursor: pointer;
+}
+.wa-voz-descargar:hover { opacity: 1; }
+
 .wa-voz {
   display: flex; align-items: center; gap: 9px;
   min-width: 190px; max-width: 240px;

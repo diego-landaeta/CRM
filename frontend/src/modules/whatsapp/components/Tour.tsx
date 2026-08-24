@@ -127,6 +127,22 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   const [altoCartel, setAltoCartel] = useState(0);
   const [ventana, setVentana] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
 
+  /**
+   * Se marca como visto AL ABRIRSE, no al cerrarse.
+   *
+   * Antes solo contaba si se salia por la X. Quien recargaba, se iba a otra
+   * pantalla o cerraba la pestaña se lo encontraba otra vez, y otra, y otra:
+   * el recorrido pasaba de ayuda a estorbo. Un recorrido guiado se enseña una
+   * vez; si alguien lo quiere de nuevo, esta el boton «Cómo va esto».
+   *
+   * La excepcion es el paso de enlazar: ese SI lo vuelve a armar, porque quien
+   * lo sigue no ha visto el recorrido —ha visto dos carteles— y vuelve con el
+   * numero puesto para verlo entero. Lo hace `seguirGuia`.
+   */
+  useEffect(() => {
+    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
+  }, []);
+
   useEffect(() => {
     const alRedimensionar = () => setVentana({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', alRedimensionar);
@@ -150,9 +166,14 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * se salta solo porque su aviso ya no esta.
    */
   const cerrar = useCallback((marcar = true) => {
-    if (marcar) {
-      try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
-    }
+    // Ya se marco al abrirse, asi que aqui solo queda el caso contrario: si se
+    // sale siguiendo la guia, se VUELVE A ARMAR. Quien pulsa «Enlazar mi
+    // numero» no ha visto el recorrido, ha visto dos carteles, y tiene que
+    // encontrarselo entero al volver con el numero puesto.
+    try {
+      if (marcar) localStorage.setItem(VISTO, '1');
+      else localStorage.removeItem(VISTO);
+    } catch { /* navegador sin permiso */ }
     alCerrar?.();
   }, [alCerrar]);
 

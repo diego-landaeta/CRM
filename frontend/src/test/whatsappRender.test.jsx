@@ -131,6 +131,15 @@ describe('Tour · el recorrido guiado', () => {
     expect(tourPendiente()).toBe(true);
   });
 
+  it('se marca visto AL ABRIRSE, no al cerrarse', () => {
+    // Lo pidio Angel viendolo por enesima vez: «que esto le salga una sola vez,
+    // no siempre». Marcandolo solo al salir por la X, quien recargaba la
+    // pagina o se iba a otra pantalla se lo encontraba de nuevo cada vez.
+    expect(tourPendiente()).toBe(true);
+    envolver(<Tour />);
+    expect(tourPendiente()).toBe(false);
+  });
+
   it('pero cerrarlo con la X si lo marca', () => {
     envolver(<Tour />);
     fireEvent.click(screen.getByTitle('Cerrar'));
