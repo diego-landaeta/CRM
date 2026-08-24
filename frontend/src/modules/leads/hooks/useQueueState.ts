@@ -12,7 +12,17 @@ export type SaludCola =
   /** La cola se mueve: el reparto lo hace el CRM. */
   | 'viva'
   /** Han entrado prospectos y la cola sigue quieta: los reparte otro. */
-  | 'congelada';
+  | 'congelada'
+  /**
+   * No se puede saber si la cola manda, así que no se afirma.
+   *
+   * Le pasa al rol `gestor`: el listado de prospectos le devuelve **solo los
+   * suyos** (lead.controller.js:69-74, y `/leads/stats` igual), así que el
+   * conteo saldría una fracción del real. Si Make se los asigna a otras, ella
+   * contaría cero y el panel le diría «cola viva» enseñándole un siguiente
+   * falso — justo lo que esto viene a evitar, y al rol que más lo mira.
+   */
+  | 'sin_verificar';
 
 export interface Cola {
   estado: EstadoCola | null;
@@ -35,7 +45,7 @@ export interface Cola {
  * última vez que la cola se movió, es que los repartió otro (hoy, Make). Son
  * dos peticiones que la pantalla ya sabe hacer, sin tocar el servidor.
  */
-export default function useQueueState(projectId?: number): Cola {
+export default function useQueueState(projectId?: number, puedeContar = true): Cola {
   const [estado, setEstado] = useState<EstadoCola | null>(null);
   const [posteriores, setPosteriores] = useState(0);
   const [salud, setSalud] = useState<SaludCola>('cargando');
@@ -53,6 +63,12 @@ export default function useQueueState(projectId?: number): Cola {
         setPosteriores(0);
         return;
       }
+      // Si el conteo no es fiable para este rol, no se afirma nada.
+      if (!puedeContar) {
+        setSalud('sin_verificar');
+        setPosteriores(0);
+        return;
+      }
       // Sin fecha de último reparto no hay con qué comparar: no se acusa.
       if (!datos.last_assigned_at) {
         setSalud('viva');
@@ -66,7 +82,7 @@ export default function useQueueState(projectId?: number): Cola {
       setError(err?.message || 'No se pudo leer la cola');
       setSalud('cargando');
     }
-  }, [projectId]);
+  }, [projectId, puedeContar]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

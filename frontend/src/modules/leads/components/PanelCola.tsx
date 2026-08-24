@@ -71,7 +71,11 @@ function desdeHace(iso: string | null): string {
 export default function PanelCola({ projectId, onRepartido }: Props) {
   const { user } = useAuth();
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const { estado, salud, posteriores, error, recargar } = useQueueState(projectId);
+  // El listado de prospectos le devuelve a la gestora solo los suyos, así que
+  // con su sesión el conteo saldría una fracción del real y el panel podría
+  // dar por viva una cola muerta. Para ella no se cuenta, y no se afirma.
+  const puedeContar = user?.role !== 'gestor';
+  const { estado, salud, posteriores, error, recargar } = useQueueState(projectId, puedeContar);
   const [repartiendo, setRepartiendo] = useState(false);
 
   async function repartir() {
@@ -98,6 +102,9 @@ export default function PanelCola({ projectId, onRepartido }: Props) {
   // Mientras carga no se ocupa sitio: el listado es lo que se viene a ver.
   if (!projectId || salud === 'cargando') return null;
 
+  // Si la cola no se puede leer, el panel desaparece en vez de poner un aviso
+  // rojo encima del listado. Esto es información de apoyo: que falle no puede
+  // estorbar para trabajar con los prospectos, que es a lo que se viene.
   if (error) return null;
 
   if (salud === 'sin_gestores') {
@@ -116,6 +123,32 @@ export default function PanelCola({ projectId, onRepartido }: Props) {
 
   const gestores = estado?.gestores || [];
   const siguiente = estado?.next_gestor || null;
+
+  // Gestora: se enseña el turno configurado, pero NO se afirma quién es el
+  // siguiente. Con su sesión no hay forma de comprobar si esa cola manda de
+  // verdad, y un «te toca a ti» equivocado es peor que no decir nada.
+  if (salud === 'sin_verificar') {
+    return (
+      <div className="rounded-lg border border-border bg-card px-4 py-3">
+        <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Turno configurado</span>
+          {gestores.map((g) => (
+            <span
+              key={g.id}
+              title={g.nombre}
+              className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full text-[10px] text-muted-foreground"
+            >
+              <Avatar gestor={g} />
+              <span className="truncate max-w-[110px]">{g.nombre}</span>
+            </span>
+          ))}
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap ml-auto">
+            La cola se movió {desdeHace(estado?.last_assigned_at ?? null)}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (salud === 'congelada') {
     return (
