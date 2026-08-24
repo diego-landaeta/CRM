@@ -94,7 +94,26 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
     `INSERT INTO wa_mensajes
        (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? ', $12' : ''})
-     ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO NOTHING
+     ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO UPDATE SET
+       -- Se COMPLETA la fila, no se pisa.
+       --
+       -- Un mensaje que sale llega por dos sitios casi a la vez: lo guarda el
+       -- propio envio y lo guarda el aviso que devuelve WhatsApp. Ganaba el
+       -- aviso por unas decimas y el envio se quedaba sin fila —«DO NOTHING»—,
+       -- asi que la pantalla no recibia fila y el mensaje recien mandado
+       -- no aparecia hasta la siguiente vuelta.
+       --
+       -- Y lo que traia el envio no lo sabe el aviso: QUIEN lo mando, la copia
+       -- del adjunto y a que mensaje contestaba. Con COALESCE se rellena lo que
+       -- falte sin tocar lo que ya tenga valor, venga por donde venga.
+       enviado_por    = COALESCE(wa_mensajes.enviado_por, EXCLUDED.enviado_por),
+       media_url      = COALESCE(wa_mensajes.media_url, EXCLUDED.media_url),
+       media_mime     = COALESCE(wa_mensajes.media_mime, EXCLUDED.media_mime),
+       nombre_archivo = COALESCE(wa_mensajes.nombre_archivo, EXCLUDED.nombre_archivo),
+       texto          = COALESCE(wa_mensajes.texto, EXCLUDED.texto),
+       -- El estado si avanza: «enviado» pisa a un hueco, y los acuses posteriores
+       -- lo mueven a entregado o leido por su propio camino.
+       estado         = COALESCE(EXCLUDED.estado, wa_mensajes.estado)
      RETURNING *`,
     [conversacionId, waId || null, direccion, tipo || 'texto', texto || null,
      mediaUrl || null, mediaMime || null, nombreArchivo || null, estado || null,

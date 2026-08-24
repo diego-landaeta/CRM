@@ -134,19 +134,27 @@ test.describe('WhatsApp · que la pantalla abra', () => {
     await pantallaLista(page);
     await noSeHaRoto(page);
 
-    // El aviso solo existe MIENTRAS no hay nada enlazado: se pinta con
-    // `!conectado`, porque a quien ya tiene su numero puesto no se le pide
-    // consentimiento otra vez. Con una sesion viva hay que comprobar la otra
-    // mitad — que se ve conectado— o esto falla por el estado, no por el codigo.
-    const yaEnlazado = await page.getByText(/Desvincular|Conectado/i).count();
-    if (yaEnlazado) {
-      await expect(page.getByText(/Desvincular|Conectado/i).first()).toBeVisible();
-      return;
-    }
+    // Esta pantalla tiene DOS caras y las dos son correctas: sin numero
+    // enlazado pide consentimiento antes del codigo —punto 1 de la tarea #45—,
+    // y con uno puesto enseña la sesion y el boton de desvincular. A quien ya
+    // lo tiene no se le vuelve a pedir permiso.
+    //
+    // Hay que ESPERAR a que llegue el estado antes de decidir cual toca: el
+    // estado viene del servidor y preguntando nada mas pintar sale que no hay
+    // nada enlazado, aunque lo haya. Asi fallaba, y no por el codigo.
+    const enlazado = page.getByText(/Desvincular|Conectado/i).first();
+    const aviso = page.getByText(/no es la vía oficial/i).first();
+    // `.first()` sobre la union: los DOS textos estan en el arbol —el aviso
+    // sigue montado aunque oculto— y sin esto Playwright se planta por
+    // ambiguedad en vez de esperar.
+    await expect(enlazado.or(aviso).first()).toBeVisible({ timeout: 20000 });
 
-    // El aviso va ANTES del codigo, y con casilla: es el punto 1 de la tarea #45.
-    await expect(page.getByText(/no es la vía oficial/i).first()).toBeVisible();
-    await expect(page.getByRole('checkbox')).toBeVisible();
+    if (await enlazado.isVisible()) {
+      await expect(enlazado).toBeVisible();
+    } else {
+      await expect(aviso).toBeVisible();
+      await expect(page.getByRole('checkbox')).toBeVisible();
+    }
   });
 
   test('la guía abre con el camino del móvil dibujado', async ({ page }) => {
