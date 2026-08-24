@@ -679,6 +679,16 @@
   margin: 0; padding: 13px 14px;
   font-size: 13px; line-height: 1.55;
   color: var(--wa-apagado);
+  /* Alto minimo para que el pie no baile.
+   *
+   * Cada paso tiene un texto de distinto largo, asi que el cartel cambiaba de
+   * alto y «Siguiente» aparecia a distinta altura en cada uno: se pulsa nueve
+   * veces seguidas y hay que ir persiguiendolo con el raton. Con un minimo que
+   * cubre los textos normales, el pie cae en el mismo sitio; los dos o tres
+   * pasos mas largos lo empujan un poco y no hay mas remedio, pero el salto
+   * pasa de constante a excepcional. */
+  min-height: 161px;
+  box-sizing: content-box;
 }
 .wa-tour-pie {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

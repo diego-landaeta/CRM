@@ -283,11 +283,19 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
         <div className={`wa-tour-pie ${actual.accion ? 'wa-tour-con-accion' : ''}`}>
           <span className="wa-tour-cuenta">{paso + 1} de {pasos.length}</span>
           <div className="wa-tour-botones">
-            {paso > 0 && (
-              <button type="button" className="wa-btn-suave" onClick={atras}>
-                <ArrowLeft size={13} /> Atrás
-              </button>
-            )}
+            {/* «Atrás» ocupa su sitio SIEMPRE, aunque en el primer paso no se
+                pueda usar. Quitandolo del todo, «Siguiente» se corria a la
+                izquierda al pasar del paso 1 al 2 y del 2 al 1: el boton que se
+                esta pulsando repetidamente cambiaba de sitio bajo el raton. Se
+                deja hueco y se apaga. */}
+            <button type="button" className="wa-btn-suave"
+              onClick={atras}
+              disabled={paso === 0}
+              aria-hidden={paso === 0}
+              tabIndex={paso === 0 ? -1 : 0}
+              style={paso === 0 ? { visibility: 'hidden' } : undefined}>
+              <ArrowLeft size={13} /> Atrás
+            </button>
             {/* «Siguiente» solo si queda algo detras: en el recorrido corto
                 este es el ultimo paso, y ofrecerlo llevaria a ninguna parte. */}
             {actual.accion ? (

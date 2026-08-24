@@ -95,9 +95,17 @@ describe('Tour · el recorrido guiado', () => {
     expect(screen.getByText('1 de 8')).toBeTruthy();
   });
 
-  it('en el primer paso no hay «Atras», y el ultimo cierra', async () => {
+  it('en el primer paso «Atrás» esta pero apagado', async () => {
+    // Ocupa su sitio a proposito aunque no se pueda usar: quitandolo del todo,
+    // «Siguiente» se corria a la izquierda al cambiar de paso y habia que ir
+    // persiguiendo con el raton el boton que se pulsa nueve veces seguidas.
     envolver(<Tour />);
-    expect(screen.queryByText(/Atrás/)).toBeNull();
+    // Por texto y no por rol: lleva `aria-hidden` mientras esta apagado, que es
+    // lo correcto —un lector de pantalla no debe anunciar un boton inservible—
+    // y eso lo saca del arbol de accesibilidad.
+    const atras = screen.getByText(/Atrás/).closest('button');
+    expect(atras.disabled).toBe(true);
+    expect(atras.style.visibility).toBe('hidden');
     expect(screen.getByText(/Siguiente/)).toBeTruthy();
   });
 
