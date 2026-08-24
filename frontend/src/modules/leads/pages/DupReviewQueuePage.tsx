@@ -1,3 +1,4 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowsClockwise, CheckCircle, X, GitMerge, Warning, ArrowSquareOut } from '@phosphor-icons/react';
@@ -95,12 +96,10 @@ export default function DupReviewQueuePage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Revisión de duplicados</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Leads que llegaron por webhook con datos duplicados. El webhook nunca se bloqueó (Make recibió 200 OK). Decide si conservas, fusionas con el original o descartas.
-        </p>
-      </div>
+      <PageHeader
+        title="Revisión de duplicados"
+        subtitle="Leads que llegaron por webhook con datos duplicados. El webhook nunca se bloqueó (Make recibió 200 OK). Decide si conservas, fusionas con el original o descartas."
+      />
 
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         {([

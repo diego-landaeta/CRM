@@ -1,3 +1,4 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
@@ -11,7 +12,7 @@ import client from '@/shared/api/client';
 import {
   MagnifyingGlass,
   Plus,
-  Export,
+
   CaretLeft,
   CaretRight,
   Users,
@@ -52,7 +53,6 @@ import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import DateRangeFilter from '../components/DateRangeFilter';
 import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import LeadsViewToggle from '../components/LeadsViewToggle';
 import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
@@ -575,12 +575,24 @@ export default function LeadsPage() {
       )}
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold leading-tight">Prospectos</h1>
-          <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+      <PageHeader
+        title="Prospectos"
+        subtitle="Explora y gestiona tus clientes potenciales"
+        actions={(
+          <button
+            onClick={() => setFormOpen(true)}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
+          >
+            <Plus size={14} weight="bold" />
+            <span className="hidden sm:inline">Nuevo prospecto</span>
+            <span className="sm:hidden">Nuevo</span>
+          </button>
+        )}
+      />
+
+      {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
+          arriba, en la cabecera del marco, igual que en todas las demas. */}
+      <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => { setNewCount(0); refetch(); }}
             title="Refrescar lista de prospectos"
@@ -599,16 +611,9 @@ export default function LeadsPage() {
               </span>
             )}
           </button>
-          <LeadsViewToggle active="list" />
-          <button
-            onClick={() => navigate('/prospectos/audiencias')}
-            title="Audiencias para Meta/Google"
-            aria-label="Audiencias"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <Export size={14} weight="bold" />
-            <span className="hidden md:inline">Audiencias</span>
-          </button>
+          {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
+              las mismas tres pantallas que las pestanas de arriba. Dos sitios
+              para lo mismo, uno encima del otro. */}
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
               onClick={abrirExport}
@@ -683,15 +688,6 @@ export default function LeadsPage() {
               )}
             </div>
           )}
-          <button
-            onClick={() => setFormOpen(true)}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
-          >
-            <Plus size={14} weight="bold" />
-            <span className="hidden sm:inline">Nuevo prospecto</span>
-            <span className="sm:hidden">Nuevo</span>
-          </button>
-        </div>
       </div>
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".

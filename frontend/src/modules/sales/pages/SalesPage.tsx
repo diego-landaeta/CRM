@@ -1,3 +1,4 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { lazy, Suspense, useState, useEffect } from 'react';
 import { Plus, Receipt, UsersThree } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -46,18 +47,13 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Ventas {allProjects && <span className="text-sm font-normal text-muted-foreground">· Todos los proyectos</span>}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {allProjects
-              ? 'Vista agregada de todos los proyectos. Para registrar una venta entra en un proyecto concreto.'
-              : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title={allProjects ? 'Ventas · Todos los proyectos' : 'Ventas'}
+        subtitle={allProjects
+          ? 'Vista agregada de todos los proyectos. Para registrar una venta entra en un proyecto concreto.'
+          : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
+        actions={(
+          <>
           {isAdmin && !allProjects && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />
@@ -82,8 +78,9 @@ export default function SalesPage() {
             <Plus size={14} weight="bold" />
             Nueva venta
           </button>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       {hasActiveCtx && !allProjects && (
         <FiltroPeriodo

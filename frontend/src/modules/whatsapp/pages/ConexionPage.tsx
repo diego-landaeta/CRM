@@ -1,3 +1,4 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import { Link } from 'react-router-dom';
@@ -147,24 +148,28 @@ export default function ConexionPage() {
 
   return (
     <div className="max-w-2xl space-y-4">
+      <PageHeader
+        title={sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}
+        subtitle={sesion.esMia
+          ? 'Tu numero, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
+          : `Estas enlazando el numero de ${sesion.nombre}. Necesitas su movil delante para meter el codigo.`}
+        actions={(
+          <>
+            <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
+            <button type="button" onClick={mirar} title="Comprobar ahora"
+              className="p-2 rounded-md hover:bg-muted text-muted-foreground">
+              <ArrowClockwise size={16} />
+            </button>
+          </>
+        )}
+      />
+
       <div className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-start gap-3">
           <WhatsappLogo size={32} weight="duotone" className="text-emerald-600 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold">
-              {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {sesion.esMia
-                ? 'Tu numero, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
-                : `Estas enlazando el numero de ${sesion.nombre}. Necesitas su movil delante para meter el codigo.`}
-            </p>
-          </div>
-          <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
-          <button type="button" onClick={mirar} title="Comprobar ahora"
-            className="p-2 rounded-md hover:bg-muted text-muted-foreground">
-            <ArrowClockwise size={16} />
-          </button>
+          <p className="text-sm text-muted-foreground">
+            Enlaza el numero escaneando el codigo con el movil.
+          </p>
         </div>
 
         <div className="mt-4 flex items-center gap-2 text-sm">

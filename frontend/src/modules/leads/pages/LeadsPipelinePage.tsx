@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, lazy, Suspense, type DragEvent } from
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
-import LeadsViewToggle from '../components/LeadsViewToggle';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { toast } from '@/shared/hooks/useToast';
 import { Plus, User, DotsSixVertical, Users, CalendarBlank } from '@phosphor-icons/react';
@@ -297,10 +296,7 @@ export default function LeadsPipelinePage() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <div>
-          <h1 className="text-2xl font-semibold">Pipeline de Prospectos</h1>
-          <p className="text-muted-foreground text-sm">Cargando…</p>
-        </div>
+        <PageHeader title="Pipeline de Prospectos" subtitle="Cargando…" />
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => (
             <div key={col.key} className="flex-shrink-0 w-[260px] sm:w-[280px]">
@@ -330,11 +326,10 @@ export default function LeadsPipelinePage() {
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} lead={null} />
 
       <PageHeader
-        title="Prospectos"
+        title="Pipeline de prospectos"
         subtitle="Arrastra una tarjeta para cambiar su estado"
         actions={
           <>
-            <LeadsViewToggle active="kanban" />
             <button
               onClick={() => setFormOpen(true)}
               aria-label="Nuevo prospecto"
