@@ -191,6 +191,12 @@ for (const { name, mod } of ALL_MODULES) {
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
   // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
+  // Un modulo puede responder tambien por su nombre anterior. Sirve para
+  // renombrar sin romper lo que ya apuntaba al viejo.
+  if (mod.alias) {
+    app.use(mod.alias, mod.router);
+    logger.info(`Modulo registrado (alias): ${mod.alias}`);
+  }
   if (mod.publicMount) {
     app.use(mod.publicMount.prefix, mod.publicMount.router);
     logger.info(`Modulo registrado (public): ${mod.publicMount.prefix}`);
