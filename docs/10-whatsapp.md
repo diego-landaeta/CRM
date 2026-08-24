@@ -164,14 +164,12 @@ máquina, no sale a internet.
 
 ## Los frenos (y por qué no se tocan)
 
-El CRM se niega a enviar en tres casos. No son burocracia: son lo que evita que
+El CRM se niega a enviar en dos casos. No son burocracia: son lo que evita que
 suspendan la línea.
 
 1. **A quien pidió que no le escribieran.** Ni con plantilla, ni «solo una última
    vez».
-2. **A quien no es prospecto y nunca ha escrito.** Si ese número no salió de un
-   formulario nuestro, escribirle es escribir en frío.
-3. **Cuando se va demasiado rápido.** 6 por minuto, 60 por hora, 300 al día
+2. **Cuando se va demasiado rápido.** 6 por minuto, 60 por hora, 300 al día
    (`WA_TOPE_MINUTO`, `WA_TOPE_HORA`, `WA_TOPE_DIA`), más una pausa de 1,5
    segundos entre mensajes seguidos.
 
@@ -184,6 +182,134 @@ historial ya saltaba «llevas 341 hoy, se retoma mañana» sin haber enviado ni 
 desde el CRM. Ahora solo cuenta lo que lleva firma de usuario (`enviado_por`).
 
 ---
+
+## Llamadas
+
+**Hablar por el CRM no se puede.** No es que falte hacerlo: por esta vía WhatsApp
+no da canal de audio. La voz vive en la aplicación del móvil y va cifrada punto a
+punto. Lo que sí se hace es que no se pierda ninguna llamada.
+
+### Lo que llega solo
+
+Evolution emite el evento `CALL` con la llamada entrante, y hay que **pedirlo**:
+`WEBHOOK_EVENTS_CALL: "true"` en `docker-compose.whatsapp.yml`. Sin esa línea el
+contenedor la procesa pero no avisa a nadie.
+
+Manda un aviso por **cada cambio de estado** de la misma llamada — `offer`,
+`ringing`, `timeout`… — así que sólo se guarda el desenlace (`timeout` → perdida,
+`reject` → rechazada, `accept` → contestada). El identificador va como
+`call:<id>`, y el índice único de `wa_id` remata el duplicado si el aviso se
+reintenta.
+
+Se guarda como un mensaje más con `tipo = 'llamada'`. **No hizo falta migración:**
+`tipo` no tiene lista cerrada de valores. El desenlace va en `texto` en seco
+—`perdida`, no «Llamada perdida»— para poder filtrar sin buscar dentro de un
+texto; la frase la pone la pantalla. Y `media_mime` guarda `video` o `audio`,
+que en una llamada sí significa algo.
+
+### El aviso mientras suena
+
+Guardar sólo el desenlace vale para el historial pero **llega tarde para
+avisar**: cuando entra el `timeout` la llamada ya se perdió. Por eso el `offer`
+sí se atiende — no se guarda en la base, porque no es un hecho todavía — y vive
+en un `Map` en memoria, como el pulso.
+
+`GET /api/whatsapp/sonando` lo lee. Lo consulta **todo el CRM**, no sólo la
+pantalla de WhatsApp, así que **no toca la base**: el nombre y el teléfono se
+resolvieron una vez cuando entró el aviso. Es siempre la sesión de uno mismo,
+nunca la de otro — a un administrador que está mirando el WhatsApp de una
+gestora no le debe saltar su llamada.
+
+El cartel se cae solo a los 45 segundos. WhatsApp deja de llamar sobre los 30;
+el margen es por si el aviso de que terminó no llega nunca —un webhook que se
+pierde, el contenedor reiniciándose—, porque si no habría que recargar la página
+para quitarlo.
+
+**El ritmo de consulta depende de si hay sesión**: 3 segundos con WhatsApp
+enlazado, 60 sin él, y nada con la pestaña de fondo. Saberlo por el pulso no
+bastaba: una gestora enlazada y tranquila no tiene pulso después de reiniciar el
+servidor, así que iría a 60 segundos y una llamada de 30 no se vería nunca. Se
+mira la base una vez y se guarda cinco minutos.
+
+### Lo que sale
+
+El botón de llamar abre `tel:` en el móvil de la gestora y **apunta el intento
+antes** de marcar: al revés, cambiar de aplicación puede congelar la pestaña y la
+llamada saldría sin registro, que es justo lo que se venía a resolver. El
+identificador lleva el minuto dentro, así que pulsar dos veces no cuenta dos
+llamadas.
+
+### En la ficha del prospecto
+
+El chat guarda la **conversación**; la ficha guarda el **historial de contacto**,
+y son cosas distintas: quien abre un prospecto para ver por dónde va no entra en
+WhatsApp. Por eso cada llamada escribe además una fila en `lead_interactions`
+—cuyo enum `interaction_type` ya admitía `llamada`, no hizo falta tocar nada—, y
+`LeadInteractionsCard` la pinta sin cambios.
+
+Dos condiciones para no ensuciarla:
+
+- **Sólo si el mensaje se guardó de verdad.** Cuando `guardarMensaje` devuelve
+  vacío es que ese aviso ya había entrado —Evolution reintenta— y sin esa
+  comprobación la misma llamada saldría dos y tres veces en el historial.
+- **Sólo si hay prospecto atado.** Un número desconocido no tiene ficha donde
+  apuntar nada.
+
+`created_by` es NOT NULL y en una llamada entrante no hay ningún usuario del CRM
+detrás: se apunta a nombre de **la gestora cuya línea la recibió**, que es quien
+de verdad tuvo el contacto. Y si esa escritura falla no se tira el webhook — la
+llamada ya está en el chat, que es lo que no se puede perder.
+
+### La respuesta automática
+
+`rejectCall` y `msgCall` son **ajustes de instancia de Evolution**, no algo
+nuestro: rechaza la llamada y contesta con un texto. Se configuran por gestora
+desde Conexión, y por defecto van apagados — quien sí coge el teléfono no debe
+rechazar a nadie.
+
+**Cuidado al guardarlos:** `/settings/set` no parchea, reemplaza el bloque
+entero. Mandar `{ rejectCall: true }` a secas apagaría `syncFullHistory` y la
+siguiente vinculación entraría sin historial. Por eso `guardarAjustes()` lee
+antes y manda todo junto, y si no puede leer no escribe nada.
+
+### La vía que no se ha tomado
+
+Evolution admite `wavoipToken` → `useVoiceCallsBaileys()`, que sí da voz de
+verdad. Es un **servicio externo de pago** (Wavoip): servidor y coste mensual.
+Queda anotado, no se hace.
+
+La otra es la **API oficial de WhatsApp Business**, que tiene llamadas desde
+2025 — pero el número registrado ahí deja de funcionar en la app del móvil, y las
+gestoras trabajan desde el móvil. Es cambio de modelo, no mejora.
+
+## Quién entra a mirar la sesión de otra persona
+
+Un administrador puede abrir el WhatsApp de una gestora — hace falta para
+ayudarla y para supervisar. Pero son sus conversaciones con clientes, y algunas
+serán personales: **poder mirarlas sin dejar rastro es lo que convierte una
+herramienta de trabajo en una de vigilancia.**
+
+Queda escrito en `user_activity_log` con la acción `whatsapp.mirar_sesion` y el
+id de la gestora en `details`. Esa tabla ya existía y ya la usa auth, así que
+**no hizo falta migración**: esto funciona esté como esté la base.
+
+Se apunta **una vez cada media hora por pareja** (quien mira, a quién mira). La
+pantalla del chat pregunta cada pocos segundos, así que sin el freno una tarde
+mirando dejaría miles de filas idénticas y el registro no serviría para leerlo,
+que es justo para lo que está.
+
+Para consultarlo:
+
+```sql
+SELECT a.created_at, u.nombre AS miro, a.details->>'gestora' AS a_quien, a.ip_address
+  FROM user_activity_log a
+  JOIN users u ON u.id = a.user_id
+ WHERE a.action = 'whatsapp.mirar_sesion'
+ ORDER BY a.created_at DESC;
+```
+
+Y si el registro falla no se bloquea a nadie: quien está ayudando a una gestora
+sigue trabajando, y el fallo va al registro del servidor.
 
 ## Para quien toca el código
 

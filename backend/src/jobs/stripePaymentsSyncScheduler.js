@@ -19,6 +19,16 @@ async function tick() {
         logger.warn({ projectId: pid, err: err.message }, 'Stripe cron sync error');
       }
     }
+  } catch (err) {
+    // Faltaba este catch, y no era un detalle: `tick` se pasa a `setTimeout` y a
+    // `setInterval`, que no esperan la promesa. Un fallo aqui —un parpadeo de
+    // Postgres al pedir los proyectos, por ejemplo— salia como rechazo sin
+    // capturar y **mataba el proceso entero**, con el CRM completo dentro.
+    //
+    // Ya hay red a nivel de proceso en `app.js`, pero eso es el ultimo recurso:
+    // un cron que falla tiene que apuntarlo y volver a intentarlo al siguiente
+    // turno, no dejar que suba.
+    logger.error({ err: err.message }, 'Stripe cron: fallo la vuelta, se reintenta en el siguiente turno');
   } finally { running = false; }
 }
 

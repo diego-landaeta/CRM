@@ -206,6 +206,72 @@ for (const { name, mod } of ALL_MODULES) {
 // Error handler (debe ir ultimo)
 app.use(errorHandler);
 
+/**
+ * Vuelve a encolar los adjuntos que se quedaron a medias.
+ *
+ * La cola de descarga vive en memoria, asi que un reinicio la vacia. Habia un
+ * boton para recuperarla, pero esperar a que una gestora lo pulse es esperar
+ * sentado: lo que ve es que las fotos no llegan, no que hay una cola muerta.
+ *
+ * Se hace por sesion, porque para descifrar un adjunto hace falta el socket de
+ * la sesion que lo recibio. Y con un retraso: al arrancar, Evolution todavia
+ * esta levantando las suyas, y pedirle archivos antes de tiempo es tirar
+ * peticiones que van a fallar.
+ */
+async function recuperarAdjuntosDeWhatsapp() {
+  setTimeout(async () => {
+    try {
+      const { query } = await import('./shared/config/db.js');
+      const media = await import('./modules/whatsapp/media.service.js');
+      const { rows } = await query(
+        `SELECT DISTINCT c.instancia
+           FROM wa_mensajes m
+           JOIN wa_conversaciones c ON c.id = m.conversacion_id
+          WHERE m.media_url IS NULL
+            AND m.tipo NOT IN ('texto', 'otro')
+            AND m.wa_id IS NOT NULL`
+      );
+      let total = 0;
+      for (const { instancia } of rows) total += await media.reencolarPendientes(instancia);
+      if (total) logger.info({ sesiones: rows.length, archivos: total }, 'WhatsApp: adjuntos pendientes recuperados tras el arranque');
+    } catch (err) {
+      // Que no se pueda recuperar no puede impedir arrancar: el boton de
+      // reintentar sigue estando para hacerlo a mano.
+      logger.warn({ err: err.message }, 'WhatsApp: no se pudieron recuperar los adjuntos pendientes');
+    }
+  }, 45_000).unref();
+}
+
+// ── La red de seguridad del proceso ──────────────────────────────────────────
+//
+// No habia ninguna, y eso significa que UN fallo asincrono sin capturar en
+// cualquier rincon tumba la API entera. Paso el 21/08/2026: un parpadeo de
+// Postgres, el cron de Stripe lanzo dentro de su `setTimeout` —tenia
+// `try/finally` pero no `catch`— y se llevo por delante el CRM completo.
+//
+// Y en WhatsApp eso duele el doble, porque la cola de descarga de adjuntos vive
+// en memoria: al reiniciar, los archivos del historial que estaban en cola se
+// quedan sin bajar y la gestora ve «⬇ Descargar» para siempre. Eso es lo que se
+// veia como «la sincronizacion va fatal».
+//
+// Una promesa rota no puede tirar el servidor: se apunta y se sigue sirviendo.
+// Una excepcion sincrona sin capturar SI se sale, porque ahi el proceso puede
+// haber quedado a medias — pero por la puerta, dando tiempo a cerrar, y PM2 lo
+// levanta. Al arrancar se recupera la cola, asi que reiniciar ya no pierde nada.
+process.on('unhandledRejection', (motivo) => {
+  logger.error(
+    { err: motivo instanceof Error ? motivo.message : String(motivo),
+      stack: motivo instanceof Error ? motivo.stack : undefined },
+    'Promesa rechazada sin capturar — se sigue sirviendo'
+  );
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err: err.message, stack: err.stack }, 'Excepcion sin capturar — se cierra');
+  // Un margen para que el registro salga antes de irse.
+  setTimeout(() => process.exit(1), 500).unref();
+});
+
 // Solo escuchar si no estamos en tests
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
@@ -219,6 +285,7 @@ if (process.env.NODE_ENV !== 'test') {
     startMetaAdsSyncScheduler();
     startTutorCommissionsScheduler();
     startVigilanteCatalogoScheduler();
+    recuperarAdjuntosDeWhatsapp();
   });
 }
 

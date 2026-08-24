@@ -64,6 +64,7 @@ import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { moduloApagado } from '@/shared/lib/modulos';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -98,22 +99,23 @@ const NAV_SECTIONS = [
           // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
           // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
-          // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
+          // que puede pasarle a su numero— ya esta, con su casilla y su registro
+          // de quien lo acepto (tarea #45).
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
-          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-          // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
-          // cada gestora a traves del navegador remoto, y ese metodo se ha
-          // retirado. La pantalla sigue existiendo pero llamaria a un servicio
-          // que ya no corre, asi que ensenaria un error. Vuelve cuando se
-          // rehaga con el chat nuevo, que ya guarda las conversaciones.
+          // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
+          // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
+          // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
+          // ruta que llegara a ellos. Vuelve cuando se rehaga sobre el chat
+          // nuevo, que ya guarda las conversaciones: sera leerlas, no meterse en
+          // la sesion de nadie.
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
           { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
           // La guia, en el menu y no escondida: si hay que preguntar donde esta,
           // ya se ha perdido a quien tenia que leerla.
-          { label: 'Como se usa', to: '/whatsapp/ayuda', icon: BookOpen },
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
@@ -238,11 +240,12 @@ export function applyLabel(original, overrides) {
 //
 // Va aqui y no en los bundles del servidor porque esto es el menu: el modulo del
 // backend puede estar montado y aun asi no querer enseñarlo.
-const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
-  .split(',').map((s) => s.trim()).filter(Boolean);
+// El criterio vive en shared/lib/modulos: no es solo el menu, tambien lo usa el
+// aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
+// que si y el otro que no.
 
 function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
-  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+  if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;

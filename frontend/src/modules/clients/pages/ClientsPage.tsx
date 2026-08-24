@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, lazy, Suspense, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
@@ -98,10 +99,6 @@ function fmtFecha(dateStr: string | null | undefined): string | null {
   return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
 }
 
-function cleanPhone(phone: string | null | undefined): string {
-  return (phone || '').replace(/[^\d]/g, '');
-}
-
 interface QuickActionsProps {
   client: Client;
   onUpsell?: (c: Client) => void;
@@ -110,7 +107,7 @@ interface QuickActionsProps {
 
 function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
   const navigate = useNavigate();
-  const wa = c.telefono ? cleanPhone(c.telefono) : null;
+  const wa = telefonoParaWhatsapp(c.telefono);
 
   // Se abre el chat DENTRO del CRM. Antes esto lanzaba wa.me en otra pestaña:
   // se salia del CRM, no quedaba registro, y con varias sesiones enlazadas
