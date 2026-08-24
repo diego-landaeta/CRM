@@ -1,5 +1,6 @@
+import PageHeader from '@/shared/components/ui/PageHeader';
 import { useCallback, useEffect, useState } from 'react';
-import { WhatsappLogo, Plus, Trash, FloppyDisk, Users, User } from '@phosphor-icons/react';
+import { Plus, Trash, FloppyDisk, Users, User } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -77,24 +78,17 @@ export default function PlantillasWhatsappPage() {
 
   return (
     <div className="space-y-4 max-w-4xl">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <WhatsappLogo size={26} weight="duotone" className="text-emerald-600" />
-            Plantillas de WhatsApp
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Las compartidas las ve todo el equipo. Las tuyas, solo tú.
-          </p>
-        </div>
-        {!nueva && (
+      <PageHeader
+        title="Plantillas de WhatsApp"
+        subtitle="Las compartidas las ve todo el equipo. Las tuyas, solo tú."
+        actions={!nueva && (
           <button type="button"
             onClick={() => setNueva({ label: '', body: '', ambito: esAdmin ? 'compartida' : 'personal' })}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
             <Plus size={14} weight="bold" /> Nueva
           </button>
         )}
-      </header>
+      />
 
       <p className="text-xs text-muted-foreground">
         Variables disponibles:{' '}

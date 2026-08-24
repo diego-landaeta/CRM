@@ -52,7 +52,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg sm:text-xl font-semibold truncate">{lead.nombre}</h1>
+                <h2 className="text-lg sm:text-xl font-semibold truncate">{lead.nombre}</h2>
                 <StatusBadge status={lead.estado} showIcon />
               </div>
               <p className="text-muted-foreground text-xs mt-0.5">

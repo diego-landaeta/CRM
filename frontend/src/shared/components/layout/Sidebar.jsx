@@ -290,7 +290,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
-          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          'w-full flex items-center justify-center h-9 rounded-md transition-colors',
           hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -304,7 +304,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
+          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -374,7 +374,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
         aria-label={collapsed ? panel.label : panel.label}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
         )}
       >
         <Icon size={18} weight="regular" />
@@ -397,7 +397,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -428,7 +428,7 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         aria-label={`${displayLabel} — Próximamente`}
         className={cn(
           'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5'
         )}
       >
         <Icon size={18} weight="regular" />
@@ -457,8 +457,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -502,8 +502,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -579,7 +579,7 @@ function tonoDe(nombre = '') {
   return TONOS[n % TONOS.length];
 }
 
-function ProjectAvatar({ project, size = 'md' }) {
+export function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
   const [falloImagen, setFalloImagen] = useState(false);
   const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
@@ -1115,7 +1115,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       {/* Navigation */}
       <nav className={cn(
         'flex-1 overflow-y-auto min-h-0 sidebar-scroll',
-        collapsed ? 'space-y-2 -mr-1 pr-1' : 'space-y-4 -mr-2 pr-2'
+        collapsed ? 'space-y-1.5 -mr-1 pr-1' : 'space-y-3 -mr-2 pr-2'
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
@@ -1245,9 +1245,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </>
           )}
         </button>
-        <Suspense fallback={<div className="w-9 h-9 rounded-lg bg-secondary flex-shrink-0" />}>
-          <NotificationsBell />
-        </Suspense>
+        {/* La campana subió a la cabecera (Topbar): arriba a la derecha es
+            donde se busca, y desde ahí se ve sin desplegar el menú. */}
       </div>
 
       {/* User menu (Portal — escapa del sidebar) */}

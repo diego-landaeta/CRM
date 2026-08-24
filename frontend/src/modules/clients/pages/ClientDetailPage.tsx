@@ -219,7 +219,7 @@ export default function ClientDetailPage() {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-bold">{lead.nombre}</h1>
+            <h2 className="text-xl font-bold">{lead.nombre}</h2>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
               <CheckCircle size={11} weight="fill" /> Cliente
             </span>

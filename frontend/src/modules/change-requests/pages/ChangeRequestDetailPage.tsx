@@ -185,7 +185,7 @@ export default function ChangeRequestDetailPage() {
               {ESTADO_LABELS[rfc.estado] || rfc.estado}
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-2">{rfc.titulo}</h1>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2">{rfc.titulo}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Solicitante: <strong>{rfc.solicitante_nombre}</strong> ({rfc.solicitante_email})
             · {new Date(rfc.fecha_solicitud).toLocaleDateString('es-ES')}
