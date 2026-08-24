@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
-import PanelCola from '../components/PanelCola';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -694,10 +693,6 @@ export default function LeadsPage() {
           </button>
         </div>
       </div>
-
-      {/* A quién le toca el siguiente. Va arriba del listado porque es una
-          pregunta que se hace antes de mirar la lista, no después. */}
-      <PanelCola projectId={activeProject?.id} onRepartido={refetch} />
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
