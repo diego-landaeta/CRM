@@ -421,11 +421,29 @@ export default function ConexionPage() {
             </>
           ) : (
             <>
-              <p className="font-semibold">Todo listo</p>
+              {/* No dice «Todo listo».
+                  Que no entre nada desde hace medio minuto significa «ha parado»,
+                  no «ha terminado»: si el movil pierde cobertura o el servicio se
+                  reinicia a mitad, el historial se corta y esto se veia
+                  exactamente igual que si hubiera acabado. Se decia «Todo listo»
+                  con la mitad de las conversaciones sin traer, y quien lo leia se
+                  quedaba tan tranquilo hasta que echaba en falta un chat. */}
+              <p className="font-semibold">
+                {(sync?.mensajes ?? 0) > 0 ? 'Ya no entra nada nuevo' : 'Enlazado, pero no ha entrado nada'}
+              </p>
               <p className="text-muted-foreground">
-                {sync ? `${sync.conversaciones} chats · ${sync.mensajes} mensajes.` : ''}
-                {' '}Las conversaciones nuevas aparecen solas y se atan al prospecto que tenga ese teléfono.
-                Solo las ves tu.
+                {(sync?.mensajes ?? 0) > 0
+                  ? <>Han entrado <strong className="text-foreground">{sync?.conversaciones} chats</strong> y{' '}
+                      <strong className="text-foreground">{sync?.mensajes} mensajes</strong>. Las conversaciones
+                      nuevas aparecen solas y se atan al prospecto que tenga ese teléfono. Solo las ves tú.</>
+                  : <>El número está enlazado pero todavía no ha llegado ninguna conversación. Si elegiste
+                      «Empezar de cero» es lo normal: entrarán según te escriban.</>}
+              </p>
+              {/* La salida, dicha antes de que la busque. */}
+              <p className="text-xs text-muted-foreground">
+                ¿Echas algo en falta? WhatsApp manda el historial de una vez y no se puede volver a pedir a
+                medias: hay que <strong className="text-foreground">desvincular y enlazar otra vez</strong>,
+                eligiendo cuánto traerte. Lo que ya está guardado no se pierde.
               </p>
             </>
           )}
