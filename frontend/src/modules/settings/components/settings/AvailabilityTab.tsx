@@ -58,16 +58,16 @@ export default function AvailabilityTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm">{u.nombre}</span>
-                    <span className="text-micro px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    <span className="text-secundario px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                       {ROLE_LABELS[u.role] || u.role}
                     </span>
                     {!u.active && (
-                      <span className="text-micro px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                      <span className="text-secundario px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
                         Inactivo
                       </span>
                     )}
                     {bloqueado && (
-                      <span className="text-micro px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 inline-flex items-center gap-1">
+                      <span className="text-secundario px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 inline-flex items-center gap-1">
                         <Clock size={10} weight="bold" />
                         Ausente hasta {formatFecha(u.bloque_activo!.fecha_fin)}
                       </span>
@@ -75,7 +75,7 @@ export default function AvailabilityTab() {
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                   {!u.is_available && u.unavailable_reason && (
-                    <p className="text-meta text-amber-700 dark:text-amber-400 mt-0.5">Motivo: {u.unavailable_reason}</p>
+                    <p className="text-secundario text-amber-700 dark:text-amber-400 mt-0.5">Motivo: {u.unavailable_reason}</p>
                   )}
                 </div>
 
@@ -99,7 +99,7 @@ export default function AvailabilityTab() {
                   <CalendarBlank size={13} />
                   Gestionar
                   {u.bloques_futuros > 0 && (
-                    <span className="text-micro font-bold bg-primary/15 text-primary rounded-full px-1.5">
+                    <span className="text-secundario font-bold bg-primary/15 text-primary rounded-full px-1.5">
                       {u.bloques_futuros}
                     </span>
                   )}

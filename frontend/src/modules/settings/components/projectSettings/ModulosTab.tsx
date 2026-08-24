@@ -56,7 +56,7 @@ export default function ModulosTab({ project, onSaved }) {
       {Object.entries(MODULES_REGISTRY).map(([groupKey, group]) => (
         <div key={groupKey} className="bg-muted/20 rounded-md border border-border overflow-hidden">
           <div className="px-4 py-2 border-b border-border bg-muted/40">
-            <p className="text-meta font-medium text-muted-foreground">{group.label}</p>
+            <p className="text-secundario font-medium text-muted-foreground">{group.label}</p>
           </div>
           <div className="divide-y divide-border">
             {group.items.map((item) => {
@@ -67,7 +67,7 @@ export default function ModulosTab({ project, onSaved }) {
                   <div>
                     <p className="text-sm font-semibold">{item.label}</p>
                     {item.requires && (
-                      <p className="text-micro text-muted-foreground">Requiere: {item.requires.join(', ')}</p>
+                      <p className="text-secundario text-muted-foreground">Requiere: {item.requires.join(', ')}</p>
                     )}
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">

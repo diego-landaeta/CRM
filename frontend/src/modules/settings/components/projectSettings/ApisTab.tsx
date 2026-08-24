@@ -57,21 +57,21 @@ export default function ApisTab({ project }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">{svc.name}</p>
-                  <p className="text-meta text-muted-foreground">{svc.description}</p>
-                  {cred && <p className="text-micro font-mono text-muted-foreground mt-0.5">{cred.masked_value}</p>}
+                  <p className="text-secundario text-muted-foreground">{svc.description}</p>
+                  {cred && <p className="text-secundario font-mono text-muted-foreground mt-0.5">{cred.masked_value}</p>}
                 </div>
                 {cred ? (
                   <>
-                    <span className={`px-2 py-0.5 rounded-full text-micro font-medium ${
+                    <span className={`px-2 py-0.5 rounded-full text-secundario font-medium ${
                       cred.last_test_result === 'ok'
                         ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                     }`}>{cred.last_test_result || 'sin probar'}</span>
-                    <button onClick={() => handleTest(cred.id)} className="text-meta px-2 py-1 rounded bg-blue-50 text-blue-600 font-semibold">Test</button>
-                    <button onClick={() => setDialogSvc(svc)} className="text-meta px-2 py-1 rounded border border-border font-semibold">Editar</button>
+                    <button onClick={() => handleTest(cred.id)} className="text-secundario px-2 py-1 rounded bg-blue-50 text-blue-600 font-semibold">Test</button>
+                    <button onClick={() => setDialogSvc(svc)} className="text-secundario px-2 py-1 rounded border border-border font-semibold">Editar</button>
                     <button onClick={() => handleDelete(cred.id)} aria-label="Eliminar credencial" className="p-1 rounded hover:bg-red-50 text-red-500"><X size={14} /></button>
                   </>
                 ) : (
-                  <button onClick={() => setDialogSvc(svc)} className="text-meta px-3 py-1.5 rounded-lg bg-primary text-white font-semibold">Configurar</button>
+                  <button onClick={() => setDialogSvc(svc)} className="text-secundario px-3 py-1.5 rounded-lg bg-primary text-white font-semibold">Configurar</button>
                 )}
               </div>
             );
@@ -121,7 +121,7 @@ function CredentialQuickDialog({ project, service, existing, onClose, onSaved })
           </div>
           <p className="text-xs text-muted-foreground">{service.description}</p>
           <div>
-            <label className="text-micro font-medium text-muted-foreground block mb-1">
+            <label className="text-secundario font-medium text-muted-foreground block mb-1">
               {existing ? 'Nuevo valor (si no lo cambias, deja vacio y cancela)' : 'API Key / Token'}
             </label>
             <input

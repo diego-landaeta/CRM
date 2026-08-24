@@ -34,7 +34,7 @@ export default function UserActionsMenu({
             <button
               role="menuitem"
               onClick={onEdit}
-              className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-body hover:bg-muted transition-colors"
+              className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-normal hover:bg-muted transition-colors"
             >
               <PencilSimple size={14} /> Editar usuario
             </button>
@@ -42,7 +42,7 @@ export default function UserActionsMenu({
               <button
                 role="menuitem"
                 onClick={onAvailability}
-                className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-body hover:bg-muted transition-colors"
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-normal hover:bg-muted transition-colors"
               >
                 <CalendarBlank size={14} /> Ausencias
               </button>
@@ -50,7 +50,7 @@ export default function UserActionsMenu({
             <button
               role="menuitem"
               onClick={onToggleActive}
-              className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-body hover:bg-muted transition-colors ${isActive ? 'text-red-500' : 'text-emerald-600'}`}
+              className={`w-full flex items-center gap-2.5 px-4 py-2 text-left text-normal hover:bg-muted transition-colors ${isActive ? 'text-red-500' : 'text-emerald-600'}`}
             >
               {isActive
                 ? <><UserCircleMinus size={14} /> Desactivar</>
