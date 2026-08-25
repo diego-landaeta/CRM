@@ -34,7 +34,7 @@
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 6% 10%;
     --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted-foreground: 240 4% 45%; /* 45 y no 46: sobre bg-muted, 46% da 4.43:1 y AA pide 4.5. Un punto de luminosidad, invisible, y arregla todas las pildoras del CRM. */
     --accent: 240 5% 96%;
     --accent-foreground: 240 6% 10%;
     /* Era `0 84% 60%` (red-500): con texto blanco encima se queda en 3,8:1 y no
