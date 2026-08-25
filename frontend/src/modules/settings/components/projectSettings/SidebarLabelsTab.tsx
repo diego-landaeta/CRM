@@ -99,7 +99,7 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
           return (
             <div key={section} className="border border-border rounded-md overflow-hidden">
               <div className="bg-muted/40 px-4 py-2 border-b border-border flex items-center gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Sección</span>
+                <span className="text-secundario font-bold uppercase tracking-wider text-muted-foreground/80">Sección</span>
                 <input
                   value={sectionOverride || ''}
                   onChange={(e) => setOne(section, e.target.value)}
@@ -112,7 +112,7 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
                     type="button"
                     onClick={() => clearOne(section)}
                     aria-label={`Restaurar etiqueta de ${section}`}
-                    className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    className="text-secundario text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                   >
                     <ArrowCounterClockwise size={11} weight="bold" /> reset
                   </button>
@@ -124,7 +124,7 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
                   return (
                     <div key={`${section}-${label}-${type}`} className="px-4 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm">
                       <div className="flex items-center gap-2 sm:gap-3 sm:contents">
-                        <span className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 flex-shrink-0 ${
+                        <span className={`text-secundario font-bold uppercase rounded px-1.5 py-0.5 flex-shrink-0 ${
                           type === 'group' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
                           type === 'child' ? 'bg-muted text-muted-foreground' :
                           'bg-primary/10 text-primary'
@@ -145,7 +145,7 @@ export default function SidebarLabelsTab({ project, onSaved }: Props) {
                           type="button"
                           onClick={() => clearOne(label)}
                           aria-label={`Restaurar etiqueta de ${label}`}
-                          className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0 self-start sm:self-auto"
+                          className="text-secundario text-muted-foreground hover:text-foreground inline-flex items-center gap-1 flex-shrink-0 self-start sm:self-auto"
                         >
                           <ArrowCounterClockwise size={11} weight="bold" /> reset
                         </button>

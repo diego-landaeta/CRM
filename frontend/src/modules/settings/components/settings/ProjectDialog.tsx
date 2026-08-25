@@ -136,18 +136,18 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
           <form onSubmit={handleSave} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Nombre *</label>
+                <label className="text-secundario font-medium text-muted-foreground mb-1 block">Nombre *</label>
                 <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className={inputClass} required />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Slug *</label>
+                <label className="text-secundario font-medium text-muted-foreground mb-1 block">Slug *</label>
                 <input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} className={inputClass + ' font-mono'} disabled={!!existing} placeholder="psiko-aprende" required />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Tipo</label>
+                <label className="text-secundario font-medium text-muted-foreground mb-1 block">Tipo</label>
                 <Select<string>
                   value={form.type}
                   onChange={(v) => setForm({ ...form, type: v })}
@@ -159,27 +159,27 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
+                <label className="text-secundario font-medium text-muted-foreground mb-1 block">Alerta inactividad (dias)</label>
                 <input type="number" min="1" max="365" value={form.dias_alerta_inactividad} onChange={e => setForm({ ...form, dias_alerta_inactividad: Number(e.target.value) })} className={inputClass} />
               </div>
             </div>
 
             <div className="p-3 bg-muted/20 rounded-lg border border-border space-y-2">
               <div>
-                <p className="text-[11px] font-medium text-muted-foreground mb-0.5">Sociedad emisora (facturación)</p>
-                <p className="text-[11px] text-muted-foreground">Empresa que emite las facturas de este proyecto y su numeración.</p>
+                <p className="text-secundario font-medium text-muted-foreground mb-0.5">Sociedad emisora (facturación)</p>
+                <p className="text-secundario text-muted-foreground">Empresa que emite las facturas de este proyecto y su numeración.</p>
               </div>
               {newSoc ? (
                 <div className="grid grid-cols-3 gap-2 items-end">
                   <div className="col-span-2">
-                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Razón social *</label>
+                    <label className="text-secundario font-bold text-muted-foreground mb-1 block">Razón social *</label>
                     <input value={newSoc.razon_social} onChange={e => setNewSoc({ ...newSoc, razon_social: e.target.value })} className={inputClass} placeholder="Nueva Sociedad SL" autoFocus />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Serie</label>
+                    <label className="text-secundario font-bold text-muted-foreground mb-1 block">Serie</label>
                     <input value={newSoc.serie} onChange={e => setNewSoc({ ...newSoc, serie: e.target.value.toUpperCase() })} className={inputClass + ' font-mono'} placeholder="NUEVA" />
                   </div>
-                  <button type="button" onClick={() => setNewSoc(null)} className="col-span-3 text-[11px] text-muted-foreground hover:text-foreground text-left">← Elegir una sociedad existente</button>
+                  <button type="button" onClick={() => setNewSoc(null)} className="col-span-3 text-secundario text-muted-foreground hover:text-foreground text-left">← Elegir una sociedad existente</button>
                 </div>
               ) : (
                 <select
@@ -202,29 +202,29 @@ export default function ProjectDialog({ open, onClose, existing, onSaved }: { op
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-border">
               <div className="col-span-2">
-                <p className="text-[11px] font-medium text-muted-foreground mb-1">Etiqueta de producto</p>
-                <p className="text-[11px] text-muted-foreground">Personaliza como se llama &quot;Producto&quot; en este proyecto (ej: Formacion, Plan, Servicio)</p>
+                <p className="text-secundario font-medium text-muted-foreground mb-1">Etiqueta de producto</p>
+                <p className="text-secundario text-muted-foreground">Personaliza como se llama &quot;Producto&quot; en este proyecto (ej: Formacion, Plan, Servicio)</p>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Singular</label>
+                <label className="text-secundario font-bold text-muted-foreground mb-1 block">Singular</label>
                 <input value={form.producto_label} onChange={e => setForm({ ...form, producto_label: e.target.value })} className={inputClass} placeholder="Formacion" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Plural</label>
+                <label className="text-secundario font-bold text-muted-foreground mb-1 block">Plural</label>
                 <input value={form.producto_label_plural} onChange={e => setForm({ ...form, producto_label_plural: e.target.value })} className={inputClass} placeholder="Formaciones" />
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Meta Account ID (opcional)</label>
+              <label className="text-secundario font-medium text-muted-foreground mb-1 block">Meta Account ID (opcional)</label>
               <input value={form.meta_account_id} onChange={e => setForm({ ...form, meta_account_id: e.target.value })} className={inputClass} placeholder="act_1234567890" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Google Ads Account ID (opcional)</label>
+              <label className="text-secundario font-medium text-muted-foreground mb-1 block">Google Ads Account ID (opcional)</label>
               <input value={form.google_account_id} onChange={e => setForm({ ...form, google_account_id: e.target.value })} className={inputClass} placeholder="123-456-7890" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">GSC Property URL (opcional)</label>
+              <label className="text-secundario font-medium text-muted-foreground mb-1 block">GSC Property URL (opcional)</label>
               <input value={form.gsc_property} onChange={e => setForm({ ...form, gsc_property: e.target.value })} className={inputClass} placeholder="sc-domain:psikoaprende.com" />
             </div>
 

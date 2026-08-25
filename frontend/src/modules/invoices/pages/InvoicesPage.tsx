@@ -367,7 +367,7 @@ export default function InvoicesPage() {
             </Link>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="tabla-cifras w-full text-[13px]">
               <tbody>
                 {stripeSinAsociar.slice(0, 8).map((p) => (
                   <tr key={p.id} className="border-b border-red-100 dark:border-red-900/20 last:border-0">
@@ -399,7 +399,7 @@ export default function InvoicesPage() {
             <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="tabla-cifras w-full text-[13px]">
               <thead className="bg-amber-100/40 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-900/40">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
@@ -443,7 +443,7 @@ export default function InvoicesPage() {
             <p className="text-xs text-muted-foreground">{esAbonos ? 'Las facturas rectificativas (de abono) aparecerán aquí. Créalas con “Nuevo abono”.' : esProformas ? 'Genera una con “Nueva proforma”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
           </div>
         ) : (
-          <table className="w-full text-[13px]">
+          <table className="tabla-cifras w-full text-[13px]">
             <thead className="bg-muted/50 border-y">
               <tr>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Código</th>

@@ -165,7 +165,7 @@ export default function AccountsPayablePage() {
           <>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Proveedor</th>
