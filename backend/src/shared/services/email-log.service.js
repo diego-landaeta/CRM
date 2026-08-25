@@ -68,3 +68,50 @@ export async function ultimos({ limite = 100, estado = null, etiqueta = null } =
   );
   return rows;
 }
+
+/**
+ * Los ultimos correos que el CRM intento mandar.
+ *
+ * Es la cuarta subfase de la tarea #27: «un sitio donde ver lo enviado — que
+ * salio, a quien y cuando». Sin esto, comprobar que el freno o los reintentos
+ * funcionan exige entrar a Postgres, y entonces no lo comprueba nadie.
+ *
+ * `estado` filtra por enviado / fallido / bloqueado, que es la pregunta que uno
+ * se hace de verdad: «¿que NO salio?».
+ */
+export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
+  try {
+    const tope = Math.min(Math.max(parseInt(limite, 10) || 50, 1), 200);
+    const { rows } = await query(
+      `SELECT id, clave, destinatarios, asunto, etiquetas, project_id,
+              estado, intentos, error, created_at
+         FROM email_envios
+        WHERE ($1::text IS NULL OR estado = $1)
+        ORDER BY created_at DESC, id DESC
+        LIMIT $2`,
+      [estado || null, tope]
+    );
+    return rows;
+  } catch (err) {
+    logger.error({ err: err.message }, 'Registro de correo: no se pudo leer');
+    return [];
+  }
+}
+
+/** Cuantos de cada estado en las ultimas 24 horas, para el resumen de arriba. */
+export async function resumenEnvios() {
+  try {
+    const { rows } = await query(
+      `SELECT estado, count(*)::int AS n
+         FROM email_envios
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+        GROUP BY estado`
+    );
+    const r = { enviado: 0, fallido: 0, bloqueado: 0 };
+    for (const f of rows) r[f.estado] = f.n;
+    return r;
+  } catch (err) {
+    logger.error({ err: err.message }, 'Registro de correo: no se pudo resumir');
+    return { enviado: 0, fallido: 0, bloqueado: 0 };
+  }
+}

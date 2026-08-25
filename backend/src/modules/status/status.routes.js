@@ -14,5 +14,8 @@ router.post('/incidents', roleGuard('admin', 'superadmin'), ctrl.createIncident)
 router.put('/incidents/:id', roleGuard('admin', 'superadmin'), ctrl.updateIncident);
 router.put('/components/:slug', roleGuard('admin', 'superadmin'), ctrl.updateComponent);
 router.get('/errors', roleGuard('admin', 'superadmin'), ctrl.getErrors);
+// Los correos que salieron y los que no. Mismo candado: aqui se ven
+// direcciones de clientes.
+router.get('/correos', roleGuard('admin', 'superadmin'), ctrl.getCorreos);
 
 export default router;

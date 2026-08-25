@@ -82,3 +82,27 @@ export async function getErrors(req, res, next) {
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
+
+/**
+ * GET /api/status/correos — que correos intento mandar el CRM.
+ *
+ * Es la cuarta subfase de la tarea #27. Sin esto, comprobar que el freno de
+ * pruebas o los reintentos funcionan exige entrar a Postgres — y entonces no lo
+ * comprueba nadie, que es exactamente lo que pasaba con los 3.133 intentos
+ * perdidos: estaban en el log del servidor y nadie los miro.
+ *
+ * Protegido como los errores: quien puede ver esto ve direcciones de clientes.
+ */
+export async function getCorreos(req, res, next) {
+  try {
+    const { ultimosEnvios, resumenEnvios } = await import('../../shared/services/email-log.service.js');
+    const estado = ['enviado', 'fallido', 'bloqueado'].includes(req.query.estado)
+      ? req.query.estado
+      : null;
+    const [envios, resumen] = await Promise.all([
+      ultimosEnvios({ estado, limite: req.query.limit }),
+      resumenEnvios(),
+    ]);
+    res.json({ success: true, data: { envios, resumen } });
+  } catch (err) { next(err); }
+}

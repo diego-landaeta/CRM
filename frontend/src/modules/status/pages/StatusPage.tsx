@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
+import CorreosEnviados from '../components/CorreosEnviados';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import {
   CheckCircle, WarningCircle, ArrowClockwise,
@@ -119,6 +120,11 @@ export default function StatusPage() {
           );
         })}
       </div>
+
+      {/* Los correos, aqui y no en una pantalla propia: esto es «estado del
+          sistema» y lo primero que se pregunta cuando algo no llega es si
+          salio. Antes habia que entrar a Postgres para saberlo. */}
+      <CorreosEnviados />
 
       <p className="text-xs text-muted-foreground text-center">
         Las credenciales se configuran en <strong>Configuración → APIs</strong> de cada proyecto.

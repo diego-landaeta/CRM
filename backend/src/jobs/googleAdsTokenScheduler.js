@@ -40,6 +40,12 @@ async function recordResult(id, result) {
   );
 }
 
+
+// El dia de hoy, para la clave de idempotencia. Se corta la fecha ISO en seco en
+// vez de formatear: da igual la zona horaria mientras sea la misma en las dos
+// comparaciones, y lo que se quiere es «un aviso al dia», no la medianoche exacta.
+const hoy = () => new Date().toISOString().slice(0, 10);
+
 async function notifyExpired(cred, errorCode, errorMessage, adminEmails) {
   if (adminEmails.length === 0) return;
   const projectLabel = cred.project_nombre || `(global, project_id=NULL)`;
@@ -56,6 +62,13 @@ async function notifyExpired(cred, errorCode, errorMessage, adminEmails) {
          o el refresh token expiro por inactividad (>6 meses).</p>
     `,
     tags: ['google-ads-token', `cred-${cred.id}`],
+    // UN aviso al dia por credencial, y no uno por arranque.
+    //
+    // Este trabajo hace su primer tick diez minutos despues de arrancar la
+    // aplicacion. Con el token caido, cinco reinicios en una tarde eran cinco
+    // correos identicos a los administradores — el caso que motivo la tarea #27.
+    // Mientras nadie lo arregle, el aviso se repite cada dia; eso si se quiere.
+    clave: `google-ads-caido-${cred.id}-${hoy()}`,
   });
 }
 
@@ -70,6 +83,9 @@ async function notifyReactivated(cred, adminEmails) {
       <p>Las metricas se sincronizaran de nuevo en el proximo ciclo.</p>
     `,
     tags: ['google-ads-token', `cred-${cred.id}`],
+    // Igual que el de caido: uno al dia. Aqui ademas evita el ping-pong si la
+    // credencial se recupera y se vuelve a caer en el mismo dia.
+    clave: `google-ads-recuperado-${cred.id}-${hoy()}`,
   });
 }
 
