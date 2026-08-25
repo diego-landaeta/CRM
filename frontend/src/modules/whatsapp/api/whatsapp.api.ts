@@ -130,7 +130,57 @@ export interface ConexionWhatsapp {
   estado?: string | null;
 }
 
+/** La ficha del prospecto que se ve en el popup del chat (tarea #64). */
+export interface FichaProspecto {
+  id: number;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  status: string;
+  notas: string | null;
+  fecha_solicitud: string | null;
+  created_at: string;
+  reincidente: boolean | null;
+  lead_duplicado_de: number | null;
+  proyecto: string | null;
+  responsable: string | null;
+  producto: string | null;
+}
+
+export interface InteraccionProspecto {
+  id: number;
+  tipo: string;
+  nota: string | null;
+  fecha: string | null;
+  quien: string | null;
+}
+
+/**
+ * Lo que devuelve la ficha. `prospecto` en null NO es un error: son las
+ * conversaciones de gente que escribe y todavia no esta en el CRM, que son
+ * muchas. En ese caso vienen el telefono y el nombre para poder crearla.
+ */
+export interface RespuestaFicha {
+  prospecto: FichaProspecto | null;
+  interacciones?: InteraccionProspecto[];
+  telefono: string | null;
+  nombre?: string | null;
+  esGrupo?: boolean;
+}
+
 export const chatApi = {
+  /**
+   * La ficha del prospecto de una conversacion, para el popup del chat.
+   *
+   * `usuarioId` NO es opcional de verdad: sin el, con la sesion de otra persona
+   * elegida el servidor busca en la del propio administrador y contesta que la
+   * conversacion no existe. Es el mismo descuido que ya aparecio en otras cinco
+   * llamadas de esta pantalla, y la tarea #64 pide justo lo contrario: que el
+   * popup funcione igual cuando un admin mira el WhatsApp de una gestora.
+   */
+  ficha: (conversacionId: number, usuarioId?: number | null): Promise<ApiResponse<RespuestaFicha>> =>
+    client.get(`/whatsapp/chats/${conversacionId}/ficha${qs({ usuarioId })}`),
+
   /** Pide el adjunto de un mensaje que no se bajo en su momento. */
   descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
     client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),

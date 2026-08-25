@@ -220,6 +220,43 @@ export async function abrirChat(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/whatsapp/chats/:id/ficha — el prospecto de esta conversacion.
+ *
+ * Lo justo para el popup del chat: quien es, en que estado esta, de quien es y
+ * sus ultimas anotaciones. El resto se ve en la ficha completa.
+ *
+ * OJO CON EL PERMISO, que aqui es facil equivocarse. No se usa el guardia de
+ * Prospectos —`exigirQueSeaSuyo`— porque comprueba que el prospecto sea de QUIEN
+ * PREGUNTA, y cuando un administrador esta mirando el WhatsApp de una gestora el
+ * prospecto es de ella: la ficha saldria vacia justo en el caso que hay que
+ * cubrir. El guardia bueno es el del propio chat: si puedes leer la
+ * conversacion, puedes ver de quien es. Lo pide asi la tarea #64.
+ *
+ * Una conversacion sin prospecto NO es un error: hay muchas, de gente que
+ * escribe y todavia no esta en el CRM. Se contesta con el telefono para que la
+ * pantalla ofrezca crearlo ya relleno.
+ */
+export async function ficha(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const prospecto = await model.fichaDeConversacion(conv.id);
+    if (!prospecto) {
+      return res.json({
+        success: true,
+        data: {
+          prospecto: null,
+          telefono: conv.telefono,
+          nombre: conv.nombre_push || null,
+          esGrupo: Boolean(conv.es_grupo),
+        },
+      });
+    }
+    const interacciones = await model.ultimasInteracciones(prospecto.id).catch(() => []);
+    res.json({ success: true, data: { prospecto, interacciones, telefono: conv.telefono } });
+  } catch (err) { next(err); }
+}
+
 // POST /api/whatsapp/chats/:id/adjunto  (multipart: archivo, pie)
 export async function adjunto(req, res, next) {
   try {

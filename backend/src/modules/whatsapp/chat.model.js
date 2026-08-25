@@ -196,6 +196,53 @@ export async function mensajes(conversacionId, limite = 100) {
   return rows.reverse();
 }
 
+/**
+ * La ficha del prospecto de una conversacion, resumida.
+ *
+ * Es para el popup del chat: lo justo para no tener que irse a Prospectos y
+ * volver — porque volver recarga el chat entero y con el la sesion de WhatsApp.
+ *
+ * Devuelve null si esa conversacion no tiene prospecto, que pasa mucho: gente
+ * que escribe y todavia no esta en el CRM. Quien llama distingue ese caso del
+ * de una conversacion que no existe.
+ */
+export async function fichaDeConversacion(conversacionId) {
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.notas,
+            l.fecha_solicitud, l.created_at, l.reincidente, l.lead_duplicado_de,
+            p.nombre  AS proyecto,
+            u.nombre  AS responsable,
+            pr.nombre AS producto
+       FROM wa_conversaciones c
+       JOIN leads l          ON l.id = c.lead_id AND l.deleted_at IS NULL
+       LEFT JOIN projects p  ON p.id = l.project_id
+       LEFT JOIN users u     ON u.id = l.responsable_id
+       LEFT JOIN products pr ON pr.id = l.producto_interes_id
+      WHERE c.id = $1`,
+    [conversacionId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Las ultimas anotaciones del prospecto, para el mismo popup.
+ *
+ * Cinco y no mas: esto es un vistazo, no el historial. Quien quiera el resto
+ * abre la ficha completa, que para eso esta el enlace.
+ */
+export async function ultimasInteracciones(leadId, cuantas = 5) {
+  const { rows } = await query(
+    `SELECT i.id, i.tipo, i.nota, i.fecha, u.nombre AS quien
+       FROM lead_interactions i
+       LEFT JOIN users u ON u.id = i.created_by
+      WHERE i.lead_id = $1
+      ORDER BY i.fecha DESC NULLS LAST, i.id DESC
+      LIMIT $2`,
+    [leadId, cuantas]
+  );
+  return rows;
+}
+
 export const porId = async (id) =>
   // es_grupo hace falta AQUI tambien, no solo en la lista: la cabecera del chat
   // lo usa para decidir que ensena debajo del nombre, y sin el pintaba el

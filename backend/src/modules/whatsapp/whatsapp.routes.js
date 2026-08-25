@@ -45,6 +45,7 @@ router.get('/usuarios', chat.usuarios);
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);
+router.get('/chats/:id/ficha', chat.ficha);
 router.post('/chats/:id/enviar', chat.enviar);
 router.post('/chats/:id/adjunto', uploadWhatsapp.single('archivo'), chat.adjunto);
 router.post('/chats/:id/no-escribir', chat.noEscribir);

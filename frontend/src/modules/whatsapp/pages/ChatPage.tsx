@@ -17,6 +17,8 @@ import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSe
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
 import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
+import FichaProspecto from '../components/FichaProspecto';
+import AvisoAlSalir from '../components/AvisoAlSalir';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -195,6 +197,10 @@ export default function ChatPage() {
   // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
   // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
   const [aPantalla, setAPantalla] = useState(false);
+  // Que conversacion tiene la ficha abierta. Se guarda el id y no el objeto:
+  // asi el popup se pide sus datos y no depende de lo que ya hubiera cargado la
+  // lista, que trae menos campos.
+  const [fichaDe, setFichaDe] = useState<number | null>(null);
   // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
   // elegir el fichero y no habia forma de ver que era hasta despues — y en
   // WhatsApp un mensaje no se recoge pasados unos minutos.
@@ -852,11 +858,21 @@ export default function ChatPage() {
                     : conv.lead_id ? `${conv.telefono} · prospecto`
                     : `${conv.telefono} · sin prospecto`} />
                 <ConversationHeader.Actions>
-                  {conv.lead_id && (
-                    <Link to={`/prospectos/${conv.lead_id}`} title="Ver la ficha del prospecto">
-                      <InfoButton />
-                    </Link>
-                  )}
+                  {/* La ficha, en un popup y SIN salir de aqui.
+                      Antes era un enlace a /prospectos/:id que navegaba en esta
+                      misma pestaña: al volver se recargaban las conversaciones,
+                      los mensajes del hilo y las firmas de los adjuntos. Varios
+                      segundos, y una gestora entra y sale cada dos mensajes.
+                      Es el motivo de la tarea #64.
+
+                      Y sale SIEMPRE, no solo con prospecto: la conversacion sin
+                      ficha es justo la que hay que poder convertir en una. */}
+                  <button type="button" onClick={() => setFichaDe(conv.id)}
+                    className="wa-btn-ficha"
+                    aria-label={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}
+                    title={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}>
+                    <InfoButton />
+                  </button>
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo en conversaciones de una persona: a un grupo no se
                       puede llamar desde un enlace `tel:`, y ofrecerlo seria
@@ -1093,6 +1109,31 @@ export default function ChatPage() {
         alAnadir={(fs) => setPorEnviar((p) => [...p, ...fs])} />
 
       {tour && <Tour alCerrar={() => setTour(false)} />}
+
+      {/* Avisa antes de que un enlace se lleve la pestaña fuera del chat. No
+          salta al moverse por dentro —cambiar de conversacion, plantillas— ni
+          con lo que ya abre pestaña nueva. Se apaga mientras hay un dialogo
+          abierto: dos ventanas encima de otra son un laberinto. */}
+      <AvisoAlSalir activo={fichaDe === null && !tour} />
+
+      {/* La ficha del prospecto. Crear una nueva SI saca del chat, pero es una
+          accion deliberada y con destino: se va a Prospectos con el telefono ya
+          puesto, en vez de dejar a la gestora copiandolo a mano. */}
+      {fichaDe !== null && (
+        <FichaProspecto
+          conversacionId={fichaDe}
+          deQuien={deQuien}
+          onCerrar={() => setFichaDe(null)}
+          onCrearProspecto={(telefono, nombre) => {
+            setFichaDe(null);
+            const q = new URLSearchParams();
+            if (telefono) q.set('telefono', telefono);
+            if (nombre) q.set('nombre', nombre);
+            window.open(`${import.meta.env.BASE_URL}prospectos?nuevo=1&${q}`.replace(/\/{2,}/g, '/'),
+              '_blank', 'noopener');
+          }}
+        />
+      )}
 
       <input ref={ficheroRef} type="file" className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"
