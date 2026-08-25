@@ -202,8 +202,8 @@ export const chatApi = {
   // Apunta que se ha llamado. La llamada la hace el movil, no el CRM: por esta
   // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo
   // que hoy se pierde de todas las llamadas que salen.
-  apuntarLlamada: (id: number): Promise<ApiResponse<{ telefono: string }>> =>
-    client.post(`/whatsapp/chats/${id}/llamada`),
+  apuntarLlamada: (id: number, usuarioId?: number | null): Promise<ApiResponse<{ telefono: string }>> =>
+    client.post(`/whatsapp/chats/${id}/llamada`, { usuarioId }),
 
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
@@ -233,11 +233,16 @@ export const chatApi = {
    * Lo que graba Chrome es webm y ese contenedor no la lleva en la cabecera,
    * asi que WhatsApp enseñaba una duracion inventada, mas larga que la real.
    */
-  adjunto: (id: number, archivo: File, pie?: string, segundos?: number): Promise<ApiResponse<MensajeWhatsapp>> => {
+  adjunto: (id: number, archivo: File, pie?: string, segundos?: number, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> => {
     const fd = new FormData();
     fd.append('archivo', archivo);
     if (pie) fd.append('pie', pie);
     if (segundos) fd.append('segundos', String(segundos));
+    // Va en el formulario y no en la direccion porque esto es multipart. Sin el,
+    // con la sesion de otra persona elegida el servidor busca en la del propio
+    // administrador: la octava vez que aparece lo mismo, y la encontro sola la
+    // prueba de `whatsappUsuarioId.test.js`.
+    if (usuarioId) fd.append('usuarioId', String(usuarioId));
     return client.post(`/whatsapp/chats/${id}/adjunto`, fd);
   },
 };

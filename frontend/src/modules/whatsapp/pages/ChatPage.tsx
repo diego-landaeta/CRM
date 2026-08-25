@@ -20,6 +20,7 @@ import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
+import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
 
@@ -214,6 +215,10 @@ export default function ChatPage() {
   // Los datos con los que se rellenan los huecos de la plantilla. Se piden al
   // abrir el selector y no antes: la mayoria de los mensajes no usan plantilla.
   const [datosPlantilla, setDatosPlantilla] = useState<DatosParaRellenar>({});
+  // A quien se va a llamar, y si el intento quedo apuntado.
+  const [llamando, setLlamando] = useState<
+    { telefono: string; nombre: string | null; apuntada: boolean } | null
+  >(null);
   // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
   // elegir el fichero y no habia forma de ver que era hasta despues — y en
   // WhatsApp un mensaje no se recoge pasados unos minutos.
@@ -461,16 +466,26 @@ export default function ChatPage() {
    * viene a resolver.
    */
   async function llamar(c: ChatWhatsapp) {
+    let apuntada = false;
     try {
-      await chatApi.apuntarLlamada(c.id);
+      // `deQuien` NO es opcional: sin el, con la sesion de otra persona elegida
+      // el servidor busca en la del propio administrador y contesta que la
+      // conversacion no existe. Por eso en pruebas habia CERO llamadas
+      // apuntadas mientras el boton parecia funcionar (tarea #67). Es la
+      // septima llamada de esta pantalla donde faltaba lo mismo.
+      const r = await chatApi.apuntarLlamada(c.id, deQuien);
+      apuntada = Boolean(r?.success);
       await cargarHilo(c.id);
       cargarLista();
     } catch {
       // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
-      // la persona, no alimentar el historial.
-      toast({ title: 'No se pudo apuntar la llamada', description: 'Se marca igual.' });
+      // la persona, no alimentar el historial. Pero se DICE, en el propio
+      // dialogo, en vez de con un aviso que se va solo.
+      apuntada = false;
     }
-    window.location.href = `tel:+${String(c.telefono).replace(/[^0-9]/g, '')}`;
+    // Y NO se navega a `tel:` a ciegas: en un ordenador eso no hace nada y el
+    // navegador lo ignora en silencio. Se enseña el numero con sus dos salidas.
+    setLlamando({ telefono: String(c.telefono || ''), nombre: c.lead_nombre || c.nombre_push || null, apuntada });
   }
 
   /** Los pone en la vista previa. No envia nada todavia. */
@@ -491,7 +506,7 @@ export default function ChatPage() {
       // va solo en el primero, que es lo que hace WhatsApp — repetirlo en cada
       // uno seria mandar el mismo texto tres veces.
       for (const [i, f] of porEnviar.entries()) {
-        const r = await chatApi.adjunto(abierto, f, i === 0 ? pie : '');
+        const r = await chatApi.adjunto(abierto, f, i === 0 ? pie : '', undefined, deQuien);
         if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       }
       setPorEnviar([]);
@@ -508,7 +523,7 @@ export default function ChatPage() {
     // no sabe si salio y vuelve a grabar.
     if (extra?.segundos) setVozSaliendo(extra.segundos);
     try {
-      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos);
+      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); setVozSaliendo(null); }
@@ -1162,6 +1177,15 @@ export default function ChatPage() {
         alAnadir={(fs) => setPorEnviar((p) => [...p, ...fs])} />
 
       {tour && <Tour alCerrar={() => setTour(false)} />}
+
+      {llamando && (
+        <Llamar
+          telefono={llamando.telefono}
+          nombre={llamando.nombre}
+          apuntada={llamando.apuntada}
+          onCerrar={() => setLlamando(null)}
+        />
+      )}
 
       {/* Avisa antes de que un enlace se lleve la pestaña fuera del chat. No
           salta al moverse por dentro —cambiar de conversacion, plantillas— ni
