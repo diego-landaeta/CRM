@@ -6,7 +6,7 @@ import {
   MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -19,6 +19,8 @@ import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
+import SelectorPlantillas from '../components/SelectorPlantillas';
+import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -145,8 +147,12 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
 }
 
 export default function ChatPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
+  const { activeProject } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+  };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Para el hueco {proyecto} de las plantillas.
+  const nombreProyecto = activeProject?.nombre ?? null;
 
   // De quien es el WhatsApp que se esta viendo. Una gestora solo tiene el suyo
   // y el selector ni aparece; quien manda puede abrir el de otra persona.
@@ -201,6 +207,13 @@ export default function ChatPage() {
   // asi el popup se pide sus datos y no depende de lo que ya hubiera cargado la
   // lista, que trae menos campos.
   const [fichaDe, setFichaDe] = useState<number | null>(null);
+  // El campo de escribir pasa a estar CONTROLADO. Antes no lo estaba y por eso
+  // no habia forma de meterle texto: elegir una plantilla no podia hacer nada.
+  const [borrador, setBorrador] = useState('');
+  const [plantillasAbiertas, setPlantillasAbiertas] = useState(false);
+  // Los datos con los que se rellenan los huecos de la plantilla. Se piden al
+  // abrir el selector y no antes: la mayoria de los mensajes no usan plantilla.
+  const [datosPlantilla, setDatosPlantilla] = useState<DatosParaRellenar>({});
   // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
   // elegir el fichero y no habia forma de ver que era hasta despues — y en
   // WhatsApp un mensaje no se recoge pasados unos minutos.
@@ -418,6 +431,7 @@ export default function ChatPage() {
       const r = await chatApi.enviar(abierto, t, citando?.id ?? null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       setCitando(null);
+      setBorrador('');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
   }
@@ -1063,7 +1077,44 @@ export default function ChatPage() {
                     </button>
                   </>
                 ) : null}
+                {/* Las plantillas, AQUI. Estaban solo en su pantalla, asi que
+                    habia que salir del chat, copiar a mano y volver — con lo
+                    cual no ahorraban nada. */}
+                {!bloqueo && projectId && (
+                  <button type="button" className="wa-btn-plantillas"
+                    aria-label="Usar una plantilla"
+                    title="Usar una plantilla"
+                    aria-expanded={plantillasAbiertas}
+                    onClick={() => {
+                      setPlantillasAbiertas((v) => !v);
+                      // Los datos para los huecos se piden al abrir, no antes.
+                      if (!plantillasAbiertas && abierto) {
+                        chatApi.ficha(abierto, deQuien)
+                          .then((r) => {
+                            if (!r.success) return;
+                            const p = r.data.prospecto;
+                            setDatosPlantilla(p
+                              ? { nombre: p.nombre, email: p.email, telefono: p.telefono, producto: p.producto }
+                              : { telefono: r.data.telefono, nombre: r.data.nombre });
+                          })
+                          .catch(() => setDatosPlantilla({}));
+                      }
+                    }}>
+                    <FileText size={15} />
+                    <span>Plantillas</span>
+                  </button>
+                )}
               </InputToolbox>
+
+              {plantillasAbiertas && projectId && (
+                <SelectorPlantillas
+                  projectId={projectId}
+                  datos={datosPlantilla}
+                  nombreProyecto={nombreProyecto}
+                  alElegir={(texto) => setBorrador(texto)}
+                  alCerrar={() => setPlantillasAbiertas(false)}
+                />
+              )}
 
               <MessageInput
                 placeholder={
@@ -1071,6 +1122,8 @@ export default function ChatPage() {
                   : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
+                value={borrador}
+                onChange={(_html, texto) => setBorrador(texto)}
                 onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
                 onAttachClick={() => ficheroRef.current?.click()}
                 sendDisabled={enviando || Boolean(bloqueo)} />

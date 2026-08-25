@@ -808,6 +808,139 @@
    es bajarla y oirla con otra cosa, asi que es lo que se ofrece. */
 /* El boton ⓘ de la cabecera. Era un enlace y ahora es un boton, asi que hay
    que devolverle el aspecto: el navegador le pone borde y fondo propios. */
+/* El panel de plantillas se posiciona respecto al contenedor del chat, asi que
+   este tiene que estar posicionado. Sin esto se colocaria respecto a la pagina
+   entera y aparaceria en una esquina. */
+.wa-marco .cs-chat-container { position: relative; }
+
+/* El selector de plantillas, encima del campo de escribir.
+   Va por encima del hilo y no dentro, para que no empuje los mensajes al
+   abrirse: si el hilo se mueve, se pierde de vista lo que se estaba leyendo. */
+.wa-plantillas {
+  position: absolute;
+  bottom: 100%;
+  left: 8px;
+  right: 8px;
+  max-width: 460px;
+  z-index: 20;
+  margin-bottom: 6px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--background));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  overflow: hidden;
+}
+.wa-plantillas-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.wa-plantillas-busca {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+}
+.wa-plantillas-cerrar {
+  color: hsl(var(--muted-foreground));
+  display: inline-flex;
+  border-radius: 4px;
+}
+.wa-plantillas-cerrar:hover { color: hsl(var(--foreground)); }
+.wa-plantillas-cerrar:focus-visible,
+.wa-plantilla:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+/* Se limita el alto y scrollea DENTRO: con cuarenta plantillas, sin esto el
+   panel taparia el chat entero. */
+.wa-plantillas-lista { max-height: 46vh; overflow-y: auto; }
+
+.wa-plantilla {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: pointer;
+}
+.wa-plantilla:last-child { border-bottom: 0; }
+.wa-plantilla:hover { background: hsl(var(--muted)); }
+.wa-plantilla-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.wa-plantilla-etiqueta {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+/* Dos lineas y corta: es un adelanto para reconocerla, no para leerla entera. */
+.wa-plantilla-cuerpo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+.wa-plantilla-hueco {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgb(180 83 9);
+}
+.dark .wa-plantilla-hueco { color: rgb(251 191 36); }
+
+.wa-plantillas-aviso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+.wa-plantillas-vacio { flex-direction: column; text-align: center; gap: 6px; }
+
+/* El boton que lo abre, en la barra del campo de escribir. */
+.wa-btn-plantillas {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.wa-btn-plantillas:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.wa-btn-plantillas:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+/* En movil ocupa todo el ancho: 460 px no caben en 375. */
+@media (max-width: 640px) {
+  .wa-plantillas { left: 4px; right: 4px; max-width: none; }
+  .wa-plantillas-lista { max-height: 40vh; }
+}
+
 .wa-btn-ficha {
   background: none;
   border: 0;
