@@ -296,6 +296,11 @@ export function useLeads(): UseLeadsResult {
         en_seguimiento: Number(merged.en_seguimiento) || 0,
         convertido: Number(merged.convertidos) || 0,
         no_interesado: Number(merged.no_interesados) || 0,
+        // Se sumaba arriba y luego se tiraba aqui, asi que `stats.sin_asignar`
+        // era `undefined` para todo el mundo. El servidor lo devuelve
+        // (lead.model.js: responsable_id IS NULL y aun vivo) y es el numero que
+        // dice si hay prospectos que no esta trabajando nadie.
+        sin_asignar: Number(merged.sin_asignar) || 0,
       } as Partial<LeadStats>);
     } catch {
       // Stats son secundarios, no bloquear UI

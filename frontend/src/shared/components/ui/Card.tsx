@@ -35,7 +35,10 @@ export default function Card({
   return (
     <div
       className={cn(
-        'bg-card text-card-foreground border border-border rounded-lg',
+        // `rounded-md` y `shadow-sm`, no `rounded-lg` sin sombra: es lo que
+        // pide la maqueta de referencia (suitedash-preview) — tarjetas planas
+        // con borde suave, no cajas flotando.
+        'bg-card text-card-foreground border border-border rounded-md shadow-sm',
         RELLENO[padding],
         overflowHidden && 'overflow-hidden',
         className,

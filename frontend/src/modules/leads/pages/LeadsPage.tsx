@@ -1,3 +1,4 @@
+import SaludComercial from '../components/SaludComercial';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -689,6 +690,17 @@ export default function LeadsPage() {
             </div>
           )}
       </div>
+
+      {/* Lo que pasa con los prospectos, antes de la tabla. Los numeros ya
+          venian del servidor; solo se usaban para unas pildoras dentro del
+          desplegable de filtros, donde no los ve nadie. */}
+      <SaludComercial
+        stats={stats}
+        urgencias={quickCounts}
+        filtroRapido={quickFilter}
+        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
+        onFiltroEstado={setFilterEstadoSafe}
+      />
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
