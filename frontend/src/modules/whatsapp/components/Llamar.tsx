@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Phone, Copy, Check, X, DeviceMobile, ArrowSquareOut, Monitor } from '@phosphor-icons/react';
+import { Phone, Copy, Check, X, DeviceMobile } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 
 /**
@@ -15,21 +15,15 @@ import Portal from '@/shared/components/ui/portal';
  * pulsaba y no pasaba nada (tarea #67). En un movil si funciona, y por eso se
  * escapo: se probo donde funcionaba.
  *
- * Aqui no se adivina el dispositivo —eso se hace mal siempre— sino que se dan
- * las salidas que hay. Peor que cualquiera de ellas es que no pase nada.
+ * Aqui no se adivina el dispositivo —eso se hace mal siempre— sino que se
+ * enseña el numero y se dan las dos salidas: marcar, que en un movil abre el
+ * telefono, y copiar, que sirve en cualquier sitio. Peor que las dos es que no
+ * pase nada.
  *
- * Y la primera es la que de verdad resuelve el problema: **WhatsApp Web hace
- * llamadas de voz desde el navegador** desde julio de 2026. Antes hacia falta
- * la aplicacion de escritorio; ahora no. O sea que la gestora NO tiene que coger
- * el movil: se le abre esa conversacion en WhatsApp Web y llama desde ahi, en la
- * misma pantalla en la que trabaja.
- *
- * Es gratis, es oficial y va cifrado de punta a punta — a diferencia de meter la
- * voz dentro del CRM, que solo se puede pagando a un tercero (ver tarea #47).
- *
- * Lo unico que hace falta es que su numero este vinculado tambien a WhatsApp
- * Web. Se puede: WhatsApp admite cuatro dispositivos vinculados, asi que el CRM
- * y WhatsApp Web conviven sin pelearse.
+ * NO se manda a WhatsApp Web aunque ahi si haya boton de llamar. Sacar a la
+ * gestora del CRM es lo contrario de para lo que existe este modulo: alli no
+ * queda registro de la llamada, ni hay plantillas, ni historial del prospecto.
+ * Se monto y se quito por eso.
  */
 export default function Llamar({
   telefono,
@@ -102,33 +96,18 @@ export default function Llamar({
             </p>
 
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              Desde el CRM no se puede hablar, pero{' '}
-              <strong className="text-foreground">WhatsApp Web sí llama</strong> — y ahí no
-              hace falta tocar el móvil.
+              La llamada se hace <strong className="text-foreground">desde tu móvil</strong>.
+              WhatsApp no deja hablar desde el ordenador.
             </p>
 
             <div className="flex flex-col gap-2 pt-1">
-              {/* La opcion buena primero: abre esa conversacion en WhatsApp Web,
-                  donde hay boton de llamar de verdad. */}
-              <a
-                href={`https://web.whatsapp.com/send?phone=${limpio.replace('+', '')}`}
-                target="_blank"
-                rel="noreferrer"
-                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium
-                           hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap
-                           focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Monitor size={15} weight="bold" aria-hidden="true" />
-                Abrir en WhatsApp Web y llamar
-                <ArrowSquareOut size={13} aria-hidden="true" />
-              </a>
               {/* Un enlace de verdad, no un `window.location`: asi el navegador
                   decide, y en un movil abre el telefono. En el ordenador puede
                   no hacer nada — para eso esta el boton de copiar debajo. */}
               <a
                 href={`tel:${limpio}`}
-                className="h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground
-                           hover:bg-muted inline-flex items-center justify-center gap-2 whitespace-nowrap
+                className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium
+                           hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap
                            focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <DeviceMobile size={15} weight="bold" aria-hidden="true" />
@@ -137,8 +116,8 @@ export default function Llamar({
               <button
                 type="button"
                 onClick={copiar}
-                className="h-8 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground
-                           inline-flex items-center justify-center gap-2 whitespace-nowrap
+                className="h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground
+                           hover:bg-muted inline-flex items-center justify-center gap-2 whitespace-nowrap
                            focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {copiado
