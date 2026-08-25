@@ -457,7 +457,9 @@ export default function ChatPage() {
    */
   async function llamar(c: ChatWhatsapp) {
     try {
-      await chatApi.apuntarLlamada(c.id);
+      // Tambien aqui: si un admin llama desde la sesion de una gestora, la
+      // llamada se apunta en la conversacion de ella, no en la suya.
+      await chatApi.apuntarLlamada(c.id, deQuien);
       await cargarHilo(c.id);
       cargarLista();
     } catch {
@@ -506,7 +508,10 @@ export default function ChatPage() {
     // no sabe si salio y vuelve a grabar.
     if (extra?.segundos) setVozSaliendo(extra.segundos);
     try {
-      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos);
+      // `deQuien` tambien aqui: sin el, el servidor busca la conversacion en la
+      // sesion de quien mira y no en la que se esta viendo — y contesta
+      // «Conversacion no encontrada». Es la unica llamada que se quedo sin el.
+      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); setVozSaliendo(null); }
