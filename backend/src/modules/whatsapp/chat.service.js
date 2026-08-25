@@ -48,7 +48,12 @@ const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 // El historial es lo unico que hay que esperar; una conversacion normal no.
 const pulsoHistorial = new Map();
 
+// El pulso general. Ya no lo lee ningun endpoint —«Sincronizando…» mira el del
+// historial— pero el mapa sigue vivo por dentro y esto es por donde se
+// comprueba. Se quedaba sin llamadas en `src/`, lo quite por muerto, y reventó
+// cuatro pruebas: el barrido no habia mirado en `tests/`.
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+
 export const ultimoDelHistorial = (instancia) => pulsoHistorial.get(instancia) || null;
 
 /**

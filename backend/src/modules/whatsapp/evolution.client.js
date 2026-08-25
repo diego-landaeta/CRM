@@ -244,24 +244,6 @@ export async function comprobarNumero(numero, nombre = INSTANCIA) {
   return { existe: uno?.exists ?? null, jid: uno?.jid || null };
 }
 
-/**
- * ¿Hay alguien escribiendo en esta conversacion?
- *
- * Devuelve { quien, que } o null. Nunca lanza: que no se sepa si el otro esta
- * escribiendo no puede impedir abrir el chat.
- */
-export async function quienEscribe() {
-  // Evolution no deja LEER la presencia de otro: solo `sendPresence`, que es
-  // para mandar la tuya. `/chat/presence` era del puente de Baileys y en
-  // produccion daba 404 — **136 en diez minutos**, porque la pantalla lo pedia
-  // cada cinco segundos con cada chat abierto. Eso enterraba los errores de
-  // verdad: a Diego le costo encontrar el fallo de las citas por culpa de esto.
-  //
-  // La via buena es el evento `presence.update` del webhook, que hay que
-  // encender en el contenedor y guardar en memoria. Hasta que eso este, no se
-  // pide: mejor quedarse sin el «escribiendo…» que llenar el registro.
-  return null;
-}
 
 /**
  * La agenda de esa sesion: como tienes guardado a cada uno.
