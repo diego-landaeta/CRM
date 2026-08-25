@@ -260,6 +260,15 @@ export interface UsuarioWhatsapp {
   soyYo: boolean;
   conectado: boolean;
   numero: string | null;
+  /**
+   * Si esta persona puede tener WhatsApp del CRM.
+   *
+   * Antes quien no podia NO SALIA en la lista, y nadie sabia por que — hoy los
+   * tutores. No aparecer es la peor forma de negar algo: parece un fallo y se
+   * pierde el rato buscandolo. Ahora sale, apagada y con su motivo.
+   */
+  puede: boolean;
+  motivo: string | null;
 }
 
 /**

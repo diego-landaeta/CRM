@@ -7,6 +7,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
+import { porQueNoPuede } from './roles.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
@@ -35,6 +36,19 @@ const VERSION_AVISO = 1;
  */
 async function usuarioObjetivo(req) {
   const propio = req.user.userId;
+
+  // Lo PRIMERO: si quien pregunta no puede tener WhatsApp, no lo tiene ni el
+  // suyo. Antes se devolvia la sesion propia antes de comprobar nada, asi que
+  // un tutor entraba a la suya aunque no saliera en ninguna lista.
+  //
+  // Se mira el rol del testigo de sesion y no la base: es lo que hace el resto
+  // del CRM, y consultar en cada peticion seria una consulta mas cada tres
+  // segundos con el chat abierto. La contrapartida es que un cambio de rol
+  // tarda en aplicarse lo que dure el testigo —quince minutos— y eso vale para
+  // quitar el acceso, no para darlo: quien lo gana entra en cuanto renueve.
+  const suyo = porQueNoPuede({ role: req.user.role, active: true });
+  if (suyo) throw new AppError(suyo, 403, 'SIN_WHATSAPP');
+
   const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
   if (!Number.isInteger(pedido) || pedido === propio) return propio;
 
@@ -43,7 +57,7 @@ async function usuarioObjetivo(req) {
   }
 
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.active,
+    `SELECT u.id, u.nombre, u.active, u.role, u.gestor_colaboraciones,
             EXISTS (
               SELECT 1 FROM user_projects a
               JOIN user_projects b ON b.project_id = a.project_id AND b.active
@@ -55,6 +69,11 @@ async function usuarioObjetivo(req) {
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
   }
+  // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
+  // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
+  // la pantalla no se la enseñara. La regla vive en `roles.js`, una sola vez.
+  const noPuede = porQueNoPuede(u);
+  if (noPuede) throw new AppError(noPuede, 403, 'SIN_WHATSAPP');
 
   // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
   // intento rechazado no es una mirada, y apuntarlo antes dejaria en el registro
@@ -872,11 +891,19 @@ export async function usuarios(req, res, next) {
 
     const { rows } = await query(
       soloMio
-        ? `SELECT id, nombre, email, role FROM users WHERE id = $1`
+        ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
+             FROM users WHERE id = $1`
         : (req.user.role === 'superadmin'
-            ? `SELECT id, nombre, email, role FROM users
-                WHERE active AND role IN ('superadmin','admin','gestor','soporte')
-                  AND NOT COALESCE(gestor_colaboraciones, false)
+            // NO se filtra por rol aqui.
+            //
+            // Antes la consulta llevaba `role IN (...)` y quien no estaba en esa
+            // lista simplemente NO APARECIA — hoy, los tutores. Nadie sabia por
+            // que, y no salir es la peor forma de negar algo: parece un fallo.
+            // Ahora salen todos y cada uno dice si puede tener WhatsApp y, si no,
+            // por que. Quien decide es `roles.js`, en un solo sitio.
+            ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
+                 FROM users
+                WHERE active
                 ORDER BY (id = $1) DESC, nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
@@ -889,9 +916,9 @@ export async function usuarios(req, res, next) {
             //
             // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
             // pregunta si comparte algun proyecto y se para en el primero.
-            : `SELECT u.id, u.nombre, u.email, u.role FROM users u
-                WHERE u.active AND u.role IN ('superadmin','admin','gestor','soporte')
-                  AND NOT COALESCE(u.gestor_colaboraciones, false)
+            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones
+                 FROM users u
+                WHERE u.active
                   AND EXISTS (
                     SELECT 1 FROM user_projects b
                       JOIN user_projects a ON a.project_id = b.project_id
@@ -923,11 +950,16 @@ export async function usuarios(req, res, next) {
     res.json({ success: true, data: rows.map((u) => {
       const instancia = evolution.instanciaDe(u.id);
       const est = porInstancia.get(instancia) || {};
+      // Se dice quien NO puede y por que, en vez de esconderlo. La pantalla lo
+      // enseña apagado con su motivo, que es lo que pide la tarea #68.
+      const motivo = porQueNoPuede(u);
       return {
         id: u.id, nombre: u.nombre, email: u.email, role: u.role,
         soyYo: u.id === yo,
         conectado: Boolean(est.conectado),
         numero: est.numero || null,
+        puede: motivo === null,
+        motivo,
       };
     })});
   } catch (err) { next(err); }
