@@ -61,6 +61,7 @@ import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js'
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
+import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -266,6 +267,7 @@ if (process.env.NODE_ENV !== 'test') {
     startMetaAdsSyncScheduler();
     startTutorCommissionsScheduler();
     startVigilanteCatalogoScheduler();
+    startLeadSinTocarScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
