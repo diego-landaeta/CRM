@@ -48,7 +48,22 @@ export async function update(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // Como estaba ANTES, para saber si pierde el acceso a WhatsApp.
+    const antes = await userService.getById(id).catch(() => null);
     const user = await userService.update(id, parsed.data);
+
+    // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
+    // sus conversaciones se quedan. El numero es suyo y no puede seguir
+    // enlazado a un CRM que ya no usa; las conversaciones con prospectos son de
+    // la empresa. Es el punto 3 de la tarea #68.
+    //
+    // No se espera al resultado ni se deja que rompa nada: cambiar un rol no
+    // puede fallar porque WhatsApp no conteste.
+    const wa = await import('../whatsapp/roles.js');
+    if (antes && wa.puedeTenerWhatsapp(antes) && !wa.puedeTenerWhatsapp(user)) {
+      wa.alPerderAcceso(id, `cambio de rol: ${antes.role} -> ${user.role}`).catch(() => {});
+    }
+
     res.json({ success: true, data: user });
   } catch (err) { next(err); }
 }
@@ -58,6 +73,12 @@ export async function deactivate(req, res, next) {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await userService.deactivate(id);
+
+    // Una baja tambien quita el acceso, y por el mismo motivo: quien ya no
+    // trabaja aqui no debe seguir con su numero enlazado.
+    const wa = await import('../whatsapp/roles.js');
+    wa.alPerderAcceso(id, 'baja del usuario').catch(() => {});
+
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
