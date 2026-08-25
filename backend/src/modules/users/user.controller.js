@@ -182,3 +182,56 @@ export async function deleteAvatar(req, res, next) {
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }
+
+/**
+ * GET /api/users/mis-avisos — que avisos por correo tengo encendidos.
+ * PATCH /api/users/mis-avisos — encender o apagar uno.
+ *
+ * Cuarta subfase de la tarea #28. Cada persona gestiona LOS SUYOS: no hace falta
+ * ser admin, y nadie puede tocar los de otro — el usuario sale del testigo de
+ * sesion, no del cuerpo de la peticion.
+ *
+ * En la base se guarda solo lo APAGADO. Aqui se devuelve al reves —encendido si
+ * o no— porque es como se pregunta y como se pinta la casilla.
+ */
+const AVISOS = [
+  { aviso: 'lead_sin_tocar', titulo: 'Prospecto sin contactar',
+    detalle: 'Cuando te asignan uno y pasa media hora sin que lo toques.' },
+  { aviso: 'resumen_del_dia', titulo: 'Resumen del dia',
+    detalle: 'Al cerrar la jornada: que ha entrado, que has hecho y que queda.' },
+  { aviso: 'plan_de_manana', titulo: 'Plan de mañana',
+    detalle: 'Por la noche, lo que te espera al dia siguiente.' },
+];
+
+export async function misAvisos(req, res, next) {
+  try {
+    const { query } = await import('../../shared/config/db.js');
+    const { rows } = await query(
+      'SELECT aviso FROM avisos_apagados WHERE user_id = $1', [req.user.userId]);
+    const apagados = new Set(rows.map((r) => r.aviso));
+    res.json({
+      success: true,
+      data: AVISOS.map((a) => ({ ...a, encendido: !apagados.has(a.aviso) })),
+    });
+  } catch (err) { next(err); }
+}
+
+export async function cambiarMiAviso(req, res, next) {
+  try {
+    const { aviso, encendido } = req.body || {};
+    if (!AVISOS.some((a) => a.aviso === aviso)) {
+      throw new AppError('Ese aviso no existe', 400, 'AVISO_DESCONOCIDO');
+    }
+    const { query } = await import('../../shared/config/db.js');
+    if (encendido) {
+      await query('DELETE FROM avisos_apagados WHERE user_id = $1 AND aviso = $2',
+        [req.user.userId, aviso]);
+    } else {
+      await query(
+        `INSERT INTO avisos_apagados (user_id, aviso) VALUES ($1, $2)
+         ON CONFLICT (user_id, aviso) DO NOTHING`,
+        [req.user.userId, aviso]);
+    }
+    res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
+  } catch (err) { next(err); }
+}

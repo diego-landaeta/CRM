@@ -62,6 +62,7 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -268,6 +269,7 @@ if (process.env.NODE_ENV !== 'test') {
     startTutorCommissionsScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
+    startResumenDiarioScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
