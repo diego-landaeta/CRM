@@ -49,15 +49,45 @@ describe('leadSchema', () => {
   });
 });
 
+// Contar elementos era la prueba equivocada: se rompe cada vez que el producto
+// crece —paso de 5 origenes a 8 y de 6 estados a 7— y no dice nada cuando de
+// verdad importa. Lo que hay que garantizar es que no falte ninguno de los que
+// el CRM da por hechos y que no haya duplicados, no cuantos son. Tarea #70.
 describe('ORIGEN_OPTIONS', () => {
-  it('has 5 items', () => {
-    expect(ORIGEN_OPTIONS).toHaveLength(5);
+  it('estan los origenes que el CRM da por hechos', () => {
+    const valores = ORIGEN_OPTIONS.map((o) => o.value);
+    for (const imprescindible of ['meta_ads', 'organico', 'referido']) {
+      expect(valores, `falta el origen «${imprescindible}»`).toContain(imprescindible);
+    }
+  });
+
+  it('no hay ninguno repetido', () => {
+    // Un duplicado no rompe nada visible: sale dos veces en el desplegable y
+    // los informes reparten el mismo origen en dos filas.
+    const valores = ORIGEN_OPTIONS.map((o) => o.value);
+    expect(new Set(valores).size).toBe(valores.length);
+  });
+
+  it('todos tienen etiqueta para enseñar', () => {
+    for (const o of ORIGEN_OPTIONS) {
+      expect(o.label, `«${o.value}» no tiene etiqueta`).toBeTruthy();
+    }
   });
 });
 
 describe('ESTADO_OPTIONS', () => {
-  it('has 6 items', () => {
-    expect(ESTADO_OPTIONS).toHaveLength(6);
+  it('estan los estados del embudo', () => {
+    // Estos los usa el pipeline y las metricas de conversion: si falta uno,
+    // hay prospectos que no caen en ninguna columna.
+    const valores = ESTADO_OPTIONS.map((o) => o.value);
+    for (const imprescindible of ['nuevo', 'contactado', 'convertido']) {
+      expect(valores, `falta el estado «${imprescindible}»`).toContain(imprescindible);
+    }
+  });
+
+  it('no hay ninguno repetido', () => {
+    const valores = ESTADO_OPTIONS.map((o) => o.value);
+    expect(new Set(valores).size).toBe(valores.length);
   });
 });
 
