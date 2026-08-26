@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as evolution from './evolution.client.js';
+import { textoDeBot, esDeBot } from './mensajes-de-bot.js';
 
 // Los adjuntos de WhatsApp.
 //
@@ -55,6 +56,10 @@ export function tipoDeMensaje(message) {
   if (message.documentMessage) return { tipo: 'documento', clave: 'documentMessage' };
   if (message.stickerMessage) return { tipo: 'sticker', clave: 'stickerMessage' };
   if (message.conversation || message.extendedTextMessage) return { tipo: 'texto', clave: null };
+  // Botones, menus, plantillas, sitios y contactos. No traen fichero que bajar,
+  // asi que van como texto: darles un tipo propio haria que la pantalla les
+  // pintara un adjunto que no existe. Antes caian en 'otro' y salian en blanco.
+  if (esDeBot(message)) return { tipo: 'texto', clave: null };
   return { tipo: 'otro', clave: null };
 }
 
@@ -65,6 +70,9 @@ export const textoDe = (m = {}) =>
   || m.imageMessage?.caption
   || m.videoMessage?.caption
   || m.documentMessage?.caption
+  // Lo ultimo, para no pisar nunca un texto de verdad: solo entra cuando arriba
+  // no habia nada, que es justo cuando la burbuja salia vacia.
+  || textoDeBot(m)
   || null;
 
 /**
