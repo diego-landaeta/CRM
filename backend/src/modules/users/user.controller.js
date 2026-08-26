@@ -201,6 +201,8 @@ const AVISOS = [
     detalle: 'Al cerrar la jornada: que ha entrado, que has hecho y que queda.' },
   { aviso: 'plan_de_manana', titulo: 'Plan de mañana',
     detalle: 'Por la noche, lo que te espera al dia siguiente.' },
+  { aviso: 'reporte_semanal', titulo: 'Reporte semanal',
+    detalle: 'Los lunes: como fue la semana comparada con la anterior. Solo administracion.' },
 ];
 
 export async function misAvisos(req, res, next) {
