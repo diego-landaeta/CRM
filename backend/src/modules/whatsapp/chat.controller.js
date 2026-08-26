@@ -117,6 +117,9 @@ export async function chats(req, res, next) {
       instancia: await instanciaObjetivo(req),
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       limite: parseInt(req.query.limite) || 50,
+      // Buscar en la base y no en el navegador: con el tope de 50, filtrar lo
+      // ya cargado dejaba fuera cualquier seguimiento de hace semanas.
+      busca: req.query.busca || null,
     })});
   } catch (err) { next(err); }
 }

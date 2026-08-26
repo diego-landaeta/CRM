@@ -138,10 +138,56 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   return fila;
 }
 
-export async function listar({ instancia, projectId = null, limite = 50 }) {
+/**
+ * Las conversaciones, y —si se busca— buscando en TODAS, no en las 50 primeras.
+ *
+ * Reportado por una gestora: «no aparecen los números de los seguimientos de
+ * tiempo atrás a pesar de buscar con nombre y número; una vez se envía el
+ * mensaje desde la app, aparece el chat».
+ *
+ * No era la búsqueda: era el tope. La lista traía las 50 más recientes y el
+ * filtro se aplicaba en el navegador sobre esas 50. Un seguimiento de hace
+ * semanas es la número 80, así que no estaba cargado y buscarlo no encontraba
+ * nada. Al mandarle un mensaje, `ultimo_at` sube al presente, entra en las 50 y
+ * aparece — que es exactamente lo que ella describía. Al grupo callado le
+ * pasaba lo mismo.
+ *
+ * Con `busca`, el tope deja de importar: filtra Postgres sobre la tabla entera.
+ */
+export async function listar({ instancia, projectId = null, limite = 50, busca = null }) {
   const params = [instancia];
   let filtro = '';
   if (projectId) { params.push(projectId); filtro = `AND (c.project_id = $${params.length} OR c.project_id IS NULL)`; }
+
+  const texto = String(busca ?? '').trim();
+  if (texto) {
+    params.push(`%${texto}%`);
+    const like = `$${params.length}`;
+    const condiciones = [
+      `c.nombre_push ILIKE ${like}`,
+      `l.nombre    ILIKE ${like}`,
+      `l.email     ILIKE ${like}`,
+    ];
+
+    // El telefono se compara SOLO con cifras. Buscar «+34 612 34 56 78» contra
+    // un «34612345678» guardado no casaba por culpa del mas y los espacios: es
+    // el mismo fallo que el de los duplicados por telefono de #65.
+    //
+    // Y solo si quedan cifras. Buscando «psiko» el resultado seria la cadena
+    // vacia, y un LIKE '%%' casa con TODAS las conversaciones — una busqueda
+    // que devuelve la lista entera parece que funciona y es lo contrario.
+    const cifras = texto.replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      const soloCifras = `$${params.length}`;
+      condiciones.push(
+        `regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE ${soloCifras}`,
+        `regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') LIKE ${soloCifras}`,
+      );
+    }
+    filtro += `\n      AND (${condiciones.join('\n        OR ')})`;
+  }
+
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
