@@ -48,10 +48,12 @@ pie. Pero **el panel sigue mal**, y eso es una decisión de Diego, no nuestra.
 | | | Sin ella |
 |---|---|---|
 | **127** | `registro_de_correos` | El correo sale pero no queda registro, la pantalla de Estado sale vacía, y **la idempotencia no frena**: la clave vive en esa tabla, así que una tarea repetida vuelve a mandar |
-| **131** | `avisos_por_correo` | Los avisos ni se mandan: la consulta usa esa tabla, falla, y el trabajo lo registra sin tumbar nada |
+| **132** | `avisos_por_correo` | Los avisos ni se mandan: la consulta usa esa tabla, falla, y el trabajo lo registra sin tumbar nada |
 
-Ojo con el número: la 128 ya estaba cogida por WhatsApp. La de los avisos es la
-**131**. Ya está corregido, pero se escapó una vez.
+Ojo con el número, que ha chocado **dos veces**. Primero la 128, ya cogida por
+WhatsApp. Luego la 131, que se la quedó `131_lead_whatsapp_usuario.sql` en
+`integracion/todo` — la misma que tumbó producción el 25/08 (ver #71). La de los
+avisos es la **132**.
 
 ### 3 · Ocho issues terminados y todavía abiertos
 

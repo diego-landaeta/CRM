@@ -150,7 +150,7 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 128 | 128_whatsapp_conversaciones.sql | Conversaciones y mensajes de WhatsApp. Es la tabla base del chat. |
 | 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando. Sin ella el aviso se ve pero no queda registro. |
 | 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje. Sin ella el mensaje se guarda igual, pero se pierde la cita. |
-| 131 | 131_avisos_por_correo.sql | Que avisos por correo ha apagado cada persona. **Sin aplicar.** |
+| 132 | 132_avisos_por_correo.sql | Que avisos por correo ha apagado cada persona. **Sin aplicar.** |
 
 > **Las de WhatsApp (122, 128, 129, 130) no estan todas aplicadas en produccion.**
 > El modulo esta apagado alli con `VITE_MODULOS_APAGADOS=whatsapp`, asi que
@@ -159,7 +159,7 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 > 129 no queda registro de quien acepto el aviso, sin la 130 se pierde a que
 > mensaje contestaba una respuesta citada.
 >
-> **Las dos del correo (127 y 131) estan escritas y sin aplicar.** Las aprueba
+> **Las dos del correo (127 y 132) estan escritas y sin aplicar.** Las aprueba
 > Diego, como todas. Mientras no esten:
 >
 > - sin la **127**, el envio de correo funciona pero no queda registro de nada:
@@ -167,13 +167,13 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 >   pantalla de Estado del sistema saldra vacia. Ademas, **sin ella la
 >   idempotencia no frena nada**: la clave se guarda en esa tabla, asi que una
 >   tarea repetida vuelve a mandar el correo.
-> - sin la **131**, los avisos de recordatorios llegan a todo el mundo y nadie
+> - sin la **132**, los avisos de recordatorios llegan a todo el mundo y nadie
 >   puede apagarselos. La consulta que los busca la usa, asi que **sin la tabla
 >   los avisos ni se mandan**: falla la consulta y el trabajo lo registra sin
 >   tumbar nada.
 >
 > Ojo con el numero: la 128 ya estaba cogida por WhatsApp. La de los avisos es
-> la **131**.
+> la **132**.
 
 
 ---

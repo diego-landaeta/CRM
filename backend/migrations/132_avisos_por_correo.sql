@@ -1,4 +1,4 @@
--- Migracion 131: que cada persona pueda apagar sus avisos por correo
+-- Migracion 132: que cada persona pueda apagar sus avisos por correo
 --
 -- Es la cuarta subfase de la tarea #28. Los tres avisos nuevos —lead sin tocar a
 -- los 30 minutos, resumen del dia y plan de mañana— se mandan a todo el mundo
