@@ -46,6 +46,7 @@ interface Pieza {
   estado: Estado;
   resumen?: string;
   desde?: string | null;
+  desdeQue?: string;
   detalle?: string | null;
   datos?: { tareas?: Tarea[]; webhook?: Webhook | null; [k: string]: unknown };
 }
@@ -214,7 +215,10 @@ export default function PiezasDelSistema() {
 
                   {cuando && (
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock size={12} aria-hidden="true" /> Última vez, {cuando}
+                      {/* Cada pieza dice de qué es su fecha. Con un «Última
+                          vez» para todas, la de la API —que es el último
+                          ERROR— se leía como si fuera lo contrario. */}
+                      <Clock size={12} aria-hidden="true" /> {p.desdeQue ?? 'Última vez'}, {cuando}
                     </p>
                   )}
 

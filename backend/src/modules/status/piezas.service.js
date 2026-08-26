@@ -60,6 +60,45 @@ async function baseDeDatos() {
   };
 }
 
+async function api() {
+  // Una tarjeta que diga «funciona» porque acaba de contestar no informa de
+  // nada: si la API estuviera caida no habria pantalla que mirar. Lo que si
+  // informa son los 5xx, que `errorHandler` ya venia guardando en
+  // `status_errors` desde hace tiempo sin que nadie los leyera nunca.
+  const { rows } = await query(
+    `SELECT COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour')   AS ultima_hora,
+            COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') AS ultimas_24h,
+            MAX(created_at)                                                  AS ultimo,
+            -- La ruta que mas falla, con los identificadores tapados: sirve
+            -- para saber DONDE mirar sin sacar a nadie en la pantalla.
+            (SELECT REGEXP_REPLACE(SPLIT_PART(path, '?', 1), '/[0-9]+', '/:id', 'g')
+               FROM status_errors
+              WHERE created_at > NOW() - INTERVAL '24 hours'
+              GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1)                     AS ruta
+       FROM status_errors`
+  );
+  const r = rows[0] || {};
+  const hora = Number(r.ultima_hora || 0);
+  const dia = Number(r.ultimas_24h || 0);
+  const arriba = Math.round(process.uptime() / 60);
+
+  let estado = 'bien';
+  let resumen = `Arriba desde hace ${arriba < 60 ? `${arriba} min` : `${Math.round(arriba / 60)} h`}`;
+  if (hora > 0) {
+    estado = hora >= 10 ? 'caida' : 'atencion';
+    resumen = `${hora} error${hora > 1 ? 'es' : ''} de servidor en la última hora`;
+  } else if (dia > 0) {
+    resumen = `Sin errores en una hora (${dia} en el día)`;
+  }
+  return {
+    estado, resumen,
+    desde: iso(r.ultimo),
+    desdeQue: 'Último error de servidor',
+    datos: { errores1h: hora, errores24h: dia, arribaMin: arriba },
+    detalle: hora > 0 && r.ruta ? `La que más falla: ${r.ruta}` : null,
+  };
+}
+
 async function correo() {
   const { rows } = await query(
     `SELECT MAX(created_at) FILTER (WHERE estado = 'enviado')   AS ultimo_ok,
@@ -96,6 +135,7 @@ async function correo() {
   return {
     estado, resumen,
     desde: iso(r.ultimo_ok),
+    desdeQue: 'Último correo enviado',
     datos: {
       ok24h: ok, fallos24h: fallos,
       // Los frenados no son fallos: es el freno de pruebas de #27 haciendo su
@@ -137,6 +177,7 @@ async function metaAds() {
   }
   return {
     estado, resumen, desde: iso(r.ultimo),
+    desdeQue: 'Última sincronización',
     datos: { cuentas, conError },
     detalle: conError > 0 ? String(r.motivo || '').slice(0, 300) : null,
   };
@@ -167,6 +208,7 @@ async function stripe() {
         estado: wh.resultado === 'aceptado' ? 'atencion' : 'caida',
         resumen: 'Llegan webhooks pero Stripe no está enlazado aquí',
         desde: wh.cuando,
+        desdeQue: 'Último webhook',
         datos: { webhook: wh },
         detalle: wh.motivo,
       };
@@ -193,6 +235,7 @@ async function stripe() {
 
   return {
     estado, resumen, desde: iso(r.ultima_sync),
+    desdeQue: 'Última sincronización',
     datos: {
       ultimoCobro: iso(r.ultimo_cobro),
       cobros7d: Number(r.cobros_7d || 0),
@@ -222,6 +265,7 @@ async function wooCommerce() {
 
   return {
     estado, resumen, desde: iso(r.cuando),
+    desdeQue: 'Última importación',
     datos: { creados: Number(r.total_created || 0), actualizados: Number(r.total_updated || 0) },
     detalle: fallo ? String(r.error_message || '').slice(0, 300) : null,
   };
@@ -257,6 +301,7 @@ async function tareas() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PIEZAS = [
+  { nombre: 'api',           titulo: 'API',                  comprobar: api },
   { nombre: 'base_de_datos', titulo: 'Base de datos',        comprobar: baseDeDatos },
   { nombre: 'correo',        titulo: 'Correo (Brevo)',       comprobar: correo },
   { nombre: 'meta_ads',      titulo: 'Meta Ads',             comprobar: metaAds },

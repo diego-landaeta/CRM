@@ -318,3 +318,60 @@ describe('el agujero que se vio antes de subirlo', () => {
     expect(ps.find((p) => p.nombre === 'stripe').estado).toBe('sin_configurar');
   });
 });
+
+describe('la API, que el ticket pide junto a la base de datos', () => {
+  it('no se limita a decir «funciona» por haber contestado', async () => {
+    // Si la API estuviera caida no habria pantalla que mirar: una tarjeta verde
+    // tautologica es ruido. Lo que informa son los 5xx, que errorHandler ya
+    // guardaba en status_errors sin que nadie los leyera.
+    respuestas.set('FROM status_errors', [{ ultima_hora: 4, ultimas_24h: 30, ultimo: new Date().toISOString(), ruta: '/api/leads/:id' }]);
+    const { piezas: ps } = await comprobarTodo();
+    const a = ps.find((p) => p.nombre === 'api');
+    expect(a.estado).toBe('atencion');
+    expect(a.resumen).toMatch(/4 errores de servidor/);
+  });
+
+  it('muchos errores en una hora es caida, no aviso', async () => {
+    respuestas.set('FROM status_errors', [{ ultima_hora: 40, ultimas_24h: 40, ultimo: new Date().toISOString(), ruta: '/api/x' }]);
+    const { piezas: ps } = await comprobarTodo();
+    expect(ps.find((p) => p.nombre === 'api').estado).toBe('caida');
+  });
+
+  it('la ruta que mas falla sale con los identificadores tapados', () => {
+    // Sirve para saber DONDE mirar sin sacar a nadie en pantalla. El
+    // enmascarado lo hace Postgres, aqui se comprueba que la consulta lo pide.
+    const fs = require('node:fs');
+    const src = fs.readFileSync('src/modules/status/piezas.service.js', 'utf8');
+    expect(src).toMatch(/REGEXP_REPLACE\(SPLIT_PART\(path, '\?', 1\), '\/\[0-9\]\+', '\/:id'/);
+  });
+
+  it('sin errores no acusa nada, solo dice cuanto lleva arriba', async () => {
+    respuestas.set('FROM status_errors', [{ ultima_hora: 0, ultimas_24h: 0, ultimo: null, ruta: null }]);
+    const { piezas: ps } = await comprobarTodo();
+    const a = ps.find((p) => p.nombre === 'api');
+    expect(a.estado).toBe('bien');
+    expect(a.resumen).toMatch(/Arriba desde hace/);
+    expect(a.detalle).toBeNull();
+  });
+});
+
+describe('lo que solo se ve mirando la pantalla', () => {
+  it('cada pieza dice DE QUE es su fecha', async () => {
+    // Se vio en la captura: la tarjeta de API ponia «Última vez, hace 4 días»
+    // y esa fecha era el ultimo ERROR 5xx. Con una etiqueta comun se leia justo
+    // al reves — como si la API llevara cuatro dias sin funcionar.
+    respuestas.set('FROM status_errors', [{ ultima_hora: 0, ultimas_24h: 2, ultimo: new Date().toISOString(), ruta: null }]);
+    const { piezas: ps } = await comprobarTodo();
+    expect(ps.find((p) => p.nombre === 'api').desdeQue).toBe('Último error de servidor');
+  });
+
+  it('y ninguna que traiga fecha se queda sin etiqueta', async () => {
+    respuestas.set('FROM status_errors', [{ ultima_hora: 0, ultimas_24h: 1, ultimo: new Date().toISOString() }]);
+    respuestas.set('FROM email_envios', [{ ultimo_ok: new Date().toISOString(), ok_24h: 1, fallos_24h: 0, frenados_24h: 0 }]);
+    respuestas.set('FROM meta_ad_accounts', [{ cuentas: 1, con_error: 0, ultimo: new Date().toISOString() }]);
+    respuestas.set('FROM wc_import_runs', [{ status: 'ok', cuando: new Date().toISOString(), total_fetched: 3 }]);
+    const { piezas: ps } = await comprobarTodo();
+    const sinEtiqueta = ps.filter((p) => p.desde && !p.desdeQue).map((p) => p.nombre);
+    expect(sinEtiqueta).toEqual([]);
+  });
+});
