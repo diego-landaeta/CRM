@@ -1273,3 +1273,38 @@
   color: #0b141a !important;
 }
 .wa-editando-guardar:disabled { opacity: .5; cursor: default; }
+
+/* Los dos claros que se colaban del kit.
+
+   El kit trae su propia paleta y esta pensada para fondo blanco. Aqui el panel
+   es oscuro, y estos dos se habian quedado sin pisar:
+
+     .cs-sidebar--left               border-right: rgb(209, 219, 227)
+     .cs-message-input__content-editor  background: rgb(198, 227, 250)
+
+   El primero es la raya vertical entre la lista y el hilo. El segundo es peor:
+   es un AZUL CLARO de fondo en la caja de escribir, que sobre el panel oscuro
+   se ve como una banda blanca cruzando toda la parte de abajo.
+
+   No se veian buscando fondos claros porque uno es un borde; ni buscando
+   bordes, porque el otro es un fondo. Hay que mirar las dos cosas. */
+/* La especificidad importa, y aqui costo dos intentos.
+
+   El kit lo pinta con:
+     .cs-main-container > .cs-sidebar.cs-sidebar--left   -> 0,3,0
+   y el primer intento fue:
+     .wa-marco .cs-sidebar--left                         -> 0,2,0   pierde
+
+   Estar mas abajo en el fichero no salva a una regla menos especifica. Se
+   copia la forma del kit y se le antepone el marco: 0,4,0. */
+.wa-marco .cs-main-container > .cs-sidebar.cs-sidebar--left {
+  border-right-color: var(--wa-borde);
+}
+/* La caja de escribir, por la misma razon. El kit le pone un azul claro que
+   sobre el panel oscuro se ve como una banda blanca cruzando todo el ancho. */
+.wa-marco .cs-message-input .cs-message-input__content-editor-container,
+.wa-marco .cs-message-input .cs-message-input__content-editor-wrapper,
+.wa-marco .cs-message-input .cs-message-input__content-editor {
+  background-color: var(--wa-cabecera);
+  color: var(--wa-texto);
+}

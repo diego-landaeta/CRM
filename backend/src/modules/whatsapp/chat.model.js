@@ -632,7 +632,12 @@ export async function mensajePorWaId(waId) {
 /** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
 export async function mensajePorId(id) {
   const { rows } = await query(
-    `SELECT m.id, m.wa_id, m.direccion, m.tipo, m.media_url, c.jid, c.instancia
+    // `conversacion_id`, `texto` y `ts` hacen falta para corregir un mensaje
+    // (#75): comprobar que es de ESTA conversacion, y si esta dentro de los 15
+    // minutos que deja WhatsApp. Sin la primera, la comparacion era contra
+    // `undefined` y el endpoint contestaba «Mensaje no encontrado» SIEMPRE.
+    `SELECT m.id, m.conversacion_id, m.wa_id, m.direccion, m.tipo, m.texto,
+            m.media_url, m.ts, c.jid, c.instancia
        FROM wa_mensajes m JOIN wa_conversaciones c ON c.id = m.conversacion_id
       WHERE m.id = $1`,
     [id]
