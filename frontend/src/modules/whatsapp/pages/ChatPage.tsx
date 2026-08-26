@@ -174,7 +174,11 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
  * de un tope que no es el real deja pasar ficheros que despues fallan. Cuando
  * se suba el de Nginx, se sube este a la vez — o se pone VITE_WHATSAPP_TOPE_MB.
  */
-const TOPE_ADJUNTO = Number(import.meta.env.VITE_WHATSAPP_TOPE_MB || 1) * 1024 * 1024;
+/**
+ * Mientras el servidor no diga el suyo. En cuanto contesta `/conexion`, manda
+ * el de verdad: el numero no se adivina desde aqui.
+ */
+const TOPE_POR_DEFECTO = 16 * 1024 * 1024;
 
 /**
  * Las «etiquetas» de la lista de chats (#72).
@@ -312,13 +316,22 @@ export default function ChatPage() {
   const trozos = useRef<Blob[]>([]);
 
   useEffect(() => {
-    const leer = () => chatApi.conexion().then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
+    // `deQuien` NO es opcional aqui. Sin el, un administrador que abre el
+    // WhatsApp de una gestora ve el estado de SU PROPIA conexion: si el tiene el
+    // numero enlazado, la pantalla dice «conectado» aunque el de ella este
+    // caido — y al reves, sale «no tienes WhatsApp enlazado» sobre una sesion
+    // que funciona. Es el mismo descuido que ya aparecio en otras llamadas de
+    // esta pantalla, y Diego lo arreglo en integracion/todo (cb3dc57).
+    const leer = () => chatApi.conexion(deQuien).then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
     leer();
     // La sesion se cae sola si el movil se queda sin internet. Se vigila para
     // que la gestora se entere en vez de escribir contra el vacio.
     const t = setInterval(leer, 30000);
     return () => clearInterval(t);
-  }, []);
+      // Depende de `deQuien`: al cambiar de sesion hay que volver a preguntar.
+    // Con [] se quedaba con la sesion con la que se abrio la pantalla y
+    // seguia enseñando el estado de la anterior.
+  }, [deQuien]);
 
   // Cambiar de persona vacia la pantalla antes de traer lo suyo. Sin esto se
   // quedan a la vista los chats de la anterior mientras carga, y basta un
@@ -534,7 +547,11 @@ export default function ChatPage() {
     if (!abierto || !m.texto) return;
     setReintentando(m.id);
     try {
-      const r = await chatApi.enviar(abierto, m.texto);
+      // Con `deQuien`: reintentar tiene que salir por la MISMA linea por la que
+      // se intento. Sin el, un administrador que reintenta un mensaje fallido de
+      // una gestora lo manda desde su propio numero — y el prospecto recibe a un
+      // desconocido en mitad de una conversacion.
+      const r = await chatApi.enviar(abierto, m.texto, null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setReintentando(null); }
@@ -587,16 +604,17 @@ export default function ChatPage() {
     // a nadie. Ese 413 no es de la aplicacion (multer acepta 16 MB): lo corta
     // Nginx, cuyo client_max_body_size por defecto es 1 MB. Mientras no se
     // suba en el servidor, al menos que se sepa antes y en cristiano.
-    const pesados = fs.filter((f) => f.size > TOPE_ADJUNTO);
+    const tope = conexion?.topeAdjuntoBytes || TOPE_POR_DEFECTO;
+    const pesados = fs.filter((f) => f.size > tope);
     if (pesados.length) {
       const cual = pesados[0];
       toast({
         title: 'El archivo pesa demasiado',
         description: `«${cual.name}» ocupa ${(cual.size / 1024 / 1024).toFixed(1)} MB y el servidor `
-          + `solo acepta ${(TOPE_ADJUNTO / 1024 / 1024).toFixed(0)} MB. Mandalo comprimido, o por otra via.`,
+          + `solo acepta ${(tope / 1024 / 1024).toFixed(0)} MB. Mandalo comprimido, o por otra via.`,
         variant: 'destructive',
       });
-      const caben = fs.filter((f) => f.size <= TOPE_ADJUNTO);
+      const caben = fs.filter((f) => f.size <= tope);
       if (!caben.length) return;
       setPorEnviar(caben);
       return;
@@ -766,6 +784,28 @@ export default function ChatPage() {
         title: 'Chat abierto',
         description: 'Si no es prospecto y nunca te ha escrito, se puede escribir igual — pero queda anotado.',
       });
+    } catch (e) { fallo(e); }
+  }
+
+  /**
+   * Abre el chat del numero que se acaba de buscar, sin mandarle nada.
+   *
+   * Es la salida del #73. El chat no esta en la base hasta que pasa un mensaje
+   * por el CRM —`syncFullHistory` esta en false y esa conversacion es anterior
+   * a enlazar el numero—, asi que ella tenia que ESCRIBIRLE para que apareciera:
+   * «una vez se envia el mensaje desde la app, aparece el chat». Escribir a
+   * alguien solo para poder verlo no es una forma de trabajar.
+   *
+   * `abrirChat` crea la conversacion y no manda nada. Un clic y esta ahi.
+   */
+  async function abrirLoBuscado() {
+    const t = buscaChats.replace(/[^0-9]/g, '');
+    if (t.length < 9) return;
+    try {
+      const r = await chatApi.abrirPorTelefono(t);
+      if (!r.success) throw new Error(r.error || 'No se pudo abrir');
+      setFiltro(''); setBuscaChats('');
+      await cargarLista(); setAbierto(r.data.id);
     } catch (e) { fallo(e); }
   }
 
@@ -1012,8 +1052,15 @@ export default function ChatPage() {
                 <p>
                   Los chats aparecen aquí <strong>cuando pasa un mensaje por el CRM</strong>.
                   Una conversación anterior a enlazar el número puede seguir en tu móvil y
-                  no estar todavía aquí: escríbele y aparecerá.
+                  no estar todavía aquí.
                 </p>
+                {/* Y aqui se abre, sin tener que escribirle. Antes la unica forma
+                    de que un chat viejo apareciera era mandarle un mensaje. */}
+                {buscaChats.replace(/[^0-9]/g, '').length >= 9 && (
+                  <button type="button" onClick={abrirLoBuscado} className="wa-abrir-buscado">
+                    Abrir el chat con {buscaChats.trim()}
+                  </button>
+                )}
                 <p>
                   Y los <strong>grupos no se muestran</strong>, a propósito: este número es
                   para escribir a prospectos, y entrar en grupos suma para que WhatsApp lo

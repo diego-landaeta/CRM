@@ -128,6 +128,8 @@ export interface ConexionWhatsapp {
   nombre?: string | null;
   conectado?: boolean;
   estado?: string | null;
+  /** Lo que de verdad acepta un adjunto. Lo dice el servidor, no se adivina. */
+  topeAdjuntoBytes?: number;
 }
 
 /** La ficha del prospecto que se ve en el popup del chat (tarea #64). */

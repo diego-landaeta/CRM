@@ -7,7 +7,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
-import { porQueNoPuede } from './roles.js';
+import { porQueNoPuede } from './roles.js';
+import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
