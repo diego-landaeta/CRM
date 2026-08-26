@@ -439,10 +439,16 @@ export async function recibir(cuerpo) {
   const m = datos?.message || {};
   const { tipo } = media.tipoDeMensaje(m);
   if (tipo === 'otro') {
-    logger.warn(
-      { instancia, claves: Object.keys(m).join(','), jid: destino.split('@')[0] },
-      'WhatsApp: tipo de mensaje que no se sabe leer — se guarda igual, pero revisar'
-    );
+    // Este aviso ya estaba, y es el que va a resolver de verdad lo que se ve en
+    // produccion: el numero de los leads enseña una fila tras otra de
+    // «Descargar otro» y ni una palabra. Desde aqui no se puede saber que tipo
+    // es —hay medio centenar de clases de mensaje— y adivinar seria eso,
+    // adivinar. Una linea de este registro lo dice.
+    //
+    // Ahora apunta tambien las claves de DENTRO del sobre: si el mensaje venia
+    // envuelto, con las de fuera solo se veia «ephemeralMessage» y no lo que
+    // llevaba dentro, que es lo que hace falta saber.
+    media.apuntarDesconocido(m, { instancia, jid: destino.split('@')[0] });
   }
 
   // El adjunto NO se baja aqui. Se apunta en la cola y se descarga despues.

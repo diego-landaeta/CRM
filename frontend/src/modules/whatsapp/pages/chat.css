@@ -1192,3 +1192,13 @@
 .wa-et-convertido     { background: rgba(139, 92,246,.20); color: #c4b5fd; }
 .wa-et-no_interesado  { background: rgba(239, 68, 68,.16); color: #fca5a5; }
 .wa-et-proxima_convocatoria { background: rgba(6,182,212,.16); color: #67e8f9; }
+
+/* Un mensaje de un tipo que el CRM no sabe leer. No es un archivo: ofrecer
+   «Descargar» era un boton que no podia funcionar nunca. */
+.wa-no-legible {
+  display: inline-block;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--wa-apagado);
+  padding: 2px 0;
+}

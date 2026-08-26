@@ -150,3 +150,50 @@ describe('enganchado donde hacia falta', () => {
     expect(tipoDeMensaje({ algoQueNadieHaVistoMessage: {} }).tipo).toBe('otro');
   });
 });
+
+describe('los sobres, que es lo que se ve en produccion', () => {
+  it('un documento con pie se lee, no se queda en «otro»', () => {
+    // En produccion, el numero por el que entran los leads enseña una fila tras
+    // otra de «Descargar otro» y ni una palabra. Son mensajes que acaban en tipo
+    // «otro» sin texto, y una causa muy probable son los SOBRES: WhatsApp mete
+    // el mensaje de verdad dentro de otro cuando es temporal, de una sola vista
+    // o un documento con pie. Sin abrirlos, lo de dentro no se ve nunca.
+    const m = { documentWithCaptionMessage: { message: { documentMessage: { fileName: 'dossier.pdf', caption: 'El dossier' } } } };
+    expect(tipoDeMensaje(m).tipo).toBe('documento');
+    expect(textoDe(m)).toBe('El dossier');
+  });
+
+  it('un mensaje temporal tambien', () => {
+    const m = { ephemeralMessage: { message: { conversation: 'Hola desde dentro del sobre' } } };
+    expect(tipoDeMensaje(m).tipo).toBe('texto');
+    expect(textoDe(m)).toBe('Hola desde dentro del sobre');
+  });
+
+  it('y uno de una sola vista', () => {
+    expect(tipoDeMensaje({ viewOnceMessageV2: { message: { imageMessage: {} } } }).tipo).toBe('imagen');
+  });
+
+  it('un sobre dentro de otro sobre', () => {
+    const m = { deviceSentMessage: { message: { ephemeralMessage: { message: { conversation: 'doble' } } } } };
+    expect(textoDe(m)).toBe('doble');
+  });
+
+  it('los botones del bot DENTRO de un sobre', () => {
+    // Las dos cosas a la vez: un sobre y un tipo que antes no se leia.
+    const m = { ephemeralMessage: { message: { buttonsResponseMessage: { selectedDisplayText: 'Si, me interesa' } } } };
+    expect(textoDe(m)).toBe('Si, me interesa');
+    expect(tipoDeMensaje(m).tipo).toBe('texto');
+  });
+
+  it('un sobre que se apunta a si mismo no cuelga el proceso', () => {
+    // Un mensaje mal formado no puede dejar colgado al que atiende el webhook.
+    const malo = {};
+    malo.ephemeralMessage = { message: malo };
+    expect(tipoDeMensaje(malo).tipo).toBe('otro');
+  });
+
+  it('y un mensaje sin sobre sigue igual que siempre', () => {
+    expect(textoDe({ conversation: 'sin sobre' })).toBe('sin sobre');
+    expect(tipoDeMensaje({ imageMessage: {} }).tipo).toBe('imagen');
+  });
+});

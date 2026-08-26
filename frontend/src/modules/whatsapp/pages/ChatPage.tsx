@@ -23,7 +23,7 @@ import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
-import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
+import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 
 // El chat de WhatsApp dentro del CRM.
@@ -80,6 +80,20 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
   // esperando detras. Lo que se deja fuera se pide aqui, de uno en uno y
   // saltandose la cola. Antes ponia «no se pudo descargar», que ademas era
   // mentira: no habia fallado nada, es que no le tocaba.
+  // Un «otro» NO tiene archivo que bajar, y ofrecerlo es un boton que no puede
+  // funcionar nunca. Asi se ve hoy en produccion el numero por el que entran los
+  // leads: una fila tras otra de «⬇ Descargar otro» y ni una palabra.
+  //
+  // «otro» quiere decir que el CRM no supo leer ese tipo de mensaje. Se dice, y
+  // se dice que el movil si lo enseña — que es lo unico util que se le puede
+  // contar a la gestora mientras se arregla.
+  if (m.tipo === 'otro') {
+    return (
+      <span className="wa-no-legible" title="El CRM no reconoce este tipo de mensaje">
+        Mensaje que el CRM aún no sabe mostrar — míralo en el móvil
+      </span>
+    );
+  }
   if (!m.media_url) {
     return (
       <button type="button" className="wa-pedir" onClick={() => alPedir(m.id)} disabled={bajando}>
