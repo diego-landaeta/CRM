@@ -1,6 +1,7 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
+import { vigilar } from './latido.js';
 
 /**
  * Los dos avisos de final y principio de jornada, de la tarea #28.
@@ -193,7 +194,7 @@ export function startResumenDiarioScheduler() {
     logger.info('Avisos diarios desactivados (RESUMEN_DISABLED=1)');
     return;
   }
-  setInterval(vuelta, TICK_MS);
+  vigilar('resumen_diario', 'Resumen del día y plan de mañana', vuelta, TICK_MS);
   logger.info({ tickMs: TICK_MS, horaResumen: HORA_RESUMEN, horaPlan: HORA_PLAN },
     'Avisos diarios iniciados');
 }

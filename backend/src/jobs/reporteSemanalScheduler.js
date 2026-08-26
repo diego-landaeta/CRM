@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import * as informes from '../modules/reports/report.model.js';
+import { vigilar } from './latido.js';
 
 /**
  * El reporte de los lunes, a direccion.
@@ -246,7 +247,7 @@ export function startReporteSemanalScheduler() {
     logger.info('Reporte semanal desactivado (REPORTE_SEMANAL_DISABLED=1)');
     return;
   }
-  setInterval(vuelta, TICK_MS);
+  vigilar('reporte_semanal', 'Reporte semanal', vuelta, TICK_MS);
   logger.info({ tickMs: TICK_MS, hora: HORA }, 'Reporte semanal iniciado');
 }
 

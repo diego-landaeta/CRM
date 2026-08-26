@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
+import { vigilar } from './latido.js';
 
 /**
  * «Tienes un prospecto sin tocar desde hace media hora.»
@@ -125,7 +126,7 @@ export function startLeadSinTocarScheduler() {
   // No se llama en el arranque: el primer tick espera un ciclo. Al levantar la
   // aplicacion la base puede no estar lista todavia, y ademas un reinicio no
   // deberia disparar correos — que es de lo que iba la tarea #27.
-  setInterval(vuelta, TICK_MS);
+  vigilar('prospecto_sin_tocar', 'Aviso de prospecto sin contactar', vuelta, TICK_MS);
   logger.info({ tickMs: TICK_MS, minutos: MINUTOS }, 'Aviso de leads sin tocar iniciado');
 }
 
