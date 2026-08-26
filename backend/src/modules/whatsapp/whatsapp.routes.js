@@ -52,6 +52,8 @@ router.post('/chats/:id/no-escribir', chat.noEscribir);
 // Llamar se hace desde el movil; el CRM solo lo apunta.
 router.post('/chats/:id/llamada', chat.registrarLlamada);
 router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
+// Corregir un mensaje ya enviado. WhatsApp deja 15 minutos (#75).
+router.patch('/mensajes/:id', chat.editarMensaje);
 router.get('/conexion', chat.conexion);
 router.get('/sincronizacion', chat.sincronizacion);
 router.post('/reintentar-archivos', chat.reintentarArchivos);

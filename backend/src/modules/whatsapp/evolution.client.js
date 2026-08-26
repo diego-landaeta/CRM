@@ -324,3 +324,56 @@ export const instancias = () => pedir('/instance/fetchInstances');
 /** Cerrar la sesion: el numero deja de estar vinculado al CRM. */
 export const cerrarSesion = (nombre = INSTANCIA) =>
   pedir(`/instance/logout/${nombre}`, { metodo: 'DELETE', esperaMs: 30000 });
+
+/**
+ * Edita un mensaje ya enviado. WhatsApp deja 15 minutos.
+ *
+ * Lo pide la tarea #75: «se siguen enviando y no permite corregir desde la app».
+ * Hasta ahora, un error de dedo en un mensaje a un prospecto se quedaba ahi para
+ * siempre — y la unica salida era mandar otro pidiendo perdon.
+ *
+ * SOBRE EL RIESGO DE INVENTARSE UN ENDPOINT, que es lo que paso en la #63:
+ *
+ * Alli el CRM le pedia a Evolution dos direcciones que no existen en la version
+ * que corre (2.3.7) y las pedia EN BUCLE: 136 errores en diez minutos, tapando
+ * los errores de verdad. Lo que fallo no fue intentarlo, fue seguir intentandolo.
+ *
+ * Aqui se intenta una vez. Si esta Evolution no lo trae, se apunta y no se
+ * vuelve a preguntar en toda la vida del proceso: `puedeEditar()` pasa a false,
+ * la pantalla deja de ofrecer el boton y no se escribe ni un error mas.
+ */
+let editarNoExiste = false;
+
+/** ¿Merece la pena ofrecer «editar»? Falso en cuanto se sabe que no existe. */
+export const puedeEditar = () => !editarNoExiste;
+
+export async function editarTexto(numero, { waId, jid, mio = true }, texto, nombre = INSTANCIA) {
+  if (editarNoExiste) return { ok: false, error: 'NO_SOPORTADO' };
+
+  const r = await pedir(`/chat/updateMessage/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      number: numero,
+      text: texto,
+      // La clave del mensaje que se corrige, igual que en la cita: Evolution
+      // necesita el objeto entero, no el identificador suelto.
+      key: { id: waId, remoteJid: jid, fromMe: Boolean(mio) },
+    },
+    esperaMs: 20000,
+  });
+
+  // 404 significa que esta version no lo trae. No es un fallo pasajero y
+  // reintentarlo no lo va a arreglar: se apaga y se dice UNA vez.
+  if (!r.ok && r.error === 'HTTP_404') {
+    editarNoExiste = true;
+    logger.warn(
+      { ruta: `/chat/updateMessage/${nombre}` },
+      'Evolution no soporta editar mensajes en esta version — se deja de ofrecer'
+    );
+    return { ok: false, error: 'NO_SOPORTADO' };
+  }
+  return r;
+}
+
+/** Para las pruebas: volver a empezar sin reiniciar el proceso. */
+export const _reiniciarEdicion = () => { editarNoExiste = false; };

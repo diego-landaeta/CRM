@@ -1223,3 +1223,16 @@
   cursor: pointer;
 }
 .wa-abrir-buscado:hover { filter: brightness(1.08); }
+
+/* Corregir un mensaje ya enviado (#75). Discreto: solo aparece durante los
+   15 minutos que WhatsApp deja, y no compite con el texto. */
+.wa-corregir {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--wa-apagado);
+  cursor: pointer;
+  opacity: .8;
+}
+.wa-corregir:hover { opacity: 1; color: var(--wa-texto); }
+.wa-corregir:disabled { cursor: default; opacity: .5; }

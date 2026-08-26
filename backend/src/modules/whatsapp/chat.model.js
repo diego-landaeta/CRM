@@ -717,3 +717,13 @@ export async function sinLeer(instancia) {
     } : null,
   };
 }
+
+
+/** Cambia el texto de un mensaje ya enviado, tras corregirlo en WhatsApp (#75). */
+export async function corregirTexto(id, texto) {
+  const { rows } = await query(
+    `UPDATE wa_mensajes SET texto = $2 WHERE id = $1 RETURNING *`,
+    [id, texto]
+  );
+  return rows[0] || null;
+}

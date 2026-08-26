@@ -183,6 +183,14 @@ export const chatApi = {
   ficha: (conversacionId: number, usuarioId?: number | null): Promise<ApiResponse<RespuestaFicha>> =>
     client.get(`/whatsapp/chats/${conversacionId}/ficha${qs({ usuarioId })}`),
 
+  /**
+   * Corrige un mensaje ya enviado (#75). WhatsApp deja 15 minutos, y solo con
+   * los propios y de texto — lo comprueba el servidor antes de intentarlo.
+   */
+  editarMensaje: (mensajeId: number, conversacionId: number, texto: string, usuarioId?: number | null):
+    Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.patch(`/whatsapp/mensajes/${mensajeId}${qs({ usuarioId })}`, { conversacionId, texto }),
+
   /** Pide el adjunto de un mensaje que no se bajo en su momento. */
   descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
     client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),

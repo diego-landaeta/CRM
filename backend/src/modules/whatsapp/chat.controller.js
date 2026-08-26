@@ -994,3 +994,32 @@ export async function sinLeer(req, res, next) {
     res.json({ success: true, data: { ...datos, enlazada } });
   } catch (err) { next(err); }
 }
+
+/**
+ * PATCH /api/whatsapp/mensajes/:id — corrige un mensaje ya enviado (#75).
+ *
+ * «Se siguen enviando y no permite corregir desde la app». Hasta ahora un error
+ * de dedo en un mensaje a un prospecto se quedaba ahi para siempre, y la unica
+ * salida era mandar otro pidiendo perdon.
+ *
+ * Pasa por `miConversacion`, asi que nadie puede corregir un mensaje de la
+ * conversacion de otra persona: contesta «no encontrada», que no confirma
+ * siquiera que exista.
+ */
+export async function editarMensaje(req, res, next) {
+  try {
+    const texto = String(req.body?.texto ?? '').trim();
+    if (!texto) throw new AppError('El mensaje no puede quedar vacio', 400, 'TEXTO_VACIO');
+    if (texto.length > 4096) throw new AppError('Ese texto es demasiado largo', 400, 'TEXTO_LARGO');
+
+    const conversacionId = parseInt(req.body?.conversacionId, 10);
+    const conv = await miConversacion(req, conversacionId);
+    const fila = await servicio.editarMensaje({
+      mensajeId: parseInt(req.params.id, 10),
+      conversacion: conv,
+      texto,
+      instancia: await instanciaObjetivo(req),
+    });
+    res.json({ success: true, data: fila });
+  } catch (err) { next(err); }
+}

@@ -670,3 +670,54 @@ export async function marcarLeida(conversacionId, noLeidos = null) {
     ).catch(() => {});
   }
 }
+
+/**
+ * Corrige un mensaje ya enviado. Tarea #75.
+ *
+ * Las tres condiciones no son nuestras, son de WhatsApp, y por eso se comprueban
+ * ANTES de molestar a Evolution: solo se puede editar lo que uno mismo mando, y
+ * solo texto, y solo durante 15 minutos. Preguntar sabiendo que va a decir que
+ * no es tirar una peticion y ensuciar el registro.
+ */
+export const VENTANA_EDICION_MS = 15 * 60 * 1000;
+
+export async function editarMensaje({ mensajeId, conversacion, texto, instancia }) {
+  const m = await model.mensajePorId(mensajeId);
+  if (!m || m.conversacion_id !== conversacion.id) {
+    throw new AppError('Mensaje no encontrado', 404, 'NOT_FOUND');
+  }
+  if (m.direccion !== 'saliente') {
+    throw new AppError('Solo se pueden corregir los mensajes que has mandado tu', 400, 'NO_ES_TUYO');
+  }
+  if (m.tipo !== 'texto') {
+    throw new AppError('Solo se puede corregir el texto, no un archivo', 400, 'NO_ES_TEXTO');
+  }
+  if (!m.wa_id) {
+    // Sin identificador de WhatsApp no hay a que apuntar. Pasa con los que
+    // fallaron al salir: nunca llegaron, asi que no hay nada que corregir.
+    throw new AppError('Ese mensaje no llego a salir; vuelve a mandarlo', 400, 'SIN_WA_ID');
+  }
+  const edad = Date.now() - new Date(m.ts).getTime();
+  if (edad > VENTANA_EDICION_MS) {
+    throw new AppError('WhatsApp solo deja corregir durante los primeros 15 minutos', 400, 'FUERA_DE_PLAZO');
+  }
+
+  const r = await evolution.editarTexto(
+    conversacion.telefono,
+    { waId: m.wa_id, jid: conversacion.jid, mio: true },
+    texto,
+    instancia
+  );
+  if (!r.ok) {
+    if (r.error === 'NO_SOPORTADO') {
+      throw new AppError('Este WhatsApp no permite corregir mensajes', 400, 'NO_SOPORTADO');
+    }
+    throw new AppError('No se pudo corregir el mensaje', 502, 'EVOLUTION_ERROR');
+  }
+
+  // Se guarda el texto nuevo. El viejo NO se conserva: en WhatsApp una edicion
+  // sustituye al mensaje y quien lo recibio ve el corregido; guardar aqui una
+  // version que el prospecto ya no ve solo serviria para confundir a quien lea
+  // el chat despues.
+  return model.corregirTexto(mensajeId, texto);
+}

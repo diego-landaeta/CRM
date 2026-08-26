@@ -180,6 +180,9 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
  */
 const TOPE_POR_DEFECTO = 16 * 1024 * 1024;
 
+/** Lo que WhatsApp deja para corregir un mensaje ya enviado (#75). */
+const VENTANA_EDICION_MS = 15 * 60 * 1000;
+
 /**
  * Las «etiquetas» de la lista de chats (#72).
  *
@@ -263,6 +266,7 @@ export default function ChatPage() {
   const [bajando, setBajando] = useState<number[]>([]);
   // El mensaje fallido que se esta reintentando ahora mismo.
   const [reintentando, setReintentando] = useState<number | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState<number | null>(null);
   // El mensaje al que se esta respondiendo, si hay alguno.
   const [citando, setCitando] = useState<MensajeWhatsapp | null>(null);
   // El tour, solo la primera vez y solo cuando ya hay algo que enseñar: sobre
@@ -540,6 +544,37 @@ export default function ChatPage() {
       setBorrador('');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  /**
+   * Corrige un mensaje ya enviado.
+   *
+   * «Se siguen enviando y no permite corregir desde la app» (#75). Hasta ahora
+   * un error de dedo en un mensaje a un prospecto se quedaba ahi para siempre.
+   *
+   * El boton solo sale donde WhatsApp lo permite —propio, texto y menos de 15
+   * minutos—, asi que quien lo ve puede usarlo. Ofrecerlo siempre y contestar
+   * «fuera de plazo» al pulsarlo es peor que no ofrecerlo.
+   */
+  function sePuedeCorregir(m: MensajeWhatsapp) {
+    return m.direccion === 'saliente' && m.tipo === 'texto' && Boolean(m.texto) && Boolean(m.wa_id)
+      && m.estado !== 'fallido'
+      && (Date.now() - new Date(m.ts).getTime()) < VENTANA_EDICION_MS;
+  }
+
+  async function corregir(m: MensajeWhatsapp) {
+    if (!abierto) return;
+    const nuevo = window.prompt('Corrige el mensaje', m.texto || '');
+    if (nuevo === null) return;
+    const limpio = nuevo.trim();
+    if (!limpio || limpio === m.texto) return;
+    setCorrigiendo(m.id);
+    try {
+      const r = await chatApi.editarMensaje(m.id, abierto, limpio, deQuien);
+      if (!r.success) throw new Error(r.error || 'No se pudo corregir');
+      await cargarHilo(abierto); cargarLista();
+      toast({ title: 'Corregido', description: 'Al otro lado se ve el texto nuevo, con la marca de editado.' });
+    } catch (e) { fallo(e); } finally { setCorrigiendo(null); }
   }
 
   /** Vuelve a enviar un mensaje que no salio, con su mismo texto. */
@@ -1231,6 +1266,14 @@ export default function ChatPage() {
                             disabled={reintentando === m.id}
                             onClick={() => reintentar(m)}>
                             {reintentando === m.id ? 'Enviando…' : '↻ Reintentar'}
+                          </button>
+                        )}
+                        {sePuedeCorregir(m) && (
+                          <button type="button" className="wa-corregir"
+                            disabled={corrigiendo === m.id}
+                            title="WhatsApp deja corregir durante 15 minutos"
+                            onClick={() => corregir(m)}>
+                            {corrigiendo === m.id ? 'Corrigiendo…' : '✎ Corregir'}
                           </button>
                         )}
                       </Message.CustomContent>
