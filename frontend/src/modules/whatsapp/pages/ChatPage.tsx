@@ -267,6 +267,8 @@ export default function ChatPage() {
   // El mensaje fallido que se esta reintentando ahora mismo.
   const [reintentando, setReintentando] = useState<number | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<number | null>(null);
+  const [editando, setEditando] = useState<number | null>(null);
+  const [textoEditado, setTextoEditado] = useState('');
   // El mensaje al que se esta respondiendo, si hay alguno.
   const [citando, setCitando] = useState<MensajeWhatsapp | null>(null);
   // El tour, solo la primera vez y solo cuando ya hay algo que enseñar: sobre
@@ -562,16 +564,27 @@ export default function ChatPage() {
       && (Date.now() - new Date(m.ts).getTime()) < VENTANA_EDICION_MS;
   }
 
-  async function corregir(m: MensajeWhatsapp) {
-    if (!abierto) return;
-    const nuevo = window.prompt('Corrige el mensaje', m.texto || '');
-    if (nuevo === null) return;
-    const limpio = nuevo.trim();
-    if (!limpio || limpio === m.texto) return;
+  /**
+   * Se corrige DENTRO de la burbuja, no en un dialogo del navegador.
+   *
+   * Aqui habia un `window.prompt`. Funcionaba y estaba mal: sale un cartel del
+   * sistema con «localhost:5173 dice» encima del CRM, no se puede dar estilo, no
+   * respeta el tema y rompe la sensacion de estar en una aplicacion. Ademas
+   * bloquea la pestaña entera mientras esta abierto.
+   */
+  function empezarACorregir(m: MensajeWhatsapp) {
+    setEditando(m.id);
+    setTextoEditado(m.texto || '');
+  }
+
+  async function guardarCorreccion(m: MensajeWhatsapp) {
+    const limpio = textoEditado.trim();
+    if (!abierto || !limpio || limpio === m.texto) { setEditando(null); return; }
     setCorrigiendo(m.id);
     try {
       const r = await chatApi.editarMensaje(m.id, abierto, limpio, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo corregir');
+      setEditando(null);
       await cargarHilo(abierto); cargarLista();
       toast({ title: 'Corregido', description: 'Al otro lado se ve el texto nuevo, con la marca de editado.' });
     } catch (e) { fallo(e); } finally { setCorrigiendo(null); }
@@ -1245,7 +1258,30 @@ export default function ChatPage() {
                           </div>
                         )}
                         {m.tipo !== 'texto' && <div className="wa-adjunto"><Adjunto m={m} alPedir={pedirAdjunto} bajando={bajando.includes(m.id)} /></div>}
-                        {m.texto && <div className="wa-texto"><TextoDeWhatsapp texto={m.texto} /></div>}
+                        {editando === m.id ? (
+                          <div className="wa-editando">
+                            <textarea
+                              autoFocus
+                              value={textoEditado}
+                              onChange={(e) => setTextoEditado(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') { setEditando(null); }
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); guardarCorreccion(m); }
+                              }}
+                              rows={Math.max(2, Math.min(6, textoEditado.split(String.fromCharCode(10)).length))}
+                              aria-label="Corrige el mensaje" />
+                            <div className="wa-editando-botones">
+                              <button type="button" onClick={() => setEditando(null)}>Cancelar</button>
+                              <button type="button" className="wa-editando-guardar"
+                                disabled={corrigiendo === m.id || !textoEditado.trim()}
+                                onClick={() => guardarCorreccion(m)}>
+                                {corrigiendo === m.id ? 'Guardando…' : 'Guardar'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          m.texto && <div className="wa-texto"><TextoDeWhatsapp texto={m.texto} /></div>
+                        )}
                         <span className={`wa-meta ${m.estado === 'leido' ? 'wa-leido' : ''}`}>
                           {hora(m.ts)}{mia && m.estado ? ` ${TIC[m.estado]}` : ''}
                         </span>
@@ -1268,11 +1304,11 @@ export default function ChatPage() {
                             {reintentando === m.id ? 'Enviando…' : '↻ Reintentar'}
                           </button>
                         )}
-                        {sePuedeCorregir(m) && (
+                        {sePuedeCorregir(m) && editando !== m.id && (
                           <button type="button" className="wa-corregir"
                             disabled={corrigiendo === m.id}
                             title="WhatsApp deja corregir durante 15 minutos"
-                            onClick={() => corregir(m)}>
+                            onClick={() => empezarACorregir(m)}>
                             {corrigiendo === m.id ? 'Corrigiendo…' : '✎ Corregir'}
                           </button>
                         )}

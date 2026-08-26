@@ -72,16 +72,33 @@ export function vigilar(nombre, titulo, tick, cadaMs) {
  * `retraso` solo se acusa cuando lleva mas de DOS intervalos sin dar señales:
  * con uno, cualquier vuelta que tarde un poco pintaria de rojo una tarea sana.
  */
+/**
+ * Nunca se da por muerta a una tarea antes de un minuto, pase lo que pase.
+ *
+ * «Dos intervalos» solo vale cuando el intervalo es grande. La tarea mas rapida
+ * del CRM tarda dos minutos, asi que este suelo no cambia nada para ninguna de
+ * las doce — pero evita que un servidor ocupado un par de segundos pinte de rojo
+ * una tarea perfectamente viva.
+ *
+ * Y lo hace determinista: sin el suelo, la prueba de este fichero pasaba en
+ * solitario y fallaba en la suite completa, porque con la maquina cargada
+ * caben veinte milisegundos entre una vuelta y la comprobacion. Una prueba que
+ * va y viene es peor que una roja: se acaba ignorando.
+ */
+const SUELO_MS = 60_000;
+const margenDe = (cadaMs) => Math.max(cadaMs * 2, SUELO_MS);
+
 export function tareasProgramadas(ahora = Date.now()) {
   return [...tareas.values()]
     .map((t) => {
       const desdeArranque = ahora - t.desde;
+      const margen = margenDe(t.cadaMs);
       let estado;
       if (t.ultima === null) {
         // Nunca ha dado una vuelta. Solo es un problema si ya deberia haberla
         // dado: una tarea diaria a los diez minutos de arrancar esta bien.
-        estado = desdeArranque > t.cadaMs * 2 ? 'caida' : 'esperando';
-      } else if (ahora - t.ultima > t.cadaMs * 2) {
+        estado = desdeArranque > margen ? 'caida' : 'esperando';
+      } else if (ahora - t.ultima > margen) {
         estado = 'caida';
       } else if (t.ultimoFallo && t.ultimoFallo.cuando > (t.ultima - t.cadaMs)) {
         estado = 'fallando';

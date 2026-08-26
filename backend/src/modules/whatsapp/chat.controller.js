@@ -591,6 +591,14 @@ export async function sincronizacion(req, res, next) {
       // lo que sepa la base, que para eso ya se ha consultado.
       haceSegundos: haceSegundos ?? d.hace_segundos,
       adjuntosPendientes: media.pendientes(instancia),
+      // Cuanto lleva del historial, de 0 a 100. Es el numero REAL que manda
+      // Baileys en cada tanda; WhatsApp no dice cuantos mensajes va a mandar en
+      // total, asi que calcularlo por nuestra cuenta seria inventarselo.
+      //
+      // Puede venir null —si quien manda los avisos no lo incluye, o si lleva
+      // dos minutos sin moverse— y entonces la pantalla enseña los contadores
+      // de siempre. Una barra parada en el 40 % es peor que no tener barra.
+      progreso: servicio.progresoDe(instancia),
     }});
   } catch (err) { next(err); }
 }

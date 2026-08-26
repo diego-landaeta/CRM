@@ -245,7 +245,7 @@ export const chatApi = {
     client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
 
   // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
-  sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
+  sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number; progreso: number | null }>> =>
     client.get(`/whatsapp/sincronizacion${qs({ usuarioId })}`),
 
   conexion: (usuarioId?: number | null): Promise<ApiResponse<ConexionWhatsapp>> =>

@@ -1236,3 +1236,40 @@
 }
 .wa-corregir:hover { opacity: 1; color: var(--wa-texto); }
 .wa-corregir:disabled { cursor: default; opacity: .5; }
+
+/* Corregir DENTRO de la burbuja (#75). Antes esto era un window.prompt: un
+   cartel del sistema con «localhost dice» encima del CRM, sin estilo, sin
+   tema y bloqueando la pestaña entera. */
+.wa-editando textarea {
+  width: 100%;
+  min-width: 220px;
+  background: rgb(0 0 0 / 0.25);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 8px;
+  color: var(--wa-texto);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.wa-editando textarea:focus { outline: none; border-color: var(--wa-verde); }
+.wa-editando-botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.wa-editando-botones button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--wa-apagado);
+  cursor: pointer;
+}
+.wa-editando-botones button:hover { color: var(--wa-texto); }
+.wa-editando-guardar {
+  background: var(--wa-verde);
+  color: #0b141a !important;
+}
+.wa-editando-guardar:disabled { opacity: .5; cursor: default; }

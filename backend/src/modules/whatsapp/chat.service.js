@@ -391,6 +391,10 @@ export async function recibir(cuerpo) {
   if (/messages[._]update/i.test(evento)) return acuse(cuerpo);
   // Llamadas. Van por su propio evento, no por messages.upsert.
   if (/^call$/i.test(evento)) return llamada(cuerpo);
+  // Cuanto lleva del historial. Es el UNICO numero real que hay: WhatsApp no
+  // dice cuantos mensajes va a mandar en total, asi que un porcentaje calculado
+  // por nosotros seria inventado. Baileys lo manda en cada tanda.
+  if (/history[._]progress/i.test(evento)) return anotarProgreso(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -721,3 +725,43 @@ export async function editarMensaje({ mensajeId, conversacion, texto, instancia 
   // el chat despues.
   return model.corregirTexto(mensajeId, texto);
 }
+
+/**
+ * Cuanto lleva traido del historial, de 0 a 100.
+ *
+ * En memoria y por instancia. No lleva tabla a proposito: es un dato que solo
+ * vale mientras dura la sincronizacion y que se puede perder sin consecuencias
+ * — si se reinicia a mitad, la pantalla vuelve a enseñar los contadores de
+ * siempre en vez de un porcentaje parado que ya no avanza.
+ *
+ * Puede no llegar nunca: depende de que quien manda los avisos lo incluya. Por
+ * eso la pantalla lo enseña SOLO si existe, y si no, sigue con «1 chats y 4
+ * mensajes hasta ahora» como hasta hoy. Nunca se inventa.
+ */
+const progresoHistorial = new Map();
+
+function anotarProgreso(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instancia;
+  const pct = Number(cuerpo?.data?.progress);
+  if (!instancia || !Number.isFinite(pct)) return { ignorado: true };
+  const ultimo = Boolean(cuerpo?.data?.isLatest);
+  progresoHistorial.set(instancia, {
+    pct: Math.max(0, Math.min(100, Math.round(pct))),
+    ultimo,
+    cuando: Date.now(),
+  });
+  return { progreso: pct };
+}
+
+/** El progreso de esta instancia, o null si nadie lo ha mandado. */
+export function progresoDe(instancia) {
+  const p = progresoHistorial.get(instancia);
+  if (!p) return null;
+  // Si lleva mas de dos minutos sin moverse, deja de contar: una barra parada
+  // en el 40 % es peor que no tener barra.
+  if (Date.now() - p.cuando > 120000) return null;
+  return p.pct;
+}
+
+/** Para las pruebas. */
+export const _progreso = progresoHistorial;
