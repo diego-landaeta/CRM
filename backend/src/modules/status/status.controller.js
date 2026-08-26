@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as service from './status.service.js';
+import { comprobarTodo } from './piezas.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 const VALID_STATUSES = ['operational', 'degraded', 'partial', 'major', 'maintenance'];
@@ -105,4 +106,22 @@ export async function getCorreos(req, res, next) {
     ]);
     res.json({ success: true, data: { envios, resumen } });
   } catch (err) { next(err); }
+}
+
+/**
+ * Como esta cada pieza AHORA, tarea #26.
+ *
+ * Separado a proposito de `getStatus`, que es la pagina publica de incidencias
+ * al estilo statuspage.io —componentes que alguien marca a mano y avisos
+ * escritos por una persona—. Esto es lo contrario: nadie lo escribe, se mide.
+ *
+ * Nunca contesta 500. Una pieza rota se pinta rota; que la pantalla de estado
+ * se caiga cuando algo va mal es justo el dia que hace falta.
+ */
+export async function getPiezas(req, res, next) {
+  try {
+    res.json({ success: true, data: await comprobarTodo() });
+  } catch (err) {
+    next(err);
+  }
 }

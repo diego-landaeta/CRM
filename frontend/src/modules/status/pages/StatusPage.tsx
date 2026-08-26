@@ -3,6 +3,7 @@ import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import CorreosEnviados from '../components/CorreosEnviados';
+import PiezasDelSistema from '../components/PiezasDelSistema';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import {
   CheckCircle, WarningCircle, ArrowClockwise,
@@ -101,7 +102,13 @@ export default function StatusPage() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Lo primero, porque es la pregunta que se hace de verdad. Lo de abajo
+          —si hay una credencial guardada— solo importa cuando esto dice que
+          algo no va. */}
+      <PiezasDelSistema />
+
+      <h2 className="font-bold pt-2">Credenciales guardadas</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 !mt-3">
         {INTEGRATIONS.map(({ service, name, desc, icon: Icon, color }) => {
           const status = loading ? 'loading' : getStatus(service);
           return (
@@ -128,7 +135,8 @@ export default function StatusPage() {
 
       <p className="text-xs text-muted-foreground text-center">
         Las credenciales se configuran en <strong>Configuración → APIs</strong> de cada proyecto.
-        Este panel muestra si existe una credencial guardada, no verifica la validez en tiempo real.
+        Este bloque solo dice si hay una credencial guardada — que esté puesta no significa que valga.
+        Si funciona o no lo dice <strong>Cómo está ahora mismo</strong>, arriba.
       </p>
     </div>
   );
