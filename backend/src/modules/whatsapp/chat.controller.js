@@ -120,6 +120,8 @@ export async function chats(req, res, next) {
       // Buscar en la base y no en el navegador: con el tope de 50, filtrar lo
       // ya cargado dejaba fuera cualquier seguimiento de hace semanas.
       busca: req.query.busca || null,
+      // La «etiqueta»: el estado del prospecto (#72).
+      estado: req.query.estado || null,
     })});
   } catch (err) { next(err); }
 }
@@ -965,5 +967,29 @@ export async function usuarios(req, res, next) {
         motivo,
       };
     })});
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/sin-leer — lo que ha entrado y nadie ha leido.
+ *
+ * Para avisar de un mensaje nuevo desde cualquier pantalla. Hasta ahora el CRM
+ * no avisaba de NADA: cuando entraba un WhatsApp no habia sonido, ni aviso, ni
+ * cambio en el titulo de la pestaña. La gestora solo se enteraba si tenia el
+ * chat abierto y estaba mirando.
+ *
+ * Mismo molde que `sonando`, que es lo que ya avisa de las llamadas: se
+ * pregunta cada pocos segundos desde el layout, y devuelve `enlazada` para que
+ * quien no tenga WhatsApp espacie las vueltas en vez de preguntar en balde toda
+ * la jornada.
+ */
+export async function sinLeer(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    const [datos, enlazada] = await Promise.all([
+      model.sinLeer(instancia),
+      servicio.tieneSesion(instancia),
+    ]);
+    res.json({ success: true, data: { ...datos, enlazada } });
   } catch (err) { next(err); }
 }

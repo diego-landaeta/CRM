@@ -154,10 +154,27 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
  *
  * Con `busca`, el tope deja de importar: filtra Postgres sobre la tabla entera.
  */
-export async function listar({ instancia, projectId = null, limite = 50, busca = null }) {
+export async function listar({ instancia, projectId = null, limite = 50, busca = null, estado = null }) {
   const params = [instancia];
   let filtro = '';
   if (projectId) { params.push(projectId); filtro = `AND (c.project_id = $${params.length} OR c.project_id IS NULL)`; }
+
+  // Filtrar por el estado del prospecto (#72, «poner etiquetas a los chats»).
+  //
+  // El ticket sugeria reutilizar «el sistema de etiquetas para prospectos»,
+  // pero ese sistema NO existe: en las migraciones solo hay etiquetas del menu
+  // lateral y tags de cifrado. Lo que si existe —y encaja con lo que ella pide
+  // literalmente, «pendiente de contestar / ya vendido / no interesado»— es el
+  // estado del prospecto, que ademas ya viajaba en esta misma consulta como
+  // `lead_status` sin que nadie lo usara.
+  //
+  // Y viaja con la PERSONA, no con el chat, que es lo que el propio ticket
+  // dice que probablemente se quiere. Sin tabla nueva y sin migracion, que hoy
+  // ademas estan bloqueadas (#71).
+  if (estado) {
+    params.push(estado);
+    filtro += ` AND l.status = $${params.length}`;
+  }
 
   const texto = String(busca ?? '').trim();
   if (texto) {
@@ -642,4 +659,61 @@ export async function actividad(instancia) {
     [instancia]
   );
   return rows[0];
+}
+
+/**
+ * Lo que ha entrado y nadie ha leido todavia.
+ *
+ * Para avisar de un mensaje nuevo desde cualquier pantalla del CRM. Hasta ahora
+ * no se avisaba de NADA: cuando entraba un WhatsApp el CRM no hacia ni un
+ * sonido, ni un aviso, ni cambiaba el titulo de la pestaña. La gestora solo se
+ * enteraba si tenia el chat abierto y miraba.
+ *
+ * Se apoya en `no_leidos`, que ya solo cuenta lo que llega DE VERDAD ahora
+ * —el propio UPDATE se lo salta si el mensaje es de hace mas de dos minutos—,
+ * asi que al emparejar un numero y entrar miles de mensajes viejos esto no
+ * dispara mil avisos.
+ *
+ * Barata a proposito: la pregunta se repite cada pocos segundos desde todas las
+ * pantallas del CRM.
+ */
+export async function sinLeer(instancia) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(c.no_leidos), 0)::int AS total,
+            COUNT(*) FILTER (WHERE c.no_leidos > 0)::int AS conversaciones
+       FROM wa_conversaciones c
+      WHERE c.instancia = $1 AND c.no_leidos > 0`,
+    [instancia]
+  );
+  const resumen = rows[0] || { total: 0, conversaciones: 0 };
+  if (!resumen.total) return { ...resumen, ultimo: null };
+
+  // El ultimo entrante, para poder decir de quien es sin abrir nada.
+  const { rows: ult } = await query(
+    `SELECT m.id, m.texto, m.tipo, m.ts,
+            c.id AS conversacion_id,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            COALESCE(l.nombre, c.nombre_push, c.telefono) AS quien
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.instancia = $1 AND m.direccion = 'entrante' AND c.no_leidos > 0
+      ORDER BY m.ts DESC, m.id DESC
+      LIMIT 1`,
+    [instancia]
+  );
+  const u = ult[0];
+  return {
+    ...resumen,
+    ultimo: u ? {
+      id: u.id,
+      conversacionId: u.conversacion_id,
+      quien: u.quien,
+      esGrupo: Boolean(u.es_grupo),
+      tipo: u.tipo,
+      // Recortado: esto va a un aviso del sistema, no a la pantalla del chat.
+      texto: u.texto ? String(u.texto).slice(0, 140) : null,
+      ts: u.ts,
+    } : null,
+  };
 }

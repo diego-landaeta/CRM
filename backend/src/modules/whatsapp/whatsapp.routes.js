@@ -60,6 +60,8 @@ router.post('/desconectar', chat.desconectar);
 // Que se le contesta a quien llama. Por sesion: no todas la quieren.
 // Lo consulta todo el CRM, no solo la pantalla de WhatsApp. No toca la base.
 router.get('/sonando', chat.sonando);
+// Lo que ha entrado y nadie ha leido, para avisar desde cualquier pantalla.
+router.get('/sin-leer', chat.sinLeer);
 router.get('/respuesta-llamada', chat.respuestaLlamada);
 router.post('/respuesta-llamada', chat.guardarRespuestaLlamada);
 

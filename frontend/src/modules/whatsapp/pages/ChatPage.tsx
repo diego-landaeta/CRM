@@ -23,7 +23,8 @@ import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
-import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
+import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
+import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 
 // El chat de WhatsApp dentro del CRM.
 //
@@ -161,6 +162,23 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
  */
 const TOPE_ADJUNTO = Number(import.meta.env.VITE_WHATSAPP_TOPE_MB || 1) * 1024 * 1024;
 
+/**
+ * Las «etiquetas» de la lista de chats (#72).
+ *
+ * No son etiquetas nuevas: son los estados del prospecto, que ya existen en el
+ * CRM. El ticket sugeria «reutilizar el sistema de etiquetas para prospectos»,
+ * pero ese sistema no existe — en las migraciones solo hay etiquetas del menu
+ * lateral y tags de cifrado.
+ *
+ * Y estos encajan literalmente con lo que pidio: «pendiente de contestar»,
+ * «ya vendido», «no interesado». Ademas viajan con la PERSONA y no con el chat,
+ * que es lo que el propio ticket dice que probablemente se quiere.
+ *
+ * Se dejan fuera «nuevo» y «contactado» a proposito: con siete pastillas no se
+ * filtra, se busca entre pastillas.
+ */
+const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesado'] as const;
+
 export default function ChatPage() {
   const { activeProject } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
@@ -193,6 +211,11 @@ export default function ChatPage() {
   // filtro con un respiro para no mandar una consulta por tecla. Ojo, no
   // confundir con `busca`, que es el buscador de prospectos del chat nuevo.
   const [buscaChats, setBuscaChats] = useState('');
+  // La «etiqueta» por la que se filtra (#72). Es el estado del prospecto: no
+  // hay sistema de etiquetas en el CRM, y este encaja con lo que pidio —
+  // «pendiente de contestar / ya vendido / no interesado»— y viaja con la
+  // persona en vez de con el chat.
+  const [etiqueta, setEtiqueta] = useState<string | null>(null);
 
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
@@ -306,7 +329,18 @@ export default function ChatPage() {
 
   const cargarLista = useCallback(async () => {
     try {
-      const r = await chatApi.lista(projectId, deQuien, buscaChats);
+      // La lista NO se filtra por proyecto, a proposito. Es lo mismo que hizo
+      // Diego en `integracion/todo` (33101c8) y que esta rama no tenia:
+      //
+      //   El WhatsApp de una gestora es UNA bandeja. Sus conversaciones son de
+      //   los proyectos que sean, y muchas de nadie todavia. Filtrando por el
+      //   proyecto elegido se veian 6 de 28 — y lo peor no era no verlas: era
+      //   mandar un mensaje, no encontrarlo en la lista y pensar que el CRM no
+      //   lo habia guardado. Estaba guardado; estaba escondido.
+      //
+      // Se vio otra vez al probar las etiquetas: seis conversaciones en la base
+      // y una sola en pantalla.
+      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
@@ -319,7 +353,7 @@ export default function ChatPage() {
     } finally {
       setCargando(false);
     }
-  }, [projectId, deQuien, buscaChats]);
+  }, [deQuien, buscaChats, etiqueta]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
@@ -892,6 +926,26 @@ export default function ChatPage() {
                 <PencilSimpleLine size={16} weight="bold" />
               </button>
             </div>
+
+            {/* Las «etiquetas» de #72. Filtran en el servidor, no aqui: con el
+                tope de 50 chats, filtrar lo ya cargado dejaria fuera justo lo
+                que se busca — el mismo fallo que tenia el buscador. */}
+            <div className="wa-etiquetas" role="group" aria-label="Filtrar por estado">
+              {ETIQUETAS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  aria-pressed={etiqueta === e}
+                  onClick={() => setEtiqueta(etiqueta === e ? null : e)}
+                  className={`wa-etiqueta wa-et-${e} ${etiqueta === e ? "wa-etiqueta-puesta" : ""}`}>
+                  {STATUS_LABELS[e] || e}
+                </button>
+              ))}
+              {etiqueta && (
+                <button type="button" onClick={() => setEtiqueta(null)}
+                  className="wa-etiqueta wa-etiqueta-quitar">Quitar filtro</button>
+              )}
+            </div>
             {sync?.entrando && (
               <div className="wa-sincronizando">
                 Sincronizando… {sync.conversaciones} chats · {sync.mensajes} mensajes
@@ -905,15 +959,54 @@ export default function ChatPage() {
             )}
             <ConversationList>
               {visibles.map((c) => (
-                <Conversation key={c.id} name={nombreDe(c)}
-                  info={adelantoDe(c)}
+                <Conversation key={c.id}
                   active={abierto === c.id}
                   unreadCnt={c.no_leidos || undefined}
                   onClick={() => setAbierto(c.id)}>
                   <Avatar name={nombreDe(c)}><Foto nombre={nombreDe(c)} url={c.avatar_url} grupo={c.es_grupo} /></Avatar>
+                  {/* Con Conversation.Content y no con las props `name`/`info`:
+                      hace falta meter la etiqueta AL LADO del nombre, y por prop
+                      solo cabe texto plano. */}
+                  <Conversation.Content>
+                    <div className="wa-fila-nombre">
+                      <span className="wa-fila-quien">{nombreDe(c)}</span>
+                      {c.lead_status && (
+                        <span className={`wa-fila-etiqueta wa-et-${c.lead_status}`}>
+                          {STATUS_LABELS[c.lead_status] || c.lead_status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="wa-fila-adelanto">{adelantoDe(c)}</div>
+                  </Conversation.Content>
                 </Conversation>
               ))}
             </ConversationList>
+
+            {/* Buscar y no encontrar nada tiene DOS motivos, y ninguno se veia.
+                La gestora reporto los dos como si fueran fallos del buscador:
+                «no aparecen los seguimientos de tiempo atras» (#73) y «no me
+                aparece el chat del grupo de Psiko» (#74).
+
+                Lo del grupo NO es un fallo: los grupos estan apagados a
+                proposito en `groupsIgnore`, para no darle a Meta motivos de
+                suspender el numero. Que ella lo sepa cuesta dos lineas, y le
+                ahorra volver a reportarlo — y a nosotros, buscar un fallo que
+                no existe. */}
+            {buscaChats && !visibles.length && (
+              <div className="wa-sin-resultados">
+                <p className="font-medium text-foreground">Sin resultados para «{buscaChats}»</p>
+                <p>
+                  Los chats aparecen aquí <strong>cuando pasa un mensaje por el CRM</strong>.
+                  Una conversación anterior a enlazar el número puede seguir en tu móvil y
+                  no estar todavía aquí: escríbele y aparecerá.
+                </p>
+                <p>
+                  Y los <strong>grupos no se muestran</strong>, a propósito: este número es
+                  para escribir a prospectos, y entrar en grupos suma para que WhatsApp lo
+                  suspenda. No es un fallo.
+                </p>
+              </div>
+            )}
           </Sidebar>
           )}
 
@@ -979,6 +1072,22 @@ export default function ChatPage() {
               </ConversationHeader>
 
               <MessageList>
+                {/* Un chat abierto y en blanco no puede quedarse en blanco (#76).
+                    La gestora lo conto asi: «en el chat con el bot no me aparece
+                    nada, NO SE SI DEBO ESCRIBIRLE AL PROSPECTO DESDE OTRO LUGAR».
+                    Esa segunda parte es lo grave: no sabe si el CRM sirve para
+                    esto o tiene que irse a otro sitio. Aunque el historial tarde
+                    en entrar, la pantalla tiene que decirle que pasa.
+
+                    Va como separador por lo mismo que el «ver mas» de abajo:
+                    MessageList solo admite sus propios hijos. */}
+                {!mensajes.length && (
+                  <MessageSeparator
+                    className="wa-vacio"
+                    content={sync?.entrando
+                      ? 'Todavía no ha entrado el historial de esta conversación'
+                      : 'Aquí no hay nada guardado todavía — escribe para empezar'} />
+                )}
                 {/* Va como separador y no como <div> ni como MessageList.Content:
                     el primero no es un hijo que MessageList admita, y el segundo
                     es EXCLUYENTE —si aparece, el kit descarta todos los demas

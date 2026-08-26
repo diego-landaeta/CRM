@@ -190,8 +190,18 @@ export const chatApi = {
    * navegador sobre las 50 cargadas — que era lo que dejaba fuera cualquier
    * seguimiento de hace semanas.
    */
-  lista: (projectId?: number | null, usuarioId?: number | null, busca?: string | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
-    client.get(`/whatsapp/chats${qs({ projectId, usuarioId, busca: busca || undefined })}`),
+  lista: (
+    projectId?: number | null,
+    usuarioId?: number | null,
+    busca?: string | null,
+    /** El estado del prospecto, que es lo que hace de etiqueta (#72). */
+    estado?: string | null,
+  ): Promise<ApiResponse<ChatWhatsapp[]>> =>
+    client.get(`/whatsapp/chats${qs({
+      projectId, usuarioId,
+      busca: busca || undefined,
+      estado: estado || undefined,
+    })}`),
 
   /** Quien esta escribiendo ahora mismo en la conversacion abierta. */
   hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[]; escribiendo: { quien: string; que: string } | null }>> =>

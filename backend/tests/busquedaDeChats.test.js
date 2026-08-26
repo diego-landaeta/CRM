@@ -99,9 +99,19 @@ describe('sin romper lo que ya hacia', () => {
     expect(ultima().params[1]).toBe(7);
   });
 
-  it('los grupos entran en la busqueda como todo lo demas', async () => {
-    // El grupo de Psiko no salia por lo mismo: llevaba tiempo callado y caia
-    // fuera de las 50. No habia ningun filtro que los quitara.
+  it('esta consulta no quita los grupos — el filtro esta en otro sitio', async () => {
+    // OJO, correccion de un diagnostico mio equivocado: al mirar el #74 dije
+    // que «los grupos si estan contemplados y no hay ningun filtro». Es falso.
+    // Si lo hay, pero no aqui: en `evolution.client.js:87`,
+    //
+    //     groupsIgnore: true,
+    //
+    // puesto a proposito para no darle a Meta motivos de suspender el numero.
+    // Se me escapo por buscar «grupo» en español cuando la linea dice «groups».
+    //
+    // Lo que esta prueba fija es lo que SI depende de esta consulta: que si
+    // algun dia se encienden, la lista y la busqueda ya los tratan bien. El
+    // interruptor no se toca sin el owner, que lo dice el propio ticket.
     await listar({ instancia: 'x', busca: 'psiko' });
     expect(ultima().sql).not.toMatch(/NOT.*@g\.us/);
     expect(ultima().sql).toMatch(/es_grupo/);
@@ -111,5 +121,42 @@ describe('sin romper lo que ya hacia', () => {
     await listar({ instancia: 'x', busca: "'; DROP TABLE wa_conversaciones; --" });
     expect(ultima().sql).not.toMatch(/DROP TABLE/);
     expect(ultima().params.some((p) => String(p).includes('DROP TABLE'))).toBe(true);
+  });
+});
+
+describe('las «etiquetas» de la lista (#72)', () => {
+  it('filtra por el estado del prospecto', async () => {
+    // El ticket sugeria «reutilizar el sistema de etiquetas para prospectos».
+    // Ese sistema NO existe: en las migraciones solo hay etiquetas del menu
+    // lateral y tags de cifrado. Lo que si existe —y encaja literalmente con
+    // «pendiente de contestar / ya vendido / no interesado»— es el estado del
+    // prospecto, que ademas ya viajaba en esta consulta sin que nadie lo usara.
+    await listar({ instancia: 'x', estado: 'convertido' });
+    expect(ultima().sql).toMatch(/l\.status = \$\d/);
+    expect(ultima().params).toContain('convertido');
+  });
+
+  it('sin etiqueta no filtra nada', async () => {
+    await listar({ instancia: 'x' });
+    expect(ultima().sql).not.toMatch(/l\.status =/);
+  });
+
+  it('la etiqueta y la busqueda conviven', async () => {
+    await listar({ instancia: 'x', estado: 'convertido', busca: 'carlos' });
+    expect(ultima().sql).toMatch(/l\.status = \$\d/);
+    expect(ultima().sql).toMatch(/ILIKE/);
+  });
+
+  it('filtra en Postgres, no en el navegador', async () => {
+    // Con el tope de 50, filtrar lo ya cargado dejaria fuera justo lo que se
+    // busca — el mismo fallo que tenia el buscador antes.
+    await listar({ instancia: 'x', estado: 'convertido', limite: 50 });
+    expect(ultima().params).toContain(50);
+    expect(ultima().sql).toMatch(/LIMIT \$\d/);
+  });
+
+  it('va parametrizado', async () => {
+    await listar({ instancia: 'x', estado: "'; DROP TABLE leads; --" });
+    expect(ultima().sql).not.toMatch(/DROP TABLE/);
   });
 });

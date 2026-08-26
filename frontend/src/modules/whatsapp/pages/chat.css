@@ -1088,3 +1088,107 @@
   flex: 1 1 auto; min-width: 0;
   height: 34px;
 }
+
+/* Buscar y no encontrar nada: los dos motivos, dichos (#73 y #74). */
+.wa-sin-resultados {
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-foreground, #6b7280);
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.wa-sin-resultados p + p { margin-top: 8px; }
+
+/* Las «etiquetas» de la lista (#72). Son los estados del prospecto, y los
+   colores salen de STATUS_STYLES —las clases de Tailwind que ya usa el resto
+   del CRM—, asi que traen su propia variante oscura y no hay una paleta nueva
+   que se desincronice con el Dashboard. Aqui solo va la forma. */
+.wa-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+.wa-etiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity .12s, border-color .12s;
+  opacity: .75;
+}
+.wa-etiqueta:hover { opacity: 1; }
+/* La puesta se marca con el BORDE y opacidad plena, no cambiando el fondo: el
+   fondo es lo que identifica al estado y cambiarlo lo haria irreconocible. */
+.wa-etiqueta-puesta {
+  opacity: 1;
+  border-color: currentColor;
+}
+.wa-etiqueta-quitar {
+  background: transparent;
+  color: var(--muted-foreground, #6b7280);
+  border-color: var(--border, #e5e7eb);
+  opacity: 1;
+}
+
+/* La fila del chat, con su etiqueta al lado del nombre. */
+.wa-fila-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.wa-fila-quien {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* No se encoge y no parte el nombre: con la lista estrecha, lo que cede es el
+   nombre con sus puntos suspensivos, no la etiqueta. */
+.wa-fila-etiqueta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.wa-fila-adelanto {
+  font-size: 12px;
+  color: var(--muted-foreground, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Los colores de las etiquetas, propios y NO de Tailwind.
+
+   Se probo primero con STATUS_STYLES, que es lo que usa el resto del CRM. No
+   vale aqui, y se vio en pantalla: esas clases llevan variante `dark:` y esa
+   variante sigue el tema de la APLICACION — pero este panel tiene su propia
+   paleta fija (--wa-panel: #111b21) y es oscuro en los dos temas. Resultado:
+   en modo oscuro salia un bg-*-950/30 sobre un fondo ya oscuro y no se leia
+   nada; en claro se leia por casualidad.
+
+   Mismos tonos que el resto del CRM —naranja, ambar, violeta, rojo, azul,
+   esmeralda— pero calibrados para ese fondo, y sin depender del tema, igual
+   que no depende el panel. */
+/* La reserva va DELANTE de las de color, no detras: con la misma
+   especificidad gana la ultima, y puesta al final dejaba TODAS las etiquetas
+   grises. Se vio en la captura, no leyendo. Sirve para un estado que aparezca
+   mañana y no este aqui: gris legible, no un hueco sin texto. */
+.wa-fila-etiqueta, .wa-etiqueta { background: rgba(255,255,255,.10); color: var(--wa-apagado); }
+
+.wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
+.wa-et-por_contactar  { background: rgba(249,115, 22,.16); color: #fdba74; }
+.wa-et-contactado     { background: rgba( 16,185,129,.16); color: #6ee7b7; }
+.wa-et-en_seguimiento { background: rgba(245,158, 11,.16); color: #fcd34d; }
+.wa-et-convertido     { background: rgba(139, 92,246,.20); color: #c4b5fd; }
+.wa-et-no_interesado  { background: rgba(239, 68, 68,.16); color: #fca5a5; }
+.wa-et-proxima_convocatoria { background: rgba(6,182,212,.16); color: #67e8f9; }
