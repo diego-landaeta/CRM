@@ -185,8 +185,13 @@ export const chatApi = {
   descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
     client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
 
-  lista: (projectId?: number | null, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
-    client.get(`/whatsapp/chats${qs({ projectId, usuarioId })}`),
+  /**
+   * La lista de chats. Con `busca`, filtra Postgres sobre TODAS y no el
+   * navegador sobre las 50 cargadas — que era lo que dejaba fuera cualquier
+   * seguimiento de hace semanas.
+   */
+  lista: (projectId?: number | null, usuarioId?: number | null, busca?: string | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
+    client.get(`/whatsapp/chats${qs({ projectId, usuarioId, busca: busca || undefined })}`),
 
   /** Quien esta escribiendo ahora mismo en la conversacion abierta. */
   hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[]; escribiendo: { quien: string; que: string } | null }>> =>

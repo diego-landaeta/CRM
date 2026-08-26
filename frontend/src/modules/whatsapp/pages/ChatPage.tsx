@@ -23,6 +23,7 @@ import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
+import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 
 // El chat de WhatsApp dentro del CRM.
 //
@@ -147,6 +148,19 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
   );
 }
 
+/**
+ * Lo que de verdad acepta el servidor para un adjunto.
+ *
+ * NO es el limite de la aplicacion: multer deja pasar 16 MB. Es el de Nginx,
+ * cuyo `client_max_body_size` por defecto es 1 MB, y por eso un dossier de
+ * 1,4 MB devolvia «Error 413» sin llegar a tocar Node.
+ *
+ * Va aqui como constante y no adivinado, porque adivinarlo seria peor: avisar
+ * de un tope que no es el real deja pasar ficheros que despues fallan. Cuando
+ * se suba el de Nginx, se sube este a la vez — o se pone VITE_WHATSAPP_TOPE_MB.
+ */
+const TOPE_ADJUNTO = Number(import.meta.env.VITE_WHATSAPP_TOPE_MB || 1) * 1024 * 1024;
+
 export default function ChatPage() {
   const { activeProject } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
@@ -175,6 +189,10 @@ export default function ChatPage() {
   const [enviando, setEnviando] = useState(false);
   const [conexion, setConexion] = useState<ConexionWhatsapp | null>(null);
   const [filtro, setFiltro] = useState('');
+  // Lo que se le pide al servidor para filtrar la LISTA de chats. Va detras del
+  // filtro con un respiro para no mandar una consulta por tecla. Ojo, no
+  // confundir con `busca`, que es el buscador de prospectos del chat nuevo.
+  const [buscaChats, setBuscaChats] = useState('');
 
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
@@ -184,6 +202,14 @@ export default function ChatPage() {
   const [cargando, setCargando] = useState(true);
   const [sync, setSync] = useState<{ entrando: boolean; mensajes: number; conversaciones: number; adjuntosPendientes: number } | null>(null);
   const cuantasAntes = useRef(0);
+  // Buscar es cosa de Postgres, no del navegador: con el tope de 50 chats,
+  // filtrar lo ya cargado dejaba fuera cualquier seguimiento de hace semanas.
+  // Lo reporto una gestora — buscaba por nombre y por numero y no salia nada, y
+  // en cuanto le mandaba un mensaje, aparecia.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaChats(filtro.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filtro]);
   const [grabando, setGrabando] = useState(false);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   // Los dos paneles que antes eran ventanas del navegador. window.prompt y
@@ -280,17 +306,20 @@ export default function ChatPage() {
 
   const cargarLista = useCallback(async () => {
     try {
-      const r = await chatApi.lista(projectId, deQuien);
+      const r = await chatApi.lista(projectId, deQuien, buscaChats);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
       // sigue entrando. Se apaga solo cuando deja de crecer.
-      cuantasAntes.current = lista.length;
+      //
+      // Pero buscando NO: la lista encoge y crece segun lo que se teclea, y ese
+      // vaiven diria «sincronizando…» sin que este entrando nada.
+      if (!buscaChats) cuantasAntes.current = lista.length;
       setChats(lista);
     } finally {
       setCargando(false);
     }
-  }, [projectId, deQuien]);
+  }, [projectId, deQuien, buscaChats]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
@@ -425,7 +454,18 @@ export default function ChatPage() {
   function fallo(e: unknown) {
     // Aqui contestan los frenos: ritmo, «no me escribas» y sin consentimiento.
     // El texto del servidor se enseña tal cual: esta escrito para una gestora.
-    toast({ title: 'No se ha enviado', description: (e as Error).message, variant: 'destructive' });
+    // Un 413 en crudo no le dice nada a nadie. Puede llegar aqui aunque se
+    // avise antes: si el tope de Nginx cambia y este no, o si el pie del
+    // mensaje engorda la peticion por encima del limite.
+    const bruto = (e as Error).message || '';
+    const esDemasiadoGrande = /(^|[^0-9])413([^0-9]|$)|too large|entity too large/i.test(bruto);
+    toast({
+      title: esDemasiadoGrande ? 'El archivo pesa demasiado' : 'No se ha enviado',
+      description: esDemasiadoGrande
+        ? 'El servidor lo ha rechazado por tamaño. Mandalo comprimido, o por otra via.'
+        : bruto,
+      variant: 'destructive',
+    });
   }
 
   async function enviar(texto: string) {
@@ -492,6 +532,25 @@ export default function ChatPage() {
   function proponerArchivos(fs: File[]) {
     if (!abierto) {
       toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    // Se avisa AQUI, antes de subir nada. Lo que pasaba: se elegia el dossier,
+    // se pulsaba enviar, se esperaba, y salia «Error 413» — que no le dice nada
+    // a nadie. Ese 413 no es de la aplicacion (multer acepta 16 MB): lo corta
+    // Nginx, cuyo client_max_body_size por defecto es 1 MB. Mientras no se
+    // suba en el servidor, al menos que se sepa antes y en cristiano.
+    const pesados = fs.filter((f) => f.size > TOPE_ADJUNTO);
+    if (pesados.length) {
+      const cual = pesados[0];
+      toast({
+        title: 'El archivo pesa demasiado',
+        description: `«${cual.name}» ocupa ${(cual.size / 1024 / 1024).toFixed(1)} MB y el servidor `
+          + `solo acepta ${(TOPE_ADJUNTO / 1024 / 1024).toFixed(0)} MB. Mandalo comprimido, o por otra via.`,
+        variant: 'destructive',
+      });
+      const caben = fs.filter((f) => f.size <= TOPE_ADJUNTO);
+      if (!caben.length) return;
+      setPorEnviar(caben);
       return;
     }
     if (fs.length) setPorEnviar(fs);
@@ -731,9 +790,9 @@ export default function ChatPage() {
     // nada — su identificador no le dice nada a nadie.
     return c.es_grupo ? 'Grupo' : c.telefono;
   };
-  const visibles = filtro
-    ? chats.filter((c) => `${nombreDe(c)} ${c.telefono}`.toLowerCase().includes(filtro.toLowerCase()))
-    : chats;
+  // Ya vienen filtrados del servidor. Antes se filtraba aqui, sobre las 50
+  // cargadas, y por eso no aparecia nada de mas atras.
+  const visibles = chats;
 
   if (conexion && !conexion.configurado) {
     return (
@@ -981,7 +1040,7 @@ export default function ChatPage() {
                           </div>
                         )}
                         {m.tipo !== 'texto' && <div className="wa-adjunto"><Adjunto m={m} alPedir={pedirAdjunto} bajando={bajando.includes(m.id)} /></div>}
-                        {m.texto && <div className="wa-texto">{m.texto}</div>}
+                        {m.texto && <div className="wa-texto"><TextoDeWhatsapp texto={m.texto} /></div>}
                         <span className={`wa-meta ${m.estado === 'leido' ? 'wa-leido' : ''}`}>
                           {hora(m.ts)}{mia && m.estado ? ` ${TIC[m.estado]}` : ''}
                         </span>
