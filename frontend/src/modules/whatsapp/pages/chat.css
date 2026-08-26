@@ -1141,9 +1141,15 @@
   gap: 6px;
   min-width: 0;
 }
+/* Los colores salen de la paleta del PANEL, no de la de la aplicacion.
+   Al pasar a Conversation.Content se perdio el estilo del kit y se puso
+   --muted-foreground, que es una variable del CRM: sobre este fondo oscuro
+   (#111b21) queda casi negro y el telefono no se distinguia. El kit usaba
+   --wa-apagado, que es lo correcto aqui. */
 .wa-fila-quien {
   font-weight: 600;
   font-size: 14px;
+  color: var(--wa-texto);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1160,8 +1166,8 @@
   white-space: nowrap;
 }
 .wa-fila-adelanto {
-  font-size: 12px;
-  color: var(--muted-foreground, #6b7280);
+  font-size: 13px;
+  color: var(--wa-apagado);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
