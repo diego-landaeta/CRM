@@ -53,11 +53,11 @@ pie. Pero **el panel sigue mal**, y eso es una decisión de Diego, no nuestra.
 Ojo con el número: la 128 ya estaba cogida por WhatsApp. La de los avisos es la
 **131**. Ya está corregido, pero se escapó una vez.
 
-### 3 · Seis issues terminados y todavía abiertos
+### 3 · Ocho issues terminados y todavía abiertos
 
-**#62, #63, #64, #67, #68** (WhatsApp) y **#27** (tubería de correo). Los cinco
-de WhatsApp están en la rama; #27 está en local. Falta que Diego los revise y los
-cierre.
+**#62, #63, #64, #67, #68** (WhatsApp), **#27** (tubería de correo), **#28**
+(recordatorios) y **#29** (reporte semanal). Todo subido. Falta que Diego los
+revise y los cierre — los issues no los cerramos nosotros.
 
 ### 4 · Choque con `integracion/todo`
 
@@ -78,15 +78,14 @@ Cuanto más espere, peor.
 
 ## Lo siguiente, por orden
 
-1. **Terminar #29** — pruebas y commit. Es lo que está abierto.
-2. **#26 · Página de estado del sistema.** Ya tiene una subfase hecha sin
+1. **#26 · Página de estado del sistema.** Ya tiene una subfase hecha sin
    pretenderlo: el bloque de correos. Quedan Meta, Stripe, WooCommerce y las
    tareas programadas — el mismo patrón repetido.
    > Ojo: #26 pide *«sin datos sensibles, por si algún día se enseña fuera»*, y el
    > bloque de correos enseña direcciones de clientes. Hoy está tras
    > `roleGuard('admin','superadmin')`, pero si esa pantalla llega a ser pública,
    > ese bloque no puede ir. Conviene decidirlo antes de añadir más.
-3. **#30 · Análisis de datos con IA** y **#44 · Sincronizar proyectos de IA**
+2. **#30 · Análisis de datos con IA** y **#44 · Sincronizar proyectos de IA**
    (compartido con Fabián — hablarlo antes de empezar).
 
 ---
