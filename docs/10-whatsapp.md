@@ -85,10 +85,53 @@ decide al abrir la sesión, no después):
 | **El último mes** | Los últimos 30 días | Si vienes atendiendo a gente por ese número y no quieres perder el hilo |
 | **Todo el historial** | Todo lo que tenga el móvil, incluido lo personal y los grupos | Piénsatelo. Decenas de miles de mensajes y un buen rato de espera |
 
-El recorte del mes se hace **en el puente, no en el CRM**: lo viejo no llega a
-salir del móvil ni a viajar por la red. Antes quedaba en manos de WhatsApp —«lo
-reciente» era lo que a él le pareciera— y en un móvil con años de uso llegaban
-decenas de miles de mensajes igualmente.
+El recorte del mes lo hacen **los dos lados, y hace falta que sea así**:
+
+- **En el puente** (local), que no llega a sacarlo del móvil.
+- **En el CRM** al recibir, porque en producción no hay puente sino Evolution, y
+  Evolution no sabe recortar.
+
+Y esto no funcionaba en el VPS. `crearInstancia` mandaba un campo `modo` que
+**solo entiende el puente**, y a Evolution le mandaba `syncFullHistory: false`
+fijo — el único campo que Evolution mira. Resultado: en producción, «el último
+mes» y «todo el historial» hacían exactamente lo mismo que «empezar de cero».
+Tres opciones en pantalla y dos que no hacían nada. Es el fondo de la tarea #73.
+
+Ahora `syncFullHistory` sale del modo (`politica.js`) y los 30 días los aplica
+el CRM sobre lo que entra. Si el proceso se reinicia a mitad de una
+sincronización, el modo se pierde y **no se recorta nada**: de las dos formas de
+equivocarse, guardar de más tiene arreglo y tirar mensajes de una gestora no.
+
+### Los grupos
+
+**Los grupos entran y funcionan.** Se ven en la lista, se puede escribir en
+ellos y se distinguen de una persona en la cabecera.
+
+Durante un tiempo el código decía lo contrario: pedía `groupsIgnore: true` «para
+no darle a Meta motivos de suspender el número». No se cumplía nunca, y por tres
+motivos a la vez:
+
+1. El **puente de Baileys no implementa** ese flag (la misma trampa de la #63:
+   el puente es más permisivo que Evolution, así que lo que pruebas no es lo que
+   corre).
+2. `guardarAjustes` lo **apagaba solo**: reconstruía el bloque entero con
+   `groupsIgnore: actuales.groupsIgnore ?? false`, así que tocar el interruptor
+   de «responder a llamadas» encendía los grupos sin que nadie lo pidiera.
+3. El propio CRM los **aceptaba a propósito** en `recibir()`.
+
+Medido en la base de pruebas: 2 grupos de 5 conversaciones, con mensajes del
+mismo día. Entraban en vivo.
+
+Y aun así no se podía trabajar con ellos, porque `numeroDe()` partía el jid por
+la arroba y mandaba las 18 cifras sueltas. Al otro lado eso se reconstruye como
+`...@s.whatsapp.net`, un teléfono que no existe: los grupos se veían y contestar
+en ellos no llegaba a ninguna parte. Ahora se manda el jid entero — también con
+`@lid`, donde tomar las cifras por un teléfono mandaba el mensaje a un
+desconocido.
+
+La decisión vive en **un sitio**, `politica.js`, y se aplica en el CRM. Con
+`WHATSAPP_GRUPOS=no` los grupos dejan de entrar de verdad y tampoco se enseñan
+los que ya estuvieran guardados. Por defecto está en `si`.
 
 Con «Todo el historial» en un número con años de uso llegan **decenas de miles**
 de mensajes por tandas, durante bastante rato. Medido: 76.580 mensajes y 17.894

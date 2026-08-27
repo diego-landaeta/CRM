@@ -112,6 +112,9 @@ export interface MensajeWhatsapp {
   media_firma: string | null;
   /** A que mensaje responde este, y un adelanto del citado para pintarlo. */
   responde_a?: string | null;
+  /** Quien escribio, SOLO en grupos (#74). Null en chats de una persona. */
+  participante?: string | null;
+  participante_nombre?: string | null;
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;
@@ -130,6 +133,10 @@ export interface ConexionWhatsapp {
   estado?: string | null;
   /** Lo que de verdad acepta un adjunto. Lo dice el servidor, no se adivina. */
   topeAdjuntoBytes?: number;
+  /** Si entran los grupos. Lo decide el servidor (#74); la pantalla solo lo dice. */
+  grupos?: boolean;
+  /** Si este WhatsApp deja corregir mensajes. Falso en cuanto se sabe que no (#75). */
+  puedeCorregir?: boolean;
 }
 
 /** La ficha del prospecto que se ve en el popup del chat (tarea #64). */

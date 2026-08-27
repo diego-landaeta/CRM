@@ -1,6 +1,7 @@
 import * as model from './chat.model.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
+import * as politica from './politica.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -218,7 +219,30 @@ async function permitirEnvio(conversacionId) {
   return conv;
 }
 
-const numeroDe = (conv) => String(conv.jid).split('@')[0];
+/**
+ * A donde se manda. NO siempre son las cifras del jid.
+ *
+ * Esto era `String(conv.jid).split('@')[0]` a secas, y con eso:
+ *
+ *   · A un GRUPO no llegaba nada. Su jid es `1203634...@g.us`, y quitandole el
+ *     sufijo queda un numero de 18 cifras que al otro lado se reconstruye como
+ *     `...@s.whatsapp.net` — un telefono que no existe. Los grupos se veian en
+ *     la lista y no se podia contestar en ellos, que es justo lo que hace falta
+ *     que funcione en la #74.
+ *
+ *   · Con un `@lid` era peor que no llegar: ese identificador oculta el
+ *     telefono de una persona, asi que sus cifras NO son un numero suyo. Tomarlo
+ *     por telefono es mandarle el mensaje a quien tenga esa linea — un
+ *     desconocido leyendo una conversacion con un prospecto.
+ *
+ * En los dos casos hay que mandar el jid ENTERO y dejar que el otro lado lo
+ * resuelva. Solo se pelan las cifras cuando de verdad es un telefono.
+ */
+const numeroDe = (conv) => {
+  const jid = String(conv.jid);
+  if (jid.endsWith('@g.us') || jid.endsWith('@lid')) return jid;
+  return jid.split('@')[0];
+};
 
 /** Manda un texto. */
 export async function enviar({ conversacionId, texto, usuarioId, citarWaId = null }) {
@@ -415,6 +439,15 @@ export async function recibir(cuerpo) {
   if (!esGrupo && !esPersona) {
     return { ignorado: `ni persona ni grupo (${destino.split('@')[1] || destino})` };
   }
+  // Y si los grupos no entran, aqui se paran DE VERDAD.
+  //
+  // Antes esta linea no existia: se le pedia `groupsIgnore: true` a Evolution y
+  // se daba por hecho. En la base de pruebas habia 2 grupos de 5 conversaciones,
+  // con mensajes del mismo dia — entraban en vivo. Delegar una decision propia
+  // en un servicio de terceros no es aplicarla. Es la #74.
+  if (politica.sobraPorSerGrupo(destino)) {
+    return { ignorado: 'los grupos no entran (WHATSAPP_GRUPOS=no)' };
+  }
   // «0@s.whatsapp.net» y similares: WhatsApp cuela identificadores basura que
   // aparecian en la lista como una conversacion mas.
   const digitos = destino.split('@')[0].replace(/[^0-9]/g, '');
@@ -463,6 +496,23 @@ export async function recibir(cuerpo) {
   // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
   // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
   // failed». El webhook tiene que contestar rapido y soltar.
+  // messageTimestamp viene en segundos.
+  const cuando = datos?.messageTimestamp
+    ? new Date(Number(datos.messageTimestamp) * 1000)
+    : new Date();
+
+  // «El ultimo mes» tiene que ser un mes (#73).
+  //
+  // El recorte vivia solo en el puente de Baileys, asi que en produccion no
+  // existia. Se hace ANTES de crear nada: descartarlo despues de guardar la
+  // conversacion dejaria chats vacios en la lista, que es peor que no tenerlos.
+  //
+  // Solo puede saltar con el modo «rapido» apuntado y una fecha de hace mas de
+  // 30 dias, y un mensaje en vivo nunca cumple lo segundo.
+  if (politica.sobraDelHistorial(instancia, cuando)) {
+    return { ignorado: 'mas viejo que el mes que se pidio' };
+  }
+
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,
@@ -474,8 +524,11 @@ export async function recibir(cuerpo) {
     nombreArchivo: m.documentMessage?.fileName || null,
     // A que mensaje responde, si responde a alguno. Lo manda el puente.
     respondeA: datos?.respondeA || null,
-    // messageTimestamp viene en segundos.
-    ts: datos?.messageTimestamp ? new Date(Number(datos.messageTimestamp) * 1000) : new Date(),
+    // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
+    // salen iguales y no se sabe quien dijo que.
+    participante: datos?.participante || null,
+    participanteNombre: datos?.participanteNombre || null,
+    ts: cuando,
   });
 
   // Lo de AHORA se baja delante de todo; lo viejo del historial, con criterio.
@@ -670,7 +723,17 @@ export async function marcarLeida(conversacionId, noLeidos = null) {
   const ultimo = (await model.ultimoEntranteSinLeer(conversacionId));
   if (conv && ultimo?.wa_id && evolution.configurado()) {
     await evolution.marcarLeido(
-      { remoteJid: conv.jid, fromMe: false, id: ultimo.wa_id }, conv.instancia
+      {
+        remoteJid: conv.jid,
+        fromMe: false,
+        id: ultimo.wa_id,
+        // En un grupo, sin `participant` WhatsApp no sabe QUE mensaje marcar:
+        // la terna es (remoteJid, participant, id). Se manda solo cuando lo hay
+        // — en un chat de una persona el campo sobra y algunos servidores lo
+        // rechazan si viene vacio.
+        ...(ultimo.participante ? { participant: ultimo.participante } : {}),
+      },
+      conv.instancia
     ).catch(() => {});
   }
 }
@@ -707,7 +770,9 @@ export async function editarMensaje({ mensajeId, conversacion, texto, instancia 
   }
 
   const r = await evolution.editarTexto(
-    conversacion.telefono,
+    // `telefono` y no el jid tenia el mismo fallo que `numeroDe`: en un grupo
+    // son 18 cifras que no son un telefono de nadie.
+    numeroDe(conversacion),
     { waId: m.wa_id, jid: conversacion.jid, mio: true },
     texto,
     instancia

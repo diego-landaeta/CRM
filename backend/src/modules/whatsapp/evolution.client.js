@@ -1,4 +1,5 @@
 import { logger } from '../../shared/utils/logger.js';
+import { groupsIgnoreParaEvolution, syncFullHistoryPara } from './politica.js';
 
 // El cliente de Evolution API. Es lo unico que sabe hablar con WhatsApp, y
 // vive detras de HTTP a proposito: Evolution corre en su propio contenedor,
@@ -82,16 +83,28 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       modo,
       integration: 'WHATSAPP-BAILEYS',
       qrcode: true,
-      // No entrar en grupos: este numero es para escribir a prospectos, y cada
-      // interaccion rara suma para que lo suspendan.
-      groupsIgnore: true,
+      // Los grupos: lo decide `politica.js`, no esta linea.
+      //
+      // Aqui iba `true` fijo «para no darle a Meta motivos de suspender el
+      // numero», y no servia de nada: entraban igual. El puente de Baileys no
+      // implementa el flag, `guardarAjustes` lo apagaba solo, y el propio CRM
+      // los aceptaba en `recibir()`. Ahora se le pide al proveedor lo MISMO que
+      // aplica el CRM, y la garantia esta en el CRM. Es la #74.
+      groupsIgnore: groupsIgnoreParaEvolution(),
       rejectCall: false,
       // «Siempre en linea» y «marcar como leido» automaticos son justo el tipo
       // de comportamiento que no hace una persona. Se dejan apagados.
       alwaysOnline: false,
       readMessages: false,
       readStatus: false,
-      syncFullHistory: false,
+      // Cuanto historial pide el socket, DERIVADO del modo (#73).
+      //
+      // Iba `false` fijo mientras la pantalla ofrecia tres opciones. El campo
+      // `modo` de arriba solo lo entiende el puente de Baileys: el Evolution
+      // del VPS lo ignora y lee ESTE, asi que alli «el ultimo mes» y «todo el
+      // historial» hacian lo mismo que «empezar de cero». No llegaba nada que
+      // recortar. El recorte a 30 dias lo aplica ahora el CRM al recibir.
+      syncFullHistory: syncFullHistoryPara(modo),
       // A donde avisa Evolution cuando entra un mensaje de ESTA sesion.
       //
       // Sin esto se usa el webhook global del contenedor, que apunta a un solo
@@ -306,11 +319,24 @@ export async function guardarAjustes(nombre = INSTANCIA, cambios = {}) {
     cuerpo: {
       rejectCall: actuales.rejectCall ?? false,
       msgCall: actuales.msgCall ?? '',
-      groupsIgnore: actuales.groupsIgnore ?? false,
+      // Los dos `??` de estas lineas eran una puerta trasera.
+      //
+      // Cuando Evolution no devuelve un campo —y no siempre los devuelve
+      // todos—, el valor de reserva pasa a ser el que se escribe. Con
+      // `groupsIgnore ?? false`, tocar el interruptor de «responder a
+      // llamadas» ENCENDIA los grupos; con `syncFullHistory ?? true`, dejaba
+      // la sesion pidiendo el historial entero en la siguiente vinculacion.
+      // Dos efectos que nadie pidio, disparados desde una pantalla que habla
+      // de otra cosa, y sin rastro en ningun registro.
+      //
+      // Ahora la reserva es lo que el CRM decide, no lo que caiga.
+      groupsIgnore: actuales.groupsIgnore ?? groupsIgnoreParaEvolution(),
       alwaysOnline: actuales.alwaysOnline ?? false,
       readMessages: actuales.readMessages ?? false,
       readStatus: actuales.readStatus ?? false,
-      syncFullHistory: actuales.syncFullHistory ?? true,
+      // Y aqui `false`: pedir el historial entero es caro y solo se decide al
+      // enlazar. Si el campo no viene, lo seguro es no pedirlo.
+      syncFullHistory: actuales.syncFullHistory ?? false,
       ...cambios,
     },
     esperaMs: 15000,

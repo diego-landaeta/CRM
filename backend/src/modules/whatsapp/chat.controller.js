@@ -1,5 +1,6 @@
 import * as model from './chat.model.js';
 import * as servicio from './chat.service.js';
+import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
 import * as firma from './media.firma.js';
@@ -7,7 +8,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
-import { porQueNoPuede } from './roles.js';
+import { porQueNoPuede } from './roles.js';
+
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
@@ -703,6 +705,8 @@ export async function conexion(req, res, next) {
       logger.warn('WhatsApp sin configurar: faltan EVOLUTION_URL o EVOLUTION_API_KEY');
       return res.json({ success: true, data: {
         configurado: false,
+        topeAdjuntoBytes: TOPE_WHATSAPP_BYTES,
+        grupos: politica.seAceptanGrupos(),
         motivo: process.env.NODE_ENV === 'production'
           ? 'WhatsApp no esta disponible ahora mismo. Avisa a quien lleva el CRM.'
           : 'WhatsApp todavia no esta disponible en este entorno de pruebas. En produccion funciona con normalidad.',
@@ -743,6 +747,25 @@ export async function conexion(req, res, next) {
       nombre: mia?.profileName || mia?.profileName || null,
       conectado: crudo === 'open',
       estado: crudo,
+      // El tope real de un adjunto, dicho por quien lo sabe (#77).
+      //
+      // `TOPE_WHATSAPP_BYTES` se importaba aqui y no se usaba en ninguna linea,
+      // asi que la pantalla nunca recibia este campo y caia siempre a su
+      // constante escrita a mano — que es exactamente el numero desincronizado
+      // que se queria eliminar. Un import muerto no da error y no se ve.
+      topeAdjuntoBytes: TOPE_WHATSAPP_BYTES,
+      // Si este WhatsApp deja corregir mensajes (#75).
+      //
+      // `evolution.puedeEditar()` existia desde el primer dia y no lo llamaba
+      // NADIE: se apagaba la funcion por dentro tras un 404 y la pantalla
+      // seguia ofreciendo el boton en todos los mensajes. La gestora lo pulsaba
+      // una y otra vez y siempre fallaba igual — que es exactamente lo que se
+      // queria evitar apagandola.
+      puedeCorregir: evolution.puedeEditar(),
+      // Si entran los grupos o no. La pantalla lo dice al buscar sin resultados
+      // y hasta ahora lo afirmaba a ciegas: «los grupos no se muestran» era
+      // falso, porque si se muestran (#74).
+      grupos: politica.seAceptanGrupos(),
     }});
   } catch (err) { next(err); }
 }
@@ -763,7 +786,11 @@ export async function emparejar(req, res, next) {
     const instancia = await instanciaObjetivo(req);
     // Cuanto historial quiere quien enlaza. Si manda cualquier otra cosa, lo
     // rapido: es lo que deja la pantalla usable en segundos.
-    const modo = ['cero', 'rapido', 'todo'].includes(req.body?.modo) ? req.body.modo : 'rapido';
+    const modo = politica.MODOS.includes(req.body?.modo) ? req.body.modo : 'rapido';
+    // Se apunta para poder recortar lo que llegue (#73). El socket ya viene
+    // pidiendo todo el historial en «rapido» —si no, no habria nada que
+    // recortar—, asi que los 30 dias los aplica el CRM al recibir.
+    politica.apuntarModo(instancia, modo);
 
     // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
     //

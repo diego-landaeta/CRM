@@ -639,6 +639,37 @@
   background: rgba(0, 0, 0, 0.22);
 }
 .wa-cita-quien { display: block; font-size: 11.5px; font-weight: 600; color: var(--wa-verde); }
+
+/* Quien escribio, en un grupo (#74).
+ *
+ * Va ENCIMA del texto y en su mismo hueco, como en WhatsApp: leerlo tiene que
+ * costar cero, porque en un grupo movido se lee un autor por burbuja. Mas
+ * pequeño y en verde para que sea la etiqueta y no el mensaje.
+ *
+ * Solo aparece en lo que ENTRA: en lo que sales tu, el autor eres tu. */
+.wa-autor {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wa-verde);
+  max-width: 100%;
+}
+
+/* El nombre se recorta; el avatar nunca, para que no se deforme. */
+.wa-autor-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wa-autor-avatar {
+  flex: 0 0 auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; letter-spacing: .2px;
+  color: #fff;
+}
+
+/* «Grupos» no es un estado de prospecto, asi que no lleva su paleta: gris
+ * neutro para que se lea como lo que es, un filtro de otra clase. */
+.wa-et-grupos { background: rgba(148, 163, 184, .18); color: #cbd5e1; }
 .wa-cita-texto {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;

@@ -51,6 +51,23 @@ const iniciales = (n: string) =>
   n.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 
 /**
+ * Un color estable a partir del nombre.
+ *
+ * La gracia es que sea SIEMPRE el mismo para la misma persona: en un grupo
+ * movido se reconoce quién habla por el color antes de leer el nombre. Al azar
+ * cambiaría en cada recarga, y por posición se movería según quién más hubiera
+ * escrito, que es justo lo contrario de reconocible.
+ *
+ * Tonos oscuros a propósito: el texto encima es blanco y este panel es oscuro
+ * en los dos temas de la aplicación.
+ */
+function colorDeNombre(nombre: string) {
+  let n = 0;
+  for (let i = 0; i < nombre.length; i++) n = (n * 31 + nombre.charCodeAt(i)) % 360;
+  return `hsl(${n} 45% 32%)`;
+}
+
+/**
  * La foto de perfil de WhatsApp, con las iniciales de recurso.
  *
  * La direccion que da WhatsApp caduca, asi que puede fallar en cualquier
@@ -198,7 +215,10 @@ const VENTANA_EDICION_MS = 15 * 60 * 1000;
  * Se dejan fuera «nuevo» y «contactado» a proposito: con siete pastillas no se
  * filtra, se busca entre pastillas.
  */
-const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesado'] as const;
+const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesado', 'grupos'] as const;
+
+/** «Grupos» no es un estado de prospecto, así que su nombre no sale de STATUS_LABELS. */
+const ETIQUETA_GRUPOS = 'grupos';
 
 export default function ChatPage() {
   const { activeProject } = useProjectContext() as {
@@ -559,6 +579,10 @@ export default function ChatPage() {
    * «fuera de plazo» al pulsarlo es peor que no ofrecerlo.
    */
   function sePuedeCorregir(m: MensajeWhatsapp) {
+    // Lo primero, si este WhatsApp lo permite. El servidor lo pone en falso en
+    // cuanto un 404 le dice que esta versión no trae la función: sin esto, el
+    // botón se seguía ofreciendo en cada mensaje y fallaba siempre igual.
+    if (conexion?.puedeCorregir === false) return false;
     return m.direccion === 'saliente' && m.tipo === 'texto' && Boolean(m.texto) && Boolean(m.wa_id)
       && m.estado !== 'fallido'
       && (Date.now() - new Date(m.ts).getTime()) < VENTANA_EDICION_MS;
@@ -643,10 +667,21 @@ export default function ChatPage() {
 
   /** Los pone en la vista previa. No envia nada todavia. */
   function proponerArchivos(fs: File[]) {
-    if (!abierto) {
+    // El destino sale de lo que se está VIENDO, no solo de `abierto`.
+    //
+    // Con el chat abierto en pantalla, soltar un archivo contestaba «Elige una
+    // conversación antes». `conv` es la conversación que la cabecera está
+    // pintando: si hay cabecera, hay destino, y no puede desajustarse con lo
+    // que el usuario ve. `abierto` va primero porque es quien manda cuando los
+    // dos están puestos.
+    const destino = abierto ?? conv?.id ?? null;
+    if (!destino) {
       toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
       return;
     }
+    // Y si se cayó el desajuste, se recupera: sin esto el archivo se quedaría
+    // en la vista previa y al enviar volvería a fallar por lo mismo.
+    if (!abierto) setAbierto(destino);
     // Se avisa AQUI, antes de subir nada. Lo que pasaba: se elegia el dossier,
     // se pulsaba enviar, se esperaba, y salia «Error 413» — que no le dice nada
     // a nadie. Ese 413 no es de la aplicacion (multer acepta 16 MB): lo corta
@@ -1040,7 +1075,7 @@ export default function ChatPage() {
                   aria-pressed={etiqueta === e}
                   onClick={() => setEtiqueta(etiqueta === e ? null : e)}
                   className={`wa-etiqueta wa-et-${e} ${etiqueta === e ? "wa-etiqueta-puesta" : ""}`}>
-                  {STATUS_LABELS[e] || e}
+                  {e === ETIQUETA_GRUPOS ? 'Grupos' : (STATUS_LABELS[e] || e)}
                 </button>
               ))}
               {etiqueta && (
@@ -1109,11 +1144,18 @@ export default function ChatPage() {
                     Abrir el chat con {buscaChats.trim()}
                   </button>
                 )}
-                <p>
-                  Y los <strong>grupos no se muestran</strong>, a propósito: este número es
-                  para escribir a prospectos, y entrar en grupos suma para que WhatsApp lo
-                  suspenda. No es un fallo.
-                </p>
+                {/* Esto lo dice ahora el servidor, no la pantalla.
+                    Antes se afirmaba siempre «los grupos no se muestran», y era
+                    falso: sí se muestran. Se le pedía a Evolution que los
+                    ignorara y no lo hacía, así que la pantalla estaba dando por
+                    buena una regla que nadie cumplía (#74). */}
+                {conexion?.grupos === false && (
+                  <p>
+                    Y los <strong>grupos no se muestran</strong>, a propósito: este número es
+                    para escribir a prospectos, y entrar en grupos suma para que WhatsApp lo
+                    suspenda. No es un fallo.
+                  </p>
+                )}
               </div>
             )}
           </Sidebar>
@@ -1244,6 +1286,31 @@ export default function ChatPage() {
                         type: 'custom',
                       }}>
                       <Message.CustomContent>
+                        {/* QUIEN escribio. Solo en grupos, y solo en lo que
+                            entra: lo que sale es tuyo y ponerte tu propio
+                            nombre en cada burbuja seria ruido.
+
+                            Sin esto, un grupo era una lista de mensajes sin
+                            autor —todos iguales— y no se podia saber quien
+                            había dicho qué, que es media razón para abrir un
+                            grupo. En un chat de una persona sobra: la
+                            conversación YA es ella. */}
+                        {conv?.es_grupo && !mia && (m.participante_nombre || m.participante) && (() => {
+                          const quien = m.participante_nombre
+                            || `+${String(m.participante).split('@')[0]}`;
+                          return (
+                            <div className="wa-autor">
+                              {/* Iniciales y no la foto real: la de WhatsApp
+                                  caduca, así que guardar su dirección en cada
+                                  mensaje llenaría el histórico de huecos rotos. */}
+                              <span className="wa-autor-avatar" aria-hidden="true"
+                                style={{ background: colorDeNombre(quien) }}>
+                                {iniciales(quien)}
+                              </span>
+                              <span className="wa-autor-nombre">{quien}</span>
+                            </div>
+                          );
+                        })()}
                         {/* A que contestaba. Sin esto la respuesta salia suelta
                             y en una conversacion movida eso es la mitad de la
                             informacion: se veia el «si» sin la pregunta. */}

@@ -36,6 +36,16 @@ const NO_ES_CONVERSACION = [
   'reactionMessage', 'pollUpdateMessage', 'pollCreationMessage',
   'ephemeralMessage', 'viewOnceMessage', 'call', 'callLogMesssage',
   'deviceSentMessage', 'keepInChatMessage', 'editedMessage',
+  // Sobres CIFRADOS: WhatsApp los usa para los votos de encuestas y para los
+  // eventos. Van cifrados con una clave que solo tienen quien los creo y quien
+  // participa, asi que aqui no hay nada que descifrar ni que enseñar — no es
+  // que no sepamos leerlos, es que no se pueden leer.
+  //
+  // Sin esto salia una burbuja «Mensaje que el CRM aun no sabe mostrar —
+  // miralo en el movil» que ademas mentia: en el movil tampoco se ve como
+  // mensaje, porque es la maquinaria de una encuesta y no una conversacion.
+  'secretEncryptedMessage', 'encReactionMessage', 'encEventUpdateMessage',
+  'pollResultSnapshotMessage', 'eventCoverImage',
 ];
 
 /** ¿Este mensaje es contenido de verdad, o ruido del protocolo? */
