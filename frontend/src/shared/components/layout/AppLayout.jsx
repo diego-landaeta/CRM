@@ -37,6 +37,10 @@ const ALL_PROJECTS_OK = [
   /^\/status$/,
   /^\/ai-chat$/,
   /^\/prueba_ui(?:_[a-z]+)?$/,
+  // El muestrario de primitivas no depende de ningún proyecto: son piezas
+  // sueltas. Sin esto, quien tenga puesto «Todos los proyectos» —que es lo
+  // normal— se encuentra el aviso de «elige un proyecto» en vez de la pantalla.
+  /^\/dev\/components$/,
 ];
 
 function pathAllowsAll(pathname) {

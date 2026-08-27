@@ -1,3 +1,4 @@
+import { avatarColorFor } from '@/shared/lib/ui';
 import { useState, useEffect, useCallback, lazy, Suspense, type DragEvent } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
@@ -21,12 +22,6 @@ const COLUMNS = [
   { key: 'convertido', label: 'Convertido', color: '#8b5cf6', bg: 'bg-violet-50 dark:bg-violet-950/30', dot: 'bg-violet-500', ring: 'ring-violet-400' },
   { key: 'no_interesado', label: 'No interesado', color: '#ef4444', bg: 'bg-red-50 dark:bg-red-950/30', dot: 'bg-red-500', ring: 'ring-red-400' },
   { key: 'proxima_convocatoria', label: 'Próxima convocatoria', color: '#06b6d4', bg: 'bg-cyan-50 dark:bg-cyan-950/30', dot: 'bg-cyan-500', ring: 'ring-cyan-400' },
-];
-
-const AVATAR_COLORS = [
-  'bg-rose-100 text-rose-700', 'bg-sky-100 text-sky-700',
-  'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700', 'bg-teal-100 text-teal-700',
 ];
 
 function getInitials(name: string | null | undefined): string {
@@ -109,7 +104,7 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${AVATAR_COLORS[lead.id % AVATAR_COLORS.length]}`}>
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${avatarColorFor(lead.id)}`}>
             {getInitials(lead.nombre)}
           </div>
           <div className="min-w-0">

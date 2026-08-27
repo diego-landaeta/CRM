@@ -190,7 +190,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
       >
         <Icon size={16} weight={unread > 0 ? 'fill' : 'regular'} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -239,7 +239,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
                       >
                         <span className={cn(
                           'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                          it.kind === 'overdue' ? 'bg-red-500' : it.kind === 'urgent' ? 'bg-amber-500' : 'bg-blue-500',
+                          it.kind === 'overdue' ? 'bg-destructive' : it.kind === 'urgent' ? 'bg-warning' : 'bg-info',
                         )} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold leading-tight">{it.title}</p>

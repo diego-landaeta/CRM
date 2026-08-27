@@ -9,10 +9,13 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
 }
 
+// `p-tarjeta` y no `p-4`: el relleno de una tarjeta es una decisión con nombre,
+// no un número que se elige otra vez en cada pantalla. Se movía entre ocho
+// valores distintos antes de esto.
 const RELLENO = {
   none: '',
   sm: 'p-3',
-  md: 'p-4',
+  md: 'p-tarjeta',
 } as const;
 
 /**

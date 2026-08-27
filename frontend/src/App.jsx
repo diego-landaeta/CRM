@@ -135,9 +135,14 @@ const LeadsUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-
 const GenericUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage')) : null;
 const SuiteDashCrmPreviewPage = IS_TESTEO2_BASE ? lazy(() => import('./modules/suitedash-preview/pages/SuiteDashCrmPreviewPage')) : null;
 
-// Dev-only: catalogo de componentes UI (CRM-205). Solo se monta en development;
-// en build de produccion Vite elimina la rama por dead-code elimination.
-const DevComponentsPage = import.meta.env.DEV
+// El muestrario de primitivas (#32): todas juntas, para verlas de una vez.
+//
+// Estaba detras de `import.meta.env.DEV`, asi que existia solo en el equipo de
+// quien lo escribio: en /testeo no se montaba y por eso «no existia». Pasa a la
+// misma puerta que las demas pantallas de previsualizacion —desarrollo y
+// /testeo—, que es donde hay que poder mirarlo. En produccion sigue fuera, y
+// Vite elimina la rama entera al construir.
+const DevComponentsPage = UI_PREVIEW_ENABLED
   ? lazy(() => import('./modules/dev/pages/DevComponentsPage'))
   : null;
 

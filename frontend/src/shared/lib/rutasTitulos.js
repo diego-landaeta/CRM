@@ -60,7 +60,7 @@ export const ROUTE_TITLES = {
   '/manual': 'Manual',
   '/configuracion': 'Configuración',
   '/perfil': 'Mi perfil',
-  '/dev/components': 'Catálogo UI',
+  '/dev/components': 'Las 22 primitivas',
   '/prueba_ui': 'Laboratorio UI',
   '/prueba_ui_leads': 'Prueba UI Prospectos',
   '/prueba_ui_clientes': 'Prueba UI Clientes',
