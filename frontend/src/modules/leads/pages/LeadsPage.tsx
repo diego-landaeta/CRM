@@ -84,13 +84,13 @@ type ChipTone = 'default' | 'danger' | 'warning';
 function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
   const toneActive: string = {
     default: 'bg-primary text-white',
-    danger: 'bg-red-600 text-white',
-    warning: 'bg-amber-600 text-white',
+    danger: 'bg-destructive text-destructive-foreground',
+    warning: 'bg-warning text-warning-foreground',
   }[tone];
   const toneIdleCount: string = {
     default: 'bg-primary/15 text-primary',
-    danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    danger: 'bg-destructive-soft text-destructive-soft-foreground',
+    warning: 'bg-warning-soft text-warning-soft-foreground',
   }[tone];
   return (
     <button
@@ -600,14 +600,14 @@ export default function LeadsPage() {
             aria-label="Refrescar"
             className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
               newCount > 0
-                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 animate-pulse'
+                ? 'border-success/30 bg-success-soft text-success animate-pulse'
                 : 'border-border bg-card hover:bg-muted'
             }`}
           >
             <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
             <span className="hidden md:inline">Refrescar</span>
             {newCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-success-foreground text-[10px] font-bold flex items-center justify-center">
                 {newCount > 9 ? '9+' : newCount}
               </span>
             )}
@@ -642,7 +642,7 @@ export default function LeadsPage() {
             onClick={() => setWasapiOpen(true)}
             title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
             aria-label="Wasapi"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-success/30 bg-success-soft text-success text-xs sm:text-sm font-medium hover:bg-success-soft transition-colors focus:outline-none focus:ring-2 focus:ring-success/40"
           >
             <WhatsappLogo size={14} weight="bold" />
             <span className="hidden md:inline">Wasapi</span>
@@ -748,9 +748,9 @@ export default function LeadsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
-          <WarningCircle size={32} className="text-red-500 mx-auto mb-2" weight="regular" />
-          <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
+        <div className="bg-destructive-soft border border-destructive/30 rounded-lg p-6 text-center">
+          <WarningCircle size={32} className="text-destructive mx-auto mb-2" weight="regular" />
+          <p className="text-sm text-destructive font-medium">{error}</p>
         </div>
       )}
 
@@ -795,7 +795,7 @@ export default function LeadsPage() {
                   key={lead.id}
                   onClick={() => setDrawerLeadId(lead.id)}
                   title={isPorContactar ? 'Por contactar — pendiente de primer contacto' : `Prioridad: ${pStyle.label}`}
-                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-orange-50/60 dark:bg-orange-950/20 ring-1 ring-orange-300/60 dark:ring-orange-800/60' : ''}`}
+                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-warning-soft ring-1 ring-warning/40 dark:ring-warning/40' : ''}`}
                 >
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
@@ -845,13 +845,13 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.valor_oportunidad === 'alto' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" title="Producto de valor alto">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Alto
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold bg-success-soft text-success-soft-foreground" title="Producto de valor alto">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />Alto
                       </span>
                     )}
                     {lead.valor_oportunidad === 'medio' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" title="Producto de valor medio">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Medio
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-warning-soft text-warning-soft-foreground" title="Producto de valor medio">
+                        <span className="w-1.5 h-1.5 rounded-full bg-warning" />Medio
                       </span>
                     )}
                     {lead.valor_oportunidad === 'bajo' && (
@@ -888,7 +888,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.next_reminder_at ? (
-                      <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-medium' : 'text-foreground'}>
+                      <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-destructive font-medium' : 'text-foreground'}>
                         {formatRelative(lead.next_reminder_at, { future: true })}
                       </span>
                     ) : <span className="text-muted-foreground/60">—</span>}
@@ -952,7 +952,7 @@ export default function LeadsPage() {
                   <span className="text-muted-foreground">Último: <span className="text-foreground">{formatFecha(lead.last_interaction_at)}</span></span>
                 )}
                 {lead.next_reminder_at && (
-                  <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-red-600 font-semibold' : 'text-muted-foreground'}>
+                  <span className={(new Date(lead.next_reminder_at) < new Date()) ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
                     Próximo: <span className="font-medium">{formatRelative(lead.next_reminder_at, { future: true })}</span>
                   </span>
                 )}
@@ -1121,7 +1121,7 @@ export default function LeadsPage() {
           scope={
             <section className="rounded-md border border-border bg-muted/20 p-3 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué leads exportar?</p>
+                <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué prospectos exportar?</p>
                 <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
                   <button type="button" onClick={() => setExportScope('filtros')}
                     className={`flex-1 h-8 ${expScope === 'filtros' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
@@ -1155,7 +1155,7 @@ export default function LeadsPage() {
                     })}
                   </div>
                   {expProjectIds.length === 0 && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Elige al menos un proyecto.</p>
+                    <p className="text-[11px] text-warning mt-1">Elige al menos un proyecto.</p>
                   )}
                 </div>
               )}

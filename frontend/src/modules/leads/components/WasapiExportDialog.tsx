@@ -47,7 +47,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
   // Filtros (todos opcionales; gestor solo puede tocar los suyos)
   const [responsableId, setResponsableId] = useState<string>('');
   // Estados a EXCLUIR del envío (p.ej. no interesados). Sustituye al antiguo
-  // filtro "Estado del lead": aquí marcas a quién NO enviar.
+  // filtro "Estado del prospecto": aquí marcas a quién NO enviar.
   const [excludeStatus, setExcludeStatus] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
@@ -123,13 +123,13 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-2xl flex flex-col max-h-[90vh]">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-            <div className="w-9 h-9 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-md bg-success-soft text-success flex items-center justify-center flex-shrink-0">
               <WhatsappLogo size={18} weight="duotone" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-base">Exportar plantilla Wasapi</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Exporta los leads para enviarles WhatsApp desde Wasapi.io. Elige <strong>de qué fechas</strong> y marca <strong>a quién excluir</strong>. Todo es opcional: sin filtros se descargan todos los prospectos del proyecto.
+                Exporta los prospectos para enviarles WhatsApp desde Wasapi.io. Elige <strong>de qué fechas</strong> y marca <strong>a quién excluir</strong>. Todo es opcional: sin filtros se descargan todos los prospectos del proyecto.
               </p>
             </div>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={18} /></button>
@@ -137,9 +137,9 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
 
           <div className="p-5 space-y-4 overflow-y-auto">
             {isGestor && (
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded p-2.5 text-xs text-blue-900 dark:text-blue-300 flex gap-2">
+              <div className="bg-info-soft border border-info/30 rounded p-2.5 text-xs text-info flex gap-2">
                 <Info size={14} className="flex-shrink-0 mt-0.5" weight="duotone" />
-                Como gestor, solo descargarás los leads asignados a ti.
+                Como gestor, solo descargarás los prospectos asignados a ti.
               </div>
             )}
 
@@ -185,12 +185,12 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
               <label className="text-[11px] font-semibold text-muted-foreground mb-1.5 block">Formato del archivo</label>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setFormat('xlsx')}
-                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'xlsx' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border hover:border-muted-foreground/40'}`}>
+                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'xlsx' ? 'border-success/30 bg-success-soft' : 'border-border hover:border-muted-foreground/40'}`}>
                   <p className="text-sm font-semibold">Excel (.xlsx)</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Recomendado. Teléfonos preservados, acentos OK.</p>
                 </button>
                 <button type="button" onClick={() => setFormat('csv')}
-                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'csv' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border hover:border-muted-foreground/40'}`}>
+                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'csv' ? 'border-success/30 bg-success-soft' : 'border-border hover:border-muted-foreground/40'}`}>
                   <p className="text-sm font-semibold">CSV (.csv)</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Más liviano. Cuidado al abrirlo en Excel (puede romper teléfonos).</p>
                 </button>
@@ -200,7 +200,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
             {/* EXCLUIR estados: checklist. Quita del envio los leads en esos
                 estados (p.ej. no interesados). */}
             <div className="pt-2 border-t border-border">
-              <p className="text-sm font-semibold mb-0.5">Excluir estos leads del envío</p>
+              <p className="text-sm font-semibold mb-0.5">Excluir estos prospectos del envío</p>
               <p className="text-[11px] text-muted-foreground mb-2">
                 Marca los estados que <strong>NO</strong> quieres que reciban el WhatsApp. Si no marcas nada, se exportan todos.
               </p>
@@ -214,14 +214,14 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
                         prev.includes(e.value) ? prev.filter((x) => x !== e.value) : [...prev, e.value])}
                       className="w-4 h-4 rounded border-border"
                     />
-                    <span className={excludeStatus.includes(e.value) ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                    <span className={excludeStatus.includes(e.value) ? 'text-destructive font-medium' : ''}>
                       {e.label}
                     </span>
                   </label>
                 ))}
               </div>
               {excludeStatus.length > 0 && (
-                <p className="text-[11px] text-red-600 dark:text-red-400 mt-2">
+                <p className="text-[11px] text-destructive mt-2">
                   Se excluiran {excludeStatus.length} estado{excludeStatus.length !== 1 ? 's' : ''} del envio.{' '}
                   <button type="button" onClick={() => setExcludeStatus([])} className="underline hover:no-underline">Quitar exclusiones</button>
                 </p>
@@ -232,12 +232,12 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={onlyWithPhone} onChange={(e) => setOnlyWithPhone(e.target.checked)}
                   className="w-4 h-4 rounded border-border" />
-                Solo leads con teléfono válido <span className="text-muted-foreground">(recomendado — sin teléfono Wasapi no puede enviar)</span>
+                Solo prospectos con teléfono válido <span className="text-muted-foreground">(recomendado — sin teléfono Wasapi no puede enviar)</span>
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={includeConverted} onChange={(e) => setIncludeConverted(e.target.checked)}
                   className="w-4 h-4 rounded border-border" />
-                Incluir leads ya convertidos <span className="text-muted-foreground">(normalmente excluidos)</span>
+                Incluir prospectos ya convertidos <span className="text-muted-foreground">(normalmente excluidos)</span>
               </label>
             </div>
 
@@ -258,7 +258,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
               Cancelar
             </button>
             <button onClick={handleDownload} disabled={loading}
-              className="h-9 px-4 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+              className="h-9 px-4 rounded-md bg-success text-success-foreground text-sm font-semibold hover:bg-success/90 disabled:opacity-50 inline-flex items-center gap-1.5">
               <DownloadSimple size={14} weight="bold" />
               {loading ? 'Generando…' : `Descargar ${format.toUpperCase()}`}
             </button>

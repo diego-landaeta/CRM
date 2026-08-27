@@ -49,7 +49,7 @@ function Field({ label, error, hint, children }: { label: string; error?: string
       </label>
       {children}
       {hint && <p className="text-xs text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
+      {error && <p className="text-xs text-destructive mt-1 px-1">{error}</p>}
     </div>
   );
 }
@@ -209,13 +209,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   return (
     <Portal>
-      <div role="dialog" aria-label={isEdit ? 'Editar Lead' : 'Nuevo Prospecto'} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
+      <div role="dialog" aria-label={isEdit ? 'Editar prospecto' : 'Nuevo prospecto'} className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
         <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
         <div className="relative bg-card rounded-lg border border-border shadow-[0_20px_25px_-5px_rgb(0_0_0/0.1)] w-full max-w-2xl mx-4 p-4 sm:p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold">{isEdit ? 'Editar Lead' : 'Nuevo Prospecto'}</h2>
+              <h2 className="text-lg font-semibold">{isEdit ? 'Editar prospecto' : 'Nuevo prospecto'}</h2>
               <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del lead' : 'Registra un nuevo lead manualmente'}</p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
@@ -227,8 +227,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
             {/* En modo "Todos los proyectos": pedimos al usuario que elija
                 a qué proyecto pertenece el lead antes de poder rellenar nada. */}
             {isAllProjects && !isEdit && (
-              <div className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-3">
-                <label className="text-xs font-semibold text-violet-800 dark:text-violet-300 block mb-1.5">
+              <div className="rounded-md border border-info/30 bg-info-soft p-3">
+                <label className="text-xs font-semibold text-info block mb-1.5">
                   Proyecto al que pertenece este prospecto *
                 </label>
                 <select
@@ -242,8 +242,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     <option key={p.id} value={p.id}>{p.nombre}</option>
                   ))}
                 </select>
-                <p className="text-[11px] text-violet-700 dark:text-violet-400 mt-1.5">
-                  Estás en la vista global. El lead se creará en el proyecto elegido y aplicará su round-robin.
+                <p className="text-[11px] text-info mt-1.5">
+                  Estás en la vista global. El prospecto se creará en el proyecto elegido y aplicará su round-robin.
                 </p>
               </div>
             )}
@@ -257,10 +257,10 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
             </div>
 
             {duplicates.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 flex gap-3 items-start">
-                <Warning size={16} weight="fill" className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="bg-warning-soft border border-warning/30 rounded-md p-3 flex gap-3 items-start">
+                <Warning size={16} weight="fill" className="text-warning flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                  <p className="text-xs font-bold text-warning dark:text-warning">
                     Ya existe {duplicates.length} lead{duplicates.length > 1 ? 's' : ''} con ese email
                   </p>
                   {duplicates.slice(0, 3).map(d => {
@@ -275,16 +275,16 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     );
                     return isMine ? (
                       <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
+                        className="text-[11px] text-warning hover:underline flex items-center gap-1 mt-0.5"
                       >{inner}</a>
                     ) : (
-                      <div key={d.id} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
-                        title="Este lead pertenece a otra asesora — contacta con ella para coordinar"
+                      <div key={d.id} className="text-[11px] text-warning flex items-center gap-1 mt-0.5"
+                        title="Este prospecto pertenece a otra asesora — contacta con ella para coordinar"
                       >{inner}</div>
                     );
                   })}
                   {isGestor && duplicates.some(d => d.responsable_id !== user?.id) && (
-                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 italic">
+                    <p className="text-[10px] text-warning mt-1.5 italic">
                       Hay duplicados asignados a otras asesoras. Coordina con ellas antes de crear un registro nuevo.
                     </p>
                   )}
@@ -366,7 +366,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   {customFields.map(f => (
                     <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
                       <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-                        {f.label} {f.required && <span className="text-red-500">*</span>}
+                        {f.label} {f.required && <span className="text-destructive">*</span>}
                       </label>
                       {f.type === 'textarea' ? (
                         <textarea
@@ -411,7 +411,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
             <Field label="Notas">
               <textarea
                 {...register('notas')}
-                placeholder="Notas adicionales sobre el lead..."
+                placeholder="Notas adicionales sobre el prospecto..."
                 rows={3}
                 className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
               />
@@ -430,11 +430,11 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
       </div>
 
       {pendingDup && (
-        <div role="dialog" aria-label="Lead duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div role="dialog" aria-label="Prospecto duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPendingDup(null)} />
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
             <div>
-              <h3 className="text-base font-semibold mb-1">Ya existe un lead con estos datos</h3>
+              <h3 className="text-base font-semibold mb-1">Ya existe un prospecto con estos datos</h3>
               <p className="text-sm text-muted-foreground">
                 {pendingDup.lead.masked
                   ? pendingDup.lead.message || 'Existe un lead duplicado asignado a otro gestor.'
@@ -463,7 +463,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 <button type="button"
                   onClick={() => { const id = pendingDup.lead.id; setPendingDup(null); onClose(); const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, ''); window.location.href = `${base}/prospectos/${id}`; }}
                   className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90"
-                >Ver lead existente</button>
+                >Ver prospecto existente</button>
               )}
               <button type="button"
                 onClick={async () => { const p = pendingDup; setPendingDup(null); await proceedSubmit(p.formData, p.productoInteresId); }}

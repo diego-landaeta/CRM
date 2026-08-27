@@ -1,3 +1,4 @@
+import { fondoDeEstado, puntoDeEstado, haloDeEstado, cssDeEstado } from '../lib/estadoTono';
 import { avatarColorFor } from '@/shared/lib/ui';
 import { useState, useEffect, useCallback, lazy, Suspense, type DragEvent } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -14,15 +15,17 @@ const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 
 type PipelineLead = Lead & { gestor?: string; fecha?: string };
 
+// Los tonos salen de lib/estadoTono.ts. Aqui estaban a mano, con un hexadecimal
+// ademas de la clase, y los dos podian irse por su lado.
 const COLUMNS = [
-  { key: 'nuevo', label: 'Nuevo', color: '#3b82f6', bg: 'bg-blue-50 dark:bg-blue-950/30', dot: 'bg-blue-500', ring: 'ring-blue-400' },
-  { key: 'por_contactar', label: 'Por contactar', color: '#f59e0b', bg: 'bg-orange-50 dark:bg-orange-950/30', dot: 'bg-amber-500', ring: 'ring-amber-400' },
-  { key: 'contactado', label: 'Contactado', color: '#10b981', bg: 'bg-emerald-50 dark:bg-emerald-950/30', dot: 'bg-emerald-500', ring: 'ring-emerald-400' },
-  { key: 'en_seguimiento', label: 'En seguimiento', color: '#eab308', bg: 'bg-amber-50 dark:bg-amber-950/30', dot: 'bg-yellow-500', ring: 'ring-yellow-400' },
-  { key: 'convertido', label: 'Convertido', color: '#8b5cf6', bg: 'bg-violet-50 dark:bg-violet-950/30', dot: 'bg-violet-500', ring: 'ring-violet-400' },
-  { key: 'no_interesado', label: 'No interesado', color: '#ef4444', bg: 'bg-red-50 dark:bg-red-950/30', dot: 'bg-red-500', ring: 'ring-red-400' },
-  { key: 'proxima_convocatoria', label: 'Próxima convocatoria', color: '#06b6d4', bg: 'bg-cyan-50 dark:bg-cyan-950/30', dot: 'bg-cyan-500', ring: 'ring-cyan-400' },
-];
+  { key: 'nuevo', label: 'Nuevo' },
+  { key: 'por_contactar', label: 'Por contactar' },
+  { key: 'contactado', label: 'Contactado' },
+  { key: 'en_seguimiento', label: 'En seguimiento' },
+  { key: 'convertido', label: 'Convertido' },
+  { key: 'no_interesado', label: 'No interesado' },
+  { key: 'proxima_convocatoria', label: 'Próxima convocatoria' },
+].map((c) => ({ ...c, bg: fondoDeEstado(c.key), dot: puntoDeEstado(c.key), ring: haloDeEstado(c.key), color: cssDeEstado(c.key) }));
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
@@ -57,11 +60,11 @@ function nextContactInfo(dateStr: string | null | undefined) {
   const today = todayLocal();
   const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
   if (diffDays < 0) {
-    return { label: `vencido ${Math.abs(diffDays)}d`, classes: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' };
+    return { label: `vencido ${Math.abs(diffDays)}d`, classes: 'bg-destructive-soft text-destructive-soft-foreground' };
   }
-  if (diffDays === 0) return { label: 'hoy', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
-  if (diffDays === 1) return { label: 'mañana', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' };
-  if (diffDays <= 7) return { label: `en ${diffDays}d`, classes: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' };
+  if (diffDays === 0) return { label: 'hoy', classes: 'bg-success-soft text-success-soft-foreground' };
+  if (diffDays === 1) return { label: 'mañana', classes: 'bg-info-soft text-info-soft-foreground' };
+  if (diffDays <= 7) return { label: `en ${diffDays}d`, classes: 'bg-info-soft text-info-soft-foreground' };
   return { label: target.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }), classes: 'bg-muted text-muted-foreground' };
 }
 
@@ -330,7 +333,7 @@ export default function LeadsPipelinePage() {
               aria-label="Nuevo prospecto"
               className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
             >
-              <Plus size={16} weight="bold" /> <span className="hidden sm:inline">Nuevo Prospecto</span>
+              <Plus size={16} weight="bold" /> <span className="hidden sm:inline">Nuevo prospecto</span>
             </button>
           </>
         }
