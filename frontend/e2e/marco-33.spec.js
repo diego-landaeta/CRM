@@ -102,8 +102,13 @@ test.describe('marco de la aplicacion', () => {
     // herramientas ademas de en las pestanas: dos sitios para las mismas tres
     // pantallas, uno encima del otro.
     await ir(page, baseURL, '/prospectos');
-    await expect(page.getByRole('link', { name: 'Listado' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Pipeline' })).toBeVisible();
+    // Acotado al contenido, y por nombre exacto. El menú lateral queda fuera de
+    // `#main-content`, y sus entradas llevan una segunda línea desde el #78:
+    // «Prospectos · Lista, pipeline y más» contiene la palabra «pipeline», así
+    // que un `getByRole('link', { name: 'Pipeline' })` a secas casa con dos.
+    const pestanas = page.locator('#main-content');
+    await expect(pestanas.getByRole('link', { name: 'Listado', exact: true })).toBeVisible();
+    await expect(pestanas.getByRole('link', { name: 'Pipeline', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: /kanban/i })).toHaveCount(0);
   });
 });
