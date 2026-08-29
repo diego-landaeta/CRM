@@ -222,7 +222,7 @@ export default function LeadsFiltersBar(props: Props) {
           <div
             ref={panelRef}
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
-            className="bg-card border border-border rounded-lg shadow-xl overflow-hidden"
+            className="bg-card border border-border rounded-lg shadow-dialog overflow-hidden"
           >
             <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}

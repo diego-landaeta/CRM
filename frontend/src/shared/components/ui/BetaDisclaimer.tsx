@@ -51,7 +51,7 @@ export default function BetaDisclaimer({
       {/* Popup modal — primera vez */}
       {showModal && (
         <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4" onClick={close}>
-          <div className="bg-card rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card rounded-lg shadow-dialog w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-start gap-3">
               <div className="w-10 h-10 rounded-md bg-warning-soft text-warning-soft-foreground flex items-center justify-center flex-shrink-0">
                 <WarningCircle size={22} weight="duotone" />

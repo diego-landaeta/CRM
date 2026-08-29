@@ -125,7 +125,7 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
             ref={menuRef}
             role="menu"
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
-            className="z-[100] min-w-[200px] rounded-md shadow-2xl py-1 bg-card border border-border"
+            className="z-[100] min-w-[200px] rounded-md shadow-popover py-1 bg-card border border-border"
           >
             {STATUS_KEYS.map((s) => {
               const isCurrent = s === currentStatus;

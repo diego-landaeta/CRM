@@ -203,7 +203,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
             role="dialog"
             aria-label="Notificaciones"
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
-            className="bg-card border border-border rounded-xl shadow-2xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className="bg-card border border-border rounded-xl shadow-popover z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
           >
             <header className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div>

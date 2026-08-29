@@ -1,4 +1,8 @@
 import SaludComercial from '../components/SaludComercial';
+import CifrasProspectos from '../components/CifrasProspectos';
+import SiguientesAcciones from '../components/SiguientesAcciones';
+import AccesosClave from '@/shared/components/ui/AccesosClave';
+import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -34,6 +38,9 @@ import {
   Flag,
   ChartLineUp,
   Receipt,
+  Kanban,
+  Export,
+  GitMerge,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -46,9 +53,9 @@ const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
-import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import StatusBadge, { STATUS_LABELS, STATUS_KEYS } from '@/shared/components/ui/StatusBadge';
 import QuickStatusChange from '../components/QuickStatusChange';
-import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import DateRangeFilter from '../components/DateRangeFilter';
@@ -659,7 +666,7 @@ export default function LeadsPage() {
                 <CaretDown size={11} weight="bold" />
               </button>
               {moreOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-popover z-30 w-max py-1">
                   <button
                     onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
@@ -691,19 +698,103 @@ export default function LeadsPage() {
           )}
       </div>
 
-      {/* Lo que pasa con los prospectos, antes de la tabla. Los numeros ya
-          venian del servidor; solo se usaban para unas pildoras dentro del
-          desplegable de filtros, donde no los ve nadie. */}
-      <SaludComercial
+      {/* Los tres bloques de arriba, como la maqueta: que pasa, que toca hacer,
+          y a donde se va desde aqui. Los numeros ya venian del servidor; solo
+          se usaban para unas pildoras dentro del desplegable de filtros, donde
+          no los ve nadie.
+
+          Las proporciones son las de la maqueta: la salud manda porque es lo
+          que mas se mira, y los accesos son la columna estrecha. */}
+      <CifrasProspectos
         stats={stats}
         urgencias={quickCounts}
         filtroRapido={quickFilter}
         onFiltroRapido={(clave) => setQuickFilter(clave || '')}
-        onFiltroEstado={setFilterEstadoSafe}
       />
 
-      {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
-              Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
+        <SaludComercial
+          stats={stats}
+          onFiltroEstado={setFilterEstadoSafe}
+          onVerPipeline={() => navigate('/prospectos/pipeline')}
+        />
+        <SiguientesAcciones
+          leads={leads}
+          onAbrir={(id) => navigate(`/prospectos/${id}`)}
+          onVerTodos={() => setQuickFilter('urgent')}
+        />
+        <AccesosClave
+          accesos={[
+            { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/prospectos/pipeline' },
+            { label: 'Audiencias', detail: 'Exportar a Meta y Google', icon: Export, to: '/prospectos/audiencias' },
+            { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/prospectos/revision-duplicados' },
+            { label: 'Reportes', detail: 'Numeros descargables', icon: ChartLineUp, to: '/informes' },
+          ]}
+        />
+      </section>
+
+      {/* Los cuatro filtros que más se usan, a la vista y en una fila, como la
+          maqueta. Estaban TODOS dentro del desplegable «Filtros»: para saber si
+          había algo puesto había que abrirlo, y un filtro que no se ve es un
+          filtro que se queda puesto sin querer — y entonces la pantalla enseña
+          menos de lo que hay sin decirlo.
+
+          Los otros siete (proyecto, gestora, programa, fechas, duplicados,
+          reincidentes y el orden fino) siguen detrás del botón: no caben en una
+          fila y no se usan a diario. */}
+      <BarraFiltros
+        busqueda={search}
+        onBusqueda={setSearch}
+        placeholder="Buscar por nombre, email o teléfono"
+        desplegables={[
+          {
+            nombre: 'Estado',
+            valor: filterEstado,
+            onChange: setFilterEstadoSafe,
+            opciones: [
+              { value: '', label: 'Todos los estados' },
+              ...STATUS_KEYS.map((k) => ({ value: k, label: STATUS_LABELS[k] || k })),
+            ],
+          },
+          {
+            nombre: 'Origen',
+            valor: filterOrigen,
+            onChange: setFilterOrigen,
+            opciones: [
+              { value: '', label: 'Todos los orígenes' },
+              ...Object.entries(CHANNEL_LABELS).map(([value, label]) => ({ value, label: String(label) })),
+            ],
+          },
+          {
+            nombre: 'Orden',
+            valor: sortMode,
+            onChange: (v) => setSortMode(v as 'value' | 'recent' | 'urgency' | 'recent_value'),
+            opciones: [
+              { value: 'recent', label: 'Más recientes' },
+              { value: 'urgency', label: 'Por urgencia' },
+              { value: 'value', label: 'Mayor valor' },
+              { value: 'recent_value', label: 'Reciente + valor' },
+            ],
+          },
+        ]}
+        hayFiltros={!!(search || filterEstado || filterOrigen || filterResponsable || filterProducto || dateFrom || dateTo || filterDup || filterReincidente || quickFilter)}
+        onLimpiar={() => {
+          setSearch('');
+          setFilterEstado('');
+          setFilterOrigen('');
+          setFilterResponsable('');
+          setFilterProducto('');
+          setDateRange('', '');
+          setFilterDup(false);
+          setFilterReincidente(false);
+          setQuickFilter('');
+        }}
+        onActualizar={() => { setNewCount(0); refetch(); }}
+        actualizando={loading}
+      />
+
+      {/* Lo que no cabe arriba: el resto de filtros, las píldoras de lo que está
+          puesto ahora mismo, y «Asignar pendientes». */}
       <LeadsFiltersBar
         activeProject={activeProject}
         projects={projects}

@@ -106,7 +106,7 @@ export default function LeadEmailDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="lead-email-title"
-        className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-2xl flex flex-col max-h-[92vh]"
+        className="bg-card rounded-xl border border-border shadow-dialog w-full max-w-2xl flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
