@@ -38,10 +38,14 @@ export default function Card({
   return (
     <div
       className={cn(
-        // `rounded-md` y `shadow-sm`, no `rounded-lg` sin sombra: es lo que
-        // pide la maqueta de referencia (suitedash-preview) — tarjetas planas
-        // con borde suave, no cajas flotando.
-        'bg-card text-card-foreground border border-border rounded-md shadow-sm',
+        // `rounded-lg` + `shadow-sm`. Estuvo en `rounded-md` un rato, por la frase
+        // «tarjetas planas: rounded-md y shadow-sm». Pero al MEDIR la maqueta, sus
+        // tarjetas y bloques van en `lg` —los cuatro `<section>` y los seis `p-4`— y
+        // el `md` es para controles y piezas pequeñas. El issue #78 dice lo mismo:
+        // «rounded-lg (cards)». Y con `md` esta primitiva se veía distinta de las
+        // 334 tarjetas que el CRM aún escribe a mano con `rounded-lg`: dos
+        // aspectos de tarjeta a la vez, que es lo que hay que quitar.
+        'bg-card text-card-foreground border border-border rounded-lg shadow-sm',
         RELLENO[padding],
         overflowHidden && 'overflow-hidden',
         className,
