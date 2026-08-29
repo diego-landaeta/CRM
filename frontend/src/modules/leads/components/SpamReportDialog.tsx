@@ -43,7 +43,7 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !submitting && onClose()}>
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-card border border-border rounded-2xl shadow-dialog w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-5 py-4 border-b border-border">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-destructive-soft text-destructive flex items-center justify-center flex-shrink-0">

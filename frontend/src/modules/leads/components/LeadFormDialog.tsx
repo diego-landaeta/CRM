@@ -432,7 +432,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
       {pendingDup && (
         <div role="dialog" aria-label="Prospecto duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPendingDup(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="relative bg-card border border-border rounded-xl shadow-dialog w-full max-w-md p-6 space-y-4">
             <div>
               <h3 className="text-base font-semibold mb-1">Ya existe un prospecto con estos datos</h3>
               <p className="text-sm text-muted-foreground">

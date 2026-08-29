@@ -71,7 +71,7 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
       <div role="dialog" aria-label="Detalle de prospecto" aria-modal="true" className="fixed inset-0 z-[60]">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150" onClick={onClose} />
 
-        <aside className="absolute top-0 right-0 h-full w-full max-w-[480px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+        <aside className="absolute top-0 right-0 h-full w-full max-w-[480px] bg-card border-l border-border shadow-dialog flex flex-col animate-in slide-in-from-right duration-200">
           <header className="flex items-start justify-between p-5 border-b border-border">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm flex-shrink-0">

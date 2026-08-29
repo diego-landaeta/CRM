@@ -123,8 +123,19 @@ export default {
         fila: '0.5rem',     // 8px
       },
 
+      // Solo hay TRES profundidades, y cada una dice a qué distancia está la
+      // pieza del papel. Había cinco sombras distintas repartidas —`lg`, `xl`,
+      // `2xl` y dos copias literales— para dos cosas.
+      //
+      //   shadow-sm       la tarjeta: está en la página, no encima  (Tailwind)
+      //   shadow-popover  un menú o un aviso: flota un poco
+      //   shadow-dialog   un diálogo: tapa la pantalla
+      //
+      // La regla de la maqueta —«tarjetas planas, no cajas flotando»— es sobre
+      // la primera. Un diálogo SÍ debe despegarse: la sombra es lo que lo separa
+      // de lo que hay debajo.
       boxShadow: {
-        // La sombra de los diálogos estaba copiada tal cual en 7 sitios.
+        popover: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
         dialog: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
       },
     },

@@ -1015,7 +1015,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     width: pickerPos.width,
                     maxHeight: pickerPos.maxHeight,
                   }}
-                  className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
+                  className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-dialog py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
                 >
                   {(() => {
                     // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
@@ -1268,7 +1268,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             role="menu"
             aria-label="Acciones de usuario"
             style={{ position: 'fixed', bottom: userMenuPos.bottom, left: userMenuPos.left, minWidth: userMenuPos.minWidth }}
-            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-xl ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
+            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-dialog ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
           >
             {userMenuView === 'main' ? (
               <div className="py-1.5">
