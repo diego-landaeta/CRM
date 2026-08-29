@@ -34,7 +34,7 @@
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 6% 10%;
     --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted-foreground: 240 4% 45%; /* 45 y no 46: sobre bg-muted, 46% da 4.43:1 y AA pide 4.5. Un punto de luminosidad, invisible, y arregla todas las pildoras del CRM. */
     --accent: 240 5% 96%;
     --accent-foreground: 240 6% 10%;
     /* Era `0 84% 60%` (red-500): con texto blanco encima se queda en 3,8:1 y no
@@ -163,6 +163,21 @@
     rounded-sm     detalles pequeños dentro de un control
 
   Todos cuelgan de --radius, así que se mueven juntos.
+
+  ---
+
+  El ritmo, medido igual y con el mismo resultado: una tarjeta se rellenaba de
+  OCHO maneras (p-4 110 veces, p-5 70, p-3 42, p-6 39, y p-8/p-2/p-7/p-12), y
+  para separar bloques no había ni un valor dominante — space-y-5 66, space-y-3
+  54, space-y-2 46, space-y-6 31, space-y-4 31.
+
+    space-y-bloque   entre los bloques de una pantalla   (24px)
+    p-tarjeta        relleno de una tarjeta              (16px, lo pone <Card>)
+    gap-fila         entre controles de una fila         (8px)
+
+  No se elige un número: se elige qué es. La escala numérica de Tailwind sigue
+  ahí para los casos sueltos; esto es para las tres decisiones que se repiten en
+  las 82 pantallas.
 
   (Aquí vivían `.crm-card` y `.crm-card-interactive`. Se han quitado: cero usos
   en todo el frontal. Lo que hacen ahora lo hace la primitiva Card, que además

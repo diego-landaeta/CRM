@@ -74,7 +74,7 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Información del lead</h3>
+        <h3 className="font-semibold">Información del prospecto</h3>
         {!editMode ? (
           <button onClick={() => setEditMode(true)} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5">
             <PencilSimple size={12} weight="bold" /> Editar

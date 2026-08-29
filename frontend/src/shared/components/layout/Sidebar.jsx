@@ -57,6 +57,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
+import { avatarColorForName } from '@/shared/lib/ui';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
@@ -79,6 +80,10 @@ const NAV_SECTIONS = [
     items: [
       { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
       { label: 'SUITE DASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
+      // El muestrario de primitivas. Sin esta entrada existe pero no lo
+      // encuentra nadie: hay que escribir /dev/components a mano, que es
+      // exactamente lo que hacía que «no existiera».
+      { label: 'Las 22 primitivas', to: '/dev/components', icon: Sparkle, previewOnly: true },
     ],
   },
   {
@@ -290,7 +295,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
-          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          'w-full flex items-center justify-center h-9 rounded-md transition-colors',
           hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -304,7 +309,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
+          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -374,7 +379,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
         aria-label={collapsed ? panel.label : panel.label}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
         )}
       >
         <Icon size={18} weight="regular" />
@@ -397,7 +402,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -428,7 +433,7 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         aria-label={`${displayLabel} — Próximamente`}
         className={cn(
           'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5'
         )}
       >
         <Icon size={18} weight="regular" />
@@ -457,8 +462,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -502,8 +507,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -560,26 +565,12 @@ function inicialesDe(nombre = '') {
   return sinPrefijo.slice(0, 2);
 }
 
-// El color sale del propio nombre, siempre el mismo para la misma marca. Asi
-// ISECD es verde hoy y verde mañana: la memoria visual funciona porque el color
-// no cambia, no porque sea bonito.
-const TONOS = [
-  'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
-  'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
-];
-function tonoDe(nombre = '') {
-  let n = 0;
-  for (const ch of String(nombre)) n = (n * 31 + ch.charCodeAt(0)) % 9973;
-  return TONOS[n % TONOS.length];
-}
+// La paleta vive en shared/lib/ui.ts, que es el unico sitio donde puede vivir.
+// Aqui habia una copia; era la QUINTA del CRM, y la unica que llevaba variante
+// oscura — las otras cuatro pintaban un parche claro sobre fondo negro.
+const tonoDe = avatarColorForName;
 
-function ProjectAvatar({ project, size = 'md' }) {
+export function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
   const [falloImagen, setFalloImagen] = useState(false);
   const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
@@ -587,7 +578,7 @@ function ProjectAvatar({ project, size = 'md' }) {
   // «Todos los proyectos» va primero: no es una marca, es una vista.
   if (project?.isAll) {
     return (
-      <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
+      <div className={`${dim} rounded-lg bg-info-soft text-info-soft-foreground flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
         ALL
       </div>
     );
@@ -944,7 +935,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
               {BETA_MODE && (
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
                   BETA {BETA_VERSION}
                 </span>
               )}
@@ -1033,7 +1024,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                         >
                           <ProjectAvatar project={{ isAll: true }} size="sm" />
                           <span className="flex-1 truncate">Todos los proyectos</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold">vista global</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-info-soft text-info-soft-foreground font-bold">vista global</span>
                         </button>
                       </li>
                     ) : null;
@@ -1115,7 +1106,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       {/* Navigation */}
       <nav className={cn(
         'flex-1 overflow-y-auto min-h-0 sidebar-scroll',
-        collapsed ? 'space-y-2 -mr-1 pr-1' : 'space-y-4 -mr-2 pr-2'
+        collapsed ? 'space-y-1.5 -mr-1 pr-1' : 'space-y-3 -mr-2 pr-2'
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
@@ -1245,9 +1236,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </>
           )}
         </button>
-        <Suspense fallback={<div className="w-9 h-9 rounded-lg bg-secondary flex-shrink-0" />}>
-          <NotificationsBell />
-        </Suspense>
+        {/* La campana subió a la cabecera (Topbar): arriba a la derecha es
+            donde se busca, y desde ahí se ve sin desplegar el menú. */}
       </div>
 
       {/* User menu (Portal — escapa del sidebar) */}
@@ -1339,7 +1329,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
 
 function UserMenuItem({ icon: Icon, label, onClick, tone = 'default' }) {
   const toneClasses = tone === 'danger'
-    ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
+    ? 'text-destructive hover:bg-destructive-soft'
     : 'text-foreground hover:bg-muted';
   return (
     <button

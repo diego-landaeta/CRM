@@ -100,6 +100,29 @@ export default {
         cifra: ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],
       },
 
+      // El ritmo de la pantalla (#32).
+      //
+      // Medido antes de decidir, igual que los radios. Una tarjeta se rellenaba
+      // de OCHO maneras distintas —p-4 (110 veces), p-5 (70), p-3 (42), p-6
+      // (39), p-8, p-2, p-7, p-12—, y para separar bloques no había ni un valor
+      // dominante: space-y-5 (66), space-y-3 (54), space-y-2 (46), space-y-6
+      // (31), space-y-4 (31). Esa es la razón de que dos pantallas del mismo CRM
+      // no parezcan del mismo CRM aunque los colores ya sean los mismos.
+      //
+      // Tres nombres, uno por papel. No se elige un número: se elige qué es.
+      //
+      //   space-y-bloque   entre los bloques de una pantalla
+      //   p-tarjeta        relleno de una tarjeta      (lo pone <Card>)
+      //   gap-fila         entre controles de una fila
+      //
+      // La escala numérica de Tailwind sigue estando para los casos sueltos;
+      // esto es para las tres decisiones que se repiten en las 82 pantallas.
+      spacing: {
+        bloque: '1.5rem',   // 24px
+        tarjeta: '1rem',    // 16px
+        fila: '0.5rem',     // 8px
+      },
+
       boxShadow: {
         // La sombra de los diálogos estaba copiada tal cual en 7 sitios.
         dialog: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
