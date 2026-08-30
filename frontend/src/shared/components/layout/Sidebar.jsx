@@ -42,6 +42,7 @@ import {
   Lightning,
   WebhooksLogo,
   Tree,
+  ListBullets,
   GraduationCap,
   CurrencyEur,
   TrendUp,
@@ -147,7 +148,11 @@ const NAV_SECTIONS = [
       { label: 'Productos', to: '/productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Cursos pendientes', to: '/productos/pendientes', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
-      { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
+      // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
+      // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
+      // árbol de verdad no tenía entrada en ningún sitio.
+      { label: 'Productos por categoría', to: '/productos/arbol', icon: ListBullets, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Árbol de categorías', to: '/productos/categorias', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
     ],
   },

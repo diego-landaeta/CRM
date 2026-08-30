@@ -21,7 +21,11 @@ const ROUTE_TITLES = {
   '/campanas/google': 'Google Ads',
   '/campanas/seo': 'Tráfico orgánico',
   '/productos': 'Productos',
-  '/productos/arbol': 'Árbol de categorías',
+  // El nombre de la pestaña del navegador tiene que ser el mismo que el del
+  // menú y el del título de la pantalla (#79). `/productos/arbol` abre
+  // «Productos por categoría»; el árbol de categorías es otra pantalla.
+  '/productos/arbol': 'Productos por categoría',
+  '/productos/categorias': 'Árbol de categorías',
   '/productos/pendientes': 'Cursos pendientes',
   '/productos/woocommerce': 'WooCommerce',
   '/finanzas': 'Contabilidad',
@@ -275,6 +279,12 @@ function App() {
           <Route path="/productos" element={<ProductosLayout />}>
             <Route index element={<ProductsPage />} />
             <Route path="arbol" element={<ProductsTreePage />} />
+            {/* El árbol de categorías vivía en `/configuracion/categorias-arbol`
+                y no tenía entrada en ningún menú: existía y no se podía llegar.
+                Pasa aquí, con lo demás del catálogo, y con el nombre que lleva
+                la propia pantalla. Mover la ruta no rompe enlaces guardados
+                porque no había forma de llegar para guardarlos. */}
+            <Route path="categorias" element={<CategoriesTreePage />} />
             <Route path="pendientes" element={<CoursesPendingPage />} />
             <Route path="woocommerce" element={<WooCommercePage />} />
           </Route>
@@ -308,7 +318,6 @@ function App() {
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
-          <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
