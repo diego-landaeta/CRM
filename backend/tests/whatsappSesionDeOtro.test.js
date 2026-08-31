@@ -15,7 +15,17 @@ vi.mock('../src/shared/config/db.js', () => ({
       const objetivo = params[1];
       if (objetivo === 99) return { rows: [] };                                  // no existe
       if (objetivo === 98) return { rows: [{ id: 98, active: false }] };          // desactivada
-      return { rows: [{ id: objetivo, nombre: 'Dayana', active: true, comparten: objetivo !== 77 }] };
+      // `role` hace falta desde que se comprueba quien puede tener WhatsApp
+      // (tarea #68): sin el, el guardia lo toma por un rol desconocido y lo
+      // rechaza. El 76 es un tutor, para probar justo eso.
+      return { rows: [{
+        id: objetivo,
+        nombre: 'Dayana',
+        active: true,
+        role: objetivo === 76 ? 'tutor' : 'gestor',
+        gestor_colaboraciones: false,
+        comparten: objetivo !== 77,
+      }] };
     }
     return { rows: [] };
   }),
@@ -78,6 +88,26 @@ describe('de quien es la sesion que se abre', () => {
     await chats(req, res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.json.mock.calls[0][0].data[0].instancia).toBe('crm-u7');
+  });
+
+  it('la de un TUTOR no se abre, ni siendo superadmin', async () => {
+    // No es que no salga en la lista: es que tampoco se puede entrar acertando
+    // el identificador. La regla vive en `roles.js` y se aplica en el guardia
+    // central, no en cada endpoint.
+    const { req, res, next } = pedir({ userId: 1, role: 'superadmin' }, { usuarioId: '76' });
+    await chats(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(next.mock.calls[0][0].code).toBe('SIN_WHATSAPP');
+  });
+
+  it('quien no puede tener WhatsApp tampoco abre LA SUYA', async () => {
+    // El hueco que casi se queda: la sesion propia se devolvia antes de
+    // comprobar nada, asi que un tutor entraba a la suya sin salir en ninguna
+    // lista.
+    const { req, res, next } = pedir({ userId: 5, role: 'tutor' }, {});
+    await chats(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(next.mock.calls[0][0].code).toBe('SIN_WHATSAPP');
   });
 
   it('un admin abre la de quien comparte proyecto con el', async () => {
