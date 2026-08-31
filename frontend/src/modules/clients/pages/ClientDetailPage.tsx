@@ -193,7 +193,7 @@ export default function ClientDetailPage() {
   const interacciones = lead.interactions || [];
 
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px]">
+    <div className="space-y-5 pb-8 max-w-[1100px] mx-auto">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">

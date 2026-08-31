@@ -401,7 +401,7 @@ export default function InvoiceCreatePage() {
   const fiscalMissing = fs && fs.missing.length ? fs.missing : null;
 
   return (
-    <div className="space-y-4 pb-8 max-w-4xl">
+    <div className="space-y-4 pb-8 max-w-4xl mx-auto">
       <PageHeader title={editId ? 'Editar factura' : esRect ? 'Nuevo abono' : esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
         actions={(
           <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">

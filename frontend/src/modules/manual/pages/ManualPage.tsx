@@ -206,7 +206,7 @@ export default function ManualPage() {
   ];
 
   return (
-    <div className="flex gap-10 max-w-[1240px] pb-24">
+    <div className="flex gap-10 max-w-[1240px] pb-24 mx-auto">
 
       {/* ── Sidebar ── */}
       <aside className="hidden lg:block w-56 flex-shrink-0">

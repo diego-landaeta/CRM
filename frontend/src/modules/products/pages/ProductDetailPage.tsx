@@ -115,7 +115,7 @@ export default function ProductDetailPage() {
     : [];
 
   return (
-    <div className="p-5 max-w-4xl space-y-5 pb-12">
+    <div className="p-5 max-w-4xl mx-auto space-y-5 pb-12">
       <div className="flex items-start gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/productos" aria-label="Volver a productos"><ArrowLeft className="h-4 w-4" /></Link>

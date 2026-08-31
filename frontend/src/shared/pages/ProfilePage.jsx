@@ -136,7 +136,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl mx-auto">
       <PageHeader
         title="Mi Perfil"
         subtitle="Gestiona tu información personal y seguridad"
