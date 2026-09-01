@@ -41,6 +41,7 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Curso Test',
         importe_total: 1000,
+        iva_incluido: true,
         importe_pagado: 0,
         metodo_pago: 'fraccionado',
       });
@@ -59,6 +60,7 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Curso Cash',
         importe_total: 500,
+        iva_incluido: true,
         importe_pagado: 500,
         metodo_pago: 'tarjeta',
       });
@@ -87,6 +89,7 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Fail',
         importe_total: 100,
+        iva_incluido: true,
         importe_pagado: 200,
       });
     expect(res.status).toBe(400);
@@ -100,6 +103,7 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: 999,
         producto_contratado: 'Fail',
         importe_total: 100,
+        iva_incluido: true,
       });
     expect(res.status).toBe(400);
   });
@@ -155,6 +159,7 @@ describe('POST /api/conversions/:id/payments - abonos parciales', () => {
         project_id: testProjectId,
         producto_contratado: 'Para abonos',
         importe_total: 1000,
+        iva_incluido: true,
         importe_pagado: 0,
         metodo_pago: 'fraccionado',
       });
@@ -215,6 +220,7 @@ describe('PATCH /api/conversions/:id - editar', () => {
         project_id: testProjectId,
         producto_contratado: 'Para editar',
         importe_total: 1500,
+        iva_incluido: true,
         importe_pagado: 500,
         metodo_pago: 'fraccionado',
       });
