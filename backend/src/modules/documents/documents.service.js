@@ -67,14 +67,17 @@ async function imgBase64(filename) {
  * Añadir una marca es dejar caer su PNG. Sin desplegar codigo, sin migrar nada.
  */
 async function imgProyecto(filename, slug) {
-  if (slug) {
+  // Solo si tiene el diseño ENTERO. Ver `tieneDiseñoPropio`: media marca no se
+  // emite, porque mezclar el logo de una con el nombre de otra es peor que
+  // usar el de siempre.
+  if (await tieneDiseñoPropio(slug)) {
     const punto = filename.lastIndexOf('.');
     const propio = `${filename.slice(0, punto)}--${slug}${filename.slice(punto)}`;
     try {
       return await imgBase64(propio);
     } catch {
-      // No tiene el suyo: se usa el de siempre. Que un proyecto no traiga
-      // diseño propio no puede impedir que se emita el documento.
+      // No deberia pasar —se acaba de comprobar que esta— pero si el fichero
+      // desaparece entre medias, el respaldo sigue siendo mejor que reventar.
     }
   }
   return imgBase64(filename);
@@ -92,8 +95,33 @@ const AVAL_POR_DEFECTO = {
   avalado_por: 'ISEIE Innovation School, e Hispamedic',
 };
 
+/**
+ * ¿Tiene esta marca su diseño COMPLETO?
+ *
+ * Todo o nada, y esto importa mas de lo que parece. Con las piezas sueltas se
+ * podia llegar a un certificado que dice «expedido por Fono Aprende» con el
+ * logo de PSIKOAPRENDE arriba y firmado por Carlos Saiz y Mireia Jareño.
+ *
+ * Eso es PEOR que el fallo que se venia a arreglar: un documento coherentemente
+ * equivocado se explica; uno que se contradice a si mismo, no. Y a quien lo
+ * recibe le llega un papel que dice una cosa y parece otra.
+ *
+ * Asi que si falta cualquiera de las tres piezas —las dos paginas del fondo y
+ * el aval— se usa el de siempre ENTERO. Medio diseño no se emite.
+ */
+async function tieneDiseñoPropio(slug) {
+  if (!slug) return false;
+  const piezas = [`cert-bg-p1--${slug}.png`, `cert-bg-p2--${slug}.png`, `cert--${slug}.json`];
+  try {
+    await Promise.all(piezas.map((f) => fs.access(path.join(ASSETS_DIR, f))));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function avalDelProyecto(slug) {
-  if (!slug) return AVAL_POR_DEFECTO;
+  if (!(await tieneDiseñoPropio(slug))) return AVAL_POR_DEFECTO;
   try {
     const txt = await fs.readFile(path.join(ASSETS_DIR, `cert--${slug}.json`), 'utf8');
     return { ...AVAL_POR_DEFECTO, ...JSON.parse(txt) };

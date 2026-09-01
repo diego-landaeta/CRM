@@ -346,16 +346,51 @@ describe('de que marca sale el certificado', () => {
     expect(html).toMatch(/expedido por Psiko Aprende/);
   });
 
-  it('con su fichero, sale su marca y su aval', async () => {
-    // Antes, un alumno de Fono Aprende recibia un certificado de Psiko Aprende:
-    // marca, aval y dos firmantes que no eran los suyos.
+  it('media marca NO se emite: con el aval pero sin los fondos, sigue el de siempre', async () => {
+    // Es el caso que importa. Con las piezas sueltas salia un certificado que
+    // dice «expedido por Fono Aprende» con el logo de PSIKOAPRENDE arriba y
+    // firmado por Carlos Saiz y Mireia Jareño.
+    //
+    // Eso es PEOR que el fallo que se venia a arreglar: un documento
+    // coherentemente equivocado se explica; uno que se contradice a si mismo,
+    // no. Todo o nada.
     const fs = await import('fs/promises');
     const path = await import('path');
     const dir = path.join(process.cwd(), 'src/modules/documents/assets');
-    const fichero = path.join(dir, 'cert--marca-de-prueba.json');
-    await fs.writeFile(fichero, JSON.stringify({
+    const soloAval = path.join(dir, 'cert--media-marca.json');
+    await fs.writeFile(soloAval, JSON.stringify({ expedido_por: 'Media Marca' }));
+    try {
+      const html = await buildCertP1Html({
+        alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
+        project_slug: 'media-marca',
+      });
+      expect(html).toMatch(/expedido por Psiko Aprende/);
+      expect(html).not.toMatch(/Media Marca/);
+    } finally {
+      await fs.unlink(soloAval);
+    }
+  });
+
+  it('con el diseño COMPLETO, sale su marca y su aval', async () => {
+    // Antes, un alumno de Fono Aprende recibia un certificado de Psiko Aprende:
+    // marca, aval y dos firmantes que no eran los suyos.
+    //
+    // Las tres piezas: las dos paginas del fondo y el aval. Se copian las de
+    // Psiko como relleno — lo que se comprueba es el mecanismo, no el diseño.
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const dir = path.join(process.cwd(), 'src/modules/documents/assets');
+    const piezas = {
+      [path.join(dir, 'cert--marca-de-prueba.json')]: null,
+      [path.join(dir, 'cert-bg-p1--marca-de-prueba.png')]: path.join(dir, 'cert-bg-p1.png'),
+      [path.join(dir, 'cert-bg-p2--marca-de-prueba.png')]: path.join(dir, 'cert-bg-p2.png'),
+    };
+    await fs.writeFile(Object.keys(piezas)[0], JSON.stringify({
       expedido_por: 'Marca De Prueba', avalado_por: 'Quien La Avala',
     }));
+    for (const [destino, origen] of Object.entries(piezas)) {
+      if (origen) await fs.copyFile(origen, destino);
+    }
     try {
       const html = await buildCertP1Html({
         alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
@@ -365,7 +400,7 @@ describe('de que marca sale el certificado', () => {
       expect(html).toMatch(/avalado por Quien La Avala/);
       expect(html).not.toMatch(/Psiko Aprende/);
     } finally {
-      await fs.unlink(fichero);
+      for (const f of Object.keys(piezas)) await fs.unlink(f).catch(() => {});
     }
   });
 });
