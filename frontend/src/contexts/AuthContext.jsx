@@ -22,6 +22,19 @@ export function AuthProvider({ children }) {
   const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
   const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
   const [loading, setLoading] = useState(!BYPASS); // bypass salta el loader
+  /**
+   * Los permisos y la vista del usuario. Tarea #7.
+   *
+   * `/auth/me` los devuelve desde que se hizo el backend de roles, y aqui no se
+   * guardaban: el contexto solo tenia usuario y proyectos. Por eso el menu
+   * seguia recortando con `roles: ['admin']` escritos a mano, y tras entrar
+   * todo el mundo aterrizaba en `/` aunque su rol tuviera otra ruta puesta.
+   *
+   * `/auth/login` NO los trae —solo usuario, proyectos y testigo—, asi que
+   * despues de entrar hay que preguntarle a `/auth/me`.
+   */
+  const [permissions, setPermissions] = useState({});
+  const [view, setView] = useState({});
   const initialized = useRef(false);
 
   // Al montar, intentar restaurar sesión con refresh token (cookie httpOnly)
@@ -53,6 +66,8 @@ export function AuthProvider({ children }) {
           if (meRes.success) {
             setUser(meRes.data.user);
             setProjects(meRes.data.projects || []);
+            setPermissions(meRes.data.permissions || {});
+            setView(meRes.data.view || {});
             // Restaurar proyecto activo de localStorage o usar el primero
             const savedProjectId = localStorage.getItem('crm_active_project_id');
             const savedNum = Number(savedProjectId);
@@ -91,7 +106,30 @@ export function AuthProvider({ children }) {
 
     const { accessToken: token, user: userData, projects: userProjects, activeProjectId: apiProjectId } = res.data;
 
+    // El testigo primero: `/auth/me` lo necesita, y `setAccessToken` escribe una
+    // variable del modulo, no estado de React, asi que esta disponible ya.
     setAccessToken(token);
+
+    // Los permisos y la vista van en `/auth/me`, no en la respuesta del login.
+    let vista = {};
+    try {
+      const me = await client.get('/auth/me');
+      if (me.success) {
+        setPermissions(me.data.permissions || {});
+        vista = me.data.view || {};
+        setView(vista);
+      }
+    } catch {
+      // Sin esto se entra igual, solo que al sitio de siempre y sin permisos
+      // finos. Quedarse fuera por no poder leer la vista seria peor.
+    }
+
+    // El usuario AL FINAL, y esto no es cosmetico.
+    //
+    // `LoginPage` tiene arriba un `if (isAuthenticated) return <Navigate to=.../>`
+    // que se dispara en cuanto hay usuario — antes de que su `navigate()` llegue
+    // a ejecutarse. Poniendo el usuario antes de tener la vista, ese guard
+    // mandaba a todo el mundo a `/` y la ruta del rol no se usaba nunca.
     setUser(userData);
     setProjects(userProjects || []);
 
@@ -104,7 +142,7 @@ export function AuthProvider({ children }) {
     setActiveProjectId(projectId);
     if (projectId) localStorage.setItem('crm_active_project_id', String(projectId));
 
-    return userData;
+    return { ...userData, view: vista };
   }, []);
 
   const logout = useCallback(async () => {
@@ -117,6 +155,8 @@ export function AuthProvider({ children }) {
     setUser(null);
     setProjects([]);
     setActiveProjectId(null);
+    setPermissions({});
+    setView({});
     localStorage.removeItem('crm_active_project_id');
   }, []);
 
@@ -146,6 +186,10 @@ export function AuthProvider({ children }) {
       if (res.success) {
         setUser(res.data.user);
         setProjects(res.data.projects || []);
+        // Tambien aqui: si a alguien le cambian el rol y se refresca, sus
+        // permisos y su vista tienen que venirse con el.
+        setPermissions(res.data.permissions || {});
+        setView(res.data.view || {});
       }
     } catch { /* ignore */ }
   }, []);
@@ -159,6 +203,8 @@ export function AuthProvider({ children }) {
       isAllProjects,
       isAuthenticated,
       loading,
+      permissions,
+      view,
       login,
       logout,
       switchProject,

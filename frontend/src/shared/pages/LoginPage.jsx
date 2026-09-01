@@ -6,10 +6,19 @@ import { Package, Eye, EyeSlash } from '@phosphor-icons/react';
 // Patron topografico (Hero Patterns "Topography", MIT) — encoded as data URL
 const TOPO_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800' viewBox='0 0 800 800'><g fill='none' stroke='currentColor' stroke-width='1.2'><path d='M769 229L1037 260.9M927 880L731 737 520 660 309 538 40 599 295 764 126.5 879.5 40 599-197 493 102 382-31 229 126.5 79.5-69-63'/><path d='M-31 229L237 261 390 382 603 493 308.5 537.5 101.5 381.5M370 905L295 764'/><path d='M520 660L578 842 731 737 840 599 603 493 520 660 295 764 309 538 390 382 539 269 769 229 577.5 41.5 370 105 295 -36 126.5 79.5 237 261 102 382 40 599 -69 737 127 880'/><path d='M520-140L578.5 42.5 731-63M603 493L539 269 237 261 370 105M902 382L539 269M390 382L102 382'/><path d='M-222 42L126.5 79.5 370 105 539 269 577.5 41.5 927 80 769 229 902 382 603 493 731 737M295-36L577.5 41.5M578 842L295 764M40-201L127 80M102 382L-261 269'/></g><g fill='currentColor'><circle cx='769' cy='229' r='4'/><circle cx='539' cy='269' r='4'/><circle cx='603' cy='493' r='4'/><circle cx='731' cy='737' r='4'/><circle cx='520' cy='660' r='4'/><circle cx='309' cy='538' r='4'/><circle cx='295' cy='764' r='4'/><circle cx='40' cy='599' r='4'/><circle cx='102' cy='382' r='4'/><circle cx='127' cy='80' r='4'/><circle cx='370' cy='105' r='4'/><circle cx='578' cy='42' r='4'/><circle cx='237' cy='261' r='4'/><circle cx='390' cy='382' r='4'/></g></svg>`;
 
+/**
+ * Las pantallas en las que se puede aterrizar tras entrar.
+ *
+ * Lista corta y explicita a proposito: son las cuatro que los roles del sistema
+ * usan hoy. Si el servidor manda otra cosa —o una ruta vieja— se va al inicio,
+ * que siempre existe.
+ */
+const RUTAS_VALIDAS = new Set(['/', '/prospectos', '/soporte', '/status', '/informes', '/finanzas']);
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { login, isAuthenticated, loading: authLoading, view } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -24,8 +33,13 @@ export default function LoginPage() {
     );
   }
 
+  // Este guard se dispara en cuanto hay sesion, y gana al `navigate()` de mas
+  // abajo: es el que decide de verdad a donde se entra. Por eso mira tambien la
+  // ruta del rol.
   if (isAuthenticated) {
-    const from = location.state?.from?.pathname || '/';
+    const suya = view?.default_route;
+    const from = location.state?.from?.pathname
+      || (suya && RUTAS_VALIDAS.has(suya) ? suya : '/');
     return <Navigate to={from} replace />;
   }
 
@@ -40,8 +54,18 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await login(email, password);
-      const from = location.state?.from?.pathname || '/';
+      const datos = await login(email, password);
+      // Si venia de una pantalla concreta —le caduco la sesion a medias— se
+      // vuelve alli. Si no, a la ruta de su rol: una gestora no tiene por que
+      // aterrizar en el panel de direccion. Antes iban todos a `/`.
+      //
+      // La ruta se comprueba antes de usarla. Las del servidor se quedaron sin
+      // actualizar cuando el CRM paso las direcciones a español —decian
+      // `/dashboard` y `/leads`, que ya no existen— y aterrizar a alguien en
+      // una pantalla en blanco nada mas entrar es peor que llevarlo al inicio.
+      const suya = datos?.view?.default_route;
+      const from = location.state?.from?.pathname
+        || (suya && RUTAS_VALIDAS.has(suya) ? suya : '/');
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Credenciales incorrectas');
