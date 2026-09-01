@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import Topbar from './Topbar';
+import { CabeceraProvider } from './CabeceraContext';
 import Toaster from './Toaster';
 import CommandPalette from './CommandPalette';
-import { List, X } from '@phosphor-icons/react';
+import { X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -35,6 +37,10 @@ const ALL_PROJECTS_OK = [
   /^\/status$/,
   /^\/ai-chat$/,
   /^\/prueba_ui(?:_[a-z]+)?$/,
+  // El muestrario de primitivas no depende de ningún proyecto: son piezas
+  // sueltas. Sin esto, quien tenga puesto «Todos los proyectos» —que es lo
+  // normal— se encuentra el aviso de «elige un proyecto» en vez de la pantalla.
+  /^\/dev\/components$/,
 ];
 
 function pathAllowsAll(pathname) {
@@ -185,26 +191,21 @@ export default function AppLayout() {
   }, [navigate, pathname]);
 
   return (
+    // El provider envuelve a los dos: la pantalla publica su cabecera desde
+    // dentro del contenido, y Topbar la lee desde arriba.
+    <CabeceraProvider>
     <div className="min-h-screen bg-background">
       {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-3 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-lg focus:font-semibold focus:text-sm"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-3 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-popover focus:font-semibold focus:text-sm"
       >
         Saltar al contenido
       </a>
 
-      {/* Mobile topbar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-30">
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Abrir menu"
-          className="p-2 rounded-md hover:bg-muted transition-colors"
-        >
-          <List size={22} weight="bold" />
-        </button>
-        <span className="ml-3 font-semibold text-sm">MultiCRM</span>
-      </div>
+      {/* Aquí vivía una barra fija SOLO para móvil, que decía «MultiCRM» y
+          nada más. La sustituye Topbar, que va en todos los tamaños y sí dice
+          en qué pantalla y en qué marca estás. */}
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -235,22 +236,30 @@ export default function AppLayout() {
         aria-label="Contenido principal"
         tabIndex={-1}
         className={cn(
-          'p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8 transition-[margin] duration-200 focus:outline-none',
+          'transition-[margin] duration-200 focus:outline-none',
           collapsed ? 'lg:ml-16' : 'lg:ml-64'
         )}
       >
-        <Suspense fallback={
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-          </div>
-        }>
-          {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
-          <div key={pathname} className="animate-in fade-in duration-200">
-            <AllProjectsGuard pathname={pathname}>
-              <Outlet />
-            </AllProjectsGuard>
-          </div>
-        </Suspense>
+        {/* La cabecera va DENTRO de la columna de contenido y es `sticky`, no
+            `fixed`: así respeta el ancho del menú lateral al plegarse y no hay
+            que compensar su altura con relleno arriba, que era el `pt-[72px]`
+            de antes — un número a ojo que se descuadraba al cambiar la barra. */}
+        <Topbar onAbrirMenu={() => setMobileOpen(true)} />
+
+        <div className="p-4 lg:p-6 xl:p-8">
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          }>
+            {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
+            <div key={pathname} className="animate-in fade-in duration-200">
+              <AllProjectsGuard pathname={pathname}>
+                <Outlet />
+              </AllProjectsGuard>
+            </div>
+          </Suspense>
+        </div>
       </main>
 
       <Toaster />
@@ -281,5 +290,6 @@ export default function AppLayout() {
         <AvisoDeLlamada />
       </Suspense>
     </div>
+    </CabeceraProvider>
   );
 }

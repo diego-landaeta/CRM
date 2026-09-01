@@ -127,7 +127,7 @@ export default function ProductDetailPage() {
             {product.source_type && <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 rounded">{product.source_type}</span>}
             {product.sku && <span className="font-mono">SKU: {product.sku}</span>}
           </div>
-          <h1 className="text-xl sm:text-2xl font-semibold">{product.nombre}</h1>
+          <h2 className="text-xl sm:text-2xl font-semibold">{product.nombre}</h2>
           {product.descripcion && (
             <p
               className="text-muted-foreground text-sm mt-2 whitespace-pre-wrap leading-relaxed"

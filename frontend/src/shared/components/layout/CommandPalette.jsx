@@ -328,7 +328,7 @@ export default function CommandPalette() {
   return (
     <div role="dialog" aria-label="Búsqueda rápida" className="fixed inset-0 !m-0 z-[60] flex items-start justify-center pt-[15vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      <div className="relative bg-card rounded-lg border border-border shadow-2xl w-full max-w-xl mx-4 overflow-hidden">
+      <div className="relative bg-card rounded-lg border border-border shadow-dialog w-full max-w-xl mx-4 overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 border-b border-border">
           <MagnifyingGlass size={18} className="text-muted-foreground flex-shrink-0" />
