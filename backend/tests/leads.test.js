@@ -247,7 +247,16 @@ describe('GET /api/leads/:id', () => {
 // ============================================================
 
 describe('PATCH /api/leads/:id/status', () => {
-  it('cambia status con motivo', async () => {
+  // Estas tres compartian un lead y se pisaban entre ellas: la segunda cambiaba
+  // el estado y la tercera ya no encontraba el que esperaba. Cada una deja el
+  // lead en un estado conocido antes de empezar, asi que el orden deja de
+  // importar y un fallo señala a una sola prueba.
+  const ponerEstado = (estado) => request.patch(`/api/leads/${createdLeadId}/status`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ status: estado, motivo: 'preparando la prueba' });
+
+  it('cambia el status y dice de cual venia', async () => {
+    await ponerEstado('nuevo');
     const res = await request.patch(`/api/leads/${createdLeadId}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'contactado', motivo: 'Se le llamo por telefono' });
@@ -257,15 +266,26 @@ describe('PATCH /api/leads/:id/status', () => {
     expect(res.body.data.current).toBe('contactado');
   });
 
-  it('falla sin motivo', async () => {
-    const res = await request.patch(`/api/leads/${createdLeadId}/status`)
+  // El motivo dejo de ser obligatorio SIEMPRE en `aa783bc` («quick-change estado
+  // guardaba 400»): pedirlo en cada cambio rompia el desplegable rapido de la
+  // ficha, que no tiene donde escribirlo. Quedo obligatorio solo donde importa
+  // saber por que: al descartar a alguien.
+  it('sin motivo se puede, salvo al marcar no interesado', async () => {
+    await ponerEstado('nuevo');
+    const ok = await request.patch(`/api/leads/${createdLeadId}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'en_seguimiento' });
+    expect(ok.status).toBe(200);
 
-    expect(res.status).toBe(400);
+    const no = await request.patch(`/api/leads/${createdLeadId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'no_interesado' });
+    expect(no.status).toBe(400);
+    expect(no.body.error).toMatch(/motivo/i);
   });
 
   it('falla con mismo status', async () => {
+    await ponerEstado('contactado');
     const res = await request.patch(`/api/leads/${createdLeadId}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'contactado', motivo: 'Repetido' });

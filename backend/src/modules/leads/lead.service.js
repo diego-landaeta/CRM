@@ -123,6 +123,16 @@ async function _createLeadCore(project, leadData) {
   // round-robin). Devolvemos un flag para que el llamante sepa que ocurrió.
   const spamHistory = leadData.email ? await leadModel.findSpamMatch(leadData.email, project.id) : null;
 
+  // Canal: override de Make > deteccion automatica por UTMs.
+  //
+  // Se calcula AQUI ARRIBA y no mas abajo porque el burst-merge lo devuelve en
+  // su respuesta. Estando declarado despues, ese `return` leia una `const` sin
+  // inicializar y lanzaba «Cannot access 'canalDetectado' before
+  // initialization»: cada reenvio del mismo formulario dentro de la ventana
+  // contestaba 500. El lead SI se fusionaba —la interaccion queda escrita—
+  // pero quien mandaba el formulario recibia un error, y Make reintenta.
+  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
+
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNormWebhook = normalizePhone(leadData.telefono);
   const duplicate = (leadData.email || telNormWebhook)
@@ -176,9 +186,6 @@ async function _createLeadCore(project, leadData) {
     converted.producto_interes_id !== productoInteresId
   );
   const propuestoDe = esPropuesto ? converted.id : null;
-
-  // Canal: override de Make > deteccion automatica por UTMs
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
   // Si es spam recurrente, no malgastamos un slot del round-robin.
   // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
