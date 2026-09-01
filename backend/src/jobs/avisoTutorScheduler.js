@@ -142,7 +142,11 @@ export function cuerpo(tutor, ventas, mes = {}) {
          </tr>
        </table>`,
 
-      boton({ texto: 'Ver mis comisiones', url: enlace('tutor/comisiones') }),
+      // `/mis-cursos` y NO `/tutores/comisiones`: la segunda es la pantalla de
+      // ADMINISTRACION, donde se ven las comisiones de todo el mundo. La del
+      // tutor es esta, que carga solo las suyas. Mandarle a la otra seria, en
+      // el mejor caso, un 403.
+      boton({ texto: 'Ver mis comisiones', url: enlace('mis-cursos') }),
 
       nota('Lo que ves aquí sale de los pagos registrados en el CRM. Si algo no cuadra, díselo a administración antes de que se liquide el mes.'),
     ],
