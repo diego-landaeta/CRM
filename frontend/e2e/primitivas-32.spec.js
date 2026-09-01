@@ -5,6 +5,7 @@
 // existía en el equipo de quien la escribió y en /testeo no se montaba. Por eso
 // «no existía». Esto comprueba que sigue estando donde se mira.
 import { test, expect } from '@playwright/test';
+import { ir, API_GLOB } from './helpers';
 
 const PROYECTOS = [
   { id: 1, nombre: 'Fono Aprende', slug: 'fono', type: 'crm', active: true, modules: null },
@@ -27,11 +28,10 @@ const SUELTO = /\b(bg|text|border|ring)-(red|blue|green|emerald|amber|yellow|ora
 // semántico no da eso.
 const ES_IDENTIDAD = /(bg|text)-(sky|emerald|amber|rose|violet|teal|orange|indigo)-(100|700)\b/;
 
-const ir = (page, baseURL, ruta) => page.goto(baseURL + ruta);
 
-async function simularApi(page, baseURL) {
+async function simularApi(page) {
   const j = (b) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
-  await page.route(`${baseURL}/api/**`, (r) => {
+  await page.route(API_GLOB, (r) => {
     const ruta = new URL(r.request().url()).pathname.replace(/^.*\/api/, '');
     if (ruta === '/auth/refresh') return r.fulfill(j({ success: true, data: { accessToken: 't' } }));
     if (ruta === '/auth/me') {
@@ -42,12 +42,12 @@ async function simularApi(page, baseURL) {
 }
 
 test.describe('muestrario de primitivas', () => {
-  test.beforeEach(async ({ page, baseURL }) => {
-    await simularApi(page, baseURL);
+  test.beforeEach(async ({ page }) => {
+    await simularApi(page);
   });
 
-  test('las 22 primitivas están, cada una por su nombre', async ({ page, baseURL }) => {
-    await ir(page, baseURL, '/dev/components');
+  test('las 22 primitivas están, cada una por su nombre', async ({ page }) => {
+    await ir(page, '/dev/components');
     await expect(page.locator('header.sticky').getByRole('heading', { level: 1 }))
       .toHaveText('Las 22 primitivas, juntas');
 
@@ -57,10 +57,10 @@ test.describe('muestrario de primitivas', () => {
     expect(faltan, `faltan del muestrario: ${faltan.join(', ')}`).toEqual([]);
   });
 
-  test('se llega desde el menú, sin escribir la dirección a mano', async ({ page, baseURL }) => {
+  test('se llega desde el menú, sin escribir la dirección a mano', async ({ page }) => {
     // Lo que hacía que «no existiera» no era que faltara: era que no había
     // forma de llegar.
-    await ir(page, baseURL, '/');
+    await ir(page, '/');
     // En móvil el menú vive detrás del botón de la cabecera.
     const hamburguesa = page.getByRole('button', { name: /abrir menu/i });
     if (await hamburguesa.isVisible()) await hamburguesa.click();
@@ -70,8 +70,8 @@ test.describe('muestrario de primitivas', () => {
       .toHaveText('Las 22 primitivas, juntas');
   });
 
-  test('el espaciado con nombre se aplica de verdad', async ({ page, baseURL }) => {
-    await ir(page, baseURL, '/dev/components');
+  test('el espaciado con nombre se aplica de verdad', async ({ page }) => {
+    await ir(page, '/dev/components');
     // La pantalla va por `lazy`: sin esperar a que esté, se mide un DOM vacío.
     await expect(page.locator('#main-content section').first()).toBeVisible();
 
@@ -84,8 +84,8 @@ test.describe('muestrario de primitivas', () => {
     expect(relleno, 'p-tarjeta debe valer 16px').toBe('16px');
   });
 
-  test('no pinta ni un color suelto, salvo la paleta de identidad', async ({ page, baseURL }) => {
-    await ir(page, baseURL, '/dev/components');
+  test('no pinta ni un color suelto, salvo la paleta de identidad', async ({ page }) => {
+    await ir(page, '/dev/components');
     const clases = await page.evaluate(() => (
       [...document.querySelectorAll('#main-content [class]')].map((e) => String(e.className)).filter(Boolean)
     ));
@@ -93,10 +93,10 @@ test.describe('muestrario de primitivas', () => {
     expect(sucias, `colores a pelo en el muestrario:\n${sucias.join('\n')}`).toEqual([]);
   });
 
-  test('funciona con «Todos los proyectos» puesto', async ({ page, baseURL }) => {
+  test('funciona con «Todos los proyectos» puesto', async ({ page }) => {
     // Las primitivas no dependen de ninguna marca. Sin declararlo, quien tenga
     // la vista global —que es lo normal— se encuentra «elige un proyecto».
-    await ir(page, baseURL, '/dev/components');
+    await ir(page, '/dev/components');
     // No se puede comprobar por la ausencia del aviso: el muestrario ENSEÑA
     // `NeedsProjectBanner`, así que su texto está en la pantalla a propósito.
     // Lo que distingue «se ve el muestrario» de «me han cortado el paso» es que
