@@ -324,3 +324,48 @@ describe('buildCertPreviewHtml', () => {
     expect(html).toContain('NATIVE_W');
   });
 });
+
+// ============================================================
+// La identidad del certificado, por proyecto (#95)
+// ============================================================
+
+describe('de que marca sale el certificado', () => {
+  it('sin proyecto, el de siempre — para no romper lo que ya emitía', async () => {
+    const html = await buildCertP1Html({
+      alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
+    });
+    expect(html).toMatch(/expedido por Psiko Aprende/);
+  });
+
+  it('con proyecto y sin diseño propio, tambien el de siempre', async () => {
+    // Que una marca no traiga todavia su diseño no puede impedir emitir.
+    const html = await buildCertP1Html({
+      alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
+      project_slug: 'marca-que-no-existe',
+    });
+    expect(html).toMatch(/expedido por Psiko Aprende/);
+  });
+
+  it('con su fichero, sale su marca y su aval', async () => {
+    // Antes, un alumno de Fono Aprende recibia un certificado de Psiko Aprende:
+    // marca, aval y dos firmantes que no eran los suyos.
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const dir = path.join(process.cwd(), 'src/modules/documents/assets');
+    const fichero = path.join(dir, 'cert--marca-de-prueba.json');
+    await fs.writeFile(fichero, JSON.stringify({
+      expedido_por: 'Marca De Prueba', avalado_por: 'Quien La Avala',
+    }));
+    try {
+      const html = await buildCertP1Html({
+        alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
+        project_slug: 'marca-de-prueba',
+      });
+      expect(html).toMatch(/expedido por Marca De Prueba/);
+      expect(html).toMatch(/avalado por Quien La Avala/);
+      expect(html).not.toMatch(/Psiko Aprende/);
+    } finally {
+      await fs.unlink(fichero);
+    }
+  });
+});

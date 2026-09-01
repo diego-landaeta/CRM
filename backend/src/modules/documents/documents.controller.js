@@ -7,6 +7,7 @@ import { uploadToR2, deleteFromR2 } from '../../shared/services/r2.service.js';
 import { generatePresignedUrl } from '../../shared/utils/presignedUrl.js';
 import { sendDocumentEmail, isProjectAutoEmailEnabled } from './documents.email.js';
 import * as model from './documents.model.js';
+import * as projectModel from '../projects/project.model.js';
 import { generateInvoicePdf, generateCertificatePdf } from './documents.service.js';
 import {
   generateSchema, previewSchema, setNumberSchema,
@@ -56,6 +57,16 @@ export async function generate(req, res, next) {
     if (numero_override != null && numero_override !== '') {
       await model.setNextNumber(projectId, type, Number(numero_override));
     }
+
+    // El slug del proyecto viaja con los datos: es lo que decide de que marca
+    // sale el certificado (#95). Sin el, todos salian con la de Psiko Aprende.
+    // Si el proyecto no se encuentra se sigue igual: quedarse sin emitir un
+    // documento por no poder leer un slug seria peor que emitirlo con el
+    // diseño de respaldo.
+    try {
+      const proyecto = await projectModel.findById(projectId);
+      if (proyecto?.slug) data.project_slug = proyecto.slug;
+    } catch { /* respaldo */ }
 
     const n = await model.nextNumber(projectId, type);
     const prefix = type === 'invoice' ? 'FAC' : 'CERT';
