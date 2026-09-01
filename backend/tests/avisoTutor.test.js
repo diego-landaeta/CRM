@@ -99,9 +99,12 @@ describe('lo que se le cuenta', () => {
     expect(t).toMatch(/120,00.*pagada/s);
   });
 
-  it('lleva un enlace a su panel', () => {
-    expect(_internos.cuerpo({ nombre: 'Lola' }, [venta()], {}).htmlContent)
-      .toContain('/tutor/comisiones');
+  it('lleva un enlace a SU panel, no al de administracion', () => {
+    // `/tutores/comisiones` es la pantalla de administracion, donde se ven las
+    // comisiones de todo el mundo. La del tutor es `/mis-cursos`.
+    const h = _internos.cuerpo({ nombre: 'Lola' }, [venta()], {}).htmlContent;
+    expect(h).toContain('/mis-cursos');
+    expect(h).not.toContain('/tutores/comisiones');
   });
 
   it('el titular distingue una venta de varias', () => {
