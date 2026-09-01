@@ -236,15 +236,23 @@ describe('buildInvoicePreviewHtml', () => {
 });
 
 describe('buildCertP1Html', () => {
-  it('embebe alumno_nombre en cursive y firma', async () => {
+  it('embebe los datos del alumno y del curso', async () => {
     const html = await buildCertP1Html({
       alumno_nombre: 'Juan Perez',
       alumno_dni: '12345678A',
       curso_nombre: 'Curso Test',
     });
-    // Aparece dos veces: nombre cursivo grande + label arriba de la firma
-    const matches = html.match(/Juan Perez/g) || [];
-    expect(matches.length).toBeGreaterThanOrEqual(2);
+    // Antes se exigia que el nombre saliera DOS veces: el cursivo grande y un
+    // rotulo encima de la firma. Ese segundo no existe y no es un fallo — el
+    // fondo `cert-bg-p1.png` ya trae la linea de firma del alumno VACIA porque
+    // la firma va a mano. La prueba contaba las apariciones de un diseño que ya
+    // no esta.
+    //
+    // Contar apariciones no dice nada de un certificado. Lo que importa es que
+    // los datos esten, que es lo que se comprueba ahora.
+    expect(html).toContain('Juan Perez');
+    expect(html).toContain('12345678A');
+    expect(html).toContain('Curso Test');
   });
 
   it('embebe DNI en el subtitle', async () => {

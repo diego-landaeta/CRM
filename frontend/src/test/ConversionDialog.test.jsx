@@ -31,6 +31,29 @@ import ConversionDialog from '@/modules/conversions/components/ConversionDialog'
 
 const baseLead = { id: 99, nombre: 'Ana Test' };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Estas ayudas existen porque las pruebas elegian los campos POR POSICION
+// —`querySelectorAll('input[type=number]')[0]` y `[1]`— y el dialogo crecio: hoy
+// el primer number es el porcentaje de IVA, no el precio. Los valores se metian
+// en campos que no eran, y de ahi los tres rojos.
+//
+// Elegir por posicion es una prueba que se rompe cada vez que el producto crece
+// y que no dice nada cuando importa. Se elige por lo que el campo ES.
+
+/** El precio base: el unico number obligatorio del formulario. */
+const precioBase = (c) => c.querySelector('input[type="number"][required]');
+
+/**
+ * Abre «Parcial» y devuelve su casilla, que solo existe en ese modo.
+ *
+ * OJO: pulsar «Parcial» cambia el metodo de pago a `fraccionado` a proposito —
+ * si paga una parte, el resto va a plazos— y eso genera el plan de cuotas solo.
+ */
+function pagoParcial(c) {
+  fireEvent.click(screen.getByText('Parcial'));
+  return screen.getByPlaceholderText(/cuánto pagó/i);
+}
+
 beforeEach(() => {
   productsState.products = [];
   createMock.mockReset();
@@ -97,11 +120,9 @@ describe('ConversionDialog — validaciones', () => {
   it('rechaza importe_pagado > importe_total con toast destructive', async () => {
     const { container } = render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
     const productoInput = container.querySelector('input[placeholder*="producto"]');
-    const numbers = container.querySelectorAll('input[type="number"]');
-    // El primer number es importe_total, el segundo es importe_pagado (según el grid del JSX)
     fireEvent.change(productoInput, { target: { value: 'Curso X' } });
-    fireEvent.change(numbers[0], { target: { value: '500' } });
-    fireEvent.change(numbers[1], { target: { value: '600' } });
+    fireEvent.change(precioBase(container), { target: { value: '500' } });
+    fireEvent.change(pagoParcial(container), { target: { value: '600' } });
     fireEvent.submit(container.querySelector('form'));
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith(
@@ -114,11 +135,14 @@ describe('ConversionDialog — validaciones', () => {
   it('importe_pagado = importe_total se acepta (caso borde)', async () => {
     const { container } = render(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} onCreated={vi.fn()} />);
     fireEvent.change(container.querySelector('input[placeholder*="producto"]'), { target: { value: 'X' } });
-    const numbers = container.querySelectorAll('input[type="number"]');
-    fireEvent.change(numbers[0], { target: { value: '500' } });
-    fireEvent.change(numbers[1], { target: { value: '500' } });
+    fireEvent.change(precioBase(container), { target: { value: '500' } });
+    // «Pago TODO» pone el pagado exactamente igual al total, que es este caso
+    // borde. Antes se escribia el mismo numero a mano en dos campos y pasaba
+    // por casualidad: el pagado se quedaba en 0 y 0 <= 500 tambien pasa.
+    fireEvent.click(screen.getByText(/pagó todo/i));
     fireEvent.submit(container.querySelector('form'));
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][0]).toMatchObject({ importe_total: 500, importe_pagado: 500 });
   });
 });
 
@@ -131,9 +155,8 @@ describe('ConversionDialog — submit', () => {
     );
 
     fireEvent.change(container.querySelector('input[placeholder*="producto"]'), { target: { value: 'Master IA' } });
-    const numbers = container.querySelectorAll('input[type="number"]');
-    fireEvent.change(numbers[0], { target: { value: '1200' } });
-    fireEvent.change(numbers[1], { target: { value: '300' } });
+    fireEvent.change(precioBase(container), { target: { value: '1200' } });
+    fireEvent.change(pagoParcial(container), { target: { value: '300' } });
 
     fireEvent.submit(container.querySelector('form'));
 
@@ -146,7 +169,10 @@ describe('ConversionDialog — submit', () => {
       producto_contratado: 'Master IA',
       importe_total: 1200,
       importe_pagado: 300,
-      metodo_pago: 'tarjeta',
+      // Ya no es 'tarjeta': pagar una parte implica que el resto va a plazos, y
+      // el dialogo cambia el metodo solo. El metodo real de cada abono se
+      // indica al registrar cada cuota.
+      metodo_pago: 'fraccionado',
     });
 
     expect(onCreated).toHaveBeenCalled();
@@ -160,7 +186,7 @@ describe('ConversionDialog — submit', () => {
       <ConversionDialog open onClose={onClose} lead={baseLead} projectId={1} onCreated={vi.fn()} />,
     );
     fireEvent.change(container.querySelector('input[placeholder*="producto"]'), { target: { value: 'X' } });
-    fireEvent.change(container.querySelector('input[type="number"]'), { target: { value: '100' } });
+    fireEvent.change(precioBase(container), { target: { value: '100' } });
     fireEvent.submit(container.querySelector('form'));
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith(
