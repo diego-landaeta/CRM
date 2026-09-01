@@ -45,6 +45,7 @@ const ROUTE_TITLES = {
   '/notificaciones': 'Notificaciones',
   '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
@@ -195,6 +196,7 @@ const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
+const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
@@ -321,6 +323,9 @@ function App() {
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferencias" element={<PreferencesPage />} />
+          {/* Claves y variables (#80). El recorte de rol lo hace el servidor con
+              `soloRoles`; aqui solo se sirve la pantalla. */}
+          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
