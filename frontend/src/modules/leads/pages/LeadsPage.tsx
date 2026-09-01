@@ -666,12 +666,14 @@ export default function LeadsPage() {
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
+                  {can('leads.create') && (
                   <button
                     onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
                     <UploadSimple size={13} weight="regular" className="flex-shrink-0" /> Importar desde CSV
                   </button>
+                  )}
                   <div className="my-1 border-t border-border" />
                   <button
                     onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
@@ -695,6 +697,7 @@ export default function LeadsPage() {
               )}
             </div>
           )}
+          {can('leads.create') && (
           <button
             onClick={() => setFormOpen(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
@@ -703,6 +706,7 @@ export default function LeadsPage() {
             <span className="hidden sm:inline">Nuevo prospecto</span>
             <span className="sm:hidden">Nuevo</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -1043,11 +1047,11 @@ export default function LeadsPage() {
         <BulkActionBar
           count={selectedIds.length}
           onClear={clearSelection}
-          onChangeStatus={status => handleBulkStatusChange(status)}
-          onReassign={gestorId => handleBulkReassign(gestorId)}
-          onExport={handleBulkExportCsv}
+          onChangeStatus={can('leads.edit') ? (status => handleBulkStatusChange(status)) : undefined}
+          onReassign={can('leads.assign') ? (gestorId => handleBulkReassign(gestorId)) : undefined}
+          onExport={can('leads.export') ? handleBulkExportCsv : undefined}
           gestores={gestores}
-          isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
+          isAdmin={can('leads.assign')}
           loading={bulkLoading}
         />
       )}
