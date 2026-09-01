@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   correo, fichaProspecto, tarjetas, barras, boton, etiqueta, etiquetaEstado,
-  esc, enlace, aTextoPlano, logoDeProyecto, comparar, COLORES_CANAL,
+  esc, enlace, aTextoPlano, logoDeProyecto, comparar, parrafo, COLORES_CANAL,
 } from '../src/shared/services/email-plantilla.service.js';
 
 // La envoltura comun de los correos, tarea #83.
@@ -76,6 +76,21 @@ describe('las reglas del correo, que no son las de la web', () => {
     const { textContent } = muestra();
     expect(textContent).not.toMatch(/[<>]/);
     expect(textContent).toContain('María Muñoz');
+  });
+
+  it('la pre-cabecera no ensucia el texto plano', () => {
+    // Va oculta y rellena de caracteres invisibles para que no arrastre lo que
+    // viene detras en la bandeja. Esos caracteres se colaban tal cual —
+    // «&#847;&zwnj;» treinta veces— encabezando la version en texto.
+    const { textContent } = correo({
+      titulo: 'X', resumen: '4 esperando · el primero lleva 26 h', bloques: [parrafo('Hola')],
+    });
+    expect(textContent).not.toMatch(/&#?\w+;/);
+    expect(textContent).not.toMatch(/zwnj/);
+    // Arranca por la marca de la cabecera, que es lo primero del correo.
+    expect(textContent.split('\n')[0]).toBe('CRM');
+    // Y el resumen de la bandeja no se repite dentro del cuerpo.
+    expect(textContent).not.toContain('el primero lleva 26 h');
   });
 
   it('el texto plano conserva los enlaces', () => {

@@ -92,12 +92,19 @@ const TOPE_LISTA = 12;
 
 async function sinContactarDetalle(userId, limite = TOPE_LISTA) {
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.telefono, l.email, l.producto_interes, l.status,
-            COALESCE(NULLIF(l.canal_detectado, ''), NULLIF(l.utm_source, '')) AS origen,
+    // Ni `producto_interes` ni `canal_detectado` estan en `leads`: el producto
+    // va por su identificador a `products`, y las UTM viven en `lead_utms`, que
+    // es una tabla aparte uno-a-uno. `canal_detectado` ademas es un enum, de
+    // ahi el `::text`.
+    `SELECT l.id, l.nombre, l.telefono, l.email, l.status,
+            prod.nombre AS producto_interes,
+            COALESCE(NULLIF(lu.canal_detectado::text, ''), NULLIF(lu.utm_source, '')) AS origen,
             COALESCE(l.fecha_solicitud, l.created_at) AS entro,
             p.nombre AS proyecto
        FROM leads l
-       LEFT JOIN projects p ON p.id = l.project_id
+       LEFT JOIN projects p   ON p.id = l.project_id
+       LEFT JOIN products prod ON prod.id = l.producto_interes_id
+       LEFT JOIN lead_utms lu ON lu.lead_id = l.id
       WHERE l.responsable_id = $1 AND l.deleted_at IS NULL
         AND l.status IN ('nuevo','por_contactar')
         AND NOT EXISTS (SELECT 1 FROM lead_interactions i WHERE i.lead_id = l.id)
@@ -145,11 +152,15 @@ async function ultimos7Dias(userId) {
 /** De donde vienen los suyos esta semana. El otro grafico de la #81. */
 async function porCanal(userId) {
   const { rows } = await query(
-    `SELECT COALESCE(NULLIF(canal_detectado, ''), NULLIF(utm_source, ''), 'Sin identificar') AS canal,
+    // El canal vive en `lead_utms`, no en `leads`. Con LEFT JOIN, los que no
+    // traen UTM caen en «Sin identificar», que es informacion tambien: si esa
+    // barra es la mas larga, el problema no es el correo.
+    `SELECT COALESCE(NULLIF(lu.canal_detectado::text, ''), NULLIF(lu.utm_source, ''), 'Sin identificar') AS canal,
             count(*)::int AS total
-       FROM leads
-      WHERE responsable_id = $1 AND deleted_at IS NULL
-        AND COALESCE(fecha_solicitud, created_at) >= CURRENT_DATE - 6
+       FROM leads l
+       LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+      WHERE l.responsable_id = $1 AND l.deleted_at IS NULL
+        AND COALESCE(l.fecha_solicitud, l.created_at) >= CURRENT_DATE - 6
       GROUP BY 1
       ORDER BY total DESC
       LIMIT 6`,

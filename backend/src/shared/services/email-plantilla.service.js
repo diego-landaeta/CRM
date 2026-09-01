@@ -238,7 +238,7 @@ export function etiqueta(texto, tono = 'secundario') {
  */
 function preCabecera(texto) {
   if (!texto) return '';
-  return `<div style="display:none;font-size:1px;color:${C.hoja};line-height:1px;
+  return `<div class="precabecera" style="display:none;font-size:1px;color:${C.hoja};line-height:1px;
                max-height:0;max-width:0;opacity:0;overflow:hidden">${esc(texto)}
     ${'&#847;&zwnj;&nbsp;'.repeat(30)}</div>`;
 }
@@ -714,6 +714,10 @@ export function correo({ proyecto = {}, titulo, saludo, bloques = [], apagar = n
 export function aTextoPlano(html) {
   return String(html)
     .replace(/<head[\s\S]*?<\/head>/gi, '')
+    // La pre-cabecera fuera: es para la bandeja, no para el cuerpo. Y su
+    // relleno de caracteres invisibles se colaba tal cual —«&#847;&zwnj;»
+    // treinta veces— encabezando la version en texto de todos los correos.
+    .replace(/<div class="precabecera"[\s\S]*?<\/div>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
       (_, url, txt) => `${txt.replace(/<[^>]+>/g, '').trim()} (${url})`)
