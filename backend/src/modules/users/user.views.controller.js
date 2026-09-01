@@ -12,8 +12,17 @@ const DEFAULT_VIEW = {
   language: 'es',
 };
 
+/**
+ * Uno mismo, o el superadmin. Nadie mas.
+ *
+ * Miraba `actor.id`, y en el testigo no viene con ese nombre: el payload lleva
+ * `userId`. Asi que la comparacion nunca se cumplia y todo el que no fuera
+ * superadmin recibia un 403 al guardar SUS PROPIAS preferencias. La pantalla
+ * ademas se tragaba el fallo, con lo cual el cambio se veia en pantalla y
+ * desaparecia al recargar.
+ */
 function canEdit(actor, targetUserId) {
-  return actor.role === 'superadmin' || actor.id === Number(targetUserId);
+  return actor.role === 'superadmin' || Number(actor.userId) === Number(targetUserId);
 }
 
 export async function getViews(req, res, next) {
