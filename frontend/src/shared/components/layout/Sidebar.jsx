@@ -199,7 +199,7 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
-      { label: 'Mensajes', to: '/mensajes', icon: ChatsCircle },
+      { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
@@ -930,7 +930,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     let cancelled = false;
     async function fetchMsgCount() {
       try {
-        const res = await client.get('/mensajes/conversations/unread-count');
+        const res = await client.get('/messages/conversations/unread-count');
         if (!cancelled && res.success) setMsgUnreadBadge(res.data?.count || 0);
       } catch {}
     }
@@ -1201,7 +1201,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 badge={
                   item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                   : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
-                  : item.to === '/mensajes' && msgUnreadBadge > 0 ? msgUnreadBadge
+                  : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
                   : undefined
                 }
                 labelOverrides={activeProject?.sidebar_labels}
