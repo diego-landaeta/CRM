@@ -91,8 +91,11 @@ describe('el correo', () => {
     cobradoAntes: 3000,
   };
 
+  // Desde la #83 `cuerpo` devuelve `{ htmlContent, textContent }`.
+  const html = (d) => _internos.cuerpo(d).htmlContent;
+
   it('trae las cuatro cifras', () => {
-    const h = _internos.cuerpo(datos);
+    const h = html(datos);
     expect(h).toContain('48');           // prospectos
     expect(h).toContain('9');            // convertidos
     expect(h).toContain('10');           // ventas
@@ -105,29 +108,38 @@ describe('el correo', () => {
   it('la tabla por gestora usa `vendedora`, que es lo que devuelve el agregado', () => {
     // Con `asesora` salia vacia: ese campo es del informe de DETALLE, que
     // ademas devuelve una fila por venta. Se vio en pantalla, no leyendo.
-    const h = _internos.cuerpo(datos);
+    const h = html(datos);
     expect(h).toContain('Ana');
     expect(h).toContain('Luis');
     expect(h).not.toContain('undefined');
   });
 
   it('sin gestoras no pinta la tabla vacia', () => {
-    const h = _internos.cuerpo({ ...datos, porAsesora: [] });
-    expect(h).not.toContain('Por gestora');
+    expect(html({ ...datos, porAsesora: [] })).not.toContain('Por gestora');
   });
 
   it('avisa de que lo cobrado NO sale del panel', () => {
     // Si el correo y la pantalla dan numeros distintos y nadie lo explica, en
     // dos semanas no lo abre nadie — que es lo que teme el propio ticket.
-    expect(_internos.cuerpo(datos)).toMatch(/pagos registrados/i);
+    expect(html(datos)).toMatch(/pagos registrados/i);
   });
 
-  it('va en tabla y con estilos en linea, no con clases', () => {
+  it('va en tabla y con estilos en linea, que son la base', () => {
     // Es lo unico que se ve igual en Gmail, Outlook y el movil.
-    const h = _internos.cuerpo(datos);
+    //
+    // Desde la #83 hay ademas una hoja en la cabecera, pero SOLO con lo que un
+    // atributo `style` no puede hacer: las dos consultas de medios del movil y
+    // del modo oscuro. Por eso ya no vale exigir que no haya clases; lo que
+    // hay que exigir es que la hoja sea prescindible.
+    const h = html(datos);
     expect(h).toContain('<table');
     expect(h).toMatch(/style="/);
-    expect(h).not.toMatch(/class="/);
+
+    const hoja = h.match(/<style>([\s\S]*?)<\/style>/)?.[1] || '';
+    expect(hoja).toMatch(/@media/);
+    // Ni una regla fuera de una consulta de medios: si la hubiera, seria una
+    // regla de la que el correo dependeria, y Gmail podria comersela.
+    expect(hoja.replace(/@media[^{]*\{[\s\S]*?\n  \}/g, '')).not.toMatch(/\{[^}]*:[^}]*\}/);
   });
 });
 

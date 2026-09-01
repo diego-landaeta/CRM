@@ -70,11 +70,11 @@ describe('una sola vez por prospecto', () => {
     // El aviso es «este lead lleva sin tocar», no «hoy tienes leads sin tocar».
     // Con la fecha dentro se repetiria cada dia por el mismo prospecto, que es
     // acosar a la gestora en vez de avisarla.
-    const cuerpo = _internos.cuerpo({
+    const { htmlContent } = _internos.cuerpo({
       id: 42, nombre: 'Marta', gestora: 'Ana',
       fecha_solicitud: new Date(Date.now() - 45 * 60000).toISOString(),
     });
-    expect(cuerpo).toContain('Marta');
+    expect(htmlContent).toContain('Marta');
 
     // La clave se arma en `vuelta`; se comprueba su forma, que es lo que
     // garantiza el «una sola vez».
@@ -90,24 +90,58 @@ describe('lo que se le cuenta a la gestora', () => {
     fecha_solicitud: new Date(Date.now() - 45 * 60000).toISOString(),
   };
 
+  // Desde la #83 `cuerpo` devuelve `{ htmlContent, textContent }`.
+  const texto = (l) => _internos.cuerpo(l).textContent;
+
   it('dice cuanto lleva esperando, no solo que espera', () => {
-    // «Entro hace 45 minutos» mueve; «tienes un lead pendiente» no.
-    expect(_internos.cuerpo(lead)).toMatch(/hace 4[45] minutos/);
+    // «45 minutos» mueve; «tienes un lead pendiente» no. Ahora va en la
+    // etiqueta de la ficha en vez de dentro de la frase, para no repetir el
+    // mismo numero tres veces en cuatro lineas.
+    expect(texto(lead)).toMatch(/4[45] minutos/);
   });
 
   it('trae el telefono y el correo, para poder actuar sin buscarlos', () => {
-    const c = _internos.cuerpo(lead);
-    expect(c).toContain('+34600111222');
-    expect(c).toContain('marta@ejemplo.com');
+    const t = texto(lead);
+    expect(t).toContain('+34600111222');
+    expect(t).toContain('marta@ejemplo.com');
+  });
+
+  it('el telefono y el correo se pueden pulsar', () => {
+    // La gestora abre el aviso en el movil: si el numero no es un enlace, hay
+    // que copiarlo a mano, y entonces el correo no ha ahorrado el paso.
+    const { htmlContent } = _internos.cuerpo(lead);
+    expect(htmlContent).toContain('href="tel:+34600111222"');
+    expect(htmlContent).toContain('href="mailto:marta@ejemplo.com"');
   });
 
   it('no revienta si falta el telefono o el proyecto', () => {
-    const c = _internos.cuerpo({ ...lead, telefono: null, proyecto: null, email: null });
-    expect(c).toContain('Marta Ruiz');
-    expect(c).not.toContain('null');
+    const t = texto({ ...lead, telefono: null, proyecto: null, email: null });
+    expect(t).toContain('Marta Ruiz');
+    expect(t).not.toContain('null');
   });
 
-  it('dice como apagarlo', () => {
-    expect(_internos.cuerpo(lead)).toMatch(/Mis preferencias/);
+  it('lleva a la ficha del prospecto', () => {
+    expect(_internos.cuerpo(lead).htmlContent).toContain('/prospectos/7');
+  });
+
+  it('dice como apagarlo, con enlace', () => {
+    const t = texto(lead);
+    expect(t).toMatch(/Mis preferencias/);
+    expect(t).toMatch(/\/preferencias/);
+  });
+
+  it('va con sus tildes', () => {
+    // Antes decia «entro», «todavia», «ningun», «Telefono». Lo lee una persona.
+    const t = texto(lead);
+    expect(t).toMatch(/Todavía no tiene ningún contacto/);
+    expect(t).toMatch(/Teléfono/);
+  });
+
+  it('escapa lo que viene del formulario', () => {
+    // El nombre llega de un formulario publico: sin escapar, un «&» o un «<»
+    // rompen el HTML del correo.
+    const { htmlContent } = _internos.cuerpo({ ...lead, nombre: 'Muñoz & Cia <SL>' });
+    expect(htmlContent).toContain('Muñoz &amp; Cia &lt;SL&gt;');
+    expect(htmlContent).not.toContain('<SL>');
   });
 });

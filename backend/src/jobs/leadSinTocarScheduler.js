@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
+import { correo, parrafo, boton, fichaProspecto, enlace } from '../shared/services/email-plantilla.service.js';
 import { vigilar } from './latido.js';
 
 /**
@@ -35,7 +36,9 @@ async function sinTocar() {
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.created_at,
             l.responsable_id,
             u.nombre AS gestora, u.email AS gestora_email,
-            p.nombre AS proyecto
+            -- La marca del proyecto va en la cabecera del correo (#83).
+            p.nombre AS proyecto, p.logo_url AS proyecto_logo, p.emoji AS proyecto_emoji,
+            p.slug AS proyecto_slug
        FROM leads l
        JOIN users u    ON u.id = l.responsable_id AND u.active
        LEFT JOIN projects p ON p.id = l.project_id
@@ -60,21 +63,54 @@ async function sinTocar() {
   return rows;
 }
 
+/** «Hace 45 minutos» dicho como lo diria una persona. */
+function cuantoLleva(minutos) {
+  if (minutos < 60) return `${minutos} minutos`;
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h < 24) return m ? `${h} h y ${m} min` : `${h} hora${h > 1 ? 's' : ''}`;
+  const d = Math.floor(h / 24);
+  return `${d} día${d > 1 ? 's' : ''}`;
+}
+
 function cuerpo(lead) {
   const entro = new Date(lead.fecha_solicitud || lead.created_at);
   const hace = Math.round((Date.now() - entro.getTime()) / 60000);
-  return `
-    <p>Hola ${lead.gestora || ''},</p>
-    <p><strong>${lead.nombre}</strong> entro hace ${hace} minutos y todavia no
-       tiene ningun contacto apuntado.</p>
-    <ul>
-      ${lead.proyecto ? `<li><strong>Proyecto:</strong> ${lead.proyecto}</li>` : ''}
-      ${lead.telefono ? `<li><strong>Telefono:</strong> ${lead.telefono}</li>` : ''}
-      ${lead.email ? `<li><strong>Correo:</strong> ${lead.email}</li>` : ''}
-    </ul>
-    <p>Este aviso se manda una sola vez por prospecto. Puedes apagarlo en
-       <em>Mis preferencias</em>.</p>
-  `;
+  const url = enlace(`prospectos/${lead.id}`);
+
+  return correo({
+    proyecto: {
+      nombre: lead.proyecto,
+      logo_url: lead.proyecto_logo,
+      slug: lead.proyecto_slug,
+      emoji: lead.proyecto_emoji,
+    },
+    titulo: 'Un prospecto lleva esperando',
+    saludo: lead.gestora,
+    resumen: `${lead.nombre} lleva ${cuantoLleva(hace)} sin contactar`,
+    bloques: [
+      // El tiempo va en la etiqueta de la ficha y no repetido aqui: el titular
+      // ya dice que lleva esperando, y decirlo tres veces en cuatro lineas es
+      // lo que hace que un aviso parezca escrito por una maquina.
+      parrafo('Todavía no tiene ningún contacto apuntado.'),
+      // La ficha y no una lista de <li>: es la misma pieza que la #81 va a
+      // repetir catorce veces, y conviene que el aviso de uno solo y el resumen
+      // de muchos se vean igual.
+      // Sin `url` en la ficha: aqui es UN prospecto y el boton de abajo ya
+      // lleva a el, asi que el enlace de dentro seria «Abrir la ficha» dos
+      // veces seguidas. En la #81, que son catorce fichas y ningun boton, cada
+      // una si lleva el suyo.
+      fichaProspecto({
+        nombre: lead.nombre,
+        telefono: lead.telefono,
+        correo: lead.email,
+        estado: lead.status,
+        esperando: cuantoLleva(hace),
+      }),
+      boton({ texto: 'Abrir la ficha', url }),
+    ],
+    apagar: { texto: 'Este aviso se manda una sola vez por prospecto.' },
+  });
 }
 
 async function vuelta() {
@@ -91,16 +127,19 @@ async function vuelta() {
         targetUserIds: [lead.responsable_id],
         type: 'lead_sin_tocar',
         title: `Sin contactar: ${lead.nombre}`,
-        message: `Entro hace mas de ${MINUTOS} minutos y no tiene ningun contacto apuntado.`,
+        // Con tildes: esto tambien lo lee una persona, no es un comentario.
+        message: `Entró hace más de ${MINUTOS} minutos y no tiene ningún contacto apuntado.`,
         link_path: `/prospectos/${lead.id}`,
       }).catch(() => {});
 
       if (!lead.gestora_email) continue;
 
+      const { htmlContent, textContent } = cuerpo(lead);
       await sendEmail({
         to: lead.gestora_email,
         subject: `[CRM] Sin contactar: ${lead.nombre}`,
-        htmlContent: cuerpo(lead),
+        htmlContent,
+        textContent,
         tags: ['recordatorio', 'lead-sin-tocar'],
         // UNA sola vez por prospecto, y esto es el criterio de terminado del
         // ticket. La clave lleva el id del lead y no la fecha: el aviso es «este
