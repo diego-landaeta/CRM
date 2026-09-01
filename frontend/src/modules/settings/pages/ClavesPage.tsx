@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Key, WarningCircle, Clock, ShieldCheck, Eye, EyeSlash, Plus,
-  ClockCounterClockwise, MagnifyingGlass, EnvelopeSimple, CreditCard,
+  ClockCounterClockwise, MagnifyingGlass, EnvelopeSimple, CreditCard, PencilSimple, Trash,
   ChartBar, WhatsappLogo, Cloud, ShoppingBag, Robot, Lightning, Copy,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -9,6 +9,8 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { credencialesApi, type Credencial, type Hueco } from '../api/credenciales.api';
+import DialogoClave from '../components/DialogoClave';
+import RegistroClaves from '../components/RegistroClaves';
 
 /**
  * Claves y variables, tarea #80.
@@ -75,6 +77,9 @@ export default function ClavesPage() {
   // El valor revelado vive AQUI y solo aquí: una credencial a la vez, y se
   // borra al cerrarla. No entra en `claves` ni en ninguna caché.
   const [visible, setVisible] = useState<{ id: number; value: string } | null>(null);
+  // `undefined` = cerrado; `null` = alta; una clave = cambio.
+  const [editando, setEditando] = useState<Credencial | null | undefined>(undefined);
+  const [verRegistro, setVerRegistro] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -100,6 +105,24 @@ export default function ClavesPage() {
     }
   }
 
+  async function borrar(c: Credencial) {
+    // Sin vuelta atras y sobre una credencial que puede estar en uso: se
+    // pregunta con el nombre delante, no con un «¿seguro?».
+    const nombre = `${NOMBRE[c.service] || c.service}${c.project_nombre ? ` de ${c.project_nombre}` : ''} (${c.entorno})`;
+    if (!window.confirm(`Se va a borrar la clave de ${nombre}.
+
+Lo que la use dejara de funcionar en cuanto se despliegue. ¿Seguir?`)) return;
+    try {
+      const r = await credencialesApi.borrar(c.id);
+      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
+      toast({ title: 'Clave borrada' });
+      if (visible?.id === c.id) setVisible(null);
+      cargar();
+    } catch (e) {
+      toast({ title: 'No se pudo borrar', description: (e as Error).message, variant: 'destructive' });
+    }
+  }
+
   const mostradas = useMemo(() => claves.filter((c) => {
     if (entorno !== 'todos' && c.entorno !== entorno) return false;
     if (!busca.trim()) return true;
@@ -117,10 +140,14 @@ export default function ClavesPage() {
         subtitle="Qué hay puesto en cada proyecto y en cada entorno · solo soporte y superadmin"
         actions={
           <>
-            <button className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors">
+            <button
+              onClick={() => setVerRegistro(true)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
               <ClockCounterClockwise size={14} weight="bold" /> Registro
             </button>
-            <button className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
+            <button
+              onClick={() => setEditando(null)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
               <Plus size={14} weight="bold" /> Añadir clave
             </button>
           </>
@@ -265,6 +292,20 @@ export default function ClavesPage() {
                           {abierta ? <EyeSlash size={14} weight="bold" /> : <Eye size={14} weight="bold" />}
                           {abierta ? 'Ocultar' : 'Ver'}
                         </button>
+                        <button
+                          onClick={() => setEditando(c)}
+                          aria-label={`Cambiar la clave de ${NOMBRE[c.service] || c.service}`}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border
+                                     bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors
+                                     focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        ><PencilSimple size={14} weight="bold" /></button>
+                        <button
+                          onClick={() => borrar(c)}
+                          aria-label={`Borrar la clave de ${NOMBRE[c.service] || c.service}`}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border
+                                     bg-card text-muted-foreground hover:text-destructive hover:border-destructive/30
+                                     transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"
+                        ><Trash size={14} weight="bold" /></button>
                       </div>
                     </td>
                   </tr>
@@ -279,6 +320,15 @@ export default function ClavesPage() {
         El listado nunca trae el valor: solo los cuatro últimos caracteres. Pulsar <strong>Ver</strong> es
         otra llamada y <strong>queda registrada</strong> — quién lo miró y cuándo.
       </p>
+
+      {editando !== undefined && (
+        <DialogoClave
+          clave={editando}
+          onCerrar={() => setEditando(undefined)}
+          onGuardada={cargar}
+        />
+      )}
+      {verRegistro && <RegistroClaves onCerrar={() => setVerRegistro(false)} />}
     </div>
   );
 }
