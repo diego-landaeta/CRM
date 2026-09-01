@@ -244,9 +244,56 @@ export function applyLabel(original, overrides) {
 // aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
 // que si y el otro que no.
 
-function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
+/**
+ * De `hidden_sidebar_items` a las piezas del menu. Tarea #7.
+ *
+ * El backend nombra bloques —«accounting», «users»— y el menu se organiza por
+ * claves de modulo y direcciones. Coinciden en tres (`payroll`, `reports`,
+ * `webhooks`) y en el resto no, asi que hace falta traducir. Sin esta tabla, un
+ * rol a medida que oculte «accounting» no ocultaria nada y nadie sabria por que.
+ *
+ * Se declara aqui, en una tabla que se lee de un vistazo, en vez de repartir
+ * identificadores por las ciento y pico entradas del menu.
+ */
+// Se mapea SOLO lo que no admite duda. «Cuentas por cobrar» estuvo aqui un rato
+// y hubo que sacarla: no tiene clave de modulo y su entrada dice
+// `roles: [..., 'gestor']` — alguien se la dio a las gestoras a proposito, y
+// esconderla por suponer que «accounting» la incluye era decidir por el.
+//
+// Cuando el nombre del bloque y lo que hay en el menu no encajan solos, se deja
+// fuera y se dice. Ocultar de mas es peor que no ocultar: quien lo sufre no
+// sabe que le falta algo, solo que no lo encuentra.
+const OCULTABLES = {
+  accounting: { modulos: ['accounting_income', 'accounting_expenses', 'accounting_payable'],
+                rutas: [] },
+  payroll:    { modulos: ['payroll'], rutas: [] },
+  reports:    { modulos: ['reports'], rutas: ['/informes'] },
+  webhooks:   { modulos: ['webhooks'], rutas: [] },
+  campaigns:  { modulos: [], rutas: ['/campanas'] },
+  users:      { modulos: [], rutas: ['/configuracion/usuarios', '/usuarios'] },
+  settings_advanced: { modulos: [], rutas: ['/configuracion'] },
+};
+
+/** ¿Lo esconde la vista de este rol? */
+function loEsconde(item, ocultos) {
+  if (!Array.isArray(ocultos) || !ocultos.length) return false;
+  return ocultos.some((clave) => {
+    const o = OCULTABLES[clave];
+    if (!o) return false;
+    if (item.module && o.modulos.includes(item.module)) return true;
+    // Por prefijo: ocultar «/configuracion» se lleva sus pantallas de dentro,
+    // que es lo que se espera al esconder un bloque entero.
+    return !!item.to && o.rutas.some((r) => item.to === r || item.to.startsWith(r + '/'));
+  });
+}
+
+function canSeeItem(item, role, modules, projectType, soloColaboraciones, ocultos) {
   if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
+  // La vista del rol manda, y va ANTES que el atajo de superadmin: si alguien
+  // configura un rol a medida que esconde Finanzas, esconderla es justo lo que
+  // se ha pedido — no una sugerencia que el rol pueda saltarse.
+  if (loEsconde(item, ocultos)) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
@@ -270,9 +317,9 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, ocultos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab))
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, ocultos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
@@ -652,7 +699,10 @@ function ProjectAvatar({ project, size = 'md' }) {
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, view } = useAuth();
+  // Lo que la vista de este rol esconde. Vacio para los que no tienen nada
+  // configurado, que es el caso de hoy en los cuatro roles fijos.
+  const ocultos = view?.hidden_sidebar_items;
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
@@ -1125,7 +1175,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab));
+          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, ocultos));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
@@ -1138,6 +1188,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 modules={activeProject?.modules}
                 projectType={activeProject?.type}
                 soloColab={soloColab}
+                ocultos={ocultos}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}
