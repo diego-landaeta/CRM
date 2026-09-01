@@ -103,3 +103,7 @@ backups/
 /outputs/
 /Claude/
 *-handoff.md
+
+# Cache de vitest. Lo genera `npm test` y no es de nadie: sin esto aparece como
+# fichero sin seguimiento cada vez que se corre la suite.
+.vite/
