@@ -341,7 +341,10 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
 }
 
 // Las comisiones ya creadas, con lo que hace falta para entender cada una.
-export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
+export async function comisiones({
+  periodo = null, tutorId = null, estado = null, projectId = null,
+  fechaCobro = null, limit = 1000,
+}) {
   const { rows } = await query(
     `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
             tc.fecha_liquidacion, tc.created_at,
@@ -349,7 +352,14 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
             tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
             cp.fecha AS fecha_cobro, cp.importe AS cobro,
             COALESCE(l.nombre, '—') AS alumno,
-            liq.nombre AS liquidada_por_nombre
+            liq.nombre AS liquidada_por_nombre,
+            -- Que cuota es, de cuantas. Lo pide el aviso al tutor (#82): no es
+            -- lo mismo la primera de doce que la ultima. Sale de
+            -- conversion_installments, que ya guarda el numero y a que pago
+            -- corresponde; van como NULL cuando la venta no es a plazos.
+            ci.numero AS cuota_numero,
+            (SELECT COUNT(*)::int FROM conversion_installments ci2
+              WHERE ci2.conversion_id = cp.conversion_id) AS cuotas_total
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        LEFT JOIN products p ON p.id = tc.product_id
@@ -357,14 +367,17 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
        LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
        LEFT JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
+       LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
        LEFT JOIN users liq ON liq.id = tc.liquidada_por
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
         AND ($4::int IS NULL OR p.project_id = $4)
+        -- Por dia de cobro, que es como lo mira el aviso del cierre de jornada.
+        AND ($5::date IS NULL OR cp.fecha = $5::date)
       ORDER BY tc.periodo DESC, u.nombre, cp.fecha
       LIMIT ${Number(limit) || 1000}`,
-    [periodo, tutorId, estado, projectId]
+    [periodo, tutorId, estado, projectId, fechaCobro]
   );
   return rows;
 }
