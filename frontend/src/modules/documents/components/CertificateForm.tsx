@@ -8,6 +8,11 @@ import { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
 import { downloadDoc } from '../lib/downloadDoc';
 import NaturalDatePicker from './NaturalDatePicker';
+import ClientCombobox from './ClientCombobox';
+import ProductLineCombobox from './ProductLineCombobox';
+import { useProducts } from '@/modules/products/hooks/useProducts';
+import client from '@/shared/api/client';
+import { ArrowSquareOut } from '@phosphor-icons/react';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -43,6 +48,12 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [fixedDataOpen, setFixedDataOpen] = useState(false);
 
+  // Los productos del proyecto, para el selector de programa. `ProductLineCombobox`
+  // filtra en cliente sobre esta lista, asi que se cargan una vez.
+  const { products } = useProducts(activeProject?.id);
+  const [programa, setPrograma] = useState<{ url_info?: string | null } | null>(null);
+  const [cargandoModulos, setCargandoModulos] = useState(false);
+
   const { register, control, handleSubmit, watch, setValue } = useForm<CertificateFormValues>({
     defaultValues: {
       alumno_nombre: '',
@@ -62,7 +73,40 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'modulos' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'modulos' });
+
+  /**
+   * Al elegir un programa se rellena lo que el CRM ya sabe de el y se traen sus
+   * modulos. Tarea #4: hasta ahora habia que copiar a mano el nombre, las horas
+   * y escribir el plan de estudios modulo a modulo, teniendo todo eso guardado.
+   *
+   * Los modulos se pueden seguir editando y borrando despues: se traen como
+   * punto de partida, no como algo cerrado — hay certificados que no cubren el
+   * programa entero.
+   */
+  async function elegirPrograma(p: { id: number; nombre: string; duracion?: string | null; duracion_horas?: number | null; url_info?: string | null }) {
+    setPrograma(p);
+    setValue('curso_nombre', p.nombre, { shouldDirty: true });
+    const horas = p.duracion_horas ?? p.duracion;
+    if (horas) setValue('horas_total', String(horas), { shouldDirty: true });
+
+    setCargandoModulos(true);
+    try {
+      // El `projectId` es obligatorio: lo exige el middleware `projectAccess` y
+      // sin el la llamada contesta 400. No se nota al escribir el codigo —
+      // solo al pedirlo de verdad, que es donde salio.
+      const res = await client.get(`/products/${p.id}/modules?projectId=${activeProject?.id}`);
+      const mods = (res.success ? res.data : []) as Array<{ nombre?: string; titulo?: string }>;
+      const nombres = mods.map((m) => m.nombre || m.titulo || '').filter(Boolean);
+      // Solo se pisa lo escrito si el producto trae modulos: si no tiene,
+      // borrar lo que hubiera seria castigar al que ya los habia puesto a mano.
+      if (nombres.length) replace(nombres.map((nombre) => ({ nombre })));
+    } catch {
+      // Que no haya modulos no es un error: hay productos sin plan de estudios.
+    } finally {
+      setCargandoModulos(false);
+    }
+  }
 
   const [touched, setTouched] = useState(false);
 
@@ -146,10 +190,20 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="text-xs text-muted-foreground mb-1 block">Nombre completo <span className="text-red-500">*</span></label>
-            <input
-              {...register('alumno_nombre', { required: true })}
-              className={inp + (invalidFields.has('Nombre del alumno') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-              placeholder="Nombre Apellido Apellido"
+            {/* Busca entre los prospectos del proyecto —que es donde estan
+                tambien los convertidos— y rellena DNI y correo al elegir. Se
+                puede seguir escribiendo un nombre que no existe: hay alumnos
+                que llegan de fuera del CRM. */}
+            <ClientCombobox
+              projectId={activeProject?.id}
+              value={watch('alumno_nombre')}
+              onChange={(v) => setValue('alumno_nombre', v, { shouldDirty: true })}
+              onSelect={(c) => {
+                setValue('alumno_nombre', c.nombre, { shouldDirty: true });
+                if (c.dni) setValue('alumno_dni', c.dni, { shouldDirty: true });
+                if (c.email) setValue('alumno_email', c.email, { shouldDirty: true });
+              }}
+              placeholder="Buscar alumno o escribir un nombre nuevo…"
             />
           </div>
           <div>
@@ -177,11 +231,22 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <h3 className="font-semibold text-sm mb-4">Datos del curso</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre del diplomado/curso <span className="text-red-500">*</span></label>
-            <input
-              {...register('curso_nombre', { required: true })}
-              className={inp + (invalidFields.has('Nombre del curso') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-              placeholder="Diplomado en Psicoterapia Integrativa"
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-muted-foreground">Nombre del diplomado/curso <span className="text-red-500">*</span></label>
+              {programa?.url_info && (
+                <a href={programa.url_info} target="_blank" rel="noreferrer"
+                   className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                  Ver en web <ArrowSquareOut size={12} weight="bold" />
+                </a>
+              )}
+            </div>
+            <ProductLineCombobox
+              products={products}
+              value={watch('curso_nombre')}
+              onChange={(v) => { setValue('curso_nombre', v, { shouldDirty: true }); setPrograma(null); }}
+              onSelectProduct={elegirPrograma}
+              placeholder="Buscar el programa del catálogo o escribirlo…"
+              className={invalidFields.has('Nombre del curso') ? ' border-red-400 ring-2 ring-red-400/20' : ''}
             />
           </div>
           <div>
@@ -233,6 +298,9 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
               </button>
             </div>
           ))}
+          {cargandoModulos && (
+            <p className="text-xs text-muted-foreground mb-2">Trayendo el plan de estudios del programa…</p>
+          )}
           <button type="button" onClick={() => append({ nombre: '' })}
             className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors mt-1">
             <Plus size={13}/> Añadir módulo
