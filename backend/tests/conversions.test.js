@@ -244,3 +244,49 @@ describe('PATCH /api/conversions/:id - editar', () => {
     expect(res.body.code).toBe('INVALID_TOTAL');
   });
 });
+
+// ============================================================
+// El IVA cuando nadie lo dice
+// ============================================================
+
+describe('POST /api/conversions - el IVA por defecto', () => {
+  it('sin decir nada, el importe es el precio FINAL y no se le suma el 21 %', async () => {
+    // Antes era al reves: `importe_total: 1000` se guardaba como 1210 porque el
+    // servidor lo tomaba como base imponible. El dialogo del CRM manda siempre
+    // `iva_incluido`, asi que solo lo sufria quien entrara por API o desde Make
+    // — en silencio y en un documento fiscal.
+    const res = await request.post('/api/conversions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        lead_id: testLeadId,
+        project_id: testProjectId,
+        producto_contratado: 'Curso sin decir el IVA',
+        importe_total: 1000,
+        importe_pagado: 0,
+        metodo_pago: 'transferencia',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.importe_total).toBe('1000.00');
+    createdConversionIds.push(res.body.data.id);
+  });
+
+  it('quien pida que se le sume, se le suma', async () => {
+    // La otra direccion sigue disponible: hay que pedirla.
+    const res = await request.post('/api/conversions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        lead_id: testLeadId,
+        project_id: testProjectId,
+        producto_contratado: 'Curso con IVA aparte',
+        importe_total: 1000,
+        iva_incluido: false,
+        importe_pagado: 0,
+        metodo_pago: 'transferencia',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.importe_total).toBe('1210.00');
+    createdConversionIds.push(res.body.data.id);
+  });
+});
