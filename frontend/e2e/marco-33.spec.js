@@ -74,10 +74,11 @@ test.describe('marco de la aplicacion', () => {
     // El CRM lleva varias marcas y hasta ahora solo se sabia mirando al fondo
     // del menu lateral.
     await ir(page, '/prospectos');
-    // En movil no cabe y se esconde a proposito: alli la marca se ve al abrir
-    // el menu, que esta a un toque.
-    await expect(cabecera(page).getByText('Fono Aprende'))
-      .toBeVisible({ visible: !esMovil(page) });
+    // También en móvil. Antes aquí había una píldora que solo informaba y se
+    // escondía en pantallas estrechas; ahora es el selector (#79, punto 2), y
+    // ese sí tiene que estar siempre: es la única forma de cambiar de marca.
+    await expect(cabecera(page).getByRole('button', { name: /selector de proyecto/i }))
+      .toBeVisible();
   });
 
   test('la barra se queda arriba al desplazar', async ({ page }) => {

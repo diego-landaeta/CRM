@@ -672,8 +672,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerPos, setPickerPos] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuPos, setUserMenuPos] = useState(null);
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
@@ -758,51 +756,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       duration: 6000,
     });
   }
-  const pickerRef = useRef(null);
-  const pickerBtnRef = useRef(null);
-  const pickerPopRef = useRef(null);
   const userBtnRef = useRef(null);
   const userMenuRef = useRef(null);
 
-  useEffect(() => {
-    if (!pickerOpen) return;
-    function compute() {
-      const btn = pickerBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const margin = 8;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const width = Math.max(rect.width, 220);
-      const maxH = Math.min(320, vh - rect.bottom - margin * 2);
-      let left = rect.left;
-      if (left + width + margin > vw) left = vw - width - margin;
-      if (left < margin) left = margin;
-      // Si no hay espacio abajo, abrir hacia arriba
-      let top = rect.bottom + 6;
-      if (top + maxH + margin > vh && rect.top > maxH) {
-        top = rect.top - 6 - maxH;
-      }
-      setPickerPos({ top, left, width, maxHeight: maxH });
-    }
-    compute();
-    function onDocClick(e) {
-      if (pickerBtnRef.current?.contains(e.target)) return;
-      if (pickerPopRef.current?.contains(e.target)) return;
-      setPickerOpen(false);
-    }
-    function onKey(e) { if (e.key === 'Escape') setPickerOpen(false); }
-    window.addEventListener('resize', compute);
-    window.addEventListener('scroll', compute, true);
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('resize', compute);
-      window.removeEventListener('scroll', compute, true);
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [pickerOpen]);
 
   // User menu: posicionamiento + click fuera
   useEffect(() => {
@@ -971,141 +927,32 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 </span>
               )}
             </div>
-            {/* La marca, ya con toda la anchura para ella: aqui si cabe entera. */}
-            <span className="block text-[11px] text-muted-foreground truncate">
-              {activeProject?.id === -1
-                ? 'todas las marcas'
-                : (activeProject?.nombre || 'sin marca elegida')}
-            </span>
+            {/* Aqui salia el nombre de la marca. Se ha quitado: salia TRES veces
+                en la misma pantalla —aqui, en el selector de abajo y en la
+                cabecera— y con eso no se sabe cual manda (#79, punto 2). Ahora
+                vive solo en la cabecera, y ademas desde alli se cambia. */}
           </div>
         )}
       </div>
 
-      {/* Project Selector */}
-      <div className={cn('mb-6', collapsed ? 'px-0' : 'px-1')}>
-        {!collapsed && (
-          <label className="text-xs font-medium text-muted-foreground px-2 mb-1.5 block">
-            Proyecto
-          </label>
-        )}
-        <div className={cn('flex items-center', collapsed ? 'flex-col gap-1.5' : 'gap-2')}>
-          <div className={cn('relative', collapsed ? 'w-full' : 'flex-1')} ref={pickerRef}>
-            <button
-              type="button"
-              ref={pickerBtnRef}
-              onClick={() => setPickerOpen((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={pickerOpen}
-              aria-label="Selector de proyecto"
-              title={collapsed ? activeProject?.nombre : undefined}
-              className={cn(
-                'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
-                collapsed
-                  ? 'w-full h-10 justify-center'
-                  : 'w-full h-9 pl-1 pr-8 gap-2'
-              )}
-            >
-              <ProjectAvatar project={activeProject} size="sm" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 truncate text-left">{activeProject?.nombre || 'Selecciona proyecto'}</span>
-                  <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                </>
-              )}
-            </button>
-            {pickerOpen && pickerPos && (
-              <Portal>
-                <ul
-                  ref={pickerPopRef}
-                  role="listbox"
-                  aria-label="Lista de proyectos"
-                  style={{
-                    position: 'fixed',
-                    top: pickerPos.top,
-                    left: pickerPos.left,
-                    width: pickerPos.width,
-                    maxHeight: pickerPos.maxHeight,
-                  }}
-                  className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-dialog py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
-                >
-                  {(() => {
-                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
-                    // final) y, dentro de cada una, por antiguedad.
-                    //
-                    // Antes iba por orden alfabetico y eso mezclaba las marcas
-                    // con las que se trabaja todos los dias con las que aun no
-                    // tienen ni web: ISEIH quedaba la quinta, detras de ISAEG,
-                    // ISECD e ISEF. Por antiguedad, lo que mas se usa queda
-                    // arriba, que es donde se busca sin leer.
-                    const sorted = [...projects].sort((a, b) => {
-                      const sA = a.sociedad_nombre || 'zzz';
-                      const sB = b.sociedad_nombre || 'zzz';
-                      if (sA !== sB) return sA.localeCompare(sB, 'es');
-                      return (a.id || 0) - (b.id || 0);
-                    });
-                    const allEntry = projects.length > 1 ? (
-                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
-                        <button
-                          type="button"
-                          onClick={() => { switchProject(-1); setPickerOpen(false); }}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
-                            activeProject?.id === -1 && 'bg-secondary font-semibold'
-                          )}
-                        >
-                          <ProjectAvatar project={{ isAll: true }} size="sm" />
-                          <span className="flex-1 truncate">Todos los proyectos</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-info-soft text-info-soft-foreground font-bold">vista global</span>
-                        </button>
-                      </li>
-                    ) : null;
-                    let lastSoc = undefined;
-                    const items = sorted.map((p) => {
-                      const isActive = p.id === activeProject?.id;
-                      const soc = p.sociedad_nombre || null;
-                      const showHeader = soc !== lastSoc;
-                      lastSoc = soc;
-                      return (
-                        <div key={p.id}>
-                          {showHeader && (
-                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
-                              {soc || 'Sin sociedad'}
-                            </div>
-                          )}
-                          <li role="option" aria-selected={isActive}>
-                            <button
-                              type="button"
-                              onClick={() => { switchProject(Number(p.id)); setPickerOpen(false); }}
-                              className={cn(
-                                'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors',
-                                isActive && 'bg-secondary font-semibold'
-                              )}
-                            >
-                              <ProjectAvatar project={p} size="sm" />
-                              <span className="flex-1 truncate">{p.nombre}</span>
-                            </button>
-                          </li>
-                        </div>
-                      );
-                    });
-                    return <>{allEntry}{items}</>;
-                  })()}
-                </ul>
-              </Portal>
-            )}
-          </div>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
-            <button
-              onClick={() => setConfigOpen(true)}
-              className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"
-              title={`Configurar ${activeProject.nombre}`}
-              aria-label="Configurar proyecto activo"
-            >
-              <Gear size={14} weight="bold" className="text-muted-foreground" />
-            </button>
-          )}
+      {/* Aqui vivia el selector de proyecto. Se ha ido a la cabecera (#79,
+          punto 2): el nombre de la marca salia tres veces en la misma pantalla
+          y para cambiarla habia que bajar hasta aqui. El engranaje de
+          configurar la marca se queda, pero suelto: es cosa de administradores
+          y no hace falta tenerlo al lado del selector. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
+        <div className="mb-6 px-1">
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-secondary px-2 text-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={`Configurar ${activeProject.nombre}`}
+            aria-label="Configurar proyecto activo"
+          >
+            <Gear size={14} weight="bold" />
+            Configurar esta marca
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Buscador (oculto en collapsed; sigue accesible via Ctrl+K) */}
       {!collapsed && (

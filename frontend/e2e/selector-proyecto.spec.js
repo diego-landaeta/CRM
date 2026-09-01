@@ -38,9 +38,9 @@ test.describe('el selector de marca', () => {
   test.beforeEach(async ({ page }) => {
     await simularApi(page);
     await ir(page, '/prospectos');
-    // En móvil vive dentro del menú, que se abre desde la cabecera.
-    const hamburguesa = page.getByRole('button', { name: /abrir menu/i });
-    if (await hamburguesa.isVisible()) await hamburguesa.click();
+    // Ya no hace falta abrir el menú: el selector vive en la cabecera, que se
+    // ve en todos los tamaños. Cuando esto abría el menú en móvil, el panel
+    // tapaba la cabecera y los clics no llegaban al botón.
   });
 
   test('dice en qué marca estás sin abrir nada', async ({ page }) => {
@@ -90,6 +90,18 @@ test.describe('el selector de marca', () => {
     await disparador(page).focus();
     await page.keyboard.press('Enter');
     await expect(listado(page)).toBeVisible();
+  });
+
+  test('en móvil se cambia de marca sin abrir el menú', async ({ page }) => {
+    // Antes vivía dentro del menú lateral: en móvil había que abrirlo, bajar y
+    // buscarlo. Ahora está en la cabecera, que se ve siempre.
+    const menu = page.getByRole('button', { name: /abrir menu/i });
+    test.skip(!(await menu.isVisible()), 'solo aplica en móvil');
+
+    await expect(disparador(page)).toBeVisible();
+    await disparador(page).click();
+    await listado(page).getByRole('option', { name: /ISEIH/i }).click();
+    await expect(disparador(page)).toContainText('ISEIH');
   });
 
   test('el nombre de la marca sale UNA vez, no tres', async ({ page }) => {

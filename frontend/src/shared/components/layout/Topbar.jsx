@@ -5,7 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { tituloDeRuta } from '@/shared/lib/rutasTitulos';
 import { cn } from '@/shared/lib/utils';
 import { useCabecera } from './CabeceraContext';
-import { ProjectAvatar } from './Sidebar';
+import SelectorProyecto from './SelectorProyecto';
 
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
 
@@ -71,20 +71,11 @@ export default function Topbar({ onAbrirMenu, className }) {
           </div>
         )}
 
-        {/* En que marca estoy. El CRM lleva varias y hasta ahora solo se sabia
-            mirando al fondo del menu lateral, que en movil ni esta abierto. Se
-            cambia de marca desde ese mismo menu; aqui solo se recuerda. */}
-        {activeProject && (
-          <div
-            className="hidden flex-shrink-0 items-center gap-2 rounded-md border border-border px-2 py-1 sm:flex"
-            title={`Estas viendo: ${activeProject.nombre || 'todos los proyectos'}`}
-          >
-            <ProjectAvatar project={activeProject} size="sm" />
-            <span className="max-w-[9rem] truncate text-xs font-medium text-muted-foreground">
-              {activeProject.id === -1 ? 'Todos los proyectos' : activeProject.nombre}
-            </span>
-          </div>
-        )}
+        {/* En qué marca estás, Y cómo cambiarla.
+            Era una píldora que solo informaba: para cambiar de marca había que
+            bajar al menú lateral — donde además el nombre salía otras dos veces
+            (#79, punto 2). Ahora sale una vez y desde aquí se cambia. */}
+        <SelectorProyecto className="flex-shrink-0" />
 
         {/* La campana estaba al fondo del menu lateral, junto al usuario. Aqui
             arriba es donde se busca, y se ve sin desplegar nada. */}
