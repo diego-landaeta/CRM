@@ -119,7 +119,7 @@ cd CRM
 cd backend
 npm install
 npm run db:arriba      # levanta PostgreSQL
-npm run db:preparar    # aplica las 126 migraciones y siembra datos
+npm run db:preparar -- --datos   # aplica las migraciones Y siembra datos de mentira
 
 # 2 · la API
 npm run dev            # http://localhost:3001
@@ -130,13 +130,24 @@ npm install
 npm run dev            # http://localhost:5173
 ```
 
-Para tirar la base y volver a empezar: `npm run db:abajo && npm run db:arriba && npm run db:preparar`.
+Sin `--datos` solo se aplican las migraciones y la base queda vacía.
+
+Para tirar la base y volver a empezar: `npm run db:abajo && npm run db:arriba && npm run db:preparar -- --datos`.
 
 **Los tests** (Vitest, contra la base de Docker):
 
 ```bash
-cd backend && npm test
+cd backend && npm test      # 511 pruebas
+cd frontend && npm test     # 467 pruebas
 ```
+
+> **La base tiene que estar levantada.** Sin ella, 8 ficheros del backend fallan
+> con `ECONNREFUSED` y sus **119 pruebas se saltan sin avisar de forma visible**:
+> la salida dice «passed» y en realidad no se ha ejecutado un tercio de la
+> suite. Así estuvo meses, y por eso nadie vio que 9 de ellas estaban rojas —
+> una era un fallo de producción de verdad (#70).
+>
+> Si ves `skipped` en el resumen, te falta `npm run db:arriba`.
 
 ---
 
