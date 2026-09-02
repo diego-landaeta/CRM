@@ -42,6 +42,11 @@ router.get('/cola', ctrl.cola);
 // el recorte lo hace el controlador, no la pantalla.
 router.get('/usuarios', chat.usuarios);
 
+// El banco de mensajes (#101). Va ANTES de las rutas de chats para leerse
+// junto: no es el chat, es el respaldo.
+router.get('/banco', chat.banco);
+router.get('/banco/numeros', chat.bancoNumeros);
+
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);

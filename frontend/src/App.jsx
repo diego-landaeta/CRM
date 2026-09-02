@@ -154,6 +154,7 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
 const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
 const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+const BancoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/BancoPage'));
 // La guia para quien usa el chat. docs/10-whatsapp.md esta bien para nosotros,
 // pero una gestora no entra al repositorio: lo necesita donde trabaja.
 const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
@@ -249,6 +250,7 @@ function App() {
           <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          <Route path="/whatsapp/banco" element={<BancoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />

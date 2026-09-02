@@ -96,6 +96,46 @@ export interface ChatWhatsapp {
   ultimo_tipo?: string | null;
 }
 
+
+/** Una fila del banco de mensajes (#101). */
+export interface MensajeDelBanco {
+  id: number;
+  ts: string;
+  direccion: 'entrante' | 'saliente';
+  tipo: string;
+  texto: string | null;
+  estado: string | null;
+  nombre_archivo: string | null;
+  con_adjunto: boolean;
+  participante_nombre: string | null;
+  conversacion_id: number;
+  telefono: string;
+  instancia: string;
+  es_grupo: boolean;
+  quien: string | null;
+  enviado_por_nombre: string | null;
+}
+
+/** El resumen por numero: un numero, todo lo suyo. */
+export interface NumeroDelBanco {
+  telefono: string;
+  es_grupo: boolean;
+  quien: string | null;
+  mensajes: number;
+  primero: string;
+  ultimo: string;
+  sesiones: number;
+}
+
+export interface FiltrosBanco {
+  texto?: string;
+  telefono?: string;
+  desde?: string;
+  hasta?: string;
+  direccion?: '' | 'entrante' | 'saliente';
+  tipo?: string;
+}
+
 export interface MensajeWhatsapp {
   id: number;
   wa_id: string | null;
@@ -242,6 +282,29 @@ export const chatApi = {
    */
   reenviar: (destinoId: number, mensajeId: number): Promise<ApiResponse<MensajeWhatsapp>> =>
     client.post(`/whatsapp/chats/${destinoId}/reenviar`, { mensajeId }),
+
+  /**
+   * El banco de mensajes (#101). No es el chat: es el respaldo.
+   *
+   * Un admin lo ve entero —incluidas las sesiones que ya no existen en
+   * Evolution, que es justo para lo que sirve— y una gestora solo lo suyo. Eso
+   * lo decide el servidor, aqui no se manda de quien.
+   */
+  banco: (f: FiltrosBanco = {}, pagina = 1, limite = 50) => {
+    const q = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => { if (v) q.set(k, String(v)); });
+    q.set('pagina', String(pagina));
+    q.set('limite', String(limite));
+    return client.get(`/whatsapp/banco?${q}`) as Promise<
+      ApiResponse<MensajeDelBanco[]> & { pagination?: { total: number; page: number; limit: number; totalPages: number } }
+    >;
+  },
+
+  bancoNumeros: (f: Pick<FiltrosBanco, 'texto' | 'telefono'> = {}): Promise<ApiResponse<NumeroDelBanco[]>> => {
+    const q = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => { if (v) q.set(k, String(v)); });
+    return client.get(`/whatsapp/banco/numeros?${q}`);
+  },
 
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),

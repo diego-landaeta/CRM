@@ -257,6 +257,147 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
   return rows;
 }
 
+
+/**
+ * El banco de mensajes: todo lo guardado, en tabla y sin depender de la sesion
+ * (#101).
+ *
+ * Esto NO es el chat. El chat sirve para conversar y por eso arranca de una
+ * conversacion viva; el banco sirve para buscar, auditar y llevarse una copia,
+ * y tiene que funcionar aunque la instancia ya no exista en Evolution. Es el
+ * caso de ISEIE: se recreo el contenedor, desaparecieron las sesiones de Maria
+ * Gabriela y Diana, sus 27 mensajes seguian aqui y no habia forma de verlos.
+ * Se acabaron borrando por inservibles.
+ *
+ * Por eso se lee de `wa_mensajes` y `wa_conversaciones` y de ningun sitio mas:
+ * lo que hay en nuestra base esta, exista o no la sesion.
+ *
+ * `instancias` en null significa TODAS — solo para admin y superadmin. Una
+ * gestora recibe aqui la suya y nada mas.
+ */
+export async function banco({
+  instancias = null, texto = null, telefono = null,
+  desde = null, hasta = null, direccion = null, tipo = null,
+  pagina = 1, limite = 50,
+} = {}) {
+  const cond = [];
+  const params = [];
+
+  if (Array.isArray(instancias)) {
+    // Lista vacia = ninguna, no todas. Devolver todo aqui seria abrir el banco
+    // entero a quien no tiene sesion.
+    if (!instancias.length) return { filas: [], total: 0 };
+    params.push(instancias);
+    cond.push(`c.instancia = ANY($${params.length})`);
+  }
+  if (texto) {
+    params.push(`%${texto}%`);
+    cond.push(`m.texto ILIKE $${params.length}`);
+  }
+  if (telefono) {
+    // Solo cifras, como en el resto del modulo: «+34 612 34 56 78» contra un
+    // «34612345678» guardado no casa por culpa del mas y los espacios.
+    const cifras = String(telefono).replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      cond.push(`regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+  }
+  if (desde) { params.push(desde); cond.push(`m.ts >= $${params.length}`); }
+  // El «hasta» incluye su dia entero: quien pide «hasta el 2 de septiembre» no
+  // quiere que se le queden fuera los mensajes de esa misma tarde.
+  if (hasta) { params.push(hasta); cond.push(`m.ts < ($${params.length}::date + INTERVAL '1 day')`); }
+  if (direccion) { params.push(direccion); cond.push(`m.direccion = $${params.length}`); }
+  if (tipo) { params.push(tipo); cond.push(`m.tipo = $${params.length}`); }
+
+  const donde = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+
+  const { rows: cuenta } = await query(
+    `SELECT count(*)::int AS total
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+      ${donde}`,
+    params
+  );
+  const total = cuenta[0]?.total || 0;
+  if (!total) return { filas: [], total: 0 };
+
+  const desplazamiento = Math.max(0, (pagina - 1) * limite);
+  params.push(limite, desplazamiento);
+
+  const { rows: filas } = await query(
+    `SELECT m.id, m.ts, m.direccion, m.tipo, m.texto, m.estado,
+            m.nombre_archivo,
+            -- Solo si tuvo adjunto, no la ruta: en una tabla que se exporta,
+            -- una ruta interna no le dice nada a nadie y encima se lleva a un
+            -- Excel algo que no deberia salir de aqui.
+            (m.media_url IS NOT NULL) AS con_adjunto,
+            m.participante_nombre,
+            c.id   AS conversacion_id,
+            c.telefono,
+            c.instancia,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            COALESCE(l.nombre, c.nombre_push) AS quien,
+            u.nombre AS enviado_por_nombre
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN users u ON u.id = m.enviado_por
+      ${donde}
+      ORDER BY m.ts DESC, m.id DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return { filas, total };
+}
+
+/**
+ * El mismo banco, resumido POR NUMERO. Es como lo pidio Diego: un numero, todo
+ * lo suyo, aunque su conversacion ya no exista.
+ *
+ * Agrupa por telefono y no por conversacion: la misma persona puede tener una
+ * conversacion en la sesion de cada gestora, y para auditar interesa el numero,
+ * no en la bandeja de quien cayo.
+ */
+export async function bancoPorNumero({ instancias = null, texto = null, telefono = null } = {}) {
+  const cond = [];
+  const params = [];
+
+  if (Array.isArray(instancias)) {
+    if (!instancias.length) return [];
+    params.push(instancias);
+    cond.push(`c.instancia = ANY($${params.length})`);
+  }
+  if (texto) { params.push(`%${texto}%`); cond.push(`m.texto ILIKE $${params.length}`); }
+  if (telefono) {
+    const cifras = String(telefono).replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      cond.push(`regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+  }
+  const donde = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+
+  const { rows } = await query(
+    `SELECT c.telefono,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            MAX(COALESCE(l.nombre, c.nombre_push)) AS quien,
+            count(*)::int AS mensajes,
+            min(m.ts) AS primero,
+            max(m.ts) AS ultimo,
+            count(DISTINCT c.instancia)::int AS sesiones
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+      ${donde}
+      GROUP BY c.telefono, (c.jid LIKE '%@g.us')
+      ORDER BY max(m.ts) DESC
+      LIMIT 500`,
+    params
+  );
+  return rows;
+}
+
 export async function mensajes(conversacionId, limite = 100) {
   // La cita se resuelve aqui: se busca el mensaje citado por su wa_id DENTRO de
   // la misma conversacion. Puede no estar —alguien responde a algo de antes de

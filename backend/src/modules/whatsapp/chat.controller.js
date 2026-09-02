@@ -113,6 +113,68 @@ async function miConversacion(req, id) {
   return conv;
 }
 
+/**
+ * Que sesiones puede mirar quien pregunta, en el BANCO (#101).
+ *
+ * `null` = todas. Es distinto de lo que hace el chat, y a proposito: el chat
+ * trabaja siempre sobre UNA sesion —la propia, o la de otra si eres admin y la
+ * pides—, pero el banco es un respaldo. Su razon de ser es poder mirar lo que
+ * quedo de una sesion que YA NO EXISTE, y de esas no se puede «elegir una».
+ *
+ * Quien no lleva prospectos no entra, ni a lo suyo.
+ */
+async function sesionesQuePuedeMirar(req) {
+  const suyo = porQueNoPuede({ role: req.user.role, active: true });
+  if (suyo) throw new AppError(suyo, 403, 'SIN_WHATSAPP');
+
+  if (['admin', 'superadmin'].includes(req.user.role)) return null;
+  // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
+  // clientes dentro: nunca todas las lineas para cualquiera.
+  return [evolution.instanciaDe(req.user.userId)];
+}
+
+// GET /api/whatsapp/banco
+export async function banco(req, res, next) {
+  try {
+    const instancias = await sesionesQuePuedeMirar(req);
+    const limite = Math.min(500, Math.max(1, parseInt(req.query.limite) || 50));
+    const pagina = Math.max(1, parseInt(req.query.pagina) || 1);
+
+    const { filas, total } = await model.banco({
+      instancias,
+      texto: req.query.texto?.trim() || null,
+      telefono: req.query.telefono?.trim() || null,
+      desde: req.query.desde || null,
+      hasta: req.query.hasta || null,
+      direccion: ['entrante', 'saliente'].includes(req.query.direccion) ? req.query.direccion : null,
+      tipo: req.query.tipo?.trim() || null,
+      pagina, limite,
+    });
+
+    res.json({
+      success: true,
+      data: filas,
+      pagination: {
+        total, page: pagina, limit: limite,
+        totalPages: Math.max(1, Math.ceil(total / limite)),
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+// GET /api/whatsapp/banco/numeros
+export async function bancoNumeros(req, res, next) {
+  try {
+    const instancias = await sesionesQuePuedeMirar(req);
+    const filas = await model.bancoPorNumero({
+      instancias,
+      texto: req.query.texto?.trim() || null,
+      telefono: req.query.telefono?.trim() || null,
+    });
+    res.json({ success: true, data: filas });
+  } catch (err) { next(err); }
+}
+
 // GET /api/whatsapp/chats?projectId=N
 export async function chats(req, res, next) {
   try {

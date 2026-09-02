@@ -103,6 +103,11 @@ const NAV_SECTIONS = [
           // de quien lo acepto (tarea #45).
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          // El banco de mensajes (#101). Va aqui y no dentro del chat porque no
+          // es el chat: uno sirve para conversar y este para buscar, auditar y
+          // llevarse una copia. El servidor recorta lo que ve cada cual — un
+          // admin lo ve entero, una gestora solo su numero.
+          { label: 'Banco de mensajes', to: '/whatsapp/banco', icon: ChatText },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
