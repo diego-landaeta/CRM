@@ -29,7 +29,26 @@ export function setOnAuthFailure(cb) {
 // Reintento automático ante 502/503/504 (nginx upstream caído brevemente
 // durante deploys de PM2). 2 reintentos con backoff lineal — evita que el
 // usuario vea errores transitorios de 1-2s.
+//
+// SOLO PARA LECTURAS. Reintentar un POST repite lo que ya hizo.
+//
+// Se vio mandando un WhatsApp: un solo Enter dejaba TRES mensajes. El servidor
+// contesta 502 cuando WhatsApp rechaza el envío, esto lo reintentaba dos veces
+// más, y como el backend apunta el intento fallido antes de contestar, quedaban
+// tres filas. Comprobado contra la base: tres, de una sola pulsación.
+//
+// Y eso es lo de menos. Un 502 no dice que no se haya hecho nada: si Evolution
+// llegó a entregar el mensaje y falló después, el reintento se lo manda al
+// cliente OTRA VEZ. Tres veces el mismo mensaje a un prospecto, sin que nadie
+// lo haya pedido ni pueda deshacerlo.
+//
+// Un GET se puede repetir sin consecuencias, que es para lo que se puso esto.
+// Un POST, un PATCH o un DELETE no: si fallan, lo correcto es decirlo.
+const SE_PUEDE_REPETIR = ['GET', 'HEAD'];
+
 async function fetchWithRetry(fullUrl, fetchOpts, maxRetries = 2) {
+  const metodo = String(fetchOpts?.method || 'GET').toUpperCase();
+  if (!SE_PUEDE_REPETIR.includes(metodo)) maxRetries = 0;
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
