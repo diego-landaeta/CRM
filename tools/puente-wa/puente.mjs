@@ -1380,6 +1380,39 @@ http.createServer(async (req, res) => {
     // `pushName` aqui NO es como se llama la persona a si misma: Evolution
     // mete en esa columna `contact.name`, o sea el nombre de tu agenda. Se
     // reproduce igual para que el CRM lea lo mismo en los dos sitios.
+    /**
+     * La foto de perfil de un numero.
+     *
+     * Existe en Evolution, asi que existe aqui. El puente ya se la baja solo
+     * —`s.fotoDe`— para meterla en el aviso del mensaje; esto es lo mismo pero
+     * a peticion, que es como lo pide Evolution.
+     */
+    /**
+     * El nombre y la foto de un grupo.
+     *
+     * Existe en Evolution, asi que existe aqui. El puente ya sabe el nombre
+     * —`s.nombreDeGrupo`, que lo pide y lo guarda— y la foto por la misma via
+     * que la de una persona.
+     */
+    if (url.startsWith('/group/findGroupInfos/')) {
+      const s2 = sesionDe(instanciaDeUrl(url.split('?')[0]));
+      const jid = new URL(url, 'http://x').searchParams.get('groupJid');
+      if (!jid) return json(400, { error: 'falta groupJid' });
+      const asunto = await s2.nombreDeGrupo(jid);
+      const foto = s2.fotos.has(jid) ? s2.fotos.get(jid) : await s2.fotoDe(jid);
+      return json(200, { id: jid, subject: asunto || null, pictureUrl: foto || null });
+    }
+
+    if (url.startsWith('/chat/fetchProfilePictureUrl/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      const digitos = String(cuerpo?.number || '').replace(/[^0-9]/g, '');
+      if (!digitos) return json(400, { error: 'falta el numero' });
+      const jid = `${digitos}@s.whatsapp.net`;
+      const foto = s2.fotos.has(jid) ? s2.fotos.get(jid) : await s2.fotoDe(jid);
+      return json(200, { wuid: jid, profilePictureUrl: foto || null });
+    }
+
     if (url.startsWith('/chat/findContacts/')) {
       const s2 = sesionDe(instanciaDeUrl(url));
       return json(200, [...s2.agenda.entries()].map(([jid, nombre]) => ({

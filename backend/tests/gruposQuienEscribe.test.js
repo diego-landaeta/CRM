@@ -25,9 +25,14 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
   instanciaDe: (id) => `crm-u${id}`,
   PREFIJO: 'crm',
   descargarMedia: async () => null,
+  fotoDe: async () => null,
+  grupoDe: async () => null,
 }));
 
 vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
+  actualizarAvatar: async () => 0,
+  datosDeGrupo: async () => 0,
+  marcarEliminado: async () => 0,
   conversacionDe: async (d) => { guardadas.push(d); return { id: 1, ...d }; },
   guardarMensaje: async (d) => { mensajesGuardados.push(d); return { id: 10, ...d }; },
   mensajePorWaId: async () => null,

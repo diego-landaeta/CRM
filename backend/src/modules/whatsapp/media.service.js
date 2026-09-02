@@ -100,7 +100,19 @@ export function abrirSobres(message, vueltas = 0) {
  * sacaba: una respuesta se guardaba sin saber a que respondia y la cita no
  * salia nunca. Es la mitad que faltaba del #62 y el mismo patron del #63.
  */
-export function aQueResponde(envuelto) {
+export function aQueResponde(envuelto, contextoDeFuera = null) {
+  // PRIMERO el de fuera, que es donde lo pone Evolution.
+  //
+  // Comprobado sobre 50 mensajes reales de una cuenta de verdad: 23 llevan el
+  // `contextInfo` colgando del mensaje entero y solo 5 lo llevan dentro del
+  // tipo. Mirando solo dentro se perdian cuatro de cada cinco citas.
+  //
+  // El puente hace lo contrario —lo saca del tipo y lo manda ya masticado—, asi
+  // que en local se veia bien. Cuarta vez que pasa lo mismo.
+  if (contextoDeFuera?.stanzaId) return contextoDeFuera.stanzaId;
+
+  // Y despues dentro del tipo concreto, que es donde lo pone Baileys crudo: un
+  // texto citando lo lleva en `extendedTextMessage`, una foto en `imageMessage`.
   const message = abrirSobres(envuelto);
   if (!message || typeof message !== 'object') return null;
   for (const clave of Object.keys(message)) {

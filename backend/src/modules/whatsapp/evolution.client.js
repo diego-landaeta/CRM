@@ -375,6 +375,49 @@ export async function mensajesDe(jid, nombre = INSTANCIA, limite = 300) {
   return filas.filter((m) => m?.key?.id);
 }
 
+/**
+ * La foto de perfil de alguien.
+ *
+ * Evolution la manda por su cuenta en `contacts.update`, pero eso solo llega
+ * cuando cambia. Para una conversacion que ya existe sin foto no llega nunca, y
+ * ahi hay que pedirla.
+ *
+ * Se pide UNA vez por conversacion, cuando no la tiene. En cada mensaje serian
+ * cientos de llamadas de mas a WhatsApp — es la misma cuenta que ya esta hecha
+ * en el puente.
+ *
+ * Devuelve null si no se pudo o si esa persona no tiene: no tener foto es
+ * normal y no es un fallo.
+ */
+export async function fotoDe(numero, nombre = INSTANCIA) {
+  const r = await pedir(`/chat/fetchProfilePictureUrl/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { number: String(numero || '').replace(/[^0-9]/g, '') },
+    esperaMs: 12000,
+  });
+  if (!r.ok) return null;
+  return r.datos?.profilePictureUrl || r.datos?.profilePicUrl || null;
+}
+
+/**
+ * Como se llama un grupo y cual es su foto.
+ *
+ * Evolution NO manda el asunto del grupo en el aviso de cada mensaje —
+ * comprobado sobre mensajes reales: en `key` solo viene el jid del grupo—. El
+ * puente si lo mandaba, porque se lo pedia el mismo. De ahi que en local los
+ * grupos tuvieran nombre y en produccion salieran con un numero de 18 cifras.
+ *
+ * Se pide UNA vez, cuando el grupo no tiene nombre todavia.
+ */
+export async function grupoDe(jid, nombre = INSTANCIA) {
+  const r = await pedir(`/group/findGroupInfos/${nombre}?groupJid=${encodeURIComponent(jid)}`, {
+    esperaMs: 15000,
+  });
+  if (!r.ok) return null;
+  const d = r.datos || {};
+  return { asunto: d.subject || null, foto: d.pictureUrl || null };
+}
+
 /** Que numero esta conectado ahora mismo. */
 export const instancias = () => pedir('/instance/fetchInstances');
 

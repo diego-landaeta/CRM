@@ -155,6 +155,13 @@ export interface MensajeWhatsapp {
   /** Quien escribio, SOLO en grupos (#74). Null en chats de una persona. */
   participante?: string | null;
   participante_nombre?: string | null;
+  /**
+   * Su foto, si esa persona tiene su propio chat con nosotros.
+   *
+   * Se saca de ahi en vez de guardarla por mensaje: es el mismo dato y evita
+   * una tabla nueva de participantes.
+   */
+  participante_foto?: string | null;
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;

@@ -93,8 +93,25 @@ function diaDe(iso: string) {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/**
+ * Las iniciales para cuando no hay foto.
+ *
+ * Cogia la primera letra de las dos primeras palabras, a secas. Con «Tu
+ * (mensajes contigo mismo)» eso da «T(» — la segunda palabra empieza por
+ * parentesis. Y con un nombre entre comillas o con un emoji delante, peor.
+ *
+ * Se quita lo que va entre parentesis —suele ser una aclaracion nuestra, no
+ * parte del nombre— y de cada palabra solo cuenta su primera letra o cifra.
+ */
 const iniciales = (n: string) =>
-  n.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+  (n || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .split(/\s+/)
+    .map((p) => (p.match(/[\p{L}\p{N}]/u) || [''])[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?';
 
 /**
  * Un color estable a partir del nombre.
@@ -1098,6 +1115,7 @@ export default function ChatPage() {
   const ADELANTO: Record<string, string> = {
     imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
     documento: '📄 Documento', sticker: 'Sticker', llamada: '📞 Llamada',
+    eliminado: 'Se eliminó este mensaje',
   };
   const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
@@ -1186,10 +1204,10 @@ export default function ChatPage() {
             no podia volver a verlo de ninguna manera — y es exactamente quien lo
             necesita, porque el recorrido salta solo una vez por navegador. */}
         <button type="button" onClick={() => setTour(true)} className="wa-btn-tour"
-          aria-label="Cómo va esto"
+          aria-label="Ver el tutorial"
           title="Ver el recorrido por esta pantalla">
           <Question size={14} weight="bold" />
-          <span className="font-medium">Cómo va esto</span>
+          <span className="font-medium">Tutorial</span>
         </button>
         <Link to="/whatsapp/conexion" aria-label="Conexión" title="Conectar o desvincular el número"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -1446,13 +1464,42 @@ export default function ChatPage() {
                   if (nuevoDia) ultimoDia = día;
                   const prev = hilo[i - 1];
                   const sig = hilo[i + 1];
-                  const mismoQuePrev = !nuevoDia && prev?.direccion === m.direccion;
-                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === día;
+                  // En un grupo la tanda se corta tambien cuando cambia QUIEN
+                  // escribe: dos personas seguidas no son un bloque, aunque las
+                  // dos sean mensajes que entran.
+                  const autorDe = (x?: MensajeWhatsapp) =>
+                    (conv?.es_grupo ? (x?.participante_nombre || x?.participante || '') : '');
+                  const mismoQuePrev = !nuevoDia && prev?.direccion === m.direccion
+                    && autorDe(prev) === autorDe(m);
+                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === día
+                    && autorDe(sig) === autorDe(m);
                   const posicion = mismoQuePrev && mismoQueSig ? 'normal'
                     : mismoQuePrev ? 'last' : mismoQueSig ? 'first' : 'single';
                   const mia = m.direccion === 'saliente';
                   // Una llamada no es un mensaje: no tiene burbuja, ni autor,
                   // ni se puede responder ni reintentar. Sale antes de todo eso.
+                  // Un mensaje borrado deja su hueco, como en WhatsApp: no
+                  // desaparece de la conversacion, se dice que estuvo y ya no
+                  // esta. En un historial de clientes, que una fila se esfume
+                  // sin rastro es lo contrario de lo que hace falta.
+                  if (m.tipo === 'eliminado') {
+                    return [
+                      nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
+                      <Message key={m.id} className="wa-msg-eliminado"
+                        model={{
+                          direction: mia ? 'outgoing' : 'incoming',
+                          position: posicion,
+                          type: 'custom',
+                        }}>
+                        <Message.CustomContent>
+                          <span className="wa-eliminado">
+                            <Prohibit size={13} weight="bold" /> Se eliminó este mensaje
+                          </span>
+                          <span className="wa-meta">{hora(m.ts)}</span>
+                        </Message.CustomContent>
+                      </Message>,
+                    ].filter(Boolean);
+                  }
                   if (m.tipo === 'llamada') {
                     return [
                       nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
@@ -1475,7 +1522,36 @@ export default function ChatPage() {
                         direction: mia ? 'outgoing' : 'incoming',
                         position: posicion,
                         type: 'custom',
-                      }}>
+                      }}
+                      // El avatar de quien escribe va FUERA de la burbuja, a su
+                      // izquierda, como en WhatsApp. Estaba dentro y en pequeño,
+                      // pegado al nombre, y no se parecia en nada.
+                      avatarPosition={conv?.es_grupo && !mia ? 'tl' : undefined}>
+                      {conv?.es_grupo && !mia && (
+                        // Solo en el PRIMERO de cada tanda. En los siguientes va
+                        // un hueco del mismo tamaño para que las burbujas sigan
+                        // alineadas, que es lo que hace WhatsApp.
+                        <Avatar name={m.participante_nombre || 'Alguien'}>
+                          {mismoQuePrev
+                            ? <span className="wa-autor-hueco" aria-hidden="true" />
+                            : (() => {
+                                const quien = m.participante_nombre
+                                  || `+${String(m.participante || '').split('@')[0]}`;
+                                // Su foto de verdad si la tenemos —porque esa
+                                // persona tiene su propio chat— y si no, sus
+                                // iniciales con su color.
+                                if (m.participante_foto) {
+                                  return <img src={m.participante_foto} alt={quien} className="wa-autor-foto" />;
+                                }
+                                return (
+                                  <span className="wa-autor-foto"
+                                    style={{ background: colorDeNombre(quien) }}>
+                                    {iniciales(quien)}
+                                  </span>
+                                );
+                              })()}
+                        </Avatar>
+                      )}
                       <Message.CustomContent>
                         {/* QUIEN escribio. Solo en grupos, y solo en lo que
                             entra: lo que sale es tuyo y ponerte tu propio
@@ -1486,18 +1562,16 @@ export default function ChatPage() {
                             había dicho qué, que es media razón para abrir un
                             grupo. En un chat de una persona sobra: la
                             conversación YA es ella. */}
-                        {conv?.es_grupo && !mia && (m.participante_nombre || m.participante) && (() => {
+                        {conv?.es_grupo && !mia && !mismoQuePrev
+                          && (m.participante_nombre || m.participante) && (() => {
                           const quien = m.participante_nombre
                             || `+${String(m.participante).split('@')[0]}`;
+                          // Sin la inicial al lado: el avatar ya esta fuera. Y
+                          // solo en el primero de la tanda — repetir el nombre en
+                          // cada burbuja de la misma persona es ruido, y no es lo
+                          // que hace WhatsApp.
                           return (
-                            <div className="wa-autor">
-                              {/* Iniciales y no la foto real: la de WhatsApp
-                                  caduca, así que guardar su dirección en cada
-                                  mensaje llenaría el histórico de huecos rotos. */}
-                              <span className="wa-autor-avatar" aria-hidden="true"
-                                style={{ background: colorDeNombre(quien) }}>
-                                {iniciales(quien)}
-                              </span>
+                            <div className="wa-autor" style={{ color: colorDeNombre(quien) }}>
                               <span className="wa-autor-nombre">{quien}</span>
                             </div>
                           );

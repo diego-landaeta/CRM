@@ -83,10 +83,37 @@
 }
 .wa-marco .cs-conversation:hover,
 .wa-marco .cs-conversation.cs-conversation--active { background-color: var(--wa-hover); }
+/* Los fondos del kit, apagados a la brava.
+ *
+ * El kit trae `background-color:#f6fbff` y `color:rgba(0,0,0,.87)` en el nombre
+ * y en el subtitulo, porque esta pensado para una interfaz clara. Este panel es
+ * oscuro en los dos temas, asi que hay que anularlos.
+ *
+ * Con `!important`, y no por gusto: la anulacion normal gana por especificidad
+ * SI las dos hojas cargan en el orden esperado, y eso deja de ser cierto en un
+ * build de produccion, donde el empaquetador decide el orden. Se ha visto: una
+ * barra blanca donde va el nombre del chat, con el texto en negro encima del
+ * panel oscuro. Reportado dos veces desde produccion y no reproducible en
+ * desarrollo — que es exactamente la firma de un problema de orden de hojas.
+ *
+ * Es la excepcion que justifica el `!important` del sistema de diseño: no se
+ * esta ganando a codigo nuestro, sino a la hoja de un tercero que no controlamos
+ * ni podemos reordenar. */
 .wa-marco .cs-conversation__name,
-.wa-marco .cs-conversation-header__user-name { color: var(--wa-texto); background: transparent; }
+.wa-marco .cs-conversation-header__user-name {
+  color: var(--wa-texto) !important;
+  background: transparent !important;
+}
 .wa-marco .cs-conversation__info,
-.wa-marco .cs-conversation-header__info { color: var(--wa-apagado); background: transparent; }
+.wa-marco .cs-conversation-header__info {
+  color: var(--wa-apagado) !important;
+  background: transparent !important;
+}
+/* Y la cabecera entera, por lo mismo. */
+.wa-marco .cs-conversation-header,
+.wa-marco .cs-conversation-header__content {
+  background-color: var(--wa-cabecera) !important;
+}
 
 .wa-marco .cs-conversation__unread {
   background-color: var(--wa-verde);
@@ -695,24 +722,29 @@
  *
  * Solo aparece en lo que ENTRA: en lo que sales tu, el autor eres tu. */
 .wa-autor {
-  display: flex; align-items: center; gap: 5px;
-  margin-bottom: 3px;
-  font-size: 11.5px;
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--wa-verde);
   max-width: 100%;
 }
 
+/* El avatar del autor, FUERA de la burbuja y a su izquierda, como en WhatsApp.
+   El color lo pone el nombre, para reconocer a alguien antes de leerlo. */
+.wa-marco .cs-message__avatar { align-self: flex-start; margin-right: 6px; }
+.wa-autor-foto,
+.wa-autor-hueco {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; color: #fff;
+  overflow: hidden;
+}
+/* Los mensajes siguientes de la misma persona no repiten el avatar, pero
+   guardan su hueco: si no, las burbujas de una misma tanda no se alinean. */
+.wa-autor-hueco { background: transparent; }
+
 /* El nombre se recorta; el avatar nunca, para que no se deforme. */
 .wa-autor-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.wa-autor-avatar {
-  flex: 0 0 auto;
-  width: 18px; height: 18px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; letter-spacing: .2px;
-  color: #fff;
-}
 
 /* «Grupos» no es un estado de prospecto, asi que no lleva su paleta: gris
  * neutro para que se lea como lo que es, un filtro de otra clase. */
@@ -1432,3 +1464,13 @@
   cursor: pointer; text-decoration: underline;
 }
 .wa-quitar-filtro-enlace:hover { color: var(--wa-texto); }
+
+/* Un mensaje borrado. Como en WhatsApp: se queda el hueco, en cursiva y
+   apagado, diciendo que estuvo. No se borra la fila — son conversaciones con
+   clientes y esto sirve tambien para auditar. */
+.wa-eliminado {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-style: italic;
+  color: var(--wa-apagado);
+}
+.wa-marco .cs-message.wa-msg-eliminado .cs-message__content { opacity: .85; }

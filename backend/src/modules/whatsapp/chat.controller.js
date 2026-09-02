@@ -197,6 +197,21 @@ export async function chat(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     const conv = await miConversacion(req, id);
+
+    // La foto de perfil, si este chat no la tiene todavia.
+    //
+    // Evolution la manda en `contacts.update` —que ya se atiende— pero eso solo
+    // llega cuando CAMBIA: para un chat que ya existe sin foto no llega nunca.
+    // Y por el webhook de mensajes tampoco, porque lo que sale del CRM entra
+    // como `send.message` y ahi no se pasa.
+    //
+    // Aqui es donde toca: al abrir una conversacion, una vez, y solo si le
+    // falta. Va suelta —sin esperarla— para no retrasar el hilo: la foto
+    // aparece en el siguiente refresco, que es dentro de cinco segundos.
+    if (!conv.avatar_url && !String(conv.jid || '').endsWith('@g.us')) {
+      servicio.buscarFoto(conv).catch(() => {});
+    }
+
     const crudos = await model.mensajes(id, parseInt(req.query.limite) || 100);
     // Cada adjunto viaja con su permiso firmado: el navegador pide el fichero
     // sin cabeceras y aun asi solo funciona durante media hora. La direccion la

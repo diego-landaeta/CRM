@@ -51,12 +51,28 @@ export async function leadPorTelefono(telefono, projectId = null) {
 export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
   // Un nombre de solo espacios NO es un nombre.
   //
-  // Se guardaba tal cual, y como no es una cadena vacia pasaba todos los
-  // `||` de la pantalla: la cabecera del chat se quedaba en blanco y el avatar
-  // caia a su interrogante. Se corta aqui ademas de en la pantalla — lo que no
-  // entra en la base no hay que arreglarlo despues en cada sitio que lo lea.
-  nombrePush = (nombrePush || '').trim() || null;
+  // Se guardaba tal cual, y como no es una cadena vacia pasaba todos los `||`
+  // de la pantalla: la cabecera se quedaba en blanco y el avatar caia a su
+  // interrogante. Y no vale con `trim()`: WhatsApp deja pasar nombres que son
+  // una marca invisible —U+200E, la de direccion del texto— que `trim()` no
+  // toca. Se limpian tambien.
+  nombrePush = String(nombrePush || '')
+    .replace(/[​-‏‪-‮﻿]/g, '')
+    .trim() || null;
+
+  // A UN GRUPO NO SE LE PONE EL NOMBRE DE UNA PERSONA. Nunca, venga de donde
+  // venga.
+  //
+  // Es la regla que llevo dos dias arreglando por fuera, en cada sitio que
+  // escribe: primero en el webhook, luego al traer historial, luego al abrir un
+  // chat. Cada vez volvia por otro lado y los grupos amanecian llamandose
+  // «Dieguis» o «Giorgio.» — el ultimo que hubiera hablado.
+  //
+  // Aqui ya no depende de que ningun sitio se acuerde. El nombre de un grupo es
+  // su ASUNTO, y ese se pone por `datosDeGrupo`; lo que llegue por esta via
+  // para un grupo se descarta. Un solo sitio, una sola regla.
   const esGrupo = String(jid).endsWith('@g.us');
+  if (esGrupo) nombrePush = null;
   // Un `@lid` no es un telefono: es un identificador de WhatsApp. Buscar un
   // prospecto con ese numero no encontraria nada y ademas podria cruzarse con
   // el telefono de otra persona por casualidad.
@@ -405,6 +421,80 @@ export async function bancoPorNumero({ instancias = null, texto = null, telefono
   return rows;
 }
 
+/**
+ * La foto de perfil de un contacto, cuando Evolution la manda (#67 y compañia).
+ *
+ * SOLO actualiza lo que ya existe. Un `contacts.update` puede llegar de alguien
+ * con quien no se ha hablado nunca —la agenda entera al enlazar, por ejemplo— y
+ * crear una conversacion por cada uno llenaria la lista de gente con la que no
+ * hay ni un mensaje.
+ *
+ * `COALESCE` al reves que en el resto: aqui la nueva manda, porque la direccion
+ * que da WhatsApp caduca y la que acaba de llegar es la buena. Pero si viene
+ * vacia se conserva la que habia, en vez de dejar el hueco.
+ */
+export async function actualizarAvatar(instancia, jid, url) {
+  if (!instancia || !jid || !url) return 0;
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones SET avatar_url = $3
+      WHERE instancia = $1 AND jid = $2 AND avatar_url IS DISTINCT FROM $3`,
+    [instancia, jid, url]
+  );
+  return rowCount;
+}
+
+/**
+ * El nombre y la foto de un grupo, cuando se han podido averiguar.
+ *
+ * Solo rellena lo que falte: `COALESCE` conserva lo que ya hubiera. Un grupo al
+ * que alguien le puso nombre a mano no se pisa con el que venga de WhatsApp.
+ */
+export async function datosDeGrupo(instancia, jid, asunto, foto) {
+  if (!instancia || !jid || (!asunto && !foto)) return 0;
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones
+        -- El asunto MANDA, no se conserva lo que hubiera.
+        --
+        -- Antes iba con COALESCE y era demasiado prudente: si un grupo se habia
+        -- quedado con un nombre malo —el de quien escribio el ultimo, que es lo
+        -- que pasaba antes de arreglar esto— se quedaba con el PARA SIEMPRE.
+        -- Nada lo volvia a tocar y el chat seguia llamandose «Dieguis».
+        --
+        -- El asunto de un grupo es un hecho de WhatsApp, no una preferencia
+        -- nuestra: si lo sabemos, es el bueno. Asi ademas se cura solo lo que
+        -- quedo mal, sin tener que ir a la base a mano.
+        SET nombre_push = COALESCE($3, wa_conversaciones.nombre_push),
+            avatar_url  = COALESCE($4, wa_conversaciones.avatar_url)
+      WHERE instancia = $1 AND jid = $2`,
+    [instancia, jid, asunto || null, foto || null]
+  );
+  return rowCount;
+}
+
+/**
+ * Marca un mensaje como eliminado.
+ *
+ * NO se borra la fila. WhatsApp tampoco lo hace: deja «Se eliminó este mensaje»
+ * en su hueco, y aqui ademas son conversaciones con clientes — que una fila
+ * desaparezca de un historial sin dejar rastro es justo lo que no puede pasar
+ * en algo que sirve para auditar.
+ *
+ * Se guarda como tipo `eliminado` y sin texto. `tipo` no tiene lista cerrada de
+ * valores en la base, asi que esto no necesita migracion.
+ */
+export async function marcarEliminado(waId, conversacionId = null) {
+  if (!waId) return 0;
+  const cond = conversacionId ? 'AND conversacion_id = $2' : '';
+  const params = conversacionId ? [waId, conversacionId] : [waId];
+  const { rowCount } = await query(
+    `UPDATE wa_mensajes
+        SET tipo = 'eliminado', texto = NULL, media_url = NULL
+      WHERE wa_id = $1 ${cond} AND tipo <> 'eliminado'`,
+    params
+  );
+  return rowCount;
+}
+
 export async function mensajes(conversacionId, limite = 100) {
   // La cita se resuelve aqui: se busca el mensaje citado por su wa_id DENTRO de
   // la misma conversacion. Puede no estar —alguien responde a algo de antes de
@@ -428,7 +518,22 @@ export async function mensajes(conversacionId, limite = 100) {
   // Quien escribio cada mensaje, en grupos (#74). Misma guarda que la cita: si
   // la 133 no esta aplicada se pide igual el resto y no se enseña autor.
   const columnasQuien = (await puedeGuardarParticipante())
-    ? ', m.participante, m.participante_nombre'
+    ? `, m.participante, m.participante_nombre,
+       -- La foto de quien escribio, SIN tabla nueva.
+       --
+       -- Si esa persona tiene su propio chat con nosotros, su foto ya esta
+       -- guardada ahi: se busca por telefono. Es el mismo dato, no hay que
+       -- pedirlo otra vez ni inventarse donde guardarlo.
+       --
+       -- El campo participante puede ser un «@lid» —el direccionamiento nuevo,
+       -- que no es un telefono— asi que se compara solo con las cifras, contra el
+       -- telefono, que es lo que si casa.
+       (SELECT p.avatar_url FROM wa_conversaciones p
+         WHERE p.instancia = (SELECT c2.instancia FROM wa_conversaciones c2 WHERE c2.id = m.conversacion_id)
+           AND regexp_replace(COALESCE(p.telefono, ''), '[^0-9]', '', 'g')
+               = regexp_replace(COALESCE(split_part(m.participante, '@', 1), ''), '[^0-9]', '', 'g')
+           AND p.avatar_url IS NOT NULL
+         LIMIT 1) AS participante_foto`
     : '';
 
   const { rows } = await query(

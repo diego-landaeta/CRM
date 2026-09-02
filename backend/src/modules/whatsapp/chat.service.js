@@ -419,6 +419,12 @@ export async function recibir(cuerpo) {
   // dice cuantos mensajes va a mandar en total, asi que un porcentaje calculado
   // por nosotros seria inventado. Baileys lo manda en cada tanda.
   if (/history[._]progress/i.test(evento)) return anotarProgreso(cuerpo);
+  // Las fotos de perfil. Evolution las manda por su cuenta, no dentro del
+  // mensaje: sin esto nadie tiene foto en produccion.
+  if (/contacts[._](update|upsert)/i.test(evento)) return contactos(cuerpo);
+  // Borrar un mensaje. «Para mi» viaja por aqui; «para todos» llega dentro de
+  // un mensaje normal y se atiende mas abajo.
+  if (/messages[._]delete/i.test(evento)) return borrado(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -482,7 +488,50 @@ export async function recibir(cuerpo) {
     avatarUrl: datos?.avatar || null,
   });
 
+  // La foto de perfil, UNA vez por conversacion y sin bloquear.
+  //
+  // Evolution la manda en `contacts.update`, pero eso solo llega cuando cambia:
+  // para un chat que ya existe sin foto no llega nunca. Se pide aqui la primera
+  // vez, y solo esa: en cada mensaje serian cientos de llamadas de mas.
+  //
+  // Va suelta a proposito. Que WhatsApp tarde en dar una foto no puede retrasar
+  // la entrada de un mensaje, y que falle no puede perderlo.
+  if (!conv.avatar_url && !esGrupo) {
+    evolution.fotoDe(conv.telefono, instancia)
+      .then((url) => (url ? model.actualizarAvatar(instancia, conv.jid, url) : null))
+      .catch(() => {});
+  }
+
+  // Y de un grupo, su nombre y su foto.
+  //
+  // Evolution no manda el asunto en el aviso del mensaje: en `key` solo viene el
+  // jid. El puente si, porque se lo pedia el. Sin esto un grupo se queda con su
+  // identificador de 18 cifras por nombre — o sin nombre, desde que se dejo de
+  // usar el `pushName` de quien escribio el ultimo.
+  //
+  // Una vez por grupo, y suelta: que WhatsApp tarde no puede retrasar el mensaje.
+  // Se pregunta tambien si YA tiene nombre: puede ser uno malo heredado, y el
+  // asunto de verdad lo corrige. Una vez cada seis horas por grupo basta —
+  // preguntarlo en cada mensaje serian cientos de llamadas de mas.
+  if (esGrupo && tocaMirarElGrupo(conv)) {
+    evolution.grupoDe(conv.jid, instancia)
+      .then((g) => (g ? model.datosDeGrupo(instancia, conv.jid, g.asunto, g.foto) : null))
+      .catch(() => {});
+  }
+
   const m = datos?.message || {};
+
+  // «Eliminar para todos» no es un evento aparte: llega como un mensaje normal
+  // cuyo contenido es un `protocolMessage` de tipo REVOKE apuntando al original.
+  // Si se guardara tal cual, en el chat saldria una burbuja vacia y el mensaje
+  // borrado seguiria ahi al lado.
+  const revocacion = m?.protocolMessage;
+  if (revocacion && (revocacion.type === 0 || String(revocacion.type).toUpperCase() === 'REVOKE')) {
+    const cual = revocacion.key?.id || null;
+    const marcados = cual ? await model.marcarEliminado(cual, conv.id) : 0;
+    return { revocado: cual, marcados };
+  }
+
   const { tipo } = media.tipoDeMensaje(m);
   if (tipo === 'otro') {
     // Este aviso ya estaba, y es el que va a resolver de verdad lo que se ve en
@@ -538,7 +587,7 @@ export async function recibir(cuerpo) {
     // `contextInfo` del tipo concreto. Leyendo solo lo primero, en produccion
     // una respuesta se guardaba SIN saber a que respondia — y la cita no salia
     // nunca. Es la mitad que faltaba del #62.
-    respondeA: datos?.respondeA || media.aQueResponde(m) || null,
+    respondeA: datos?.respondeA || media.aQueResponde(m, datos?.contextInfo) || null,
     // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
     // salen iguales y no se sabe quien dijo que.
     //
@@ -550,7 +599,14 @@ export async function recibir(cuerpo) {
     // Y el nombre sale de `pushName` precisamente porque en un grupo es el de
     // quien escribe: lo que lo hace inservible para nombrar la conversacion es
     // lo que lo hace correcto aqui.
-    participante: datos?.participante || key.participant || null,
+    // `participantAlt` ANTES que `participant`.
+    //
+    // Con el direccionamiento nuevo de WhatsApp —`addressingMode: 'lid'`—
+    // `participant` es un identificador opaco («213773457600590@lid») que no
+    // dice quien es nadie. El telefono de verdad viene al lado, en
+    // `participantAlt`. Comprobado en un grupo real: los tres mensajes que mire
+    // traian el lid en uno y el numero en el otro.
+    participante: datos?.participante || key.participantAlt || key.participant || null,
     participanteNombre: datos?.participanteNombre || (esGrupo ? datos?.pushName : null) || null,
     ts: cuando,
   });
@@ -733,7 +789,22 @@ async function llamada(cuerpo) {
 /** messages.update: WhatsApp dice que un mensaje nuestro llego o se leyo. */
 async function acuse(cuerpo) {
   const datos = cuerpo?.data || cuerpo;
-  const waId = datos?.key?.id;
+
+  // El identificador del mensaje viene en DOS sitios segun quien mande el aviso.
+  //
+  // El puente lo pone en `key.id`, como en el mensaje original. Evolution v2.3.7
+  // —comprobado contra el de verdad, no suponiendo— manda el acuse APLANADO:
+  //
+  //     { keyId, remoteJid, fromMe, status, instanceId, messageId }
+  //
+  // No hay objeto `key`. Leyendo solo `key.id` se descartaban TODOS los acuses
+  // por «sin id», y el mensaje se quedaba con un tic para siempre. Es el punto 3
+  // del #99: comprobado mandando uno de verdad y viendo que se quedaba en
+  // `enviado` con el mensaje ya en el movil.
+  //
+  // `messageId` NO sirve: es el identificador interno de Evolution, no el de
+  // WhatsApp, y no casa con lo que guardamos.
+  const waId = datos?.key?.id || datos?.keyId || null;
   if (!waId) return { ignorado: 'acuse sin id' };
   const crudo = datos?.status ?? datos?.update?.status;
   const bruto = String(crudo ?? '').toUpperCase();
@@ -798,6 +869,89 @@ export async function traerHistorial({ conversacion, limite = 300 }) {
     if (r && !r.ignorado) metidos += 1;
   }
   return { pedidos: crudos.length, metidos };
+}
+
+/**
+ * ¿Toca volver a preguntar por este grupo?
+ *
+ * Si no tiene nombre o foto, si. Y aunque los tenga, cada seis horas: el nombre
+ * de un grupo cambia, y ademas puede haberse quedado uno malo de antes.
+ */
+const grupoMirado = new Map();
+const CADA_GRUPO_MS = 6 * 60 * 60 * 1000;
+function tocaMirarElGrupo(conv) {
+  if (!conv?.nombre_push || !conv?.avatar_url) return true;
+  const antes = grupoMirado.get(conv.id);
+  if (antes && Date.now() - antes < CADA_GRUPO_MS) return false;
+  grupoMirado.set(conv.id, Date.now());
+  return true;
+}
+
+/** Pide la foto de un contacto y la guarda. No lanza: es un adorno, no un dato. */
+export async function buscarFoto(conv) {
+  if (!evolution.configurado() || !conv?.telefono) return null;
+  const url = await evolution.fotoDe(conv.telefono, conv.instancia);
+  if (!url) return null;
+  await model.actualizarAvatar(conv.instancia, conv.jid, url);
+  return url;
+}
+
+/**
+ * Alguien borro un mensaje.
+ *
+ * Llega de dos formas distintas y hay que atender las dos:
+ *
+ *  · «Eliminar para mi» — WhatsApp lo sincroniza entre los dispositivos de uno
+ *    mismo y Baileys lo emite como `messages.delete`. La forma varia entre
+ *    versiones: unas mandan un objeto, otras una lista, y la clave puede venir
+ *    como `key` o aplanada. Se aceptan todas, que es lo que hemos aprendido a
+ *    hacer con este proveedor.
+ *
+ *  · «Eliminar para todos» — no es un evento aparte: llega como un mensaje
+ *    normal cuyo contenido es un `protocolMessage` de tipo REVOKE que apunta al
+ *    mensaje original. Eso se atiende en `recibir()`.
+ *
+ * No se borra la fila: se marca. Ver `marcarEliminado`.
+ */
+async function borrado(cuerpo) {
+  const bruto = cuerpo?.data || cuerpo;
+  const lista = Array.isArray(bruto) ? bruto : [bruto];
+  let marcados = 0;
+  for (const d of lista) {
+    const waId = d?.key?.id || d?.keyId || d?.id || null;
+    if (waId) marcados += await model.marcarEliminado(waId);
+  }
+  return { borrados: lista.length, marcados };
+}
+
+/**
+ * La foto de perfil de un contacto.
+ *
+ * Cuarta vez que aparece el mismo patron. El CRM leia la foto de
+ * `datos.avatar`, y eso lo manda el PUENTE: se la baja el mismo de WhatsApp y la
+ * mete en el aviso del mensaje. Evolution no hace eso — manda un evento
+ * `contacts.update` aparte, con `profilePicUrl`, y ese evento el CRM lo estaba
+ * DESCARTANDO junto con todo lo que no fuera un mensaje.
+ *
+ * Resultado en produccion: nadie tiene foto. Ni una. Se ven las iniciales
+ * siempre, y parece que la funcion no existe.
+ *
+ * Llega como lista —una entrada por contacto— aunque solo cambie uno.
+ */
+async function contactos(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+  if (!instancia) return { ignorado: 'contactos sin instancia' };
+
+  const bruto = cuerpo?.data || cuerpo;
+  const lista = Array.isArray(bruto) ? bruto : [bruto];
+  let puestas = 0;
+  for (const c of lista) {
+    const jid = c?.remoteJid || c?.id || c?.jid;
+    const url = c?.profilePicUrl || c?.avatar || null;
+    if (!jid || !url) continue;
+    puestas += await model.actualizarAvatar(instancia, jid, url);
+  }
+  return { contactos: lista.length, fotos: puestas };
 }
 
 /** Marca leidos los entrantes de una conversacion, tambien en WhatsApp. */
