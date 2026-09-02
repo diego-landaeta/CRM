@@ -1,4 +1,5 @@
 import * as leadService from './lead.service.js';
+import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
@@ -9,6 +10,25 @@ import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
 // ============================================================
+
+// ¿Este contacto es suyo?
+//
+// Un gestor solo trabaja los leads que tiene asignados. El listado ya lo
+// recortaba, pero la FICHA no: bastaba con llegar al identificador —por una
+// direccion, un enlace viejo o probando numeros— para ver el contacto de otra
+// compañera con su telefono y su correo.
+//
+// Se hace aqui, en el servidor, y no escondiendo el boton: lo otro no es un
+// permiso, es un adorno.
+async function exigirQueSeaSuyo(req, leadId) {
+  if (req.user.role !== 'gestor') return;              // admin, superadmin y soporte ven todo
+  const { rows } = await query(
+    'SELECT responsable_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
+  if (!rows.length) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
+  if (rows[0].responsable_id !== req.user.userId) {
+    throw new AppError('Ese contacto es de otra gestora', 403, 'NO_ES_TUYO');
+  }
+}
 
 export async function webhook(req, res, next) {
   try {
@@ -162,11 +182,8 @@ export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
     const lead = await leadService.getById(id);
-    // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
-    if (req.user.role === 'gestor' && lead && lead.responsable_id !== req.user.userId) {
-      throw new AppError('No tienes acceso a este lead', 403, 'FORBIDDEN_LEAD');
-    }
     res.json({ success: true, data: lead });
   } catch (err) { next(err); }
 }
@@ -224,6 +241,7 @@ export async function changeStatus(req, res, next) {
 export async function addInteraction(req, res, next) {
   try {
     const id = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = createInteractionSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -328,6 +346,7 @@ export async function bulkCreate(req, res, next) {
 export async function update(req, res, next) {
   try {
     const id = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = updateLeadSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -368,18 +387,14 @@ export async function softDelete(req, res, next) {
 export async function mergeLeads(req, res, next) {
   try {
     const winnerId = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, winnerId);
     const loserId = parseInt(req.body?.loser_id);
     const comment = (req.body?.comment || '').trim();
     if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
     if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
 
-    // Si el solicitante es gestor, debe ser dueño del winner
-    if (req.user.role === 'gestor') {
-      const w = await leadService.getById(winnerId);
-      if (!w || w.responsable_id !== req.user.userId) {
-        throw new AppError('Solo puedes fusionar leads asignados a ti', 403, 'FORBIDDEN_LEAD');
-      }
-    }
+    // Cualquiera puede fusionar: los duplicados suelen caer en carteras
+    // distintas y exigir ser la dueña dejaba la fusion sin hacer.
     const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -454,6 +469,7 @@ export async function decideReviewQueue(req, res, next) {
 export async function listLeadProducts(req, res, next) {
   try {
     const leadId = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, leadId);
     if (isNaN(leadId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const items = await leadProducts.listForLead(leadId);
     res.json({ success: true, data: items });
@@ -463,6 +479,7 @@ export async function listLeadProducts(req, res, next) {
 export async function addLeadProduct(req, res, next) {
   try {
     const leadId = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, leadId);
     if (isNaN(leadId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const { product_id, responsable_id, notas } = req.body || {};
     const result = await leadProducts.addProduct({
@@ -479,6 +496,7 @@ export async function addLeadProduct(req, res, next) {
 export async function updateLeadProduct(req, res, next) {
   try {
     const leadId = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, leadId);
     const leadProductId = parseInt(req.params.lpId);
     if (isNaN(leadId) || isNaN(leadProductId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await leadProducts.updateProduct({
@@ -491,6 +509,7 @@ export async function updateLeadProduct(req, res, next) {
 export async function removeLeadProduct(req, res, next) {
   try {
     const leadId = parseInt(req.params.id);
+    await exigirQueSeaSuyo(req, leadId);
     const leadProductId = parseInt(req.params.lpId);
     if (isNaN(leadId) || isNaN(leadProductId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await leadProducts.removeProduct({ leadProductId, leadId });

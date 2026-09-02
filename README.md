@@ -1,188 +1,248 @@
-# 360 CRM — MultiProyecto
+# 360 CRM · MultiProyecto
 
-Sistema interno de gestion de leads, conversiones, campanas publicitarias y monitorizacion de ingresos.
+CRM interno para gestionar prospectos, ventas, facturación y publicidad de
+varias marcas formativas a la vez. Un solo CRM, nueve proyectos dentro, cada uno
+con sus productos, sus gestoras y su facturación.
 
-## Entornos en vivo
+Tiene un **CRM hermano**, [`CRM-ISEIE`](https://github.com/diego-landaeta/CRM-ISEIE),
+con las mismas funciones y otra marca. **Lo que se hace en uno se hace en el
+otro** — ver [`docs/PARIDAD-ENTRE-CRMS.md`](docs/PARIDAD-ENTRE-CRMS.md).
 
-| Rama Git | Entorno | URL | DB | PM2 |
+## Dónde está
+
+| Rama | Entorno | Dirección | Base de datos | PM2 |
 |---|---|---|---|---|
-| **`main`** | **Producción** | https://360crm.tech/crm/ | `crm_prod_db` | `crm-api-production` :3001 |
-| **`staging`** | **QA / Testeo** | https://360crm.tech/testeo/ | `crm_test_db` | `crm-api-staging` :3002 |
-| `feat/*` | Features en desarrollo | local | — | — |
+| `main` | Producción | https://360crm.tech/crm/ | `crm_prod_db` | `crm-api-production` :3001 |
+| `staging` | Pruebas | https://360crm.tech/testeo/ | `crm_test_db` | `crm-api-staging` :3002 |
+| `feat/*` | Desarrollo | en tu equipo | desechable, en Docker | — |
 
-Landing pública: https://360crm.tech/
+**Nada de datos reales en tu equipo.** El entorno local levanta su propia base
+en Docker con datos de mentira, y los tests se niegan a arrancar si
+`DATABASE_URL` apunta a un servidor de verdad.
 
-**Flujo de desarrollo:** `feat/X` → merge a `staging` → validar QA → merge a `main` → deploy prod.
-Ver [docs/09-deploy-y-ramas.md](docs/09-deploy-y-ramas.md) para deploy completo, rollback, envs y webhooks externos.
+### Los nueve proyectos
 
-## Proyectos CRM
-- Psiko Aprende
-- ISEIH
-- Fono Aprende
-- ICTESS
+ISEIH · Psiko Aprende · Fono Aprende · ICTESS · ACADEMIA IA · ISAEG · ISSLOGG ·
+ISECD · ISEF
 
-## Proyectos IA (monitorizacion)
-- Psicologo IA
-- Nutricionista IA
-- Tarot IA
+Los tres últimos están recién creados y todavía sin actividad. Los proyectos de
+IA (Psicólogo IA, Nutricionista IA, Tarot IA) **aún no están dados de alta**:
+es la tarea [`docs/tarea-stripe-proyectos-ia.md`](docs/tarea-stripe-proyectos-ia.md).
 
 ---
 
-## Stack
+## Cómo está montado
 
-| Capa | Tecnologia |
-|------|-----------|
-| **Frontend** | React 18 + Vite + shadcn/ui + Tailwind CSS |
-| **Backend** | Node.js + Express (API REST, puerto 3001) |
-| **Base de datos** | PostgreSQL 17 |
-| **Servidor** | VPS Hostinger — Ubuntu 25.04, Nginx + PM2 + HTTPS |
-| **Storage** | Cloudflare R2 (compatible S3) |
-| **Email** | Brevo (API v3) |
-| **APIs externas** | Meta Marketing, Google Ads, GSC, Stripe, Claude AI |
+```mermaid
+flowchart LR
+  U["Gestora<br/>en el navegador"] --> N["Nginx<br/>360crm.tech"]
+  N -->|"/crm/"| F["React + Vite<br/>ficheros estáticos"]
+  N -->|"/crm/api/"| A["API Express<br/>PM2 · puerto 3001"]
+  A --> DB[("PostgreSQL<br/>crm_prod_db")]
+  A --> R2["Cloudflare R2<br/>PDF y dossiers"]
 
----
+  subgraph EXT["Por fuera"]
+    direction TB
+    S["Stripe<br/>cobros"]
+    B["Brevo<br/>correos"]
+    M["Meta Ads<br/>cada 3 h"]
+    W["Make<br/>webhook de leads"]
+  end
 
-## Equipo y Responsabilidades
+  S -.->|"webhook"| A
+  A -.-> B
+  M -.-> A
+  W -.->|"lead nuevo"| A
 
-| Persona | Rol | Area | Jira |
-|---------|-----|------|------|
-| **Manuel Casas** | Propietario / Superadmin | Direccion | — |
-| **Diego Seo** | Desarrollador fullstack | Backend, Config, QA, DevOps | 68 stories |
-| **Angel M** | Desarrollador fullstack | Frontend, UI/UX | 29 stories |
-
-**Jira:** [seo-iseie.atlassian.net](https://seo-iseie.atlassian.net) — Proyecto `CRM`
-
----
-
-## Servidor VPS
-
-| Campo | Valor |
-|-------|-------|
-| **OS** | Ubuntu 25.04 (Plucky Puffin) |
-| **Node.js** | v24.14.1 (LTS via nvm) |
-| **PostgreSQL** | 17.7 (UTF-8) |
-| **PM2** | 6.0.14 (startup systemd) |
-| **Usuario deploy** | `claude` (SSH key, sudo NOPASSWD) |
-
-> Credenciales en `Claude/fase-1/CREDENCIALES-PRIVADO.md`
-
-### Conectar al servidor
-
-```bash
-# SSH
-ssh claude@187.124.128.126
-
-# Tunel SSH para pgAdmin (puerto 5432 bloqueado externamente)
-ssh -f -N -L 15432:localhost:5432 claude@187.124.128.126
-# Luego conectar pgAdmin a 127.0.0.1:15432
+  classDef nuestro fill:#e0e7ff,stroke:#4f46e5,color:#312e81
+  classDef datos fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef fuera fill:#fef3c7,stroke:#d97706,color:#78350f
+  class F,A,N nuestro
+  class DB,R2 datos
+  class S,B,M,W fuera
 ```
 
+**Sin ORM.** Consultas SQL directas con `pg`. Validación de lo que entra con Zod.
+
 ---
 
-## Desarrollo Local
+## Qué hace
 
-### Requisitos
-- Node.js 20+ (recomendado: usar nvm)
-- Git
+```mermaid
+flowchart TB
+  subgraph C["Captación"]
+    C1["Prospectos<br/>reparto entre gestoras"]
+    C2["Formularios y webhooks"]
+    C3["Campañas · Meta Ads · SEO"]
+    C4["Secuencias de correo"]
+  end
+  subgraph V["Comercial"]
+    V1["Catálogo de formaciones"]
+    V2["Ventas y matrículas"]
+    V3["Clientes"]
+    V4["Tutores y sus comisiones"]
+  end
+  subgraph F["Finanzas"]
+    F1["Facturación<br/>series y proformas"]
+    F2["Cobros de Stripe"]
+    F3["Ingresos · egresos<br/>cuentas por cobrar y pagar"]
+    F4["Comisiones · nóminas"]
+  end
+  subgraph A["Análisis"]
+    A1["Reportes descargables"]
+    A2["Tasa de cierre"]
+    A3["Chat e informes con IA"]
+  end
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev        # http://localhost:5173/crm/
+  C --> V --> F --> A
+
+  classDef caja fill:#f1f5f9,stroke:#64748b,color:#0f172a
+  class C1,C2,C3,C4,V1,V2,V3,V4,F1,F2,F3,F4,A1,A2,A3 caja
 ```
 
-### Backend
+Estado real de cada pieza —lo que está en producción, lo que solo en pruebas y
+lo que falta— en **[`docs/ESTADO-Y-PENDIENTES.md`](docs/ESTADO-Y-PENDIENTES.md)**,
+con diagramas.
+
+---
+
+## Empezar en tu equipo
+
+Hacen falta **Node 20 o superior**, **Docker** y **git**. Nada más: ni acceso al
+servidor, ni credenciales de producción.
+
 ```bash
+git clone https://github.com/diego-landaeta/CRM.git
+cd CRM
+
+# 1 · la base de datos, en Docker, con datos de mentira
 cd backend
-cp .env.example .env   # Configurar variables
 npm install
+npm run db:arriba      # levanta PostgreSQL
+npm run db:preparar    # aplica las 126 migraciones y siembra datos
+
+# 2 · la API
 npm run dev            # http://localhost:3001
+
+# 3 · el frontal, en otra terminal
+cd ../frontend
+npm install
+npm run dev            # http://localhost:5173
 ```
 
-### Produccion
+Para tirar la base y volver a empezar: `npm run db:abajo && npm run db:arriba && npm run db:preparar`.
+
+**Los tests** (Vitest, contra la base de Docker):
+
 ```bash
-# Build frontend
-cd frontend && npm run build
-
-# PM2 (en servidor)
-pm2 start ecosystem.config.js
-pm2 logs crm-api
+cd backend && npm test
 ```
 
 ---
 
-## Estructura del Repositorio
+## Cómo se trabaja
+
+```mermaid
+flowchart LR
+  L["feat/lo-que-sea<br/>en tu equipo"] -->|"pull request"| S["staging<br/>360crm.tech/testeo/"]
+  S -->|"probado y visto"| M["main<br/>producción"]
+  S -.->|"si algo falla"| L
+
+  classDef local fill:#e0e7ff,stroke:#4f46e5,color:#312e81
+  classDef prue fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef prod fill:#dcfce7,stroke:#16a34a,color:#14532d
+  class L local
+  class S prue
+  class M prod
+```
+
+- Rama por tarea, **pull request a `staging`**. A `main` no se va directo si toca
+  dinero, sesiones o el esquema de la base.
+- **Migraciones**: un fichero nuevo en `backend/migrations/`, numerado. **No se
+  ejecuta SQL a mano en el servidor** — las aplica quien despliega.
+- **Commits en español**, con prefijo: `feat:`, `fix:`, `refactor:`, `docs:`,
+  `chore:`, `test:`.
+- Nunca se sube `.env`, `node_modules/` ni `dist/`.
+
+---
+
+## Cómo está repartido el código
+
+Un directorio por dominio. Dentro va todo lo suyo: rutas, controlador, servicio,
+modelo y validación.
 
 ```
-backend/           API REST Node.js + Express (modular)
+backend/
   src/
-    modules/       Un directorio por dominio (auth, leads, products, dossiers...)
-    shared/        Config, middleware, utils compartidos
-  migrations/      SQL secuencial (001_, 002_...)
-  seeds/           Seed data
-  
-frontend/          SPA React + Vite
+    modules/          43 módulos: leads, conversions, invoices, tutores...
+      <dominio>/
+        index.js            exporta { prefix, router }
+        <dominio>.routes.js
+        <dominio>.controller.js
+        <dominio>.service.js
+        <dominio>.model.js
+        <dominio>.validation.js
+    shared/           configuración, middleware, utilidades
+    jobs/             tareas programadas (Meta, Stripe, recordatorios)
+    bundles/          qué módulos se encienden en cada instalación
+    app.js
+  migrations/         126 ficheros SQL, en orden. La verdad del esquema
+  tests/              Vitest
+
+frontend/
   src/
-    modules/       Un directorio por feature (leads, products, auth...)
-    shared/        Componentes UI, hooks, api client
-    contexts/      AuthContext, ProjectContext
-
-Claude/            Base de conocimiento del proyecto
-  fase-1/          Core CRM — tracking stories + credenciales
-  fase-2/          Integraciones API externas
-  fase-3/          Funcionalidades avanzadas
-
-docs/              Documentacion tecnica
-scripts/           Backup, deploy, utilidades
+    modules/          44 módulos, en espejo con el backend
+      <dominio>/
+        api/ hooks/ components/ pages/
+    shared/           componentes comunes, cliente de API, utilidades
+    contexts/         sesión y proyecto activo
 ```
 
----
-
-## Documentacion
-
-| Doc | Contenido |
-|-----|-----------|
-| [Esquema DB](docs/01-esquema-base-datos.md) | Todas las tablas, relaciones, constraints |
-| [Estructura proyecto](docs/02-estructura-proyecto.md) | Arquitectura modular detallada |
-| [Endpoints API](docs/03-api-endpoints.md) | Todos los endpoints REST con ejemplos |
-| [Variables entorno](docs/04-variables-entorno.md) | Template .env con descripcion |
-| [Arquitectura frontend](docs/05-arquitectura-frontend.md) | Layouts, componentes, colores, responsive |
-| [Deploy y DevOps](docs/06-despliegue-devops.md) | Nginx, PM2, backups, CI |
-| [Tareas Jira](docs/07-tareas-jira.md) | 15 Epics, ~97 Stories con criterios de aceptacion |
-| [Integración Meta](docs/08-integracion-meta.md) | Plan System User Token + webhooks Lead Ads sin App Review |
-| **[Deploy y ramas](docs/09-deploy-y-ramas.md)** | **Mapeo rama→entorno, comandos scp+pm2, migraciones, rollback, webhooks Make** |
-| [CLAUDE.md](CLAUDE.md) | Guia de desarrollo y convenciones de codigo |
+**Para añadir un módulo al backend**: crea el directorio, exporta
+`{ prefix, router }` en su `index.js`, regístralo en `app.js` y añádelo al
+paquete que le toque en `src/bundles/manifest.js` — si no, responde 404 y parece
+que no existe.
 
 ---
 
-## Estado del Proyecto
+## Reglas que no se negocian
 
-### Fase 1 — Core CRM
-| Epic | Stories | Done |
-|------|---------|------|
-| Setup Infraestructura | 8 | 3 |
-| Auth + Roles + Panel Usuarios | 11 | 4 |
-| Productos + Dossiers PDF | 7 | 2 |
-| Webhook + UTMs + Round-robin | 11 | 3 |
-| Ficha Lead + Historial | 9 | 4 |
-| Conversiones y Pagos | 7 | 3 |
-| Dashboard + QA | 10 | 2 |
-
-### Fase 2 — Integraciones API
-Meta Ads, Google Ads, GSC, Stripe, Claude AI — 24 stories, todas pendientes
-
-### Fase 3 — Funcionalidades Avanzadas
-Custom Audiences Meta, Chat Claude AI, Export PDF — 8 stories, todas pendientes
+- **El dinero sale de los cobros** (`conversion_payments`), no del campo
+  `importe_pagado` de la venta: ese no cuadra, y no en la misma dirección en los
+  dos CRMs.
+- **Contraseñas** con bcrypt de coste 12. Sesión de 15 minutos, renovación de 30
+  días en cookie `httpOnly`.
+- **Cada gestora ve lo suyo.** El recorte se hace en el controlador, con el
+  identificador de la sesión, nunca con lo que llegue por la URL.
+- **Credenciales cifradas en la base** (AES-256), configurables desde el panel.
+  En el `.env` solo lo imprescindible.
+- **Round-robin de leads dentro de una transacción.** Nunca fuera.
+- **Redondeo en SQL** con `ROUND(...,2)`, no con `toFixed` de JavaScript: no
+  redondean igual y sobre miles de pagos se nota.
 
 ---
 
-## Convenciones
+## Documentación
 
-- **Commits en espanol** con prefijos: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`
-- **Ramas:** `main` (producción), `staging` (QA/testeo), `feat/nombre-corto` (features), `hotfix/nombre` (urgencias)
-- **Backend:** JavaScript ES modules, queries SQL directas (NO ORM), validacion con Zod
-- **Frontend:** shadcn/ui + Tailwind, React Context (NO Redux), lazy loading por pagina
-- **Idioma codigo:** ingles para variables/funciones, espanol para comentarios
+| Documento | Para qué |
+|---|---|
+| [`docs/ESTADO-Y-PENDIENTES.md`](docs/ESTADO-Y-PENDIENTES.md) | Qué hay hecho, qué falta y quién lo lleva. **Empieza aquí** |
+| [`docs/README.md`](docs/README.md) | Esquema de base de datos, endpoints y despliegue |
+| [`docs/PARIDAD-ENTRE-CRMS.md`](docs/PARIDAD-ENTRE-CRMS.md) | Qué se copia al CRM hermano y qué no |
+| [`docs/tutores-pendiente.md`](docs/tutores-pendiente.md) | El módulo de tutores, en detalle |
+| [`docs/tarea-stripe-proyectos-ia.md`](docs/tarea-stripe-proyectos-ia.md) | Tarea abierta: Stripe en los proyectos IA |
+| [`docs/AUDITORIA-FINANZAS-CRM.md`](docs/AUDITORIA-FINANZAS-CRM.md) | Revisión de los doce módulos de finanzas |
+| [`CLAUDE.md`](CLAUDE.md) | Convenciones, para trabajar con Claude Code |
 
-> Para la guia completa de desarrollo ver [CLAUDE.md](CLAUDE.md)
+---
+
+## Quién es quién
+
+| | |
+|---|---|
+| **Manuel Casas** | Propietario · superadmin |
+| **Diego** | Desarrollo, base de datos y despliegues |
+| **Ángel** | Desarrollo · rama `feat/stripe-ia` |
+| **Carlos** | Dirección comercial · pide y valida los informes |
+
+Repositorio **privado**.

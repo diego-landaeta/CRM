@@ -57,7 +57,6 @@ import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
-import WhatsappTemplatesDialog from '../components/WhatsappTemplatesDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
@@ -154,7 +153,7 @@ export default function LeadsPage() {
     ? activeProject.id
     : (selectedProjectIds.length === 1 ? selectedProjectIds[0] : null);
   const { products } = useProducts(productsPid);
-  const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
+  const { templates: waTemplates } = useWhatsappTemplates(activeProject?.id);
 
   // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
   const lastSeenIdsRef = useRef<Set<number>>(new Set());
@@ -190,7 +189,6 @@ export default function LeadsPage() {
   const [confirmingContact, setConfirmingContact] = useState(null);
   const [reminderLead, setReminderLead] = useState(null);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
-  const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
   const [deletingLead, setDeletingLead] = useState<any>(null);
@@ -484,8 +482,20 @@ export default function LeadsPage() {
       });
       toast({ title: 'Interacción registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
       refetch();
-    } catch {
-      // Silent fail — el link igual abre, no queremos bloquear al usuario
+    } catch (e) {
+      // Antes esto se callaba: «silent fail, el link igual abre». Pero el link
+      // abriendo es justo lo que hace que no se note — la gestora habla con la
+      // persona convencida de que queda registrado, y en la ficha no hay nada.
+      // Luego alguien mira el historial y parece que nadie la contacto.
+      //
+      // No se bloquea a nadie: el chat se abre igual. Solo se dice que ese
+      // contacto NO ha quedado apuntado, para que se apunte a mano.
+      toast({
+        title: 'El contacto no ha quedado registrado',
+        description: 'El chat se abre igual, pero apúntalo a mano en la ficha: '
+          + ((e as Error)?.message || 'no se pudo guardar la interacción'),
+        variant: 'destructive',
+      });
     }
   }
 
@@ -625,7 +635,7 @@ export default function LeadsPage() {
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <button
-              onClick={() => navigate('/reports')}
+              onClick={() => navigate('/informes')}
               title="Ir a Reportes (descargables)"
               aria-label="Reportes"
               className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -676,7 +686,7 @@ export default function LeadsPage() {
                     <PlugsConnected size={13} weight="regular" className="flex-shrink-0" /> Webhook de captura
                   </button>
                   <button
-                    onClick={() => { setWaTemplatesOpen(true); setMoreOpen(false); }}
+                    onClick={() => { navigate('/whatsapp/plantillas'); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
                     <ChatCircleText size={13} weight="regular" className="flex-shrink-0" /> Plantillas de WhatsApp
@@ -889,7 +899,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
                   </td>
                 </tr>
                 );
@@ -953,7 +963,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
               </div>
             </div>
           ))}
@@ -1100,14 +1110,7 @@ export default function LeadsPage() {
       </Suspense>
 
       {/* Plantillas WhatsApp por proyecto */}
-      <WhatsappTemplatesDialog
-        open={waTemplatesOpen}
-        onClose={() => setWaTemplatesOpen(false)}
-        templates={waTemplates}
-        onSave={saveWaTemplates}
-        onReset={resetWaTemplates}
-        projectName={activeProject?.nombre}
-      />
+      
 
       {/* Export universal (CRM-196) */}
       <Suspense fallback={null}>

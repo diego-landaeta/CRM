@@ -26,7 +26,7 @@ export async function enqueue({ leadId, originalLeadId, projectId, matchByEmail 
         type: 'dup_review_pending',
         title: `Duplicado pendiente de revisión: lead #${leadId}`,
         message: `${leadName || 'Lead'} entró como duplicado de #${originalLeadId}. Decide: aprobar / fusionar / descartar.`,
-        link_path: `/leads/revision-duplicados`,
+        link_path: `/prospectos/revision-duplicados`,
         metadata: { lead_id: leadId, original_lead_id: originalLeadId, project_id: projectId },
         triggered_by_user_id: null,
       });

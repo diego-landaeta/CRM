@@ -69,15 +69,33 @@ describe('useNotifications', () => {
   });
 
   it('subscribe sin permission previo lo solicita', async () => {
+    // Sigue pidiendo el permiso, que es lo util: con permiso, el aviso de un
+    // mensaje de WhatsApp llega con el CRM abierto (AvisoDeMensaje).
     permState = 'default';
     const spy = vi.fn(async () => 'granted');
     requestImpl = spy;
     const { result } = renderHook(() => useNotifications());
+    await act(async () => { await result.current.subscribe(); });
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('pero NO dice que esta suscrita, porque no lo esta', async () => {
+    // Esta prueba antes afirmaba lo contrario —`ok` true, `isSubscribed` true—
+    // y estaba fijando un simulacro: `subscribe` escribia
+    // `{ endpoint: 'local-only' }` en localStorage y devolvia true. No habia
+    // suscripcion: `/api/push-subscriptions` no existe y no hay claves VAPID.
+    //
+    // Una pantalla que dice «activado» sobre algo apagado es peor que una que
+    // dice «todavia no»: con la primera nadie lo arregla, porque nadie sabe que
+    // esta roto. La gestora llevaba semanas esperando avisos que no podian
+    // llegar.
+    permState = 'granted';
+    const { result } = renderHook(() => useNotifications());
     let ok;
     await act(async () => { ok = await result.current.subscribe(); });
-    expect(spy).toHaveBeenCalled();
-    expect(ok).toBe(true);
-    expect(result.current.isSubscribed).toBe(true);
+    expect(ok).toBe(false);
+    expect(result.current.isSubscribed).toBe(false);
+    expect(localStorage.getItem('crm.push-subscription')).toBeNull();
   });
 
   it('subscribe NO suscribe si el usuario rechaza', async () => {
@@ -91,9 +109,12 @@ describe('useNotifications', () => {
   });
 
   it('unsubscribe limpia subscription', async () => {
+    // Ya no se puede llegar aqui desde `subscribe` —no marca nada—, asi que se
+    // simula una suscripcion vieja: la de quien tenga el marcador guardado del
+    // simulacro anterior en su navegador. Tiene que quedar limpio.
     permState = 'granted';
+    localStorage.setItem('crm.push-subscription', JSON.stringify({ endpoint: 'local-only' }));
     const { result } = renderHook(() => useNotifications());
-    await act(async () => { await result.current.subscribe(); });
     expect(result.current.isSubscribed).toBe(true);
     await act(async () => { await result.current.unsubscribe(); });
     expect(result.current.isSubscribed).toBe(false);

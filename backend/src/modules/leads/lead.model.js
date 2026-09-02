@@ -59,7 +59,7 @@ export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
   `;
 
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.producto_interes_id,
             l.responsable_id, l.created_at, l.fecha_solicitud,
             u.nombre AS responsable_nombre,
             ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
@@ -351,7 +351,7 @@ export async function deleteProductAlias(aliasId, projectId) {
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, whatsappUsuario = null, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -384,6 +384,11 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
         AND u.active = true
         AND u.is_available = true
         AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
+        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
+        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
+        -- nadie llama — no es su trabajo ni mira esa bandeja.
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -405,7 +410,8 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       const { rows: access } = await client.query(
         `SELECT u.id FROM users u
          JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
-         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')`,
+         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')
+           AND NOT COALESCE(u.gestor_colaboraciones, false)`,
         [projectId, forcedResponsableId]
       );
       if (access.length > 0) {
@@ -439,10 +445,10 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
+      `INSERT INTO leads (project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id, project_id, nombre, email, telefono, whatsapp_usuario, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, whatsappUsuario || null, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
        customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
@@ -611,11 +617,21 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(canal);
   }
   if (productId) {
-    conditions.push(`l.producto_interes_id = $${paramIdx++}`);
+    conditions.push(conConversion
+      ? `EXISTS (
+          SELECT 1 FROM conversions cprod
+          WHERE cprod.lead_id = l.id
+            AND (
+              cprod.producto_contratado_id = $${paramIdx}
+              OR (cprod.producto_contratado_id IS NULL AND l.producto_interes_id = $${paramIdx})
+            )
+        )`
+      : `l.producto_interes_id = $${paramIdx}`);
+    paramIdx++;
     params.push(productId);
   }
   if (search) {
-    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx})`);
+    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
     params.push(`%${search}%`);
     paramIdx++;
   }
@@ -626,14 +642,28 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   // descuadra ±2h en Madrid (verano). Resultado: "Hoy" muestra leads de "Ayer"
   // y viceversa. Forzamos interpretación en la TZ de la app.
   const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
-  if (dateFrom) {
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
-    params.push(dateFrom);
-  }
-  if (dateTo) {
-    // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
-    params.push(dateTo);
+  if (conConversion) {
+    // En Clientes, el rango corresponde a la última compra, no a la fecha en
+    // que se creó/importó el lead.
+    const lastPurchase = `(SELECT MAX(cdate.fecha_conversion) FROM conversions cdate WHERE cdate.lead_id = l.id)`;
+    if (dateFrom) {
+      conditions.push(`${lastPurchase} >= $${paramIdx++}::date`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push(`${lastPurchase} < ($${paramIdx++}::date + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
+  } else {
+    if (dateFrom) {
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
@@ -642,11 +672,81 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   const countResult = await query(`SELECT COUNT(*) FROM leads l ${where}`, params);
   const total = parseInt(countResult.rows[0].count);
 
+  const clientStatsSelect = conConversion ? `,
+            client_stats.conversiones,
+            client_stats.total_compras,
+            client_stats.total_pagado,
+            client_stats.pendiente,
+            client_stats.ultima_compra,
+            client_stats.cursos,
+            client_stats.programas,
+            client_stats.total_cuotas,
+            client_stats.cuotas_pagadas,
+            client_stats.cuotas_pendientes,
+            client_stats.total_pagos,
+            client_stats.proximo_vencimiento` : '';
+  const clientStatsJoin = conConversion ? `
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS conversiones,
+              COALESCE(SUM(cstat.importe_total), 0)::numeric AS total_compras,
+              COALESCE(SUM(cstat.importe_pagado), 0)::numeric AS total_pagado,
+              COALESCE(SUM(cstat.importe_total - cstat.importe_pagado), 0)::numeric AS pendiente,
+              MAX(cstat.fecha_conversion) AS ultima_compra,
+              ARRAY(
+                SELECT DISTINCT ccourse.producto_contratado
+                FROM conversions ccourse
+                WHERE ccourse.lead_id = l.id
+                  AND NULLIF(BTRIM(ccourse.producto_contratado), '') IS NOT NULL
+                ORDER BY ccourse.producto_contratado
+              ) AS cursos,
+              -- El programa contratado, y si no hay venta todavia, el que pidio.
+              ARRAY(
+                SELECT program_name FROM (
+                  SELECT DISTINCT COALESCE(
+                    NULLIF(BTRIM(ccourse.producto_contratado), ''),
+                    pcourse.nombre,
+                    pcontact.nombre
+                  ) AS program_name
+                  FROM conversions ccourse
+                  LEFT JOIN products pcourse  ON pcourse.id  = ccourse.producto_contratado_id
+                  LEFT JOIN products pcontact ON pcontact.id = l.producto_interes_id
+                  WHERE ccourse.lead_id = l.id
+                  UNION ALL
+                  SELECT pcontact.nombre
+                  FROM products pcontact
+                  WHERE pcontact.id = l.producto_interes_id
+                    AND NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id)
+                ) client_programs
+                WHERE program_name IS NOT NULL
+                ORDER BY program_name
+              ) AS programas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id) AS total_cuotas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NOT NULL) AS cuotas_pagadas,
+              (SELECT COUNT(*)::int FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NULL) AS cuotas_pendientes,
+              -- Los apuntes de la carga inicial no son cobros de verdad.
+              (SELECT COUNT(*)::int FROM conversion_payments cp
+                 JOIN conversions cp_conv ON cp_conv.id = cp.conversion_id
+                WHERE cp_conv.lead_id = l.id
+                  AND COALESCE(cp.notas, '') NOT ILIKE 'Backfill%') AS total_pagos,
+              (SELECT MIN(ci.fecha_vencimiento) FROM conversion_installments ci
+                 JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id AND ci.fecha_cobro IS NULL) AS proximo_vencimiento
+       FROM conversions cstat
+       WHERE cstat.lead_id = l.id
+     ) client_stats ON TRUE` : '';
+
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
+            l.responsable_id,
             proj.nombre AS proyecto_nombre,
             proj.slug AS proyecto_slug,
             u.nombre as responsable_nombre,
@@ -660,12 +760,14 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
             p.dias_alerta_inactividad,
             EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo,
             EXISTS(SELECT 1 FROM lead_spam_reports sr WHERE sr.lead_id = l.id AND sr.status = 'pending') AS has_pending_spam_report
+            ${clientStatsSelect}
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
+     ${clientStatsJoin}
      ${where}
      ORDER BY ${buildOrderBy(sort, dir)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
@@ -850,6 +952,11 @@ export async function reassignPendingRoundRobin(projectId) {
         AND u.active = true
         AND u.is_available = true
         AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
+        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
+        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
+        -- nadie llama — no es su trabajo ni mira esa bandeja.
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -923,7 +1030,7 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const allowed = ['nombre', 'email', 'telefono', 'whatsapp_usuario', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);

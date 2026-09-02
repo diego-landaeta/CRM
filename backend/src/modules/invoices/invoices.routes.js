@@ -10,6 +10,12 @@ router.get('/issuers/:id/logo',       ctrl.getIssuerLogo);
 
 router.use(verifyToken);
 
+// Corte de facturacion: hasta que dia esta al dia. Consultarlo lo puede
+// cualquiera; moverlo solo quien gestiona la facturacion (se comprueba dentro).
+router.get('/facturacion-al-dia',     ctrl.facturacionAlDia);
+router.put('/facturacion-al-dia',     ctrl.setFacturacionAlDia);
+router.post('/cola/generar',          ctrl.generarDeCola);
+router.post('/cola/emitir-hasta',     ctrl.emitirColaHasta);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);
@@ -42,6 +48,11 @@ router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.upd
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): admin/superadmin
 // o gestora con permiso factura_manager (el controller valida que sea suya).
 router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor'), ctrl.corregir);
+// Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
+// editar_fechas_factura (admins y usuarios acotados a "solo fechas").
+router.patch('/:id/fechas',           ctrl.updateFechas);
+// Opción B: asociar una factura existente a una venta del cliente.
+router.patch('/:id/asociar',          roleGuard('admin', 'superadmin', 'gestor'), ctrl.asociarVenta);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);

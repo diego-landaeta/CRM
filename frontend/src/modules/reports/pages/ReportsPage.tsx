@@ -12,6 +12,10 @@ import {
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
+import AsesorasPanel from '../components/AsesorasPanel';
+import RankingsPanel from '@/shared/components/RankingsPanel';
+import PanelResumen from '@/shared/components/PanelResumen';
+import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
 
 function exportReportCSV(data, project, range) {
   const sections = [];
@@ -104,7 +108,7 @@ export default function ReportsPage() {
       try {
         const params = { ...(activeProject?.id ? { projectId: activeProject.id } : {}), from: range.from, to: range.to };
         const qs = new URLSearchParams(params).toString();
-        const res = await client.get(`/reports/overview?${qs}`);
+        const res = await client.get(`/informes/overview?${qs}`);
         if (res.success) setData(res.data);
       } catch (err) {
         toast({ title: 'Error cargando reportes', description: err?.data?.error || err.message, variant: 'destructive' });
@@ -225,8 +229,26 @@ export default function ReportsPage() {
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
 
+      {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
+          periodo anterior y la grafica con selector de serie. */}
+      <PanelResumen
+        projectId={activeProject?.id}
+        projectName={activeProject?.nombre}
+        from={range.from}
+        to={range.to}
+      />
+
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
-      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+      {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
+      <AsesorasPanel from={range.from} to={range.to} />
+
+      {/* Paises y formaciones: en pantalla, no solo descargables. */}
+      <RankingsPanel from={range.from} to={range.to} />
+
+      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={range.from} to={range.to} />
+
+      {/* El catálogo de reportes por tema, igual que en el CRM hermano. */}
+      <ReportesDisponibles />
 
       {/* Pipeline de leads + ingresos mensual */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

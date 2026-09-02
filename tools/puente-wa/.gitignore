@@ -1,0 +1,5 @@
+# Las credenciales de WhatsApp de una persona. Nunca al repo.
+sesiones/
+node_modules/
+*.bak
+*.antes-*

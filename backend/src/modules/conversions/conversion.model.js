@@ -173,11 +173,17 @@ export async function findById(id) {
   // Cada pago trae SU factura (una factura por pago). Enlazamos por payment_id
   // e incluimos los datos de cliente para que el front sepa si faltan datos.
   const { rows: payments } = await query(
-    `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.created_at,
+    `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.metodo, cp.created_at,
+            ci.numero AS cuota_numero,
+            (cp.metodo = 'tarjeta_stripe' OR EXISTS (
+              SELECT 1 FROM stripe_payments sp
+               WHERE sp.conversion_payment_id = cp.id AND sp.status = 'succeeded'
+            )) AS pagado_por_stripe,
             i.id  AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais, i.items AS factura_items
        FROM conversion_payments cp
+       LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
       ORDER BY cp.fecha DESC, cp.id DESC`,
@@ -189,6 +195,10 @@ export async function findById(id) {
   const { rows: installments } = await query(
     `SELECT ci.id, ci.numero, ci.importe_previsto, ci.fecha_vencimiento,
             ci.fecha_cobro, ci.importe_cobrado, ci.metodo, ci.payment_id,
+            (ci.metodo = 'tarjeta_stripe' OR EXISTS (
+              SELECT 1 FROM stripe_payments sp
+               WHERE sp.conversion_payment_id = ci.payment_id AND sp.status = 'succeeded'
+            )) AS pagado_por_stripe,
             i.id AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais
@@ -235,14 +245,14 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, from, to, page, limit }) {
+export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
-  if (responsableId) { conditions.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { conditions.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -252,6 +262,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (pendingBilling === 'true') {
     conditions.push(`(c.importe_total = 0 OR c.notas_pago LIKE 'Backfill 2026-06-16%')`);
   }
+  if (producto) { conditions.push(`TRIM(c.producto_contratado) = $${idx++}`); params.push(String(producto).trim()); }
   if (from) { conditions.push(`c.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`c.fecha_conversion <= $${idx++}`); params.push(to); }
 
@@ -259,9 +270,25 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   const offset = (page - 1) * limit;
 
   // JOIN a leads necesario si filtramos por l.responsable_id
-  const countJoin = responsableId ? 'LEFT JOIN leads l ON l.id = c.lead_id' : '';
-  const { rows: countRows } = await query(`SELECT COUNT(*) FROM conversions c ${countJoin} ${where}`, params);
+  const countJoin = 'LEFT JOIN leads l ON l.id = c.lead_id';
+  // Totales sobre TODO el filtro, no sobre la pagina: las tarjetas de arriba
+  // sumaban solo las filas visibles y por eso no cuadraban nunca.
+  const { rows: countRows } = await query(
+    `SELECT COUNT(*) AS count,
+            COALESCE(SUM(c.importe_total), 0) AS total_importe,
+            COALESCE(SUM(c.importe_pagado), 0) AS total_pagado,
+            COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
+            COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva
+       FROM conversions c ${countJoin} ${where}`,
+    params
+  );
   const total = parseInt(countRows[0].count);
+  const totales = {
+    importe: Number(countRows[0].total_importe),
+    pagado: Number(countRows[0].total_pagado),
+    pendiente: Number(countRows[0].total_pendiente),
+    iva: Number(countRows[0].total_iva),
+  };
 
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
@@ -270,11 +297,13 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
             c.fecha_compromiso_pago, c.metodo_pago,
             c.fecha_conversion, c.created_at,
             l.nombre as lead_nombre, l.email as lead_email,
-            l.responsable_id, u.nombre as responsable_nombre,
+            COALESCE(c.vendedora_id, l.responsable_id) AS responsable_id,
+            COALESCE(uv.nombre, u.nombre) AS responsable_nombre,
             p.nombre as proyecto_nombre
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN users u ON u.id = l.responsable_id
+     LEFT JOIN users uv ON uv.id = c.vendedora_id
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
      ORDER BY c.fecha_conversion DESC, c.id DESC
@@ -282,7 +311,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     [...params, limit, offset]
   );
 
-  return { conversions: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { conversions: rows, total, totales, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function update(id, fields) {
@@ -308,7 +337,10 @@ export async function update(id, fields) {
   return rows[0];
 }
 
-export async function addPayment(conversionId, { importe, fecha, notas, metodo }) {
+// opts.allowOverpay: permite registrar un cobro que supere el importe_total de la venta.
+// Lo usa el cobro automático de Stripe: el dinero entró de verdad, y cuando excede el total
+// lo que suele estar mal es el total previsto, no el cobro. El flujo manual sigue bloqueado.
+export async function addPayment(conversionId, { importe, fecha, notas, metodo }, opts = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -324,9 +356,27 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo }
     }
 
     const nuevoTotal = Number(convRows[0].importe_pagado) + Number(importe);
-    if (nuevoTotal > Number(convRows[0].importe_total)) {
+    if (!opts.allowOverpay && nuevoTotal > Number(convRows[0].importe_total)) {
       await client.query('ROLLBACK');
       return { error: 'OVERPAY' };
+    }
+
+    // Anti-duplicado: el mismo importe en la misma venta con menos de 3 dias
+    // de diferencia es casi siempre el mismo cobro metido dos veces (a mano y
+    // por la sincronizacion de Stripe). Se puede forzar con allowDuplicate.
+    if (!opts.allowDuplicate) {
+      const { rows: dup } = await client.query(
+        `SELECT id, importe, fecha, notas, metodo FROM conversion_payments
+          WHERE conversion_id = $1
+            AND ABS(importe - $2::numeric) < 0.01
+            AND ABS(fecha - COALESCE($3::date, CURRENT_DATE)) <= 3
+          ORDER BY id LIMIT 1`,
+        [conversionId, importe, fecha]
+      );
+      if (dup[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE', existing: dup[0] };
+      }
     }
 
     // INSERT payment
@@ -420,4 +470,23 @@ export async function deletePayment(paymentId) {
 
 export async function deleteConversion(id) {
   await query(`DELETE FROM conversions WHERE id = $1`, [id]);
+}
+
+// Valores distintos de producto para el desplegable de filtros. Va aparte de
+// findAll porque el listado esta paginado y no ve el catalogo completo.
+export async function listProductos({ projectId, responsableId }) {
+  const cond = ["TRIM(COALESCE(c.producto_contratado, '')) <> ''"];
+  const params = [];
+  let idx = 1;
+  if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  if (responsableId) { cond.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  const { rows } = await query(
+    `SELECT DISTINCT TRIM(c.producto_contratado) AS producto
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY 1`,
+    params
+  );
+  return rows.map(r => r.producto);
 }

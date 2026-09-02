@@ -19,8 +19,8 @@ export const TABS: SettingsTab[] = [
   { id: 'channels',     label: 'Canales',             icon: ChatCircleText, to: '/configuracion/canales' },
   { id: 'forms',        label: 'Formularios',         icon: Globe },
   { id: 'webhooks',     label: 'Webhooks',            icon: PlugsConnected, to: '/captacion/webhooks' },
-  { id: 'sequences',    label: 'Email seguimiento',   icon: Envelope,       to: '/email-sequences' },
-  { id: 'templates',    label: 'Plantillas email',    icon: EnvelopeOpen,   to: '/configuracion/email-templates' },
+  { id: 'sequences',    label: 'Email seguimiento',   icon: Envelope,       to: '/secuencias-email' },
+  { id: 'templates',    label: 'Plantillas email',    icon: EnvelopeOpen,   to: '/configuracion/plantillas-email' },
   { id: 'shortcuts',    label: 'Atajos rápidos',      icon: Lightning,      to: '/configuracion/atajos' },
   { id: 'documents',    label: 'Numeración docs',     icon: Receipt,        to: '/configuracion/documentos' },
   { id: 'apis',         label: 'APIs globales',       icon: Key },
@@ -34,23 +34,9 @@ export const ROLE_STYLES: Record<string, string> = {
   gestor: 'bg-muted text-muted-foreground',
 };
 
-export const AVATAR_COLORS: ReadonlyArray<string> = [
-  'bg-blue-100 text-blue-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-rose-100 text-rose-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-pink-100 text-pink-700',
-  'bg-teal-100 text-teal-700',
-];
-
-export function getInitials(name: string | null | undefined): string {
-  if (!name) return '??';
-  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-export const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+// Estas tres vivian aqui copiadas. Ahora hay una sola copia en shared/lib/ui;
+// se re-exportan para no romper a quien ya las importaba desde aqui.
+export { AVATAR_COLORS, avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
 
 export const SERVICES_CATALOG = [
   { service: 'brevo', name: 'Brevo (Email transaccional)', description: 'API Key para envio de emails desde cada proyecto (remitente configurable)', placeholder: 'xkeysib-...', global: false },

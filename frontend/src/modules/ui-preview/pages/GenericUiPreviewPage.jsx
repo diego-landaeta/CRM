@@ -105,7 +105,7 @@ const AREA_CONFIG = {
   reportes: {
     title: 'Redisenio - Reportes',
     subtitle: 'Indicadores comparables por proyecto, canal y responsable.',
-    currentPath: '/reports',
+    currentPath: '/informes',
     icon: ChartLineUp,
     primaryMetric: 'KPIs visibles',
     rows: [
@@ -123,7 +123,7 @@ const AREA_CONFIG = {
   configuracion: {
     title: 'Redisenio - Configuracion',
     subtitle: 'Ajustes del CRM ordenados por impacto y frecuencia de uso.',
-    currentPath: '/settings',
+    currentPath: '/configuracion',
     icon: GearSix,
     primaryMetric: 'Ajustes clave',
     rows: [

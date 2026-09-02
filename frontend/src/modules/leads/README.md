@@ -45,26 +45,45 @@ Mantener funcional pero no añadir features nuevas hasta alinear UX.
 
 ## Concepto: plantillas WhatsApp por proyecto
 
-`hooks/useWhatsappTemplates.js` — guarda plantillas por proyecto en localStorage:
+**Ya no viven en localStorage.** Están en la tabla `whatsapp_templates` (migración
+122) y se leen por API. Antes cada gestora tenía las suyas en su equipo: nadie
+podía revisarlas, se perdían al cambiar de ordenador, y los dos CRMs las
+guardaban con formatos distintos que ni coincidían entre sí.
 
-```js
-{
-  projectId: [
-    { id, label, text },
-    ...
-  ]
-}
+`hooks/useWhatsappTemplates.ts` — **solo lee**:
+
+```ts
+const { templates } = useWhatsappTemplates(projectId);
+// GET /api/whatsapp/templates?projectId=N
+// [{ id, label, text, ambito: 'compartida' | 'personal' }]
 ```
+
+En la base el campo se llama `body`; el hook lo devuelve como `text`, que es
+como lo esperan estas pantallas.
+
+Crear, editar y borrar viven en **`/whatsapp/plantillas`**, no aquí: dos sitios
+para editar lo mismo es como se llega a dos formatos incompatibles. El
+`WhatsappTemplatesDialog` que había aquí se retiró con el cambio.
+
+Las `compartida` las ve todo el proyecto; las `personal`, solo quien las creó —
+ni siquiera un administrador.
 
 Variables soportadas en `text`: `{nombre}`, `{nombreCompleto}`, `{producto}`,
 `{proyecto}`, `{email}`, `{telefono}`. `fillTemplate(text, { lead, projectName })`
 hace el reemplazo case-insensitive.
 
-`QuickActions` muestra dropdown con plantillas + botón "Mensaje en blanco" + botón
-"Editar plantillas" (abre `WhatsappTemplatesDialog`). Tras enviar, registra
-`onLogInteraction(lead, 'whatsapp')`.
+`QuickActions` muestra el desplegable de plantillas + "Mensaje en blanco" +
+"Editar plantillas" (lleva a `/whatsapp/plantillas`). Abre la conversación
+**dentro del CRM** —no `wa.me` en otra pestaña— y registra
+`onLogInteraction(lead, 'whatsapp')`. Si ese registro falla se dice en pantalla:
+antes se callaba, y la gestora se quedaba creyendo que había quedado apuntado.
 
-Tests: `test/whatsapp-templates.test.js` (9).
+El teléfono se decide con `telefonoParaWhatsapp` de `@/shared/lib/telefono`, que
+aplica el mismo criterio que el backend. **No uses `cleanPhone`** para esto: se
+limita a tirar lo que no sea un dígito, y con eso un `0034…` y un `600123456.0`
+de Excel pasaban el filtro y luego el chat no abría.
+
+Tests: `test/whatsapp-templates.test.js` (9), `test/telefono.test.js` (9).
 
 ## AbortController en fetches
 

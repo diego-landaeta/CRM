@@ -50,7 +50,8 @@ import {
   HandCoins,
   GitMerge,
   WhatsappLogo,
-} from '@phosphor-icons/react';
+  ChatText,
+  UsersThree, QrCode, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -62,6 +63,7 @@ import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { moduloApagado } from '@/shared/lib/modulos';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -84,6 +86,37 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
+      // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
+      {
+        label: 'WhatsApp',
+        icon: WhatsappLogo,
+        module: 'whatsapp',
+        apagable: 'whatsapp',
+        children: [
+          // Un solo sitio: el Chat. «Mi WhatsApp» y el panel del equipo eran del
+          // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
+          // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
+          // Abierto a todo el equipo por decision del owner. El aviso previo —lo
+          // que puede pasarle a su numero— ya esta, con su casilla y su registro
+          // de quien lo acepto (tarea #45).
+          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
+          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
+          // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
+          // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
+          // ruta que llegara a ellos. Vuelve cuando se rehaga sobre el chat
+          // nuevo, que ya guarda las conversaciones: sera leerlas, no meterse en
+          // la sesion de nadie.
+          // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
+          // la deja tocar el suyo. Estaba solo para administradores, asi que la
+          // pantalla existia pero ninguna gestora podia llegar a ella.
+          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          // La guia, en el menu y no escondida: si hay que preguntar donde esta,
+          // ya se ha perdido a quien tenia que leerla.
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
+        ],
+      },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
@@ -92,11 +125,11 @@ const NAV_SECTIONS = [
   {
     label: 'Captación',
     items: [
-      { label: 'Email', to: '/email-sequences', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
+      { label: 'Email', to: '/secuencias-email', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
       { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
-      { label: 'WhatsApp', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
+      { label: 'Widget web', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
@@ -119,6 +152,16 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Tutores',
+    items: [
+      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
+      { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
+      { label: 'Sin tutor', to: '/tutores/sin-tutor', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
+    ],
+  },
+  {
     label: 'Finanzas',
     items: [
       { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
@@ -132,16 +175,16 @@ const NAV_SECTIONS = [
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
+      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
       { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { label: 'Reportes', to: '/reports', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
-      { label: 'Análisis IA', to: '/reports/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/ai-chat', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      { label: 'Reportes', to: '/informes', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+      { label: 'Análisis IA', to: '/informes/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Chat IA', to: '/chat-ia', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -156,10 +199,11 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
-      { label: 'Mensajes', to: '/messages', icon: ChatsCircle },
+      { label: 'Mensajes', to: '/mensajes', icon: ChatsCircle },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
-      { label: 'Mis preferencias', to: '/preferences', icon: UserCircle },
+      // El tutor entra aqui: es donde cambia su contraseña.
+      { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
@@ -190,29 +234,65 @@ export function applyLabel(original, overrides) {
   return typeof o === 'string' && o.trim().length > 0 ? o : original;
 }
 
-function canSeeItem(item, role, modules, projectType) {
+// Interruptor de compilacion para dejar una parte fuera de una instalacion sin
+// borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
+// —esta en revision— pero viaja en el mismo build que el resto.
+//
+// Va aqui y no en los bundles del servidor porque esto es el menu: el modulo del
+// backend puede estar montado y aun asi no querer enseñarlo.
+// El criterio vive en shared/lib/modulos: no es solo el menu, tambien lo usa el
+// aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
+// que si y el otro que no.
+
+function canSeeItem(item, role, modules, projectType, soloColaboraciones, permisos) {
+  if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
+  // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
+  // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
+  // es un tutor paseandose por Prospectos o por Finanzas.
+  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
+  // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
+  // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
+  if (soloColaboraciones) {
+    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+  }
+
   // soporte ve todo (rol generico tipo dev)
   if (role === 'soporte' || role === 'superadmin') {
     if (item.module && modules && modules[item.module] === false) return false;
     return true;
   }
+  // Un permiso acotado manda sobre el rol.
+  //
+  // La entrada de Facturacion la ve quien PUEDE facturar, no todo el que sea
+  // gestor. En ISEIE ninguna gestora factura —lo hacen Adriana y Daniela, que
+  // son admin— y aun asi las doce veian el panel. En ISEIH lo veia Vanessa, que
+  // es «gestor» pero lleva tutores.
+  //
+  // Se comprueba solo para gestor: un admin puede facturar por su rol, y a
+  // soporte y superadmin se les ha dejado pasar justo arriba.
+  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
   if (item.roles && !item.roles.includes(role)) return false;
   if (item.module && modules && modules[item.module] === false) return false;
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType))
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
   const [open, setOpen] = useState(hasActiveChild);
+  // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
+  // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
+  // quedaria escondido. Cerrarlo a mano se respeta.
+  useEffect(() => { if (hasActiveChild) setOpen(true); }, [hasActiveChild]);
   if (!visible.length) return null;
   const displayLabel = applyLabel(label, labelOverrides);
 
@@ -478,58 +558,49 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
   );
 }
 
+// Las iniciales con las que se reconoce una marca sin logo.
+//
+// Casi todas empiezan por «IS» —ISECD, ISEF, ISSLOGG, ISAEG, ISEIH—, asi que
+// coger las dos primeras letras las deja a todas igual: «IS, IS, IS». Se quita
+// ese prefijo comun y se cogen las dos siguientes: EC, EF, SL, AE, EI. Cada una
+// distinta, y siguen siendo su nombre.
+function inicialesDe(nombre = '') {
+  const limpio = String(nombre).trim();
+  if (!limpio) return '··';
+  const palabras = limpio.split(/\s+/).filter(Boolean);
+  if (palabras.length > 1) {
+    return (palabras[0][0] + palabras[1][0]).toUpperCase();
+  }
+  const sola = palabras[0].toUpperCase();
+  const sinPrefijo = sola.length > 4 && sola.startsWith('IS') ? sola.slice(2) : sola;
+  return sinPrefijo.slice(0, 2);
+}
+
+// El color sale del propio nombre, siempre el mismo para la misma marca. Asi
+// ISECD es verde hoy y verde mañana: la memoria visual funciona porque el color
+// no cambia, no porque sea bonito.
+const TONOS = [
+  'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
+  'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
+];
+function tonoDe(nombre = '') {
+  let n = 0;
+  for (const ch of String(nombre)) n = (n * 31 + ch.charCodeAt(0)) % 9973;
+  return TONOS[n % TONOS.length];
+}
+
 function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
-  const dim = size === 'sm' ? 'w-7 h-7 text-base' : 'w-8 h-8 text-lg';
+  const [falloImagen, setFalloImagen] = useState(false);
+  const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
 
-  // 1) logo_url configurado en DB. Si es URL externa la usa directo;
-  //    si es solo un flag (sistema antiguo de upload), usa el endpoint API.
-  if (project?.logo_url) {
-    const isExternalUrl = /^https?:\/\//i.test(project.logo_url);
-    const src = isExternalUrl
-      ? project.logo_url
-      : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`;
-    return (
-      <img
-        src={src}
-        alt=""
-        width={24}
-        height={24}
-        loading="lazy"
-        decoding="async"
-        className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-
-  // 2) logo local segun slug (con variante por tema)
-  const localSrc = getLocalLogo(project?.slug, theme);
-  if (localSrc) {
-    return (
-      <img
-        src={localSrc}
-        alt={project.nombre || ''}
-        width={24}
-        height={24}
-        loading="lazy"
-        decoding="async"
-        className={`${dim} rounded-lg object-contain bg-muted/40 p-0.5 flex-shrink-0`}
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
-    );
-  }
-
-  // 3) emoji fallback
-  if (project?.emoji) {
-    return (
-      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0`}>
-        {project.emoji}
-      </div>
-    );
-  }
-
-  // 4) Caso especial "Todos los proyectos"
+  // «Todos los proyectos» va primero: no es una marca, es una vista.
   if (project?.isAll) {
     return (
       <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
@@ -538,12 +609,53 @@ function ProjectAvatar({ project, size = 'md' }) {
     );
   }
 
-  // 5) Fallback final: icono de maletín/cajita azul (cuando el proyecto no tiene
-  //    ni logo subido, ni logo local por slug, ni emoji). Antes se mostraba un
-  //    rectángulo vacío feo.
+  const externo = project?.logo_url && /^https?:\/\//i.test(project.logo_url);
+  const src = project?.logo_url
+    ? (externo
+        ? project.logo_url
+        : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`)
+    : getLocalLogo(project?.slug, theme);
+
+  if (src && !falloImagen) {
+    return (
+      // Fondo claro SIEMPRE, tambien en modo oscuro: estos logos vienen de las
+      // webs y muchos son de tinta oscura sobre transparente. Sin el fondo
+      // desaparecen en el panel oscuro y queda un cuadro vacio.
+      <span className={`${dim} rounded-lg bg-white ring-1 ring-black/5 dark:ring-white/10 flex items-center justify-center overflow-hidden flex-shrink-0`}>
+        <img
+          src={src}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-contain p-[3px]"
+          // Si el logo no carga —una web caida, una direccion cambiada— se
+          // enseñan las iniciales. Antes se escondia la imagen y quedaba un
+          // hueco, que parece que la pantalla esta rota.
+          onError={() => setFalloImagen(true)}
+        />
+      </span>
+    );
+  }
+
+  if (project?.emoji) {
+    return (
+      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-lg'}`}>
+        {project.emoji}
+      </div>
+    );
+  }
+
+  // Sin logo y sin emoji: iniciales con su color. Antes las tres marcas sin
+  // logo compartian el mismo icono de cajita y no habia forma de distinguirlas
+  // de un vistazo, que es justo para lo que sirve un icono.
   return (
-    <div className={`${dim} rounded-lg bg-primary/15 text-primary flex items-center justify-center flex-shrink-0`}>
-      <Package size={size === 'sm' ? 14 : 16} weight="duotone" />
+    <div
+      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'lg' ? 'text-base' : size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
+      title={project?.nombre || ''}
+    >
+      {inicialesDe(project?.nombre)}
     </div>
   );
 }
@@ -778,7 +890,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     let cancelled = false;
     async function fetchMsgCount() {
       try {
-        const res = await client.get('/messages/conversations/unread-count');
+        const res = await client.get('/mensajes/conversations/unread-count');
         if (!cancelled && res.success) setMsgUnreadBadge(res.data?.count || 0);
       } catch {}
     }
@@ -788,7 +900,16 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   }, []);
 
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
-  const rolLabel = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor' }[user?.role] || '';
+  // Vanessa y quien lleve las colaboraciones: solo tutores, nada mas.
+  // Un admin con la casilla NO se recorta: ya lo ve todo por su rol.
+  const soloColab = user?.gestor_colaboraciones === true
+    && !['superadmin', 'admin', 'soporte'].includes(user?.role);
+
+  // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
+  // que es dar de alta profesores y ajustarles el porcentaje.
+  const rolLabel = user?.gestor_colaboraciones
+    ? 'Colaboraciones'
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
@@ -804,42 +925,53 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* Logo + toggle */}
-      <div className={cn('flex items-center mb-6', collapsed ? 'flex-col gap-2' : 'gap-2.5 px-2')}>
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0">
-          <Package size={16} weight="bold" />
+      {/* La cabecera: el logo grande arriba y los textos debajo.
+          En una linea no cabia: con el logo, «MultiCRM» y la chapa de BETA en
+          240 pixeles, el nombre acababa cortado en «Multi…». Apilado, el logo
+          se ve de verdad —es lo que dice en que marca estas— y el texto cabe
+          entero. */}
+      <div className={cn('mb-6', collapsed ? 'flex flex-col items-center gap-2' : 'px-2')}>
+        <div className={cn('flex', collapsed ? 'flex-col items-center gap-2' : 'items-start justify-between gap-2')}>
+          {activeProject && activeProject.id !== -1 ? (
+            <ProjectAvatar project={activeProject} size={collapsed ? 'md' : 'lg'} />
+          ) : (
+            <div className={cn(
+              'rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm flex-shrink-0',
+              collapsed ? 'w-8 h-8' : 'w-12 h-12',
+            )}>
+              <Package size={collapsed ? 16 : 22} weight="bold" />
+            </div>
+          )}
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+              title={collapsed ? 'Expandir (Ctrl+B)' : 'Contraer (Ctrl+B)'}
+              className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
+            >
+              {collapsed ? <CaretRight size={14} weight="bold" /> : <CaretLeft size={14} weight="bold" />}
+            </button>
+          )}
         </div>
+
         {!collapsed && (
-          <>
-            <span className="font-semibold text-sm text-foreground flex-1">MultiCRM</span>
-            {BETA_MODE && (
-              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
-                BETA {BETA_VERSION}
-              </span>
-            )}
-            {onToggleCollapsed && (
-              <button
-                type="button"
-                onClick={onToggleCollapsed}
-                aria-label="Contraer barra lateral"
-                title="Contraer (Ctrl+B)"
-                className="hidden lg:flex w-7 h-7 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <CaretLeft size={14} weight="bold" />
-              </button>
-            )}
-          </>
-        )}
-        {collapsed && onToggleCollapsed && (
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label="Expandir barra lateral"
-            title="Expandir (Ctrl+B)"
-            className="hidden lg:flex w-8 h-8 rounded-md items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <CaretRight size={14} weight="bold" />
-          </button>
+          <div className="mt-2 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
+              {BETA_MODE && (
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                  BETA {BETA_VERSION}
+                </span>
+              )}
+            </div>
+            {/* La marca, ya con toda la anchura para ella: aqui si cabe entera. */}
+            <span className="block text-[11px] text-muted-foreground truncate">
+              {activeProject?.id === -1
+                ? 'todas las marcas'
+                : (activeProject?.nombre || 'sin marca elegida')}
+            </span>
+          </div>
         )}
       </div>
 
@@ -891,12 +1023,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
                 >
                   {(() => {
-                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al final).
+                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
+                    // final) y, dentro de cada una, por antiguedad.
+                    //
+                    // Antes iba por orden alfabetico y eso mezclaba las marcas
+                    // con las que se trabaja todos los dias con las que aun no
+                    // tienen ni web: ISEIH quedaba la quinta, detras de ISAEG,
+                    // ISECD e ISEF. Por antiguedad, lo que mas se usa queda
+                    // arriba, que es donde se busca sin leer.
                     const sorted = [...projects].sort((a, b) => {
                       const sA = a.sociedad_nombre || 'zzz';
                       const sB = b.sociedad_nombre || 'zzz';
                       if (sA !== sB) return sA.localeCompare(sB, 'es');
-                      return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+                      return (a.id || 0) - (b.id || 0);
                     });
                     const allEntry = projects.length > 1 ? (
                       <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
@@ -996,7 +1135,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type));
+          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
@@ -1008,6 +1147,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 role={user?.role}
                 modules={activeProject?.modules}
                 projectType={activeProject?.type}
+                soloColab={soloColab}
+                permisos={user}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}
@@ -1020,7 +1161,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 badge={
                   item.to === '/prospectos' && newLeadsBadge > 0 ? newLeadsBadge
                   : item.to === '/notificaciones' && spamReportsBadge > 0 ? spamReportsBadge
-                  : item.to === '/messages' && msgUnreadBadge > 0 ? msgUnreadBadge
+                  : item.to === '/mensajes' && msgUnreadBadge > 0 ? msgUnreadBadge
                   : undefined
                 }
                 labelOverrides={activeProject?.sidebar_labels}
@@ -1141,13 +1282,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 <UserMenuItem
                   icon={UserCircle}
                   label="Mi perfil"
-                  onClick={() => { setUserMenuOpen(false); navigate('/profile'); onNavigate?.(); }}
+                  onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
                   <UserMenuItem
                     icon={Gear}
                     label="Configuración"
-                    onClick={() => { setUserMenuOpen(false); navigate('/settings'); onNavigate?.(); }}
+                    onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}
                 <UserMenuItem

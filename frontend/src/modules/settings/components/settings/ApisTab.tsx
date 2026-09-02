@@ -57,8 +57,8 @@ export default function ApisTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold">APIs globales</h2>
-        <p className="text-[13px] text-muted-foreground mt-0.5">Credenciales compartidas por todos los proyectos (ej: Claude AI para reportes). Las APIs por proyecto se configuran en Proyectos &gt; Configurar &gt; APIs.</p>
+        <h2 className="text-seccion">APIs globales</h2>
+        <p className="text-normal text-muted-foreground mt-0.5">Credenciales compartidas por todos los proyectos (ej: Claude AI para reportes). Las APIs por proyecto se configuran en Proyectos &gt; Configurar &gt; APIs.</p>
       </div>
 
       {loading ? (
@@ -105,14 +105,14 @@ function CredentialCard({ service, projectName, credential, onConfigure, onTest,
       </div>
       <div className="flex-1">
         <p className="font-semibold text-sm">{service.name}</p>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-secundario text-muted-foreground">
           {service.description} - {projectName}
           {credential && <> - <span className="font-mono">{credential.masked_value}</span></>}
         </p>
       </div>
       {credential ? (
         <>
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
+          <span className={`px-2.5 py-1 rounded-full text-secundario font-medium ${
             credential.last_test_result === 'ok'
               ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
               : 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400'
@@ -123,7 +123,7 @@ function CredentialCard({ service, projectName, credential, onConfigure, onTest,
         </>
       ) : (
         <>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">sin configurar</span>
+          <span className="px-2.5 py-1 rounded-full text-secundario font-medium bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">sin configurar</span>
           <button onClick={onConfigure} className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90">Configurar</button>
         </>
       )}
@@ -186,12 +186,12 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
 
           <form onSubmit={handleSave} className="space-y-3">
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">API Key / Token *</label>
+              <label className="text-secundario font-medium text-muted-foreground mb-1 block">API Key / Token *</label>
               <input type="password" value={value} onChange={e => setValue(e.target.value)} placeholder={service.placeholder} className={inputClass + ' font-mono'} required autoFocus />
-              <p className="text-[10px] text-muted-foreground mt-1">Se cifra con AES-256-GCM antes de guardar</p>
+              <p className="text-secundario text-muted-foreground mt-1">Se cifra con AES-256-GCM antes de guardar</p>
             </div>
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Metadata (JSON opcional)</label>
+              <label className="text-secundario font-medium text-muted-foreground mb-1 block">Metadata (JSON opcional)</label>
               <textarea value={metadata} onChange={e => setMetadata(e.target.value)} placeholder='{"account_id": "12345", "refresh_token": "..."}' rows={3} className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-xs outline-none font-mono resize-none focus:border-primary" />
             </div>
             <div className="flex justify-end gap-2 pt-2">

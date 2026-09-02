@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
+import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.REMINDER_TICK_MS || String(15 * 60 * 1000)); // 15 min
 
@@ -36,7 +37,7 @@ async function processDueReminders() {
       type: 'lead_reminder',
       title: `Recordatorio: ${rem.lead_nombre}`,
       message: rem.nota || `Tienes un recordatorio vencido para ${rem.lead_nombre} (${rem.proyecto_nombre})`,
-      link_path: `/leads/${rem.lead_id}`,
+      link_path: `/prospectos/${rem.lead_id}`,
       metadata: { reminder_id: rem.id, lead_id: rem.lead_id, fecha: rem.fecha_recordatorio },
     });
 
@@ -52,7 +53,7 @@ async function processDueReminders() {
             <p>Tienes un recordatorio vencido para el prospecto <strong>${rem.lead_nombre}</strong>.</p>
             ${rem.nota ? `<p><em>"${rem.nota}"</em></p>` : ''}
             <p>Fecha: ${rem.fecha_recordatorio}</p>
-            <p><a href="${baseUrl}/leads/${rem.lead_id}">Ver prospecto →</a></p>
+            <p><a href="${baseUrl}/prospectos/${rem.lead_id}">Ver prospecto →</a></p>
           `,
           tags: ['reminder', `lead-${rem.lead_id}`],
         });
@@ -91,6 +92,6 @@ export function startReminderScheduler() {
     return;
   }
   tick();
-  setInterval(tick, TICK_MS);
+  vigilar('recordatorios', 'Recordatorios de seguimiento', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Reminder scheduler iniciado');
 }

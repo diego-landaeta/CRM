@@ -1,14 +1,14 @@
 // Sección de reportes descargables. Rango de fechas arriba + una tarjeta por
 // reporte con botones Excel/CSV. Cada tarjeta pega a /reports/<key> y arma el
 // archivo en el navegador (Excel con write-excel-file, CSV manual).
-import { useState } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
+import { useState, useEffect } from 'react';
+import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
 type ColType = 'string' | 'number' | 'date' | 'estado';
 interface Col { h: string; k: string; t?: ColType }
-interface ReportDef { key: string; label: string; desc: string; icon: React.ComponentType<{ size?: number; weight?: 'regular' | 'bold' | 'fill' }>; cols: Col[] }
+interface ReportDef { key: string; label: string; desc: string; icon: React.ElementType; cols: Col[] }
 
 const ESTADO: Record<string, string> = {
   nuevo: 'Nuevo', por_contactar: 'Por contactar', contactado: 'Contactado',
@@ -37,13 +37,15 @@ const REPORTS: ReportDef[] = [
     ],
   },
   {
-    key: 'ventas', label: 'Ventas (cobros)', icon: Receipt,
-    desc: 'Por fecha de PAGO: cada cuota donde cae. Incluye mes de origen, país y pendiente de cobro.',
+    key: 'ventas', label: 'Ventas (conversiones)', icon: Receipt,
+    desc: 'Una fila por venta, según su fecha de conversión. No incluye cuotas ni abonos como ventas adicionales.',
     cols: [
-      { h: 'Fecha pago', k: 'fecha_pago', t: 'date' }, { h: 'Cliente', k: 'cliente' },
-      { h: 'Formación', k: 'formacion' }, { h: 'Importe €', k: 'importe', t: 'number' },
-      { h: 'Plan de pago', k: 'plan_pago' }, { h: 'Mes origen', k: 'mes_origen' }, { h: 'País', k: 'pais' },
-      { h: 'Pendiente €', k: 'pendiente', t: 'number' }, { h: 'Método', k: 'metodo_pago' },
+      { h: 'Fecha venta', k: 'fecha_venta', t: 'date' }, { h: 'Cliente', k: 'cliente' },
+      { h: 'Formación', k: 'formacion' }, { h: 'Venta total €', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Estado lead', k: 'estado', t: 'estado' },
+      { h: 'Responsable', k: 'responsable' }, { h: 'País', k: 'pais' },
+      { h: 'Método', k: 'metodo_pago' }, { h: 'Proyecto', k: 'proyecto' },
     ],
   },
   {
@@ -67,6 +69,58 @@ const REPORTS: ReportDef[] = [
       { h: 'Vendedora', k: 'vendedora' }, { h: 'Ventas', k: 'ventas', t: 'number' },
       { h: 'Clientes', k: 'clientes', t: 'number' }, { h: 'Total €', k: 'total', t: 'number' },
       { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
+    ],
+  },
+  {
+    key: 'ventas-asesora', label: 'Ventas por asesora (detalle)', icon: Trophy,
+    desc: 'Una fila por venta con su asesora, la fecha, el cliente y sus datos de contacto, el importe y como va el cobro.',
+    cols: [
+      { h: 'Asesora', k: 'asesora' }, { h: 'Fecha venta', k: 'fecha_venta', t: 'date' },
+      { h: 'Cliente', k: 'cliente' }, { h: 'Email', k: 'cliente_email' },
+      { h: 'Telefono', k: 'cliente_telefono' }, { h: 'Pais', k: 'pais' },
+      { h: 'Formacion', k: 'formacion' }, { h: 'Venta total EUR', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' }, { h: 'Pendiente EUR', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Metodo', k: 'metodo_pago' },
+      { h: 'N cobros', k: 'num_cobros', t: 'number' },
+      { h: 'Cuotas pendientes', k: 'cuotas_pendientes', t: 'number' },
+      { h: 'N facturas', k: 'facturas', t: 'number' },
+      { h: 'Estado lead', k: 'estado_lead', t: 'estado' },
+      { h: 'Fecha entrada', k: 'fecha_entrada', t: 'date' }, { h: 'Proyecto', k: 'proyecto' },
+    ],
+  },
+  {
+    key: 'asesoras-mes', label: 'Asesoras por mes', icon: UsersThree,
+    desc: 'Por asesora y mes: leads que le entraron, ventas cerradas, tasa de conversion, lo vendido y lo cobrado ese mes.',
+    cols: [
+      { h: 'Mes', k: 'mes' }, { h: 'Asesora', k: 'asesora' },
+      { h: 'Leads', k: 'leads', t: 'number' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Mensualidades cobradas', k: 'mensualidades', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Tasa conversion %', k: 'tasa_conversion', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' }, { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+      { h: 'Cobrado de ventas EUR', k: 'cobrado_venta', t: 'number' },
+      { h: 'Cobrado de cuotas EUR', k: 'cobrado_cuotas', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
+    ],
+  },
+  {
+    key: 'paises', label: 'Países', icon: ChartBar,
+    desc: 'Ventas por país, deducido del prefijo del teléfono. La columna de país fiscal no sirve: casi todos los leads tienen España por defecto.',
+    cols: [
+      { h: 'País', k: 'pais' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+    ],
+  },
+  {
+    key: 'formaciones', label: 'Formaciones más vendidas', icon: ListChecks,
+    desc: 'Ranking de formaciones. Cada fila dice si viene del catálogo o de texto tecleado a mano.',
+    cols: [
+      { h: 'Formación', k: 'formacion' }, { h: 'Origen del dato', k: 'origen' },
+      { h: 'Ventas', k: 'ventas', t: 'number' }, { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
     ],
   },
   {
@@ -133,11 +187,48 @@ function downloadBlob(blob: Blob, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ReportsDownloadSection({ projectId, projectName }: { projectId?: number; projectName?: string }) {
-  const [from, setFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+export default function ReportsDownloadSection({ projectId, projectName, from: desdeArriba, to: hastaArriba }: { projectId?: number; projectName?: string; from?: string; to?: string }) {
+  // El rango lo manda la cabecera de la pagina: aqui no se elige aparte.
+  const from = desdeArriba || '';
+  const to = hastaArriba || '';
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ report: ReportDef; rows: Record<string, unknown>[]; base: string } | null>(null);
+  const [bajandoTodo, setBajandoTodo] = useState(false);
+  // Lo que el informe «por factura» va a dejar fuera. Se pregunta ANTES de
+  // descargar: una venta cobrada y aun sin facturar no aparece —el informe
+  // cuenta por fecha de factura— y quien descarga se lleva un total mas bajo
+  // sin enterarse. Paso el fin de semana del 15 y 16 de agosto.
+  const [aviso, setAviso] = useState<{ ventas: number; importe: number; detalle: Array<{ id: number; cliente: string; cobrado: string; ultimo_cobro: string; curso: string }> } | null>(null);
+  const [pendiente, setPendiente] = useState<null | (() => void)>(null);
+  const [comprobando, setComprobando] = useState(false);
+
+  // Devuelve true si se puede seguir; si hay ventas sin facturar, abre el aviso
+  // y deja la descarga en espera de que la persona decida.
+  async function comprobarAntes(seguir: () => void) {
+    if (!from || !to) { seguir(); return; }
+    setComprobando(true);
+    try {
+      const r = await client.get(`/informes/aviso-sin-factura?from=${from}&to=${to}${projectId ? `&projectId=${projectId}` : ''}`);
+      const d = r?.success ? r.data : null;
+      if (d && d.ventas > 0) { setAviso(d); setPendiente(() => seguir); return; }
+    } catch { /* si la comprobacion falla no se bloquea la descarga */ }
+    finally { setComprobando(false); }
+    seguir();
+  }
+
+  // Todo junto, una hoja por bloque. Es lo que se pide cuando alguien quiere
+  // mirar los numeros fuera del CRM sin ir juntando ficheros sueltos.
+  async function bajarTodo() {
+    setBajandoTodo(true);
+    try {
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({ projectId, projectName, from, to });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Reporte principal descargado', description: `${r.hojas} hojas · ${r.nombre}` });
+    } catch (err) {
+      toast({ title: 'No se pudo generar el reporte', description: (err as Error)?.message, variant: 'destructive' });
+    } finally { setBajandoTodo(false); }
+  }
   const ready = Boolean(from && to);
 
   async function fetchRows(report: ReportDef): Promise<{ rows: Record<string, unknown>[]; base: string }> {
@@ -147,7 +238,7 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
     if (projectId) p.set('projectId', String(projectId));
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
-    const res = await client.get(`/reports/${report.key}?${p.toString()}`);
+    const res = await client.get(`/informes/${report.key}?${p.toString()}`);
     const rows: Record<string, unknown>[] = (res as { data?: Record<string, unknown>[] }).data || [];
     const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
     return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };
@@ -203,25 +294,19 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
         <div>
           <h2 className="text-base font-semibold text-foreground">Reportes descargables</h2>
           <p className="text-xs text-muted-foreground">
-            Elige el rango de fechas (Desde y Hasta) y descarga en Excel o CSV.
-            {!ready && <span className="text-amber-600 dark:text-amber-500"> Selecciona ambas fechas para habilitar la descarga.</span>}
+            Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
         </div>
-        <div className="flex items-end gap-2 rounded-lg border-2 border-primary/40 bg-primary/5 px-3 py-2">
-          <span className="hidden lg:block self-center text-xs font-semibold text-primary">Fechas del<br />reporte</span>
-          <label className="text-xs font-medium text-foreground">Desde
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
-          <label className="text-xs font-medium text-foreground">Hasta
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
-        </div>
+        <button
+          type="button"
+          onClick={() => comprobarAntes(bajarTodo)}
+          disabled={bajandoTodo}
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          title="Un solo Excel con resumen, evolución, asesoras, países, formaciones y el detalle de ventas"
+        >
+          <DownloadSimple size={16} weight="bold" />
+          {comprobando ? 'Comprobando…' : bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
+        </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -243,11 +328,11 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
                   <Eye size={13} weight="bold" /> {busy === `${r.key}:preview` ? 'Cargando…' : 'Vista previa'}
                 </button>
-                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'xlsx')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => comprobarAntes(() => run(r, 'xlsx'))}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> {busy === `${r.key}:xlsx` ? 'Generando…' : 'Excel'}
                 </button>
-                <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'csv')}
+                <button type="button" disabled={busy !== null || !ready} onClick={() => comprobarAntes(() => run(r, 'csv'))}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
                   <FileCsv size={13} weight="bold" /> {busy === `${r.key}:csv` ? 'Generando…' : 'CSV'}
                 </button>
@@ -268,11 +353,11 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
                 <p className="text-[11px] text-muted-foreground">{preview.rows.length} fila{preview.rows.length === 1 ? '' : 's'} · mostrando las primeras {Math.min(50, preview.rows.length)}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => run(preview.report, 'xlsx', preview)} disabled={busy !== null}
+                <button onClick={() => comprobarAntes(() => run(preview.report, 'xlsx', preview))} disabled={busy !== null}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> Excel
                 </button>
-                <button onClick={() => run(preview.report, 'csv', preview)} disabled={busy !== null}
+                <button onClick={() => comprobarAntes(() => run(preview.report, 'csv', preview))} disabled={busy !== null}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-xs font-medium">
                   <FileCsv size={13} weight="bold" /> CSV
                 </button>
@@ -296,6 +381,53 @@ export default function ReportsDownloadSection({ projectId, projectName }: { pro
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+      {aviso && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => { setAviso(null); setPendiente(null); }}>
+          <div onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-lg p-5 space-y-3">
+            <h2 className="font-bold text-base">
+              Hay {aviso.ventas} {aviso.ventas === 1 ? 'venta cobrada sin facturar' : 'ventas cobradas sin facturar'}
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Suman <strong className="text-foreground tabular-nums">
+                {Number(aviso.importe).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+              </strong> y <strong className="text-foreground">no van a salir en este informe</strong>,
+              porque cuenta por la fecha de la factura. En cuanto se les emita la factura aparecerán solas.
+            </p>
+
+            <ul className="max-h-48 overflow-y-auto divide-y divide-border border border-border rounded-md text-xs">
+              {aviso.detalle.map((v) => (
+                <li key={v.id} className="px-3 py-1.5 flex items-center gap-2">
+                  <span className="flex-1 truncate">{v.cliente}</span>
+                  <span className="text-muted-foreground truncate max-w-[10rem] hidden sm:block">{v.curso}</span>
+                  <span className="tabular-nums text-muted-foreground">{String(v.ultimo_cobro).slice(0, 10)}</span>
+                  <span className="tabular-nums font-semibold">
+                    {Number(v.cobrado).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <p className="text-xs text-muted-foreground">
+              Si lo que quieres es ver el dinero que entró —esté facturado o no—, descarga igual y
+              consulta el informe en su vista por cobro.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button type="button" onClick={() => { setAviso(null); setPendiente(null); }}
+                className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted/50">
+                Cancelar
+              </button>
+              <button type="button"
+                onClick={() => { const f = pendiente; setAviso(null); setPendiente(null); f?.(); }}
+                className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold">
+                Descargar igual
+              </button>
             </div>
           </div>
         </div>

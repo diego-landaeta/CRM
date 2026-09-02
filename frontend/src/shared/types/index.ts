@@ -28,7 +28,7 @@ export type LeadOrigen =
   | 'chatgpt_ia'
   | 'otro';
 
-export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte';
+export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte' | 'tutor';
 
 export type ProjectType = 'crm' | 'ia';
 
@@ -72,6 +72,8 @@ export interface Lead {
   nombre: string;
   email: string;
   telefono?: string | null;
+  /** El usuario de WhatsApp, cuando no hay numero o ademas del numero. */
+  whatsapp_usuario?: string | null;
   estado: LeadStatus;
   status?: LeadStatus;
   origen?: LeadOrigen | null;
@@ -148,6 +150,13 @@ export interface Client {
   origen?: LeadOrigen | null;
   notas?: string | null;
   cursos?: string[];
+  // El programa contratado y su plan de cuotas, igual que en ISEIE.
+  programas?: string[];
+  total_cuotas?: number;
+  cuotas_pagadas?: number;
+  cuotas_pendientes?: number;
+  total_pagos?: number;
+  proximo_vencimiento?: string | null;
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';

@@ -5,6 +5,10 @@ import { useProjectContext } from './contexts/ProjectContext';
 const ROUTE_TITLES = {
   '/': 'Dashboard',
   '/prospectos': 'Prospectos',
+  '/whatsapp': 'Chat de WhatsApp',
+  '/whatsapp/chat': 'Chat de WhatsApp',
+  '/whatsapp/conexion': 'Conexion de WhatsApp',
+  '/whatsapp/ayuda': 'Como se usa WhatsApp',
   '/prospectos/pipeline': 'Pipeline',
   '/prospectos/audiencias': 'Audiencias',
   '/clientes': 'Clientes',
@@ -25,6 +29,7 @@ const ROUTE_TITLES = {
   '/finanzas/ingresos': 'Ingresos',
   '/finanzas/conversiones': 'Conversiones',
   '/finanzas/egresos': 'Egresos',
+  '/finanzas/ventas-analisis': 'Análisis de ventas',
   '/finanzas/por-cobrar': 'Cuentas por cobrar',
   '/finanzas/por-pagar': 'Cuentas por pagar',
   '/finanzas/comisiones': 'Comisiones',
@@ -38,18 +43,18 @@ const ROUTE_TITLES = {
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',
   '/notificaciones': 'Notificaciones',
-  '/email-sequences': 'Email seguimiento',
+  '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
   '/configuracion/documentos': 'Numeración de documentos',
-  '/configuracion/email-templates': 'Plantillas de email',
-  '/reports': 'Reportes',
-  '/messages': 'Mensajes',
+  '/configuracion/plantillas-email': 'Plantillas de email',
+  '/informes': 'Reportes',
+  '/mensajes': 'Mensajes',
   '/manual': 'Manual',
-  '/settings': 'Configuración',
-  '/profile': 'Mi perfil',
+  '/configuracion': 'Configuración',
+  '/perfil': 'Mi perfil',
   '/dev/components': 'Catálogo UI',
   '/prueba_ui': 'Laboratorio UI',
   '/prueba_ui_leads': 'Prueba UI Prospectos',
@@ -142,6 +147,19 @@ const IntegrationsPage = lazy(() => import('./modules/accounting/pages/Integrati
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
+// Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
+// plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
+// navegador remoto— y se han retirado con el.
+const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
+const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
+const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+// La guia para quien usa el chat. docs/10-whatsapp.md esta bien para nosotros,
+// pero una gestora no entra al repositorio: lo necesita donde trabaja.
+const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
+const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
+const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
+const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
+const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -152,6 +170,8 @@ const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetailPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
+const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
@@ -218,10 +238,20 @@ function App() {
             <Route index element={<ClientsPage />} />
             <Route path="matriculas" element={<MatriculasPage />} />
           </Route>
-          <Route path="/sales" element={<SalesPage />} />
+          <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
+
+          <Route path="/whatsapp" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
+          <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
+          <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          <Route path="/tutores" element={<TutoresPage />} />
+          <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
+          <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
+          <Route path="/mis-cursos" element={<MisCursosPage />} />
 
           {/* Captación — tabs */}
           <Route path="/captacion" element={<CaptacionLayout />}>
@@ -253,6 +283,8 @@ function App() {
           {/* Finanzas — tabs */}
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
+            <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
+            <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             <Route path="ingresos" element={<IncomePage />} />
             <Route path="conversiones" element={<RevenuePage />} />
@@ -270,7 +302,7 @@ function App() {
             <Route path="facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           </Route>
 
-          <Route path="/email-sequences" element={<EmailSequencesPage />} />
+          <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
@@ -278,22 +310,22 @@ function App() {
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
-          <Route path="/configuracion/email-templates" element={<EmailTemplatesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/reports/ia" element={<ReportsIAPage />} />
-          <Route path="/ai-chat" element={<AIChatPage />} />
+          <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
+          <Route path="/informes" element={<ReportsPage />} />
+          <Route path="/informes/ia" element={<ReportsIAPage />} />
+          <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/mensajes" element={<MessagesPage />} />
           <Route path="/solicitudes-cambio" element={<ChangeRequestsPage />} />
           <Route path="/solicitudes-cambio/:id" element={<ChangeRequestDetailPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
-          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/preferencias" element={<PreferencesPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/configuracion" element={<SettingsPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
           {UI_PREVIEW_ENABLED && (
             <>
               <Route path="/prueba_ui" element={<UiPreviewHomePage />} />
@@ -309,6 +341,21 @@ function App() {
             <Route path="/dev/components" element={<DevComponentsPage />} />
           )}
           {/* Catch-all 404 dentro del layout (mantiene sidebar y header) */}
+
+          {/* Las direcciones de antes, en ingles, siguen funcionando.
+              Sin esto se rompen los favoritos de todo el equipo y los enlaces
+              que haya en correos ya enviados: quien pulse uno veria «pagina no
+              encontrada» y pensaria que el CRM esta roto. */}
+          <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
+          <Route path="/reports/ia" element={<Navigate to="/informes/ia" replace />} />
+          <Route path="/reports" element={<Navigate to="/informes" replace />} />
+          <Route path="/sales" element={<Navigate to="/ventas" replace />} />
+          <Route path="/profile" element={<Navigate to="/perfil" replace />} />
+          <Route path="/preferences" element={<Navigate to="/preferencias" replace />} />
+          <Route path="/messages" element={<Navigate to="/mensajes" replace />} />
+          <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
+          <Route path="/ai-chat" element={<Navigate to="/chat-ia" replace />} />
+          <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

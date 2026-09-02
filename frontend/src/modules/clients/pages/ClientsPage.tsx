@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, lazy, Suspense, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
@@ -18,13 +20,17 @@ import { useAuth } from '@/contexts/AuthContext';
 function exportCSV(clients: Client[], filename: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
   const rows = [
-    ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Curso / Programa', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
+    ['Nombre', 'Email', 'Teléfono', 'Gestora', 'Curso / Programa', 'Cuotas totales', 'Cuotas pagadas', 'Cuotas pendientes', 'Próximo vencimiento', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
     ...clients.map(c => [
       c.nombre || '',
       c.email || '',
       c.telefono || '',
       c.responsable_nombre || '',
-      (c.cursos || []).join(' · '),
+      ((c.programas && c.programas.length ? c.programas : c.cursos) || []).join(' · '),
+      Number(c.total_cuotas) || 0,
+      Number(c.cuotas_pagadas) || 0,
+      Number(c.cuotas_pendientes) || 0,
+      c.proximo_vencimiento ? String(c.proximo_vencimiento).slice(0, 10) : '',
       c.conversiones,
       fmtNum(c.total_compras),
       fmtNum(c.total_pagado),
@@ -63,15 +69,34 @@ function formatRelative(dateStr: string | null | undefined, { future = false }: 
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
+// El plan de cuotas de un vistazo: cuántas hay, cuántas se han cobrado y
+// cuántas quedan. Es lo que se mira para saber por dónde va un cliente.
+function CeldaCuotas({ client: c }: { client: Client }) {
+  const total = Number(c.total_cuotas) || 0;
+  const pagadas = Number(c.cuotas_pagadas) || 0;
+  const pendientes = Number(c.cuotas_pendientes) || 0;
+  if (total === 0) return <span className="text-xs text-muted-foreground/60">Sin plan</span>;
+  return (
+    <div className="min-w-[145px]">
+      <span className="inline-flex px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">
+        {total} {total === 1 ? 'cuota' : 'cuotas'}
+      </span>
+      <div className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap">
+        <span className="text-green-700 dark:text-green-400">{pagadas} pagadas</span>
+        <span> · </span>
+        <span className={pendientes > 0 ? 'text-orange-700 dark:text-orange-400' : ''}>
+          {pendientes} pendientes
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
 // exacto en que se registró el contacto, no "hoy"/"hace 3d".
 function fmtFecha(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
-}
-
-function cleanPhone(phone: string | null | undefined): string {
-  return (phone || '').replace(/[^\d]/g, '');
 }
 
 interface QuickActionsProps {
@@ -81,14 +106,32 @@ interface QuickActionsProps {
 }
 
 function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
-  const wa = c.telefono ? cleanPhone(c.telefono) : null;
+  const navigate = useNavigate();
+  const wa = telefonoParaWhatsapp(c.telefono);
+
+  // Se abre el chat DENTRO del CRM. Antes esto lanzaba wa.me en otra pestaña:
+  // se salia del CRM, no quedaba registro, y con varias sesiones enlazadas
+  // abria la del navegador —que puede ser la personal— en vez de la del CRM.
+  async function abrirAqui() {
+    const destino = await abrirChatCrm({ leadId: c.id, telefono: c.telefono });
+    if (!destino) {
+      toast({
+        title: 'No se ha podido abrir el chat',
+        description: 'Comprueba en WhatsApp / Conexion que tu numero sigue enlazado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    navigate(destino);
+  }
+
   return (
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
-        <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Abrir WhatsApp"
+        <button type="button" onClick={() => abrirAqui()} title="WhatsApp" aria-label="Abrir WhatsApp"
           className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <WhatsappLogo size={14} weight="regular" />
-        </a>
+        </button>
       )}
       {c.email && (
         <a href={`mailto:${c.email}`} title="Email" aria-label="Enviar email"
@@ -154,7 +197,7 @@ export default function ClientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [saleOpen, setSaleOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 500;
 
   // Debounce búsqueda 350ms
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,10 +210,11 @@ export default function ClientsPage() {
   // Cargar gestores (solo admin/superadmin)
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
-    client.get('/users?limit=200').then((r) => {
+    const projectFilter = !isAllProjects && activeProject?.id ? `&projectId=${activeProject.id}` : '';
+    client.get(`/users?active=true&role=gestor&limit=100${projectFilter}`).then((r) => {
       if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
-    }).catch(() => { /* ignore */ });
-  }, [user?.role]);
+    }).catch(() => setGestores([]));
+  }, [user?.role, activeProject?.id, isAllProjects]);
 
   // Cargar productos del proyecto activo
   useEffect(() => {
@@ -212,25 +256,7 @@ export default function ClientsPage() {
       if (controller.signal.aborted) return;
       if (res.success) {
         setTotalBackend(Number((res as { pagination?: { total?: number } }).pagination?.total) || 0);
-        const enriched = await Promise.all(((res.data as Array<Client>) || []).map(async (l) => {
-          try {
-            const cr = await client.get(`/conversions/by-lead/${l.id}`);
-            const convs = cr.success ? (cr.data as Array<{ importe_total?: number; importe_pagado?: number; fecha_compra?: string; created_at?: string; producto_contratado?: string }>) : [];
-            const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
-            const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
-            const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-            // Cursos/programas comprados (únicos, en orden de compra más reciente).
-            const cursos = [...new Set(convs.map((c) => (c.producto_contratado || '').trim()).filter(Boolean))];
-            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv, cursos } as Client;
-          } catch {
-            return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 } as Client;
-          }
-        }));
-        // El enriquecimiento es async y no lleva signal: si el proyecto cambió
-        // mientras tanto, no pisar la lista del proyecto activo (bug: cargaba
-        // clientes de otro proyecto).
-        if (controller.signal.aborted) return;
-        setClients(enriched);
+        setClients(((res.data as Array<Client>) || []));
       }
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
@@ -287,26 +313,10 @@ export default function ClientsPage() {
     setDeleteClient(c);
   }
 
-  async function handleUpsellCreated() {
+  function handleUpsellCreated() {
     setUpsellLead(null);
     toast({ title: 'Venta registrada', description: 'Se actualizó el historial del cliente' });
-    // Recargar datos del cliente
-    if (activeProject?.id) {
-      const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
-      if (res.success) {
-        const enriched = await Promise.all((res.data || []).map(async (l) => {
-          try {
-            const cr = await client.get(`/conversions/by-lead/${l.id}`);
-            const convs = cr.success ? cr.data : [];
-            const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
-            const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
-            const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv };
-          } catch { return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 }; }
-        }));
-        setClients(enriched);
-      }
-    }
+    setReloadKey((k) => k + 1);
   }
 
   return (
@@ -331,7 +341,9 @@ export default function ClientsPage() {
       <Suspense fallback={null}>
         <RegisterSaleDialog
           open={saleOpen}
-          project={activeProject}
+          project={activeProject?.id
+            ? { id: activeProject.id, nombre: activeProject.nombre }
+            : null}
           onClose={() => setSaleOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
@@ -399,7 +411,10 @@ export default function ClientsPage() {
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                     <th className="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Teléfono</th>
                     <th className="text-left px-4 py-2.5 font-bold">Curso / Programa</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Gestora</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Cuotas</th>
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
                     <th className="text-right px-4 py-2.5 font-bold">Facturado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
@@ -413,19 +428,25 @@ export default function ClientsPage() {
                     <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <td className="px-4 py-3">
                         <div className="font-semibold">{c.nombre}</div>
-                        <div className="text-xs text-muted-foreground">{c.responsable_nombre || '—'}</div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs tabular-nums whitespace-nowrap">{c.telefono || '—'}</td>
                       <td className="px-4 py-3">
-                        {c.cursos && c.cursos.length > 0 ? (
-                          <div className="flex flex-col gap-0.5 max-w-[220px]">
-                            <span className="text-xs font-medium text-foreground truncate" title={c.cursos.join(' · ')}>{c.cursos[0]}</span>
-                            {c.cursos.length > 1 && (
-                              <span className="text-[10px] text-muted-foreground">+{c.cursos.length - 1} más</span>
-                            )}
-                          </div>
-                        ) : <span className="text-xs text-muted-foreground/60">—</span>}
+                        {(() => {
+                          // El programa contratado; si no hay venta todavía, el que pidió.
+                          const progs = (c.programas && c.programas.length ? c.programas : c.cursos) || [];
+                          return progs.length > 0 ? (
+                            <div className="flex flex-col gap-0.5 max-w-[220px]">
+                              <span className="text-xs font-medium text-foreground truncate" title={progs.join(' · ')}>{progs[0]}</span>
+                              {progs.length > 1 && (
+                                <span className="text-[10px] text-muted-foreground">+{progs.length - 1} más</span>
+                              )}
+                            </div>
+                          ) : <span className="text-xs text-muted-foreground/60">—</span>;
+                        })()}
                       </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{c.responsable_nombre || '—'}</td>
+                      <td className="px-4 py-3"><CeldaCuotas client={c} /></td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>

@@ -24,6 +24,8 @@ interface Props {
   className?: string;
   /** Si false, no muestra columna de acciones (modo solo lectura) */
   canEdit?: boolean;
+  /** Mes (YYYY-MM) que manda desde la pantalla. */
+  periodo?: string;
 }
 
 function fmt(n: number) {
@@ -35,26 +37,30 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function GestoresStatsTable({ projectId, className = '', canEdit = true }: Props) {
+export default function GestoresStatsTable({ projectId, className = '', canEdit = true, periodo: periodoProp }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editVentas, setEditVentas] = useState('');
   const [editFact, setEditFact] = useState('');
   const [saving, setSaving] = useState(false);
-  const periodo = currentPeriodo();
+  // El mes que diga el filtro de arriba; si no viene, el actual.
+  const periodo = periodoProp || currentPeriodo();
 
   function load() {
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
-    client.get<{ gestores: GestorRow[] }>('/sales/gestores-stats', { params })
+    // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
+    // backend y salia todo a cero aunque arriba se estuviera mirando el año.
+    if (periodo) params.periodo = periodo;
+    client.get<{ gestores: GestorRow[] }>('/ventas/gestores-stats', { params })
       .then((r) => { setRows(r?.data?.gestores || []); })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(row: GestorRow) {
     setEditingId(row.user_id);
@@ -65,7 +71,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
   async function saveEdit(row: GestorRow) {
     setSaving(true);
     try {
-      await client.post('/sales/goals', {
+      await client.post('/ventas/goals', {
         user_id: row.user_id,
         project_id: projectId || null,
         periodo_yyyymm: periodo,
@@ -88,7 +94,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Users size={16} weight="duotone" className="text-blue-600" />
-          Equipo de ventas — {periodo}
+          Equipo de ventas — {periodo === 'all' ? 'histórico' : periodo}
         </h3>
         <span className="text-[11px] text-muted-foreground">{rows.length} {rows.length === 1 ? 'gestor' : 'gestores'}</span>
       </div>
@@ -100,7 +106,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
         <p className="text-xs text-muted-foreground text-center py-4">No hay gestores activos.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="tabla-cifras w-full text-sm">
             <thead className="text-[11px] text-muted-foreground border-b border-border">
               <tr>
                 <th className="text-left py-2 font-medium">Gestor</th>

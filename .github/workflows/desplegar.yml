@@ -1,0 +1,71 @@
+# Despliegue desde GitHub, para cuando no se puede entrar por SSH desde casa.
+#
+# Existe porque una VPN puede interceptar todo lo que no sea web y dejar el SSH
+# sin pasar: da igual el nodo y da igual el pais. Las maquinas de GitHub no
+# tienen ese problema, asi que entran ellas.
+#
+# Se lanza a mano —nunca solo— desde Actions o con `gh workflow run`.
+name: Desplegar
+
+on:
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: A donde se sube
+        required: true
+        default: staging
+        type: choice
+        options: [staging, produccion]
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar el acceso
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync
+
+      - name: Elegir destino
+        id: destino
+        run: |
+          if [ "${{ inputs.entorno }}" = "produccion" ]; then
+            echo "ruta=/opt/crm/production"  >> $GITHUB_OUTPUT
+            echo "app=crm-api-production"    >> $GITHUB_OUTPUT
+            echo "puerto=3001"               >> $GITHUB_OUTPUT
+          else
+            echo "ruta=/opt/crm/staging"     >> $GITHUB_OUTPUT
+            echo "app=crm-api-staging"       >> $GITHUB_OUTPUT
+            echo "puerto=3002"               >> $GITHUB_OUTPUT
+          fi
+
+      # El usuario no es dueño de /opt/crm, asi que se deja en su casa y se
+      # copia con sudo desde alli. El .env del servidor NO viaja nunca: ahi
+      # viven sus claves y son distintas en cada entorno.
+      - name: Subir el backend
+        env:
+          SSHPASS: ${{ secrets.SSH_PASS }}
+        run: |
+          sshpass -e rsync -az --delete \
+            --exclude='.env*' --exclude='node_modules' --exclude='uploads' \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            backend/src/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/claude/_subida/
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "sudo rsync -a --delete --exclude='.env*' --exclude='node_modules' --exclude='uploads' \
+               /home/claude/_subida/ ${{ steps.destino.outputs.ruta }}/src/ && rm -rf /home/claude/_subida"
+
+      # pm2 vive en el nvm del usuario y no esta en el PATH de una sesion no
+      # interactiva: sin el export, "pm2: command not found".
+      - name: Reiniciar y comprobar
+        env:
+          SSHPASS: ${{ secrets.SSH_PASS }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "export PATH=/home/claude/.nvm/versions/node/v24.14.1/bin:\$PATH; \
+             pm2 restart ${{ steps.destino.outputs.app }} --update-env >/dev/null 2>&1; sleep 8; \
+             printf 'salud: '; curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:${{ steps.destino.outputs.puerto }}/api/health; \
+             pm2 logs ${{ steps.destino.outputs.app }} --err --lines 12 --nostream --no-color 2>&1 | grep -iE 'error|cannot find' | grep -v Deprecation | tail -3 || true" \
+            | tee salida.txt
+          grep -q 'salud: 200' salida.txt || { echo '::error::La API no responde 200 despues del despliegue'; exit 1; }

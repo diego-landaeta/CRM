@@ -48,7 +48,7 @@ const SECTIONS = [
   { label: 'Matrículas', to: '/clientes/matriculas', icon: UserCheck, keywords: 'inscripciones' },
   { label: 'Productos', to: '/productos', icon: Package, keywords: 'catalogo' },
   { label: 'Documentos', to: '/documentos', icon: FilePdf, keywords: 'pdf archivos dossier' },
-  { label: 'Email seguimiento', to: '/email-sequences', icon: Envelope, keywords: 'secuencias drip' },
+  { label: 'Email seguimiento', to: '/secuencias-email', icon: Envelope, keywords: 'secuencias drip' },
   { label: 'Formularios', to: '/captacion', icon: Globe, keywords: 'captura webhook forms' },
   { label: 'Webhooks', to: '/captacion/webhooks', icon: Globe, keywords: 'integraciones api' },
   { label: 'Make', to: '/captacion/make', icon: Globe, keywords: 'make automatizacion' },
@@ -65,10 +65,10 @@ const SECTIONS = [
   { label: 'Stripe', to: '/stripe', icon: CreditCard, keywords: 'mrr churn suscripciones saas ia', projectType: 'ia' },
   { label: 'Comisiones', to: '/commissions', icon: Coins, keywords: 'gestores' },
   { label: 'Nóminas', to: '/payroll', icon: Coins, keywords: 'salarios' },
-  { label: 'Reportes', to: '/reports', icon: ChartBar, keywords: 'analytics estadisticas' },
+  { label: 'Reportes', to: '/informes', icon: ChartBar, keywords: 'analytics estadisticas' },
   { label: 'Soporte / Novedades', to: '/soporte', icon: Headset, keywords: 'ayuda changelog' },
   { label: 'Manual', to: '/manual', icon: BookOpen, keywords: 'documentacion ayuda' },
-  { label: 'Configuración', to: '/settings', icon: Gear, keywords: 'ajustes preferencias' },
+  { label: 'Configuración', to: '/configuracion', icon: Gear, keywords: 'ajustes preferencias' },
 ];
 
 const RECENT_KEY = 'crm.palette.recents';
