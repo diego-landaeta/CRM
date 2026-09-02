@@ -6,7 +6,7 @@ import {
   MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -17,6 +17,7 @@ import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSe
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
 import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
+import ElegirChat from '../components/ElegirChat';
 import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
@@ -159,7 +160,10 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
   );
 }
 
-const TIC = { enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '⚠' } as const;
+// `…` y no un reloj: los tics son texto suelto dentro de la burbuja y los
+// glifos de reloj no estan en todas las fuentes — donde falten saldria un
+// cuadrado. Tres puntos se entienden y se ven en cualquier sitio.
+const TIC = { enviando: '…', enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '⚠' } as const;
 
 /**
  * Como se cuenta una llamada.
@@ -264,6 +268,17 @@ export default function ChatPage() {
   // solo se veian los ultimos 100 y no habia forma de llegar a los de antes.
   const [cuantos, setCuantos] = useState(100);
   const [enviando, setEnviando] = useState(false);
+  /**
+   * Lo que ya se ve pero aun no ha vuelto del servidor (#99, punto 4).
+   *
+   * Aparte de `mensajes` a proposito: el hilo se recarga entero cada cinco
+   * segundos, y si estos vivieran ahi la siguiente vuelta los borraria de la
+   * pantalla justo mientras se estan mandando.
+   */
+  const [pendientes, setPendientes] = useState<MensajeWhatsapp[]>([]);
+  /** Que mensaje se esta reenviando, mientras se elige a quien (#99, punto 5). */
+  const [reenviando, setReenviando] = useState<MensajeWhatsapp | null>(null);
+  const [reenvioEnCurso, setReenvioEnCurso] = useState(false);
   const [conexion, setConexion] = useState<ConexionWhatsapp | null>(null);
   const [filtro, setFiltro] = useState('');
   // Lo que se le pide al servidor para filtrar la LISTA de chats. Va detras del
@@ -573,17 +588,45 @@ export default function ChatPage() {
     });
   }
 
+  /**
+   * Manda un mensaje sin dejar el teclado muerto (#99, punto 4).
+   *
+   * Antes se bloqueaba el campo, se esperaba a que Evolution contestara Y
+   * ademas a que volviera el hilo entero. Dos viajes de ida y vuelta con el
+   * teclado apagado: escribiendo dos seguidos, el segundo no salia hasta
+   * pasados unos cinco segundos. «Se nota y molesta», y con razon.
+   *
+   * Ahora el mensaje se pinta al momento y el campo queda libre en el acto. Si
+   * el envio falla, esa burbuja se queda marcada como fallida — con su texto,
+   * que es lo que no hay que perder— en vez de desaparecer.
+   */
   async function enviar(texto: string) {
     const t = texto.replace(/<[^>]*>/g, '').trim();
-    if (!t || !abierto || enviando) return;
-    setEnviando(true);
+    if (!t || !abierto) return;
+    const cita = citando?.id ?? null;
+    // Negativo para que no choque nunca con un id de la base.
+    const tempId = -Date.now();
+    const enCurso: MensajeWhatsapp = {
+      id: tempId, wa_id: null, direccion: 'saliente', tipo: 'texto', texto: t,
+      media_url: null, media_mime: null, nombre_archivo: null, media_firma: null,
+      estado: 'enviando', enviado_por: null, ts: new Date().toISOString(),
+    } as MensajeWhatsapp;
+
+    setPendientes((p) => [...p, enCurso]);
+    setCitando(null);
+    setBorrador('');
+
     try {
-      const r = await chatApi.enviar(abierto, t, citando?.id ?? null, deQuien);
+      const r = await chatApi.enviar(abierto, t, cita, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
-      setCitando(null);
-      setBorrador('');
+      // Se quita de los pendientes y se recarga: el bueno llega del servidor
+      // con su id, su estado y su hora.
+      setPendientes((p) => p.filter((m) => m.id !== tempId));
       await cargarHilo(abierto); cargarLista();
-    } catch (e) { fallo(e); } finally { setEnviando(false); }
+    } catch (e) {
+      setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, estado: 'fallido' } : m)));
+      fallo(e);
+    }
   }
 
   /**
@@ -1014,6 +1057,13 @@ export default function ChatPage() {
       }
     : null;
 
+  // Lo del servidor mas lo que todavia va en camino. Los pendientes van al
+
+  // final porque son los ultimos por definicion.
+
+  const hilo = pendientes.length ? [...mensajes, ...pendientes] : mensajes;
+
+
   let ultimoDia = '';
 
   return (
@@ -1257,7 +1307,7 @@ export default function ChatPage() {
 
                     Va como separador por lo mismo que el «ver mas» de abajo:
                     MessageList solo admite sus propios hijos. */}
-                {!mensajes.length && (
+                {!hilo.length && (
                   <MessageSeparator
                     className="wa-vacio"
                     content={sync?.entrando
@@ -1280,12 +1330,12 @@ export default function ChatPage() {
                 {/* flatMap y no map: MessageList solo admite sus propios hijos,
                     y envolver cada mensaje en un <div> para colgarle el
                     separador del dia le rompia la estructura. Van sueltos. */}
-                {mensajes.flatMap((m, i) => {
+                {hilo.flatMap((m, i) => {
                   const día = diaDe(m.ts);
                   const nuevoDia = día !== ultimoDia;
                   if (nuevoDia) ultimoDia = día;
-                  const prev = mensajes[i - 1];
-                  const sig = mensajes[i + 1];
+                  const prev = hilo[i - 1];
+                  const sig = hilo[i + 1];
                   const mismoQuePrev = !nuevoDia && prev?.direccion === m.direccion;
                   const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === día;
                   const posicion = mismoQuePrev && mismoQueSig ? 'normal'
@@ -1389,6 +1439,16 @@ export default function ChatPage() {
                           onClick={() => setCitando(m)}>
                           <ArrowBendUpLeft size={13} weight="bold" />
                         </button>
+                        {/* Reenviar a otro chat (#99, punto 5). Una llamada no
+                            se reenvia, y uno que aun no ha salido tampoco. */}
+                        {m.tipo !== 'llamada' && m.id > 0 && (
+                          <button type="button" className="wa-responder"
+                            title="Reenviar a otro chat"
+                            aria-label="Reenviar a otro chat"
+                            onClick={() => setReenviando(m)}>
+                            <ShareFat size={13} weight="bold" />
+                          </button>
+                        )}
                         {m.estado === 'fallido' && m.texto && (
                           <button type="button" className="wa-reintentar"
                             disabled={reintentando === m.id}
@@ -1539,9 +1599,9 @@ export default function ChatPage() {
                 }
                 value={borrador}
                 onChange={(_html, texto) => setBorrador(texto)}
-                onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
+                onSend={enviar} disabled={Boolean(bloqueo)} attachButton
                 onAttachClick={() => ficheroRef.current?.click()}
-                sendDisabled={enviando || Boolean(bloqueo)} />
+                sendDisabled={Boolean(bloqueo)} />
             </ChatContainer>
           ) : estrecho ? null : (
             <ChatContainer>
@@ -1596,6 +1656,29 @@ export default function ChatPage() {
       {/* La ficha del prospecto. Crear una nueva SI saca del chat, pero es una
           accion deliberada y con destino: se va a Prospectos con el telefono ya
           puesto, en vez de dejar a la gestora copiandolo a mano. */}
+      {reenviando && (
+        <ElegirChat
+          chats={chats}
+          excluirId={abierto}
+          nombreDe={nombreDe}
+          enviando={reenvioEnCurso}
+          onCerrar={() => setReenviando(null)}
+          onElegir={async (destino) => {
+            setReenvioEnCurso(true);
+            try {
+              const r = await chatApi.reenviar(destino.id, reenviando.id);
+              if (!r.success) throw new Error(r.error || 'No se pudo reenviar');
+              setReenviando(null);
+              toast({ title: 'Reenviado', description: `A ${nombreDe(destino)}.` });
+              // Si es el chat que se esta mirando, que se vea sin esperar al
+              // refresco; si no, basta con actualizar la lista.
+              if (destino.id === abierto) await cargarHilo(abierto);
+              cargarLista();
+            } catch (e) { fallo(e); } finally { setReenvioEnCurso(false); }
+          }}
+        />
+      )}
+
       {fichaDe !== null && (
         <FichaProspecto
           conversacionId={fichaDe}

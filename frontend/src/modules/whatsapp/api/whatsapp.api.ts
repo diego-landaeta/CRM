@@ -118,7 +118,13 @@ export interface MensajeWhatsapp {
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;
-  estado: 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
+  /**
+   * `enviando` no existe en la base: es solo de la pantalla.
+   *
+   * Marca el mensaje que ya se ve pero todavia no ha vuelto del servidor. En
+   * cuanto vuelve, manda el estado de verdad.
+   */
+  estado: 'enviando' | 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
   enviado_por: number | null;
   ts: string;
 }
@@ -227,6 +233,15 @@ export const chatApi = {
   /** `citarId` es el mensaje al que se responde: sale con la cita encima. */
   enviar: (id: number, texto: string, citarId?: number | null, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
     client.post(`/whatsapp/chats/${id}/enviar`, { texto, citarId, usuarioId }),
+
+  /**
+   * Reenvia un mensaje a otro chat (#99, punto 5).
+   *
+   * `destinoId` es a donde va, y `mensajeId` de donde sale. Los dos chats
+   * tienen que ser de la misma sesion; eso lo comprueba el servidor.
+   */
+  reenviar: (destinoId: number, mensajeId: number): Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.post(`/whatsapp/chats/${destinoId}/reenviar`, { mensajeId }),
 
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),

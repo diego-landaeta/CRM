@@ -1041,6 +1041,33 @@ export async function sinLeer(req, res, next) {
  * conversacion de otra persona: contesta «no encontrada», que no confirma
  * siquiera que exista.
  */
+// POST /api/whatsapp/chats/:id/reenviar  — :id es el chat DESTINO
+export async function reenviar(req, res, next) {
+  try {
+    const destino = await miConversacion(req, parseInt(req.params.id));
+    const mensajeId = parseInt(req.body?.mensajeId);
+    if (!Number.isInteger(mensajeId)) {
+      throw new AppError('Falta que mensaje reenviar', 400, 'VALIDATION_ERROR');
+    }
+
+    // El mensaje de origen tambien tiene que ser de esta sesion.
+    //
+    // Se comprueba por su conversacion y no por el mensaje a secas: si no,
+    // bastaria con acertar un id para sacar contenido del chat de una
+    // companera hacia el propio.
+    const m = await model.mensajePorId(mensajeId);
+    if (!m) throw new AppError('Mensaje no encontrado', 404, 'NOT_FOUND');
+    await miConversacion(req, m.conversacion_id);
+
+    const fila = await servicio.reenviar({
+      mensaje: m,
+      destinoId: destino.id,
+      usuarioId: req.user.userId,
+    });
+    res.json({ success: true, data: fila });
+  } catch (err) { next(err); }
+}
+
 export async function editarMensaje(req, res, next) {
   try {
     const texto = String(req.body?.texto ?? '').trim();

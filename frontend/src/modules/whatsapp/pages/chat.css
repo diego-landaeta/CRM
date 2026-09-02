@@ -1353,3 +1353,36 @@
   background-color: var(--wa-cabecera);
   color: var(--wa-texto);
 }
+
+/* ── Reenviar a otro chat (#99, punto 5) ─────────────────────────────────────
+   Sale FLOTANDO sobre el panel, asi que va con la paleta del panel y no con la
+   del CRM. Es lo mismo que ya paso con las etiquetas: `bg-background` y
+   `text-muted-foreground` siguen el tema de la aplicacion, y este panel es
+   oscuro en los dos. Un cuadro claro sobre el chat se ve de otro sitio. */
+.wa-elegir {
+  background: var(--wa-panel);
+  color: var(--wa-texto);
+  border: 1px solid var(--wa-borde);
+}
+.wa-elegir-cabecera,
+.wa-elegir-buscador { border-bottom: 1px solid var(--wa-borde); }
+
+.wa-elegir-tenue { color: var(--wa-apagado); }
+
+.wa-elegir-cerrar { color: var(--wa-apagado); }
+.wa-elegir-cerrar:hover { color: var(--wa-texto); }
+
+.wa-elegir-campo {
+  background: var(--wa-cabecera);
+  color: var(--wa-texto);
+  border: 1px solid transparent;
+}
+.wa-elegir-campo::placeholder { color: var(--wa-apagado); }
+/* El foco se marca con el verde de WhatsApp, no con el anillo del CRM. */
+.wa-elegir-campo:focus-visible { border-color: var(--wa-verde); }
+
+.wa-elegir-fila { color: var(--wa-texto); }
+.wa-elegir-fila:hover:not(:disabled),
+.wa-elegir-fila:focus-visible { background: var(--wa-hover); }
+
+.wa-elegir-avatar { background: var(--wa-cabecera); color: var(--wa-apagado); }

@@ -778,6 +778,56 @@ export async function marcarLeida(conversacionId, noLeidos = null) {
  */
 export const VENTANA_EDICION_MS = 15 * 60 * 1000;
 
+/**
+ * Reenvia un mensaje a otra conversacion (#99, punto 5).
+ *
+ * «De las cosas que mas se usan al pasar un dossier o un dato de una
+ * conversacion a otra», y hasta ahora habia que descargar el archivo y volver
+ * a subirlo a mano.
+ *
+ * No usa el reenvio nativo de WhatsApp —que marcaria el mensaje como
+ * «reenviado»— sino que manda uno nuevo con el mismo contenido: el reenvio de
+ * verdad necesita la clave original del mensaje, y de los importados del
+ * historial no siempre la tenemos. Un mensaje nuevo funciona siempre.
+ *
+ * Las dos conversaciones tienen que ser de la MISMA sesion. Se comprueba
+ * arriba, en el controlador, para las dos por separado: sin eso se podria
+ * sacar contenido del chat de una companera hacia el propio.
+ */
+export async function reenviar({ mensaje, destinoId, usuarioId }) {
+  if (mensaje.tipo === 'llamada') {
+    throw new AppError('Una llamada no se puede reenviar', 400, 'NO_REENVIABLE');
+  }
+
+  // Sin archivo, es texto y basta con mandarlo.
+  if (!mensaje.media_url) {
+    const texto = (mensaje.texto || '').trim();
+    if (!texto) throw new AppError('Ese mensaje no tiene nada que reenviar', 400, 'VACIO');
+    return enviar({ conversacionId: destinoId, texto, usuarioId });
+  }
+
+  // Con archivo: se lee del disco y se manda como uno nuevo. Si el adjunto
+  // todavia no se ha bajado —la cola va por detras— se dice, en vez de mandar
+  // un mensaje a medias.
+  let archivo;
+  try {
+    archivo = await media.leer(mensaje.media_url);
+  } catch {
+    throw new AppError('El archivo aun no esta descargado, intentalo en un momento', 409, 'SIN_ARCHIVO');
+  }
+
+  return enviarAdjunto({
+    conversacionId: destinoId,
+    buffer: archivo.buffer,
+    mimetype: mensaje.media_mime,
+    nombreArchivo: mensaje.nombre_archivo,
+    // El pie va con el archivo: en WhatsApp el texto de una imagen es su pie,
+    // y mandarlo aparte partiria en dos lo que era un solo mensaje.
+    pie: mensaje.texto || null,
+    usuarioId,
+  });
+}
+
 export async function editarMensaje({ mensajeId, conversacion, texto, instancia }) {
   const m = await model.mensajePorId(mensajeId);
   if (!m || m.conversacion_id !== conversacion.id) {
