@@ -212,6 +212,12 @@ export async function chat(req, res, next) {
       servicio.buscarFoto(conv).catch(() => {});
     }
 
+    // Quienes escriben en el grupo, para la cabecera — como los miembros que
+    // pone WhatsApp debajo del nombre.
+    const participantes = String(conv.jid || '').endsWith('@g.us')
+      ? await model.quienesEscriben(conv.id).catch(() => [])
+      : [];
+
     const crudos = await model.mensajes(id, parseInt(req.query.limite) || 100);
     // Cada adjunto viaja con su permiso firmado: el navegador pide el fichero
     // sin cabeceras y aun asi solo funciona durante media hora. La direccion la
@@ -235,7 +241,7 @@ export async function chat(req, res, next) {
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
     await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
-    res.json({ success: true, data: { conversacion: conv, mensajes: msgs, escribiendo } });
+    res.json({ success: true, data: { conversacion: { ...conv, participantes }, mensajes: msgs, escribiendo } });
   } catch (err) { next(err); }
 }
 
@@ -744,6 +750,16 @@ export async function desconectar(req, res, next) {
 const nombresRefrescados = new Map();
 const CADA_CUANTO_NOMBRES = 15 * 60 * 1000;
 
+// Lo mismo para los avisos a los que esta suscrita cada sesion.
+const eventosRevisados = new Map();
+
+async function asegurarEventosSiToca(instancia) {
+  const ultima = eventosRevisados.get(instancia) || 0;
+  if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
+  eventosRevisados.set(instancia, Date.now());
+  await evolution.asegurarEventos(instancia);
+}
+
 /**
  * Como tienes guardada a esa persona en TU agenda.
  *
@@ -774,6 +790,21 @@ async function refrescarNombresSiToca(instancia) {
   if (puestos) {
     logger.info({ instancia, puestos, deLaAgenda: pares.length }, 'WhatsApp: nombres puestos al dia');
   }
+
+  // Y las fotos, que vienen en la misma respuesta.
+  //
+  // Hasta ahora dependian solo de `contacts.update`, y ese aviso llega cuando
+  // alguien CAMBIA su foto: una conversacion que nace de una llamada o de un
+  // mensaje se quedaba con las iniciales para siempre. La agenda ya trae la
+  // direccion, asi que no cuesta ni una llamada mas.
+  //
+  // `actualizarAvatar` solo toca filas que existen y que tienen otra foto: casi
+  // siempre no escribe nada.
+  let fotos = 0;
+  for (const c of (contactos || [])) {
+    if (c?.jid && c?.foto) fotos += await model.actualizarAvatar(instancia, c.jid, c.foto);
+  }
+  if (fotos) logger.info({ instancia, fotos }, 'WhatsApp: fotos de perfil puestas al dia');
 }
 
 // GET /api/whatsapp/conexion — ¿esta emparejado el numero?
@@ -824,6 +855,18 @@ export async function conexion(req, res, next) {
       // conexion cada treinta segundos y traerse la agenda entera cada vez
       // seria absurdo. Un cuarto de hora basta — los nombres no cambian tanto.
       await refrescarNombresSiToca(instancia).catch(() => {});
+
+      // Y que la sesion siga suscrita a TODO lo que el CRM atiende.
+      //
+      // Las sesiones creadas antes se quedaron con tres avisos de siete: sin
+      // CALL no entra ni una llamada, sin CONTACTS_UPDATE no hay ni una foto de
+      // perfil y sin MESSAGES_DELETE borrar «para mi» no llega nunca. Arreglar
+      // la creacion no toca las que ya existen, asi que se reparan desde aqui
+      // — sin entrar al servidor y sin volver a enlazar el numero.
+      //
+      // Con el mismo cuentagotas y sin tocar la URL: esa es la que separa
+      // produccion de staging.
+      await asegurarEventosSiToca(instancia).catch(() => {});
     }
     res.json({ success: true, data: {
       configurado: true,

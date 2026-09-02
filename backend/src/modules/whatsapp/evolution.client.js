@@ -27,6 +27,23 @@ export const PREFIJO = process.env.EVOLUTION_INSTANCIA || 'crm';
 // sin mezclarse.
 const WEBHOOK_PROPIO = process.env.EVOLUTION_WEBHOOK_URL || '';
 
+/**
+ * Los avisos de Evolution que el CRM sabe atender.
+ *
+ * Uno por cada rama de `recibir()`. Si se anade un manejador alli, su evento
+ * tiene que entrar aqui o no llegara nunca — que es exactamente como estuvieron
+ * las llamadas, las fotos de perfil y los borrados.
+ */
+export const EVENTOS_QUE_ATENDEMOS = [
+  'MESSAGES_UPSERT',
+  'MESSAGES_UPDATE',
+  'MESSAGES_DELETE',
+  'CONTACTS_UPDATE',
+  'CONNECTION_UPDATE',
+  'CALL',
+  'GROUPS_UPSERT',
+];
+
 /** La instancia de WhatsApp de una persona. */
 export const instanciaDe = (userId) => `${PREFIJO}-u${parseInt(userId, 10)}`;
 
@@ -112,8 +129,30 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       // que los mensajes de una sesion de pruebas aterrizaran en la base de
       // PRODUCCION: conversaciones apareciendo de la nada que nadie sabria de
       // donde salieron. Cada instancia avisa a quien la creo.
+      //
+      // Y se piden TODOS los eventos que el CRM sabe atender, no tres.
+      //
+      // Aqui iban MESSAGES_UPSERT, MESSAGES_UPDATE y CONNECTION_UPDATE. Los
+      // manejadores de los otros existen y estan probados, pero Evolution no
+      // los mandaba nunca porque nadie se habia suscrito: el codigo estaba ahi,
+      // muerto, y desde fuera parecia que la funcion no existia.
+      //
+      // Lo que se caia con esos tres, comprobado contra la instancia de la
+      // prueba —que tiene los seis puestos a mano y por eso alli si funciona—:
+      //
+      //   CALL            — ni una llamada entrante. La pantalla de «te estan
+      //                     llamando» no salta jamas.
+      //   CONTACTS_UPDATE — ninguna foto de perfil. Se ven las iniciales
+      //                     siempre; es el fallo que `contactos()` arreglo.
+      //   MESSAGES_DELETE — borrar «para mi» no llega. «Elimine un mensaje y no
+      //                     se elimino», tal cual se reporto.
+      //   GROUPS_UPSERT   — el asunto de un grupo al crearlo o renombrarlo.
+      //
+      // Solo pasaba con el webhook propio puesto, o sea SOLO en produccion y
+      // staging: en local se cae al webhook global del contenedor, que los manda
+      // todos. Por eso aqui se veia bien y alli no.
       ...(WEBHOOK_PROPIO ? { webhook: { url: WEBHOOK_PROPIO, byEvents: false,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'] } } : {}),
+        events: EVENTOS_QUE_ATENDEMOS } } : {}),
     },
     esperaMs: 30000,
   });
@@ -283,8 +322,73 @@ export async function agenda(nombre = INSTANCIA) {
       // `contact.name || contact.verifiedName || el numero`—. Que es justo el
       // que se quiere: como tu la tienes apuntada, no como se anuncia ella.
       nombre: c?.name || c?.nombre || c?.pushName || null,
+      foto: c?.profilePicUrl || null,
     }))
     .filter((c) => c.jid && c.nombre);
+}
+
+/**
+ * Un contacto suelto de la agenda, por su jid.
+ *
+ * Existe por las LLAMADAS. El aviso de una llamada no trae nombre: se comprobo
+ * en el Baileys que corre dentro de Evolution v2.3.7 —`handleCall` arma el
+ * evento con `chatId`, `from`, `id`, `date`, `offline` y `status`, y nada mas—.
+ * El nombre y la foto que se ven al sonar salen de aqui.
+ *
+ * Y `from` en una llamada llega como `@lid`, que no es un telefono, asi que se
+ * compara por la parte de delante de la arroba: la agenda guarda ese mismo
+ * `@lid`. Comprobado con la agenda real — quien llamo estaba ahi como
+ * `95069319217252@lid`, con nombre y con foto, mientras el CRM pintaba las
+ * catorce cifras.
+ */
+export async function contactoDe(jid, nombre = INSTANCIA) {
+  if (!jid) return null;
+  const clave = String(jid).split('@')[0];
+  const contactos = await agenda(nombre);
+  return (contactos || []).find((c) => String(c.jid).split('@')[0] === clave) || null;
+}
+
+/** A que avisos esta suscrita una sesion. Null si no se pudo leer. */
+export async function webhookDe(nombre = INSTANCIA) {
+  const r = await pedir(`/webhook/find/${nombre}`, { esperaMs: 10000 });
+  return r.ok ? (r.datos || null) : null;
+}
+
+/**
+ * Se asegura de que la sesion recibe TODOS los avisos que el CRM atiende.
+ *
+ * Las sesiones ya creadas se quedaron con los tres de antes, y arreglar
+ * `crearInstancia` no las toca: seguirian sin llamadas, sin fotos y sin
+ * borrados hasta que alguien las volviera a enlazar. Esto lo repara solo,
+ * desde el propio CRM, sin entrar al servidor.
+ *
+ * Solo anade. La URL no se toca — es la que distingue produccion de staging, y
+ * pisarla mandaria los mensajes de una a la base de la otra.
+ *
+ * Devuelve que se anadio, o null si no habia nada que hacer.
+ */
+export async function asegurarEventos(nombre = INSTANCIA) {
+  const actual = await webhookDe(nombre);
+  if (!actual?.url) return null;
+  const puestos = Array.isArray(actual.events) ? actual.events : [];
+  const faltan = EVENTOS_QUE_ATENDEMOS.filter((e) => !puestos.includes(e));
+  if (!faltan.length) return null;
+  const r = await pedir(`/webhook/set/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      webhook: {
+        enabled: actual.enabled !== false,
+        url: actual.url,
+        byEvents: Boolean(actual.webhookByEvents ?? actual.byEvents ?? false),
+        base64: actual.webhookBase64 ?? actual.base64 ?? true,
+        events: [...new Set([...puestos, ...EVENTOS_QUE_ATENDEMOS])],
+      },
+    },
+    esperaMs: 10000,
+  });
+  if (!r.ok) return null;
+  logger.info({ instancia: nombre, faltan }, 'WhatsApp: avisos que faltaban, suscritos');
+  return faltan;
 }
 
 /**

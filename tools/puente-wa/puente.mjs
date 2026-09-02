@@ -1468,6 +1468,26 @@ http.createServer(async (req, res) => {
       return json(200, { settings: s2.ajustes });
     }
 
+    // A que avisos esta suscrita la sesion.
+    //
+    // El CRM los revisa y completa los que falten — las sesiones viejas se
+    // quedaron con tres de siete y por eso en produccion no entraba ni una
+    // llamada, ni una foto de perfil, ni un borrado. Aqui el puente avisa
+    // SIEMPRE de todo, asi que estas dos rutas solo existen para que la
+    // reparacion no de 404 en local y parezca rota: un puente menos capaz que
+    // el original miente igual que uno mas generoso.
+    if (url.startsWith('/webhook/find/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      return json(200, s2.webhook || { enabled: true, url: CRM_WEBHOOK, events: [], byEvents: false });
+    }
+    if (url.startsWith('/webhook/set/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      s2.webhook = cuerpo?.webhook || cuerpo;
+      log(`avisos de ${s2.nombre}: ${(s2.webhook?.events || []).length}`);
+      return json(201, { webhook: s2.webhook });
+    }
+
     // Para mirar por encima como va todo, sin tocar la base.
     if (url === '/estado') {
       return json(200, {
