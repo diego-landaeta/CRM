@@ -467,9 +467,18 @@ export async function recibir(cuerpo) {
     logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
     return { ignorado: 'sin instancia' };
   }
+  // En un grupo, `pushName` es QUIEN ESCRIBIO, no el grupo.
+  //
+  // Usarlo como nombre de la conversacion hacia que «Psiko Aprende General»
+  // saliera como «199247962062849» —el identificador de quien hablo el ultimo—
+  // y que fuera cambiando segun quien escribiera. El nombre de un grupo es su
+  // asunto; si no viene, mejor ninguno que uno que baila: la pantalla ya cae en
+  // «Grupo sin nombre».
   const conv = await model.conversacionDe({
     instancia, jid: key.remoteJid,
-    nombrePush: datos?.pushName,
+    nombrePush: esGrupo
+      ? (datos?.groupSubject || cuerpo?.groupSubject || datos?.subject || null)
+      : datos?.pushName,
     avatarUrl: datos?.avatar || null,
   });
 
@@ -526,8 +535,17 @@ export async function recibir(cuerpo) {
     respondeA: datos?.respondeA || null,
     // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
     // salen iguales y no se sabe quien dijo que.
-    participante: datos?.participante || null,
-    participanteNombre: datos?.participanteNombre || null,
+    //
+    // Dos sitios porque hay dos remitentes: el puente de Baileys lo manda en
+    // `datos.participante`, y Evolution —que es lo que corre en produccion— lo
+    // pone en `key.participant`. Leyendo solo el primero, el autor quedaba
+    // SIEMPRE vacio donde importa. Es el mismo patron del #63.
+    //
+    // Y el nombre sale de `pushName` precisamente porque en un grupo es el de
+    // quien escribe: lo que lo hace inservible para nombrar la conversacion es
+    // lo que lo hace correcto aqui.
+    participante: datos?.participante || key.participant || null,
+    participanteNombre: datos?.participanteNombre || (esGrupo ? datos?.pushName : null) || null,
     ts: cuando,
   });
 
@@ -699,11 +717,23 @@ async function acuse(cuerpo) {
   const datos = cuerpo?.data || cuerpo;
   const waId = datos?.key?.id;
   if (!waId) return { ignorado: 'acuse sin id' };
-  const bruto = String(datos?.status || datos?.update?.status || '').toUpperCase();
-  const estado = /READ/.test(bruto) ? 'leido'
+  const crudo = datos?.status ?? datos?.update?.status;
+  const bruto = String(crudo ?? '').toUpperCase();
+
+  // El acuse llega de dos formas y solo se entendia una.
+  //
+  // En texto: SERVER_ACK, DELIVERY_ACK, READ, PLAYED. Y en numero, que es como
+  // lo numera Baileys y como lo deja pasar Evolution en algunas versiones:
+  // 2 entregado, 3 leido, 4 reproducido. Con solo el texto, un acuse numerico
+  // caia en `null` y el mensaje se quedaba con un tic para siempre.
+  //
+  // PLAYED es una nota de voz escuchada. Escuchada es leida: no hay un tercer
+  // tic para eso, y dejarlo fuera hacia que oir un audio no marcara nada.
+  const porNumero = { 2: 'entregado', 3: 'leido', 4: 'leido' };
+  const estado = /READ|PLAYED/.test(bruto) ? 'leido'
     : /DELIVER/.test(bruto) ? 'entregado'
     : /ERROR|FAIL/.test(bruto) ? 'fallido'
-    : null;
+    : porNumero[Number(crudo)] || null;
   if (!estado) return { ignorado: `estado ${bruto}` };
   await model.actualizarEstado(waId, estado);
   return { waId, estado };

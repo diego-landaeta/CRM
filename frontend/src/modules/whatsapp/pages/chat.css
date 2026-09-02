@@ -1196,6 +1196,16 @@
   border-radius: 999px;
   white-space: nowrap;
 }
+/* La hora, empujada a la derecha del todo. `margin-left:auto` en vez de
+   `justify-content`: el nombre tiene que seguir siendo lo que cede sitio. */
+.wa-fila-cuando {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 11px;
+  color: var(--wa-apagado);
+  font-variant-numeric: tabular-nums;
+}
 .wa-fila-adelanto {
   font-size: 13px;
   color: var(--wa-apagado);
@@ -1221,6 +1231,10 @@
    grises. Se vio en la captura, no leyendo. Sirve para un estado que aparezca
    mañana y no este aqui: gris legible, no un hueco sin texto. */
 .wa-fila-etiqueta, .wa-etiqueta { background: rgba(255,255,255,.10); color: var(--wa-apagado); }
+
+/* Un grupo no es un estado de prospecto: gris azulado, para que se lea como
+   lo que es —una propiedad del chat— y no como una fase del embudo. */
+.wa-et-grupo          { background: rgba(148,163,184,.18); color: #cbd5e1; }
 
 .wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
 .wa-et-por_contactar  { background: rgba(249,115, 22,.16); color: #fdba74; }

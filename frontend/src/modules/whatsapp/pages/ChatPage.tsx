@@ -37,6 +37,24 @@ const CADA_MS = 5000;
 const hora = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
+/**
+ * La fecha del ultimo mensaje, como en WhatsApp: la hora si es de hoy, «Ayer»,
+ * y la fecha si es mas viejo (#99, punto 6).
+ *
+ * Sin esto no se sabe si una conversacion es de hace diez minutos o de hace
+ * tres dias, que es lo primero que se mira para decidir a quien contestar.
+ */
+function cuandoDe(iso: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const hoy = new Date();
+  const ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
+  const igual = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (igual(d, hoy)) return hora(iso);
+  if (igual(d, ayer)) return 'Ayer';
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+}
+
 function diaDe(iso: string) {
   const d = new Date(iso);
   const hoy = new Date();
@@ -1107,11 +1125,18 @@ export default function ChatPage() {
                   <Conversation.Content>
                     <div className="wa-fila-nombre">
                       <span className="wa-fila-quien">{nombreDe(c)}</span>
-                      {c.lead_status && (
+                      {/* Un grupo se dice ANTES de mirar si es prospecto (#99,
+                          punto 1): nunca tiene ficha, asi que por la via del
+                          estado no le tocaba etiqueta ninguna y en la lista no
+                          habia forma de distinguirlo de una persona suelta. */}
+                      {c.es_grupo ? (
+                        <span className="wa-fila-etiqueta wa-et-grupo">Grupo</span>
+                      ) : c.lead_status && (
                         <span className={`wa-fila-etiqueta wa-et-${c.lead_status}`}>
                           {STATUS_LABELS[c.lead_status] || c.lead_status}
                         </span>
                       )}
+                      <span className="wa-fila-cuando">{cuandoDe(c.ultimo_at)}</span>
                     </div>
                     <div className="wa-fila-adelanto">{adelantoDe(c)}</div>
                   </Conversation.Content>
