@@ -49,6 +49,13 @@ export async function leadPorTelefono(telefono, projectId = null) {
 
 /** La conversacion de este numero, creandola si es la primera vez. */
 export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
+  // Un nombre de solo espacios NO es un nombre.
+  //
+  // Se guardaba tal cual, y como no es una cadena vacia pasaba todos los
+  // `||` de la pantalla: la cabecera del chat se quedaba en blanco y el avatar
+  // caia a su interrogante. Se corta aqui ademas de en la pantalla — lo que no
+  // entra en la base no hay que arreglarlo despues en cada sitio que lo lea.
+  nombrePush = (nombrePush || '').trim() || null;
   const esGrupo = String(jid).endsWith('@g.us');
   // Un `@lid` no es un telefono: es un identificador de WhatsApp. Buscar un
   // prospecto con ese numero no encontraria nada y ademas podria cruzarse con

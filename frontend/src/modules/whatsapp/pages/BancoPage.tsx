@@ -92,6 +92,10 @@ export default function BancoPage() {
     return () => clearTimeout(t);
   }, [filtros]);
 
+  // Cambiar de vista vuelve a la primera pagina: volviendo del resumen con la
+  // pagina 9 puesta y otro filtro, la tabla salia vacia sin decir por que.
+  useEffect(() => { setPagina(1); }, [vista]);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
@@ -133,7 +137,10 @@ export default function BancoPage() {
         if (!r.success) throw new Error(r.error || 'No se pudo leer');
         todo.push(...(r.data || []));
         const totalPaginas = r.pagination?.totalPages ?? 1;
-        if (p >= totalPaginas) break;
+        // Se corta tambien si una vuelta viene vacia: sin esto, un servidor que
+        // dijera «hay mas paginas» y no devolviera filas dejaria el bucle dando
+        // vueltas para siempre con la pantalla bloqueada en «Preparando…».
+        if (!r.data?.length || p >= totalPaginas) break;
         p += 1;
       }
       if (!todo.length) {
@@ -285,6 +292,15 @@ export default function BancoPage() {
             <EmptyState icon={ListNumbers} title="Ningún número" description="Con estos filtros no sale ninguno." />
           ) : (
             <div className="overflow-x-auto">
+              {/* El resumen trae como mucho 500 numeros. Decirlo en vez de
+                  cortar sin avisar: una lista recortada en silencio parece
+                  completa, y aqui eso significaria dar por hecho que un numero
+                  no existe cuando si esta. */}
+              {numeros.length >= 500 && (
+                <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+                  Se enseñan los 500 números con actividad más reciente. Si buscas uno concreto, fíltralo arriba.
+                </p>
+              )}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">

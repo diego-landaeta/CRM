@@ -192,6 +192,9 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
 // cuadrado. Tres puntos se entienden y se ven en cualquier sitio.
 const TIC = { enviando: '…', enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '⚠' } as const;
 
+/** Un mensaje que se esta mandando, con la conversacion a la que pertenece. */
+type EnCamino = MensajeWhatsapp & { paraConversacion: number };
+
 /**
  * Como se cuenta una llamada.
  *
@@ -301,8 +304,15 @@ export default function ChatPage() {
    * Aparte de `mensajes` a proposito: el hilo se recarga entero cada cinco
    * segundos, y si estos vivieran ahi la siguiente vuelta los borraria de la
    * pantalla justo mientras se estan mandando.
+   *
+   * Cada uno lleva A QUE CONVERSACION pertenece. Sin eso, mandar algo y cambiar
+   * de chat antes de que conteste el servidor pintaba esa burbuja en el chat
+   * de otra persona — el mensaje no se manda ahi, pero verlo ya es bastante
+   * malo.
    */
-  const [pendientes, setPendientes] = useState<MensajeWhatsapp[]>([]);
+  const [pendientes, setPendientes] = useState<EnCamino[]>([]);
+  /** Lo ultimo que se mando, para no repetirlo por un rebote del teclado. */
+  const ultimoEnvio = useRef<{ texto: string; chat: number; cuando: number } | null>(null);
   /** Que mensaje se esta reenviando, mientras se elige a quien (#99, punto 5). */
   const [reenviando, setReenviando] = useState<MensajeWhatsapp | null>(null);
   const [reenvioEnCurso, setReenvioEnCurso] = useState(false);
@@ -631,14 +641,32 @@ export default function ChatPage() {
   async function enviar(texto: string) {
     const t = texto.replace(/<[^>]*>/g, '').trim();
     if (!t || !abierto) return;
+
+    // Ni bloquear el teclado ni mandar tres veces lo mismo.
+    //
+    // El guardian de antes era `enviando`, que apagaba el campo entero — el
+    // problema del punto 4. Pero quitarlo a secas abrio otro peor: una sola
+    // pulsacion de Enter llamaba aqui TRES veces y el prospecto recibia el
+    // mensaje repetido. Comprobado contra la base: tres filas de un Enter.
+    //
+    // Asi que el freno va sobre el TEXTO y no sobre el campo: el mismo mensaje,
+    // al mismo chat, dos veces en menos de un segundo y medio, es un rebote del
+    // teclado y no una persona escribiendo. Uno distinto sale al momento, que
+    // es de lo que se trataba.
+    const ahora = Date.now();
+    const ultimo = ultimoEnvio.current;
+    if (ultimo && ultimo.texto === t && ultimo.chat === abierto && ahora - ultimo.cuando < 1500) return;
+    ultimoEnvio.current = { texto: t, chat: abierto, cuando: ahora };
+
     const cita = citando?.id ?? null;
     // Negativo para que no choque nunca con un id de la base.
     const tempId = -Date.now();
-    const enCurso: MensajeWhatsapp = {
+    const enCurso: EnCamino = {
       id: tempId, wa_id: null, direccion: 'saliente', tipo: 'texto', texto: t,
       media_url: null, media_mime: null, nombre_archivo: null, media_firma: null,
       estado: 'enviando', enviado_por: null, ts: new Date().toISOString(),
-    } as MensajeWhatsapp;
+      paraConversacion: abierto,
+    } as EnCamino;
 
     setPendientes((p) => [...p, enCurso]);
     setCitando(null);
@@ -714,6 +742,10 @@ export default function ChatPage() {
       // desconocido en mitad de una conversacion.
       const r = await chatApi.enviar(abierto, m.texto, null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      // Si lo que se reintentaba era uno que nunca llego a salir —id negativo,
+      // de los que se pintan al momento— hay que retirarlo: si no, quedarian
+      // los dos, el fallido y el que acaba de salir bien.
+      if (m.id < 0) setPendientes((p) => p.filter((x) => x.id !== m.id));
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setReintentando(null); }
   }
@@ -1022,7 +1054,16 @@ export default function ChatPage() {
     // decir lo que es.
     const mio = (conexion?.numero || '').replace(/[^0-9]/g, '');
     if (mio && c.telefono?.replace(/[^0-9]/g, '') === mio) return 'Tu (mensajes contigo mismo)';
-    return c.lead_nombre || c.nombre_push || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
+    // `||` solo cae con un valor falso, y una cadena de ESPACIOS no lo es.
+    //
+    // WhatsApp manda nombres asi mas de lo que parece: alguien con el nombre en
+    // blanco, o con caracteres invisibles. Ese «  » se tomaba como nombre bueno
+    // y la cabecera se quedaba vacia — se veia el fondo claro del kit, una
+    // barra blanca donde deberia estar el nombre, y el avatar caia a su
+    // interrogante. Reportado desde produccion.
+    const conTexto = (v?: string | null) => (v || '').trim() || null;
+    return conTexto(c.lead_nombre) || conTexto(c.nombre_push)
+      || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
   };
 
   // Lo que se ensena debajo del nombre.
@@ -1086,10 +1127,9 @@ export default function ChatPage() {
     : null;
 
   // Lo del servidor mas lo que todavia va en camino. Los pendientes van al
-
   // final porque son los ultimos por definicion.
-
-  const hilo = pendientes.length ? [...mensajes, ...pendientes] : mensajes;
+  const enCamino = pendientes.filter((m) => m.paraConversacion === abierto);
+  const hilo = enCamino.length ? [...mensajes, ...enCamino] : mensajes;
 
 
   let ultimoDia = '';
@@ -1382,7 +1422,13 @@ export default function ChatPage() {
                   }
                   return [
                     nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
-                    <Message key={m.id} className={m.tipo === 'sticker' ? 'wa-msg-sticker' : undefined}
+                    <Message key={m.id} className={
+                        m.tipo === 'sticker' ? 'wa-msg-sticker'
+                        // Con imagen o video, la burbuja se estrecha para que el
+                        // pie envuelva al ancho de la foto en vez de estirar la
+                        // burbuja y dejar la foto suelta a un lado.
+                        : (m.tipo === 'imagen' || m.tipo === 'video') ? 'wa-msg-media'
+                        : undefined}
                       model={{
                         direction: mia ? 'outgoing' : 'incoming',
                         position: posicion,

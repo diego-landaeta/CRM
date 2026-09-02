@@ -194,7 +194,27 @@
 /* ── Adjuntos ────────────────────────────────────────────────────────────── */
 
 .wa-adjunto { margin-bottom: 4px; }
-.wa-imagen { border-radius: 6px; max-width: 260px; max-height: 280px; display: block; }
+/* La foto manda el ancho de su burbuja.
+ *
+ * Estaba clavada a 260 px mientras la burbuja crecia con el texto: con un pie
+ * largo, la burbuja se estiraba hasta 800 px y la foto se quedaba pegada a la
+ * izquierda, suelta, sin nada al lado. «La imagen no se centra».
+ *
+ * Lo que hace WhatsApp no es centrarla: es estrechar la burbuja de las fotos
+ * para que el pie se parta al ancho de la imagen. Asi la foto y su texto forman
+ * un bloque, que es lo que se espera de un mensaje con foto. */
+.wa-imagen {
+  border-radius: 6px;
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  max-height: 280px;
+  object-fit: contain;
+}
+
+/* El limite va en el CONTENIDO de la burbuja y no en la imagen: si se pone en
+   la imagen, el texto sigue estirando la burbuja por su cuenta. */
+.wa-marco .cs-message.wa-msg-media .cs-message__content { max-width: 300px; }
 
 /* Los stickers van sueltos sobre el fondo, sin burbuja y pequeños. Hay que
    repetir el estado —first, last, single— porque si no ganan las reglas de
