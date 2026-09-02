@@ -1095,9 +1095,14 @@ export default function LeadsPage() {
 
       {/* Reportar como spam (gestor/admin) */}
       <Suspense fallback={null}>
+        {/* `leadId` y `leadNombre`, no el prospecto entero: es lo que declara
+            el dialogo. Le llegaba `lead`, asi que `leadId` venia vacio, y con
+            el vacio su `canSubmit` es falso — el boton de enviar estaba
+            apagado siempre. Reportar un spam no ha funcionado nunca. */}
         <SpamReportDialog
           open={!!reportingSpamLead}
-          lead={reportingSpamLead}
+          leadId={reportingSpamLead?.id}
+          leadNombre={reportingSpamLead?.nombre}
           onClose={() => setReportingSpamLead(null)}
           onReported={() => setReportingSpamLead(null)}
         />

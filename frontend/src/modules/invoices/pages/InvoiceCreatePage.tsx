@@ -252,7 +252,10 @@ export default function InvoiceCreatePage() {
         clienteNombre: cNombre, clienteNif: cNif,
         // Empresa o persona: decide el rotulo del PDF ("RAZON SOCIAL" o
         // "NOMBRE Y APELLIDO"). Al contado se factura a un particular.
-        clienteTipo: tipo === 'empresa' ? 'empresa' : 'particular',
+        // Con `as const`, como el `tipo` de arriba: sin eso TypeScript lo
+        // ensancha a `string` al guardarlo en la variable y ya no encaja con
+        // la union que pide el cuerpo de la factura.
+        clienteTipo: tipo === 'empresa' ? ('empresa' as const) : ('particular' as const),
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
