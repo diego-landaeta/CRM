@@ -47,18 +47,29 @@ export async function leadPorTelefono(telefono, projectId = null) {
   return rows[0] || null;
 }
 
-/** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
-  // Un nombre de solo espacios NO es un nombre.
-  //
-  // Se guardaba tal cual, y como no es una cadena vacia pasaba todos los `||`
-  // de la pantalla: la cabecera se quedaba en blanco y el avatar caia a su
-  // interrogante. Y no vale con `trim()`: WhatsApp deja pasar nombres que son
-  // una marca invisible —U+200E, la de direccion del texto— que `trim()` no
-  // toca. Se limpian tambien.
-  nombrePush = String(nombrePush || '')
+/**
+ * Un nombre que de verdad es un nombre, o null.
+ *
+ * Un nombre de solo espacios NO es un nombre. Se guardaba tal cual, y como no
+ * es una cadena vacia pasaba todos los `||` de la pantalla: la cabecera se
+ * quedaba en blanco y el avatar caia a su interrogante. Y no vale con trim():
+ * WhatsApp deja pasar nombres que son una marca invisible —U+200E, la de
+ * direccion del texto— que trim() no toca. Uno de los grupos de la prueba se
+ * llamaba exactamente asi.
+ *
+ * Vive aparte porque no lo necesita solo `conversacionDe`: tambien la agenda y
+ * el autor de cada mensaje en un grupo. Con la limpieza metida en un sitio, los
+ * otros dos guardaban invisibles.
+ */
+export function nombreLimpio(v) {
+  return String(v || '')
     .replace(/[​-‏‪-‮﻿]/g, '')
     .trim() || null;
+}
+
+/** La conversacion de este numero, creandola si es la primera vez. */
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
+  nombrePush = nombreLimpio(nombrePush);
 
   // A UN GRUPO NO SE LE PONE EL NOMBRE DE UNA PERSONA. Nunca, venga de donde
   // venga.
@@ -115,6 +126,12 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   // contestaba — perderlo entero seria mucho peor.
   const conCita = respondeA && await puedeGuardarCita();
   // Quien escribio, solo en grupos y solo si la 133 esta aplicada.
+  //
+  // El nombre se limpia igual que el de la conversacion: en la agenda real hay
+  // gente cuyo `pushName` es una marca invisible, y guardado asi la lista de
+  // chats pinta «: Sticker» y el globo del grupo lleva encima una linea vacia
+  // donde deberia decir quien hablo.
+  participanteNombre = nombreLimpio(participanteNombre);
   const conQuien = participante && await puedeGuardarParticipante();
   const { rows } = await query(
     `INSERT INTO wa_mensajes
@@ -259,19 +276,39 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
     filtro += `\n      AND (${condiciones.join('\n        OR ')})`;
   }
 
+  // Quien mando el ultimo mensaje. Con la misma guarda que el resto: sin la
+  // migracion 133 se pide todo lo demas y no se dice el autor.
+  const conQuien = await puedeGuardarParticipante();
+
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
             (c.jid LIKE '%@g.us') AS es_grupo,
-            -- El ultimo mensaje, con su tipo: si fue una foto o un audio no hay
-            -- texto que ensenar, y la lista caia a pintar el telefono — o el
-            -- identificador del grupo, que son 18 cifras sin ningun sentido.
-            (SELECT m.texto FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_texto,
-            (SELECT m.tipo FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_tipo
+            -- El ultimo mensaje: su texto, su tipo y QUIEN lo mando.
+            --
+            -- El tipo, porque si fue una foto o un audio no hay texto que
+            -- ensenar y la lista caia a pintar el telefono — o el identificador
+            -- del grupo, que son 18 cifras sin ningun sentido.
+            --
+            -- El autor, porque en un grupo hablan varios: «Sticker» a secas no
+            -- dice nada. WhatsApp pone «Dieguis: Sticker» y «Tu: Sticker», y
+            -- sin eso la lista de un grupo no se puede leer de un vistazo.
+            --
+            -- Los tres del MISMO mensaje, por un lateral. Con tres subconsultas
+            -- sueltas cada una elige su fila por su cuenta: basta un empate de
+            -- la marca de tiempo —que los hay, WhatsApp da la hora en
+            -- segundos— para acabar pegando el autor de un mensaje al texto de
+            -- otro.
+            u.texto AS ultimo_texto, u.tipo AS ultimo_tipo,
+            u.direccion AS ultimo_direccion${conQuien ? ', u.participante_nombre AS ultimo_autor' : ''}
        FROM wa_conversaciones c
        LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN LATERAL (
+         SELECT m.texto, m.tipo, m.direccion${conQuien ? ', m.participante_nombre' : ''}
+           FROM wa_mensajes m
+          WHERE m.conversacion_id = c.id
+          ORDER BY m.ts DESC, m.id DESC LIMIT 1
+       ) u ON true
       WHERE c.instancia = $1 ${filtro}
       ORDER BY c.ultimo_at DESC NULLS LAST
       LIMIT $${params.length}`,
@@ -450,6 +487,7 @@ export async function actualizarAvatar(instancia, jid, url) {
  * que alguien le puso nombre a mano no se pisa con el que venga de WhatsApp.
  */
 export async function datosDeGrupo(instancia, jid, asunto, foto) {
+  asunto = nombreLimpio(asunto);
   if (!instancia || !jid || (!asunto && !foto)) return 0;
   const { rowCount } = await query(
     `UPDATE wa_conversaciones
@@ -495,6 +533,35 @@ export async function marcarEliminado(waId, conversacionId = null) {
   return rowCount;
 }
 
+/**
+ * Quienes han escrito en este grupo, para la cabecera.
+ *
+ * WhatsApp pone la lista de miembros debajo del nombre del grupo. Nosotros no
+ * la tenemos: Evolution devuelve los participantes con su NUMERO y sin nombre
+ * —los nombres salen de la agenda del movil, que no es nuestra—.
+ *
+ * Asi que se usa lo que si sabemos: como se llama quien ha escrito. Es menos
+ * que la lista completa, pero es cierto y sirve para lo mismo — saber con quien
+ * estas hablando sin abrir la ficha del grupo.
+ */
+export async function quienesEscriben(conversacionId, limite = 8) {
+  if (!(await puedeGuardarParticipante())) return [];
+  const { rows } = await query(
+    `SELECT participante_nombre AS nombre, count(*)::int AS cuantos
+       FROM wa_mensajes
+      WHERE conversacion_id = $1
+        AND participante_nombre IS NOT NULL
+        AND participante_nombre <> ''
+      GROUP BY participante_nombre
+      -- Por quien mas habla: en un grupo movido, los primeros son los que
+      -- interesan y el resto sobra.
+      ORDER BY count(*) DESC
+      LIMIT $2`,
+    [conversacionId, limite]
+  );
+  return rows.map((r) => r.nombre);
+}
+
 export async function mensajes(conversacionId, limite = 100) {
   // La cita se resuelve aqui: se busca el mensaje citado por su wa_id DENTRO de
   // la misma conversacion. Puede no estar —alguien responde a algo de antes de
@@ -513,7 +580,15 @@ export async function mensajes(conversacionId, limite = 100) {
               LIMIT 1) AS citado_tipo,
             (SELECT q.direccion FROM wa_mensajes q
               WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
-              LIMIT 1) AS citado_direccion` : '';
+              LIMIT 1) AS citado_direccion,
+            -- A QUIEN se cita, en un grupo.
+            --
+            -- La pantalla ponia el nombre de la CONVERSACION, que en un grupo es
+            -- el del grupo: se leia «Fantasy: buenas» citando a alguien que no
+            -- era el grupo. En un grupo hay que decir a quien se cita.
+            (SELECT q.participante_nombre FROM wa_mensajes q
+              WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
+              LIMIT 1) AS citado_autor` : '';
 
   // Quien escribio cada mensaje, en grupos (#74). Misma guarda que la cita: si
   // la 133 no esta aplicada se pide igual el resto y no se enseña autor.
@@ -747,25 +822,45 @@ export async function limpiarNombrePropio(instancia, miNombre, miNumero) {
 }
 
 /**
- * Pone al dia los nombres desde la agenda de WhatsApp.
+ * Pone al dia los nombres de las PERSONAS desde la agenda de WhatsApp.
  *
- * La agenda es la fuente buena: son tus contactos y los nombres reales de los
- * grupos. Lo guardado puede estar mal —un grupo con el nombre del ultimo que
- * escribio, por ejemplo— y eso no se arregla solo, porque al guardar se
- * conserva lo viejo cuando lo nuevo llega vacio.
+ * La agenda es la fuente buena para una persona: es como la tienes apuntada tu,
+ * no como se anuncia ella. Lo guardado puede estar mal y eso no se arregla
+ * solo, porque al guardar se conserva lo viejo cuando lo nuevo llega vacio.
+ *
+ * De los GRUPOS no dice nada bueno, y esta era la segunda puerta por la que se
+ * les colaba el nombre de una persona. Comprobado contra Evolution v2.3.7 sobre
+ * la agenda real: `findContacts` devuelve 106 jids de grupo y en TODOS el campo
+ * `name` viene vacio, asi que se cae al `pushName` —que ahi es el de quien
+ * hablo—. Un grupo salia llamandose «Dieguis» y otro, literalmente, una marca
+ * invisible.
+ *
+ * Se arreglo primero en `conversacionDe`, que es por donde entran los mensajes.
+ * Los nombres volvieron a romperse esa misma tarde: entraban por aqui. Asi que
+ * la regla se dice tambien aqui, y en el SQL —no en quien llama— porque asi no
+ * depende de que nadie se acuerde. El nombre de un grupo es su ASUNTO y entra
+ * solo por `datosDeGrupo`.
  *
  * Solo toca lo que NO coincide, asi que casi siempre no escribe nada.
  */
 export async function refrescarNombres(instancia, pares) {
-  if (!pares?.length) return 0;
-  const jids = pares.map((p) => p.jid);
-  const nombres = pares.map((p) => p.nombre);
+  // Los invisibles no son nombres: uno de la agenda real era U+200E a secas, y
+  // guardado deja la fila con la cabecera en blanco.
+  const limpios = (pares || [])
+    .map((p) => ({ jid: p?.jid, nombre: nombreLimpio(p?.nombre) }))
+    .filter((p) => p.jid && p.nombre);
+  if (!limpios.length) return 0;
+  const jids = limpios.map((p) => p.jid);
+  const nombres = limpios.map((p) => p.nombre);
   const { rowCount } = await query(
     `UPDATE wa_conversaciones c
         SET nombre_push = n.nombre
        FROM (SELECT unnest($2::text[]) AS jid, unnest($3::text[]) AS nombre) n
       WHERE c.instancia = $1
         AND c.jid = n.jid
+        -- Los grupos, ni tocarlos: lo que la agenda trae para ellos es el
+        -- nombre de quien hablo el ultimo.
+        AND c.jid NOT LIKE '%@g.us'
         AND n.nombre <> ''
         AND c.nombre_push IS DISTINCT FROM n.nombre`,
     [instancia, jids, nombres]

@@ -26,7 +26,7 @@ vi.mock('../src/shared/utils/normalizePhone.js', () => ({
   normalizePhone: (x) => x, phoneCanonical: (x) => x,
 }));
 
-const { conversacionDe, datosDeGrupo } = await import('../src/modules/whatsapp/chat.model.js');
+const { conversacionDe, datosDeGrupo, refrescarNombres } = await import('../src/modules/whatsapp/chat.model.js');
 
 /** El nombre que acaba yendo al INSERT. */
 const nombreEscrito = () => {
@@ -95,6 +95,42 @@ describe('el asunto del grupo, que es el que manda', () => {
 
   it('sin asunto ni foto no toca nada', async () => {
     await datosDeGrupo('crm-u4', '120363412958104027@g.us', null, null);
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('la agenda, que era la SEGUNDA puerta', () => {
+  // Se arreglo en `conversacionDe` y esa misma tarde los cuatro grupos volvian
+  // a llamarse como personas: entraban por aqui. Comprobado contra Evolution
+  // v2.3.7 sobre la agenda real — `findContacts` devuelve 106 jids de grupo y
+  // en todos el campo `name` viene vacio, asi que se cae al `pushName`, que en
+  // un grupo es el de quien hablo el ultimo.
+
+  it('no le pone a un grupo el nombre que traiga la agenda', async () => {
+    await refrescarNombres('crm-u4', [
+      { jid: '120363419272016724@g.us', nombre: 'Dieguis' },
+    ]);
+    const [sql] = query.mock.calls[0];
+    expect(sql, 'la agenda podia renombrar grupos').toContain("c.jid NOT LIKE '%@g.us'");
+  });
+
+  it('a las personas SI, que para eso esta', async () => {
+    await refrescarNombres('crm-u4', [
+      { jid: '34600111222@s.whatsapp.net', nombre: 'Marta Ruiz' },
+    ]);
+    expect(query.mock.calls[0][1][2]).toEqual(['Marta Ruiz']);
+  });
+
+  it('un invisible de la agenda no se guarda como nombre', async () => {
+    // Uno de los grupos de la agenda real se llamaba exactamente asi: U+200E.
+    await refrescarNombres('crm-u4', [
+      { jid: '34600111222@s.whatsapp.net', nombre: '‎' },
+    ]);
+    expect(query, 'se guardaba un nombre invisible').not.toHaveBeenCalled();
+  });
+
+  it('el asunto de un grupo tambien se limpia', async () => {
+    await datosDeGrupo('crm-u4', '120363412958104027@g.us', '  ‎ ', null);
     expect(query).not.toHaveBeenCalled();
   });
 });
