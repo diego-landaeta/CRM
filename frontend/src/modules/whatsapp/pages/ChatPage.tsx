@@ -1275,6 +1275,25 @@ export default function ChatPage() {
             {buscaChats && !visibles.length && (
               <div className="wa-sin-resultados">
                 <p className="font-medium text-foreground">Sin resultados para «{buscaChats}»</p>
+                {/* La etiqueta puesta, LO PRIMERO y antes que nada.
+                    Es el motivo mas probable de que una busqueda no devuelva
+                    nada, y era el unico que no se decia: se explicaba lo del
+                    historial y lo de los grupos, y la gestora se quedaba
+                    buscando a alguien que si esta pero con otro estado.
+                    «Las etiquetas estan, pero no se puede buscar» (#72) — y
+                    buscar si se puede; lo que no se puede es adivinar por que
+                    no sale. Con el boton al lado, que quitar el filtro a mano
+                    es volver arriba a buscar el chip pulsado. */}
+                {etiqueta && (
+                  <p>
+                    Estás filtrando por{' '}
+                    <strong>{etiqueta === ETIQUETA_GRUPOS ? 'Grupos' : (STATUS_LABELS[etiqueta] || etiqueta)}</strong>.
+                    Puede que «{buscaChats}» esté aquí con otro estado.{' '}
+                    <button type="button" onClick={() => setEtiqueta(null)} className="wa-quitar-filtro-enlace">
+                      Buscar en todos
+                    </button>
+                  </p>
+                )}
                 <p>
                   Los chats aparecen aquí <strong>cuando pasa un mensaje por el CRM</strong>.
                   Una conversación anterior a enlazar el número puede seguir en tu móvil y

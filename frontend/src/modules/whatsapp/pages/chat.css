@@ -1422,3 +1422,13 @@
 .wa-elegir-fila:focus-visible { background: var(--wa-hover); }
 
 .wa-elegir-avatar { background: var(--wa-cabecera); color: var(--wa-apagado); }
+
+/* «Buscar en todos», dentro del aviso de sin resultados (#72). Un enlace y no
+   un boton: va en mitad de una frase, y ahi un boton pesa demasiado. */
+.wa-quitar-filtro-enlace {
+  background: none; border: 0; padding: 0;
+  color: var(--wa-verde);
+  font: inherit; font-weight: 600;
+  cursor: pointer; text-decoration: underline;
+}
+.wa-quitar-filtro-enlace:hover { color: var(--wa-texto); }
