@@ -49,6 +49,7 @@ import {
   Wallet,
   HandCoins,
   GitMerge,
+  CopySimple,
   WhatsappLogo,
   ChatText,
   UsersThree, QrCode, Warning } from '@phosphor-icons/react';
@@ -193,6 +194,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Buscar duplicados', to: '/prospectos/duplicados', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],
   },
