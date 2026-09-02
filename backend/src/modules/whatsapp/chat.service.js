@@ -531,8 +531,14 @@ export async function recibir(cuerpo) {
     mediaMime: m.audioMessage?.mimetype || m.imageMessage?.mimetype
       || m.videoMessage?.mimetype || m.documentMessage?.mimetype || null,
     nombreArchivo: m.documentMessage?.fileName || null,
-    // A que mensaje responde, si responde a alguno. Lo manda el puente.
-    respondeA: datos?.respondeA || null,
+    // A que mensaje responde, si responde a alguno.
+    //
+    // Dos sitios, como con el autor del grupo: el puente lo manda ya masticado
+    // en `respondeA`, y Evolution manda el mensaje crudo con la cita dentro del
+    // `contextInfo` del tipo concreto. Leyendo solo lo primero, en produccion
+    // una respuesta se guardaba SIN saber a que respondia — y la cita no salia
+    // nunca. Es la mitad que faltaba del #62.
+    respondeA: datos?.respondeA || media.aQueResponde(m) || null,
     // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
     // salen iguales y no se sabe quien dijo que.
     //

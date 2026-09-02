@@ -87,6 +87,29 @@ export function abrirSobres(message, vueltas = 0) {
   return message;
 }
 
+/**
+ * A que mensaje responde este, si responde a alguno.
+ *
+ * WhatsApp lo mete en el contexto, y dentro del TIPO concreto: un texto citando
+ * lo lleva en `extendedTextMessage`, una foto en `imageMessage`, y asi. Se
+ * busca en todos en vez de solo en el texto, que era lo facil y dejaba fuera
+ * las respuestas con foto o con audio.
+ *
+ * Esto lo hacia el puente de Baileys y lo mandaba ya masticado como
+ * `respondeA`. Evolution manda el mensaje crudo, asi que en produccion nadie lo
+ * sacaba: una respuesta se guardaba sin saber a que respondia y la cita no
+ * salia nunca. Es la mitad que faltaba del #62 y el mismo patron del #63.
+ */
+export function aQueResponde(envuelto) {
+  const message = abrirSobres(envuelto);
+  if (!message || typeof message !== 'object') return null;
+  for (const clave of Object.keys(message)) {
+    const ctx = message[clave]?.contextInfo;
+    if (ctx?.stanzaId) return ctx.stanzaId;
+  }
+  return null;
+}
+
 /** Del tipo de mensaje de WhatsApp al tipo que guardamos. */
 export function tipoDeMensaje(envuelto) {
   if (!envuelto) return { tipo: 'texto', clave: null };
