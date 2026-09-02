@@ -51,8 +51,7 @@ import {
   GitMerge,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode,
-} from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -64,6 +63,7 @@ import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
 import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { moduloApagado } from '@/shared/lib/modulos';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -98,19 +98,23 @@ const NAV_SECTIONS = [
           // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
           // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
-          // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
+          // que puede pasarle a su numero— ya esta, con su casilla y su registro
+          // de quien lo acepto (tarea #45).
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
-          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-          // «WhatsApp del equipo» queda fuera del menu: entraba en la sesion de
-          // cada gestora a traves del navegador remoto, y ese metodo se ha
-          // retirado. La pantalla sigue existiendo pero llamaria a un servicio
-          // que ya no corre, asi que ensenaria un error. Vuelve cuando se
-          // rehaga con el chat nuevo, que ya guarda las conversaciones.
+          // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
+          // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
+          // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
+          // ruta que llegara a ellos. Vuelve cuando se rehaga sobre el chat
+          // nuevo, que ya guarda las conversaciones: sera leerlas, no meterse en
+          // la sesion de nadie.
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
           { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          // La guia, en el menu y no escondida: si hay que preguntar donde esta,
+          // ya se ha perdido a quien tenia que leerla.
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
@@ -153,6 +157,7 @@ const NAV_SECTIONS = [
       { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
+      { label: 'Sin tutor', to: '/tutores/sin-tutor', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
       { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
   },
@@ -170,7 +175,7 @@ const NAV_SECTIONS = [
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
+      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
       { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },
@@ -235,11 +240,12 @@ export function applyLabel(original, overrides) {
 //
 // Va aqui y no en los bundles del servidor porque esto es el menu: el modulo del
 // backend puede estar montado y aun asi no querer enseñarlo.
-const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
-  .split(',').map((s) => s.trim()).filter(Boolean);
+// El criterio vive en shared/lib/modulos: no es solo el menu, tambien lo usa el
+// aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
+// que si y el otro que no.
 
-function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
-  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+function canSeeItem(item, role, modules, projectType, soloColaboraciones, permisos) {
+  if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
@@ -259,14 +265,24 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones) {
     if (item.module && modules && modules[item.module] === false) return false;
     return true;
   }
+  // Un permiso acotado manda sobre el rol.
+  //
+  // La entrada de Facturacion la ve quien PUEDE facturar, no todo el que sea
+  // gestor. En ISEIE ninguna gestora factura —lo hacen Adriana y Daniela, que
+  // son admin— y aun asi las doce veian el panel. En ISEIH lo veia Vanessa, que
+  // es «gestor» pero lleva tutores.
+  //
+  // Se comprueba solo para gestor: un admin puede facturar por su rol, y a
+  // soporte y superadmin se les ha dejado pasar justo arriba.
+  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
   if (item.roles && !item.roles.includes(role)) return false;
   if (item.module && modules && modules[item.module] === false) return false;
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab))
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
@@ -1119,7 +1135,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab));
+          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
@@ -1132,6 +1148,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 modules={activeProject?.modules}
                 projectType={activeProject?.type}
                 soloColab={soloColab}
+                permisos={user}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}

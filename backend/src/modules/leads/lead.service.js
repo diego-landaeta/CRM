@@ -45,6 +45,44 @@ function detectChannel(utmSource, utmMedium) {
   return 'directo';
 }
 
+/**
+ * Saca las UTM de dentro de la propia direccion.
+ *
+ * Make manda la pagina donde la persona dejo sus datos, y esa direccion YA trae
+ * las UTM pegadas — es como llegan de Meta:
+ *
+ *   .../curso-de-coaching-familiar/?fbclid=...&utm_source=fb&utm_medium=paid
+ *      &utm_campaign=120244428100730715&utm_content=...&utm_term=...
+ *
+ * El CRM guardaba esa direccion entera y no la leia, asi que un lead de Meta se
+ * quedaba en «directo» teniendo `utm_source=fb` delante. Pedirle a Make que las
+ * mande otra vez aparte seria mandar dos veces el mismo dato y confiar en que
+ * nadie se olvide de una.
+ *
+ * Lo que venga suelto en el cuerpo MANDA sobre lo que diga la direccion: si
+ * alguien se molesto en mapearlo a mano, sabra por que.
+ */
+function utmsDeLaUrl(url) {
+  if (!url || typeof url !== 'string') return {};
+  let params;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return {};   // no es una direccion valida: no se inventa nada
+  }
+  const sacar = (clave) => {
+    const v = params.get(clave);
+    return v && v.trim() ? v.trim() : undefined;
+  };
+  return {
+    utm_source: sacar('utm_source'),
+    utm_medium: sacar('utm_medium'),
+    utm_campaign: sacar('utm_campaign'),
+    utm_content: sacar('utm_content'),
+    utm_term: sacar('utm_term'),
+  };
+}
+
 // ============================================================
 // WEBHOOK (publico, autenticado por API key)
 // ============================================================
@@ -70,6 +108,20 @@ export async function createFromExternalWebhook(projectId, leadData, _opts = {})
 }
 
 async function _createLeadCore(project, leadData) {
+  // Las UTM, sacadas de la propia direccion si no vinieron sueltas.
+  //
+  // Va AQUI y no en processWebhook porque hay dos puertas de entrada y por la
+  // otra —la de Make, `createFromExternalWebhook`— entran casi todos. Ponerlo en
+  // una sola dejaba fuera justo el camino que importa: el lead #3417 de ISAEG
+  // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
+  //
+  // Este es el sitio por el que pasan las dos.
+  for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+    if (!leadData[k]) {
+      const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
+      if (deLaUrl[k]) leadData[k] = deLaUrl[k];
+    }
+  }
   // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
   // el lead que ya creamos en lugar de duplicar.
   if (leadData.idempotency_key) {
@@ -190,6 +242,7 @@ async function _createLeadCore(project, leadData) {
     nombre: leadData.nombre,
     email: leadData.email || null,
     telefono: normalizePhone(leadData.telefono),
+    whatsappUsuario: leadData.whatsapp_usuario || null,
     productoInteresId,
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
@@ -597,7 +650,7 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   return { duplicate: dup };
 }
 
-export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
+export async function createManualLead({ project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
   // Detectar duplicado por email O por teléfono normalizado.
   const telNorm = normalizePhone(telefono);
@@ -650,6 +703,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     nombre,
     email,
     telefono: normalizePhone(telefono),
+    whatsappUsuario: whatsapp_usuario || null,
     productoInteresId: producto_interes_id || null,
     notas: notas || null,
     landingUrl: null,

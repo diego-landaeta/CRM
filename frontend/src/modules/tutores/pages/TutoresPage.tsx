@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -41,6 +41,23 @@ function generarContrasena() {
   return `${de(mayus, 1)}${de(letras, 5)}${de(numeros, 3)}`;
 }
 
+// Que le falta a un tutor para poder cobrar.
+//
+// Sin IBAN no se le puede pagar, y sin DNI no se puede justificar el pago. El
+// correo cuenta como «falta» cuando es uno construido con el dominio de la
+// marca: esos no existen, y por eso ninguno de sus dueños ha entrado nunca.
+const CORREO_DE_LA_CASA = /@(iseie|psikoaprende|iseih|fonoaprende|ictess)\.(com|es)$/i;
+
+function loQueFalta(t: Tutor): string[] {
+  const falta: string[] = [];
+  if (!t.iban) falta.push('IBAN');
+  if (!t.banco) falta.push('banco');
+  if (!t.dni_nif) falta.push('DNI');
+  if (!t.telefono) falta.push('teléfono');
+  if (!t.email || CORREO_DE_LA_CASA.test(t.email)) falta.push('correo');
+  return falta;
+}
+
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
   const { activeProject, projects } = useProjectContext() as {
@@ -80,6 +97,12 @@ export default function TutoresPage() {
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
   const [popupClave, setPopupClave] = useState(false);
+
+  // Editar los datos del tutor. Existia el endpoint (PATCH /tutores/:id/perfil)
+  // y no lo llamaba nadie: el formulario era solo de alta, asi que el IBAN se
+  // ponia una vez y despues no habia forma de verlo ni de cambiarlo.
+  const [popupDatos, setPopupDatos] = useState(false);
+  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', banco: '', email: '', reenviar: true });
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -150,6 +173,49 @@ export default function TutoresPage() {
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
   function abrirColab() { setCursoColab(null); setPopupColab(true); }
+
+  // Se rellena con lo que YA tiene. Es lo que evita el estropicio de guardar
+  // con los campos en blanco y borrarle el telefono al tutor.
+  function abrirDatos() {
+    if (!elegido) return;
+    setDatos({
+      nombre: elegido.nombre || '',
+      dniNif: elegido.dni_nif || '',
+      telefono: elegido.telefono || '',
+      iban: elegido.iban || '',
+      banco: elegido.banco || '',
+      email: elegido.email || '',
+      reenviar: true,
+    });
+    setPopupDatos(true);
+  }
+
+  async function guardarDatos() {
+    if (!elegido) return;
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.guardarPerfil(elegido.id, {
+        dniNif: datos.dniNif.trim() || null,
+        telefono: datos.telefono.trim() || null,
+        iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
+        banco: datos.banco.trim() || null,
+        ...(datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase()
+          ? { email: datos.email.trim(), reenviarEnlace: datos.reenviar }
+          : {}),
+      });
+      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
+      // El nombre vive en users, no en el perfil, y va por otra puerta.
+      if (datos.nombre.trim() && datos.nombre.trim() !== elegido.nombre) {
+        await client.patch(`/users/${elegido.id}`, { nombre: datos.nombre.trim() });
+      }
+      toast({ title: 'Datos guardados' });
+      setPopupDatos(false);
+      await cargar();
+    } catch (e) {
+      toast({ title: 'No se pudo guardar',
+        description: (e as Error).message, variant: 'destructive' });
+    } finally { setProcesando(false); }
+  }
 
   function abrirClave() {
     setClaveNueva(generarContrasena());
@@ -227,6 +293,23 @@ export default function TutoresPage() {
         </span>
       </div>
       <div className="text-xs text-muted-foreground truncate">{t.email}</div>
+      {/* Lo que le falta para poder cobrar. Va en la lista y no solo en la
+          ficha: asi se ve de un vistazo a quien hay que perseguir, sin abrir
+          uno por uno los cuarenta y cinco. */}
+      {(() => {
+        const falta = loQueFalta(t);
+        return falta.length > 0 ? (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {falta.map((q) => (
+              <span key={q}
+                className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium
+                  bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                falta {q}
+              </span>
+            ))}
+          </div>
+        ) : null;
+      })()}
       {t.marcas && (
         <div className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{t.marcas}</div>
       )}
@@ -411,6 +494,9 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
+                      <Button variant="outline" size="sm" onClick={abrirDatos}>
+                        <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar datos
+                      </Button>
                       <Button variant="outline" size="sm" onClick={abrirClave}>
                         <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
                       </Button>
@@ -734,6 +820,99 @@ export default function TutoresPage() {
               {guardando ? 'Guardando…' : 'Añadir'}
             </Button>
           </form>
+        </div>
+      )}
+
+      {/* Editar los datos del tutor.
+          Se abre con lo que ya tiene relleno, a proposito: `guardarPerfil`
+          escribe `iban || null`, asi que un formulario en blanco le borraria el
+          telefono y el DNI a quien ya los tenia. */}
+      {popupDatos && elegido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setPopupDatos(false)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold">Datos de {elegido.nombre}</h3>
+              <button type="button" onClick={() => setPopupDatos(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            <label className="block text-xs font-medium">
+              Nombre
+              <input value={datos.nombre}
+                onChange={(e) => setDatos({ ...datos, nombre: e.target.value })}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs font-medium">
+                DNI / NIF
+                <input value={datos.dniNif}
+                  onChange={(e) => setDatos({ ...datos, dniNif: e.target.value })}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+              </label>
+              <label className="block text-xs font-medium">
+                Telefono
+                <input value={datos.telefono}
+                  onChange={(e) => setDatos({ ...datos, telefono: e.target.value })}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+              </label>
+            </div>
+
+            <label className="block text-xs font-medium">
+              IBAN
+              <input value={datos.iban}
+                onChange={(e) => setDatos({ ...datos, iban: e.target.value })}
+                placeholder="ES00 0000 0000 0000 0000 0000"
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
+              <span className="block text-[11px] text-muted-foreground font-normal mt-1">
+                Donde se le paga. Los espacios se quitan solos.
+              </span>
+            </label>
+
+            {/* El banco, suelto y no deducido del IBAN: hay tutores fuera de
+                Europa, y ahi el numero de cuenta no lleva codigo de entidad. */}
+            <label className="block text-xs font-medium">
+              Banco
+              <input value={datos.banco}
+                onChange={(e) => setDatos({ ...datos, banco: e.target.value })}
+                placeholder="BBVA, Santander, Galicia…"
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+            </label>
+
+            {/* El correo es la CREDENCIAL, no un dato de contacto: al cambiarlo,
+                con el viejo ya no se entra. De ahi la casilla de reenviar. */}
+            <label className="block text-xs font-medium">
+              Correo
+              <input type="email" value={datos.email}
+                onChange={(e) => setDatos({ ...datos, email: e.target.value })}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+            </label>
+
+            {datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 space-y-2">
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  El correo es con lo que entra al CRM. Al cambiarlo se cierran sus
+                  sesiones y con el anterior ya no podra entrar.
+                </p>
+                <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-200">
+                  <input type="checkbox" checked={datos.reenviar} className="mt-0.5"
+                    onChange={(e) => setDatos({ ...datos, reenviar: e.target.checked })} />
+                  <span>
+                    Mandarle el enlace para poner contraseña a la direccion nueva.
+                    Sin esto se queda sin poder entrar.
+                  </span>
+                </label>
+              </div>
+            )}
+
+            <Button className="w-full" disabled={procesando} onClick={guardarDatos}>
+              {procesando ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
         </div>
       )}
 

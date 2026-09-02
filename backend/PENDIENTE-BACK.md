@@ -38,8 +38,11 @@
 - Busca leads vía `GET /api/leads?projectId=X&search=q&limit=5` con debounce 300ms.
 
 ### 8. WhatsApp Templates integrado en LeadsPage (sesión anterior)
-- **Archivo:** `frontend/src/modules/leads/pages/LeadsPage.jsx`
-- Hook `useWhatsappTemplates` integrado. Plantillas editables por proyecto, persistidas en `localStorage`.
+- **Archivo:** `frontend/src/modules/leads/pages/LeadsPage.tsx`
+- Hook `useWhatsappTemplates` integrado. Plantillas editables por proyecto.
+- **Ya no es localStorage** (tarea #25): están en la tabla `whatsapp_templates`
+  (migración 122) y se leen por `GET /api/whatsapp/templates`. El hook solo lee;
+  crear, editar y borrar viven en `/whatsapp/plantillas`.
 
 ---
 

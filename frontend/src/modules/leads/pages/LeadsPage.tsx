@@ -482,8 +482,20 @@ export default function LeadsPage() {
       });
       toast({ title: 'Interacción registrada', description: `${tipo === 'whatsapp' ? 'WhatsApp' : 'Email'} con ${lead.nombre}` });
       refetch();
-    } catch {
-      // Silent fail — el link igual abre, no queremos bloquear al usuario
+    } catch (e) {
+      // Antes esto se callaba: «silent fail, el link igual abre». Pero el link
+      // abriendo es justo lo que hace que no se note — la gestora habla con la
+      // persona convencida de que queda registrado, y en la ficha no hay nada.
+      // Luego alguien mira el historial y parece que nadie la contacto.
+      //
+      // No se bloquea a nadie: el chat se abre igual. Solo se dice que ese
+      // contacto NO ha quedado apuntado, para que se apunte a mano.
+      toast({
+        title: 'El contacto no ha quedado registrado',
+        description: 'El chat se abre igual, pero apúntalo a mano en la ficha: '
+          + ((e as Error)?.message || 'no se pudo guardar la interacción'),
+        variant: 'destructive',
+      });
     }
   }
 

@@ -9,6 +9,14 @@ node_modules/
 .env.production
 .env.*.local
 
+# Los mismos ficheros SIN punto delante. Existen en backend/ y los patrones de
+# arriba no los cogen: `.env.production` no casa con `env.production`. Estaban
+# sin seguir y a un `git add -A` de subirse con sus credenciales dentro.
+env
+env.*
+!env.example
+
+
 # Build
 dist/
 build/

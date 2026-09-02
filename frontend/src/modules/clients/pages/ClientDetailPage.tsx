@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { Lead, Conversion } from '@/shared/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -55,7 +56,6 @@ function fmtDateTime(d) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-function cleanPhone(p) { return (p || '').replace(/[^\d+]/g, ''); }
 function getInitials(name) {
   if (!name) return '??';
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -185,7 +185,7 @@ export default function ClientDetailPage() {
 
   const avatarColor = AVATAR_COLORS[lead.id % AVATAR_COLORS.length];
   const initials = getInitials(lead.nombre);
-  const waPhone = cleanPhone(lead.telefono);
+  const waPhone = telefonoParaWhatsapp(lead.telefono);
 
   const totalFacturado = conversions.reduce((s, c) => s + Number(c.importe_total || 0), 0);
   const totalPagado = conversions.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);

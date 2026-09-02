@@ -226,7 +226,9 @@ export default function LeadDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          <LeadInfoCard lead={lead} onUpdate={updateLead}
+            onLlamada={(nota) => addInteraction('llamada', nota)}
+            onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard

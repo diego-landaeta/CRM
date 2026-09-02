@@ -18,6 +18,7 @@ export const altaTutorSchema = z.object({
   password: z.string().min(8, 'Al menos 8 caracteres').optional().nullable(),
   dniNif: z.string().max(32).optional().nullable(),
   iban: z.string().max(40).optional().nullable(),
+  banco: z.string().max(120).optional().nullable(),
   telefono: z.string().max(32).optional().nullable(),
   notas: z.string().optional().nullable(),
 });
@@ -25,8 +26,17 @@ export const altaTutorSchema = z.object({
 export const perfilSchema = z.object({
   dniNif: z.string().max(32).optional().nullable(),
   iban: z.string().max(40).optional().nullable(),
+  banco: z.string().max(120).optional().nullable(),
   telefono: z.string().max(32).optional().nullable(),
   notas: z.string().optional().nullable(),
+  // El correo vive en users, no en el perfil, pero se cambia desde aqui porque
+  // es la unica pantalla donde se editan los datos de un tutor.
+  //
+  // Y es la CREDENCIAL: al cambiarlo, quien lo tuviera deja de poder entrar con
+  // el viejo. Por eso viene acompañado de `reenviarEnlace`, para mandarle el
+  // correo con el enlace de contraseña a la direccion nueva.
+  email: z.string().email('Correo no valido').optional().nullable(),
+  reenviarEnlace: z.boolean().optional(),
 });
 
 export const colaboracionSchema = z.object({

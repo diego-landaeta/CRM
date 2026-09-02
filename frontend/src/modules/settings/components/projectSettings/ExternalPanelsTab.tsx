@@ -131,7 +131,7 @@ export default function ExternalPanelsTab({ project, onSaved }: Props) {
       />
 
       <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border">
-        <p className="text-[11px] font-medium text-muted-foreground mb-3">Nuevo panel</p>
+        <p className="text-secundario font-medium text-muted-foreground mb-3">Nuevo panel</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input
             value={draft.label}
@@ -229,12 +229,12 @@ export default function ExternalPanelsTab({ project, onSaved }: Props) {
                     <>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm">{p.label}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary">
+                        <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-primary/10 text-primary">
                           {p.open_in === 'tab' ? 'Pestaña' : 'Iframe'}
                         </span>
-                        {p.icon && <span className="font-mono text-[10px] text-muted-foreground">{p.icon}</span>}
+                        {p.icon && <span className="font-mono text-secundario text-muted-foreground">{p.icon}</span>}
                       </div>
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-primary truncate block mt-0.5">
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-secundario text-muted-foreground hover:text-primary truncate block mt-0.5">
                         {p.url}
                       </a>
                     </>
@@ -268,7 +268,7 @@ export default function ExternalPanelsTab({ project, onSaved }: Props) {
         </div>
       )}
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-secundario text-muted-foreground">
         <strong>Nota:</strong> algunos sitios (banca, Google Workspace, GitHub) bloquean ser embebidos en iframes
         mediante <code className="font-mono">X-Frame-Options</code> o <code className="font-mono">CSP frame-ancestors</code>.
         En esos casos, usa "Pestaña nueva".

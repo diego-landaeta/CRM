@@ -150,7 +150,7 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
           El botón es HTML inline → aparece <strong>siempre</strong>, fijo abajo-derecha, sin que WP Rocket/LiteSpeed lo bloqueen.
           La rotación de gestoras se actualiza desde el CRM automáticamente.
         </p>
-        <a href={dataUrl} target="_blank" rel="noopener" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
+        <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
           Ver datos del widget <ArrowSquareOut size={11} />
         </a>
       </div>
