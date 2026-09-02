@@ -620,7 +620,19 @@ function cuandoFue(valor) {
  * No hace falta migracion: `tipo` no tiene lista cerrada de valores.
  */
 async function llamada(cuerpo) {
-  const datos = cuerpo?.data || cuerpo;
+  // El aviso de llamada llega como OBJETO o como LISTA, segun quien lo mande.
+  //
+  // Baileys emite `call` con un array —`sock.ev.on('call', (llamadas) => …)`—
+  // porque WhatsApp puede notificar varias de golpe. Quien lo reenvie fielmente
+  // manda ese array. Aqui se leia `datos.id` a secas: con una lista eso es
+  // undefined, y la llamada se descartaba entera por «sin id». En produccion no
+  // se registraria ni una sola llamada entrante, y no habria ni rastro de por
+  // que — el descarte no deja aviso.
+  //
+  // No se puede comprobar contra el Evolution de verdad desde aqui, asi que se
+  // aceptan las dos formas. Aceptar de mas no rompe nada; suponer, si.
+  const bruto = cuerpo?.data || cuerpo;
+  const datos = Array.isArray(bruto) ? bruto[0] : bruto;
   const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
   if (!instancia) return { ignorado: 'llamada sin instancia' };
 
