@@ -1292,6 +1292,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Quien hablo, delante del adelanto. Del mismo color y sin negrita: es una
+   pista, no un titulo, y en negrita compite con el nombre del grupo de arriba.
+   No se le pone `flex` a la fila a proposito — con flex el corte por elipsis
+   se aplica a cada trozo por su cuenta y se ve «Dieg…: Stic…». */
+.wa-fila-autor { color: var(--wa-apagado); }
 
 /* Los colores de las etiquetas, propios y NO de Tailwind.
 

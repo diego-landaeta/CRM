@@ -71,13 +71,47 @@ function cuandoDe(iso: string | null) {
  * Comparando y conservando el array anterior cuando no hay nada nuevo, React
  * no toca nada y el desplazamiento se queda donde estaba.
  */
+/**
+ * Un texto que de verdad dice algo, o nada.
+ *
+ * `||` solo cae con un valor falso, y una cadena de ESPACIOS no lo es. WhatsApp
+ * manda nombres asi mas de lo que parece: alguien con el nombre en blanco, o
+ * con caracteres invisibles. Ese «  » se tomaba como nombre bueno y la cabecera
+ * se quedaba vacia — se veia el fondo claro del kit, una barra blanca donde
+ * deberia estar el nombre, y el avatar caia a su interrogante. Reportado desde
+ * produccion.
+ */
+const conTexto = (v?: string | null) => (v || '').trim() || null;
+
+/**
+ * El telefono de una conversacion, SOLO si de verdad es un telefono.
+ *
+ * WhatsApp identifica cada vez a mas gente por «@lid», su direccionamiento
+ * nuevo: un identificador que dice quien es la persona sin dar su numero. La
+ * pantalla pintaba sus catorce cifras donde va el telefono —«95069319217252 ·
+ * sin prospecto»— y eso no es el movil de nadie. No se puede marcar, no se
+ * puede buscar y no significa nada para quien lo lee.
+ *
+ * Un grupo tampoco tiene telefono: lo que hay ahi son las dieciocho cifras de
+ * su identificador.
+ *
+ * Devuelve null cuando no hay numero que ensenar, y quien llama decide que
+ * poner en su lugar.
+ */
+export const telefonoVisible = (c: { jid?: string | null; telefono?: string | null; es_grupo?: boolean }) => {
+  const jid = String(c.jid || '');
+  if (c.es_grupo || jid.endsWith('@lid') || jid.endsWith('@g.us')) return null;
+  return conTexto(c.telefono);
+};
+
 const mismoMensaje = (a: MensajeWhatsapp, b: MensajeWhatsapp) =>
   a.id === b.id && a.estado === b.estado && a.texto === b.texto
   && a.media_url === b.media_url && a.media_firma === b.media_firma;
 
 const mismoChat = (a: ChatWhatsapp, b: ChatWhatsapp) =>
   a.id === b.id && a.ultimo_at === b.ultimo_at && a.no_leidos === b.no_leidos
-  && a.ultimo_texto === b.ultimo_texto && a.lead_status === b.lead_status
+  && a.ultimo_texto === b.ultimo_texto && a.ultimo_autor === b.ultimo_autor
+  && a.lead_status === b.lead_status
   && a.nombre_push === b.nombre_push && a.avatar_url === b.avatar_url;
 
 const igualesPor = <T,>(a: T[], b: T[], iguales: (x: T, y: T) => boolean) =>
@@ -226,7 +260,26 @@ const LLAMADA = {
   // La que sale del boton. Se dice «desde el movil» a proposito: el CRM apunta
   // que se marco, no sabe si descolgaron. Prometer mas seria mentir.
   intento:    { texto: 'Llamaste desde el móvil', video: 'Llamaste desde el móvil', grave: false },
+  // Sono y acabo, y WhatsApp no dice como.
+  //
+  // Es el caso mas comun de todos: quien llama cuelga antes de que salte el
+  // buzon, o lo coges en el movil. Baileys manda el mismo `terminate` para los
+  // dos, asi que llamarlo «perdida» seria mentir. Antes esto no se guardaba y la
+  // llamada no dejaba ni rastro.
+  terminada:  { texto: 'Llamada', video: 'Videollamada', grave: false },
 } as const;
+
+/**
+ * El desenlace de una llamada y, si se sabe, cuanto sono: «terminada:16».
+ *
+ * Los segundos van pegados al desenlace porque no hay columna donde meterlos y
+ * las migraciones estan paradas.
+ */
+function comoAcabo(texto?: string | null) {
+  const [clave, segundos] = String(texto || 'perdida').split(':');
+  const cual = LLAMADA[clave as keyof typeof LLAMADA] || LLAMADA.perdida;
+  return { cual, segundos: segundos ? Number(segundos) : null };
+}
 
 /**
  * Una llamada en el hilo.
@@ -237,13 +290,16 @@ const LLAMADA = {
  * que no reconoce, asi que un <div> suelto no se pintaria.
  */
 function Llamada({ m }: { m: MensajeWhatsapp }) {
-  const cual = LLAMADA[(m.texto || 'perdida') as keyof typeof LLAMADA] || LLAMADA.perdida;
+  const { cual, segundos } = comoAcabo(m.texto);
   const esVideo = m.media_mime === 'video';
   const Icono = esVideo ? VideoCamera : cual.grave ? PhoneX : PhoneCall;
   return (
     <div className={`wa-llamada ${cual.grave ? 'wa-llamada-perdida' : ''}`}>
       <Icono size={15} weight="fill" />
-      <span>{esVideo ? cual.video : cual.texto}</span>
+      <span>
+        {esVideo ? cual.video : cual.texto}
+        {segundos ? ` · sonó ${segundos} s` : ''}
+      </span>
       <span className="wa-llamada-hora">{hora(m.ts)}</span>
     </div>
   );
@@ -1101,9 +1157,10 @@ export default function ChatPage() {
     // y la cabecera se quedaba vacia — se veia el fondo claro del kit, una
     // barra blanca donde deberia estar el nombre, y el avatar caia a su
     // interrogante. Reportado desde produccion.
-    const conTexto = (v?: string | null) => (v || '').trim() || null;
-    return conTexto(c.lead_nombre) || conTexto(c.nombre_push)
-      || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
+    return conTexto(c.lead_nombre) || conTexto(c.nombre_push) || telefonoVisible(c)
+      // Ni nombre ni telefono: pasa con quien llega por «@lid» y no esta en la
+      // agenda. Antes caia a las cifras del identificador.
+      || (c.es_grupo ? 'Grupo sin nombre' : 'Contacto de WhatsApp');
   };
 
   // Lo que se ensena debajo del nombre.
@@ -1123,14 +1180,31 @@ export default function ChatPage() {
     // desenlace en seco, asi que la lista ponia «perdida» a secas, sin decir de
     // que. Se mira el tipo primero y se dice la frase entera.
     if (c.ultimo_tipo === 'llamada') {
-      const cual = LLAMADA[(c.ultimo_texto || 'perdida') as keyof typeof LLAMADA];
-      return `📞 ${cual ? cual.texto : 'Llamada'}`;
+      return `📞 ${comoAcabo(c.ultimo_texto).cual.texto}`;
     }
     if (c.ultimo_texto) return c.ultimo_texto;
     if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
-    // Sin nada que adelantar: el telefono si es una persona, y para un grupo
-    // nada — su identificador no le dice nada a nadie.
-    return c.es_grupo ? 'Grupo' : c.telefono;
+    // Sin nada que adelantar: el telefono si lo hay de verdad. Ni el
+    // identificador de un grupo ni un «@lid» le dicen nada a nadie.
+    return telefonoVisible(c) || (c.es_grupo ? 'Grupo' : 'Sin mensajes todavía');
+  };
+
+  // Quien mando lo ultimo, delante del adelanto.
+  //
+  // En un grupo hablan varios y la lista ponia «Sticker» a secas: no habia
+  // forma de saber quien lo habia mandado sin abrir el chat. WhatsApp escribe
+  // «Dieguis: Sticker» y «Tu: Sticker», y eso es lo que se hace aqui.
+  //
+  // Solo en grupos. En el chat de una persona el nombre ya esta arriba, y
+  // WhatsApp tampoco lo repite ahi.
+  //
+  // Nada si no hay nada que adelantar —no llegan mensajes— ni cuando el
+  // adelanto no es un mensaje: «no escribir» es un aviso nuestro, no algo que
+  // haya dicho nadie.
+  const quienMandoDe = (c: ChatWhatsapp) => {
+    if (!c.es_grupo || c.no_escribir || !c.ultimo_direccion) return null;
+    if (c.ultimo_direccion === 'saliente') return 'Tú';
+    return conTexto(c.ultimo_autor) || null;
   };
   // Ya vienen filtrados del servidor. Antes se filtraba aqui, sobre las 50
   // cargadas, y por eso no aparecia nada de mas atras.
@@ -1297,7 +1371,12 @@ export default function ChatPage() {
                       )}
                       <span className="wa-fila-cuando">{cuandoDe(c.ultimo_at)}</span>
                     </div>
-                    <div className="wa-fila-adelanto">{adelantoDe(c)}</div>
+                    <div className="wa-fila-adelanto">
+                      {quienMandoDe(c) && (
+                        <span className="wa-fila-autor">{quienMandoDe(c)}: </span>
+                      )}
+                      {adelantoDe(c)}
+                    </div>
                   </Conversation.Content>
                 </Conversation>
               ))}
@@ -1389,9 +1468,16 @@ export default function ChatPage() {
                           ? `${escribiendo.quien} esta ${escribiendo.que}…`
                           : `${escribiendo.que}…`}
                       </span>
-                    : conv.es_grupo ? 'Grupo'
-                    : conv.lead_id ? `${conv.telefono} · prospecto`
-                    : `${conv.telefono} · sin prospecto`} />
+                    : conv.es_grupo ? (
+                        // Quienes escriben, como los miembros que pone WhatsApp
+                        // debajo del nombre del grupo. Si no sabemos ninguno
+                        // todavia, «Grupo» a secas.
+                        conv.participantes?.length
+                          ? `${conv.participantes.slice(0, 4).join(', ')}${conv.participantes.length > 4 ? '…' : ''} y tú`
+                          : 'Grupo'
+                      )
+                    : [telefonoVisible(conv), conv.lead_id ? 'prospecto' : 'sin prospecto']
+                        .filter(Boolean).join(' · ')} />
                 <ConversationHeader.Actions>
                   {/* La ficha, en un popup y SIN salir de aqui.
                       Antes era un enlace a /prospectos/:id que navegaba en esta
@@ -1409,12 +1495,14 @@ export default function ChatPage() {
                     <InfoButton />
                   </button>
                   {/* Llamar. El CRM prepara, el telefono llama.
-                      Solo en conversaciones de una persona: a un grupo no se
-                      puede llamar desde un enlace `tel:`, y ofrecerlo seria
-                      prometer algo que no va a pasar. */}
-                  {!conv.es_grupo && (
+                      Solo cuando hay un numero de verdad al que llamar: a un
+                      grupo no se puede, y de quien llega por «@lid» no tenemos
+                      su movil — el boton abriria un dialogo con catorce cifras
+                      que no marcan a nadie. Prometer eso es peor que no
+                      ofrecerlo. */}
+                  {telefonoVisible(conv) && (
                     <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
-                      title={`Llamar a ${conv.telefono} desde el móvil`}>
+                      title={`Llamar a ${telefonoVisible(conv)} desde el móvil`}>
                       <PhoneCall size={17} />
                     </button>
                   )}
@@ -1582,7 +1670,12 @@ export default function ChatPage() {
                         {m.responde_a && (m.citado_texto || m.citado_tipo) && (
                           <div className="wa-cita">
                             <span className="wa-cita-quien">
-                              {m.citado_direccion === 'saliente' ? 'Tu' : nombreDe(conv)}
+                              {/* En un grupo, a QUIEN se cita. Aqui iba el nombre
+                                  de la conversacion, que en un grupo es el del
+                                  grupo: se leia «Fantasy» citando a una persona. */}
+                              {m.citado_direccion === 'saliente'
+                                ? 'Tú'
+                                : (m.citado_autor || nombreDe(conv))}
                             </span>
                             <span className="wa-cita-texto">
                               {m.citado_texto || ADELANTO[m.citado_tipo || ''] || `(${m.citado_tipo})`}

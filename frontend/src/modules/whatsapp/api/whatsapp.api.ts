@@ -94,6 +94,23 @@ export interface ChatWhatsapp {
   ultimo_texto: string | null;
   /** De que tipo fue el ultimo mensaje: si fue foto o audio no hay texto. */
   ultimo_tipo?: string | null;
+  /** Si el ultimo mensaje lo mandamos nosotros o nos lo mandaron. */
+  ultimo_direccion?: 'entrante' | 'saliente' | null;
+  /**
+   * Quien mando el ultimo mensaje, en un grupo.
+   *
+   * Null en un chat de una persona —ahi ya se sabe quien— y tambien en lo
+   * saliente: de eso se encarga `ultimo_direccion`.
+   */
+  ultimo_autor?: string | null;
+  /**
+   * Quienes escriben en el grupo, para la cabecera.
+   *
+   * Solo llega al abrir la conversacion, no en la lista. Son los nombres que
+   * sabemos —los de quien ha escrito—, no la lista de miembros: esa sale de la
+   * agenda del movil y no la tenemos.
+   */
+  participantes?: string[];
 }
 
 
@@ -165,6 +182,8 @@ export interface MensajeWhatsapp {
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;
+  /** Quien escribio el mensaje citado. Solo en grupos. */
+  citado_autor?: string | null;
   /**
    * `enviando` no existe en la base: es solo de la pantalla.
    *
