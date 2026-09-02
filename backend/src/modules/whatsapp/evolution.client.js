@@ -344,6 +344,37 @@ export async function guardarAjustes(nombre = INSTANCIA, cambios = {}) {
   return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
 }
 
+/**
+ * Los mensajes que Evolution guarda de UN chat concreto (#73).
+ *
+ * Una gestora no encuentra a alguien de hace dos meses porque ese chat nunca
+ * entro: al enlazar se pide `syncFullHistory: false` y solo llega lo reciente.
+ * Ponerlo a `true` traeria cientos de miles de mensajes de golpe en un numero
+ * con años de uso, asi que se hace al reves — se pide UN chat cuando hace falta.
+ *
+ * Evolution los tiene igualmente: es leerlos de su archivo, no de WhatsApp.
+ *
+ * La forma de la respuesta cambia entre versiones —unas devuelven la lista
+ * pelada, otras la envuelven en `messages.records`— asi que se aceptan las dos.
+ * Devuelve [] si no se pudo: que no haya historial no puede tumbar nada.
+ */
+export async function mensajesDe(jid, nombre = INSTANCIA, limite = 300) {
+  const r = await pedir(`/chat/findMessages/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { where: { key: { remoteJid: jid } }, limit: limite },
+    esperaMs: 30000,
+  });
+  if (!r.ok) return [];
+  const d = r.datos;
+  const filas = Array.isArray(d) ? d
+    : Array.isArray(d?.messages?.records) ? d.messages.records
+    : Array.isArray(d?.messages) ? d.messages
+    : Array.isArray(d?.records) ? d.records
+    : [];
+  // Solo lo que tiene clave: sin `key.id` no hay como evitar duplicarlo despues.
+  return filas.filter((m) => m?.key?.id);
+}
+
 /** Que numero esta conectado ahora mismo. */
 export const instancias = () => pedir('/instance/fetchInstances');
 

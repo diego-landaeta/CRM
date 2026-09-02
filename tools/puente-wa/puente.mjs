@@ -1388,6 +1388,32 @@ http.createServer(async (req, res) => {
       })));
     }
 
+    /**
+     * Los mensajes guardados de UN chat (#73).
+     *
+     * Existe en Evolution, asi que existe aqui. Un puente MENOS capaz que el
+     * original tambien miente: si esto devolviera vacio, traer el historial de
+     * un numero se probaria bien en local sin haberse probado nada.
+     *
+     * Se sirve de lo que ya hay en memoria —`s.mensajes`, hasta 20.000 por
+     * sesion— filtrando por el chat. Evolution lo saca de su base y guarda mas;
+     * aqui se guarda lo que ha pasado por el puente, que para probar sobra.
+     */
+    if (url.startsWith('/chat/findMessages/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      const jid = cuerpo?.where?.key?.remoteJid || null;
+      const tope = Math.min(1000, Number(cuerpo?.limit) || 300);
+      const suyos = [...s2.mensajes.values()]
+        .filter((m) => !jid || m?.key?.remoteJid === jid)
+        // Lo mas reciente primero, como lo devuelve Evolution.
+        .sort((a, b) => Number(b?.messageTimestamp || 0) - Number(a?.messageTimestamp || 0))
+        .slice(0, tope);
+      // Envuelto en `messages.records`, que es una de las dos formas que usa
+      // Evolution segun la version. El CRM acepta las dos.
+      return json(200, { messages: { records: suyos, total: suyos.length } });
+    }
+
     // Los ajustes de la sesion. Existen en Evolution, asi que existen aqui: al
     // quitar el comodin de arriba, sin esto darian 404 y el rechazo automatico
     // de llamadas no se podria probar en local — que es el otro lado del mismo

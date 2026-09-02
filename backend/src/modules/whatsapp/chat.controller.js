@@ -1112,6 +1112,16 @@ export async function sinLeer(req, res, next) {
  * conversacion de otra persona: contesta «no encontrada», que no confirma
  * siquiera que exista.
  */
+// POST /api/whatsapp/chats/:id/historial — trae de Evolution lo que falte (#73)
+export async function traerHistorial(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const limite = Math.min(1000, Math.max(1, parseInt(req.body?.limite) || 300));
+    const r = await servicio.traerHistorial({ conversacion: conv, limite });
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
 // POST /api/whatsapp/chats/:id/reenviar  — :id es el chat DESTINO
 export async function reenviar(req, res, next) {
   try {

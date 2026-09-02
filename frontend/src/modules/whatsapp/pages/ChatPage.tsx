@@ -1010,6 +1010,29 @@ export default function ChatPage() {
       if (!r.success) throw new Error(r.error || 'No se pudo abrir');
       setFiltro(''); setBuscaChats('');
       await cargarLista(); setAbierto(r.data.id);
+
+      // Y se trae lo que Evolution tenga de ese chat (#73).
+      //
+      // Abrirlo y dejarlo vacio no resuelve nada: «no aparecen los
+      // seguimientos de tiempo atras» es no poder LEER lo que se hablo, no que
+      // falte una fila en la lista. Al enlazar solo entra el historial
+      // reciente, asi que lo de hace dos meses hay que pedirlo.
+      //
+      // Va DESPUES de abrir y sin bloquear: el chat se ve al momento y los
+      // mensajes viejos aparecen cuando lleguen. Si falla no se dice con un
+      // aviso rojo — el chat esta abierto, que es lo que se pidio.
+      chatApi.traerHistorial(r.data.id)
+        .then(async (h) => {
+          if (h?.success && h.data?.metidos) {
+            await cargarHilo(r.data.id);
+            cargarLista();
+            toast({
+              title: 'Historial traído',
+              description: `${h.data.metidos} mensajes que no estaban en el CRM.`,
+            });
+          }
+        })
+        .catch(() => {});
     } catch (e) { fallo(e); }
   }
 

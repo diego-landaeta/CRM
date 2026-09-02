@@ -745,6 +745,49 @@ async function acuse(cuerpo) {
   return { waId, estado };
 }
 
+/**
+ * Trae de Evolution el historial de UN chat y lo mete en la base (#73).
+ *
+ * «No aparecen los numeros de los seguimientos de tiempo atras»: al enlazar se
+ * pide `syncFullHistory: false`, asi que solo entra lo reciente y el buscador
+ * no puede encontrar lo que nunca llego. Poner eso a `true` traeria cientos de
+ * miles de mensajes de golpe en un numero con años de uso.
+ *
+ * Se hace al reves: se pide UN chat, cuando alguien lo busca y no aparece.
+ *
+ * Reinyecta por `recibir()`, el mismo camino que el webhook. Es a proposito:
+ * asi el historial pasa por toda la logica normal —tipos, adjuntos, citas,
+ * autor en grupos— en vez de por una via paralela que se quedaria atras al
+ * primer cambio. Y `wa_mensajes` tiene un unico por (conversacion, wa_id), asi
+ * que repetirlo no duplica nada.
+ */
+export async function traerHistorial({ conversacion, limite = 300 }) {
+  if (!evolution.configurado()) {
+    throw new AppError('WhatsApp no esta configurado', 503, 'SIN_EVOLUTION');
+  }
+  const crudos = await evolution.mensajesDe(conversacion.jid, conversacion.instancia, limite);
+  if (!crudos.length) return { pedidos: 0, metidos: 0 };
+
+  let metidos = 0;
+  for (const m of crudos) {
+    // Se marca como historial: el CRM lo usa para decidir que adjuntos baja ya
+    // y cuales pueden esperar. Sin esto, traer un chat de hace meses pondria
+    // cientos de fotos por delante de las de ahora en la cola de descargas.
+    const r = await recibir({
+      instance: conversacion.instancia,
+      historial: true,
+      data: {
+        key: m.key,
+        pushName: m.pushName || null,
+        message: m.message,
+        messageTimestamp: String(m.messageTimestamp || Math.floor(Date.now() / 1000)),
+      },
+    }).catch(() => null);
+    if (r && !r.ignorado) metidos += 1;
+  }
+  return { pedidos: crudos.length, metidos };
+}
+
 /** Marca leidos los entrantes de una conversacion, tambien en WhatsApp. */
 export async function marcarLeida(conversacionId, noLeidos = null) {
   // Si no hay nada sin leer, no hay nada que marcar.

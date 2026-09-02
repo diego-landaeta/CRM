@@ -306,6 +306,16 @@ export const chatApi = {
     return client.get(`/whatsapp/banco/numeros?${q}`);
   },
 
+  /**
+   * Trae de Evolution lo que falte de ESTE chat (#73).
+   *
+   * Al enlazar solo entra el historial reciente, asi que un seguimiento de hace
+   * dos meses no esta en la base y el buscador no puede encontrarlo. Esto pide
+   * ese chat concreto, en vez de traer la cuenta entera.
+   */
+  traerHistorial: (id: number, limite = 300): Promise<ApiResponse<{ pedidos: number; metidos: number }>> =>
+    client.post(`/whatsapp/chats/${id}/historial`, { limite }),
+
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
 
