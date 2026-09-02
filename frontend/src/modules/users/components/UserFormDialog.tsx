@@ -15,6 +15,8 @@ export interface UserFormValues {
   role: UserRole;
   projects: ProjectAssignment[];
   whatsapp_phone: string;
+  factura_manager: boolean;
+  editar_fechas_factura: boolean;
 }
 
 interface Props {
@@ -41,6 +43,8 @@ export default function UserFormDialog({
   const [role, setRole] = useState<UserRole>((user?.role as UserRole) ?? 'gestor');
   const [seleccionados, setSeleccionados] = useState<ProjectAssignment[]>(user?.projects ?? []);
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
+  const [facturaManager, setFacturaManager] = useState(!!user?.factura_manager);
+  const [editarFechas, setEditarFechas] = useState(!!user?.editar_fechas_factura);
 
   const [nuevaPass, setNuevaPass] = useState('');
   const [guardandoPass, setGuardandoPass] = useState(false);
@@ -81,6 +85,10 @@ export default function UserFormDialog({
       role,
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
+      factura_manager: facturaManager,
+      // Poder cambiar fechas sin poder facturar no sirve de nada: la pantalla de
+      // fechas se abre desde la factura. Si se quita lo primero, cae lo segundo.
+      editar_fechas_factura: facturaManager && editarFechas,
     });
   }
 
@@ -197,6 +205,44 @@ export default function UserFormDialog({
                 onToggleRecibeLeads={alternarRecibeLeads}
                 required={!esEdicion}
               />
+            )}
+
+            {/* Facturacion. No se deriva del rol: ser «gestor» no decide quien
+                factura. Vanessa lo es y no debe. Un admin puede siempre, por su
+                rol, asi que para el las casillas no cambian nada y no se pintan. */}
+            {(role === 'gestor' || role === 'soporte') && (
+              <div className="rounded-lg border border-border p-3 space-y-2">
+                <p className="text-xs text-muted-foreground px-1">Facturación</p>
+                <label className="flex items-start gap-2 cursor-pointer px-1">
+                  <input
+                    type="checkbox"
+                    checked={facturaManager}
+                    onChange={(e) => setFacturaManager(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm">
+                    Puede emitir y corregir facturas
+                    <span className="block text-secundario text-muted-foreground">
+                      Solo las de sus propios prospectos.
+                    </span>
+                  </span>
+                </label>
+                <label className={`flex items-start gap-2 px-1 ${facturaManager ? 'cursor-pointer' : 'opacity-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={facturaManager && editarFechas}
+                    disabled={!facturaManager}
+                    onChange={(e) => setEditarFechas(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm">
+                    Puede cambiar las fechas de emisión y de pago
+                    <span className="block text-secundario text-muted-foreground">
+                      Sin tocar importes ni conceptos.
+                    </span>
+                  </span>
+                </label>
+              </div>
             )}
 
             {esEdicion && (
