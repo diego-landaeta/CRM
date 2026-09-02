@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken } from '../../shared/middleware/auth.js';
+import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
 import { uploadWhatsapp } from '../../shared/middleware/upload.js';
 import * as ctrl from './whatsapp.controller.js';
 import * as chat from './chat.controller.js';
@@ -44,6 +44,11 @@ router.get('/usuarios', chat.usuarios);
 
 // El banco de mensajes (#101). Va ANTES de las rutas de chats para leerse
 // junto: no es el chat, es el respaldo.
+// La forma de los avisos de Evolution. Solo soporte y superadmin: no lleva
+// datos de nadie, pero dice como esta montado el sistema por dentro.
+router.get('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.formaDeAvisos);
+router.delete('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.olvidarFormaDeAvisos);
+
 router.get('/banco', chat.banco);
 router.get('/banco/numeros', chat.bancoNumeros);
 

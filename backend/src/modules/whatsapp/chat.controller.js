@@ -4,6 +4,7 @@ import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
 import * as firma from './media.firma.js';
+import * as forma from './avisos.forma.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
@@ -926,6 +927,11 @@ export async function emparejar(req, res, next) {
  */
 export async function webhook(req, res) {
   try {
+    // Apunta la FORMA del aviso —no su contenido— si esta encendido el volcado.
+    // Es lo que permite saber que manda Evolution de verdad sin desplegar a
+    // ciegas. Apagado por defecto; ver `avisos.forma.js`.
+    forma.apuntar(req.body);
+
     // El secreto es OBLIGATORIO en produccion, no «si esta puesto».
     //
     // Tal como estaba, olvidarse de la variable dejaba la puerta abierta: esta
@@ -1112,6 +1118,20 @@ export async function sinLeer(req, res, next) {
  * conversacion de otra persona: contesta «no encontrada», que no confirma
  * siquiera que exista.
  */
+// GET /api/whatsapp/forma-avisos — que manda Evolution de verdad
+export async function formaDeAvisos(req, res, next) {
+  try {
+    res.json({ success: true, data: forma.loApuntado() });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/whatsapp/forma-avisos — empezar de cero sin reiniciar
+export async function olvidarFormaDeAvisos(req, res, next) {
+  try {
+    res.json({ success: true, data: { olvidados: forma.olvidar() } });
+  } catch (err) { next(err); }
+}
+
 // POST /api/whatsapp/chats/:id/historial — trae de Evolution lo que falte (#73)
 export async function traerHistorial(req, res, next) {
   try {
