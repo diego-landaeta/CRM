@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const guardados = [];
+const conversaciones = [];
 
 vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
   configurado: () => true,
@@ -27,13 +28,14 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
   descargarMedia: async () => null,
   fotoDe: async () => null,
   grupoDe: async () => null,
+  contactoDe: async () => ({ jid: '34600111222@lid', nombre: 'Josefina', foto: 'https://x/f.jpg' }),
 }));
 
 vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   actualizarAvatar: async () => 0,
   datosDeGrupo: async () => 0,
   marcarEliminado: async () => 0,
-  conversacionDe: async (d) => ({ id: 1, telefono: '34600111222', nombre_push: 'Adrian', ...d }),
+  conversacionDe: async (d) => { conversaciones.push(d); return { id: 1, telefono: '34600111222', nombre_push: 'Adrian', ...d }; },
   guardarMensaje: async (d) => { guardados.push(d); return { id: 1, ...d }; },
   mensajePorWaId: async () => null,
   porId: async () => ({ id: 1, instancia: 'crm-u1' }),
@@ -42,6 +44,7 @@ vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
 let servicio;
 beforeEach(async () => {
   guardados.length = 0;
+  conversaciones.length = 0;
   vi.resetModules();
   servicio = await import('../src/modules/whatsapp/chat.service.js');
 });
@@ -89,5 +92,65 @@ describe('lo que sigue sin guardarse, y esta bien', () => {
     const r = await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [] });
     expect(r?.ignorado).toBeTruthy();
     expect(guardados).toHaveLength(0);
+  });
+});
+
+describe('la llamada que el otro cuelga, que es la mas normal', () => {
+  // Comprobado con una llamada de verdad contra Evolution v2.3.7: llegaron
+  // `offer`, dieciseis `relaylatency` y un `terminate`. Ni timeout, ni reject,
+  // ni accept. Se descartaba el `terminate` y esa llamada NO DEJABA NADA: ni
+  // una linea en el chat ni un apunte en la ficha.
+
+  const sonar = () => servicio.recibir({
+    event: 'call', instance: 'crm-u1', data: [laLlamada('offer')],
+  });
+
+  it('deja constancia, aunque no se sepa como acabo', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados, 'una llamada colgada no dejaba rastro').toHaveLength(1);
+    expect(guardados[0].tipo).toBe('llamada');
+    expect(String(guardados[0].texto).split(':')[0]).toBe('terminada');
+  });
+
+  it('NO la llama perdida, porque no se sabe', async () => {
+    // El propio Baileys dice que su `terminate` sale «when accepted / rejected
+    // / timeout / caller hangs up», y `accept` solo se emite si descuelga ESTE
+    // aparato — no el movil. Poner «perdida» seria mentir en un historial que
+    // sirve para auditar.
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados[0].texto).not.toContain('perdida');
+  });
+
+  it('apunta cuanto sono', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados[0].texto).toMatch(/^terminada:\d+$/);
+  });
+
+  it('un `terminate` sin haber sonado no inventa una llamada', async () => {
+    // Es el que llega detras de un accept o un reject ya guardados.
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados).toHaveLength(0);
+  });
+
+  it('despues de una rechazada, el `terminate` no anade otra', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('reject')] });
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados).toHaveLength(1);
+    expect(guardados[0].texto).toBe('rechazada');
+  });
+});
+
+describe('quien llama tiene nombre', () => {
+  it('se busca en la agenda, porque el aviso no lo trae', async () => {
+    // `handleCall` de Baileys arma el evento con chatId, from, id, date,
+    // offline y status. Nada mas: ni nombre ni foto. La conversacion nacia sin
+    // nombre y la pantalla pintaba las catorce cifras del `@lid`.
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('offer')] });
+    expect(conversaciones[0]?.nombrePush).toBe('Josefina');
+    expect(conversaciones[0]?.avatarUrl).toBe('https://x/f.jpg');
   });
 });

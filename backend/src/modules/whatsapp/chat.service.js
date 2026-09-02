@@ -697,8 +697,11 @@ async function llamada(cuerpo) {
 
   const estado = String(datos?.status || '').toLowerCase();
   // Solo el desenlace se GUARDA. Lo de en medio no es un hecho todavia.
+  //
+  // `terminate` no esta aqui porque no dice COMO acabo. Se resuelve mas abajo,
+  // que necesita saber si la llamada seguia sonando.
   const COMO_ACABO = { timeout: 'perdida', reject: 'rechazada', accept: 'contestada' };
-  const desenlace = COMO_ACABO[estado];
+  let desenlace = COMO_ACABO[estado];
 
   // `from` puede venir como `@lid`, que identifica a la persona sin dar su
   // numero. Baileys manda el telefono aparte en `callerPn` cuando lo sabe.
@@ -707,18 +710,55 @@ async function llamada(cuerpo) {
   // En grupo, la conversacion es el grupo; en persona, quien llama.
   const jid = datos?.isGroup ? (datos?.chatId || datos?.groupJid || quienLlama) : quienLlama;
 
-  // `terminate` dice que la llamada acabo, pero no COMO: llega detras de un
-  // accept o un reject que ya se guardaron. No se guarda nada —seria adivinar—
-  // pero si se apaga el cartel. Sin esto se quedaria puesto hasta caducar solo,
-  // y son 45 segundos avisando de una llamada que ya no existe.
+  // `terminate`: la llamada acabo, pero WhatsApp no dice COMO.
+  //
+  // Antes se descartaba, y por eso una llamada en la que el otro cuelga antes
+  // de que salte el buzon NO DEJABA NADA. Ni una linea. Comprobado con una
+  // llamada de verdad: llegaron `offer`, dieciseis `relaylatency` y un
+  // `terminate`, y en la base no quedo mas que la conversacion vacia.
+  //
+  // Y no se puede deducir el final, esto no es una sospecha: en el Baileys que
+  // lleva Evolution v2.3.7 el `terminate` sale «fired when accepted / rejected
+  // / timeout / caller hangs up» —su propio comentario—, y `accept` y `reject`
+  // solo se emiten cuando descuelga o rechaza ESTE aparato, no el movil. Asi
+  // que cuando contestas en el movil aqui solo llega `terminate`: apuntar
+  // «perdida» seria mentir en un historial que sirve para auditar.
+  //
+  // Se guarda lo que SI se sabe: que sono y que termino. La duracion la pone la
+  // pantalla, y quien lo lea sabe que la llamada existio — que es justo lo que
+  // faltaba.
+  const seguiaSonando = sonando.get(instancia);
   if (estado === 'terminate') {
     sonando.delete(instancia);
-    return { ignorado: 'llamada terminada' };
+    // Sin `offer` previo no hubo llamada nuestra que cerrar: es el `terminate`
+    // que llega detras de un accept o un reject ya guardados, o el de una
+    // llamada que empezo antes de arrancar el proceso.
+    if (!seguiaSonando || seguiaSonando.id !== id) return { ignorado: 'llamada ya cerrada' };
+    desenlace = 'terminada';
   }
   // Ni `offer` ni el desenlace: son estados intermedios del protocolo.
   if (!desenlace && estado !== 'offer') return { ignorado: `llamada en curso (${estado})` };
 
-  const conv = await model.conversacionDe({ instancia, jid });
+  // Quien llama, con nombre y cara.
+  //
+  // El aviso de la llamada no los trae —`handleCall` de Baileys arma el evento
+  // con chatId, from, id, date, offline y status, y nada mas— asi que la
+  // conversacion nacia sin nombre y la pantalla pintaba el identificador crudo:
+  // catorce cifras que no le dicen nada a nadie. Se buscan en la agenda, donde
+  // si estan.
+  //
+  // Solo al sonar: es un aviso raro y una llamada a Evolution de mas ahi no
+  // molesta, mientras que hacerlo en cada cambio de estado serian cinco.
+  const ficha = (estado === 'offer' && evolution.configurado())
+    ? await evolution.contactoDe(jid, instancia).catch(() => null)
+    : null;
+
+  const conv = await model.conversacionDe({
+    instancia,
+    jid,
+    nombrePush: ficha?.nombre || null,
+    avatarUrl: ficha?.foto || null,
+  });
 
   // Esta sonando. Se apunta en memoria para que la pantalla lo cante, se busca
   // el nombre AQUI —una vez, y es un aviso raro— y no en cada consulta de la
@@ -736,6 +776,11 @@ async function llamada(cuerpo) {
     return { conversacionId: conv.id, sonando: true, tipo: 'llamada' };
   }
 
+  // Cuanto estuvo sonando, si se llego a ver el `offer`.
+  const segundosSonando = seguiaSonando?.desde
+    ? Math.max(1, Math.round((Date.now() - seguiaSonando.desde) / 1000))
+    : null;
+
   // Ya no suena: se quita el cartel. Da igual como acabara — contestada en el
   // movil, rechazada o perdida—, lo que no puede es seguir avisando.
   sonando.delete(instancia);
@@ -746,7 +791,15 @@ async function llamada(cuerpo) {
     tipo: 'llamada',
     // El desenlace en seco, no la frase. La pantalla decide como se dice, y asi
     // se puede filtrar por «perdidas» sin buscar dentro de un texto.
-    texto: desenlace,
+    //
+    // Con los segundos detras cuando se sabe cuanto sono —«terminada:16»—, que
+    // es lo unico que distingue una llamada que alguien dejo pasar de una que
+    // no llego a sonar. No hay columna para esto y las migraciones estan
+    // paradas; separado por dos puntos se lee igual de bien y quien filtra por
+    // «perdida» sigue casando por delante.
+    texto: (desenlace === 'terminada' && segundosSonando)
+      ? `terminada:${segundosSonando}`
+      : desenlace,
     // Para una llamada, «de que tipo de medio es» si significa algo.
     mediaMime: datos?.isVideo ? 'video' : 'audio',
     ts: cuandoFue(datos?.date),
@@ -764,6 +817,12 @@ async function llamada(cuerpo) {
       perdida:    { voz: 'Llamada perdida por WhatsApp',    video: 'Videollamada perdida por WhatsApp' },
       rechazada:  { voz: 'Llamada rechazada por WhatsApp',  video: 'Videollamada rechazada por WhatsApp' },
       contestada: { voz: 'Llamada contestada por WhatsApp', video: 'Videollamada contestada por WhatsApp' },
+      // No se sabe si la cogio en el movil o si el otro colgo, asi que se
+      // cuenta lo que hay: que entro y cuanto sono.
+      terminada:  {
+        voz:   `Llamada por WhatsApp${segundosSonando ? ` (sonó ${segundosSonando} s)` : ''}`,
+        video: `Videollamada por WhatsApp${segundosSonando ? ` (sonó ${segundosSonando} s)` : ''}`,
+      },
     };
     const comoSeCuenta = COMO_SE_CUENTA[desenlace];
     try {
