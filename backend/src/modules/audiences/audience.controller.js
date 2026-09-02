@@ -62,7 +62,7 @@ export async function uploadMeta(req, res, next) {
       records_uploaded: leads.length,
       status: 'processing',
       filters,
-      created_by: req.user.id,
+      created_by: req.user.userId,
     });
     // Sin credenciales Meta: simulamos progreso con un timeout corto, marca completed con match_rate ficticio
     setTimeout(async () => {
