@@ -562,19 +562,46 @@
 .wa-escribiendo { color: var(--wa-verde); font-style: italic; }
 
 /* Responder a un mensaje: sale al pasar por encima de la burbuja. */
-.wa-responder {
-  position: absolute; top: 2px; right: 4px;
+/* Las acciones de un mensaje: responder, reenviar y corregir.
+ *
+ * En FILA. Antes cada boton llevaba su propia posicion absoluta en la misma
+ * esquina, asi que al anadir el segundo tapaba al primero. Ahora la posicion la
+ * pone el contenedor y los botones solo se colocan dentro. */
+.wa-acciones {
+  /* FUERA de la burbuja, a su lado.
+     Dentro, en la esquina, se montaban encima del texto en cuanto el mensaje
+     era corto — y son casi todos. Al lado no tapan nada y siguen a mano. */
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--wa-cabecera);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+/* Cada uno hacia su lado libre: los mios estan pegados a la derecha, asi que
+   sus acciones van por la izquierda, y al reves. */
+.wa-marco .cs-message--incoming .wa-acciones { right: -70px; }
+.wa-marco .cs-message--outgoing .wa-acciones { left: -70px; }
+.wa-marco .cs-message__content { position: relative; }
+/* Con el foco tambien, no solo con el raton: por teclado no habia forma de
+   llegar a ellas — se tabulaba a un boton invisible. */
+.wa-marco .cs-message:hover .wa-acciones,
+.wa-acciones:focus-within { opacity: 1; }
+
+.wa-accion {
   display: grid; place-items: center;
   width: 20px; height: 20px;
   border: 0; border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.35);
+  background: transparent;
   color: var(--wa-apagado);
-  cursor: pointer; opacity: 0;
-  transition: opacity 0.12s;
+  cursor: pointer;
 }
-.wa-marco .cs-message__content { position: relative; }
-.wa-marco .cs-message:hover .wa-responder { opacity: 1; }
-.wa-responder:hover { color: var(--wa-texto); }
+.wa-accion:hover:not(:disabled) { color: var(--wa-texto); background: rgba(255,255,255,.10); }
+.wa-accion:focus-visible { outline: 2px solid var(--wa-verde); outline-offset: 1px; }
+.wa-accion:disabled { cursor: default; opacity: .5; }
 
 /* La cita, encima de la caja de escribir.
  *
@@ -1271,17 +1298,6 @@
 
 /* Corregir un mensaje ya enviado (#75). Discreto: solo aparece durante los
    15 minutos que WhatsApp deja, y no compite con el texto. */
-.wa-corregir {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--wa-apagado);
-  cursor: pointer;
-  opacity: .8;
-}
-.wa-corregir:hover { opacity: 1; color: var(--wa-texto); }
-.wa-corregir:disabled { cursor: default; opacity: .5; }
-
 /* Corregir DENTRO de la burbuja (#75). Antes esto era un window.prompt: un
    cartel del sistema con «localhost dice» encima del CRM, sin estilo, sin
    tema y bloqueando la pestaña entera. */

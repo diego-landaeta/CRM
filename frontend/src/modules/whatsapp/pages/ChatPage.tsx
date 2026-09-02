@@ -56,6 +56,33 @@ function cuandoDe(iso: string | null) {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 }
 
+/**
+ * Un mensaje es «el mismo» si nada de lo que se pinta ha cambiado.
+ *
+ * El hilo y la lista se vuelven a pedir cada cinco segundos, y hasta ahora se
+ * reemplazaba el array entero SIEMPRE, aunque llegara identico. Cada vuelta
+ * eran objetos nuevos, asi que React repintaba todas las burbujas y el kit
+ * volvia a colocar el desplazamiento: un parpadeo cada cinco segundos.
+ *
+ * Se notaba sobre todo al ampliar (#64) — cambia el alto, se remide, y si en
+ * ese momento cae el refresco parece que la conversacion se recarga sola. Y
+ * leyendo hacia arriba era peor: cada vuelta devolvia al final.
+ *
+ * Comparando y conservando el array anterior cuando no hay nada nuevo, React
+ * no toca nada y el desplazamiento se queda donde estaba.
+ */
+const mismoMensaje = (a: MensajeWhatsapp, b: MensajeWhatsapp) =>
+  a.id === b.id && a.estado === b.estado && a.texto === b.texto
+  && a.media_url === b.media_url && a.media_firma === b.media_firma;
+
+const mismoChat = (a: ChatWhatsapp, b: ChatWhatsapp) =>
+  a.id === b.id && a.ultimo_at === b.ultimo_at && a.no_leidos === b.no_leidos
+  && a.ultimo_texto === b.ultimo_texto && a.lead_status === b.lead_status
+  && a.nombre_push === b.nombre_push && a.avatar_url === b.avatar_url;
+
+const igualesPor = <T,>(a: T[], b: T[], iguales: (x: T, y: T) => boolean) =>
+  a.length === b.length && a.every((x, i) => iguales(x, b[i]));
+
 function diaDe(iso: string) {
   const d = new Date(iso);
   const hoy = new Date();
@@ -435,7 +462,7 @@ export default function ChatPage() {
       // Pero buscando NO: la lista encoge y crece segun lo que se teclea, y ese
       // vaiven diria «sincronizando…» sin que este entrando nada.
       if (!buscaChats) cuantasAntes.current = lista.length;
-      setChats(lista);
+      setChats((antes) => (igualesPor(antes, lista, mismoChat) ? antes : lista));
     } finally {
       setCargando(false);
     }
@@ -444,8 +471,9 @@ export default function ChatPage() {
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
     if (!r.success) return;
+    const llegan = r.data.mensajes || [];
     setConv(r.data.conversacion);
-    setMensajes(r.data.mensajes || []);
+    setMensajes((antes) => (igualesPor(antes, llegan, mismoMensaje) ? antes : llegan));
     setEscribiendo(r.data.escribiendo || null);
   }, [cuantos, deQuien]);
 
@@ -1434,21 +1462,42 @@ export default function ChatPage() {
                         {/* Responder a ESTE mensaje. Aparece al pasar por
                             encima, como en WhatsApp: siempre visible seria
                             ruido en cada burbuja. */}
-                        <button type="button" className="wa-responder"
-                          title="Responder a este mensaje"
-                          onClick={() => setCitando(m)}>
-                          <ArrowBendUpLeft size={13} weight="bold" />
-                        </button>
-                        {/* Reenviar a otro chat (#99, punto 5). Una llamada no
-                            se reenvia, y uno que aun no ha salido tampoco. */}
-                        {m.tipo !== 'llamada' && m.id > 0 && (
-                          <button type="button" className="wa-responder"
-                            title="Reenviar a otro chat"
-                            aria-label="Reenviar a otro chat"
-                            onClick={() => setReenviando(m)}>
-                            <ShareFat size={13} weight="bold" />
+                        {/* Las acciones, en FILA y no apiladas.
+                            Iban las dos con la misma posicion absoluta en la
+                            esquina, asi que la segunda tapaba a la primera.
+
+                            Y corregir entra aqui (#75): era un texto gris de
+                            once pixeles dentro de la burbuja, siempre visible
+                            pero invisible de hecho — «funciona, pero no se ve
+                            como». Ahora es un icono al lado de los otros, que
+                            es donde se busca. */}
+                        <span className="wa-acciones">
+                          <button type="button" className="wa-accion"
+                            title="Responder a este mensaje"
+                            aria-label="Responder a este mensaje"
+                            onClick={() => setCitando(m)}>
+                            <ArrowBendUpLeft size={13} weight="bold" />
                           </button>
-                        )}
+                          {/* Una llamada no se reenvia, y uno que aun no ha
+                              salido tampoco. */}
+                          {m.tipo !== 'llamada' && m.id > 0 && (
+                            <button type="button" className="wa-accion"
+                              title="Reenviar a otro chat"
+                              aria-label="Reenviar a otro chat"
+                              onClick={() => setReenviando(m)}>
+                              <ShareFat size={13} weight="bold" />
+                            </button>
+                          )}
+                          {sePuedeCorregir(m) && editando !== m.id && (
+                            <button type="button" className="wa-accion"
+                              disabled={corrigiendo === m.id}
+                              title="Corregir — WhatsApp lo permite durante 15 minutos"
+                              aria-label="Corregir este mensaje"
+                              onClick={() => empezarACorregir(m)}>
+                              <PencilSimpleLine size={13} weight="bold" />
+                            </button>
+                          )}
+                        </span>
                         {m.estado === 'fallido' && m.texto && (
                           <button type="button" className="wa-reintentar"
                             disabled={reintentando === m.id}
@@ -1456,14 +1505,7 @@ export default function ChatPage() {
                             {reintentando === m.id ? 'Enviando…' : '↻ Reintentar'}
                           </button>
                         )}
-                        {sePuedeCorregir(m) && editando !== m.id && (
-                          <button type="button" className="wa-corregir"
-                            disabled={corrigiendo === m.id}
-                            title="WhatsApp deja corregir durante 15 minutos"
-                            onClick={() => empezarACorregir(m)}>
-                            {corrigiendo === m.id ? 'Corrigiendo…' : '✎ Corregir'}
-                          </button>
-                        )}
+
                       </Message.CustomContent>
                     </Message>,
                   ].filter(Boolean);
