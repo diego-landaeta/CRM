@@ -463,6 +463,15 @@ export async function noEscribir(req, res, next) {
 export async function registrarLlamada(req, res, next) {
   try {
     const conv = await miConversacion(req, parseInt(req.params.id));
+
+    // A un grupo no se le llama. La pantalla ya no ofrece el boton ahi, pero el
+    // endpoint lo aceptaba igual: apuntaba el identificador del grupo —dieciocho
+    // cifras— como si fuera un telefono, y ese numero acaba saliendo en el
+    // historial y en el banco de mensajes como una llamada a alguien.
+    if (String(conv.jid || '').endsWith('@g.us')) {
+      throw new AppError('A un grupo no se le puede llamar', 400, 'ES_UN_GRUPO');
+    }
+
     const minuto = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
     const fila = await model.guardarMensaje({
       conversacionId: conv.id,
