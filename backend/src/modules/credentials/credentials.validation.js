@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Los servicios que se pueden guardar.
  *
  * Esta lista tiene que ir a la par con el enum `api_service` de la base
- * (migracion 135). Son dos sitios y no hay forma de compartirlos: si aqui falta
+ * (migracion 137). Son dos sitios y no hay forma de compartirlos: si aqui falta
  * uno, el endpoint contesta 400 aunque la base lo admita — que es lo que pasaba
  * con los cuatro de abajo.
  *

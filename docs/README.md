@@ -151,6 +151,9 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando. Sin ella el aviso se ve pero no queda registro. |
 | 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje. Sin ella el mensaje se guarda igual, pero se pierde la cita. |
 | 132 | 132_avisos_por_correo.sql | Que avisos por correo ha apagado cada persona. **Sin aplicar.** |
+| 137 | 137_claves_por_entorno.sql | El panel de claves: una credencial por servicio Y entorno, y los servicios que faltaban (#80). **Sin aplicar.** |
+| 138 | 138_densidad_de_tabla_cabe.sql | `table_density` era VARCHAR(10) y «comfortable» mide 11: la preferencia no se podia guardar. **Sin aplicar.** |
+| 139 | 139_banco_de_mensajes.sql | Los indices que necesita el banco de mensajes, que recorre todo por fecha en vez de un hilo (#101). **Sin aplicar.** |
 
 > **Las de WhatsApp (122, 128, 129, 130) no estan todas aplicadas en produccion.**
 > El modulo esta apagado alli con `VITE_MODULOS_APAGADOS=whatsapp`, asi que

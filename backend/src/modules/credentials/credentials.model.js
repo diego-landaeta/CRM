@@ -175,7 +175,7 @@ export async function upsert({ project_id, service, value, metadata, userId = nu
   };
   const { rows } = await query(
     // El conflicto se declara con las MISMAS expresiones del indice unico
-    // (migracion 135). Postgres no lo deduce de otra forma con un indice de
+    // (migracion 137). Postgres no lo deduce de otra forma con un indice de
     // expresiones, y `ON CONFLICT (project_id, service)` deja de existir en
     // cuanto una credencial puede estar en dos entornos.
     `INSERT INTO api_credentials (project_id, service, encrypted_value, iv, auth_tag, metadata)

@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *    elige su fila por su cuenta, y basta un empate de `ts` —que los hay,
  *    WhatsApp da la hora en segundos— para pegar el autor de un mensaje al
  *    texto de otro. Eso no falla en pruebas y miente en pantalla.
- *  · Con la guarda de la 133. Sin la migracion, la lista tiene que salir igual
+ *  · Con la guarda de la 134. Sin la migracion, la lista tiene que salir igual
  *    y sin autor, no reventar entera.
  */
 
@@ -42,7 +42,7 @@ const conMigracion = (hay) => {
   });
 };
 
-describe('con la 133 aplicada', () => {
+describe('con la 134 aplicada', () => {
   beforeEach(() => conMigracion(true));
 
   it('pide quien mando lo ultimo', async () => {
@@ -65,7 +65,7 @@ describe('con la 133 aplicada', () => {
   });
 });
 
-describe('sin la 133', () => {
+describe('sin la 134', () => {
   beforeEach(() => conMigracion(false));
 
   it('la lista sale igual, solo que sin autor', async () => {

@@ -125,7 +125,7 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   // el mensaje se guarda igual y lo unico que se pierde es saber a que
   // contestaba — perderlo entero seria mucho peor.
   const conCita = respondeA && await puedeGuardarCita();
-  // Quien escribio, solo en grupos y solo si la 133 esta aplicada.
+  // Quien escribio, solo en grupos y solo si la 134 esta aplicada.
   //
   // El nombre se limpia igual que el de la conversacion: en la agenda real hay
   // gente cuyo `pushName` es una marca invisible, y guardado asi la lista de
@@ -137,7 +137,7 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
     `INSERT INTO wa_mensajes
        (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''}${conQuien ? ', participante, participante_nombre' : ''})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? `, $${12}` : ''}${conQuien ? `, $${conCita ? 13 : 12}, $${conCita ? 14 : 13}` : ''})
-     -- Por CONVERSACION y no solo por wa_id (migracion 134).
+     -- Por CONVERSACION y no solo por wa_id (migracion 135).
      --
      -- Con el conflicto global, el mismo mensaje visto por dos sesiones —dos
      -- gestoras en el mismo grupo— se guardaba en UNA sola: en la pantalla de
@@ -277,7 +277,7 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
   }
 
   // Quien mando el ultimo mensaje. Con la misma guarda que el resto: sin la
-  // migracion 133 se pide todo lo demas y no se dice el autor.
+  // migracion 134 se pide todo lo demas y no se dice el autor.
   const conQuien = await puedeGuardarParticipante();
 
   params.push(Math.min(200, limite));
@@ -591,7 +591,7 @@ export async function mensajes(conversacionId, limite = 100) {
               LIMIT 1) AS citado_autor` : '';
 
   // Quien escribio cada mensaje, en grupos (#74). Misma guarda que la cita: si
-  // la 133 no esta aplicada se pide igual el resto y no se enseña autor.
+  // la 134 no esta aplicada se pide igual el resto y no se enseña autor.
   const columnasQuien = (await puedeGuardarParticipante())
     ? `, m.participante, m.participante_nombre,
        -- La foto de quien escribio, SIN tabla nueva.
@@ -880,7 +880,7 @@ let hayColumnaResponde = null;
 let hayColumnaParticipante = null;
 
 /**
- * ¿Esta aplicada la migracion 133?
+ * ¿Esta aplicada la migracion 134?
  *
  * Mismo patron que la cita: pedir una columna que no existe tumba el INSERT
  * entero, y perder el mensaje por no poder guardar QUIEN lo escribio seria un
