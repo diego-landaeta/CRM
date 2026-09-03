@@ -54,6 +54,7 @@ import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import LeadsFiltersBar from '../components/LeadsFiltersBar';
+import PanelDeCola from '../components/PanelDeCola';
 import QuickActions from '../components/QuickActions';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
@@ -144,6 +145,9 @@ export default function LeadsPage() {
   } = useLeads();
 
   const { activeProject, projects } = useProjectContext();
+  // Sube al crear un lead: el turno del round-robin avanza justo ahi, y el
+  // panel tiene que dejar de ensenar al que ya recibio.
+  const [repartos, setRepartos] = useState(0);
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
@@ -551,6 +555,7 @@ export default function LeadsPage() {
         else if (duplicado) desc = 'Prospecto duplicado detectado en este proyecto';
 
         toast({ title: 'Lead creado', description: desc });
+        setRepartos((n) => n + 1);
         await refetch();
       }
     } catch (err) {
@@ -709,6 +714,14 @@ export default function LeadsPage() {
           )}
         </div>
       </div>
+
+      {/* A quien le toca el proximo prospecto (#11).
+          Encima de los filtros y debajo del titulo: es contexto de la lista, no
+          una accion. Se pinta solo con un proyecto concreto elegido — en modo
+          «todos» no hay una cola, hay una por proyecto. */}
+      {activeProject?.id > 0 && (
+        <PanelDeCola projectId={activeProject.id} recargarCon={repartos} />
+      )}
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
