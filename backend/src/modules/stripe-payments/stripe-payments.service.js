@@ -197,6 +197,22 @@ async function filtroDeMetadata(projectId) {
  *
  * Tratarlo como ajeno seria perder ese cobro para siempre. Por eso se distingue.
  */
+/**
+ * Cuanto se espera a que la plataforma estampe un cobro suyo.
+ *
+ * La marca de agua se queda esperando a los cobros sin marcar, y eso esta bien
+ * durante la ventana de estampado — minutos. Pero si uno no se marca NUNCA
+ * —porque es de otra plataforma que no marca, o porque su webhook esta roto— la
+ * marca de agua se quedaria clavada para siempre y cada vuelta releeria una
+ * ventana un poco mas grande, cada cinco minutos, hasta que alguien se diera
+ * cuenta. Nadie se daria cuenta.
+ *
+ * Un dia es mucho mas que la ventana real y poco para el ritmo del negocio: si a
+ * las 24 horas sigue sin marca, no es un desfase, es que no le van a poner
+ * ninguna.
+ */
+const GRACIA_SIN_MARCAR_MS = 24 * 60 * 60 * 1000;
+
 function deQuienEs(charge, filtro) {
   if (!filtro) return 'mio';
   const marca = charge?.metadata?.[filtro.clave];
@@ -242,6 +258,7 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
   let imported = 0;
   let ajenos = 0;
   let sinMarcar = 0;
+  let sinMarcarViejos = 0;
   // El cobro sin marcar MAS ANTIGUO de esta vuelta. La marca de agua no puede
   // pasar de ahi: ver abajo.
   let primeroSinMarcar = null;
@@ -270,6 +287,15 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
         // ha estampado. Se deja pasar de largo SIN mover la marca de agua, para
         // volver a mirarlo en la siguiente vuelta.
         if (duenno === 'sin_marcar') {
+          const edadMs = Date.now() - ch.created * 1000;
+          if (edadMs > GRACIA_SIN_MARCAR_MS) {
+            // Ya no es un desfase de estampado: a estas alturas no le van a
+            // poner marca. Se deja pasar la marca de agua y se apunta, porque
+            // esto SI hay que mirarlo — o es de otra plataforma que no marca, o
+            // su webhook no esta estampando.
+            sinMarcarViejos++;
+            continue;
+          }
           sinMarcar++;
           if (primeroSinMarcar == null || ch.created < primeroSinMarcar) primeroSinMarcar = ch.created;
           continue;
@@ -348,8 +374,16 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     last_error: null,
   });
 
-  logger.info({ projectId, imported, ajenos, sinMarcar, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, ajenos, sinMarcar, disputes: disputesFound, pages, reasociados };
+  // Los viejos sin marcar se avisan aparte y como aviso, no como dato: si esto
+  // sale, o hay una plataforma compartiendo cuenta sin marcar sus cobros, o el
+  // estampado de la nuestra se ha roto. Las dos cosas hay que mirarlas.
+  if (sinMarcarViejos) {
+    logger.warn({ projectId, sinMarcarViejos },
+      'Stripe: cobros de mas de un dia SIN marca de plataforma. O son de otra que no marca, ' +
+      'o el estampado del webhook de la nuestra no esta funcionando.');
+  }
+  logger.info({ projectId, imported, ajenos, sinMarcar, sinMarcarViejos, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, ajenos, sinMarcar, sinMarcarViejos, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
