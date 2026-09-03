@@ -45,6 +45,7 @@ const ROUTE_TITLES = {
   '/notificaciones': 'Notificaciones',
   '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
@@ -186,6 +187,7 @@ const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDet
 const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
+const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -309,6 +311,9 @@ function App() {
           <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
+          {/* Claves y variables (#80). El recorte de rol lo hace el servidor con
+              `soloRoles`; aqui solo se sirve la pantalla. */}
+          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />

@@ -22,10 +22,14 @@ export const upsertCredentialSchema = z.object({
   project_id: z.number().int().positive().nullable().optional(),
   service: z.enum(SERVICES),
   value: z.string().min(4, 'Valor muy corto').max(10000),
+  entorno: z.enum(ENTORNOS).optional().default('produccion'),
   metadata: z.record(z.string(), z.any()).optional().nullable(),
 });
 
 export const listCredentialsSchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),
   service: z.enum(SERVICES).optional(),
+  entorno: z.enum(ENTORNOS).optional(),
 });
+
+export const SERVICIOS = SERVICES;

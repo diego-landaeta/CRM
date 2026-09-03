@@ -109,6 +109,33 @@ export async function getCorreos(req, res, next) {
 }
 
 /**
+ * GET /api/status/correos/vista-previa — los avisos del CRM, sin mandar ninguno.
+ *
+ * Ultima parte de la #83. Contesta HTML y no JSON a proposito: esto se abre en
+ * el navegador para MIRARLO, y devolver el correo dentro de una cadena JSON
+ * obligaria a montar una pantalla solo para volver a sacarlo.
+ *
+ * `?aviso=` pinta uno suelto; sin parametro, el indice con todos.
+ */
+export async function getVistaPreviaCorreos(req, res, next) {
+  try {
+    const { AVISOS, pintarUno, pintarIndice } = await import('./vista-previa-correos.js');
+    res.type('html');
+
+    if (!req.query.aviso) return res.send(pintarIndice());
+
+    const uno = pintarUno(req.query.aviso);
+    if (!uno) {
+      throw new AppError(
+        `No hay ningún aviso «${req.query.aviso}». Los que hay: ${Object.keys(AVISOS).join(', ')}`,
+        404, 'NOT_FOUND'
+      );
+    }
+    res.send(uno.htmlContent);
+  } catch (err) { next(err); }
+}
+
+/**
  * Como esta cada pieza AHORA, tarea #26.
  *
  * Separado a proposito de `getStatus`, que es la pagina publica de incidencias
