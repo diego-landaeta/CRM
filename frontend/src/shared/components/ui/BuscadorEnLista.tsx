@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 
-// Buscador de cursos, para elegir uno entre cientos.
+// Elegir UNO de una lista larga, escribiendo.
 //
 // Nace de un problema real: ISEIE tiene 787 cursos y el desplegable de siempre
 // no deja escribir, asi que encontrar el «Máster Profesional en Neuropsicología
@@ -11,8 +11,20 @@ import { MagnifyingGlass, X } from '@phosphor-icons/react';
 // Se busca sin acentos y por trozos sueltos: escribir «neuro logo» encuentra
 // «Neuropsicología y Logopedia», que es como la gente recuerda los titulos —por
 // dos palabras, no por el nombre exacto ni por el orden—.
+//
+// Vive en `shared/` porque el mismo problema estaba en las CATEGORIAS de un
+// producto (#2): cincuenta y pico rutas concatenadas en un desplegable sin
+// busqueda. Era escribirlo otra vez o sacar este de su modulo.
+//
+// `nota` es el texto pequeño de la derecha —un precio, una ruta— y es opcional:
+// no todas las listas tienen algo que decir ahi.
 
-export interface CursoElegible { id: number; nombre: string; precio?: string | number }
+export interface Elegible {
+  id: number;
+  nombre: string;
+  /** Lo pequeño de la derecha. Un precio, una ruta, lo que distinga. */
+  nota?: string | number | null;
+}
 
 const sinAcentos = (s: string) =>
   String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -20,22 +32,28 @@ const sinAcentos = (s: string) =>
 const euros = (n: string | number | undefined) =>
   n == null ? '' : Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
-export default function BuscadorCurso({
-  cursos, valor, onElegir, excluir = [], placeholder = 'Escribe para buscar un curso…', autoFocus = false,
+export default function BuscadorEnLista({
+  opciones, valor, onElegir, excluir = [], autoFocus = false,
+  placeholder = 'Escribe para buscar…',
+  comoDinero = false,
+  sinResultados = 'Nada con «{texto}». Prueba con una palabra suelta.',
 }: {
-  cursos: CursoElegible[];
+  opciones: Elegible[];
   valor: number | null;
   onElegir: (id: number | null) => void;
   excluir?: number[];
   placeholder?: string;
   autoFocus?: boolean;
+  /** La nota es un importe y se formatea como tal. */
+  comoDinero?: boolean;
+  sinResultados?: string;
 }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
   const [resaltado, setResaltado] = useState(0);
   const caja = useRef<HTMLDivElement>(null);
 
-  const elegido = useMemo(() => cursos.find((c) => c.id === valor) || null, [cursos, valor]);
+  const elegido = useMemo(() => opciones.find((c) => c.id === valor) || null, [opciones, valor]);
 
   // Cerrar al pulsar fuera: si no, la lista se queda abierta encima del resto
   // del formulario y tapa lo siguiente que hay que rellenar.
@@ -48,17 +66,22 @@ export default function BuscadorCurso({
   }, []);
 
   const resultados = useMemo(() => {
-    const disponibles = cursos.filter((c) => !excluir.includes(c.id));
+    const disponibles = opciones.filter((c) => !excluir.includes(c.id));
     const t = sinAcentos(texto).trim();
     if (!t) return disponibles.slice(0, 60);
     const trozos = t.split(/\s+/);
     return disponibles
       .filter((c) => {
-        const n = sinAcentos(c.nombre);
-        return trozos.every((p) => n.includes(p));
+        // Se busca tambien en la NOTA cuando es texto — en las categorias ahi
+        // vive la ruta, y «prof adicc» tiene que llegar a «Para Profesionales ›
+        // Adicciones». Si la nota es un importe no aporta nada y se deja fuera.
+        const donde = typeof c.nota === 'string'
+          ? sinAcentos(`${c.nombre} ${c.nota}`)
+          : sinAcentos(c.nombre);
+        return trozos.every((p) => donde.includes(p));
       })
       .slice(0, 60);
-  }, [cursos, texto, excluir]);
+  }, [opciones, texto, excluir]);
 
   useEffect(() => { setResaltado(0); }, [texto]);
 
@@ -72,8 +95,10 @@ export default function BuscadorCurso({
     return (
       <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-background text-sm">
         <span className="flex-1 truncate">{elegido.nombre}</span>
-        {elegido.precio != null && (
-          <span className="text-xs text-muted-foreground tabular-nums shrink-0">{euros(elegido.precio)}</span>
+        {elegido.nota != null && elegido.nota !== '' && (
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0 truncate max-w-[45%]">
+            {comoDinero ? euros(elegido.nota) : elegido.nota}
+          </span>
         )}
         <button type="button" onClick={() => onElegir(null)} aria-label="Quitar"
           className="text-muted-foreground hover:text-foreground shrink-0">
@@ -113,7 +138,7 @@ export default function BuscadorCurso({
         <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-card border border-border rounded-md shadow-lg">
           {resultados.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-muted-foreground">
-              Ningún curso con «{texto}». Prueba con una palabra suelta.
+              {sinResultados.replace('{texto}', texto)}
             </p>
           ) : (
             <>
@@ -123,8 +148,10 @@ export default function BuscadorCurso({
                     i === resaltado ? 'bg-primary/10' : 'hover:bg-muted/50'
                   }`}>
                   <span className="flex-1 truncate">{c.nombre}</span>
-                  {c.precio != null && (
-                    <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{euros(c.precio)}</span>
+                  {c.nota != null && c.nota !== '' && (
+                    <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 truncate max-w-[50%]">
+                      {comoDinero ? euros(c.nota) : c.nota}
+                    </span>
                   )}
                 </button>
               ))}

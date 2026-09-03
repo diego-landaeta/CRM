@@ -7,7 +7,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
-import BuscadorCurso from '../components/BuscadorCurso';
+import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -723,8 +723,11 @@ export default function TutoresPage() {
                   <label className="text-[11px] text-muted-foreground min-w-0">
                     Curso
                     <div className="mt-1">
-                      <BuscadorCurso
-                        cursos={formaciones}
+                      <BuscadorEnLista
+                        opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
+                        comoDinero
+                        placeholder="Escribe para buscar un curso…"
+                        sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
                         valor={nuevoCurso ? Number(nuevoCurso) : null}
                         onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
                         excluir={cursosAlta.map((c) => c.productId)}
@@ -809,8 +812,11 @@ export default function TutoresPage() {
             </div>
 
             {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir. */}
-            <BuscadorCurso
-              cursos={formaciones}
+            <BuscadorEnLista
+              opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
+              comoDinero
+              placeholder="Escribe para buscar un curso…"
+              sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
               valor={cursoColab}
               onElegir={setCursoColab}
               excluir={colabs.map((c) => c.product_id)}
