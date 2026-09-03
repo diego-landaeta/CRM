@@ -161,6 +161,29 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     createdGte = Math.floor(new Date(state.last_synced_until).getTime() / 1000) - 3600;
   }
 
+  // LO ANTERIOR AL ALTA DEL PROYECTO NO ENTRA (#44).
+  //
+  // En la PRIMERA sincronizacion no hay estado previo, asi que `createdGte` era
+  // null y se le pedian a Stripe todos los cobros de la historia del proyecto
+  // —hasta veinte mil— y todos se guardaban. Con un proyecto que lleva meses
+  // cobrando, eso entra como ventas de este mes e infla las cifras y las
+  // comisiones. Es justo lo que la tarea llama «la regla que no se negocia».
+  //
+  // El corte ya existia, pero solo al LISTAR lo pendiente de facturar. De
+  // `stripe_payments` leen ademas las pantallas de dinero, asi que filtrar al
+  // final no bastaba: habia que no traerlo.
+  //
+  // Se aplica tambien con `fullHistory`, que ahora significa «todo desde el
+  // alta». La salida de emergencia sigue siendo la de siempre y esta escrita en
+  // el modelo: mover `al_dia_hasta` hacia atras.
+  const corte = await model.fechaDeCorte(projectId);
+  if (corte) {
+    const desdeElAlta = Math.floor(new Date(corte).getTime() / 1000);
+    // El mayor de los dos: si ya se sincronizo hasta ayer, no se vuelve a pedir
+    // desde el alta.
+    createdGte = createdGte == null ? desdeElAlta : Math.max(createdGte, desdeElAlta);
+  }
+
   let imported = 0;
   let disputesFound = 0;
   let lastCreated = state?.last_synced_until ? Math.floor(new Date(state.last_synced_until).getTime() / 1000) : 0;
