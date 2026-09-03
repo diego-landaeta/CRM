@@ -52,7 +52,7 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning } from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -212,6 +212,10 @@ const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
+      // Claves y variables (#80). Los mismos roles que exige el servidor con
+      // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
+      // no ofrecerlo.
+      { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
     ],
