@@ -151,6 +151,43 @@ async function fetchAndUpdateDispute(apiKey, projectId, charge) {
   }
 }
 
+/**
+ * Cuando varios proyectos comparten la MISMA cuenta de Stripe (#44).
+ *
+ * El indice unico de `stripe_payments` es `(project_id, stripe_id)`, asi que el
+ * mismo cobro importado por dos proyectos crea DOS filas: el mismo dinero
+ * contado dos veces, alimentando dos juegos de cifras y dos calculos de
+ * comision. Con cuentas separadas no pasa; con una compartida, pasa siempre.
+ *
+ * Y no hay forma de adivinarlo mirando el cobro. Comprobado en el checkout de
+ * una de las plataformas: manda `metadata: { user_id, plan_type }`, y
+ * `plan_type` es generico —monthly, annual, single— o sea el MISMO en todas.
+ * Dos cobros de dos plataformas distintas son indistinguibles.
+ *
+ * Asi que se declara. En la integracion de Stripe del proyecto:
+ *
+ *     config_public.filtro_metadata = { clave: 'proyecto', valor: 'tarot-ia' }
+ *
+ * y la plataforma añade ese par a su checkout. Es una linea alli y cero aqui.
+ *
+ * Sin declararlo NO se filtra nada, que es lo correcto para una cuenta
+ * dedicada: es el caso normal y no tiene por que configurarse.
+ */
+async function filtroDeMetadata(projectId) {
+  try {
+    const row = await integrationsModel.get(projectId, 'stripe');
+    const f = row?.config_public?.filtro_metadata;
+    if (f?.clave && f?.valor) return { clave: String(f.clave), valor: String(f.valor) };
+  } catch { /* sin integracion, sin filtro */ }
+  return null;
+}
+
+/** ¿Este cobro es de este proyecto? Sin filtro declarado, todos lo son. */
+function esDeEsteProyecto(charge, filtro) {
+  if (!filtro) return true;
+  return String(charge?.metadata?.[filtro.clave] ?? '') === filtro.valor;
+}
+
 export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
@@ -184,7 +221,10 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     createdGte = createdGte == null ? desdeElAlta : Math.max(createdGte, desdeElAlta);
   }
 
+  const filtro = await filtroDeMetadata(projectId);
+
   let imported = 0;
+  let ajenos = 0;
   let disputesFound = 0;
   let lastCreated = state?.last_synced_until ? Math.floor(new Date(state.last_synced_until).getTime() / 1000) : 0;
   let startingAfter = null;
@@ -201,6 +241,10 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
 
     for (const ch of data.data) {
       try {
+        // De otro proyecto de la misma cuenta: ni se guarda ni cuenta como
+        // importado, pero SI se apunta cuantos, para que al conectar se vea que
+        // el filtro esta haciendo algo y no que no llega nada.
+        if (!esDeEsteProyecto(ch, filtro)) { ajenos++; continue; }
         const payment = chargeToPayment(ch, projectId);
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
@@ -261,8 +305,8 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     last_error: null,
   });
 
-  logger.info({ projectId, imported, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, disputes: disputesFound, pages, reasociados };
+  logger.info({ projectId, imported, ajenos, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, ajenos, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {

@@ -28,19 +28,25 @@ const modelo = {
   getPaymentById: vi.fn(async () => null),
 };
 vi.mock('../src/modules/stripe-payments/stripe-payments.model.js', () => modelo);
-vi.mock('../src/modules/integrations/integrations.model.js', () => ({
-  get: async () => ({ encrypted_value: 'x', iv: 'y', auth_tag: 'z' }),
-}));
+const integraciones = {
+  get: vi.fn(async () => ({ encrypted_value: 'x', iv: 'y', auth_tag: 'z' })),
+};
+vi.mock('../src/modules/integrations/integrations.model.js', () => integraciones);
 vi.mock('../src/shared/utils/crypto.js', () => ({
   decrypt: () => 'sk_test_loquesea', encrypt: () => ({}),
 }));
 vi.mock('../src/shared/config/db.js', () => ({ query: async () => ({ rows: [] }) }));
 vi.mock('../src/modules/tutores/tutor.model.js', () => ({}));
 
-/** Se apunta que rango se le pide a Stripe y se contesta vacio. */
+/** Lo que Stripe contesta en la siguiente peticion. */
+let cobros = [];
+
+/** Se apunta que rango se le pide a Stripe. */
 global.fetch = vi.fn(async (url) => {
   pedidos.push(new URL(url));
-  return { ok: true, json: async () => ({ data: [], has_more: false }) };
+  const data = cobros;
+  cobros = [];                       // solo la primera pagina
+  return { ok: true, json: async () => ({ data, has_more: false }) };
 });
 
 const servicio = await import('../src/modules/stripe-payments/stripe-payments.service.js');
@@ -53,8 +59,18 @@ const desdeCuandoSePidio = () => {
 
 beforeEach(() => {
   pedidos.length = 0;
+  cobros = [];
   modelo.fechaDeCorte.mockResolvedValue('2026-08-01');
   modelo.getSyncState.mockResolvedValue(null);
+  modelo.upsertPayment.mockClear();
+  integraciones.get.mockResolvedValue({ encrypted_value: 'x', iv: 'y', auth_tag: 'z' });
+});
+
+/** Un cobro tal cual lo devuelve Stripe. */
+const cobro = (id, metadata = {}) => ({
+  id, amount: 5000, currency: 'eur', status: 'succeeded',
+  created: Math.floor(new Date('2026-09-01').getTime() / 1000),
+  metadata, disputed: false,
 });
 
 describe('la primera sincronizacion de un proyecto', () => {
@@ -100,5 +116,60 @@ describe('«todo el historial» tambien respeta el alta', () => {
     modelo.fechaDeCorte.mockResolvedValue('2025-01-01');
     await servicio.syncStripePayments(7, { fullHistory: true });
     expect(desdeCuandoSePidio()).toBe('2025-01-01');
+  });
+});
+
+describe('cuando varios proyectos comparten la MISMA cuenta de Stripe', () => {
+  // El indice unico es (project_id, stripe_id), asi que el mismo cobro
+  // importado por dos proyectos crea DOS filas: el mismo dinero contado dos
+  // veces, en dos proyectos, alimentando dos calculos de comision.
+  //
+  // Y no se puede adivinar: el checkout de las plataformas manda
+  // `metadata: { user_id, plan_type }`, y `plan_type` es generico —monthly,
+  // annual, single— o sea el mismo en todas. Dos cobros de dos plataformas
+  // distintas son indistinguibles. Por eso se declara.
+
+  const conFiltro = (valor) => integraciones.get.mockResolvedValue({
+    encrypted_value: 'x', iv: 'y', auth_tag: 'z',
+    config_public: { filtro_metadata: { clave: 'proyecto', valor } },
+  });
+
+  it('solo entra lo que lleva la marca del proyecto', async () => {
+    conFiltro('tarot-ia');
+    cobros = [
+      cobro('ch_1', { proyecto: 'tarot-ia', plan_type: 'monthly' }),
+      cobro('ch_2', { proyecto: 'nutricionista-ia', plan_type: 'monthly' }),
+    ];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.imported).toBe(1);
+    expect(modelo.upsertPayment).toHaveBeenCalledTimes(1);
+    expect(modelo.upsertPayment.mock.calls[0][0].stripe_id).toBe('ch_1');
+  });
+
+  it('y se dice CUANTOS eran de otro, para ver que el filtro trabaja', async () => {
+    // Sin esto, «0 importados» se lee igual que «no llega nada» y se pierde
+    // media hora mirando la clave.
+    conFiltro('tarot-ia');
+    cobros = [cobro('ch_2', { proyecto: 'nutricionista-ia' })];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.imported).toBe(0);
+    expect(r.ajenos).toBe(1);
+  });
+
+  it('un cobro SIN marca no se cuela', async () => {
+    conFiltro('tarot-ia');
+    cobros = [cobro('ch_3', { plan_type: 'annual' })];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.imported).toBe(0);
+  });
+});
+
+describe('con cuenta dedicada, que es el caso normal', () => {
+  it('sin filtro declarado entra TODO', async () => {
+    // No hay que configurar nada para el caso de siempre.
+    cobros = [cobro('ch_1', {}), cobro('ch_2', { proyecto: 'otro' })];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.imported).toBe(2);
+    expect(r.ajenos).toBe(0);
   });
 });
