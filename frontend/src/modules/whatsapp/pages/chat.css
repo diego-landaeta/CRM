@@ -34,7 +34,14 @@
   min-height: 420px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--wa-borde);
+  /* SIN marco alrededor.
+     Lo traia el kit y se quedo. WhatsApp Web no lo tiene: su panel se apoya en
+     el fondo sin dibujar un rectangulo. Aqui era ademas la linea mas visible de
+     toda la pantalla —un rectangulo entero de 1px sobre fondo casi negro— y con
+     el navegador a mas zoom se aclara al antialiasear: es la que se reportaba
+     como «linea blanca».
+     Las separaciones de dentro se quedan: esas si las tiene WhatsApp, con el
+     mismo color que usamos (#222d34 sobre #111b21). */
 }
 
 /* La lista de chats ocupa lo que necesita; el hilo, todo lo demas. */
@@ -1297,6 +1304,50 @@
    No se le pone `flex` a la fila a proposito — con flex el corte por elipsis
    se aplica a cada trozo por su cuenta y se ve «Dieg…: Stic…». */
 .wa-fila-autor { color: var(--wa-apagado); }
+
+/* La etiqueta del prospecto en la cabecera, que ademas se puede cambiar (#72).
+
+   Hereda el color de `.wa-et-*`, que es el mismo de la lista: asi el estado se
+   lee igual en los dos sitios. Sin flecha del sistema —queda enorme al lado de
+   los iconos— pero con el cursor de mano, que es lo que dice que se puede
+   tocar. */
+.wa-estado-elegir {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Sin esto el control se pinta con el lienzo CLARO del sistema y los fondos
+     de `.wa-et-*` —que son translucidos a proposito— quedan encima de blanco:
+     la pildora salia azul palido con letra oscura en medio de un tema oscuro.
+     Es la misma trampa de siempre, pero con quien pinta el control siendo el
+     navegador y no nosotros. */
+  color-scheme: dark;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 9999px;
+  border: 0;
+  cursor: pointer;
+  max-width: 150px;
+}
+.wa-estado-elegir:focus-visible {
+  outline: 2px solid var(--wa-verde);
+  outline-offset: 2px;
+}
+/* Las opciones las pinta el sistema y no heredan la pildora: se les da el fondo
+   del panel para que no salgan en blanco sobre el tema oscuro. */
+.wa-estado-elegir option {
+  background: var(--wa-panel);
+  color: var(--wa-texto);
+}
+/* El fondo, OPACO y calculado del color del propio estado.
+   `.wa-et-*` los da translucidos, que va bien sobre una fila de la lista pero
+   no sobre un control: el navegador pinta su lienzo debajo y —diga lo que diga
+   `color-scheme`— sale claro. Aqui se mezcla el color del texto con el de la
+   cabecera y queda la misma pildora, opaca, sin depender de quien pinte debajo.
+   Con `select.` para ganar a `.wa-et-*` sin importar el orden del fichero. */
+select.wa-estado-elegir {
+  background-color: color-mix(in srgb, currentColor 20%, var(--wa-cabecera));
+}
 
 /* Los colores de las etiquetas, propios y NO de Tailwind.
 

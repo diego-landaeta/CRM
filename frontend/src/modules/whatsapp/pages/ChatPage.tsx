@@ -257,9 +257,19 @@ const LLAMADA = {
   perdida:    { texto: 'Llamada perdida',    video: 'Videollamada perdida',    grave: true },
   rechazada:  { texto: 'Llamada rechazada',  video: 'Videollamada rechazada',  grave: false },
   contestada: { texto: 'Llamada contestada', video: 'Videollamada contestada', grave: false },
-  // La que sale del boton. Se dice «desde el movil» a proposito: el CRM apunta
-  // que se marco, no sabe si descolgaron. Prometer mas seria mentir.
-  intento:    { texto: 'Llamaste desde el móvil', video: 'Llamaste desde el móvil', grave: false },
+  // La que sale del boton de llamar.
+  //
+  // Ponia «Llamaste desde el móvil», y eso es FALSO: lo unico que ha pasado es
+  // que alguien pulso el boton en el CRM. Puede que no llegara a marcar, o que
+  // marcara y no descolgaran. Reportado tal cual — «no llamé desde el móvil,
+  // solo le di al botón».
+  //
+  // Y no es una pega de estilo: esto se lee en el historial de un cliente para
+  // decidir si se le vuelve a llamar. Un apunte que afirma una llamada que no
+  // existio es peor que no tener apunte.
+  //
+  // Se dice lo unico que el CRM sabe de verdad: que se pidio.
+  intento:    { texto: 'Pediste llamar', video: 'Pediste llamar', grave: false },
   // Sono y acabo, y WhatsApp no dice como.
   //
   // Es el caso mas comun de todos: quien llama cuelga antes de que salte el
@@ -859,6 +869,37 @@ export default function ChatPage() {
     setLlamando({ telefono: String(c.telefono || ''), nombre: c.lead_nombre || c.nombre_push || null, apuntada });
   }
 
+  /**
+   * Cambia el estado del prospecto sin salir del chat (#72).
+   *
+   * Lo que pedia el ticket de verdad: «que se le pueda anadir en seguimiento al
+   * chat que estoy viendo». Las etiquetas de arriba solo filtran; para cambiar
+   * una habia que irse a Prospectos y volver — y volver recarga el chat entero,
+   * que es justo lo que la #64 acaba de quitar.
+   *
+   * Se pinta primero y se manda despues: el estado es de la persona y el
+   * servidor no lo va a discutir. Si falla, se deshace y se dice.
+   */
+  async function cambiarEstado(c: ChatWhatsapp, status: string) {
+    if (!c.lead_id || status === c.lead_status) return;
+    const antes = c.lead_status;
+    setChats((prev) => prev.map((x) => (x.id === c.id ? { ...x, lead_status: status } : x)));
+    setConv((prev) => (prev && prev.id === c.id ? { ...prev, lead_status: status } : prev));
+    try {
+      const r = await chatApi.cambiarEstado(c.lead_id, status);
+      if (!r?.success) throw new Error('no');
+      cargarLista();
+    } catch {
+      setChats((prev) => prev.map((x) => (x.id === c.id ? { ...x, lead_status: antes } : x)));
+      setConv((prev) => (prev && prev.id === c.id ? { ...prev, lead_status: antes } : prev));
+      toast({
+        title: 'No se pudo cambiar el estado',
+        description: 'Se queda como estaba. Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    }
+  }
+
   /** Los pone en la vista previa. No envia nada todavia. */
   function proponerArchivos(fs: File[]) {
     // El destino sale de lo que se está VIENDO, no solo de `abierto`.
@@ -1189,6 +1230,30 @@ export default function ChatPage() {
     return telefonoVisible(c) || (c.es_grupo ? 'Grupo' : 'Sin mensajes todavía');
   };
 
+  // Lo que va debajo del nombre de un grupo.
+  //
+  // Antes se listaba a quien habia ESCRITO y se leia como la lista de miembros.
+  // En un grupo recien enlazado eso ponia «Angel y tú» debajo de un grupo de
+  // doce personas: parece que faltan diez, y es lo que se reporto.
+  //
+  // Manda el numero de verdad, que se le pregunta a WhatsApp al abrir. Los
+  // nombres se anaden cuando los sabemos, porque un nombre dice mas que una
+  // cifra — pero nunca en lugar del recuento.
+  //
+  // Si WhatsApp no contesta se cae a lo que sabemos, sin el «y tú» que sugeria
+  // que ahi estaban todos.
+  const miembrosDe = (c: ChatWhatsapp) => {
+    const cuantos = c.miembros ?? null;
+    const nombres = c.participantes?.length
+      ? `${c.participantes.slice(0, 3).join(', ')}${c.participantes.length > 3 ? '…' : ''}`
+      : null;
+    if (cuantos) {
+      const recuento = `${cuantos} miembros`;
+      return nombres ? `${recuento} · ${nombres}` : recuento;
+    }
+    return nombres || 'Grupo';
+  };
+
   // Quien mando lo ultimo, delante del adelanto.
   //
   // En un grupo hablan varios y la lista ponia «Sticker» a secas: no habia
@@ -1468,17 +1533,31 @@ export default function ChatPage() {
                           ? `${escribiendo.quien} esta ${escribiendo.que}…`
                           : `${escribiendo.que}…`}
                       </span>
-                    : conv.es_grupo ? (
-                        // Quienes escriben, como los miembros que pone WhatsApp
-                        // debajo del nombre del grupo. Si no sabemos ninguno
-                        // todavia, «Grupo» a secas.
-                        conv.participantes?.length
-                          ? `${conv.participantes.slice(0, 4).join(', ')}${conv.participantes.length > 4 ? '…' : ''} y tú`
-                          : 'Grupo'
-                      )
+                    : conv.es_grupo ? miembrosDe(conv)
                     : [telefonoVisible(conv), conv.lead_id ? 'prospecto' : 'sin prospecto']
                         .filter(Boolean).join(' · ')} />
                 <ConversationHeader.Actions>
+                  {/* La etiqueta del prospecto, cambiable desde aqui (#72).
+                      Solo con ficha: un grupo no tiene estado, y un numero que
+                      no es prospecto tampoco — para ese esta el boton de al
+                      lado, que abre la ficha y deja convertirlo.
+                      Un <select> de verdad y no un menu propio: se abre con
+                      teclado, se lee con lector de pantalla y en el movil sale
+                      la rueda del sistema. */}
+                  {conv.lead_id && (
+                    <select
+                      className={`wa-estado-elegir wa-et-${conv.lead_status || 'nuevo'}`}
+                      value={conv.lead_status || ''}
+                      aria-label="Estado del prospecto"
+                      title="Cambiar el estado de este prospecto"
+                      onChange={(e) => cambiarEstado(conv, e.target.value)}
+                    >
+                      {!conv.lead_status && <option value="">Sin estado</option>}
+                      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
+                        <option key={valor} value={valor}>{texto}</option>
+                      ))}
+                    </select>
+                  )}
                   {/* La ficha, en un popup y SIN salir de aqui.
                       Antes era un enlace a /prospectos/:id que navegaba en esta
                       misma pestaña: al volver se recargaban las conversaciones,

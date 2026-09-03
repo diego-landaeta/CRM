@@ -111,6 +111,13 @@ export interface ChatWhatsapp {
    * agenda del movil y no la tenemos.
    */
   participantes?: string[];
+  /**
+   * Cuantos son de verdad, preguntandoselo a WhatsApp.
+   *
+   * Hace falta porque `participantes` solo trae a quien ha ESCRITO: en un grupo
+   * recien enlazado eso ponia «Angel y tu» debajo de un grupo de doce.
+   */
+  miembros?: number | null;
 }
 
 
@@ -250,6 +257,20 @@ export interface RespuestaFicha {
 }
 
 export const chatApi = {
+  /**
+   * Cambia el estado del prospecto de una conversacion, SIN salir del chat.
+   *
+   * Es lo que pide la #72 de verdad: «que se le pueda anadir en seguimiento al
+   * chat que estoy viendo». Las etiquetas de arriba solo FILTRAN; para cambiar
+   * una habia que irse a Prospectos, buscar la ficha y volver — y volver
+   * recarga el chat entero.
+   *
+   * Va contra el endpoint que ya existe. No hay estado propio del chat: es el
+   * del prospecto, que es lo que viaja con la persona.
+   */
+  cambiarEstado: (leadId: number, status: string): Promise<ApiResponse<unknown>> =>
+    client.patch(`/leads/${leadId}/status`, { status }),
+
   /**
    * La ficha del prospecto de una conversacion, para el popup del chat.
    *
