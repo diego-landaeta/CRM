@@ -519,7 +519,14 @@ export async function grupoDe(jid, nombre = INSTANCIA) {
   });
   if (!r.ok) return null;
   const d = r.datos || {};
-  return { asunto: d.subject || null, foto: d.pictureUrl || null };
+  return {
+    asunto: d.subject || null,
+    foto: d.pictureUrl || null,
+    // Cuantos son. Evolution devuelve la lista con el identificador de cada uno
+    // pero SIN nombre, asi que lo unico util de ahi es el numero — y es lo que
+    // pone WhatsApp cuando no conoce los nombres.
+    miembros: Array.isArray(d.participants) ? d.participants.length : null,
+  };
 }
 
 /** Que numero esta conectado ahora mismo. */

@@ -212,11 +212,24 @@ export async function chat(req, res, next) {
       servicio.buscarFoto(conv).catch(() => {});
     }
 
-    // Quienes escriben en el grupo, para la cabecera — como los miembros que
-    // pone WhatsApp debajo del nombre.
-    const participantes = String(conv.jid || '').endsWith('@g.us')
+    // La cabecera de un grupo, debajo del nombre.
+    //
+    // Aqui iba SOLO la lista de quien ha escrito, y se lee como si fuera la de
+    // miembros. Con una sesion recien enlazada eso pone «Angel y tu» en un
+    // grupo de doce personas: parece que faltan diez.
+    //
+    // Asi que manda el numero de verdad, que se le pregunta a WhatsApp. Los
+    // nombres se siguen mandando —son mejores que un numero cuando los hay— y
+    // la pantalla decide como decirlo.
+    const esGrupo = String(conv.jid || '').endsWith('@g.us');
+    const participantes = esGrupo
       ? await model.quienesEscriben(conv.id).catch(() => [])
       : [];
+    // Solo para grupos y solo al abrir. Si WhatsApp no contesta se queda en
+    // null y la pantalla cae a lo que sabemos, que es como estaba.
+    const miembros = esGrupo && evolution.configurado()
+      ? await evolution.grupoDe(conv.jid, conv.instancia).then((g) => g?.miembros ?? null).catch(() => null)
+      : null;
 
     const crudos = await model.mensajes(id, parseInt(req.query.limite) || 100);
     // Cada adjunto viaja con su permiso firmado: el navegador pide el fichero
@@ -241,7 +254,7 @@ export async function chat(req, res, next) {
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
     await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
-    res.json({ success: true, data: { conversacion: { ...conv, participantes }, mensajes: msgs, escribiendo } });
+    res.json({ success: true, data: { conversacion: { ...conv, participantes, miembros }, mensajes: msgs, escribiendo } });
   } catch (err) { next(err); }
 }
 
@@ -513,7 +526,10 @@ export async function registrarLlamada(req, res, next) {
       try {
         await model.apuntarInteraccion({
           leadId: conv.lead_id,
-          nota: 'Llamada desde el movil (marcada desde el CRM)',
+          // Lo que de verdad ha pasado: se pulso el boton. El CRM no marca ni
+          // sabe si hubo conversacion, y afirmarlo en la ficha de un cliente
+          // —que es donde se decide si volver a llamar— seria mentir.
+          nota: 'Pidio llamar a este numero desde el CRM',
           userId: req.user.userId,
           fecha: fila.ts,
         });
