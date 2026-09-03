@@ -68,8 +68,24 @@ export function nombreLimpio(v) {
 }
 
 /** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false }) {
   nombrePush = nombreLimpio(nombrePush);
+
+  // EL NOMBRE DE UN MENSAJE QUE MANDAS TU ERES TU.
+  //
+  // `pushName` es como se llama QUIEN ESCRIBE. En lo que sale de aqui ese eres
+  // tu, asi que escribirlo le pone TU nombre al chat de la otra persona: mandas
+  // un sticker a Dieguis y la conversacion pasa a llamarse «Angel».
+  //
+  // Reportado en pantalla, y ademas es escurridizo: el repaso de la agenda lo
+  // corrige al cuarto de hora, asi que al ir a mirarlo ya esta bien y parece
+  // que no paso nada.
+  //
+  // Va aqui, con la regla de los grupos, porque es la misma historia: el unico
+  // sitio que escribe el nombre de una conversacion es este. En el chat de uno
+  // consigo mismo ese nombre SI seria el bueno, pero tampoco hace falta —la
+  // pantalla lo llama «Tu (mensajes contigo mismo)» comparando el numero.
+  if (mensajeMio) nombrePush = null;
 
   // A UN GRUPO NO SE LE PONE EL NOMBRE DE UNA PERSONA. Nunca, venga de donde
   // venga.
@@ -675,9 +691,17 @@ export const porId = async (id) =>
   // es_grupo hace falta AQUI tambien, no solo en la lista: la cabecera del chat
   // lo usa para decidir que ensena debajo del nombre, y sin el pintaba el
   // identificador del grupo —un numero de 18 cifras— como si fuera un telefono.
+  //
+  // Y el prospecto, por lo mismo. La lista SI lo traia y esto no, asi que la
+  // misma conversacion se llamaba «Maria Lopez · Nuevo» en la lista y «Dieguis ·
+  // sin estado» en la cabecera al abrirla. El nombre de la ficha manda sobre el
+  // que se ponga en WhatsApp: es como la tienes tu apuntada.
   (await query(
-    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo
-       FROM wa_conversaciones c WHERE c.id = $1`, [id]
+    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo,
+            l.nombre AS lead_nombre, l.status AS lead_status
+       FROM wa_conversaciones c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`, [id]
   )).rows[0] || null;
 
 export const marcarLeida = (id) =>

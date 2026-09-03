@@ -486,6 +486,9 @@ export async function recibir(cuerpo) {
       ? (datos?.groupSubject || cuerpo?.groupSubject || datos?.subject || null)
       : datos?.pushName,
     avatarUrl: datos?.avatar || null,
+    // En lo que mandamos nosotros, `pushName` somos NOSOTROS. Se dice aqui y la
+    // regla se aplica dentro, que es donde no se puede olvidar.
+    mensajeMio: Boolean(key.fromMe),
   });
 
   // La foto de perfil, UNA vez por conversacion y sin bloquear.

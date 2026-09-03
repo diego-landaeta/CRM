@@ -134,3 +134,37 @@ describe('la agenda, que era la SEGUNDA puerta', () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+describe('el nombre de un mensaje que mandas TU', () => {
+  // `pushName` es como se llama QUIEN ESCRIBE. En lo que sale de aqui ese eres
+  // tu: mandar un sticker a Dieguis renombraba su chat a «Angel». Visto en
+  // pantalla, y escurridizo — el repaso de la agenda lo corrige al cuarto de
+  // hora, asi que al ir a mirarlo ya esta bien.
+
+  it('NO se le pone a la otra persona', async () => {
+    await conversacionDe({
+      instancia: 'crm-u4',
+      jid: '34600111222@s.whatsapp.net',
+      nombrePush: 'Angel',
+      mensajeMio: true,
+    });
+    expect(nombreEscrito(), 'el chat de otro se quedo con tu nombre').toBeNull();
+  });
+
+  it('pero el de un mensaje que te mandan SI', async () => {
+    await conversacionDe({
+      instancia: 'crm-u4',
+      jid: '34600111222@s.whatsapp.net',
+      nombrePush: 'Dieguis',
+      mensajeMio: false,
+    });
+    expect(nombreEscrito()).toBe('Dieguis');
+  });
+
+  it('sin decir nada se toma como que lo mandan ellos, que es lo normal', async () => {
+    await conversacionDe({
+      instancia: 'crm-u4', jid: '34600111222@s.whatsapp.net', nombrePush: 'Marta',
+    });
+    expect(nombreEscrito()).toBe('Marta');
+  });
+});
