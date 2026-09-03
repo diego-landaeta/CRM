@@ -5,8 +5,29 @@ import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { SectionTitle, useConfirm, inputClass } from './shared';
 
+/**
+ * Las categorias son de PRODUCTOS, y hoy solo de productos (#8).
+ *
+ * El ticket pide un selector `[Productos | Leads | Clientes]` con «solo
+ * Productos funcional». Se enseñan las tres, pero las otras dos salen
+ * deshabilitadas y diciendo POR QUE — no como dos botones muertos que parecen
+ * rotos.
+ *
+ * Y el motivo es de verdad, no una tarea a medias: `product_categories` cuelga
+ * de un producto y no tiene columna de entidad. Categorizar prospectos o
+ * clientes no es enchufar esta pantalla a otro sitio; es otra tabla y otra
+ * decision sobre que significa ahi una categoria — para un prospecto, el
+ * equivalente que YA existe es su estado.
+ */
+const ENTIDADES = [
+  { clave: 'product', label: 'Productos', lista: true },
+  { clave: 'lead', label: 'Prospectos', lista: false },
+  { clave: 'client', label: 'Clientes', lista: false },
+];
+
 export default function CategoriesTab({ project }) {
   const { ask, dialog: confirmDialog } = useConfirm();
+  const [entidad, setEntidad] = useState('product');
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newCat, setNewCat] = useState({ nombre: '', parent_id: '' });
@@ -58,6 +79,29 @@ export default function CategoriesTab({ project }) {
   return (
     <div className="space-y-5 max-w-2xl">
       <SectionTitle title="Categorias y subcategorias" subtitle={`Organiza ${productoLabel} en grupos (ej: Cursos, Presenciales, Talleres)`} />
+
+      {/* Las tres entidades. Las que no tienen categorias salen deshabilitadas
+          con el motivo puesto: un boton muerto sin explicacion parece roto. */}
+      <div role="tablist" aria-label="Entidad" className="flex flex-wrap gap-1.5">
+        {ENTIDADES.map((e) => (
+          <button key={e.clave} type="button" role="tab" aria-selected={entidad === e.clave}
+            disabled={!e.lista}
+            onClick={() => setEntidad(e.clave)}
+            title={e.lista ? undefined : 'Las categorías son de productos'}
+            className={`h-8 px-3 rounded-md text-xs font-medium border transition-colors ${
+              entidad === e.clave
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-border hover:bg-muted'
+            } ${e.lista ? '' : 'opacity-40 cursor-not-allowed'}`}>
+            {e.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Las categorías son de {productoLabel}. Un prospecto se agrupa por su <strong>estado</strong>,
+        que se configura en Prospectos; los clientes todavía no tienen agrupación propia.
+      </p>
 
       <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border space-y-2">
         <p className="text-[11px] font-medium text-muted-foreground">Añadir categoría</p>
