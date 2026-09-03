@@ -126,6 +126,33 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   // numeradas con lo que hubiera en la ficha en ese momento.
   logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
     'cobro de Stripe registrado; queda en la cola de facturacion');
+
+  // AVISAR DE LA VENTA AUTOMATICA (#111).
+  //
+  // «Hoy pasa en silencio, y es justo lo que hay que mirar.» Un cobro de Stripe
+  // entra solo, salda una cuota y se pone en la cola de facturacion sin que
+  // nadie se entere: quien lleva ese prospecto no sabe que le han pagado.
+  //
+  // Va a la gestora de la ficha, que es a quien le afecta. Si no tiene
+  // responsable no se avisa a nadie: sin dueño no hay a quien decirselo, y
+  // mandarlo a los admin convertiria esto en el ruido que la tarea quiere
+  // quitar.
+  //
+  // No duplica correo: hoy este suceso no manda ninguno.
+  if (lead.responsable_id) {
+    const { notifyUsers } = await import('../notifications/notifications.service.js');
+    const euros = Number(payment.amount).toLocaleString('es-ES', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+    await notifyUsers({
+      targetUserIds: [lead.responsable_id],
+      type: 'venta_automatica',
+      title: `Cobro de ${euros} € de ${lead.nombre || payment.customer_email}`,
+      message: 'Entro por Stripe y se registro solo en su venta. Queda en la cola de facturacion.',
+      link_path: `/prospectos/${lead.id}`,
+      metadata: { lead_id: lead.id, conversion_id: conv.id, stripe_id: payment.stripe_id },
+    }).catch(() => {});
+  }
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)

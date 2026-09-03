@@ -36,7 +36,13 @@ export async function upsertPayment(p) {
 export async function findLeadByEmail(projectId, email) {
   if (!email) return null;
   const { rows } = await query(
-    `SELECT id, status FROM leads WHERE project_id=$1 AND LOWER(email)=LOWER($2) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`,
+    // Con nombre y responsable: hacen falta para avisar a quien lleva la ficha
+    // de que le ha entrado un cobro (#111). Sin ellos el aviso no se manda y no
+    // se nota, porque `lead.responsable_id` sale undefined y la condicion falla
+    // en silencio.
+    `SELECT id, status, nombre, responsable_id FROM leads
+      WHERE project_id=$1 AND LOWER(email)=LOWER($2) AND deleted_at IS NULL
+      ORDER BY id DESC LIMIT 1`,
     [projectId, email]
   );
   return rows[0] || null;

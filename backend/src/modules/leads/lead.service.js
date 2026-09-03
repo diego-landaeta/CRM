@@ -5,7 +5,7 @@ import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
-import { notifyAdmins } from '../notifications/notifications.service.js';
+import { notifyAdmins, notifyUsers } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 
@@ -237,6 +237,28 @@ async function _createLeadCore(project, leadData) {
       spam_previous_lead_id: spamHistory.id,
       canal: canalDetectado,
     };
+  }
+
+  // AVISAR A QUIEN LE HA TOCADO (#111).
+  //
+  // «Es el aviso que mas falta hace y hoy no existe: la gestora se entera si
+  // mira el listado.» El reparto es automatico, asi que sin esto una ficha
+  // nueva aparece en su cartera sin que nadie se lo diga.
+  //
+  // Va a ELLA, no a los admin: es su prospecto. Y no duplica ningun correo —
+  // hoy no se manda ninguno al asignar.
+  //
+  // Sin responsable no hay a quien avisar: pasa cuando el reparto esta apagado
+  // o no hay gestoras en el proyecto, y de eso ya avisa el panel de la cola.
+  if (lead.responsable_id) {
+    notifyUsers({
+      targetUserIds: [lead.responsable_id],
+      type: 'lead_asignado',
+      title: `Nuevo prospecto: ${lead.nombre || 'sin nombre'}`,
+      message: canalDetectado ? `Entro por ${canalDetectado}.` : 'Te lo ha asignado el reparto automatico.',
+      link_path: `/prospectos/${lead.id}`,
+      metadata: { lead_id: lead.id, project_id: project.id },
+    }).catch(() => {});
   }
 
   // Disparar email sequences con trigger lead_created (async)
@@ -525,6 +547,37 @@ export async function reassign(leadId, newResponsableId, userId) {
     const newName = byId[newResponsableId] || `gestor #${newResponsableId}`;
     const actorName = byId[userId] || 'sistema';
     await leadModel.createInteraction(leadId, 'nota', `👤 Reasignado de ${prevName} a ${newName} por ${actorName}.`, userId, null);
+
+    // A LAS DOS PARTES (#111): «a quien lo recibe y a quien lo pierde».
+    //
+    // Hoy no se avisa a nadie: la ficha cambia de bandeja en silencio. Quien lo
+    // recibe no sabe que tiene trabajo nuevo, y quien lo pierde puede seguir
+    // llamando a alguien que ya no lleva.
+    //
+    // Dos avisos y no uno con los dos destinatarios: dicen cosas distintas.
+    notifyUsers({
+      targetUserIds: [newResponsableId],
+      type: 'lead_reasignado',
+      title: `Te han pasado un prospecto: ${lead.nombre || 'sin nombre'}`,
+      message: `${actorName} te lo asigno (antes lo llevaba ${prevName}).`,
+      link_path: `/prospectos/${leadId}`,
+      metadata: { lead_id: leadId },
+      triggered_by_user_id: userId,
+    }).catch(() => {});
+
+    // A quien lo pierde, solo si habia alguien y no es quien hizo el cambio:
+    // avisar a una persona de algo que acaba de hacer ella es ruido.
+    if (prevResponsableId && prevResponsableId !== userId) {
+      notifyUsers({
+        targetUserIds: [prevResponsableId],
+        type: 'lead_reasignado',
+        title: `Ya no llevas a ${lead.nombre || 'un prospecto'}`,
+        message: `${actorName} se lo paso a ${newName}.`,
+        link_path: `/prospectos/${leadId}`,
+        metadata: { lead_id: leadId },
+        triggered_by_user_id: userId,
+      }).catch(() => {});
+    }
   } catch (err) {
     logger.warn({ err: err.message, leadId }, 'No se pudo registrar interaction de reasignación (no crítico)');
   }
