@@ -2,22 +2,39 @@ import { useState, useEffect } from 'react';
 import { Plus, X, ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
-import { SectionTitle, useConfirm, DEFAULT_COLUMNS, AVAILABLE_EXTRA_COLUMNS } from './shared';
+import { SectionTitle, useConfirm, ENTIDADES_CON_COLUMNAS } from './shared';
 
 export default function ColumnsTab({ project, onSaved }) {
   const { ask, dialog: confirmDialog } = useConfirm();
-  const initial = Array.isArray(project.lead_columns) && project.lead_columns.length
-    ? project.lead_columns
-    : DEFAULT_COLUMNS;
+
+  // La pestaña servia SOLO para prospectos (#8). Clientes y Productos salian
+  // con su listado fijo, sin forma de tocarlo.
+  const [entidad, setEntidad] = useState('lead');
+  const cual = ENTIDADES_CON_COLUMNAS.find((e) => e.clave === entidad);
+
+  // Las de clientes y productos las trae la migracion 141. Si no esta aplicada
+  // la API no devuelve esos campos, asi que su AUSENCIA es la señal — no hace
+  // falta preguntar nada aparte.
+  const disponible = (e) => e.clave === 'lead' || e.columna in project;
+
+  const guardadas = project[cual.columna];
+  const initial = Array.isArray(guardadas) && guardadas.length ? guardadas : cual.porDefecto;
   const [cols, setCols] = useState(initial);
   const [customFields, setCustomFields] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  // Al cambiar de entidad se carga LO SUYO. Sin esto se quedaban las columnas
+  // de la anterior y guardar las habria copiado de una entidad a otra.
   useEffect(() => {
-    client.get(`/field-definitions/project/${project.id}`).then(r => {
+    const g = project[cual.columna];
+    setCols(Array.isArray(g) && g.length ? g : cual.porDefecto);
+  }, [entidad, project, cual]);
+
+  useEffect(() => {
+    client.get(`/field-definitions/project/${project.id}?entity=${entidad}`).then(r => {
       if (r.success) setCustomFields(r.data || []);
     }).catch(() => toast({ title: 'Error al cargar campos personalizados', variant: 'destructive' }));
-  }, [project.id]);
+  }, [project.id, entidad]);
 
   function move(idx, dir) {
     const j = idx + dir;
@@ -46,13 +63,13 @@ export default function ColumnsTab({ project, onSaved }) {
   }
 
   function resetDefaults() {
-    ask('Restablecer columnas', '¿Restablecer las columnas a los valores por defecto? Se perderá la configuración actual.', () => setCols(DEFAULT_COLUMNS), 'warning', 'Restablecer');
+    ask('Restablecer columnas', '¿Restablecer las columnas a los valores por defecto? Se perderá la configuración actual.', () => setCols(cual.porDefecto), 'warning', 'Restablecer');
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await client.patch(`/projects/${project.id}`, { lead_columns: cols });
+      const res = await client.patch(`/projects/${project.id}`, { [cual.columna]: cols });
       if (res.success) {
         toast({ title: 'Columnas guardadas' });
         if (onSaved) onSaved(res.data);
@@ -64,7 +81,7 @@ export default function ColumnsTab({ project, onSaved }) {
 
   const presentKeys = new Set(cols.map(c => c.key));
   const extraOptions = [
-    ...AVAILABLE_EXTRA_COLUMNS.filter(c => !presentKeys.has(c.key)),
+    ...cual.extras.filter(c => !presentKeys.has(c.key)),
     ...customFields
       .filter(f => !presentKeys.has(`custom.${f.field_key}`))
       .map(f => ({ key: `custom.${f.field_key}`, label: f.label + ' (custom)' })),
@@ -73,9 +90,37 @@ export default function ColumnsTab({ project, onSaved }) {
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-start justify-between">
-        <SectionTitle title="Columnas del listado de leads" subtitle="Elige cuales se ven y en que orden. Aplica al listado tabla." />
+        <SectionTitle title={`Columnas del listado de ${cual.label.toLowerCase()}`}
+          subtitle="Elige cuales se ven y en que orden. Aplica al listado tabla." />
         <button onClick={resetDefaults} className="text-xs text-muted-foreground hover:text-foreground underline">Restablecer</button>
       </div>
+
+      {/* Las tres entidades. Las que faltan por migrar salen DESHABILITADAS y
+          diciendo por que: esconderlas haria parecer que no se ha hecho. */}
+      <div role="tablist" aria-label="Entidad" className="flex flex-wrap gap-1.5">
+        {ENTIDADES_CON_COLUMNAS.map((e) => {
+          const hay = disponible(e);
+          return (
+            <button key={e.clave} type="button" role="tab" aria-selected={entidad === e.clave}
+              disabled={!hay}
+              onClick={() => setEntidad(e.clave)}
+              title={hay ? undefined : 'Necesita la migración 141'}
+              className={`h-8 px-3 rounded-md text-xs font-medium border transition-colors ${
+                entidad === e.clave
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border hover:bg-muted'
+              } ${hay ? '' : 'opacity-40 cursor-not-allowed'}`}>
+              {e.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {!ENTIDADES_CON_COLUMNAS.every(disponible) && (
+        <p className="text-xs text-muted-foreground">
+          Clientes y Productos necesitan la migración <strong>141</strong>, todavía sin aplicar.
+        </p>
+      )}
 
       <div className="border border-border rounded-xl divide-y divide-border bg-muted/10">
         {cols.length === 0 ? (

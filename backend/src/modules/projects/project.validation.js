@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { CLAVES } from './tipos.js';
 
+/** Que columnas se ven en un listado y en que orden (#8). */
+const columnasDeUnListado = z.array(z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  visible: z.boolean(),
+})).optional();
+
 export const createProjectSchema = z.object({
   nombre: z.string().min(1).max(200),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'Slug solo minusculas, numeros y guiones').min(1).max(100),
@@ -37,11 +44,11 @@ export const updateProjectSchema = z.object({
     required: z.boolean().optional(),
     visible: z.boolean().optional(),
   })).optional(),
-  lead_columns: z.array(z.object({
-    key: z.string().min(1),
-    label: z.string().min(1),
-    visible: z.boolean(),
-  })).optional(),
+  // Las columnas de cada listado. Misma forma las tres, y por eso el esquema se
+  // escribe una vez: si divergen, divergen tambien las pantallas.
+  lead_columns: columnasDeUnListado,
+  client_columns: columnasDeUnListado,
+  product_columns: columnasDeUnListado,
   external_panels: z.array(z.object({
     id: z.string().min(1).max(64),
     label: z.string().min(1).max(80),
