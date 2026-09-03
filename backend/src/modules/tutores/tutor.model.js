@@ -92,18 +92,56 @@ export async function ponerContrasena(userId, password) {
   );
 }
 
-export async function guardarPerfil(tutorId, { dniNif, iban, telefono, notas }) {
+export async function guardarPerfil(tutorId, datos = {}) {
+  // Lo que NO se manda no se toca.
+  //
+  // Antes esto escribia los cuatro campos siempre, con `|| null`. Como el alta
+  // es el unico sitio que los rellena y nadie puso el IBAN, cualquier guardado
+  // posterior que no los trajera los borraba — y lo unico que hay en esa tabla
+  // son los TELEFONOS: 16 de 16 en MultiCRM, con 1 DNI y 0 IBAN.
+  //
+  // O sea que conectar una pantalla de edicion sobre esto tal cual, con los
+  // campos en blanco, se llevaba por delante el unico dato bueno. Y no habria
+  // aviso: un UPDATE que pone null a algo que ya era null no se distingue del
+  // que borra.
+  //
+  // La regla, explicita:
+  //
+  //   campo ausente  → no se toca
+  //   null o vacio   → se borra, porque alguien lo ha vaciado a proposito
+  //
+  // Zod ya distingue las dos cosas: `optional()` deja el campo fuera del objeto
+  // y `nullable()` lo deja en null.
+  const COLUMNAS = { dniNif: 'dni_nif', iban: 'iban', telefono: 'telefono', notas: 'notas' };
+
+  const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
+  const valor = (k) => {
+    const v = datos[k];
+    return typeof v === 'string' ? (v.trim() || null) : (v ?? null);
+  };
+
+  // Sin nada que guardar no se escribe, pero SI se devuelve el perfil: quien
+  // llama espera una ficha, no un hueco.
+  if (!presentes.length) {
+    const { rows: [actual] } = await query(
+      'SELECT * FROM tutor_profiles WHERE user_id = $1', [tutorId]
+    );
+    return actual || null;
+  }
+
+  const columnas = presentes.map((k) => COLUMNAS[k]);
+  const valores = presentes.map(valor);
+  const huecos = columnas.map((_, i) => `$${i + 2}`);
+  const alActualizar = columnas.map((c, i) => `${c} = $${i + 2}`).join(', ');
+
   const { rows: [p] } = await query(
-    `INSERT INTO tutor_profiles (user_id, dni_nif, iban, telefono, notas)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO tutor_profiles (user_id, ${columnas.join(', ')})
+     VALUES ($1, ${huecos.join(', ')})
      ON CONFLICT (user_id) DO UPDATE
-       SET dni_nif = EXCLUDED.dni_nif,
-           iban = EXCLUDED.iban,
-           telefono = EXCLUDED.telefono,
-           notas = EXCLUDED.notas,
+       SET ${alActualizar},
            updated_at = NOW()
      RETURNING *`,
-    [tutorId, dniNif || null, iban || null, telefono || null, notas || null]
+    [tutorId, ...valores]
   );
   return p;
 }

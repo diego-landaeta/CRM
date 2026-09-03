@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -80,6 +80,7 @@ export default function TutoresPage() {
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
   const [popupClave, setPopupClave] = useState(false);
+  const [popupPago, setPopupPago] = useState(false);
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -238,8 +239,56 @@ export default function TutoresPage() {
           aún no ha entrado
         </div>
       )}
+      {/* Sin IBAN no se le puede pagar, y hoy son 45 de 45 (#92).
+          Se dice en la lista y no solo en la ficha porque el trabajo es
+          encontrarlos: con 45 tutores, abrirlos uno a uno para ver cual falta
+          es justo lo que hace que no se haga. Solo en los activos — a un
+          retirado no se le paga. */}
+      {t.active !== false && !t.iban && (
+        <div className="text-[11px] text-destructive font-semibold mt-0.5">
+          sin IBAN · no se le puede pagar
+        </div>
+      )}
     </button>
   );
+
+  /**
+   * Los datos de pago de un tutor que YA existe (#92).
+   *
+   * Hasta ahora el formulario era solo de alta, asi que un tutor dado de alta
+   * sin IBAN se quedaba sin el para siempre. Hoy son 45 de 45 en los dos CRMs,
+   * con comisiones ya generandose: sin esta pantalla no se puede pagar a nadie.
+   *
+   * Se mandan SOLO los tres campos de este formulario. `notas` no viaja, y por
+   * eso no se toca: el servidor deja fuera del UPDATE lo que no llega. Antes
+   * escribia los cuatro siempre y esto habria borrado las notas.
+   */
+  async function guardarPago(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!elegido) return;
+    const f = new FormData(e.currentTarget);
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.guardarPerfil(elegido.id, {
+        dniNif: String(f.get('dniNif') || ''),
+        telefono: String(f.get('telefono') || ''),
+        // Sin espacios: se copian del banco con ellos y luego no casan.
+        iban: String(f.get('iban') || '').replace(/\s+/g, '').toUpperCase(),
+      });
+      if (!r?.success) throw new Error('no');
+      toast({ title: 'Datos guardados' });
+      setPopupPago(false);
+      await cargar();
+    } catch (err) {
+      toast({
+        title: 'No se pudieron guardar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -411,6 +460,9 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
+                      <Button variant="outline" size="sm" onClick={() => setPopupPago(true)}>
+                        <Bank size={14} weight="bold" className="mr-1.5" /> Datos de pago
+                      </Button>
                       <Button variant="outline" size="sm" onClick={abrirClave}>
                         <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
                       </Button>
@@ -485,6 +537,68 @@ export default function TutoresPage() {
           )}
         </div>
       </div>
+
+      {/* Datos de pago de un tutor que ya existe (#92).
+          El alta era el unico sitio donde se podian meter, asi que quien no los
+          puso entonces no podia ponerlos nunca. */}
+      {popupPago && elegido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setPopupPago(false)}>
+          <form onSubmit={guardarPago} onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md">
+
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
+              <div className="min-w-0">
+                <h2 className="font-bold text-base">Datos de pago</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{elegido.nombre}</p>
+              </div>
+              <button type="button" onClick={() => setPopupPago(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              {!elegido.iban && (
+                <p className="text-xs text-destructive flex items-start gap-1.5">
+                  <Warning size={14} weight="fill" className="shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>Sin IBAN no se le puede pagar la comisión, aunque ya la haya generado.</span>
+                </p>
+              )}
+
+              <div>
+                <label htmlFor="pago-dni" className="text-xs font-semibold">DNI / NIF</label>
+                <input id="pago-dni" name="dniNif" defaultValue={elegido.dni_nif || ''}
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label htmlFor="pago-tel" className="text-xs font-semibold">Teléfono</label>
+                <input id="pago-tel" name="telefono" defaultValue={elegido.telefono || ''}
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label htmlFor="pago-iban" className="text-xs font-semibold">IBAN</label>
+                <input id="pago-iban" name="iban" defaultValue={elegido.iban || ''}
+                  placeholder="ES00 0000 0000 0000 0000 0000"
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background
+                             text-sm font-mono tracking-wide" />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Se guarda sin espacios. Vaciar un campo lo borra; el resto no se toca.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <Button type="button" variant="outline" onClick={() => setPopupPago(false)}>Cancelar</Button>
+              <Button type="submit" disabled={procesando}>
+                {procesando ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Alta de tutor */}
       {popupAlta && (
