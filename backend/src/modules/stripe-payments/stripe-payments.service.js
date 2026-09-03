@@ -182,10 +182,26 @@ async function filtroDeMetadata(projectId) {
   return null;
 }
 
-/** ¿Este cobro es de este proyecto? Sin filtro declarado, todos lo son. */
-function esDeEsteProyecto(charge, filtro) {
-  if (!filtro) return true;
-  return String(charge?.metadata?.[filtro.clave] ?? '') === filtro.valor;
+/**
+ * ¿De quien es este cobro? Tres respuestas, y la tercera es la que importa.
+ *
+ *   'mio'        — lleva la marca de este proyecto
+ *   'ajeno'      — lleva la marca de OTRO: seguro que no es nuestro
+ *   'sin_marcar' — no lleva ninguna, y eso NO significa que no sea nuestro
+ *
+ * La tercera existe por como se marcan las renovaciones. En una suscripcion, el
+ * cobro de renovacion lo genera Stripe sin pasar por el checkout, asi que la
+ * plataforma solo puede marcarlo A POSTERIORI desde su webhook. Entre que Stripe
+ * lo crea y la plataforma lo estampa hay una ventana, y si el CRM lee justo ahi
+ * ve un cobro sin marca.
+ *
+ * Tratarlo como ajeno seria perder ese cobro para siempre. Por eso se distingue.
+ */
+function deQuienEs(charge, filtro) {
+  if (!filtro) return 'mio';
+  const marca = charge?.metadata?.[filtro.clave];
+  if (marca == null || marca === '') return 'sin_marcar';
+  return String(marca) === filtro.valor ? 'mio' : 'ajeno';
 }
 
 export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
@@ -225,6 +241,10 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
 
   let imported = 0;
   let ajenos = 0;
+  let sinMarcar = 0;
+  // El cobro sin marcar MAS ANTIGUO de esta vuelta. La marca de agua no puede
+  // pasar de ahi: ver abajo.
+  let primeroSinMarcar = null;
   let disputesFound = 0;
   let lastCreated = state?.last_synced_until ? Math.floor(new Date(state.last_synced_until).getTime() / 1000) : 0;
   let startingAfter = null;
@@ -241,10 +261,19 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
 
     for (const ch of data.data) {
       try {
+        const duenno = deQuienEs(ch, filtro);
         // De otro proyecto de la misma cuenta: ni se guarda ni cuenta como
         // importado, pero SI se apunta cuantos, para que al conectar se vea que
         // el filtro esta haciendo algo y no que no llega nada.
-        if (!esDeEsteProyecto(ch, filtro)) { ajenos++; continue; }
+        if (duenno === 'ajeno') { ajenos++; continue; }
+        // Sin marca todavia: puede ser una renovacion que su plataforma aun no
+        // ha estampado. Se deja pasar de largo SIN mover la marca de agua, para
+        // volver a mirarlo en la siguiente vuelta.
+        if (duenno === 'sin_marcar') {
+          sinMarcar++;
+          if (primeroSinMarcar == null || ch.created < primeroSinMarcar) primeroSinMarcar = ch.created;
+          continue;
+        }
         const payment = chargeToPayment(ch, projectId);
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
@@ -297,6 +326,20 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     logger.warn({ err: e.message }, 'no se pudo reintentar la asociacion de pendientes');
   }
 
+  // LA MARCA DE AGUA NO PASA DE UN COBRO SIN MARCAR.
+  //
+  // Si avanzara, la proxima vuelta empezaria despues de el y ese cobro no se
+  // volveria a mirar NUNCA. Cuando su plataforma lo estampe —las renovaciones se
+  // marcan a posteriori, desde su webhook— ya seria tarde: dinero perdido en
+  // silencio, que es el peor final posible.
+  //
+  // Asi que se retrocede hasta un segundo antes del mas antiguo sin marcar. Se
+  // vuelve a leer un trozo pequeño cada vez, y en cuanto aparezca la marca
+  // entra y la marca de agua sigue su camino.
+  if (primeroSinMarcar != null) {
+    lastCreated = Math.min(lastCreated || primeroSinMarcar, primeroSinMarcar - 1);
+  }
+
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
     last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
@@ -305,8 +348,8 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     last_error: null,
   });
 
-  logger.info({ projectId, imported, ajenos, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, ajenos, disputes: disputesFound, pages, reasociados };
+  logger.info({ projectId, imported, ajenos, sinMarcar, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, ajenos, sinMarcar, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {

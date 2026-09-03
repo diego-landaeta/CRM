@@ -164,6 +164,54 @@ describe('cuando varios proyectos comparten la MISMA cuenta de Stripe', () => {
   });
 });
 
+describe('el cobro sin marcar no se pierde, que es lo que costaria dinero', () => {
+  // Una renovacion de suscripcion la genera Stripe sin pasar por el checkout,
+  // asi que la plataforma solo puede marcarla A POSTERIORI desde su webhook.
+  // Entre que Stripe la crea y la plataforma la estampa hay una ventana. Si el
+  // CRM lee justo ahi y avanza la marca de agua, ese cobro no se vuelve a mirar
+  // nunca: dinero perdido en silencio.
+
+  const conFiltro = (valor) => integraciones.get.mockResolvedValue({
+    encrypted_value: 'x', iv: 'y', auth_tag: 'z',
+    config_public: { filtro_metadata: { clave: 'platform', valor } },
+  });
+
+  /** La fecha hasta la que se dio por sincronizado. */
+  const marcaDeAgua = () => modelo.upsertSyncState.mock.calls.at(-1)[1].last_synced_until;
+
+  it('la marca de agua NO pasa del mas antiguo sin marcar', async () => {
+    conFiltro('tarot-ia');
+    const viejo = Math.floor(new Date('2026-09-10').getTime() / 1000);
+    const nuevo = Math.floor(new Date('2026-09-20').getTime() / 1000);
+    cobros = [
+      { ...cobro('ch_marcado', { platform: 'tarot-ia' }), created: nuevo },
+      { ...cobro('ch_sin_marca', {}), created: viejo },
+    ];
+    await servicio.syncStripePayments(7);
+    // Aunque se importo uno del dia 20, la marca se queda ANTES del dia 10.
+    expect(new Date(marcaDeAgua()).getTime() / 1000).toBe(viejo - 1);
+  });
+
+  it('se dice cuantos se dejaron para la proxima vuelta', async () => {
+    conFiltro('tarot-ia');
+    cobros = [cobro('ch_sin_marca', { plan_type: 'monthly' })];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.sinMarcar).toBe(1);
+    expect(r.imported).toBe(0);
+  });
+
+  it('uno de OTRO proyecto si deja avanzar: ese no va a cambiar', async () => {
+    conFiltro('tarot-ia');
+    const cuando = Math.floor(new Date('2026-09-15').getTime() / 1000);
+    cobros = [
+      { ...cobro('ch_ajeno', { platform: 'nutricionista-ia' }), created: cuando },
+      { ...cobro('ch_mio', { platform: 'tarot-ia' }), created: cuando },
+    ];
+    await servicio.syncStripePayments(7);
+    expect(new Date(marcaDeAgua()).getTime() / 1000).toBe(cuando);
+  });
+});
+
 describe('con cuenta dedicada, que es el caso normal', () => {
   it('sin filtro declarado entra TODO', async () => {
     // No hay que configurar nada para el caso de siempre.
