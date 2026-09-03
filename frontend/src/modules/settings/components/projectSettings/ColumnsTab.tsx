@@ -12,23 +12,38 @@ export default function ColumnsTab({ project, onSaved }) {
   const [entidad, setEntidad] = useState('lead');
   const cual = ENTIDADES_CON_COLUMNAS.find((e) => e.clave === entidad);
 
-  // Las de clientes y productos las trae la migracion 141. Si no esta aplicada
-  // la API no devuelve esos campos, asi que su AUSENCIA es la señal — no hace
-  // falta preguntar nada aparte.
-  const disponible = (e) => e.clave === 'lead' || e.columna in project;
+  // El proyecto se pide A LA FUENTE, no se usa el que llega por prop.
+  //
+  // Ese viene de `/auth/me`, que no devuelve las columnas configuradas — por eso
+  // esta pestaña guardaba bien y al volver a abrirla enseñaba la lista por
+  // defecto: lo guardado no se leia NUNCA. `GET /projects/:id` si las trae.
+  //
+  // Y de paso resuelve lo otro: las de clientes y productos solo existen con la
+  // migracion 141 aplicada, asi que su ausencia en la respuesta es la señal de
+  // que falta. No hace falta preguntar nada aparte.
+  const [config, setConfig] = useState(null);
+  useEffect(() => {
+    client.get(`/projects/${project.id}`)
+      .then((r) => { if (r.success) setConfig(r.data); })
+      .catch(() => setConfig({}));   // sin respuesta, se trabaja con lo que hay
+  }, [project.id]);
 
-  const guardadas = project[cual.columna];
+  const fuente = config || project;
+  const disponible = (e) => e.clave === 'lead' || (config ? e.columna in config : false);
+
+  const guardadas = fuente[cual.columna];
   const initial = Array.isArray(guardadas) && guardadas.length ? guardadas : cual.porDefecto;
   const [cols, setCols] = useState(initial);
   const [customFields, setCustomFields] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // Al cambiar de entidad se carga LO SUYO. Sin esto se quedaban las columnas
-  // de la anterior y guardar las habria copiado de una entidad a otra.
+  // Al cambiar de entidad —o cuando llega la configuracion— se carga LO SUYO.
+  // Sin esto se quedaban las columnas de la anterior, y guardar las habria
+  // copiado de una entidad a otra.
   useEffect(() => {
-    const g = project[cual.columna];
+    const g = (config || project)[cual.columna];
     setCols(Array.isArray(g) && g.length ? g : cual.porDefecto);
-  }, [entidad, project, cual]);
+  }, [entidad, config, project, cual]);
 
   useEffect(() => {
     client.get(`/field-definitions/project/${project.id}?entity=${entidad}`).then(r => {
@@ -72,6 +87,7 @@ export default function ColumnsTab({ project, onSaved }) {
       const res = await client.patch(`/projects/${project.id}`, { [cual.columna]: cols });
       if (res.success) {
         toast({ title: 'Columnas guardadas' });
+        setConfig((antes) => ({ ...(antes || {}), ...res.data }));
         if (onSaved) onSaved(res.data);
       }
     } catch (err) {
