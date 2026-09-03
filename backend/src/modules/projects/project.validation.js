@@ -1,9 +1,15 @@
 import { z } from 'zod';
+import { CLAVES } from './tipos.js';
 
 export const createProjectSchema = z.object({
   nombre: z.string().min(1).max(200),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'Slug solo minusculas, numeros y guiones').min(1).max(100),
-  type: z.enum(['crm', 'ia']).default('crm'),
+  // Los tipos salen del catalogo, no de una lista escrita a mano aqui.
+  //
+  // Estaban en tres sitios —el enum de Postgres y estos dos `z.enum`— y anadir
+  // uno obligaba a acordarse de los tres. Que la BASE lo acepte se comprueba
+  // aparte, en el controlador: aqui solo se dice cuales existen.
+  type: z.enum(CLAVES).default('crm'),
   emoji: z.string().max(10).optional().nullable(),
   meta_account_id: z.string().max(100).optional().nullable(),
   google_account_id: z.string().max(100).optional().nullable(),
@@ -16,7 +22,7 @@ export const createProjectSchema = z.object({
 
 export const updateProjectSchema = z.object({
   nombre: z.string().min(1).max(200).optional(),
-  type: z.enum(['crm', 'ia']).optional(),
+  type: z.enum(CLAVES).optional(),
   emoji: z.string().max(10).nullable().optional(),
   logo_url: z.string().url('URL inválida').max(2000).nullable().optional(),
   meta_account_id: z.string().max(100).nullable().optional(),
