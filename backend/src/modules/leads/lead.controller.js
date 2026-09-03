@@ -233,6 +233,13 @@ export async function changeStatus(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Una gestora, solo los suyos. Es la regla de negocio escrita, y aqui
+    // faltaba: se comprobo con la sesion de Laura, que paso un lead de Diego a
+    // «convertido» y recibio un 200. Anadir una NOTA al mismo lead si le daba
+    // 403 — o sea que el handler de al lado ya lo comprobaba y este no.
+    //
+    // Y de todos los campos, el estado es el peor para dejar suelto: «convertido»
+    // es lo que alimenta el informe de ventas.
     await exigirQueSeaSuyo(req, id);
     const parsed = updateStatusSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -285,6 +292,8 @@ export async function addReminder(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Lo mismo: un recordatorio en el lead de otra le aparece a ELLA en su cola
+    // del dia. No es grave como el estado, pero es la misma regla.
     await exigirQueSeaSuyo(req, id);
     const parsed = createReminderSchema.safeParse(req.body);
     if (!parsed.success) {

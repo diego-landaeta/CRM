@@ -47,9 +47,59 @@ export async function leadPorTelefono(telefono, projectId = null) {
   return rows[0] || null;
 }
 
+/**
+ * Un nombre que de verdad es un nombre, o null.
+ *
+ * Un nombre de solo espacios NO es un nombre. Se guardaba tal cual, y como no
+ * es una cadena vacia pasaba todos los `||` de la pantalla: la cabecera se
+ * quedaba en blanco y el avatar caia a su interrogante. Y no vale con trim():
+ * WhatsApp deja pasar nombres que son una marca invisible —U+200E, la de
+ * direccion del texto— que trim() no toca. Uno de los grupos de la prueba se
+ * llamaba exactamente asi.
+ *
+ * Vive aparte porque no lo necesita solo `conversacionDe`: tambien la agenda y
+ * el autor de cada mensaje en un grupo. Con la limpieza metida en un sitio, los
+ * otros dos guardaban invisibles.
+ */
+export function nombreLimpio(v) {
+  return String(v || '')
+    .replace(/[​-‏‪-‮﻿]/g, '')
+    .trim() || null;
+}
+
 /** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false }) {
+  nombrePush = nombreLimpio(nombrePush);
+
+  // EL NOMBRE DE UN MENSAJE QUE MANDAS TU ERES TU.
+  //
+  // `pushName` es como se llama QUIEN ESCRIBE. En lo que sale de aqui ese eres
+  // tu, asi que escribirlo le pone TU nombre al chat de la otra persona: mandas
+  // un sticker a Dieguis y la conversacion pasa a llamarse «Angel».
+  //
+  // Reportado en pantalla, y ademas es escurridizo: el repaso de la agenda lo
+  // corrige al cuarto de hora, asi que al ir a mirarlo ya esta bien y parece
+  // que no paso nada.
+  //
+  // Va aqui, con la regla de los grupos, porque es la misma historia: el unico
+  // sitio que escribe el nombre de una conversacion es este. En el chat de uno
+  // consigo mismo ese nombre SI seria el bueno, pero tampoco hace falta —la
+  // pantalla lo llama «Tu (mensajes contigo mismo)» comparando el numero.
+  if (mensajeMio) nombrePush = null;
+
+  // A UN GRUPO NO SE LE PONE EL NOMBRE DE UNA PERSONA. Nunca, venga de donde
+  // venga.
+  //
+  // Es la regla que llevo dos dias arreglando por fuera, en cada sitio que
+  // escribe: primero en el webhook, luego al traer historial, luego al abrir un
+  // chat. Cada vez volvia por otro lado y los grupos amanecian llamandose
+  // «Dieguis» o «Giorgio.» — el ultimo que hubiera hablado.
+  //
+  // Aqui ya no depende de que ningun sitio se acuerde. El nombre de un grupo es
+  // su ASUNTO, y ese se pone por `datosDeGrupo`; lo que llegue por esta via
+  // para un grupo se descarta. Un solo sitio, una sola regla.
   const esGrupo = String(jid).endsWith('@g.us');
+  if (esGrupo) nombrePush = null;
   // Un `@lid` no es un telefono: es un identificador de WhatsApp. Buscar un
   // prospecto con ese numero no encontraria nada y ademas podria cruzarse con
   // el telefono de otra persona por casualidad.
@@ -91,13 +141,19 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   // el mensaje se guarda igual y lo unico que se pierde es saber a que
   // contestaba — perderlo entero seria mucho peor.
   const conCita = respondeA && await puedeGuardarCita();
-  // Quien escribio, solo en grupos y solo si la 133 esta aplicada.
+  // Quien escribio, solo en grupos y solo si la 134 esta aplicada.
+  //
+  // El nombre se limpia igual que el de la conversacion: en la agenda real hay
+  // gente cuyo `pushName` es una marca invisible, y guardado asi la lista de
+  // chats pinta «: Sticker» y el globo del grupo lleva encima una linea vacia
+  // donde deberia decir quien hablo.
+  participanteNombre = nombreLimpio(participanteNombre);
   const conQuien = participante && await puedeGuardarParticipante();
   const { rows } = await query(
     `INSERT INTO wa_mensajes
        (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''}${conQuien ? ', participante, participante_nombre' : ''})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? `, $${12}` : ''}${conQuien ? `, $${conCita ? 13 : 12}, $${conCita ? 14 : 13}` : ''})
-     -- Por CONVERSACION y no solo por wa_id (migracion 134).
+     -- Por CONVERSACION y no solo por wa_id (migracion 135).
      --
      -- Con el conflicto global, el mismo mensaje visto por dos sesiones —dos
      -- gestoras en el mismo grupo— se guardaba en UNA sola: en la pantalla de
@@ -236,26 +292,291 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
     filtro += `\n      AND (${condiciones.join('\n        OR ')})`;
   }
 
+  // Quien mando el ultimo mensaje. Con la misma guarda que el resto: sin la
+  // migracion 134 se pide todo lo demas y no se dice el autor.
+  const conQuien = await puedeGuardarParticipante();
+
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
             (SELECT p.nombre FROM projects p WHERE p.id = c.project_id) AS proyecto_nombre,
             (c.jid LIKE '%@g.us') AS es_grupo,
-            -- El ultimo mensaje, con su tipo: si fue una foto o un audio no hay
-            -- texto que ensenar, y la lista caia a pintar el telefono — o el
-            -- identificador del grupo, que son 18 cifras sin ningun sentido.
-            (SELECT m.texto FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_texto,
-            (SELECT m.tipo FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_tipo
+            -- El ultimo mensaje: su texto, su tipo y QUIEN lo mando.
+            --
+            -- El tipo, porque si fue una foto o un audio no hay texto que
+            -- ensenar y la lista caia a pintar el telefono — o el identificador
+            -- del grupo, que son 18 cifras sin ningun sentido.
+            --
+            -- El autor, porque en un grupo hablan varios: «Sticker» a secas no
+            -- dice nada. WhatsApp pone «Dieguis: Sticker» y «Tu: Sticker», y
+            -- sin eso la lista de un grupo no se puede leer de un vistazo.
+            --
+            -- Los tres del MISMO mensaje, por un lateral. Con tres subconsultas
+            -- sueltas cada una elige su fila por su cuenta: basta un empate de
+            -- la marca de tiempo —que los hay, WhatsApp da la hora en
+            -- segundos— para acabar pegando el autor de un mensaje al texto de
+            -- otro.
+            u.texto AS ultimo_texto, u.tipo AS ultimo_tipo,
+            u.direccion AS ultimo_direccion${conQuien ? ', u.participante_nombre AS ultimo_autor' : ''}
        FROM wa_conversaciones c
        LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN LATERAL (
+         SELECT m.texto, m.tipo, m.direccion${conQuien ? ', m.participante_nombre' : ''}
+           FROM wa_mensajes m
+          WHERE m.conversacion_id = c.id
+          ORDER BY m.ts DESC, m.id DESC LIMIT 1
+       ) u ON true
       WHERE c.instancia = $1 ${filtro}
       ORDER BY c.ultimo_at DESC NULLS LAST
       LIMIT $${params.length}`,
     params
   );
   return rows;
+}
+
+
+/**
+ * El banco de mensajes: todo lo guardado, en tabla y sin depender de la sesion
+ * (#101).
+ *
+ * Esto NO es el chat. El chat sirve para conversar y por eso arranca de una
+ * conversacion viva; el banco sirve para buscar, auditar y llevarse una copia,
+ * y tiene que funcionar aunque la instancia ya no exista en Evolution. Es el
+ * caso de ISEIE: se recreo el contenedor, desaparecieron las sesiones de Maria
+ * Gabriela y Diana, sus 27 mensajes seguian aqui y no habia forma de verlos.
+ * Se acabaron borrando por inservibles.
+ *
+ * Por eso se lee de `wa_mensajes` y `wa_conversaciones` y de ningun sitio mas:
+ * lo que hay en nuestra base esta, exista o no la sesion.
+ *
+ * `instancias` en null significa TODAS — solo para admin y superadmin. Una
+ * gestora recibe aqui la suya y nada mas.
+ */
+export async function banco({
+  instancias = null, texto = null, telefono = null,
+  desde = null, hasta = null, direccion = null, tipo = null,
+  pagina = 1, limite = 50,
+} = {}) {
+  const cond = [];
+  const params = [];
+
+  if (Array.isArray(instancias)) {
+    // Lista vacia = ninguna, no todas. Devolver todo aqui seria abrir el banco
+    // entero a quien no tiene sesion.
+    if (!instancias.length) return { filas: [], total: 0 };
+    params.push(instancias);
+    cond.push(`c.instancia = ANY($${params.length})`);
+  }
+  if (texto) {
+    params.push(`%${texto}%`);
+    cond.push(`m.texto ILIKE $${params.length}`);
+  }
+  if (telefono) {
+    // Solo cifras, como en el resto del modulo: «+34 612 34 56 78» contra un
+    // «34612345678» guardado no casa por culpa del mas y los espacios.
+    const cifras = String(telefono).replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      cond.push(`regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+  }
+  if (desde) { params.push(desde); cond.push(`m.ts >= $${params.length}`); }
+  // El «hasta» incluye su dia entero: quien pide «hasta el 2 de septiembre» no
+  // quiere que se le queden fuera los mensajes de esa misma tarde.
+  if (hasta) { params.push(hasta); cond.push(`m.ts < ($${params.length}::date + INTERVAL '1 day')`); }
+  if (direccion) { params.push(direccion); cond.push(`m.direccion = $${params.length}`); }
+  if (tipo) { params.push(tipo); cond.push(`m.tipo = $${params.length}`); }
+
+  const donde = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+
+  const { rows: cuenta } = await query(
+    `SELECT count(*)::int AS total
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+      ${donde}`,
+    params
+  );
+  const total = cuenta[0]?.total || 0;
+  if (!total) return { filas: [], total: 0 };
+
+  const desplazamiento = Math.max(0, (pagina - 1) * limite);
+  params.push(limite, desplazamiento);
+
+  const { rows: filas } = await query(
+    `SELECT m.id, m.ts, m.direccion, m.tipo, m.texto, m.estado,
+            m.nombre_archivo,
+            -- Solo si tuvo adjunto, no la ruta: en una tabla que se exporta,
+            -- una ruta interna no le dice nada a nadie y encima se lleva a un
+            -- Excel algo que no deberia salir de aqui.
+            (m.media_url IS NOT NULL) AS con_adjunto,
+            m.participante_nombre,
+            c.id   AS conversacion_id,
+            c.telefono,
+            c.instancia,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            COALESCE(l.nombre, c.nombre_push) AS quien,
+            u.nombre AS enviado_por_nombre
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN users u ON u.id = m.enviado_por
+      ${donde}
+      ORDER BY m.ts DESC, m.id DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return { filas, total };
+}
+
+/**
+ * El mismo banco, resumido POR NUMERO. Es como lo pidio Diego: un numero, todo
+ * lo suyo, aunque su conversacion ya no exista.
+ *
+ * Agrupa por telefono y no por conversacion: la misma persona puede tener una
+ * conversacion en la sesion de cada gestora, y para auditar interesa el numero,
+ * no en la bandeja de quien cayo.
+ */
+export async function bancoPorNumero({ instancias = null, texto = null, telefono = null } = {}) {
+  const cond = [];
+  const params = [];
+
+  if (Array.isArray(instancias)) {
+    if (!instancias.length) return [];
+    params.push(instancias);
+    cond.push(`c.instancia = ANY($${params.length})`);
+  }
+  if (texto) { params.push(`%${texto}%`); cond.push(`m.texto ILIKE $${params.length}`); }
+  if (telefono) {
+    const cifras = String(telefono).replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      cond.push(`regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+  }
+  const donde = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+
+  const { rows } = await query(
+    `SELECT c.telefono,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            MAX(COALESCE(l.nombre, c.nombre_push)) AS quien,
+            count(*)::int AS mensajes,
+            min(m.ts) AS primero,
+            max(m.ts) AS ultimo,
+            count(DISTINCT c.instancia)::int AS sesiones
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+      ${donde}
+      GROUP BY c.telefono, (c.jid LIKE '%@g.us')
+      ORDER BY max(m.ts) DESC
+      LIMIT 500`,
+    params
+  );
+  return rows;
+}
+
+/**
+ * La foto de perfil de un contacto, cuando Evolution la manda (#67 y compañia).
+ *
+ * SOLO actualiza lo que ya existe. Un `contacts.update` puede llegar de alguien
+ * con quien no se ha hablado nunca —la agenda entera al enlazar, por ejemplo— y
+ * crear una conversacion por cada uno llenaria la lista de gente con la que no
+ * hay ni un mensaje.
+ *
+ * `COALESCE` al reves que en el resto: aqui la nueva manda, porque la direccion
+ * que da WhatsApp caduca y la que acaba de llegar es la buena. Pero si viene
+ * vacia se conserva la que habia, en vez de dejar el hueco.
+ */
+export async function actualizarAvatar(instancia, jid, url) {
+  if (!instancia || !jid || !url) return 0;
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones SET avatar_url = $3
+      WHERE instancia = $1 AND jid = $2 AND avatar_url IS DISTINCT FROM $3`,
+    [instancia, jid, url]
+  );
+  return rowCount;
+}
+
+/**
+ * El nombre y la foto de un grupo, cuando se han podido averiguar.
+ *
+ * Solo rellena lo que falte: `COALESCE` conserva lo que ya hubiera. Un grupo al
+ * que alguien le puso nombre a mano no se pisa con el que venga de WhatsApp.
+ */
+export async function datosDeGrupo(instancia, jid, asunto, foto) {
+  asunto = nombreLimpio(asunto);
+  if (!instancia || !jid || (!asunto && !foto)) return 0;
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones
+        -- El asunto MANDA, no se conserva lo que hubiera.
+        --
+        -- Antes iba con COALESCE y era demasiado prudente: si un grupo se habia
+        -- quedado con un nombre malo —el de quien escribio el ultimo, que es lo
+        -- que pasaba antes de arreglar esto— se quedaba con el PARA SIEMPRE.
+        -- Nada lo volvia a tocar y el chat seguia llamandose «Dieguis».
+        --
+        -- El asunto de un grupo es un hecho de WhatsApp, no una preferencia
+        -- nuestra: si lo sabemos, es el bueno. Asi ademas se cura solo lo que
+        -- quedo mal, sin tener que ir a la base a mano.
+        SET nombre_push = COALESCE($3, wa_conversaciones.nombre_push),
+            avatar_url  = COALESCE($4, wa_conversaciones.avatar_url)
+      WHERE instancia = $1 AND jid = $2`,
+    [instancia, jid, asunto || null, foto || null]
+  );
+  return rowCount;
+}
+
+/**
+ * Marca un mensaje como eliminado.
+ *
+ * NO se borra la fila. WhatsApp tampoco lo hace: deja «Se eliminó este mensaje»
+ * en su hueco, y aqui ademas son conversaciones con clientes — que una fila
+ * desaparezca de un historial sin dejar rastro es justo lo que no puede pasar
+ * en algo que sirve para auditar.
+ *
+ * Se guarda como tipo `eliminado` y sin texto. `tipo` no tiene lista cerrada de
+ * valores en la base, asi que esto no necesita migracion.
+ */
+export async function marcarEliminado(waId, conversacionId = null) {
+  if (!waId) return 0;
+  const cond = conversacionId ? 'AND conversacion_id = $2' : '';
+  const params = conversacionId ? [waId, conversacionId] : [waId];
+  const { rowCount } = await query(
+    `UPDATE wa_mensajes
+        SET tipo = 'eliminado', texto = NULL, media_url = NULL
+      WHERE wa_id = $1 ${cond} AND tipo <> 'eliminado'`,
+    params
+  );
+  return rowCount;
+}
+
+/**
+ * Quienes han escrito en este grupo, para la cabecera.
+ *
+ * WhatsApp pone la lista de miembros debajo del nombre del grupo. Nosotros no
+ * la tenemos: Evolution devuelve los participantes con su NUMERO y sin nombre
+ * —los nombres salen de la agenda del movil, que no es nuestra—.
+ *
+ * Asi que se usa lo que si sabemos: como se llama quien ha escrito. Es menos
+ * que la lista completa, pero es cierto y sirve para lo mismo — saber con quien
+ * estas hablando sin abrir la ficha del grupo.
+ */
+export async function quienesEscriben(conversacionId, limite = 8) {
+  if (!(await puedeGuardarParticipante())) return [];
+  const { rows } = await query(
+    `SELECT participante_nombre AS nombre, count(*)::int AS cuantos
+       FROM wa_mensajes
+      WHERE conversacion_id = $1
+        AND participante_nombre IS NOT NULL
+        AND participante_nombre <> ''
+      GROUP BY participante_nombre
+      -- Por quien mas habla: en un grupo movido, los primeros son los que
+      -- interesan y el resto sobra.
+      ORDER BY count(*) DESC
+      LIMIT $2`,
+    [conversacionId, limite]
+  );
+  return rows.map((r) => r.nombre);
 }
 
 export async function mensajes(conversacionId, limite = 100) {
@@ -276,12 +597,35 @@ export async function mensajes(conversacionId, limite = 100) {
               LIMIT 1) AS citado_tipo,
             (SELECT q.direccion FROM wa_mensajes q
               WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
-              LIMIT 1) AS citado_direccion` : '';
+              LIMIT 1) AS citado_direccion,
+            -- A QUIEN se cita, en un grupo.
+            --
+            -- La pantalla ponia el nombre de la CONVERSACION, que en un grupo es
+            -- el del grupo: se leia «Fantasy: buenas» citando a alguien que no
+            -- era el grupo. En un grupo hay que decir a quien se cita.
+            (SELECT q.participante_nombre FROM wa_mensajes q
+              WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
+              LIMIT 1) AS citado_autor` : '';
 
   // Quien escribio cada mensaje, en grupos (#74). Misma guarda que la cita: si
-  // la 133 no esta aplicada se pide igual el resto y no se enseña autor.
+  // la 134 no esta aplicada se pide igual el resto y no se enseña autor.
   const columnasQuien = (await puedeGuardarParticipante())
-    ? ', m.participante, m.participante_nombre'
+    ? `, m.participante, m.participante_nombre,
+       -- La foto de quien escribio, SIN tabla nueva.
+       --
+       -- Si esa persona tiene su propio chat con nosotros, su foto ya esta
+       -- guardada ahi: se busca por telefono. Es el mismo dato, no hay que
+       -- pedirlo otra vez ni inventarse donde guardarlo.
+       --
+       -- El campo participante puede ser un «@lid» —el direccionamiento nuevo,
+       -- que no es un telefono— asi que se compara solo con las cifras, contra el
+       -- telefono, que es lo que si casa.
+       (SELECT p.avatar_url FROM wa_conversaciones p
+         WHERE p.instancia = (SELECT c2.instancia FROM wa_conversaciones c2 WHERE c2.id = m.conversacion_id)
+           AND regexp_replace(COALESCE(p.telefono, ''), '[^0-9]', '', 'g')
+               = regexp_replace(COALESCE(split_part(m.participante, '@', 1), ''), '[^0-9]', '', 'g')
+           AND p.avatar_url IS NOT NULL
+         LIMIT 1) AS participante_foto`
     : '';
 
   const { rows } = await query(
@@ -348,9 +692,17 @@ export const porId = async (id) =>
   // es_grupo hace falta AQUI tambien, no solo en la lista: la cabecera del chat
   // lo usa para decidir que ensena debajo del nombre, y sin el pintaba el
   // identificador del grupo —un numero de 18 cifras— como si fuera un telefono.
+  //
+  // Y el prospecto, por lo mismo. La lista SI lo traia y esto no, asi que la
+  // misma conversacion se llamaba «Maria Lopez · Nuevo» en la lista y «Dieguis ·
+  // sin estado» en la cabecera al abrirla. El nombre de la ficha manda sobre el
+  // que se ponga en WhatsApp: es como la tienes tu apuntada.
   (await query(
-    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo
-       FROM wa_conversaciones c WHERE c.id = $1`, [id]
+    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo,
+            l.nombre AS lead_nombre, l.status AS lead_status
+       FROM wa_conversaciones c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`, [id]
   )).rows[0] || null;
 
 export const marcarLeida = (id) =>
@@ -495,25 +847,45 @@ export async function limpiarNombrePropio(instancia, miNombre, miNumero) {
 }
 
 /**
- * Pone al dia los nombres desde la agenda de WhatsApp.
+ * Pone al dia los nombres de las PERSONAS desde la agenda de WhatsApp.
  *
- * La agenda es la fuente buena: son tus contactos y los nombres reales de los
- * grupos. Lo guardado puede estar mal —un grupo con el nombre del ultimo que
- * escribio, por ejemplo— y eso no se arregla solo, porque al guardar se
- * conserva lo viejo cuando lo nuevo llega vacio.
+ * La agenda es la fuente buena para una persona: es como la tienes apuntada tu,
+ * no como se anuncia ella. Lo guardado puede estar mal y eso no se arregla
+ * solo, porque al guardar se conserva lo viejo cuando lo nuevo llega vacio.
+ *
+ * De los GRUPOS no dice nada bueno, y esta era la segunda puerta por la que se
+ * les colaba el nombre de una persona. Comprobado contra Evolution v2.3.7 sobre
+ * la agenda real: `findContacts` devuelve 106 jids de grupo y en TODOS el campo
+ * `name` viene vacio, asi que se cae al `pushName` —que ahi es el de quien
+ * hablo—. Un grupo salia llamandose «Dieguis» y otro, literalmente, una marca
+ * invisible.
+ *
+ * Se arreglo primero en `conversacionDe`, que es por donde entran los mensajes.
+ * Los nombres volvieron a romperse esa misma tarde: entraban por aqui. Asi que
+ * la regla se dice tambien aqui, y en el SQL —no en quien llama— porque asi no
+ * depende de que nadie se acuerde. El nombre de un grupo es su ASUNTO y entra
+ * solo por `datosDeGrupo`.
  *
  * Solo toca lo que NO coincide, asi que casi siempre no escribe nada.
  */
 export async function refrescarNombres(instancia, pares) {
-  if (!pares?.length) return 0;
-  const jids = pares.map((p) => p.jid);
-  const nombres = pares.map((p) => p.nombre);
+  // Los invisibles no son nombres: uno de la agenda real era U+200E a secas, y
+  // guardado deja la fila con la cabecera en blanco.
+  const limpios = (pares || [])
+    .map((p) => ({ jid: p?.jid, nombre: nombreLimpio(p?.nombre) }))
+    .filter((p) => p.jid && p.nombre);
+  if (!limpios.length) return 0;
+  const jids = limpios.map((p) => p.jid);
+  const nombres = limpios.map((p) => p.nombre);
   const { rowCount } = await query(
     `UPDATE wa_conversaciones c
         SET nombre_push = n.nombre
        FROM (SELECT unnest($2::text[]) AS jid, unnest($3::text[]) AS nombre) n
       WHERE c.instancia = $1
         AND c.jid = n.jid
+        -- Los grupos, ni tocarlos: lo que la agenda trae para ellos es el
+        -- nombre de quien hablo el ultimo.
+        AND c.jid NOT LIKE '%@g.us'
         AND n.nombre <> ''
         AND c.nombre_push IS DISTINCT FROM n.nombre`,
     [instancia, jids, nombres]
@@ -533,7 +905,7 @@ let hayColumnaResponde = null;
 let hayColumnaParticipante = null;
 
 /**
- * ¿Esta aplicada la migracion 133?
+ * ¿Esta aplicada la migracion 134?
  *
  * Mismo patron que la cita: pedir una columna que no existe tumba el INSERT
  * entero, y perder el mensaje por no poder guardar QUIEN lo escribio seria un

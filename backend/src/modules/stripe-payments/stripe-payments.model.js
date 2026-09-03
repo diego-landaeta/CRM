@@ -240,6 +240,40 @@ export async function getStats({ projectId, status, linked, search, from, to, fa
   return rows[0];
 }
 
+/**
+ * Desde cuando cuenta un proyecto. Antes de esa fecha, nada entra (#44).
+ *
+ * «Cada proyecto factura desde el dia que entra al CRM, no desde antes. Si el
+ * proyecto lleva meses cobrando, ese historico no se importa: entraria como
+ * ventas nuevas de este mes e inflaria todas las cifras y todas las comisiones.»
+ *
+ * El mismo COALESCE que ya filtraba la lista de pendientes de facturar, sacado
+ * a una funcion para que lo use tambien la IMPORTACION. Estaba solo en la
+ * lista, asi que el historico entero SI entraba en `stripe_payments` y de ahi
+ * lo leen las pantallas de dinero y las comisiones.
+ *
+ * El orden importa y es el que ya estaba:
+ *   1. `al_dia_hasta` — el corte puesto a mano, que manda sobre todo lo demas
+ *   2. la primera factura de la sociedad
+ *   3. el alta del proyecto
+ *
+ * Devuelve null si no se puede saber: quien llama decide, y en la importacion
+ * eso significa no cortar — mejor traer de mas que perder un cobro sin avisar.
+ */
+export async function fechaDeCorte(projectId) {
+  const { rows } = await query(
+    `SELECT COALESCE(
+       (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1),
+       (SELECT MIN(f.fecha_emision) FROM invoices f
+         WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = $1)
+           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL),
+       (SELECT pr3.created_at::date FROM projects pr3 WHERE pr3.id = $1)
+     ) AS corte`,
+    [projectId]
+  );
+  return rows[0]?.corte || null;
+}
+
 export async function getSyncState(projectId) {
   const { rows } = await query(`SELECT * FROM stripe_sync_state WHERE project_id=$1`, [projectId]);
   return rows[0] || null;

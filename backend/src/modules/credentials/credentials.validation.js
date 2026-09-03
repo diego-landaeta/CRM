@@ -1,6 +1,22 @@
 import { z } from 'zod';
 
-const SERVICES = ['meta', 'google_ads', 'gsc', 'stripe', 'claude', 'brevo'];
+/**
+ * Los servicios que se pueden guardar.
+ *
+ * Esta lista tiene que ir a la par con el enum `api_service` de la base
+ * (migracion 137). Son dos sitios y no hay forma de compartirlos: si aqui falta
+ * uno, el endpoint contesta 400 aunque la base lo admita — que es lo que pasaba
+ * con los cuatro de abajo.
+ *
+ * Los cuatro ultimos son los que la #80 pide traer del .env.
+ */
+const SERVICES = [
+  'meta', 'google_ads', 'gsc', 'stripe', 'claude', 'brevo',
+  'woocommerce', 'evolution', 'r2', 'make',
+];
+
+/** Produccion o pruebas. Por defecto produccion, que es lo que habia hasta la #80. */
+const ENTORNOS = ['produccion', 'pruebas'];
 
 export const upsertCredentialSchema = z.object({
   project_id: z.number().int().positive().nullable().optional(),

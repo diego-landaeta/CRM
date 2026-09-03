@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -7,7 +7,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
-import BuscadorCurso from '../components/BuscadorCurso';
+import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -39,23 +39,6 @@ function generarContrasena() {
   const numeros = '23456789';
   const de = (s: string, n: number) => Array.from({ length: n }, () => s[Math.floor(Math.random() * s.length)]).join('');
   return `${de(mayus, 1)}${de(letras, 5)}${de(numeros, 3)}`;
-}
-
-// Que le falta a un tutor para poder cobrar.
-//
-// Sin IBAN no se le puede pagar, y sin DNI no se puede justificar el pago. El
-// correo cuenta como «falta» cuando es uno construido con el dominio de la
-// marca: esos no existen, y por eso ninguno de sus dueños ha entrado nunca.
-const CORREO_DE_LA_CASA = /@(iseie|psikoaprende|iseih|fonoaprende|ictess)\.(com|es)$/i;
-
-function loQueFalta(t: Tutor): string[] {
-  const falta: string[] = [];
-  if (!t.iban) falta.push('IBAN');
-  if (!t.banco) falta.push('banco');
-  if (!t.dni_nif) falta.push('DNI');
-  if (!t.telefono) falta.push('teléfono');
-  if (!t.email || CORREO_DE_LA_CASA.test(t.email)) falta.push('correo');
-  return falta;
 }
 
 export default function TutoresPage() {
@@ -97,12 +80,7 @@ export default function TutoresPage() {
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
   const [popupClave, setPopupClave] = useState(false);
-
-  // Editar los datos del tutor. Existia el endpoint (PATCH /tutores/:id/perfil)
-  // y no lo llamaba nadie: el formulario era solo de alta, asi que el IBAN se
-  // ponia una vez y despues no habia forma de verlo ni de cambiarlo.
-  const [popupDatos, setPopupDatos] = useState(false);
-  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', banco: '', email: '', reenviar: true });
+  const [popupPago, setPopupPago] = useState(false);
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -173,49 +151,6 @@ export default function TutoresPage() {
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
   function abrirColab() { setCursoColab(null); setPopupColab(true); }
-
-  // Se rellena con lo que YA tiene. Es lo que evita el estropicio de guardar
-  // con los campos en blanco y borrarle el telefono al tutor.
-  function abrirDatos() {
-    if (!elegido) return;
-    setDatos({
-      nombre: elegido.nombre || '',
-      dniNif: elegido.dni_nif || '',
-      telefono: elegido.telefono || '',
-      iban: elegido.iban || '',
-      banco: elegido.banco || '',
-      email: elegido.email || '',
-      reenviar: true,
-    });
-    setPopupDatos(true);
-  }
-
-  async function guardarDatos() {
-    if (!elegido) return;
-    setProcesando(true);
-    try {
-      const r = await tutoresApi.guardarPerfil(elegido.id, {
-        dniNif: datos.dniNif.trim() || null,
-        telefono: datos.telefono.trim() || null,
-        iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
-        banco: datos.banco.trim() || null,
-        ...(datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase()
-          ? { email: datos.email.trim(), reenviarEnlace: datos.reenviar }
-          : {}),
-      });
-      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
-      // El nombre vive en users, no en el perfil, y va por otra puerta.
-      if (datos.nombre.trim() && datos.nombre.trim() !== elegido.nombre) {
-        await client.patch(`/users/${elegido.id}`, { nombre: datos.nombre.trim() });
-      }
-      toast({ title: 'Datos guardados' });
-      setPopupDatos(false);
-      await cargar();
-    } catch (e) {
-      toast({ title: 'No se pudo guardar',
-        description: (e as Error).message, variant: 'destructive' });
-    } finally { setProcesando(false); }
-  }
 
   function abrirClave() {
     setClaveNueva(generarContrasena());
@@ -293,23 +228,6 @@ export default function TutoresPage() {
         </span>
       </div>
       <div className="text-xs text-muted-foreground truncate">{t.email}</div>
-      {/* Lo que le falta para poder cobrar. Va en la lista y no solo en la
-          ficha: asi se ve de un vistazo a quien hay que perseguir, sin abrir
-          uno por uno los cuarenta y cinco. */}
-      {(() => {
-        const falta = loQueFalta(t);
-        return falta.length > 0 ? (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {falta.map((q) => (
-              <span key={q}
-                className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium
-                  bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                falta {q}
-              </span>
-            ))}
-          </div>
-        ) : null;
-      })()}
       {t.marcas && (
         <div className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{t.marcas}</div>
       )}
@@ -321,8 +239,56 @@ export default function TutoresPage() {
           aún no ha entrado
         </div>
       )}
+      {/* Sin IBAN no se le puede pagar, y hoy son 45 de 45 (#92).
+          Se dice en la lista y no solo en la ficha porque el trabajo es
+          encontrarlos: con 45 tutores, abrirlos uno a uno para ver cual falta
+          es justo lo que hace que no se haga. Solo en los activos — a un
+          retirado no se le paga. */}
+      {t.active !== false && !t.iban && (
+        <div className="text-[11px] text-destructive font-semibold mt-0.5">
+          sin IBAN · no se le puede pagar
+        </div>
+      )}
     </button>
   );
+
+  /**
+   * Los datos de pago de un tutor que YA existe (#92).
+   *
+   * Hasta ahora el formulario era solo de alta, asi que un tutor dado de alta
+   * sin IBAN se quedaba sin el para siempre. Hoy son 45 de 45 en los dos CRMs,
+   * con comisiones ya generandose: sin esta pantalla no se puede pagar a nadie.
+   *
+   * Se mandan SOLO los tres campos de este formulario. `notas` no viaja, y por
+   * eso no se toca: el servidor deja fuera del UPDATE lo que no llega. Antes
+   * escribia los cuatro siempre y esto habria borrado las notas.
+   */
+  async function guardarPago(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!elegido) return;
+    const f = new FormData(e.currentTarget);
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.guardarPerfil(elegido.id, {
+        dniNif: String(f.get('dniNif') || ''),
+        telefono: String(f.get('telefono') || ''),
+        // Sin espacios: se copian del banco con ellos y luego no casan.
+        iban: String(f.get('iban') || '').replace(/\s+/g, '').toUpperCase(),
+      });
+      if (!r?.success) throw new Error('no');
+      toast({ title: 'Datos guardados' });
+      setPopupPago(false);
+      await cargar();
+    } catch (err) {
+      toast({
+        title: 'No se pudieron guardar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -494,8 +460,8 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
-                      <Button variant="outline" size="sm" onClick={abrirDatos}>
-                        <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar datos
+                      <Button variant="outline" size="sm" onClick={() => setPopupPago(true)}>
+                        <Bank size={14} weight="bold" className="mr-1.5" /> Datos de pago
                       </Button>
                       <Button variant="outline" size="sm" onClick={abrirClave}>
                         <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
@@ -571,6 +537,68 @@ export default function TutoresPage() {
           )}
         </div>
       </div>
+
+      {/* Datos de pago de un tutor que ya existe (#92).
+          El alta era el unico sitio donde se podian meter, asi que quien no los
+          puso entonces no podia ponerlos nunca. */}
+      {popupPago && elegido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setPopupPago(false)}>
+          <form onSubmit={guardarPago} onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md">
+
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
+              <div className="min-w-0">
+                <h2 className="font-bold text-base">Datos de pago</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{elegido.nombre}</p>
+              </div>
+              <button type="button" onClick={() => setPopupPago(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              {!elegido.iban && (
+                <p className="text-xs text-destructive flex items-start gap-1.5">
+                  <Warning size={14} weight="fill" className="shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>Sin IBAN no se le puede pagar la comisión, aunque ya la haya generado.</span>
+                </p>
+              )}
+
+              <div>
+                <label htmlFor="pago-dni" className="text-xs font-semibold">DNI / NIF</label>
+                <input id="pago-dni" name="dniNif" defaultValue={elegido.dni_nif || ''}
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label htmlFor="pago-tel" className="text-xs font-semibold">Teléfono</label>
+                <input id="pago-tel" name="telefono" defaultValue={elegido.telefono || ''}
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label htmlFor="pago-iban" className="text-xs font-semibold">IBAN</label>
+                <input id="pago-iban" name="iban" defaultValue={elegido.iban || ''}
+                  placeholder="ES00 0000 0000 0000 0000 0000"
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background
+                             text-sm font-mono tracking-wide" />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Se guarda sin espacios. Vaciar un campo lo borra; el resto no se toca.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <Button type="button" variant="outline" onClick={() => setPopupPago(false)}>Cancelar</Button>
+              <Button type="submit" disabled={procesando}>
+                {procesando ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Alta de tutor */}
       {popupAlta && (
@@ -695,8 +723,11 @@ export default function TutoresPage() {
                   <label className="text-[11px] text-muted-foreground min-w-0">
                     Curso
                     <div className="mt-1">
-                      <BuscadorCurso
-                        cursos={formaciones}
+                      <BuscadorEnLista
+                        opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
+                        comoDinero
+                        placeholder="Escribe para buscar un curso…"
+                        sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
                         valor={nuevoCurso ? Number(nuevoCurso) : null}
                         onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
                         excluir={cursosAlta.map((c) => c.productId)}
@@ -781,8 +812,11 @@ export default function TutoresPage() {
             </div>
 
             {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir. */}
-            <BuscadorCurso
-              cursos={formaciones}
+            <BuscadorEnLista
+              opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
+              comoDinero
+              placeholder="Escribe para buscar un curso…"
+              sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
               valor={cursoColab}
               onElegir={setCursoColab}
               excluir={colabs.map((c) => c.product_id)}
@@ -820,99 +854,6 @@ export default function TutoresPage() {
               {guardando ? 'Guardando…' : 'Añadir'}
             </Button>
           </form>
-        </div>
-      )}
-
-      {/* Editar los datos del tutor.
-          Se abre con lo que ya tiene relleno, a proposito: `guardarPerfil`
-          escribe `iban || null`, asi que un formulario en blanco le borraria el
-          telefono y el DNI a quien ya los tenia. */}
-      {popupDatos && elegido && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={() => setPopupDatos(false)}>
-          <div className="bg-card border border-border rounded-lg w-full max-w-md p-4 space-y-3"
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-bold">Datos de {elegido.nombre}</h3>
-              <button type="button" onClick={() => setPopupDatos(false)} aria-label="Cerrar"
-                className="text-muted-foreground hover:text-foreground">
-                <X size={16} weight="bold" />
-              </button>
-            </div>
-
-            <label className="block text-xs font-medium">
-              Nombre
-              <input value={datos.nombre}
-                onChange={(e) => setDatos({ ...datos, nombre: e.target.value })}
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-xs font-medium">
-                DNI / NIF
-                <input value={datos.dniNif}
-                  onChange={(e) => setDatos({ ...datos, dniNif: e.target.value })}
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-              </label>
-              <label className="block text-xs font-medium">
-                Telefono
-                <input value={datos.telefono}
-                  onChange={(e) => setDatos({ ...datos, telefono: e.target.value })}
-                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-              </label>
-            </div>
-
-            <label className="block text-xs font-medium">
-              IBAN
-              <input value={datos.iban}
-                onChange={(e) => setDatos({ ...datos, iban: e.target.value })}
-                placeholder="ES00 0000 0000 0000 0000 0000"
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
-              <span className="block text-[11px] text-muted-foreground font-normal mt-1">
-                Donde se le paga. Los espacios se quitan solos.
-              </span>
-            </label>
-
-            {/* El banco, suelto y no deducido del IBAN: hay tutores fuera de
-                Europa, y ahi el numero de cuenta no lleva codigo de entidad. */}
-            <label className="block text-xs font-medium">
-              Banco
-              <input value={datos.banco}
-                onChange={(e) => setDatos({ ...datos, banco: e.target.value })}
-                placeholder="BBVA, Santander, Galicia…"
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-            </label>
-
-            {/* El correo es la CREDENCIAL, no un dato de contacto: al cambiarlo,
-                con el viejo ya no se entra. De ahi la casilla de reenviar. */}
-            <label className="block text-xs font-medium">
-              Correo
-              <input type="email" value={datos.email}
-                onChange={(e) => setDatos({ ...datos, email: e.target.value })}
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-            </label>
-
-            {datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 space-y-2">
-                <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                  El correo es con lo que entra al CRM. Al cambiarlo se cierran sus
-                  sesiones y con el anterior ya no podra entrar.
-                </p>
-                <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-200">
-                  <input type="checkbox" checked={datos.reenviar} className="mt-0.5"
-                    onChange={(e) => setDatos({ ...datos, reenviar: e.target.checked })} />
-                  <span>
-                    Mandarle el enlace para poner contraseña a la direccion nueva.
-                    Sin esto se queda sin poder entrar.
-                  </span>
-                </label>
-              </div>
-            )}
-
-            <Button className="w-full" disabled={procesando} onClick={guardarDatos}>
-              {procesando ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </div>
         </div>
       )}
 

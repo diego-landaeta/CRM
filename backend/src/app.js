@@ -193,6 +193,13 @@ for (const { name, mod } of ALL_MODULES) {
   }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
+  // Nombres viejos que se siguen atendiendo. Al pasar las rutas al castellano
+  // hubo pantallas pidiendo a direcciones que ya no existian; el alias evita
+  // que vuelva a pasar mientras quede algo apuntando al nombre anterior.
+  for (const viejo of mod.alias || []) {
+    app.use(viejo, mod.router);
+    logger.info(`Modulo registrado (alias): ${viejo} -> ${mod.prefix}`);
+  }
   // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
   // Un modulo puede responder tambien por su nombre anterior. Sirve para
   // renombrar sin romper lo que ya apuntaba al viejo.

@@ -52,7 +52,7 @@ export const createHours = async (req, res, next) => {
   try {
     const parsed = hoursSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
-    res.status(201).json({ success: true, data: await model.createHours({ ...parsed.data, created_by: req.user.id }) });
+    res.status(201).json({ success: true, data: await model.createHours({ ...parsed.data, created_by: req.user.userId }) });
   } catch (e) { next(e); }
 };
 export const deleteHours = async (req, res, next) => { try { await model.deleteHours(parseInt(req.params.id)); res.json({ success: true }); } catch (e) { next(e); } };
@@ -85,7 +85,7 @@ export const generatePeriod = async (req, res, next) => {
 };
 export const closePeriod = async (req, res, next) => {
   try {
-    const r = await model.closePeriod(parseInt(req.params.id), req.user.id);
+    const r = await model.closePeriod(parseInt(req.params.id), req.user.userId);
     if (!r) throw new AppError('Periodo no encontrado o ya cerrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (e) { next(e); }
@@ -103,7 +103,7 @@ export const addAdjustment = async (req, res, next) => {
   try {
     const parsed = adjSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
-    res.status(201).json({ success: true, data: await model.addAdjustment({ ...parsed.data, created_by: req.user.id }) });
+    res.status(201).json({ success: true, data: await model.addAdjustment({ ...parsed.data, created_by: req.user.userId }) });
   } catch (e) { next(e); }
 };
 export const deleteAdjustment = async (req, res, next) => { try { await model.deleteAdjustment(parseInt(req.params.id)); res.json({ success: true }); } catch (e) { next(e); } };

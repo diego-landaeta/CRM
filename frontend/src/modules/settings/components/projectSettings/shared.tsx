@@ -116,6 +116,75 @@ export const DEFAULT_COLUMNS = [
   { key: 'fecha_solicitud', label: 'Fecha', visible: true },
 ];
 
+/**
+ * Las columnas de cada listado, por entidad (#8).
+ *
+ * `DEFAULT_COLUMNS` era solo de leads y la pestaña «Columnas» servia solo para
+ * ellos: Clientes y Productos salian con su listado fijo.
+ *
+ * `campo` dice de que entidad son los campos personalizados que se le pueden
+ * añadir, y `columna` en cual de las tres de `projects` se guarda.
+ */
+export const ENTIDADES_CON_COLUMNAS = [
+  {
+    clave: 'lead',
+    label: 'Prospectos',
+    columna: 'lead_columns',
+    porDefecto: [
+      { key: 'nombre', label: 'Nombre', visible: true },
+      { key: 'email', label: 'Email', visible: true },
+      { key: 'telefono', label: 'Teléfono', visible: true },
+      { key: 'canal_detectado', label: 'Origen', visible: true },
+      { key: 'status', label: 'Estado', visible: true },
+      { key: 'responsable_nombre', label: 'Gestor', visible: true },
+      { key: 'fecha_solicitud', label: 'Fecha', visible: true },
+    ],
+    extras: [
+      { key: 'utm_source', label: 'UTM Source' },
+      { key: 'utm_campaign', label: 'UTM Campaign' },
+      { key: 'dias_inactivo', label: 'Días inactivo' },
+      { key: 'last_interaction_at', label: 'Última interacción' },
+      { key: 'updated_at', label: 'Actualizado' },
+      { key: 'reincidente', label: 'Reincidente' },
+    ],
+  },
+  {
+    clave: 'client',
+    label: 'Clientes',
+    columna: 'client_columns',
+    porDefecto: [
+      { key: 'nombre', label: 'Nombre', visible: true },
+      { key: 'email', label: 'Email', visible: true },
+      { key: 'telefono', label: 'Teléfono', visible: true },
+      { key: 'tipo', label: 'Tipo', visible: true },
+      { key: 'created_at', label: 'Alta', visible: true },
+    ],
+    extras: [
+      { key: 'nif', label: 'NIF / CIF' },
+      { key: 'direccion', label: 'Dirección' },
+      { key: 'total_facturado', label: 'Total facturado' },
+      { key: 'updated_at', label: 'Actualizado' },
+    ],
+  },
+  {
+    clave: 'product',
+    label: 'Productos',
+    columna: 'product_columns',
+    porDefecto: [
+      { key: 'nombre', label: 'Nombre', visible: true },
+      { key: 'precio', label: 'Precio', visible: true },
+      { key: 'categoria', label: 'Categoría', visible: true },
+      { key: 'active', label: 'Activo', visible: true },
+    ],
+    extras: [
+      { key: 'sku', label: 'SKU' },
+      { key: 'stock', label: 'Stock' },
+      { key: 'external_url', label: 'Enlace externo' },
+      { key: 'updated_at', label: 'Actualizado' },
+    ],
+  },
+];
+
 export const AVAILABLE_EXTRA_COLUMNS = [
   { key: 'utm_source', label: 'UTM Source' },
   { key: 'utm_campaign', label: 'UTM Campaign' },
