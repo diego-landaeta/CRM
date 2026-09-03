@@ -974,13 +974,32 @@ export async function buscarFoto(conv) {
  */
 async function borrado(cuerpo) {
   const bruto = cuerpo?.data || cuerpo;
-  const lista = Array.isArray(bruto) ? bruto : [bruto];
+
+  // La forma que faltaba: `{ keys: [...] }`.
+  //
+  // Es la que emite Baileys para «eliminar para mi», y se comprobo en el codigo
+  // que corre dentro de Evolution v2.3.7: `chat-utils.js` hace
+  //
+  //     ev.emit('messages.delete', { keys: [{ remoteJid, id, fromMe }] })
+  //
+  // O sea que la clave NO viene en el objeto de arriba, sino dentro de una lista
+  // que cuelga de `keys`. Se aceptaban el objeto suelto, la lista de objetos y
+  // la clave aplanada — las tres — y esta se caia por el unico hueco que
+  // quedaba: `d.key.id`, `d.keyId` y `d.id` son todos undefined, asi que el
+  // aviso entraba, no casaba con nada y salia con «0 marcados» sin decir nada.
+  //
+  // Un borrado que no se refleja es de lo peor que puede hacer esto: el mensaje
+  // sigue ahi para quien mira el CRM y ya no existe para quien mira el movil.
+  const claves = Array.isArray(bruto?.keys) ? bruto.keys
+    : Array.isArray(bruto) ? bruto
+    : [bruto];
+
   let marcados = 0;
-  for (const d of lista) {
+  for (const d of claves) {
     const waId = d?.key?.id || d?.keyId || d?.id || null;
     if (waId) marcados += await model.marcarEliminado(waId);
   }
-  return { borrados: lista.length, marcados };
+  return { borrados: claves.length, marcados };
 }
 
 /**
