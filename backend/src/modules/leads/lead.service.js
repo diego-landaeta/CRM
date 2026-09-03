@@ -586,21 +586,18 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   if (!cleanEmail && !telNorm) return { duplicate: null };
   const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
   if (!dup) return { duplicate: null };
-  // Se mantiene el aviso enmascarado solo si NO hay responsable identificable;
-  // entre gestoras se enseñan los datos, que es lo que permite decidir si es la
-  // misma persona sin tener que preguntar.
-  if (false && requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
-    return {
-      duplicate: {
-        id: dup.id,
-        masked: true,
-        responsable_nombre: dup.responsable_nombre || 'otro gestor',
-        status: dup.status,
-        created_at: dup.created_at,
-        message: `Ya existe un lead con estos datos asignado a ${dup.responsable_nombre || 'otro gestor'}`,
-      },
-    };
-  }
+  // Entre gestoras se ENSEÑAN los datos del duplicado, sin enmascarar.
+  //
+  // Es lo que permite decidir si es la misma persona sin tener que preguntarle a
+  // nadie. Aqui habia una rama que devolvia una version tapada cuando el
+  // duplicado era de otra gestora, y estaba desactivada con `if (false && ...)`
+  // — o sea codigo muerto que no se podia ejecutar de ninguna manera, pero que
+  // se leia como si el enmascarado siguiera existiendo.
+  //
+  // Se quita entera. El comportamiento es exactamente el mismo que ya habia; lo
+  // que cambia es que ahora se lee lo que de verdad pasa. Si algun dia hay que
+  // volver a tapar datos entre gestoras, se escribe de nuevo con su condicion de
+  // verdad y su prueba.
   return { duplicate: dup };
 }
 
