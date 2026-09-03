@@ -889,12 +889,21 @@ export default function ChatPage() {
       const r = await chatApi.cambiarEstado(c.lead_id, status);
       if (!r?.success) throw new Error('no');
       cargarLista();
-    } catch {
+    } catch (e) {
       setChats((prev) => prev.map((x) => (x.id === c.id ? { ...x, lead_status: antes } : x)));
       setConv((prev) => (prev && prev.id === c.id ? { ...prev, lead_status: antes } : prev));
+      // Se dice el motivo del servidor cuando lo hay.
+      //
+      // El caso real es «ese contacto es de otra gestora»: el chat es tuyo pero
+      // el prospecto esta asignado a otra persona, y eso no se adivina mirando
+      // la pantalla. Con un «vuelve a intentarlo» generico, quien lo vea lo
+      // intentara otra vez y volvera a fallar.
+      const motivo = (e as { message?: string })?.message;
       toast({
         title: 'No se pudo cambiar el estado',
-        description: 'Se queda como estaba. Vuelve a intentarlo.',
+        description: motivo && !/^Error \d/.test(motivo)
+          ? motivo
+          : 'Se queda como estaba. Vuelve a intentarlo.',
         variant: 'destructive',
       });
     }
