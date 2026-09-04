@@ -53,7 +53,12 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key,
+  // Los de los encabezados de seccion (#105). Ninguno repite el de una
+  // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
+  // que una de sus filas, deja de ordenar y pasa a confundir.
+  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice,
+} from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -79,6 +84,7 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 const NAV_SECTIONS = [
   {
     label: 'Testeo',
+    icon: Flask,
     items: [
       { label: 'TESTEO2', to: '/testeo2', detail: 'Maqueta del rediseño', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
       { label: 'SUITE DASH', to: '/suite-dash', detail: 'La referencia', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
@@ -90,6 +96,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Principal',
+    icon: House,
     items: [
       { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, module: 'leads' },
@@ -136,6 +143,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Captación',
+    icon: Funnel,
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
@@ -148,6 +156,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Publicidad',
+    icon: Megaphone,
     items: [
       { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'] },
       { label: 'Google Ads', to: '/google-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
@@ -155,6 +164,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Catálogo',
+    icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Vendidos sin fecha', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
@@ -169,6 +179,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Tutores',
+    icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
@@ -179,6 +190,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Finanzas',
+    icon: Bank,
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
@@ -197,6 +209,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Análisis',
+    icon: ChartPieSlice,
     items: [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
       { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
@@ -206,6 +219,7 @@ const NAV_SECTIONS = [
   {
     // Clientes = consulta de datos de clientes (no ventas). Va al final.
     label: 'Clientes',
+    icon: UsersThree,
     items: [
       { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
@@ -215,6 +229,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Sistema',
+    icon: Gear,
     items: [
       { label: 'Mensajes', to: '/mensajes', detail: 'Del equipo', icon: ChatsCircle },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge },
@@ -1013,6 +1028,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
+          // El icono del encabezado (#105). Mismo tamano y peso que los de las
+          // entradas —18 y `regular`—: la idea es que ordenen, no que compitan.
+          const SectionIcon = section.icon;
           const renderItems = () => visibleItems.map((item) =>
             item.children ? (
               <NavGroup
@@ -1049,7 +1067,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           if (collapsed) {
             return (
               <div key={section.label} className="space-y-1">
-                {sIdx > 0 && <div className="mx-2 my-1.5 border-t border-border" aria-hidden="true" />}
+                {sIdx > 0 && <div className="mx-2 mt-2 border-t border-border" aria-hidden="true" />}
+                {/* Plegado solo habia una raya: se veia que empezaba otra cosa,
+                    pero no cual. El icono lo dice, y al pasar por encima da el
+                    nombre. No es pulsable: una seccion no lleva a ningun sitio,
+                    y fingirlo aqui seria peor que no ponerlo. */}
+                {SectionIcon && (
+                  <div
+                    className="flex h-6 items-center justify-center text-muted-foreground/50"
+                    title={sectionLabel}
+                  >
+                    <SectionIcon size={18} weight="regular" />
+                  </div>
+                )}
                 {renderItems()}
               </div>
             );
@@ -1062,7 +1092,10 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 aria-expanded={isOpen}
                 className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
               >
-                <span>{sectionLabel}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {SectionIcon && <SectionIcon size={18} weight="regular" className="shrink-0" />}
+                  <span className="truncate">{sectionLabel}</span>
+                </span>
                 <CaretDown
                   size={10}
                   weight="bold"
