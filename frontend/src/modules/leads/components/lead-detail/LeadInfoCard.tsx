@@ -142,7 +142,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
   return (
     <div className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">Información del lead</h3>
+        <h3 className="font-semibold">Información del prospecto</h3>
         {!editMode ? (
           <button onClick={() => setEditMode(true)} className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5">
             <PencilSimple size={12} weight="bold" /> Editar
@@ -192,7 +192,7 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
                   <button type="button" onClick={abrirWhatsapp} disabled={abriendoWa}
                     title="Abrir la conversacion en el CRM"
                     className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border
-                               text-xs text-muted-foreground hover:text-green-700 dark:hover:text-green-400 hover:bg-muted">
+                               text-xs text-muted-foreground hover:text-success hover:bg-muted">
                     <WhatsappLogo size={12} />
                     {abriendoWa ? 'Abriendo…' : 'WhatsApp'}
                   </button>

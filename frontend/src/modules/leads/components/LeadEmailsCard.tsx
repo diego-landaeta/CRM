@@ -69,7 +69,7 @@ export default function LeadEmailsCard({ leadId, hasEmail, onCompose, refreshKey
       </div>
 
       {error && (
-        <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-md p-3">
+        <div className="text-xs text-destructive bg-destructive-soft border border-destructive/30/50 rounded-md p-3">
           {error}
         </div>
       )}
@@ -82,7 +82,7 @@ export default function LeadEmailsCard({ leadId, hasEmail, onCompose, refreshKey
 
       {emails && emails.length === 0 && (
         <p className="text-sm text-muted-foreground italic text-center py-6">
-          Aún no se han enviado emails a este lead.
+          Aún no se han enviado emails a este prospecto.
         </p>
       )}
 

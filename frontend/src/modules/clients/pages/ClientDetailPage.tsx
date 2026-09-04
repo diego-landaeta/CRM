@@ -3,6 +3,8 @@
 // `useState<...>(...)` arriba, pero el archivo consume varios componentes UI
 // que aún están en .jsx con tipos inferidos demasiado estrictos. La
 // migración completa de los componentes UI compartidos es follow-up.
+import { avatarColorFor } from '@/shared/lib/ui';
+
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { Lead, Conversion } from '@/shared/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -29,14 +31,6 @@ const ConversionsTab = lazy(() => import('@/modules/conversions/components/Conve
 const LeadFormDialog = lazy(() => import('@/modules/leads/components/LeadFormDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 const MergeLeadDialog = lazy(() => import('@/modules/leads/components/MergeLeadDialog'));
-
-const AVATAR_COLORS = [
-  'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
-  'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
-];
 
 const INTERACTION_ICONS = { llamada: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo, nota: Note };
 const INTERACTION_COLORS = {
@@ -187,7 +181,7 @@ export default function ClientDetailPage() {
     );
   }
 
-  const avatarColor = AVATAR_COLORS[lead.id % AVATAR_COLORS.length];
+  const avatarColor = avatarColorFor(lead.id);
   const initials = getInitials(lead.nombre);
   const waPhone = telefonoParaWhatsapp(lead.telefono);
 
@@ -197,7 +191,7 @@ export default function ClientDetailPage() {
   const interacciones = lead.interactions || [];
 
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px]">
+    <div className="space-y-5 pb-8 max-w-[1100px] mx-auto">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">
@@ -223,7 +217,7 @@ export default function ClientDetailPage() {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl font-bold">{lead.nombre}</h1>
+            <h2 className="text-xl font-bold">{lead.nombre}</h2>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
               <CheckCircle size={11} weight="fill" /> Cliente
             </span>
