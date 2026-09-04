@@ -25,6 +25,14 @@
 
 @layer base {
   :root {
+  /* Que los controles del sistema —desplegables, calendarios, barras— sigan el
+     tema de la aplicacion.
+     Sin esto el navegador los pinta con su lienzo CLARO aunque el CRM este en
+     oscuro, y un fondo translucido encima queda lavado. Ya paso con la pildora
+     de estado del chat, que salia azul palido con letra oscura en medio de un
+     tema oscuro. */
+  color-scheme: light;
+
     --background: 0 0% 98%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
@@ -91,6 +99,9 @@
   }
 
   .dark {
+    /* Los controles del sistema, tambien en oscuro. Ver el comentario de :root. */
+    color-scheme: dark;
+
     --background: 240 10% 4%;
     --foreground: 0 0% 95%;
     --card: 240 10% 6%;

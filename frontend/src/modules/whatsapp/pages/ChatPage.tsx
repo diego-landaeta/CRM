@@ -23,6 +23,7 @@ import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
+import { altoDelMarco, rellenoDeAbajo } from '../lib/altoDelMarco';
 import './chat.css';
 import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
@@ -626,45 +627,31 @@ export default function ChatPage() {
   // Estaba fijado a `100vh - 225px`, que es el mismo error que ya cometi con el
   // marco anterior: encima hay una barra de estado que aparece y desaparece, y
   // el relleno de la pagina cambia con el ancho. Sobraba media pantalla sin
-  // usar. Se mide donde empieza el marco y se le da todo lo que queda.
-  // Lo que ocupa el relleno de la pagina POR DEBAJO del marco.
-  //
-  // Se descubre midiendo, no se adivina. Restaba 16 px a ojo y la pagina
-  // desbordaba justo 16: el contenedor de la pantalla anade su propio relleno
-  // abajo, y eso saca una barra de desplazamiento en el navegador ademas de la
-  // del chat. Dos barras, y la de fuera mueve todo.
-  //
-  // Se apunta una sola vez y se reutiliza: recalcularlo en cada medicion
-  // encogeria el marco un poco mas cada vuelta, porque cambiar su alto vuelve a
-  // disparar la medicion.
-  const sobra = useRef(0);
-
+  // usar. Se mide donde empieza el marco y se le da todo lo que queda, menos el
+  // relleno de los contenedores — el porque de eso esta en `altoDelMarco.ts`.
   useEffect(() => {
     const medir = () => {
       const arriba = marco.current?.getBoundingClientRect().top;
       if (arriba === undefined) return;
-      setAlto(Math.max(420, Math.round(window.innerHeight - arriba - sobra.current)));
+      setAlto(altoDelMarco(arriba, window.innerHeight, rellenoDeAbajo(marco.current)));
     };
     const mirarAncho = () => setEstrecho(window.innerWidth < 900);
     mirarAncho();
     window.addEventListener('resize', mirarAncho);
     medir();
-    // Tras pintar: si la pagina desborda, ese sobrante es el relleno de abajo.
-    const t = setTimeout(() => {
-      const raiz = document.documentElement;
-      const extra = raiz.scrollHeight - raiz.clientHeight;
-      if (extra > 2) { sobra.current += extra; medir(); }
-    }, 120);
     const ro = new ResizeObserver(medir);
     if (document.body) ro.observe(document.body);
     window.addEventListener('resize', medir);
     return () => {
-      clearTimeout(t); ro.disconnect();
+      ro.disconnect();
       window.removeEventListener('resize', medir);
       window.removeEventListener('resize', mirarAncho);
     };
-  }, []);
-
+    // `aPantalla` cambia el contenedor del que cuelga el marco, y con el lo que
+    // sobra por debajo. Sin volver a medir aqui, ampliar deja el alto de la
+    // pagina —y salir, el de la pantalla completa—: el ResizeObserver mira el
+    // body, que en ninguno de los dos casos cambia de tamaño.
+  }, [aPantalla]);
   // Se pregunta al servidor si sigue entrando historial, en vez de adivinarlo
   // mirando si la lista crece: al emparejar hay tandas de varios minutos con
   // pausas largas en medio, y por el tamaño de la lista parecia que se habia
