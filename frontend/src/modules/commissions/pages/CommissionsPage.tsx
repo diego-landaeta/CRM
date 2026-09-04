@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { lazy, Suspense, useEffect, useState } from 'react';
 import { commissionsApi, type CommissionStats } from '../api/commissions.api';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -26,7 +27,6 @@ const ESTADOS = [
   { v: 'pagado', label: 'Pagadas' },
 ];
 
-const inputClass = 'h-9 px-3 rounded-lg border border-border bg-card text-sm';
 
 type PeriodMode = 'all' | 'month';
 

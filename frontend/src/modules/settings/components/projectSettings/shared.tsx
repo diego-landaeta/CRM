@@ -1,7 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 
-export const inputClass = 'w-full h-10 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
+// Aqui vivia otra copia, con el campo mas alto (h-10) y las esquinas mas
+// redondeadas (rounded-lg) que en el resto del CRM: diez pestanas de ajustes
+// con los campos de otro tamano. Se reenvia la unica que hay; los diez
+// `import { inputClass } from './shared'` siguen valiendo.
+export { inputClass } from '@/shared/lib/ui';
 
 type ConfirmTone = 'destructive' | 'default' | 'warning';
 

@@ -341,7 +341,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Nº de cuotas</label>
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Nº de cuotas</label>
                   <input
                     type="number" min={1} max={36} value={numCuotas}
                     onChange={(e) => setNumCuotas(Math.max(1, Math.min(36, Number(e.target.value) || 1)))}
@@ -349,14 +349,14 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Fecha primera cuota</label>
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha primera cuota</label>
                   <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)}
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Concepto de las cuotas (opcional)</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Concepto de las cuotas (opcional)</label>
                 <input
                   list="conceptos-cuota" value={concepto}
                   onChange={(e) => setConcepto(e.target.value)}
@@ -445,7 +445,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
             </p>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Importe cobrado (€)</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Importe cobrado (€)</label>
                 <input
                   type="number" step="0.01" min={0} value={payImporte}
                   onChange={(e) => setPayImporte(e.target.value)}
@@ -454,7 +454,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Fecha del pago</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha del pago</label>
                 <input
                   type="date" value={payFecha}
                   onChange={(e) => setPayFecha(e.target.value)}
@@ -463,7 +463,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 <p className="text-[10px] text-muted-foreground mt-1">Por defecto hoy. Cámbialo si registras un pago pasado.</p>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Método de pago de esta cuota</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Método de pago de esta cuota</label>
                 <select
                   value={payMetodo}
                   onChange={(e) => setPayMetodo(e.target.value)}

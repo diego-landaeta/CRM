@@ -1,4 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { useState, useEffect, lazy, Suspense } from 'react';
 import { Key, X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
@@ -169,7 +170,6 @@ function CredentialDialog({ open, onClose, service, projectId, existing, onSaved
     } finally { setSaving(false); }
   }
 
-  const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
   return (
     <Portal>

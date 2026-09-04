@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+
+import { inputClass } from '@/shared/lib/ui';import { useState, useRef, useEffect } from 'react';
 import { MagnifyingGlass, Plus, X, CaretDown } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
 
 interface ProductOption {
   id: number;

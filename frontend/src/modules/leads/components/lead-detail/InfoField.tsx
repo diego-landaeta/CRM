@@ -10,7 +10,9 @@ export default function InfoField({ label, children }: { label: string; children
   );
 }
 
-export const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+// Era una copia mas, identica de valor. Se reenvia la unica que hay para que
+// no vuelva a separarse por el camino.
+export { inputClass } from '@/shared/lib/ui';
 
 // La paleta esta en shared/lib/ui.ts. Esta copia no llevaba variante oscura:
 // en modo oscuro pintaba un parche claro.
