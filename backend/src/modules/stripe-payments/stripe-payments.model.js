@@ -36,7 +36,13 @@ export async function upsertPayment(p) {
 export async function findLeadByEmail(projectId, email) {
   if (!email) return null;
   const { rows } = await query(
-    `SELECT id, status FROM leads WHERE project_id=$1 AND LOWER(email)=LOWER($2) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`,
+    // Con nombre y responsable: hacen falta para avisar a quien lleva la ficha
+    // de que le ha entrado un cobro (#111). Sin ellos el aviso no se manda y no
+    // se nota, porque `lead.responsable_id` sale undefined y la condicion falla
+    // en silencio.
+    `SELECT id, status, nombre, responsable_id FROM leads
+      WHERE project_id=$1 AND LOWER(email)=LOWER($2) AND deleted_at IS NULL
+      ORDER BY id DESC LIMIT 1`,
     [projectId, email]
   );
   return rows[0] || null;
@@ -77,14 +83,32 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   }
   // Y si no, el de siempre: lo registro una persona a mano, con el mismo importe
   // y una fecha muy proxima en la misma venta.
+  // Y si no, el de siempre: lo registro una persona a mano, con el mismo importe
+  // y una fecha muy proxima en la misma venta.
+  //
+  // El importe se compara CON UN MARGEN DE UN EURO, no exacto.
+  //
+  // Exigirlo clavado dejaba cobros imposibles de asociar por unos centimos. El
+  // caso que lo destapo: Maria Fernanda Garces: Stripe cobro 284,58 € y la
+  // gestora lo habia apuntado como 284,50 —lo que decia su plan de cuotas—, ocho
+  // centimos de diferencia. Al asociarlo, el CRM no reconocia el cobro que ya
+  // estaba y creaba OTRO: la venta pasaba a contar 2.207,40 € cobrados en vez de
+  // 1.922,90. El sintoma que llega es «no me deja asociar»; el daño real es el
+  // dinero contado dos veces.
+  //
+  // Un euro es margen de sobra para un redondeo del plan de cuotas y demasiado
+  // poco para confundir dos cobros distintos, que en estas ventas se llevan
+  // mensualidades enteras. Y si hubiera varios candidatos, gana el mas parecido,
+  // no el de id mas bajo.
   const { rows } = await query(
     `SELECT cp.id
        FROM conversion_payments cp
       WHERE cp.conversion_id = $1
-        AND ROUND(cp.importe::numeric, 2) = ROUND($2::numeric, 2)
+        AND ABS(cp.importe::numeric - $2::numeric) <= 1.00
         AND ABS(cp.fecha - $3::date) <= 3
         AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
-      ORDER BY cp.id LIMIT 1`,
+      ORDER BY ABS(cp.importe::numeric - $2::numeric), cp.id
+      LIMIT 1`,
     [conversionId, importe, fecha]
   );
   return rows[0] || null;
@@ -220,6 +244,40 @@ export async function getStats({ projectId, status, linked, search, from, to, fa
     params
   );
   return rows[0];
+}
+
+/**
+ * Desde cuando cuenta un proyecto. Antes de esa fecha, nada entra (#44).
+ *
+ * «Cada proyecto factura desde el dia que entra al CRM, no desde antes. Si el
+ * proyecto lleva meses cobrando, ese historico no se importa: entraria como
+ * ventas nuevas de este mes e inflaria todas las cifras y todas las comisiones.»
+ *
+ * El mismo COALESCE que ya filtraba la lista de pendientes de facturar, sacado
+ * a una funcion para que lo use tambien la IMPORTACION. Estaba solo en la
+ * lista, asi que el historico entero SI entraba en `stripe_payments` y de ahi
+ * lo leen las pantallas de dinero y las comisiones.
+ *
+ * El orden importa y es el que ya estaba:
+ *   1. `al_dia_hasta` — el corte puesto a mano, que manda sobre todo lo demas
+ *   2. la primera factura de la sociedad
+ *   3. el alta del proyecto
+ *
+ * Devuelve null si no se puede saber: quien llama decide, y en la importacion
+ * eso significa no cortar — mejor traer de mas que perder un cobro sin avisar.
+ */
+export async function fechaDeCorte(projectId) {
+  const { rows } = await query(
+    `SELECT COALESCE(
+       (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1),
+       (SELECT MIN(f.fecha_emision) FROM invoices f
+         WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = $1)
+           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL),
+       (SELECT pr3.created_at::date FROM projects pr3 WHERE pr3.id = $1)
+     ) AS corte`,
+    [projectId]
+  );
+  return rows[0]?.corte || null;
 }
 
 export async function getSyncState(projectId) {

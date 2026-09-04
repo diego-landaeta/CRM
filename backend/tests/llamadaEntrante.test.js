@@ -1,0 +1,156 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/**
+ * El aviso de una llamada entrante llega de dos formas (#63, #67).
+ *
+ * Baileys emite `call` con un ARRAY —`sock.ev.on('call', (llamadas) => …)`—
+ * porque WhatsApp puede notificar varias de golpe. Quien lo reenvie fielmente
+ * manda ese array.
+ *
+ * El CRM leia `datos.id` a secas. Con una lista eso es undefined y la llamada se
+ * descartaba entera por «sin id», sin dejar rastro: en produccion no se
+ * registraria ni una sola llamada entrante y nadie sabria por que.
+ *
+ * Es el mismo patron del #63 —suponer la forma que manda el puente— pero peor,
+ * porque el puente NI SIQUIERA maneja llamadas: esto no se podia probar en
+ * local de ninguna manera. Por eso se aceptan las dos formas en vez de elegir
+ * una: aceptar de mas no rompe nada, suponer si.
+ */
+
+const guardados = [];
+const conversaciones = [];
+
+vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
+  configurado: () => true,
+  usuarioDeInstancia: (i) => { const m = /-u(\d+)$/.exec(String(i || '')); return m ? Number(m[1]) : null; },
+  instanciaDe: (id) => `crm-u${id}`,
+  PREFIJO: 'crm',
+  descargarMedia: async () => null,
+  fotoDe: async () => null,
+  grupoDe: async () => null,
+  contactoDe: async () => ({ jid: '34600111222@lid', nombre: 'Josefina', foto: 'https://x/f.jpg' }),
+}));
+
+vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
+  actualizarAvatar: async () => 0,
+  datosDeGrupo: async () => 0,
+  marcarEliminado: async () => 0,
+  conversacionDe: async (d) => { conversaciones.push(d); return { id: 1, telefono: '34600111222', nombre_push: 'Adrian', ...d }; },
+  guardarMensaje: async (d) => { guardados.push(d); return { id: 1, ...d }; },
+  mensajePorWaId: async () => null,
+  porId: async () => ({ id: 1, instancia: 'crm-u1' }),
+}));
+
+let servicio;
+beforeEach(async () => {
+  guardados.length = 0;
+  conversaciones.length = 0;
+  vi.resetModules();
+  servicio = await import('../src/modules/whatsapp/chat.service.js');
+});
+
+const laLlamada = (estado) => ({
+  id: 'CALL-1',
+  from: '34600111222@s.whatsapp.net',
+  status: estado,
+  isVideo: false,
+  isGroup: false,
+  date: new Date().toISOString(),
+});
+
+describe('una llamada entrante se registra venga como venga', () => {
+  it('como objeto', async () => {
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: laLlamada('timeout') });
+    expect(guardados[0]?.tipo).toBe('llamada');
+    expect(guardados[0]?.texto).toBe('perdida');
+  });
+
+  it('como LISTA, que es como la emite Baileys', async () => {
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('timeout')] });
+    expect(guardados[0]?.tipo, 'con una lista se descartaba por «sin id»').toBe('llamada');
+    expect(guardados[0]?.texto).toBe('perdida');
+  });
+
+  it('una rechazada tambien, y en lista', async () => {
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('reject')] });
+    expect(guardados[0]?.texto).toBe('rechazada');
+  });
+
+  it('una contestada tambien', async () => {
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('accept')] });
+    expect(guardados[0]?.texto).toBe('contestada');
+  });
+});
+
+describe('lo que sigue sin guardarse, y esta bien', () => {
+  it('mientras solo suena no hay desenlace que apuntar', async () => {
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('offer')] });
+    expect(guardados).toHaveLength(0);
+  });
+
+  it('una lista vacia no revienta', async () => {
+    const r = await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [] });
+    expect(r?.ignorado).toBeTruthy();
+    expect(guardados).toHaveLength(0);
+  });
+});
+
+describe('la llamada que el otro cuelga, que es la mas normal', () => {
+  // Comprobado con una llamada de verdad contra Evolution v2.3.7: llegaron
+  // `offer`, dieciseis `relaylatency` y un `terminate`. Ni timeout, ni reject,
+  // ni accept. Se descartaba el `terminate` y esa llamada NO DEJABA NADA: ni
+  // una linea en el chat ni un apunte en la ficha.
+
+  const sonar = () => servicio.recibir({
+    event: 'call', instance: 'crm-u1', data: [laLlamada('offer')],
+  });
+
+  it('deja constancia, aunque no se sepa como acabo', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados, 'una llamada colgada no dejaba rastro').toHaveLength(1);
+    expect(guardados[0].tipo).toBe('llamada');
+    expect(String(guardados[0].texto).split(':')[0]).toBe('terminada');
+  });
+
+  it('NO la llama perdida, porque no se sabe', async () => {
+    // El propio Baileys dice que su `terminate` sale «when accepted / rejected
+    // / timeout / caller hangs up», y `accept` solo se emite si descuelga ESTE
+    // aparato — no el movil. Poner «perdida» seria mentir en un historial que
+    // sirve para auditar.
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados[0].texto).not.toContain('perdida');
+  });
+
+  it('apunta cuanto sono', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados[0].texto).toMatch(/^terminada:\d+$/);
+  });
+
+  it('un `terminate` sin haber sonado no inventa una llamada', async () => {
+    // Es el que llega detras de un accept o un reject ya guardados.
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados).toHaveLength(0);
+  });
+
+  it('despues de una rechazada, el `terminate` no anade otra', async () => {
+    await sonar();
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('reject')] });
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('terminate')] });
+    expect(guardados).toHaveLength(1);
+    expect(guardados[0].texto).toBe('rechazada');
+  });
+});
+
+describe('quien llama tiene nombre', () => {
+  it('se busca en la agenda, porque el aviso no lo trae', async () => {
+    // `handleCall` de Baileys arma el evento con chatId, from, id, date,
+    // offline y status. Nada mas: ni nombre ni foto. La conversacion nacia sin
+    // nombre y la pantalla pintaba las catorce cifras del `@lid`.
+    await servicio.recibir({ event: 'call', instance: 'crm-u1', data: [laLlamada('offer')] });
+    expect(conversaciones[0]?.nombrePush).toBe('Josefina');
+    expect(conversaciones[0]?.avatarUrl).toBe('https://x/f.jpg');
+  });
+});

@@ -6,7 +6,7 @@ import {
   WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag,
 } from '@phosphor-icons/react';
 import { fillTemplate } from '../hooks/useWhatsappTemplates';
-import { cleanPhone } from '../lib/leadFormat';
+import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 
 interface LeadLite {
   id: number;
@@ -53,7 +53,11 @@ export default function QuickActions({
   onEditTemplates,
 }: Props) {
   const navigate = useNavigate();
-  const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
+  // Con el criterio del backend, no con «quitale lo que no sea un digito».
+  // Ese daba por bueno un «600123456.0» de Excel —Excel los guarda como numero
+  // y deja el .0— y un «123», asi que se enseñaba el boton, se pulsaba, y el
+  // chat no abria. Ahora si no hay numero utilizable no hay boton.
+  const wa = telefonoParaWhatsapp(lead.telefono);
   const [waMenuOpen, setWaMenuOpen] = useState(false);
 
   // La plantilla se copia al portapapeles y la conversacion se abre DENTRO del

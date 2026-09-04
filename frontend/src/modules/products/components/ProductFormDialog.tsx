@@ -10,6 +10,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
+import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
@@ -288,14 +289,27 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
               <Tag size={12} /> Categorización
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Select<string>
-                value={categoriaSel}
-                onChange={(v) => { setCategoriaSel(v); setSubcategoriaSel(''); }}
-                options={[
-                  { value: '', label: 'Sin categoría' },
-                  ...allCategoriesWithPath.map(c => ({ value: String(c.id), label: c.label })),
-                ]}
-                ariaLabel="Categoría"
+              {/* Se escribe, no se scrollea (#2).
+                  Aqui habia un desplegable con TODAS las categorias y su ruta
+                  entera concatenada: «Cursos › Para Profesionales › Adicciones
+                  y Conductas Compulsivas», cincuenta y pico lineas, sin forma
+                  de buscar. Encontrar una era bajar a ojo.
+                  Es el mismo buscador que ya resolvia esto con los 787 cursos
+                  de ISEIE: sin acentos y por trozos sueltos, asi que «adicc» o
+                  «prof adicc» llegan igual. */}
+              <BuscadorEnLista
+                opciones={allCategoriesWithPath.map((c: any) => ({
+                  id: c.id,
+                  nombre: c.nombre,
+                  // La ruta va en la nota: el nombre suelto se repite entre
+                  // ramas —hay varias «Adicciones»— y sin ella no se sabe cual
+                  // es. Pero el nombre manda, que es lo que se busca.
+                  nota: c.label === c.nombre ? null : c.label.replace(` › ${c.nombre}`, ''),
+                }))}
+                valor={categoriaSel ? Number(categoriaSel) : null}
+                onElegir={(id) => { setCategoriaSel(id ? String(id) : ''); setSubcategoriaSel(''); }}
+                placeholder="Escribe para buscar una categoría…"
+                sinResultados="Ninguna categoría con «{texto}»."
               />
               <Select<string>
                 value={subcategoriaSel}

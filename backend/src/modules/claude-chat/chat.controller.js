@@ -54,7 +54,7 @@ export async function chat(req, res, next) {
     if (!message) throw new AppError('message requerido', 400, 'VALIDATION_ERROR');
 
     // Rate limit
-    const used = await model.countUserMessagesLastHour(req.user.id);
+    const used = await model.countUserMessagesLastHour(req.user.userId);
     if (used >= RATE_LIMIT) {
       throw new AppError(`Limite ${RATE_LIMIT} msg/hora alcanzado`, 429, 'RATE_LIMITED');
     }
@@ -62,7 +62,7 @@ export async function chat(req, res, next) {
     // Conversation
     let conv;
     if (conversationId) conv = await model.findConversation(conversationId);
-    if (!conv) conv = await model.createConversation(projectId || null, req.user.id, message.slice(0, 80));
+    if (!conv) conv = await model.createConversation(projectId || null, req.user.userId, message.slice(0, 80));
     await model.addMessage({ conversation_id: conv.id, role: 'user', content: message });
 
     sseInit(res);
@@ -160,7 +160,7 @@ export async function listConversations(req, res, next) {
   try {
     const { rows } = await query(
       `SELECT * FROM ai_conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 30`,
-      [req.user.id]);
+      [req.user.userId]);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 }
@@ -168,7 +168,7 @@ export async function listConversations(req, res, next) {
 export async function getMessages(req, res, next) {
   try {
     const conv = await model.findConversation(req.params.conversationId);
-    if (!conv || conv.user_id !== req.user.id) throw new AppError('No encontrada', 404, 'NOT_FOUND');
+    if (!conv || conv.user_id !== req.user.userId) throw new AppError('No encontrada', 404, 'NOT_FOUND');
     const messages = await model.listMessages(conv.id);
     res.json({ success: true, data: { conversation: conv, messages } });
   } catch (err) { next(err); }
@@ -183,7 +183,7 @@ export async function status(req, res, next) {
       data: {
         api_configured: !!apiKey,
         rate_limit_per_hour: RATE_LIMIT,
-        used_last_hour: await model.countUserMessagesLastHour(req.user.id),
+        used_last_hour: await model.countUserMessagesLastHour(req.user.userId),
         warning: apiKey ? null : 'ANTHROPIC_API_KEY no configurada. Configura en Settings > APIs.',
       },
     });

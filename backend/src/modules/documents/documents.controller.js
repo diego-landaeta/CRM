@@ -97,7 +97,7 @@ export async function generate(req, res, next) {
       data,
       file_path: filePath,
       r2_key: r2Key,
-      created_by: req.user.id,
+      created_by: req.user.userId,
     });
 
     await model.logAudit(auditCtx(req, doc.id, 'generated', { number, type, r2: !!r2Key }));

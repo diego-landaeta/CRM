@@ -141,6 +141,63 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 119 | 119_invoices_cliente_tipo.sql | 119 · La factura necesita saber si el cliente es empresa o persona |
 | 120 | 120_invoice_issuers_alias.sql | Un nombre corto para distinguir emisoras que comparten datos fiscales. |
 | 121 | 121_conversion_payments_metodo.sql | conversion_payments.metodo |
+| 122 | 122_whatsapp_templates.sql | Plantillas de WhatsApp en base de datos, por proyecto y con ambito compartida/personal. **Sin aplicar en produccion** (tarea #21). |
+| 123 | 123_tutores_rol.sql | Tutores · el rol nuevo. |
+| 124 | 124_tutores.sql | Tutores y colaboraciones · las tablas. |
+| 125 | 125_reembolsos_y_comisiones.sql | Reembolsos: de que pago son, y que pasa con la comision del tutor. |
+| 126 | 126_gestor_colaboraciones.sql | Permiso gestor_colaboraciones: da de alta tutores y les asigna cursos sin ser administrador. |
+| 127 | 127_registro_de_correos.sql | Todo correo que el CRM intenta mandar, saliera o no, con clave de idempotencia. **Sin aplicar.** |
+| 128 | 128_whatsapp_conversaciones.sql | Conversaciones y mensajes de WhatsApp. Es la tabla base del chat. |
+| 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando. Sin ella el aviso se ve pero no queda registro. |
+| 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje. Sin ella el mensaje se guarda igual, pero se pierde la cita. |
+| 131 | 131_lead_whatsapp_usuario.sql | El usuario de WhatsApp del prospecto, aparte del telefono (#65). |
+| 132 | 132_avisos_por_correo.sql | Que avisos por correo ha apagado cada persona. **Sin aplicar.** |
+| 133 | 133_tutor_banco.sql | El banco donde se le paga al profesor. Sin ella no se le puede transferir. |
+| 134 | 134_whatsapp_participante.sql | Quien escribio cada mensaje dentro de un grupo. Sin ella el grupo se lee sin saber de quien es cada linea. |
+| 135 | 135_wa_mensajes_unico_por_conversacion.sql | Un mensaje no puede entrar dos veces en la misma conversacion. |
+| 136 | 136_numero_de_factura_unico_por_serie.sql | Un numero de factura por serie y año, mire desde el proyecto que mire. Es lo que impide repetir un numero como paso en CEDIA. |
+| 137 | 137_claves_por_entorno.sql | El panel de claves: una credencial por servicio Y entorno, y los servicios que faltaban (#80). |
+| 138 | 138_densidad_de_tabla_cabe.sql | `table_density` era VARCHAR(10) y «comfortable» mide 11: la preferencia no se podia guardar. |
+| 139 | 139_banco_de_mensajes.sql | Los indices que necesita el banco de mensajes, que recorre todo por fecha en vez de un hilo (#101). |
+| 140 | 140_tipos_de_proyecto.sql | Los tipos de proyecto que faltaban: educacion, ecommerce, servicios, inmobiliaria (#15). Sin ella el CRM no se rompe: los tipos nuevos salen como no disponibles y elegir uno contesta 409 diciendo que falta esta migracion. |
+| 141 | 141_columnas_por_entidad.sql | `client_columns` y `product_columns` en `projects`: la pestaña Columnas servia solo para prospectos (#8). Sin ella la pestaña sigue funcionando para leads y las otras dos salen deshabilitadas. |
+| 142 | 142_registro_tareas.sql | El diario de las tareas programadas, para la pantalla de registro (#111). Sin ella el registro funciona igual: la fuente «Tareas» sale tachada y la pantalla avisa de que falta esta migracion, en vez de enseñar cinco fuentes como si fueran seis. |
+
+> **Comprobado el 04/09/2026 contra el catalogo de las dos bases**, no contra la
+> salida de ningun comando: un `sudo` que pide contraseña devuelve un aviso sin
+> la palabra ERROR y una migracion se da por aplicada sin estarlo. Paso.
+>
+> - **MultiCRM**: todas aplicadas de la 131 a la 141. Falta la **132**.
+> - **ISEIE**: aplicadas hasta la **136**. De la 137 a la 141 no van todavia
+>   porque son del panel de claves (#80), las columnas por entidad (#8) y los
+>   tipos de proyecto (#15), y ese trabajo aun no esta portado alli.
+>
+> Y ojo con el **#71**: `crm_user` no es dueño de los tipos ni de varias tablas,
+> asi que `ALTER TYPE` y `ALTER TABLE` fallan con «must be owner of». Esas hay
+> que pasarlas como `postgres` (`sudo su - postgres -c "psql ..."`) hasta que se
+> aplique `scripts/dar-propiedad-a-crm-user.sql`.
+> El modulo esta apagado alli con `VITE_MODULOS_APAGADOS=whatsapp`, asi que
+> encenderlo es quitar esa linea *y* aplicar las que falten. Nada revienta si no
+> estan: el codigo comprueba y se degrada — sin la 122 no hay plantillas, sin la
+> 129 no queda registro de quien acepto el aviso, sin la 130 se pierde a que
+> mensaje contestaba una respuesta citada.
+>
+> **Las dos del correo (127 y 132) estan escritas y sin aplicar.** Las aprueba
+> Diego, como todas. Mientras no esten:
+>
+> - sin la **127**, el envio de correo funciona pero no queda registro de nada:
+>   ni de lo que salio, ni de lo que fallo, ni del freno de pruebas — y la
+>   pantalla de Estado del sistema saldra vacia. Ademas, **sin ella la
+>   idempotencia no frena nada**: la clave se guarda en esa tabla, asi que una
+>   tarea repetida vuelve a mandar el correo.
+> - sin la **132**, los avisos de recordatorios llegan a todo el mundo y nadie
+>   puede apagarselos. La consulta que los busca la usa, asi que **sin la tabla
+>   los avisos ni se mandan**: falla la consulta y el trabajo lo registra sin
+>   tumbar nada.
+>
+> Ojo con el numero: la 128 ya estaba cogida por WhatsApp. La de los avisos es
+> la **132**.
+
 
 ---
 

@@ -9,6 +9,14 @@ node_modules/
 .env.production
 .env.*.local
 
+# Los mismos ficheros SIN punto delante. Existen en backend/ y los patrones de
+# arriba no los cogen: `.env.production` no casa con `env.production`. Estaban
+# sin seguir y a un `git add -A` de subirse con sus credenciales dentro.
+env
+env.*
+!env.example
+
+
 # Build
 dist/
 build/
@@ -95,3 +103,11 @@ backups/
 /outputs/
 /Claude/
 *-handoff.md
+
+# Cache de vitest. Lo genera `npm test` y no es de nadie: sin esto aparece como
+# fichero sin seguimiento cada vez que se corre la suite.
+.vite/
+
+# Temporales del arranque de Evolution en local
+backend/.evolution-arranque
+backend/.env.respaldo-*
