@@ -2064,6 +2064,7 @@ export default function ChatPage() {
         <ElegirChat
           chats={chats}
           excluirId={abierto}
+          deQuien={deQuien}
           nombreDe={nombreDe}
           enviando={reenvioEnCurso}
           onCerrar={() => setReenviando(null)}

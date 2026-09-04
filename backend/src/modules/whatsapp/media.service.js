@@ -4,6 +4,39 @@ import { logger } from '../../shared/utils/logger.js';
 import * as evolution from './evolution.client.js';
 import { textoDeBot, esDeBot } from './mensajes-de-bot.js';
 
+/**
+ * El nombre del adjunto, leido como lo que es.
+ *
+ * Evolution manda `fileName` con los bytes de UTF-8 interpretados como Latin-1,
+ * asi que «Diseño sin titulo.pdf» llegaba y se guardaba como
+ *
+ *     DiseÃ±o sin tÃ­tulo.pdf
+ *
+ * Se ve tal cual en el chat, y ademas queda asi en la base: arreglarlo despues
+ * en la pantalla no sirve, porque el nombre malo ya esta guardado.
+ *
+ * La vuelta es exacta: se recuperan los bytes originales tratando la cadena
+ * como Latin-1 y se vuelven a leer como UTF-8.
+ *
+ * Solo se toca si el resultado MEJORA. Un nombre que ya venia bien —o uno en
+ * ASCII— no tiene secuencias de estas, y reconvertirlo a ciegas lo estropearia:
+ * es el fallo clasico de aplicar la correccion dos veces.
+ */
+export function enUtf8(nombre) {
+  const v = String(nombre || '');
+  if (!v) return null;
+  // La firma del problema: los caracteres que produce leer UTF-8 como Latin-1.
+  if (!/[Â-Ã][-¿]/.test(v)) return v;
+  try {
+    const arreglado = Buffer.from(v, 'latin1').toString('utf8');
+    // Si la vuelta deja el simbolo de sustitucion, no era esto: se deja como estaba.
+    return arreglado.includes('�') ? v : arreglado;
+  } catch {
+    return v;
+  }
+}
+
+
 // Los adjuntos de WhatsApp.
 //
 // WhatsApp NO da una URL publica de los ficheros: viajan cifrados y solo se
@@ -213,7 +246,7 @@ export async function bajarYGuardar({ key, message, instancia }) {
       ruta,
       mime,
       tipo: tipo || r.mediaType || null,
-      nombreArchivo: r.fileName || nombre,
+      nombreArchivo: enUtf8(r.fileName) || nombre,
       tamano: Number(r.size?.fileLength || r.size || 0) || null,
     };
   } catch (err) {
