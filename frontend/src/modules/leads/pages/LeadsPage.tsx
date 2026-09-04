@@ -598,7 +598,7 @@ export default function LeadsPage() {
       <PageHeader
         title="Prospectos"
         subtitle="Explora y gestiona tus clientes potenciales"
-        actions={(
+        actions={can('leads.create') ? (
           <button
             onClick={() => setFormOpen(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
@@ -607,7 +607,7 @@ export default function LeadsPage() {
             <span className="hidden sm:inline">Nuevo prospecto</span>
             <span className="sm:hidden">Nuevo</span>
           </button>
-        )}
+        ) : null}
       />
 
       {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
@@ -679,12 +679,14 @@ export default function LeadsPage() {
               </button>
               {moreOpen && (
                 <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-popover z-30 w-max py-1">
+                  {can('leads.create') && (
                   <button
                     onClick={() => { setCsvImportOpen(true); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
                     <UploadSimple size={13} weight="regular" className="flex-shrink-0" /> Importar desde CSV
                   </button>
+                  )}
                   <div className="my-1 border-t border-border" />
                   <button
                     onClick={() => { setConfigTab('campos'); setMoreOpen(false); }}
@@ -1142,11 +1144,11 @@ export default function LeadsPage() {
         <BulkActionBar
           count={selectedIds.length}
           onClear={clearSelection}
-          onChangeStatus={status => handleBulkStatusChange(status)}
-          onReassign={gestorId => handleBulkReassign(gestorId)}
-          onExport={handleBulkExportCsv}
+          onChangeStatus={can('leads.edit') ? (status => handleBulkStatusChange(status)) : undefined}
+          onReassign={can('leads.assign') ? (gestorId => handleBulkReassign(gestorId)) : undefined}
+          onExport={can('leads.export') ? handleBulkExportCsv : undefined}
           gestores={gestores}
-          isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
+          isAdmin={can('leads.assign')}
           loading={bulkLoading}
         />
       )}
@@ -1190,9 +1192,14 @@ export default function LeadsPage() {
 
       {/* Reportar como spam (gestor/admin) */}
       <Suspense fallback={null}>
+        {/* `leadId` y `leadNombre`, no el prospecto entero: es lo que declara
+            el dialogo. Le llegaba `lead`, asi que `leadId` venia vacio, y con
+            el vacio su `canSubmit` es falso — el boton de enviar estaba
+            apagado siempre. Reportar un spam no ha funcionado nunca. */}
         <SpamReportDialog
           open={!!reportingSpamLead}
-          lead={reportingSpamLead}
+          leadId={reportingSpamLead?.id}
+          leadNombre={reportingSpamLead?.nombre}
           onClose={() => setReportingSpamLead(null)}
           onReported={() => setReportingSpamLead(null)}
         />

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ibanValido, normalizarIban } from '../../shared/utils/iban.js';
 
 // Una fecha en formato ISO. Se acepta como texto y se deja que Postgres la
 // convierta: hacerlo en JS con new Date() mete la zona horaria del servidor y
@@ -17,7 +18,14 @@ export const altaTutorSchema = z.object({
   // habria forma de probar el modulo.
   password: z.string().min(8, 'Al menos 8 caracteres').optional().nullable(),
   dniNif: z.string().max(32).optional().nullable(),
-  iban: z.string().max(40).optional().nullable(),
+  // El IBAN se comprueba de verdad: antes entraba cualquier cosa de 40
+  // caracteres, y un digito mal no se descubre hasta que rebota la
+  // transferencia. Solo se juzga lo que DICE ser un IBAN — hay tutores en
+  // paises que no lo usan y a esos hay que poder pagarles igual.
+  iban: z.string().max(40)
+    .transform(normalizarIban)
+    .refine(ibanValido, 'Ese IBAN no es correcto: revisa que no falte ni sobre un dígito')
+    .optional().nullable(),
   banco: z.string().max(120).optional().nullable(),
   telefono: z.string().max(32).optional().nullable(),
   notas: z.string().optional().nullable(),
@@ -25,7 +33,14 @@ export const altaTutorSchema = z.object({
 
 export const perfilSchema = z.object({
   dniNif: z.string().max(32).optional().nullable(),
-  iban: z.string().max(40).optional().nullable(),
+  // El IBAN se comprueba de verdad: antes entraba cualquier cosa de 40
+  // caracteres, y un digito mal no se descubre hasta que rebota la
+  // transferencia. Solo se juzga lo que DICE ser un IBAN — hay tutores en
+  // paises que no lo usan y a esos hay que poder pagarles igual.
+  iban: z.string().max(40)
+    .transform(normalizarIban)
+    .refine(ibanValido, 'Ese IBAN no es correcto: revisa que no falte ni sobre un dígito')
+    .optional().nullable(),
   banco: z.string().max(120).optional().nullable(),
   telefono: z.string().max(32).optional().nullable(),
   notas: z.string().optional().nullable(),

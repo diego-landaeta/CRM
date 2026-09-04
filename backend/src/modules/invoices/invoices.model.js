@@ -17,21 +17,25 @@ async function issuerOfProject(exec, projectId) {
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
 export async function nextNumero(client, projectId, issuerId, ano, serie) {
-  // El numero se reserva por SERIE, no por sociedad emisora.
+  // El numero es unico por SERIE Y AÑO, mire desde el proyecto que mire.
   //
-  // La clave primaria de invoice_sequences es (project_id, ano, serie) y el
-  // indice unico de facturas es (project_id, ano, serie, numero): los dos
-  // ignoran la emisora. Pero el codigo buscaba el contador por
-  // (issuer_id, ano, serie), asi que con una emisora nueva que comparte serie
-  // —Solvenic e Ictess usan las dos ICTESS— no encontraba nada e intentaba
-  // insertar una fila que chocaba con la que ya existia. Error 23505, y la
-  // gestora solo veia «error del sistema».
+  // Iba por proyecto, y CEDIA factura desde CUATRO (1, 2, 3 y 6): cada uno
+  // llevaba su propia cuenta y repetia numeros. Salieron 23 numeros por
+  // duplicado —alguno tres veces—, como los dos «2026/0005» distintos que
+  // encontro Diego: uno de ISEIH de 140 € y otro de Fono Aprende de 765 €.
+  //
+  // La serie ya identifica a la sociedad —CEDIA, ICTESS, LATERAL—, asi que es
+  // ella la que manda. Dos emisoras que compartan serie comparten numeracion, y
+  // es lo correcto: son la misma empresa con dos fichas (Ictess y Solvenic).
+  //
+  // Lo otro que fallaba: aqui se reservaba por proyecto pero `getSequence` y
+  // `setSequence` leian y escribian por emisora. Ahora las tres van por serie.
   //
   // El cerrojo es de transaccion: sin el, dos emisiones a la vez leerian el
   // mismo maximo y pedirian el mismo numero.
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtext($1))`,
-    [`invoice_serie:${projectId}:${ano}:${serie}`]
+    [`invoice_serie:${ano}:${serie}`]
   );
 
   // El mayor entre el contador y lo que hay de verdad en facturas. Lo segundo
@@ -39,15 +43,21 @@ export async function nextNumero(client, projectId, issuerId, ano, serie) {
   // queda corto y volveriamos a chocar.
   const { rows: [tope] } = await client.query(
     `SELECT GREATEST(
-              COALESCE((SELECT ultimo_numero FROM invoice_sequences
-                         WHERE project_id = $1 AND ano = $2 AND serie = $3), 0),
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences
+                         WHERE ano = $1 AND serie = $2), 0),
               COALESCE((SELECT MAX(numero) FROM invoices
-                         WHERE project_id = $1 AND ano = $2 AND serie = $3
-                           AND numero IS NOT NULL), 0)
+                         WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
             ) AS usado`,
-    [projectId, ano, serie]
+    [ano, serie]
   );
   const n = Number(tope.usado) + 1;
+
+  // Todas las filas de esa serie quedan al dia: la tabla sigue teniendo una por
+  // proyecto, pero logicamente son UN solo contador.
+  await client.query(
+    `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ano = $2 AND serie = $3`,
+    [n, ano, serie]
+  );
 
   // La emisora solo se anota si no hay ya otra fila con esa (emisora, año,
   // serie): existe un unico parcial sobre eso y saltaria si dos proyectos
@@ -221,20 +231,44 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     if (orig.estado === 'borrador') throw new AppError('Un borrador no se rectifica: edítalo o anúlalo.', 400, 'DRAFT_CANNOT_RECTIFY');
 
     const ano = new Date().getFullYear();
-    // Serie de abono propia por empresa: deriva de la serie de la factura original
-    // (que ya es la de su empresa emisora). Ej: serie 'A' -> abonos 'RA'.
+    // La serie del abono se CONTINUA, no se estrena.
+    //
+    // Antes se derivaba de la original: serie 'A' -> abonos 'RA'. En ISEIE ya
+    // habia seis abonos en la serie «R» (2026/R-1 … 2026/R-6), y al rectificar
+    // una factura de la serie «ISEIE» salia «RISEIE» empezando otra vez en 1.
+    // Dos series de abonos en paralelo es justo lo que no puede pasar en una
+    // numeracion fiscal.
+    //
+    // Asi que si esta empresa ya emitio abonos este año, se sigue por esa serie.
+    const { rows: previos } = await client.query(
+      `SELECT serie, codigo FROM invoices
+        WHERE tipo = 'rectificativa' AND project_id = $1 AND ano = $2
+          AND COALESCE(issuer_id, -1) = COALESCE($3, -1)
+        ORDER BY numero DESC LIMIT 1`,
+      [orig.project_id, ano, orig.issuer_id || null]
+    );
     const baseSerie = String(orig.serie || '').trim();
-    const serie = baseSerie ? `R${baseSerie}` : 'R';
+    const serie = previos[0]?.serie || (baseSerie ? `R${baseSerie}` : 'R');
     const numero = await nextNumero(client, orig.project_id, orig.issuer_id || null, ano, serie);
-    const codigo = `R-${ano}/${String(numero).padStart(4, '0')}`;
+    // Y el codigo se escribe como el del abono anterior, para que la serie se
+    // lea igual de arriba abajo en vez de cambiar de forma a mitad.
+    const codigo = /^\d{4}\/R-\d+$/.test(String(previos[0]?.codigo || ''))
+      ? `${ano}/R-${numero}`
+      : `R-${ano}/${String(numero).padStart(4, '0')}`;
 
     // Importes negativos. Si parcial (monto), rectifica solo ese importe; si no, todo.
     const factor = parcial != null ? -Math.abs(Number(parcial)) / Number(orig.total || 1) : -1;
-    const items = (Array.isArray(orig.items) ? orig.items : JSON.parse(orig.items || '[]')).map((it) => ({
-      ...it,
-      precio_unitario: -Math.abs(Number(it.precio_unitario)) * (parcial != null ? Math.abs(factor) : 1),
-      subtotal: -Math.abs(Number(it.subtotal || 0)) * (parcial != null ? Math.abs(factor) : 1),
-    }));
+    const items = (Array.isArray(orig.items) ? orig.items : JSON.parse(orig.items || '[]')).map((it) => {
+      const prop = parcial != null ? Math.abs(factor) : 1;
+      const precio = -Math.abs(Number(it.precio_unitario || 0)) * prop;
+      // El subtotal se RECALCULA cuando la linea no lo trae. Muchas facturas lo
+      // guardan sin el, y leerlo a secas dejaba la linea del abono en 0 con un
+      // total distinto debajo: el documento no cuadraba consigo mismo.
+      const sub = (it.subtotal != null && it.subtotal !== '')
+        ? -Math.abs(Number(it.subtotal)) * prop
+        : precio * (Number(it.cantidad) || 1);
+      return { ...it, precio_unitario: precio, subtotal: sub };
+    });
     const base = -Math.abs(Number(orig.base_imponible || 0)) * (parcial != null ? Math.abs(factor) : 1);
     const ivaImp = -Math.abs(Number(orig.iva_importe || 0)) * (parcial != null ? Math.abs(factor) : 1);
     const total = parcial != null ? -Math.abs(Number(parcial)) : -Math.abs(Number(orig.total || 0));
@@ -269,10 +303,13 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
          tipo, rectifica_id, rectifica_codigo, motivo_rectificacion,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
-         cliente_tipo
+         cliente_tipo,
+         -- La moneda viaja con el abono. Sin esto, el de una factura en dolares
+         -- salia como si fuera en euros y la linea no cuadraba con el total.
+         moneda, total_divisa, tipo_cambio
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
          'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) RETURNING *`,
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44) RETURNING *`,
       [
         orig.project_id, orig.conversion_id, orig.lead_id, serie, ano, numero, codigo,
         orig.cliente_nombre, orig.cliente_nif, orig.cliente_direccion, orig.cliente_ciudad, orig.cliente_cp, orig.cliente_pais,
@@ -287,6 +324,17 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
         // PostgreSQL rechazaba la consulta entera y NINGUN abono se podia
         // emitir. El abono hereda el tipo de cliente de la factura que rectifica.
         orig.cliente_tipo,
+        // $42-$44. La moneda del abono es la de la factura que rectifica, y el
+        // importe en divisa va en negativo como el resto. Sin esto, el abono de
+        // una proforma en dolares salia sin moneda: la linea decia 324 (USD) y
+        // el total -285 (EUR), y el documento no cuadraba consigo mismo.
+        orig.moneda || null,
+        orig.total_divisa != null
+          ? (parcial != null
+              ? -Math.abs(Number(orig.total_divisa)) * Math.abs(factor)
+              : -Math.abs(Number(orig.total_divisa)))
+          : null,
+        orig.tipo_cambio || null,
       ]
     );
     await client.query('COMMIT');
@@ -1376,33 +1424,37 @@ export async function getProjectInvoicerData(projectId) {
 }
 
 export async function setSequence(projectId, ano, serie, ultimoNumero) {
-  const issuerId = await issuerOfProject(query, projectId);
-  if (issuerId) {
-    const upd = await query(
-      `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE issuer_id = $2 AND ano = $3 AND serie = $4`,
-      [ultimoNumero, issuerId, ano, serie]
-    );
-    if (upd.rowCount === 0) {
-      await query(
-        `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero) VALUES ($1, $2, $3, $4, $5)`,
-        [projectId, issuerId, ano, serie, ultimoNumero]
-      );
-    }
-    return;
-  }
-  await query(
-    `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (project_id, ano, serie) DO UPDATE SET ultimo_numero = EXCLUDED.ultimo_numero`,
-    [projectId, ano, serie, ultimoNumero]
+  // Por serie, no por emisora ni por proyecto: es UN contador. Se ponen al dia
+  // todas las filas de esa serie para que ninguna se quede atras y vuelva a
+  // repartir un numero ya usado.
+  const upd = await query(
+    `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ano = $2 AND serie = $3`,
+    [ultimoNumero, ano, serie]
   );
+  if (upd.rowCount === 0) {
+    const issuerId = await issuerOfProject(query, projectId);
+    await query(
+      `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, ano, serie) DO UPDATE SET ultimo_numero = EXCLUDED.ultimo_numero`,
+      [projectId, issuerId || null, ano, serie, ultimoNumero]
+    );
+  }
 }
 
 export async function getSequence(projectId, ano, serie) {
-  const issuerId = await issuerOfProject(query, projectId);
-  const { rows } = issuerId
-    ? await query(`SELECT ultimo_numero FROM invoice_sequences WHERE issuer_id=$1 AND ano=$2 AND serie=$3`, [issuerId, ano, serie])
-    : await query(`SELECT ultimo_numero FROM invoice_sequences WHERE project_id=$1 AND ano=$2 AND serie=$3`, [projectId, ano, serie]);
+  // Lo mismo que reparte `nextNumero`: el mayor de la serie, contador o factura
+  // real. Antes leia la fila de la emisora y podia enseñar un numero por debajo
+  // del ultimo emitido de verdad.
+  const { rows } = await query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences
+                         WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices
+                         WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS ultimo_numero`,
+    [ano, serie]
+  );
   return rows[0]?.ultimo_numero || 0;
 }
 

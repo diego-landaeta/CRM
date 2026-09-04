@@ -487,10 +487,16 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-3 py-2 text-xs text-muted-foreground">{inv.gestora_nombre || '—'}</td>
+                  {/* Un abono se guarda en negativo y en la lista se enseña asi,
+                      con su signo. Estuvo un tiempo sin el —la fila ya sale en
+                      rojo y la columna Tipo dice «Abono»— pero entonces la
+                      columna Total no cuadraba con lo que suma la factura por
+                      debajo: se leian dos cobros donde hay un cobro y una
+                      devolucion. Mismo criterio que en el PDF. */}
                   <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>
                     {inv.total_divisa != null && inv.moneda && inv.moneda !== 'EUR' ? (
                       <>
-                        {fmtMoneda(inv.total_divisa, inv.moneda)}
+                        {fmtMoneda(Number(inv.total_divisa), inv.moneda)}
                         <span className="block text-[10px] font-normal text-muted-foreground">({fmt(Number(inv.total))})</span>
                       </>
                     ) : fmt(Number(inv.total))}
@@ -510,6 +516,19 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <Eye size={11} /> Ver
                       </button>
+                      {/* Factura en divisa: ademas de la suya, la version en euros.
+                          La de la divisa lleva el euro entre parentesis debajo, pero
+                          a veces hace falta el documento entero en euros. */}
+                      {inv.moneda && inv.moneda !== 'EUR' && inv.total_divisa != null && (
+                        <button onClick={() => {
+                            invoicesApi.openPdf(inv.id, false, undefined, true)
+                              .catch((e: unknown) => toast({ title: 'No se pudo abrir en euros', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                          }}
+                          title={`Ver la misma factura totalizada en euros (esta va en ${inv.moneda})`}
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <Eye size={11} /> € 
+                        </button>
+                      )}
                       <button onClick={() => {
                           // Cobro por Stripe: hay dos versiones (alumno=bruto / gestión=neto),
                           // así que se pregunta cuál. En el resto se descarga directamente.
@@ -567,7 +586,7 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && canManage && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">

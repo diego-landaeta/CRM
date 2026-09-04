@@ -2,6 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 // Mocks de dependencias externas (deben declararse antes del import del componente).
+// El componente empezo a usar `useAuth` —entro con el commit de «bugs A+B+C de
+// Dayana/Ana»— y la prueba se quedo montandolo sin proveedor. Reventaba con
+// «useAuth must be used within AuthProvider», y ademas el error se escapaba y
+// ensuciaba la salida de los OTROS ficheros cuando corrian juntos: por eso
+// parecia que ExportDialog y ConversionDialog fallaban por lo mismo, y no era
+// asi. Tarea #70.
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 3, nombre: 'Angel M.', email: 'angel@empresa.com', role: 'admin' },
+    logout: vi.fn(),
+  }),
+}));
+
 vi.mock('@/contexts/ProjectContext', () => ({
   useProjectContext: () => ({ activeProject: { id: 1, nombre: 'Test Project', producto_label: 'Producto' } }),
 }));
@@ -51,16 +64,19 @@ describe('LeadFormDialog', () => {
     expect(screen.queryByText(/Nuevo Prospecto/i)).not.toBeInTheDocument();
   });
 
-  it('renderiza titulo "Nuevo Prospecto" cuando no hay lead', async () => {
+  // Los dos titulos van en minuscula y sin la palabra «Lead»: la pantalla se
+  // llama Prospectos desde el repaso de vocabulario, y el dialogo tiene que
+  // decir lo mismo que la pantalla desde la que se abre.
+  it('renderiza titulo "Nuevo prospecto" cuando no hay lead', async () => {
     render(<LeadFormDialog open onClose={vi.fn()} onSubmit={vi.fn()} />);
-    expect(await screen.findByText('Nuevo Prospecto')).toBeInTheDocument();
+    expect(await screen.findByText('Nuevo prospecto')).toBeInTheDocument();
     // Espera el useEffect de carga de custom_fields para evitar warning de act()
     await act(async () => { await Promise.resolve(); });
   });
 
-  it('renderiza titulo "Editar Lead" cuando hay un lead', async () => {
+  it('renderiza titulo "Editar prospecto" cuando hay un lead', async () => {
     render(<LeadFormDialog open onClose={vi.fn()} onSubmit={vi.fn()} lead={{ id: 1, nombre: 'X', email: 'x@y.com' }} />);
-    expect(await screen.findByText('Editar Lead')).toBeInTheDocument();
+    expect(await screen.findByText('Editar prospecto')).toBeInTheDocument();
     await act(async () => { await Promise.resolve(); });
   });
 

@@ -45,11 +45,28 @@ export default function InvoiceCreatePage() {
     initTipo === 'proforma' ? 'proforma' : initTipo === 'rectificativa' ? 'rectificativa' : 'factura'
   );
   const esProforma = docTipo === 'proforma';
+
+  // Que el aviso diga QUE ha pasado, no «Error» a secas.
+  //
+  // El servidor manda `error`, y ademas `code` y —cuando es un fallo suyo y no
+  // del formulario— una `ref` con la que encontrarlo en el registro. Antes se
+  // enseñaba solo `error`, que en los fallos internos es siempre la misma frase
+  // generica, asi que quien lo sufria no tenia nada que contar.
+  function detalleDelError(x: unknown): string {
+    const e = (x || {}) as { data?: Record<string, unknown>; error?: string; message?: string; code?: string; ref?: string };
+    const d = (e.data || {}) as { error?: string; code?: string; ref?: string };
+    const texto = d.error || e.error || e.message || 'No se ha podido guardar.';
+    const code = d.code || e.code;
+    const ref = d.ref || e.ref;
+    return [texto, code ? `(${code})` : '', ref ? `· ref ${ref}` : ''].filter(Boolean).join(' ');
+  }
   const esRect = docTipo === 'rectificativa';
   // Modo EDICIÓN (solo admin/superadmin): ?editId=X. Sirve tanto para borradores
   // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
   const [editEstado, setEditEstado] = useState<string | null>(null);
+  // Si lo que se esta corrigiendo es un abono: cambia el rotulo y el signo.
+  const [esAbono, setEsAbono] = useState(false);
   // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
   // Solo para admins o usuarias con el permiso editar_fechas_factura.
   const [fechaEmision, setFechaEmision] = useState('');
@@ -252,7 +269,10 @@ export default function InvoiceCreatePage() {
         clienteNombre: cNombre, clienteNif: cNif,
         // Empresa o persona: decide el rotulo del PDF ("RAZON SOCIAL" o
         // "NOMBRE Y APELLIDO"). Al contado se factura a un particular.
-        clienteTipo: tipo === 'empresa' ? 'empresa' : 'particular',
+        // Con `as const`, como el `tipo` de arriba: sin eso TypeScript lo
+        // ensancha a `string` al guardarlo en la variable y ya no encaja con
+        // la union que pide el cuerpo de la factura.
+        clienteTipo: tipo === 'empresa' ? ('empresa' as const) : ('particular' as const),
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
@@ -287,10 +307,10 @@ export default function InvoiceCreatePage() {
         invoicesApi.openPdf(res.data.id, true).catch(() => {});
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        toast({ title: 'No se pudo guardar', description: detalleDelError(res), variant: 'destructive' });
       }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar', description: detalleDelError(e), variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -340,10 +360,26 @@ export default function InvoiceCreatePage() {
       setTelefono(f.cliente_telefono || '');
       setLlevaIva(Number(f.iva_pct) > 0);
       setIvaIncluido(!!f.iva_incluido);
-      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 })));
+      // Un abono se guarda en negativo pero se EDITA en positivo: es como se
+      // lee en el papel y como lo piensa quien corrige. El signo lo vuelve a
+      // poner el servidor al guardar, asi que no depende de esta pantalla.
+      setEsAbono(f.tipo === 'rectificativa');
+      // El precio se lee de las DOS claves. Los abonos importados lo guardan en
+      // `precio` y no en `precio_unitario`, asi que la pantalla los leia como 0 €
+      // y luego se negaba a guardar por «falta un concepto con precio»: los seis
+      // abonos de ISEIE estaban bloqueados por esto. El PDF ya toleraba las dos.
+      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({
+        descripcion: it.descripcion,
+        cantidad: Number(it.cantidad) || 1,
+        precio_unitario: Math.abs(Number(it.precio_unitario ?? (it as { precio?: number | string }).precio ?? 0) || 0),
+      })));
       if (f.metodo_pago) setMetodoPago(f.metodo_pago as typeof metodoPago);
       if (f.moneda) setMoneda(f.moneda);
-        if (f.total_divisa != null) setTotalEur(String(f.total ?? ''));
+        // En positivo, igual que los conceptos: un abono se guarda negativo pero
+        // se teclea en positivo. Sin el valor absoluto el campo salia con «-285»
+        // y el aviso decia «falta el importe en euros» sobre un campo relleno —
+        // era el unico motivo por el que el abono en dolares no se podia guardar.
+        if (f.total_divisa != null) setTotalEur(f.total != null ? String(Math.abs(Number(f.total))) : '');
       if (f.notas) setNotas(f.notas);
       if (f.issuer_id) setIssuerId(f.issuer_id);
       if (f.project_id) setProjectId(f.project_id);
@@ -357,7 +393,11 @@ export default function InvoiceCreatePage() {
     if (!esRect || !issuerId) { setRectList([]); return; }
     invoicesApi.list({ issuerId, limit: 200 }).then((r) => {
       if (r.success) setRectList((r.data || []).filter((i) =>
-        i.tipo !== 'rectificativa' && i.tipo !== 'proforma' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
+      // Las proformas TAMBIEN se rectifican: llevan numero y salen emitidas, asi
+      // que si una se manda mal hay que poder abonarla. Solo quedan fuera las
+      // rectificativas —no se rectifica un abono— y lo que aun es borrador o ya
+      // esta cancelado.
+        i.tipo !== 'rectificativa' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
     }).catch(() => {});
   }, [esRect, issuerId]);
 
@@ -378,10 +418,10 @@ export default function InvoiceCreatePage() {
         invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         navigate(`${invBase}/facturas`);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        toast({ title: 'No se pudo guardar', description: detalleDelError(res), variant: 'destructive' });
       }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar', description: detalleDelError(e), variant: 'destructive' });
     } finally { setSaving(false); }
   }
 

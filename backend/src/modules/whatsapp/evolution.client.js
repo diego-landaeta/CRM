@@ -1,4 +1,5 @@
 import { logger } from '../../shared/utils/logger.js';
+import { groupsIgnoreParaEvolution, syncFullHistoryPara } from './politica.js';
 
 // El cliente de Evolution API. Es lo unico que sabe hablar con WhatsApp, y
 // vive detras de HTTP a proposito: Evolution corre en su propio contenedor,
@@ -25,6 +26,23 @@ export const PREFIJO = process.env.EVOLUTION_INSTANCIA || 'crm';
 // del contenedor. Es lo que permite que pruebas y produccion compartan Evolution
 // sin mezclarse.
 const WEBHOOK_PROPIO = process.env.EVOLUTION_WEBHOOK_URL || '';
+
+/**
+ * Los avisos de Evolution que el CRM sabe atender.
+ *
+ * Uno por cada rama de `recibir()`. Si se anade un manejador alli, su evento
+ * tiene que entrar aqui o no llegara nunca — que es exactamente como estuvieron
+ * las llamadas, las fotos de perfil y los borrados.
+ */
+export const EVENTOS_QUE_ATENDEMOS = [
+  'MESSAGES_UPSERT',
+  'MESSAGES_UPDATE',
+  'MESSAGES_DELETE',
+  'CONTACTS_UPDATE',
+  'CONNECTION_UPDATE',
+  'CALL',
+  'GROUPS_UPSERT',
+];
 
 /** La instancia de WhatsApp de una persona. */
 export const instanciaDe = (userId) => `${PREFIJO}-u${parseInt(userId, 10)}`;
@@ -82,16 +100,28 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       modo,
       integration: 'WHATSAPP-BAILEYS',
       qrcode: true,
-      // No entrar en grupos: este numero es para escribir a prospectos, y cada
-      // interaccion rara suma para que lo suspendan.
-      groupsIgnore: true,
+      // Los grupos: lo decide `politica.js`, no esta linea.
+      //
+      // Aqui iba `true` fijo «para no darle a Meta motivos de suspender el
+      // numero», y no servia de nada: entraban igual. El puente de Baileys no
+      // implementa el flag, `guardarAjustes` lo apagaba solo, y el propio CRM
+      // los aceptaba en `recibir()`. Ahora se le pide al proveedor lo MISMO que
+      // aplica el CRM, y la garantia esta en el CRM. Es la #74.
+      groupsIgnore: groupsIgnoreParaEvolution(),
       rejectCall: false,
       // «Siempre en linea» y «marcar como leido» automaticos son justo el tipo
       // de comportamiento que no hace una persona. Se dejan apagados.
       alwaysOnline: false,
       readMessages: false,
       readStatus: false,
-      syncFullHistory: false,
+      // Cuanto historial pide el socket, DERIVADO del modo (#73).
+      //
+      // Iba `false` fijo mientras la pantalla ofrecia tres opciones. El campo
+      // `modo` de arriba solo lo entiende el puente de Baileys: el Evolution
+      // del VPS lo ignora y lee ESTE, asi que alli «el ultimo mes» y «todo el
+      // historial» hacian lo mismo que «empezar de cero». No llegaba nada que
+      // recortar. El recorte a 30 dias lo aplica ahora el CRM al recibir.
+      syncFullHistory: syncFullHistoryPara(modo),
       // A donde avisa Evolution cuando entra un mensaje de ESTA sesion.
       //
       // Sin esto se usa el webhook global del contenedor, que apunta a un solo
@@ -99,8 +129,30 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       // que los mensajes de una sesion de pruebas aterrizaran en la base de
       // PRODUCCION: conversaciones apareciendo de la nada que nadie sabria de
       // donde salieron. Cada instancia avisa a quien la creo.
+      //
+      // Y se piden TODOS los eventos que el CRM sabe atender, no tres.
+      //
+      // Aqui iban MESSAGES_UPSERT, MESSAGES_UPDATE y CONNECTION_UPDATE. Los
+      // manejadores de los otros existen y estan probados, pero Evolution no
+      // los mandaba nunca porque nadie se habia suscrito: el codigo estaba ahi,
+      // muerto, y desde fuera parecia que la funcion no existia.
+      //
+      // Lo que se caia con esos tres, comprobado contra la instancia de la
+      // prueba —que tiene los seis puestos a mano y por eso alli si funciona—:
+      //
+      //   CALL            — ni una llamada entrante. La pantalla de «te estan
+      //                     llamando» no salta jamas.
+      //   CONTACTS_UPDATE — ninguna foto de perfil. Se ven las iniciales
+      //                     siempre; es el fallo que `contactos()` arreglo.
+      //   MESSAGES_DELETE — borrar «para mi» no llega. «Elimine un mensaje y no
+      //                     se elimino», tal cual se reporto.
+      //   GROUPS_UPSERT   — el asunto de un grupo al crearlo o renombrarlo.
+      //
+      // Solo pasaba con el webhook propio puesto, o sea SOLO en produccion y
+      // staging: en local se cae al webhook global del contenedor, que los manda
+      // todos. Por eso aqui se veia bien y alli no.
       ...(WEBHOOK_PROPIO ? { webhook: { url: WEBHOOK_PROPIO, byEvents: false,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'] } } : {}),
+        events: EVENTOS_QUE_ATENDEMOS } } : {}),
     },
     esperaMs: 30000,
   });
@@ -244,24 +296,6 @@ export async function comprobarNumero(numero, nombre = INSTANCIA) {
   return { existe: uno?.exists ?? null, jid: uno?.jid || null };
 }
 
-/**
- * ¿Hay alguien escribiendo en esta conversacion?
- *
- * Devuelve { quien, que } o null. Nunca lanza: que no se sepa si el otro esta
- * escribiendo no puede impedir abrir el chat.
- */
-export async function quienEscribe() {
-  // Evolution no deja LEER la presencia de otro: solo `sendPresence`, que es
-  // para mandar la tuya. `/chat/presence` era del puente de Baileys y en
-  // produccion daba 404 — **136 en diez minutos**, porque la pantalla lo pedia
-  // cada cinco segundos con cada chat abierto. Eso enterraba los errores de
-  // verdad: a Diego le costo encontrar el fallo de las citas por culpa de esto.
-  //
-  // La via buena es el evento `presence.update` del webhook, que hay que
-  // encender en el contenedor y guardar en memoria. Hasta que eso este, no se
-  // pide: mejor quedarse sin el «escribiendo…» que llenar el registro.
-  return null;
-}
 
 /**
  * La agenda de esa sesion: como tienes guardado a cada uno.
@@ -288,8 +322,73 @@ export async function agenda(nombre = INSTANCIA) {
       // `contact.name || contact.verifiedName || el numero`—. Que es justo el
       // que se quiere: como tu la tienes apuntada, no como se anuncia ella.
       nombre: c?.name || c?.nombre || c?.pushName || null,
+      foto: c?.profilePicUrl || null,
     }))
     .filter((c) => c.jid && c.nombre);
+}
+
+/**
+ * Un contacto suelto de la agenda, por su jid.
+ *
+ * Existe por las LLAMADAS. El aviso de una llamada no trae nombre: se comprobo
+ * en el Baileys que corre dentro de Evolution v2.3.7 —`handleCall` arma el
+ * evento con `chatId`, `from`, `id`, `date`, `offline` y `status`, y nada mas—.
+ * El nombre y la foto que se ven al sonar salen de aqui.
+ *
+ * Y `from` en una llamada llega como `@lid`, que no es un telefono, asi que se
+ * compara por la parte de delante de la arroba: la agenda guarda ese mismo
+ * `@lid`. Comprobado con la agenda real — quien llamo estaba ahi como
+ * `95069319217252@lid`, con nombre y con foto, mientras el CRM pintaba las
+ * catorce cifras.
+ */
+export async function contactoDe(jid, nombre = INSTANCIA) {
+  if (!jid) return null;
+  const clave = String(jid).split('@')[0];
+  const contactos = await agenda(nombre);
+  return (contactos || []).find((c) => String(c.jid).split('@')[0] === clave) || null;
+}
+
+/** A que avisos esta suscrita una sesion. Null si no se pudo leer. */
+export async function webhookDe(nombre = INSTANCIA) {
+  const r = await pedir(`/webhook/find/${nombre}`, { esperaMs: 10000 });
+  return r.ok ? (r.datos || null) : null;
+}
+
+/**
+ * Se asegura de que la sesion recibe TODOS los avisos que el CRM atiende.
+ *
+ * Las sesiones ya creadas se quedaron con los tres de antes, y arreglar
+ * `crearInstancia` no las toca: seguirian sin llamadas, sin fotos y sin
+ * borrados hasta que alguien las volviera a enlazar. Esto lo repara solo,
+ * desde el propio CRM, sin entrar al servidor.
+ *
+ * Solo anade. La URL no se toca — es la que distingue produccion de staging, y
+ * pisarla mandaria los mensajes de una a la base de la otra.
+ *
+ * Devuelve que se anadio, o null si no habia nada que hacer.
+ */
+export async function asegurarEventos(nombre = INSTANCIA) {
+  const actual = await webhookDe(nombre);
+  if (!actual?.url) return null;
+  const puestos = Array.isArray(actual.events) ? actual.events : [];
+  const faltan = EVENTOS_QUE_ATENDEMOS.filter((e) => !puestos.includes(e));
+  if (!faltan.length) return null;
+  const r = await pedir(`/webhook/set/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      webhook: {
+        enabled: actual.enabled !== false,
+        url: actual.url,
+        byEvents: Boolean(actual.webhookByEvents ?? actual.byEvents ?? false),
+        base64: actual.webhookBase64 ?? actual.base64 ?? true,
+        events: [...new Set([...puestos, ...EVENTOS_QUE_ATENDEMOS])],
+      },
+    },
+    esperaMs: 10000,
+  });
+  if (!r.ok) return null;
+  logger.info({ instancia: nombre, faltan }, 'WhatsApp: avisos que faltaban, suscritos');
+  return faltan;
 }
 
 /**
@@ -324,16 +423,110 @@ export async function guardarAjustes(nombre = INSTANCIA, cambios = {}) {
     cuerpo: {
       rejectCall: actuales.rejectCall ?? false,
       msgCall: actuales.msgCall ?? '',
-      groupsIgnore: actuales.groupsIgnore ?? false,
+      // Los dos `??` de estas lineas eran una puerta trasera.
+      //
+      // Cuando Evolution no devuelve un campo —y no siempre los devuelve
+      // todos—, el valor de reserva pasa a ser el que se escribe. Con
+      // `groupsIgnore ?? false`, tocar el interruptor de «responder a
+      // llamadas» ENCENDIA los grupos; con `syncFullHistory ?? true`, dejaba
+      // la sesion pidiendo el historial entero en la siguiente vinculacion.
+      // Dos efectos que nadie pidio, disparados desde una pantalla que habla
+      // de otra cosa, y sin rastro en ningun registro.
+      //
+      // Ahora la reserva es lo que el CRM decide, no lo que caiga.
+      groupsIgnore: actuales.groupsIgnore ?? groupsIgnoreParaEvolution(),
       alwaysOnline: actuales.alwaysOnline ?? false,
       readMessages: actuales.readMessages ?? false,
       readStatus: actuales.readStatus ?? false,
-      syncFullHistory: actuales.syncFullHistory ?? true,
+      // Y aqui `false`: pedir el historial entero es caro y solo se decide al
+      // enlazar. Si el campo no viene, lo seguro es no pedirlo.
+      syncFullHistory: actuales.syncFullHistory ?? false,
       ...cambios,
     },
     esperaMs: 15000,
   });
   return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
+}
+
+/**
+ * Los mensajes que Evolution guarda de UN chat concreto (#73).
+ *
+ * Una gestora no encuentra a alguien de hace dos meses porque ese chat nunca
+ * entro: al enlazar se pide `syncFullHistory: false` y solo llega lo reciente.
+ * Ponerlo a `true` traeria cientos de miles de mensajes de golpe en un numero
+ * con años de uso, asi que se hace al reves — se pide UN chat cuando hace falta.
+ *
+ * Evolution los tiene igualmente: es leerlos de su archivo, no de WhatsApp.
+ *
+ * La forma de la respuesta cambia entre versiones —unas devuelven la lista
+ * pelada, otras la envuelven en `messages.records`— asi que se aceptan las dos.
+ * Devuelve [] si no se pudo: que no haya historial no puede tumbar nada.
+ */
+export async function mensajesDe(jid, nombre = INSTANCIA, limite = 300) {
+  const r = await pedir(`/chat/findMessages/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { where: { key: { remoteJid: jid } }, limit: limite },
+    esperaMs: 30000,
+  });
+  if (!r.ok) return [];
+  const d = r.datos;
+  const filas = Array.isArray(d) ? d
+    : Array.isArray(d?.messages?.records) ? d.messages.records
+    : Array.isArray(d?.messages) ? d.messages
+    : Array.isArray(d?.records) ? d.records
+    : [];
+  // Solo lo que tiene clave: sin `key.id` no hay como evitar duplicarlo despues.
+  return filas.filter((m) => m?.key?.id);
+}
+
+/**
+ * La foto de perfil de alguien.
+ *
+ * Evolution la manda por su cuenta en `contacts.update`, pero eso solo llega
+ * cuando cambia. Para una conversacion que ya existe sin foto no llega nunca, y
+ * ahi hay que pedirla.
+ *
+ * Se pide UNA vez por conversacion, cuando no la tiene. En cada mensaje serian
+ * cientos de llamadas de mas a WhatsApp — es la misma cuenta que ya esta hecha
+ * en el puente.
+ *
+ * Devuelve null si no se pudo o si esa persona no tiene: no tener foto es
+ * normal y no es un fallo.
+ */
+export async function fotoDe(numero, nombre = INSTANCIA) {
+  const r = await pedir(`/chat/fetchProfilePictureUrl/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { number: String(numero || '').replace(/[^0-9]/g, '') },
+    esperaMs: 12000,
+  });
+  if (!r.ok) return null;
+  return r.datos?.profilePictureUrl || r.datos?.profilePicUrl || null;
+}
+
+/**
+ * Como se llama un grupo y cual es su foto.
+ *
+ * Evolution NO manda el asunto del grupo en el aviso de cada mensaje —
+ * comprobado sobre mensajes reales: en `key` solo viene el jid del grupo—. El
+ * puente si lo mandaba, porque se lo pedia el mismo. De ahi que en local los
+ * grupos tuvieran nombre y en produccion salieran con un numero de 18 cifras.
+ *
+ * Se pide UNA vez, cuando el grupo no tiene nombre todavia.
+ */
+export async function grupoDe(jid, nombre = INSTANCIA) {
+  const r = await pedir(`/group/findGroupInfos/${nombre}?groupJid=${encodeURIComponent(jid)}`, {
+    esperaMs: 15000,
+  });
+  if (!r.ok) return null;
+  const d = r.datos || {};
+  return {
+    asunto: d.subject || null,
+    foto: d.pictureUrl || null,
+    // Cuantos son. Evolution devuelve la lista con el identificador de cada uno
+    // pero SIN nombre, asi que lo unico util de ahi es el numero — y es lo que
+    // pone WhatsApp cuando no conoce los nombres.
+    miembros: Array.isArray(d.participants) ? d.participants.length : null,
+  };
 }
 
 /** Que numero esta conectado ahora mismo. */
@@ -342,3 +535,56 @@ export const instancias = () => pedir('/instance/fetchInstances');
 /** Cerrar la sesion: el numero deja de estar vinculado al CRM. */
 export const cerrarSesion = (nombre = INSTANCIA) =>
   pedir(`/instance/logout/${nombre}`, { metodo: 'DELETE', esperaMs: 30000 });
+
+/**
+ * Edita un mensaje ya enviado. WhatsApp deja 15 minutos.
+ *
+ * Lo pide la tarea #75: «se siguen enviando y no permite corregir desde la app».
+ * Hasta ahora, un error de dedo en un mensaje a un prospecto se quedaba ahi para
+ * siempre — y la unica salida era mandar otro pidiendo perdon.
+ *
+ * SOBRE EL RIESGO DE INVENTARSE UN ENDPOINT, que es lo que paso en la #63:
+ *
+ * Alli el CRM le pedia a Evolution dos direcciones que no existen en la version
+ * que corre (2.3.7) y las pedia EN BUCLE: 136 errores en diez minutos, tapando
+ * los errores de verdad. Lo que fallo no fue intentarlo, fue seguir intentandolo.
+ *
+ * Aqui se intenta una vez. Si esta Evolution no lo trae, se apunta y no se
+ * vuelve a preguntar en toda la vida del proceso: `puedeEditar()` pasa a false,
+ * la pantalla deja de ofrecer el boton y no se escribe ni un error mas.
+ */
+let editarNoExiste = false;
+
+/** ¿Merece la pena ofrecer «editar»? Falso en cuanto se sabe que no existe. */
+export const puedeEditar = () => !editarNoExiste;
+
+export async function editarTexto(numero, { waId, jid, mio = true }, texto, nombre = INSTANCIA) {
+  if (editarNoExiste) return { ok: false, error: 'NO_SOPORTADO' };
+
+  const r = await pedir(`/chat/updateMessage/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      number: numero,
+      text: texto,
+      // La clave del mensaje que se corrige, igual que en la cita: Evolution
+      // necesita el objeto entero, no el identificador suelto.
+      key: { id: waId, remoteJid: jid, fromMe: Boolean(mio) },
+    },
+    esperaMs: 20000,
+  });
+
+  // 404 significa que esta version no lo trae. No es un fallo pasajero y
+  // reintentarlo no lo va a arreglar: se apaga y se dice UNA vez.
+  if (!r.ok && r.error === 'HTTP_404') {
+    editarNoExiste = true;
+    logger.warn(
+      { ruta: `/chat/updateMessage/${nombre}` },
+      'Evolution no soporta editar mensajes en esta version — se deja de ofrecer'
+    );
+    return { ok: false, error: 'NO_SOPORTADO' };
+  }
+  return r;
+}
+
+/** Para las pruebas: volver a empezar sin reiniciar el proceso. */
+export const _reiniciarEdicion = () => { editarNoExiste = false; };

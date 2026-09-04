@@ -20,6 +20,10 @@ import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared
 //
 // Se hace aqui, en el servidor, y no escondiendo el boton: lo otro no es un
 // permiso, es un adorno.
+// Una gestora solo alcanza los leads que tiene asignados — la ficha Y su
+// historial. Va en TODO handler que reciba un :id de lead: la ficha estaba
+// protegida pero seis puertas al mismo lead no lo estaban, y por ahi se leia y
+// se escribia el historial de fichas ajenas (#109).
 async function exigirQueSeaSuyo(req, leadId) {
   if (req.user.role !== 'gestor') return;              // admin, superadmin y soporte ven todo
   const { rows } = await query(
@@ -229,6 +233,14 @@ export async function changeStatus(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Una gestora, solo los suyos. Es la regla de negocio escrita, y aqui
+    // faltaba: se comprobo con la sesion de Laura, que paso un lead de Diego a
+    // «convertido» y recibio un 200. Anadir una NOTA al mismo lead si le daba
+    // 403 — o sea que el handler de al lado ya lo comprobaba y este no.
+    //
+    // Y de todos los campos, el estado es el peor para dejar suelto: «convertido»
+    // es lo que alimenta el informe de ventas.
+    await exigirQueSeaSuyo(req, id);
     const parsed = updateStatusSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
@@ -257,6 +269,7 @@ export async function updateInteraction(req, res, next) {
     const leadId = parseInt(req.params.id);
     const interactionId = parseInt(req.params.interactionId);
     if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, leadId);
     const parsed = updateInteractionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const result = await leadService.updateInteractionFn(leadId, interactionId, parsed.data, req.user);
@@ -269,6 +282,7 @@ export async function deleteInteraction(req, res, next) {
     const leadId = parseInt(req.params.id);
     const interactionId = parseInt(req.params.interactionId);
     if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, leadId);
     await leadService.deleteInteractionFn(leadId, interactionId, req.user);
     res.json({ success: true });
   } catch (err) { next(err); }
@@ -278,6 +292,9 @@ export async function addReminder(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Lo mismo: un recordatorio en el lead de otra le aparece a ELLA en su cola
+    // del dia. No es grave como el estado, pero es la misma regla.
+    await exigirQueSeaSuyo(req, id);
     const parsed = createReminderSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
@@ -363,6 +380,7 @@ export async function getPurchaseHistory(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
     const data = await leadService.getPurchaseHistory(id);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -388,15 +406,33 @@ export async function mergeLeads(req, res, next) {
   try {
     const winnerId = parseInt(req.params.id);
     await exigirQueSeaSuyo(req, winnerId);
-    const loserId = parseInt(req.body?.loser_id);
+    // Acepta una ficha (loser_id) o varias (loser_ids). De la misma persona
+    // llega a haber tres y cuatro, y de dos en dos no se acababa nunca (#102).
+    const brutos = Array.isArray(req.body?.loser_ids) && req.body.loser_ids.length
+      ? req.body.loser_ids
+      : [req.body?.loser_id];
+    const loserIds = [...new Set(
+      brutos.map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x))
+    )];
     const comment = (req.body?.comment || '').trim();
-    if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
+    if (isNaN(winnerId) || !loserIds.length) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
     if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
 
     // Cualquiera puede fusionar: los duplicados suelen caer en carteras
     // distintas y exigir ser la dueña dejaba la fusion sin hacer.
-    const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
+    const result = await leadService.mergeLeads({ winnerId, loserIds, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// #102 - Las fichas repetidas que ya estan en la base de datos, agrupadas.
+// No es la cola de revision (#13), que solo recoge lo que llega por el webhook:
+// esto repasa TODO lo que hay, incluido lo que se completo a mano despues.
+export async function listDuplicateGroups(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { groups, total } = await leadService.listDuplicateGroups({ projectId });
+    res.json({ success: true, data: groups, total });
   } catch (err) { next(err); }
 }
 
@@ -439,6 +475,7 @@ export async function getLeadSequences(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
     const result = await leadService.getLeadSequences(id, req.user);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

@@ -1,6 +1,7 @@
 import * as model from './chat.model.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
+import * as politica from './politica.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -48,7 +49,12 @@ const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 // El historial es lo unico que hay que esperar; una conversacion normal no.
 const pulsoHistorial = new Map();
 
+// El pulso general. Ya no lo lee ningun endpoint —«Sincronizando…» mira el del
+// historial— pero el mapa sigue vivo por dentro y esto es por donde se
+// comprueba. Se quedaba sin llamadas en `src/`, lo quite por muerto, y reventó
+// cuatro pruebas: el barrido no habia mirado en `tests/`.
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+
 export const ultimoDelHistorial = (instancia) => pulsoHistorial.get(instancia) || null;
 
 /**
@@ -213,7 +219,30 @@ async function permitirEnvio(conversacionId) {
   return conv;
 }
 
-const numeroDe = (conv) => String(conv.jid).split('@')[0];
+/**
+ * A donde se manda. NO siempre son las cifras del jid.
+ *
+ * Esto era `String(conv.jid).split('@')[0]` a secas, y con eso:
+ *
+ *   · A un GRUPO no llegaba nada. Su jid es `1203634...@g.us`, y quitandole el
+ *     sufijo queda un numero de 18 cifras que al otro lado se reconstruye como
+ *     `...@s.whatsapp.net` — un telefono que no existe. Los grupos se veian en
+ *     la lista y no se podia contestar en ellos, que es justo lo que hace falta
+ *     que funcione en la #74.
+ *
+ *   · Con un `@lid` era peor que no llegar: ese identificador oculta el
+ *     telefono de una persona, asi que sus cifras NO son un numero suyo. Tomarlo
+ *     por telefono es mandarle el mensaje a quien tenga esa linea — un
+ *     desconocido leyendo una conversacion con un prospecto.
+ *
+ * En los dos casos hay que mandar el jid ENTERO y dejar que el otro lado lo
+ * resuelva. Solo se pelan las cifras cuando de verdad es un telefono.
+ */
+const numeroDe = (conv) => {
+  const jid = String(conv.jid);
+  if (jid.endsWith('@g.us') || jid.endsWith('@lid')) return jid;
+  return jid.split('@')[0];
+};
 
 /** Manda un texto. */
 export async function enviar({ conversacionId, texto, usuarioId, citarWaId = null }) {
@@ -386,6 +415,16 @@ export async function recibir(cuerpo) {
   if (/messages[._]update/i.test(evento)) return acuse(cuerpo);
   // Llamadas. Van por su propio evento, no por messages.upsert.
   if (/^call$/i.test(evento)) return llamada(cuerpo);
+  // Cuanto lleva del historial. Es el UNICO numero real que hay: WhatsApp no
+  // dice cuantos mensajes va a mandar en total, asi que un porcentaje calculado
+  // por nosotros seria inventado. Baileys lo manda en cada tanda.
+  if (/history[._]progress/i.test(evento)) return anotarProgreso(cuerpo);
+  // Las fotos de perfil. Evolution las manda por su cuenta, no dentro del
+  // mensaje: sin esto nadie tiene foto en produccion.
+  if (/contacts[._](update|upsert)/i.test(evento)) return contactos(cuerpo);
+  // Borrar un mensaje. «Para mi» viaja por aqui; «para todos» llega dentro de
+  // un mensaje normal y se atiende mas abajo.
+  if (/messages[._]delete/i.test(evento)) return borrado(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -406,6 +445,15 @@ export async function recibir(cuerpo) {
   if (!esGrupo && !esPersona) {
     return { ignorado: `ni persona ni grupo (${destino.split('@')[1] || destino})` };
   }
+  // Y si los grupos no entran, aqui se paran DE VERDAD.
+  //
+  // Antes esta linea no existia: se le pedia `groupsIgnore: true` a Evolution y
+  // se daba por hecho. En la base de pruebas habia 2 grupos de 5 conversaciones,
+  // con mensajes del mismo dia — entraban en vivo. Delegar una decision propia
+  // en un servicio de terceros no es aplicarla. Es la #74.
+  if (politica.sobraPorSerGrupo(destino)) {
+    return { ignorado: 'los grupos no entran (WHATSAPP_GRUPOS=no)' };
+  }
   // «0@s.whatsapp.net» y similares: WhatsApp cuela identificadores basura que
   // aparecian en la lista como una conversacion mas.
   const digitos = destino.split('@')[0].replace(/[^0-9]/g, '');
@@ -425,27 +473,80 @@ export async function recibir(cuerpo) {
     logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
     return { ignorado: 'sin instancia' };
   }
-  // El nombre SOLO se coge de lo que ENTRA.
+  // En un grupo, `pushName` es QUIEN ESCRIBIO, no el grupo.
   //
-  // `pushName` es el nombre de quien escribe. En un mensaje que sale, quien
-  // escribe eres tu, asi que guardarlo aqui le pone TU nombre al chat del otro:
-  // en cuanto la gestora escribia a alguien que no tenia guardado, esa
-  // conversacion pasaba a llamarse «Iseie Innovation School». Y como el nombre
-  // se conserva cuando el nuevo llega vacio, se quedaba puesto para siempre.
-  const deMi = key.fromMe === true;
+  // Usarlo como nombre de la conversacion hacia que «Psiko Aprende General»
+  // saliera como «199247962062849» —el identificador de quien hablo el ultimo—
+  // y que fuera cambiando segun quien escribiera. El nombre de un grupo es su
+  // asunto; si no viene, mejor ninguno que uno que baila: la pantalla ya cae en
+  // «Grupo sin nombre».
   const conv = await model.conversacionDe({
     instancia, jid: key.remoteJid,
-    nombrePush: deMi ? null : datos?.pushName,
-    avatarUrl: deMi ? null : (datos?.avatar || null),
+    nombrePush: esGrupo
+      ? (datos?.groupSubject || cuerpo?.groupSubject || datos?.subject || null)
+      : datos?.pushName,
+    avatarUrl: datos?.avatar || null,
+    // En lo que mandamos nosotros, `pushName` somos NOSOTROS. Se dice aqui y la
+    // regla se aplica dentro, que es donde no se puede olvidar.
+    mensajeMio: Boolean(key.fromMe),
   });
 
+  // La foto de perfil, UNA vez por conversacion y sin bloquear.
+  //
+  // Evolution la manda en `contacts.update`, pero eso solo llega cuando cambia:
+  // para un chat que ya existe sin foto no llega nunca. Se pide aqui la primera
+  // vez, y solo esa: en cada mensaje serian cientos de llamadas de mas.
+  //
+  // Va suelta a proposito. Que WhatsApp tarde en dar una foto no puede retrasar
+  // la entrada de un mensaje, y que falle no puede perderlo.
+  if (!conv.avatar_url && !esGrupo) {
+    evolution.fotoDe(conv.telefono, instancia)
+      .then((url) => (url ? model.actualizarAvatar(instancia, conv.jid, url) : null))
+      .catch(() => {});
+  }
+
+  // Y de un grupo, su nombre y su foto.
+  //
+  // Evolution no manda el asunto en el aviso del mensaje: en `key` solo viene el
+  // jid. El puente si, porque se lo pedia el. Sin esto un grupo se queda con su
+  // identificador de 18 cifras por nombre — o sin nombre, desde que se dejo de
+  // usar el `pushName` de quien escribio el ultimo.
+  //
+  // Una vez por grupo, y suelta: que WhatsApp tarde no puede retrasar el mensaje.
+  // Se pregunta tambien si YA tiene nombre: puede ser uno malo heredado, y el
+  // asunto de verdad lo corrige. Una vez cada seis horas por grupo basta —
+  // preguntarlo en cada mensaje serian cientos de llamadas de mas.
+  if (esGrupo && tocaMirarElGrupo(conv)) {
+    evolution.grupoDe(conv.jid, instancia)
+      .then((g) => (g ? model.datosDeGrupo(instancia, conv.jid, g.asunto, g.foto) : null))
+      .catch(() => {});
+  }
+
   const m = datos?.message || {};
+
+  // «Eliminar para todos» no es un evento aparte: llega como un mensaje normal
+  // cuyo contenido es un `protocolMessage` de tipo REVOKE apuntando al original.
+  // Si se guardara tal cual, en el chat saldria una burbuja vacia y el mensaje
+  // borrado seguiria ahi al lado.
+  const revocacion = m?.protocolMessage;
+  if (revocacion && (revocacion.type === 0 || String(revocacion.type).toUpperCase() === 'REVOKE')) {
+    const cual = revocacion.key?.id || null;
+    const marcados = cual ? await model.marcarEliminado(cual, conv.id) : 0;
+    return { revocado: cual, marcados };
+  }
+
   const { tipo } = media.tipoDeMensaje(m);
   if (tipo === 'otro') {
-    logger.warn(
-      { instancia, claves: Object.keys(m).join(','), jid: destino.split('@')[0] },
-      'WhatsApp: tipo de mensaje que no se sabe leer — se guarda igual, pero revisar'
-    );
+    // Este aviso ya estaba, y es el que va a resolver de verdad lo que se ve en
+    // produccion: el numero de los leads enseña una fila tras otra de
+    // «Descargar otro» y ni una palabra. Desde aqui no se puede saber que tipo
+    // es —hay medio centenar de clases de mensaje— y adivinar seria eso,
+    // adivinar. Una linea de este registro lo dice.
+    //
+    // Ahora apunta tambien las claves de DENTRO del sobre: si el mensaje venia
+    // envuelto, con las de fuera solo se veia «ephemeralMessage» y no lo que
+    // llevaba dentro, que es lo que hace falta saber.
+    media.apuntarDesconocido(m, { instancia, jid: destino.split('@')[0] });
   }
 
   // El adjunto NO se baja aqui. Se apunta en la cola y se descarga despues.
@@ -456,6 +557,23 @@ export async function recibir(cuerpo) {
   // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
   // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
   // failed». El webhook tiene que contestar rapido y soltar.
+  // messageTimestamp viene en segundos.
+  const cuando = datos?.messageTimestamp
+    ? new Date(Number(datos.messageTimestamp) * 1000)
+    : new Date();
+
+  // «El ultimo mes» tiene que ser un mes (#73).
+  //
+  // El recorte vivia solo en el puente de Baileys, asi que en produccion no
+  // existia. Se hace ANTES de crear nada: descartarlo despues de guardar la
+  // conversacion dejaria chats vacios en la lista, que es peor que no tenerlos.
+  //
+  // Solo puede saltar con el modo «rapido» apuntado y una fecha de hace mas de
+  // 30 dias, y un mensaje en vivo nunca cumple lo segundo.
+  if (politica.sobraDelHistorial(instancia, cuando)) {
+    return { ignorado: 'mas viejo que el mes que se pidio' };
+  }
+
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,
@@ -465,10 +583,35 @@ export async function recibir(cuerpo) {
     mediaMime: m.audioMessage?.mimetype || m.imageMessage?.mimetype
       || m.videoMessage?.mimetype || m.documentMessage?.mimetype || null,
     nombreArchivo: m.documentMessage?.fileName || null,
-    // A que mensaje responde, si responde a alguno. Lo manda el puente.
-    respondeA: datos?.respondeA || null,
-    // messageTimestamp viene en segundos.
-    ts: datos?.messageTimestamp ? new Date(Number(datos.messageTimestamp) * 1000) : new Date(),
+    // A que mensaje responde, si responde a alguno.
+    //
+    // Dos sitios, como con el autor del grupo: el puente lo manda ya masticado
+    // en `respondeA`, y Evolution manda el mensaje crudo con la cita dentro del
+    // `contextInfo` del tipo concreto. Leyendo solo lo primero, en produccion
+    // una respuesta se guardaba SIN saber a que respondia — y la cita no salia
+    // nunca. Es la mitad que faltaba del #62.
+    respondeA: datos?.respondeA || media.aQueResponde(m, datos?.contextInfo) || null,
+    // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
+    // salen iguales y no se sabe quien dijo que.
+    //
+    // Dos sitios porque hay dos remitentes: el puente de Baileys lo manda en
+    // `datos.participante`, y Evolution —que es lo que corre en produccion— lo
+    // pone en `key.participant`. Leyendo solo el primero, el autor quedaba
+    // SIEMPRE vacio donde importa. Es el mismo patron del #63.
+    //
+    // Y el nombre sale de `pushName` precisamente porque en un grupo es el de
+    // quien escribe: lo que lo hace inservible para nombrar la conversacion es
+    // lo que lo hace correcto aqui.
+    // `participantAlt` ANTES que `participant`.
+    //
+    // Con el direccionamiento nuevo de WhatsApp —`addressingMode: 'lid'`—
+    // `participant` es un identificador opaco («213773457600590@lid») que no
+    // dice quien es nadie. El telefono de verdad viene al lado, en
+    // `participantAlt`. Comprobado en un grupo real: los tres mensajes que mire
+    // traian el lid en uno y el numero en el otro.
+    participante: datos?.participante || key.participantAlt || key.participant || null,
+    participanteNombre: datos?.participanteNombre || (esGrupo ? datos?.pushName : null) || null,
+    ts: cuando,
   });
 
   // Lo de AHORA se baja delante de todo; lo viejo del historial, con criterio.
@@ -536,7 +679,19 @@ function cuandoFue(valor) {
  * No hace falta migracion: `tipo` no tiene lista cerrada de valores.
  */
 async function llamada(cuerpo) {
-  const datos = cuerpo?.data || cuerpo;
+  // El aviso de llamada llega como OBJETO o como LISTA, segun quien lo mande.
+  //
+  // Baileys emite `call` con un array —`sock.ev.on('call', (llamadas) => …)`—
+  // porque WhatsApp puede notificar varias de golpe. Quien lo reenvie fielmente
+  // manda ese array. Aqui se leia `datos.id` a secas: con una lista eso es
+  // undefined, y la llamada se descartaba entera por «sin id». En produccion no
+  // se registraria ni una sola llamada entrante, y no habria ni rastro de por
+  // que — el descarte no deja aviso.
+  //
+  // No se puede comprobar contra el Evolution de verdad desde aqui, asi que se
+  // aceptan las dos formas. Aceptar de mas no rompe nada; suponer, si.
+  const bruto = cuerpo?.data || cuerpo;
+  const datos = Array.isArray(bruto) ? bruto[0] : bruto;
   const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
   if (!instancia) return { ignorado: 'llamada sin instancia' };
 
@@ -545,8 +700,11 @@ async function llamada(cuerpo) {
 
   const estado = String(datos?.status || '').toLowerCase();
   // Solo el desenlace se GUARDA. Lo de en medio no es un hecho todavia.
+  //
+  // `terminate` no esta aqui porque no dice COMO acabo. Se resuelve mas abajo,
+  // que necesita saber si la llamada seguia sonando.
   const COMO_ACABO = { timeout: 'perdida', reject: 'rechazada', accept: 'contestada' };
-  const desenlace = COMO_ACABO[estado];
+  let desenlace = COMO_ACABO[estado];
 
   // `from` puede venir como `@lid`, que identifica a la persona sin dar su
   // numero. Baileys manda el telefono aparte en `callerPn` cuando lo sabe.
@@ -555,18 +713,55 @@ async function llamada(cuerpo) {
   // En grupo, la conversacion es el grupo; en persona, quien llama.
   const jid = datos?.isGroup ? (datos?.chatId || datos?.groupJid || quienLlama) : quienLlama;
 
-  // `terminate` dice que la llamada acabo, pero no COMO: llega detras de un
-  // accept o un reject que ya se guardaron. No se guarda nada —seria adivinar—
-  // pero si se apaga el cartel. Sin esto se quedaria puesto hasta caducar solo,
-  // y son 45 segundos avisando de una llamada que ya no existe.
+  // `terminate`: la llamada acabo, pero WhatsApp no dice COMO.
+  //
+  // Antes se descartaba, y por eso una llamada en la que el otro cuelga antes
+  // de que salte el buzon NO DEJABA NADA. Ni una linea. Comprobado con una
+  // llamada de verdad: llegaron `offer`, dieciseis `relaylatency` y un
+  // `terminate`, y en la base no quedo mas que la conversacion vacia.
+  //
+  // Y no se puede deducir el final, esto no es una sospecha: en el Baileys que
+  // lleva Evolution v2.3.7 el `terminate` sale «fired when accepted / rejected
+  // / timeout / caller hangs up» —su propio comentario—, y `accept` y `reject`
+  // solo se emiten cuando descuelga o rechaza ESTE aparato, no el movil. Asi
+  // que cuando contestas en el movil aqui solo llega `terminate`: apuntar
+  // «perdida» seria mentir en un historial que sirve para auditar.
+  //
+  // Se guarda lo que SI se sabe: que sono y que termino. La duracion la pone la
+  // pantalla, y quien lo lea sabe que la llamada existio — que es justo lo que
+  // faltaba.
+  const seguiaSonando = sonando.get(instancia);
   if (estado === 'terminate') {
     sonando.delete(instancia);
-    return { ignorado: 'llamada terminada' };
+    // Sin `offer` previo no hubo llamada nuestra que cerrar: es el `terminate`
+    // que llega detras de un accept o un reject ya guardados, o el de una
+    // llamada que empezo antes de arrancar el proceso.
+    if (!seguiaSonando || seguiaSonando.id !== id) return { ignorado: 'llamada ya cerrada' };
+    desenlace = 'terminada';
   }
   // Ni `offer` ni el desenlace: son estados intermedios del protocolo.
   if (!desenlace && estado !== 'offer') return { ignorado: `llamada en curso (${estado})` };
 
-  const conv = await model.conversacionDe({ instancia, jid });
+  // Quien llama, con nombre y cara.
+  //
+  // El aviso de la llamada no los trae —`handleCall` de Baileys arma el evento
+  // con chatId, from, id, date, offline y status, y nada mas— asi que la
+  // conversacion nacia sin nombre y la pantalla pintaba el identificador crudo:
+  // catorce cifras que no le dicen nada a nadie. Se buscan en la agenda, donde
+  // si estan.
+  //
+  // Solo al sonar: es un aviso raro y una llamada a Evolution de mas ahi no
+  // molesta, mientras que hacerlo en cada cambio de estado serian cinco.
+  const ficha = (estado === 'offer' && evolution.configurado())
+    ? await evolution.contactoDe(jid, instancia).catch(() => null)
+    : null;
+
+  const conv = await model.conversacionDe({
+    instancia,
+    jid,
+    nombrePush: ficha?.nombre || null,
+    avatarUrl: ficha?.foto || null,
+  });
 
   // Esta sonando. Se apunta en memoria para que la pantalla lo cante, se busca
   // el nombre AQUI —una vez, y es un aviso raro— y no en cada consulta de la
@@ -584,6 +779,11 @@ async function llamada(cuerpo) {
     return { conversacionId: conv.id, sonando: true, tipo: 'llamada' };
   }
 
+  // Cuanto estuvo sonando, si se llego a ver el `offer`.
+  const segundosSonando = seguiaSonando?.desde
+    ? Math.max(1, Math.round((Date.now() - seguiaSonando.desde) / 1000))
+    : null;
+
   // Ya no suena: se quita el cartel. Da igual como acabara — contestada en el
   // movil, rechazada o perdida—, lo que no puede es seguir avisando.
   sonando.delete(instancia);
@@ -594,7 +794,15 @@ async function llamada(cuerpo) {
     tipo: 'llamada',
     // El desenlace en seco, no la frase. La pantalla decide como se dice, y asi
     // se puede filtrar por «perdidas» sin buscar dentro de un texto.
-    texto: desenlace,
+    //
+    // Con los segundos detras cuando se sabe cuanto sono —«terminada:16»—, que
+    // es lo unico que distingue una llamada que alguien dejo pasar de una que
+    // no llego a sonar. No hay columna para esto y las migraciones estan
+    // paradas; separado por dos puntos se lee igual de bien y quien filtra por
+    // «perdida» sigue casando por delante.
+    texto: (desenlace === 'terminada' && segundosSonando)
+      ? `terminada:${segundosSonando}`
+      : desenlace,
     // Para una llamada, «de que tipo de medio es» si significa algo.
     mediaMime: datos?.isVideo ? 'video' : 'audio',
     ts: cuandoFue(datos?.date),
@@ -612,6 +820,12 @@ async function llamada(cuerpo) {
       perdida:    { voz: 'Llamada perdida por WhatsApp',    video: 'Videollamada perdida por WhatsApp' },
       rechazada:  { voz: 'Llamada rechazada por WhatsApp',  video: 'Videollamada rechazada por WhatsApp' },
       contestada: { voz: 'Llamada contestada por WhatsApp', video: 'Videollamada contestada por WhatsApp' },
+      // No se sabe si la cogio en el movil o si el otro colgo, asi que se
+      // cuenta lo que hay: que entro y cuanto sono.
+      terminada:  {
+        voz:   `Llamada por WhatsApp${segundosSonando ? ` (sonó ${segundosSonando} s)` : ''}`,
+        video: `Videollamada por WhatsApp${segundosSonando ? ` (sonó ${segundosSonando} s)` : ''}`,
+      },
     };
     const comoSeCuenta = COMO_SE_CUENTA[desenlace];
     try {
@@ -637,16 +851,188 @@ async function llamada(cuerpo) {
 /** messages.update: WhatsApp dice que un mensaje nuestro llego o se leyo. */
 async function acuse(cuerpo) {
   const datos = cuerpo?.data || cuerpo;
-  const waId = datos?.key?.id;
+
+  // El identificador del mensaje viene en DOS sitios segun quien mande el aviso.
+  //
+  // El puente lo pone en `key.id`, como en el mensaje original. Evolution v2.3.7
+  // —comprobado contra el de verdad, no suponiendo— manda el acuse APLANADO:
+  //
+  //     { keyId, remoteJid, fromMe, status, instanceId, messageId }
+  //
+  // No hay objeto `key`. Leyendo solo `key.id` se descartaban TODOS los acuses
+  // por «sin id», y el mensaje se quedaba con un tic para siempre. Es el punto 3
+  // del #99: comprobado mandando uno de verdad y viendo que se quedaba en
+  // `enviado` con el mensaje ya en el movil.
+  //
+  // `messageId` NO sirve: es el identificador interno de Evolution, no el de
+  // WhatsApp, y no casa con lo que guardamos.
+  const waId = datos?.key?.id || datos?.keyId || null;
   if (!waId) return { ignorado: 'acuse sin id' };
-  const bruto = String(datos?.status || datos?.update?.status || '').toUpperCase();
-  const estado = /READ/.test(bruto) ? 'leido'
+  const crudo = datos?.status ?? datos?.update?.status;
+  const bruto = String(crudo ?? '').toUpperCase();
+
+  // El acuse llega de dos formas y solo se entendia una.
+  //
+  // En texto: SERVER_ACK, DELIVERY_ACK, READ, PLAYED. Y en numero, que es como
+  // lo numera Baileys y como lo deja pasar Evolution en algunas versiones:
+  // 2 entregado, 3 leido, 4 reproducido. Con solo el texto, un acuse numerico
+  // caia en `null` y el mensaje se quedaba con un tic para siempre.
+  //
+  // PLAYED es una nota de voz escuchada. Escuchada es leida: no hay un tercer
+  // tic para eso, y dejarlo fuera hacia que oir un audio no marcara nada.
+  const porNumero = { 2: 'entregado', 3: 'leido', 4: 'leido' };
+  const estado = /READ|PLAYED/.test(bruto) ? 'leido'
     : /DELIVER/.test(bruto) ? 'entregado'
     : /ERROR|FAIL/.test(bruto) ? 'fallido'
-    : null;
+    : porNumero[Number(crudo)] || null;
   if (!estado) return { ignorado: `estado ${bruto}` };
   await model.actualizarEstado(waId, estado);
   return { waId, estado };
+}
+
+/**
+ * Trae de Evolution el historial de UN chat y lo mete en la base (#73).
+ *
+ * «No aparecen los numeros de los seguimientos de tiempo atras»: al enlazar se
+ * pide `syncFullHistory: false`, asi que solo entra lo reciente y el buscador
+ * no puede encontrar lo que nunca llego. Poner eso a `true` traeria cientos de
+ * miles de mensajes de golpe en un numero con años de uso.
+ *
+ * Se hace al reves: se pide UN chat, cuando alguien lo busca y no aparece.
+ *
+ * Reinyecta por `recibir()`, el mismo camino que el webhook. Es a proposito:
+ * asi el historial pasa por toda la logica normal —tipos, adjuntos, citas,
+ * autor en grupos— en vez de por una via paralela que se quedaria atras al
+ * primer cambio. Y `wa_mensajes` tiene un unico por (conversacion, wa_id), asi
+ * que repetirlo no duplica nada.
+ */
+export async function traerHistorial({ conversacion, limite = 300 }) {
+  if (!evolution.configurado()) {
+    throw new AppError('WhatsApp no esta configurado', 503, 'SIN_EVOLUTION');
+  }
+  const crudos = await evolution.mensajesDe(conversacion.jid, conversacion.instancia, limite);
+  if (!crudos.length) return { pedidos: 0, metidos: 0 };
+
+  let metidos = 0;
+  for (const m of crudos) {
+    // Se marca como historial: el CRM lo usa para decidir que adjuntos baja ya
+    // y cuales pueden esperar. Sin esto, traer un chat de hace meses pondria
+    // cientos de fotos por delante de las de ahora en la cola de descargas.
+    const r = await recibir({
+      instance: conversacion.instancia,
+      historial: true,
+      data: {
+        key: m.key,
+        pushName: m.pushName || null,
+        message: m.message,
+        messageTimestamp: String(m.messageTimestamp || Math.floor(Date.now() / 1000)),
+      },
+    }).catch(() => null);
+    if (r && !r.ignorado) metidos += 1;
+  }
+  return { pedidos: crudos.length, metidos };
+}
+
+/**
+ * ¿Toca volver a preguntar por este grupo?
+ *
+ * Si no tiene nombre o foto, si. Y aunque los tenga, cada seis horas: el nombre
+ * de un grupo cambia, y ademas puede haberse quedado uno malo de antes.
+ */
+const grupoMirado = new Map();
+const CADA_GRUPO_MS = 6 * 60 * 60 * 1000;
+function tocaMirarElGrupo(conv) {
+  if (!conv?.nombre_push || !conv?.avatar_url) return true;
+  const antes = grupoMirado.get(conv.id);
+  if (antes && Date.now() - antes < CADA_GRUPO_MS) return false;
+  grupoMirado.set(conv.id, Date.now());
+  return true;
+}
+
+/** Pide la foto de un contacto y la guarda. No lanza: es un adorno, no un dato. */
+export async function buscarFoto(conv) {
+  if (!evolution.configurado() || !conv?.telefono) return null;
+  const url = await evolution.fotoDe(conv.telefono, conv.instancia);
+  if (!url) return null;
+  await model.actualizarAvatar(conv.instancia, conv.jid, url);
+  return url;
+}
+
+/**
+ * Alguien borro un mensaje.
+ *
+ * Llega de dos formas distintas y hay que atender las dos:
+ *
+ *  · «Eliminar para mi» — WhatsApp lo sincroniza entre los dispositivos de uno
+ *    mismo y Baileys lo emite como `messages.delete`. La forma varia entre
+ *    versiones: unas mandan un objeto, otras una lista, y la clave puede venir
+ *    como `key` o aplanada. Se aceptan todas, que es lo que hemos aprendido a
+ *    hacer con este proveedor.
+ *
+ *  · «Eliminar para todos» — no es un evento aparte: llega como un mensaje
+ *    normal cuyo contenido es un `protocolMessage` de tipo REVOKE que apunta al
+ *    mensaje original. Eso se atiende en `recibir()`.
+ *
+ * No se borra la fila: se marca. Ver `marcarEliminado`.
+ */
+async function borrado(cuerpo) {
+  const bruto = cuerpo?.data || cuerpo;
+
+  // La forma que faltaba: `{ keys: [...] }`.
+  //
+  // Es la que emite Baileys para «eliminar para mi», y se comprobo en el codigo
+  // que corre dentro de Evolution v2.3.7: `chat-utils.js` hace
+  //
+  //     ev.emit('messages.delete', { keys: [{ remoteJid, id, fromMe }] })
+  //
+  // O sea que la clave NO viene en el objeto de arriba, sino dentro de una lista
+  // que cuelga de `keys`. Se aceptaban el objeto suelto, la lista de objetos y
+  // la clave aplanada — las tres — y esta se caia por el unico hueco que
+  // quedaba: `d.key.id`, `d.keyId` y `d.id` son todos undefined, asi que el
+  // aviso entraba, no casaba con nada y salia con «0 marcados» sin decir nada.
+  //
+  // Un borrado que no se refleja es de lo peor que puede hacer esto: el mensaje
+  // sigue ahi para quien mira el CRM y ya no existe para quien mira el movil.
+  const claves = Array.isArray(bruto?.keys) ? bruto.keys
+    : Array.isArray(bruto) ? bruto
+    : [bruto];
+
+  let marcados = 0;
+  for (const d of claves) {
+    const waId = d?.key?.id || d?.keyId || d?.id || null;
+    if (waId) marcados += await model.marcarEliminado(waId);
+  }
+  return { borrados: claves.length, marcados };
+}
+
+/**
+ * La foto de perfil de un contacto.
+ *
+ * Cuarta vez que aparece el mismo patron. El CRM leia la foto de
+ * `datos.avatar`, y eso lo manda el PUENTE: se la baja el mismo de WhatsApp y la
+ * mete en el aviso del mensaje. Evolution no hace eso — manda un evento
+ * `contacts.update` aparte, con `profilePicUrl`, y ese evento el CRM lo estaba
+ * DESCARTANDO junto con todo lo que no fuera un mensaje.
+ *
+ * Resultado en produccion: nadie tiene foto. Ni una. Se ven las iniciales
+ * siempre, y parece que la funcion no existe.
+ *
+ * Llega como lista —una entrada por contacto— aunque solo cambie uno.
+ */
+async function contactos(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+  if (!instancia) return { ignorado: 'contactos sin instancia' };
+
+  const bruto = cuerpo?.data || cuerpo;
+  const lista = Array.isArray(bruto) ? bruto : [bruto];
+  let puestas = 0;
+  for (const c of lista) {
+    const jid = c?.remoteJid || c?.id || c?.jid;
+    const url = c?.profilePicUrl || c?.avatar || null;
+    if (!jid || !url) continue;
+    puestas += await model.actualizarAvatar(instancia, jid, url);
+  }
+  return { contactos: lista.length, fotos: puestas };
 }
 
 /** Marca leidos los entrantes de una conversacion, tambien en WhatsApp. */
@@ -663,7 +1049,160 @@ export async function marcarLeida(conversacionId, noLeidos = null) {
   const ultimo = (await model.ultimoEntranteSinLeer(conversacionId));
   if (conv && ultimo?.wa_id && evolution.configurado()) {
     await evolution.marcarLeido(
-      { remoteJid: conv.jid, fromMe: false, id: ultimo.wa_id }, conv.instancia
+      {
+        remoteJid: conv.jid,
+        fromMe: false,
+        id: ultimo.wa_id,
+        // En un grupo, sin `participant` WhatsApp no sabe QUE mensaje marcar:
+        // la terna es (remoteJid, participant, id). Se manda solo cuando lo hay
+        // — en un chat de una persona el campo sobra y algunos servidores lo
+        // rechazan si viene vacio.
+        ...(ultimo.participante ? { participant: ultimo.participante } : {}),
+      },
+      conv.instancia
     ).catch(() => {});
   }
 }
+
+/**
+ * Corrige un mensaje ya enviado. Tarea #75.
+ *
+ * Las tres condiciones no son nuestras, son de WhatsApp, y por eso se comprueban
+ * ANTES de molestar a Evolution: solo se puede editar lo que uno mismo mando, y
+ * solo texto, y solo durante 15 minutos. Preguntar sabiendo que va a decir que
+ * no es tirar una peticion y ensuciar el registro.
+ */
+export const VENTANA_EDICION_MS = 15 * 60 * 1000;
+
+/**
+ * Reenvia un mensaje a otra conversacion (#99, punto 5).
+ *
+ * «De las cosas que mas se usan al pasar un dossier o un dato de una
+ * conversacion a otra», y hasta ahora habia que descargar el archivo y volver
+ * a subirlo a mano.
+ *
+ * No usa el reenvio nativo de WhatsApp —que marcaria el mensaje como
+ * «reenviado»— sino que manda uno nuevo con el mismo contenido: el reenvio de
+ * verdad necesita la clave original del mensaje, y de los importados del
+ * historial no siempre la tenemos. Un mensaje nuevo funciona siempre.
+ *
+ * Las dos conversaciones tienen que ser de la MISMA sesion. Se comprueba
+ * arriba, en el controlador, para las dos por separado: sin eso se podria
+ * sacar contenido del chat de una companera hacia el propio.
+ */
+export async function reenviar({ mensaje, destinoId, usuarioId }) {
+  if (mensaje.tipo === 'llamada') {
+    throw new AppError('Una llamada no se puede reenviar', 400, 'NO_REENVIABLE');
+  }
+
+  // Sin archivo, es texto y basta con mandarlo.
+  if (!mensaje.media_url) {
+    const texto = (mensaje.texto || '').trim();
+    if (!texto) throw new AppError('Ese mensaje no tiene nada que reenviar', 400, 'VACIO');
+    return enviar({ conversacionId: destinoId, texto, usuarioId });
+  }
+
+  // Con archivo: se lee del disco y se manda como uno nuevo. Si el adjunto
+  // todavia no se ha bajado —la cola va por detras— se dice, en vez de mandar
+  // un mensaje a medias.
+  let archivo;
+  try {
+    archivo = await media.leer(mensaje.media_url);
+  } catch {
+    throw new AppError('El archivo aun no esta descargado, intentalo en un momento', 409, 'SIN_ARCHIVO');
+  }
+
+  return enviarAdjunto({
+    conversacionId: destinoId,
+    buffer: archivo.buffer,
+    mimetype: mensaje.media_mime,
+    nombreArchivo: mensaje.nombre_archivo,
+    // El pie va con el archivo: en WhatsApp el texto de una imagen es su pie,
+    // y mandarlo aparte partiria en dos lo que era un solo mensaje.
+    pie: mensaje.texto || null,
+    usuarioId,
+  });
+}
+
+export async function editarMensaje({ mensajeId, conversacion, texto, instancia }) {
+  const m = await model.mensajePorId(mensajeId);
+  if (!m || m.conversacion_id !== conversacion.id) {
+    throw new AppError('Mensaje no encontrado', 404, 'NOT_FOUND');
+  }
+  if (m.direccion !== 'saliente') {
+    throw new AppError('Solo se pueden corregir los mensajes que has mandado tu', 400, 'NO_ES_TUYO');
+  }
+  if (m.tipo !== 'texto') {
+    throw new AppError('Solo se puede corregir el texto, no un archivo', 400, 'NO_ES_TEXTO');
+  }
+  if (!m.wa_id) {
+    // Sin identificador de WhatsApp no hay a que apuntar. Pasa con los que
+    // fallaron al salir: nunca llegaron, asi que no hay nada que corregir.
+    throw new AppError('Ese mensaje no llego a salir; vuelve a mandarlo', 400, 'SIN_WA_ID');
+  }
+  const edad = Date.now() - new Date(m.ts).getTime();
+  if (edad > VENTANA_EDICION_MS) {
+    throw new AppError('WhatsApp solo deja corregir durante los primeros 15 minutos', 400, 'FUERA_DE_PLAZO');
+  }
+
+  const r = await evolution.editarTexto(
+    // `telefono` y no el jid tenia el mismo fallo que `numeroDe`: en un grupo
+    // son 18 cifras que no son un telefono de nadie.
+    numeroDe(conversacion),
+    { waId: m.wa_id, jid: conversacion.jid, mio: true },
+    texto,
+    instancia
+  );
+  if (!r.ok) {
+    if (r.error === 'NO_SOPORTADO') {
+      throw new AppError('Este WhatsApp no permite corregir mensajes', 400, 'NO_SOPORTADO');
+    }
+    throw new AppError('No se pudo corregir el mensaje', 502, 'EVOLUTION_ERROR');
+  }
+
+  // Se guarda el texto nuevo. El viejo NO se conserva: en WhatsApp una edicion
+  // sustituye al mensaje y quien lo recibio ve el corregido; guardar aqui una
+  // version que el prospecto ya no ve solo serviria para confundir a quien lea
+  // el chat despues.
+  return model.corregirTexto(mensajeId, texto);
+}
+
+/**
+ * Cuanto lleva traido del historial, de 0 a 100.
+ *
+ * En memoria y por instancia. No lleva tabla a proposito: es un dato que solo
+ * vale mientras dura la sincronizacion y que se puede perder sin consecuencias
+ * — si se reinicia a mitad, la pantalla vuelve a enseñar los contadores de
+ * siempre en vez de un porcentaje parado que ya no avanza.
+ *
+ * Puede no llegar nunca: depende de que quien manda los avisos lo incluya. Por
+ * eso la pantalla lo enseña SOLO si existe, y si no, sigue con «1 chats y 4
+ * mensajes hasta ahora» como hasta hoy. Nunca se inventa.
+ */
+const progresoHistorial = new Map();
+
+function anotarProgreso(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instancia;
+  const pct = Number(cuerpo?.data?.progress);
+  if (!instancia || !Number.isFinite(pct)) return { ignorado: true };
+  const ultimo = Boolean(cuerpo?.data?.isLatest);
+  progresoHistorial.set(instancia, {
+    pct: Math.max(0, Math.min(100, Math.round(pct))),
+    ultimo,
+    cuando: Date.now(),
+  });
+  return { progreso: pct };
+}
+
+/** El progreso de esta instancia, o null si nadie lo ha mandado. */
+export function progresoDe(instancia) {
+  const p = progresoHistorial.get(instancia);
+  if (!p) return null;
+  // Si lleva mas de dos minutos sin moverse, deja de contar: una barra parada
+  // en el 40 % es peor que no tener barra.
+  if (Date.now() - p.cuando > 120000) return null;
+  return p.pct;
+}
+
+/** Para las pruebas. */
+export const _progreso = progresoHistorial;

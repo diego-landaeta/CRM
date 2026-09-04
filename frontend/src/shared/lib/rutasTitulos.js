@@ -14,6 +14,12 @@ export const ROUTE_TITLES = {
   '/whatsapp': 'Chat de WhatsApp',
   '/whatsapp/chat': 'Chat de WhatsApp',
   '/whatsapp/conexion': 'Conexion de WhatsApp',
+  // Las tres de abajo son pantallas de WhatsApp que llegaron después del marco.
+  // Sin su línea aquí, la cabecera busca hacia arriba y encuentra `/whatsapp`:
+  // las tres se anunciarían como «Chat de WhatsApp», que es otra pantalla.
+  '/whatsapp/plantillas': 'Plantillas de WhatsApp',
+  '/whatsapp/banco': 'Banco de mensajes',
+  '/whatsapp/ayuda': 'Como se usa WhatsApp',
   '/prospectos/pipeline': 'Pipeline',
   '/prospectos/audiencias': 'Audiencias',
   '/clientes': 'Clientes',
@@ -54,6 +60,7 @@ export const ROUTE_TITLES = {
   '/notificaciones': 'Notificaciones',
   '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',

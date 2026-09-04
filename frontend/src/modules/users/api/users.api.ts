@@ -20,11 +20,16 @@ export interface CrmUser {
   avatar_url: string | null;
   projects: ProjectAssignment[];
   /**
-   * OJO: el listado del backend NO devuelve esta columna (la usa en el WHERE
-   * pero no la incluye en el SELECT). Llega siempre undefined, asi que quien
-   * lleva colaboraciones sale etiquetado como «gestor». Es un SELECT de una
-   * linea en backend/src/modules/users/user.model.js — pedido a Diego.
+   * Los permisos acotados. Van aparte del rol a proposito: ser «gestor» no basta
+   * para decidir quien factura — Vanessa lo es y no debe.
+   *
+   * Estuvieron sin llegar aqui: el listado del backend los usaba en el WHERE
+   * pero no los incluia en el SELECT, asi que nadie podia ver quien los tenia.
+   * Por eso a Ana Comercial le falto uno desde su alta sin que nadie lo notara.
+   * Ya vienen.
    */
+  factura_manager?: boolean;
+  editar_fechas_factura?: boolean;
   gestor_colaboraciones?: boolean;
 }
 
@@ -68,7 +73,9 @@ function normalizeUser(raw: any): CrmUser {
     whatsapp_display_name: raw.whatsapp_display_name ?? null,
     avatar_url: raw.avatar_url ?? null,
     projects: normalizeProjects(raw),
-    gestor_colaboraciones: raw.gestor_colaboraciones,
+    factura_manager: !!raw.factura_manager,
+    editar_fechas_factura: !!raw.editar_fechas_factura,
+    gestor_colaboraciones: !!raw.gestor_colaboraciones,
   };
 }
 
