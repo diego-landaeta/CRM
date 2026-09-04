@@ -236,23 +236,15 @@ describe('buildInvoicePreviewHtml', () => {
 });
 
 describe('buildCertP1Html', () => {
-  it('embebe los datos del alumno y del curso', async () => {
+  it('embebe alumno_nombre en cursive y firma', async () => {
     const html = await buildCertP1Html({
       alumno_nombre: 'Juan Perez',
       alumno_dni: '12345678A',
       curso_nombre: 'Curso Test',
     });
-    // Antes se exigia que el nombre saliera DOS veces: el cursivo grande y un
-    // rotulo encima de la firma. Ese segundo no existe y no es un fallo — el
-    // fondo `cert-bg-p1.png` ya trae la linea de firma del alumno VACIA porque
-    // la firma va a mano. La prueba contaba las apariciones de un diseño que ya
-    // no esta.
-    //
-    // Contar apariciones no dice nada de un certificado. Lo que importa es que
-    // los datos esten, que es lo que se comprueba ahora.
-    expect(html).toContain('Juan Perez');
-    expect(html).toContain('12345678A');
-    expect(html).toContain('Curso Test');
+    // Aparece dos veces: nombre cursivo grande + label arriba de la firma
+    const matches = html.match(/Juan Perez/g) || [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 
   it('embebe DNI en el subtitle', async () => {
@@ -322,85 +314,5 @@ describe('buildCertPreviewHtml', () => {
     const html = await buildCertPreviewHtml({ modulos: [] });
     expect(html).toContain('--fit');
     expect(html).toContain('NATIVE_W');
-  });
-});
-
-// ============================================================
-// La identidad del certificado, por proyecto (#95)
-// ============================================================
-
-describe('de que marca sale el certificado', () => {
-  it('sin proyecto, el de siempre — para no romper lo que ya emitía', async () => {
-    const html = await buildCertP1Html({
-      alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
-    });
-    expect(html).toMatch(/expedido por Psiko Aprende/);
-  });
-
-  it('con proyecto y sin diseño propio, tambien el de siempre', async () => {
-    // Que una marca no traiga todavia su diseño no puede impedir emitir.
-    const html = await buildCertP1Html({
-      alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
-      project_slug: 'marca-que-no-existe',
-    });
-    expect(html).toMatch(/expedido por Psiko Aprende/);
-  });
-
-  it('media marca NO se emite: con el aval pero sin los fondos, sigue el de siempre', async () => {
-    // Es el caso que importa. Con las piezas sueltas salia un certificado que
-    // dice «expedido por Fono Aprende» con el logo de PSIKOAPRENDE arriba y
-    // firmado por Carlos Saiz y Mireia Jareño.
-    //
-    // Eso es PEOR que el fallo que se venia a arreglar: un documento
-    // coherentemente equivocado se explica; uno que se contradice a si mismo,
-    // no. Todo o nada.
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const dir = path.join(process.cwd(), 'src/modules/documents/assets');
-    const soloAval = path.join(dir, 'cert--media-marca.json');
-    await fs.writeFile(soloAval, JSON.stringify({ expedido_por: 'Media Marca' }));
-    try {
-      const html = await buildCertP1Html({
-        alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
-        project_slug: 'media-marca',
-      });
-      expect(html).toMatch(/expedido por Psiko Aprende/);
-      expect(html).not.toMatch(/Media Marca/);
-    } finally {
-      await fs.unlink(soloAval);
-    }
-  });
-
-  it('con el diseño COMPLETO, sale su marca y su aval', async () => {
-    // Antes, un alumno de Fono Aprende recibia un certificado de Psiko Aprende:
-    // marca, aval y dos firmantes que no eran los suyos.
-    //
-    // Las tres piezas: las dos paginas del fondo y el aval. Se copian las de
-    // Psiko como relleno — lo que se comprueba es el mecanismo, no el diseño.
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const dir = path.join(process.cwd(), 'src/modules/documents/assets');
-    const piezas = {
-      [path.join(dir, 'cert--marca-de-prueba.json')]: null,
-      [path.join(dir, 'cert-bg-p1--marca-de-prueba.png')]: path.join(dir, 'cert-bg-p1.png'),
-      [path.join(dir, 'cert-bg-p2--marca-de-prueba.png')]: path.join(dir, 'cert-bg-p2.png'),
-    };
-    await fs.writeFile(Object.keys(piezas)[0], JSON.stringify({
-      expedido_por: 'Marca De Prueba', avalado_por: 'Quien La Avala',
-    }));
-    for (const [destino, origen] of Object.entries(piezas)) {
-      if (origen) await fs.copyFile(origen, destino);
-    }
-    try {
-      const html = await buildCertP1Html({
-        alumno_nombre: 'X', alumno_dni: '1', curso_nombre: 'C', fecha_expedicion: 'hoy',
-        project_slug: 'marca-de-prueba',
-      });
-      expect(html).toMatch(/expedido por Marca De Prueba/);
-      expect(html).toMatch(/avalado por Quien La Avala/);
-      expect(html).not.toMatch(/Psiko Aprende/);
-    } finally {
-      for (const f of Object.keys(piezas)) await fs.unlink(f).catch(() => {});
-    }
   });
 });

@@ -29,15 +29,13 @@ export default function FieldsTab({ project, onSaved }) {
   interface FieldDef {
     id: number;
     project_id: number;
-    entity?: 'lead' | 'client' | 'product';
     field_key: string;
     label: string;
     type: string;
     required: boolean;
     orden: number;
     grupo?: string | null;
-    // El servidor guarda y devuelve `{ choices: [...] }`, no un array pelado.
-    options?: { choices: string[] } | null;
+    options?: string[] | null;
   }
 
   interface NewField {
@@ -49,16 +47,6 @@ export default function FieldsTab({ project, onSaved }) {
     options: string;
   }
 
-  /**
-   * La entidad de la que se estan configurando los campos. Tarea #8.
-   *
-   * El backend distingue lead / client / product desde siempre —la columna
-   * `entity` de `project_field_definitions`— pero el frontal pedia la lista
-   * ENTERA y la pintaba junta. Con campos de las tres mezclados y sin decir
-   * cual era de cual, y creando siempre de tipo `lead` sin preguntar.
-   */
-  const [entidad, setEntidad] = useState<'lead' | 'client' | 'product'>('lead');
-
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'editor' | 'preview'>('editor');
@@ -69,10 +57,10 @@ export default function FieldsTab({ project, onSaved }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await client.get(`/field-definitions/project/${project.id}?entity=${entidad}`);
+      const res = await client.get(`/field-definitions/project/${project.id}`);
       if (res.success) setFields(res.data);
     } finally { setLoading(false); }
-  }, [project.id, entidad]);
+  }, [project.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -82,9 +70,6 @@ export default function FieldsTab({ project, onSaved }) {
     try {
       const payload: Partial<FieldDef> = {
         project_id: project.id,
-        // Antes iba sin `entity` y el servidor lo daba por `lead`: un campo
-        // creado desde la pestaña de productos acababa en prospectos.
-        entity: entidad,
         field_key: newField.field_key,
         label: newField.label,
         type: newField.type,
@@ -93,11 +78,7 @@ export default function FieldsTab({ project, onSaved }) {
         grupo: newField.grupo || null,
       };
       if (newField.type === 'select' && newField.options) {
-        // `{ choices }` y no un array: el esquema del servidor lo exige y
-        // mandarlo pelado devolvia «Expected object, received array». O sea que
-        // crear un campo de tipo «select» con opciones NO funcionaba, y el
-        // error solo se veia en la peticion.
-        payload.options = { choices: newField.options.split(',').map(s => s.trim()).filter(Boolean) };
+        payload.options = newField.options.split(',').map(s => s.trim()).filter(Boolean);
       }
       await client.post('/field-definitions', payload);
       toast({ title: 'Campo agregado' });
@@ -124,7 +105,6 @@ export default function FieldsTab({ project, onSaved }) {
     try {
       await client.post('/field-definitions/reorder', {
         project_id: project.id,
-        entity: entidad,
         order: next.map((f, i) => ({ id: f.id, orden: i })),
       });
     } catch { await load(); }
@@ -132,14 +112,14 @@ export default function FieldsTab({ project, onSaved }) {
 
   function startEdit(f) {
     setEditingId(f.id);
-    setEditBuf({ label: f.label, required: f.required, grupo: f.grupo || '', options: Array.isArray(f.options?.choices) ? f.options.choices.join(', ') : '' });
+    setEditBuf({ label: f.label, required: f.required, grupo: f.grupo || '', options: Array.isArray(f.options) ? f.options.join(', ') : '' });
   }
 
   async function saveEdit(f: FieldDef) {
     try {
       const payload: Partial<FieldDef> = { label: editBuf.label, required: editBuf.required, grupo: editBuf.grupo || null };
       if (f.type === 'select' && editBuf.options !== undefined) {
-        payload.options = { choices: editBuf.options.split(',').map(s => s.trim()).filter(Boolean) };
+        payload.options = editBuf.options.split(',').map(s => s.trim()).filter(Boolean);
       }
       await client.patch(`/field-definitions/${f.id}`, payload);
       setEditingId(null);
@@ -154,14 +134,6 @@ export default function FieldsTab({ project, onSaved }) {
     return acc;
   }, {});
 
-  // Las tres entidades que el backend admite. «Clientes» no es una tabla
-  // aparte —la #17 se cerro como wont-fix— pero sus campos si lo son.
-  const ENTIDADES = [
-    { id: 'lead' as const, label: 'Prospectos' },
-    { id: 'client' as const, label: 'Clientes' },
-    { id: 'product' as const, label: project.producto_label_plural || 'Productos' },
-  ];
-
   return (
     <div className="space-y-5 max-w-3xl">
       <div>
@@ -175,8 +147,8 @@ export default function FieldsTab({ project, onSaved }) {
               <div key={bf.key} className="flex items-center justify-between px-4 py-2.5 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold">{bf.label}</span>
-                  <span className="font-mono text-[10px] text-muted-foreground">{bf.key}</span>
-                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
+                  <span className="font-mono text-secundario text-muted-foreground">{bf.key}</span>
+                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
                 </div>
                 <div className="flex items-center gap-4">
                   <label className={`flex items-center gap-1.5 text-xs ${bf.key === 'nombre' || bf.key === 'email' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -194,26 +166,8 @@ export default function FieldsTab({ project, onSaved }) {
         </div>
       </div>
 
-      {/* La entidad manda sobre todo lo de abajo: lo que se lista, lo que se
-          crea y el orden que se guarda. Antes se veian los de las tres juntos
-          sin distinguir, y lo que se creaba caia siempre en prospectos. */}
-      <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40 w-fit">
-        {ENTIDADES.map((e) => (
-          <button
-            key={e.id} type="button" onClick={() => { setEntidad(e.id); setEditingId(null); }}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              entidad === e.id ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            {e.label}
-          </button>
-        ))}
-      </div>
-
       <div className="flex items-center justify-between">
-        <SectionTitle
-          title={`Campos de ${ENTIDADES.find((e) => e.id === entidad)?.label.toLowerCase()}`}
-          subtitle={`${fields.length} campos. Hasta ~15 recomendados.`}
-        />
+        <SectionTitle title="Campos personalizados" subtitle={`${fields.length} campos. Hasta ~15 recomendados.`} />
         <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40">
           <button onClick={() => setView('editor')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'editor' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Editor</button>
           <button onClick={() => setView('preview')} className={`px-3 py-1.5 rounded-md text-xs font-semibold ${view === 'preview' ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>Vista previa</button>
@@ -223,7 +177,7 @@ export default function FieldsTab({ project, onSaved }) {
       {view === 'editor' ? (
         <>
           <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border">
-            <p className="text-[11px] font-medium text-muted-foreground mb-3">Nuevo campo</p>
+            <p className="text-secundario font-medium text-muted-foreground mb-3">Nuevo campo</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={smallInput + ' font-mono text-xs'} required />
               <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={smallInput} required />
@@ -284,13 +238,13 @@ export default function FieldsTab({ project, onSaved }) {
                         <>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{f.label}</span>
-                            <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
-                            {f.required && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600">REQ</span>}
-                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
+                            <span className="font-mono text-secundario text-muted-foreground">{f.field_key}</span>
+                            <span className="px-1.5 py-0.5 rounded text-secundario font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
+                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600">REQ</span>}
+                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
                           </div>
-                          {Array.isArray(f.options?.choices) && f.options.choices.length > 0 && (
-                            <p className="text-[11px] text-muted-foreground mt-1 truncate">Opciones: {f.options.choices.join(', ')}</p>
+                          {Array.isArray(f.options) && f.options.length > 0 && (
+                            <p className="text-secundario text-muted-foreground mt-1 truncate">Opciones: {f.options.join(', ')}</p>
                           )}
                         </>
                       )}
@@ -321,7 +275,7 @@ export default function FieldsTab({ project, onSaved }) {
             <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">Sin campos</div>
           ) : Object.entries(groups).map(([grupo, items]) => (
             <div key={grupo} className="bg-muted/20 rounded-md p-4 border border-border">
-              <p className="text-[11px] font-medium text-muted-foreground mb-3">{grupo}</p>
+              <p className="text-secundario font-medium text-muted-foreground mb-3">{grupo}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {items.map(f => (
                   <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>

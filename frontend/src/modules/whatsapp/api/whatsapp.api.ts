@@ -86,6 +86,8 @@ export interface ChatWhatsapp {
   lead_nombre: string | null;
   lead_status: string | null;
   project_id: number | null;
+  /** De que proyecto es el prospecto, si lo tiene. Para decirlo en la lista. */
+  proyecto_nombre?: string | null;
   es_grupo: boolean;
   no_escribir: boolean;
   motivo_no_escribir: string | null;
@@ -292,8 +294,8 @@ export const chatApi = {
     client.patch(`/whatsapp/mensajes/${mensajeId}${qs({ usuarioId })}`, { conversacionId, texto }),
 
   /** Pide el adjunto de un mensaje que no se bajo en su momento. */
-  descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
-    client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
+  descargarAdjunto: (mensajeId: number, usuarioId?: number | null): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
+    client.post(`/whatsapp/mensajes/${mensajeId}/descargar${qs({ usuarioId })}`, {}),
 
   /**
    * La lista de chats. Con `busca`, filtra Postgres sobre TODAS y no el
@@ -321,6 +323,8 @@ export const chatApi = {
   enviar: (id: number, texto: string, citarId?: number | null, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
     client.post(`/whatsapp/chats/${id}/enviar`, { texto, citarId, usuarioId }),
 
+  noEscribir: (id: number, motivo: string, usuarioId?: number | null): Promise<ApiResponse<null>> =>
+    client.post(`/whatsapp/chats/${id}/no-escribir${qs({ usuarioId })}`, { motivo }),
   /**
    * Reenvia un mensaje a otro chat (#99, punto 5).
    *
@@ -363,9 +367,6 @@ export const chatApi = {
   traerHistorial: (id: number, limite = 300): Promise<ApiResponse<{ pedidos: number; metidos: number }>> =>
     client.post(`/whatsapp/chats/${id}/historial`, { limite }),
 
-  noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
-    client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
-
   // Apunta que se ha llamado. La llamada la hace el movil, no el CRM: por esta
   // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo
   // que hoy se pierde de todas las llamadas que salen.
@@ -374,13 +375,13 @@ export const chatApi = {
 
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
-  abrir: (leadId: number): Promise<ApiResponse<ChatWhatsapp>> =>
-    client.post('/whatsapp/chats', { leadId }),
+  abrir: (leadId: number, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { leadId, usuarioId }),
 
-  // Abrir con un contacto de WhatsApp que no es prospecto. El freno de
-  // consentimiento sigue vigente: si nunca ha escrito, no se le puede escribir.
-  abrirPorTelefono: (telefono: string): Promise<ApiResponse<ChatWhatsapp>> =>
-    client.post('/whatsapp/chats', { telefono }),
+  // Abrir con un contacto de WhatsApp que no es prospecto. Se puede: el freno
+  // se apago el 21/08/2026. Queda apuntado en el registro del servidor, nada mas.
+  abrirPorTelefono: (telefono: string, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { telefono, usuarioId }),
 
   // Prospectos con telefono, para elegir a quien escribir.
   buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
@@ -399,6 +400,10 @@ export const chatApi = {
    * `segundos` solo para las notas de voz: es la duracion MEDIDA al grabar.
    * Lo que graba Chrome es webm y ese contenedor no la lleva en la cabecera,
    * asi que WhatsApp enseñaba una duracion inventada, mas larga que la real.
+   *
+   * `usuarioId` es de quien es el WhatsApp que se esta mirando. Va en la
+   * direccion y no dentro del formulario: asi vale igual aqui que en las
+   * llamadas normales, sin depender de como lea el servidor el multipart.
    */
   adjunto: (id: number, archivo: File, pie?: string, segundos?: number, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> => {
     const fd = new FormData();

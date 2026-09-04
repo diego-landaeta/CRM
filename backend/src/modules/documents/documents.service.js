@@ -48,88 +48,6 @@ async function imgBase64(filename) {
   return `data:image/png;base64,${buf.toString('base64')}`;
 }
 
-/**
- * La misma imagen, pero la del proyecto si la tiene. Tarea #95.
- *
- * Hasta hoy `cert-bg-p1.png` era el unico fondo que existia, con el logo de
- * PSIKOAPRENDE y las firmas de Carlos Saiz y Mireia Jareño incrustadas. O sea
- * que un alumno de Fono Aprende recibia un certificado de Psiko Aprende:
- * marca, aval y dos firmantes que no son los suyos.
- *
- * Se resuelve por convencion de nombre y NO con una tabla: el fondo, las firmas
- * y quien avala son partes del mismo diseño, llegan juntos de la agencia y
- * cambian a la vez. Ponerlos en la base separaria cosas que solo tienen sentido
- * juntas, y ademas obligaria a una migracion — bloqueada hoy por la #71.
- *
- *     cert-bg-p1.png                 <- el de siempre, respaldo
- *     cert-bg-p1--fono-aprende.png   <- el de Fono Aprende
- *
- * Añadir una marca es dejar caer su PNG. Sin desplegar codigo, sin migrar nada.
- */
-async function imgProyecto(filename, slug) {
-  // Solo si tiene el diseño ENTERO. Ver `tieneDiseñoPropio`: media marca no se
-  // emite, porque mezclar el logo de una con el nombre de otra es peor que
-  // usar el de siempre.
-  if (await tieneDiseñoPropio(slug)) {
-    const punto = filename.lastIndexOf('.');
-    const propio = `${filename.slice(0, punto)}--${slug}${filename.slice(punto)}`;
-    try {
-      return await imgBase64(propio);
-    } catch {
-      // No deberia pasar —se acaba de comprobar que esta— pero si el fichero
-      // desaparece entre medias, el respaldo sigue siendo mejor que reventar.
-    }
-  }
-  return imgBase64(filename);
-}
-
-/**
- * Quien expide el certificado y quien lo avala.
- *
- * Va en un JSON al lado del fondo, por el mismo motivo: es parte del diseño.
- * Sin fichero propio se usa lo de Psiko Aprende, que es lo que habia escrito a
- * mano en la plantilla y lo unico que existe hoy.
- */
-const AVAL_POR_DEFECTO = {
-  expedido_por: 'Psiko Aprende',
-  avalado_por: 'ISEIE Innovation School, e Hispamedic',
-};
-
-/**
- * ¿Tiene esta marca su diseño COMPLETO?
- *
- * Todo o nada, y esto importa mas de lo que parece. Con las piezas sueltas se
- * podia llegar a un certificado que dice «expedido por Fono Aprende» con el
- * logo de PSIKOAPRENDE arriba y firmado por Carlos Saiz y Mireia Jareño.
- *
- * Eso es PEOR que el fallo que se venia a arreglar: un documento coherentemente
- * equivocado se explica; uno que se contradice a si mismo, no. Y a quien lo
- * recibe le llega un papel que dice una cosa y parece otra.
- *
- * Asi que si falta cualquiera de las tres piezas —las dos paginas del fondo y
- * el aval— se usa el de siempre ENTERO. Medio diseño no se emite.
- */
-async function tieneDiseñoPropio(slug) {
-  if (!slug) return false;
-  const piezas = [`cert-bg-p1--${slug}.png`, `cert-bg-p2--${slug}.png`, `cert--${slug}.json`];
-  try {
-    await Promise.all(piezas.map((f) => fs.access(path.join(ASSETS_DIR, f))));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function avalDelProyecto(slug) {
-  if (!(await tieneDiseñoPropio(slug))) return AVAL_POR_DEFECTO;
-  try {
-    const txt = await fs.readFile(path.join(ASSETS_DIR, `cert--${slug}.json`), 'utf8');
-    return { ...AVAL_POR_DEFECTO, ...JSON.parse(txt) };
-  } catch {
-    return AVAL_POR_DEFECTO;
-  }
-}
-
 const CHROME_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-background-networking'];
 
 async function newPage(browser) {
@@ -1008,19 +926,14 @@ const CERT_WAVES_SVG = `
 // ============================================================
 // TEMPLATE: CERTIFICADO página 1
 // ============================================================
-// El fondo trae bakeados el logo, las firmas con sus nombres, y la línea de
-// firma del alumno (vacía — el alumno firma a mano). Aquí solo se superpone el
-// texto dinámico: nombre, DNI, curso, fechas y aval.
-//
-// El fondo y el aval salen del PROYECTO desde la #95: antes eran los de Psiko
-// Aprende para todo el mundo, así que un alumno de Fono Aprende recibía un
-// certificado con la marca, el aval y los firmantes de otra escuela. Ver
-// `imgProyecto` para cómo se resuelve y qué hay que dejar caer para una marca
-// nueva.
+// El fondo `cert-bg-p1.png` (extraído del Canva original) ya trae bakeados:
+// el logo PSIKOAPRENDE en la cabecera, las firmas + nombres de Carlos Saiz
+// (Director) y Mireia Jareño (Responsable de Formación), y la línea de
+// firma del alumno (vacía — el alumno firma a mano). Aquí solo overlayeamos
+// el texto dinámico (nombre, DNI, curso, fechas, aval).
 
 export async function buildCertP1Html(data) {
-  const bgUrl = await imgProyecto('cert-bg-p1.png', data.project_slug);
-  const aval = await avalDelProyecto(data.project_slug);
+  const bgUrl = await imgBase64('cert-bg-p1.png');
   const {
     alumno_nombre, alumno_dni,
     curso_nombre,
@@ -1093,7 +1006,7 @@ export async function buildCertP1Html(data) {
   </div>
 
   <div class="t aval">
-    Este certificado ha sido expedido por ${aval.expedido_por} y avalado por ${aval.avalado_por}
+    Este certificado ha sido expedido por Psiko Aprende y avalado por ISEIE Innovation School, e Hispamedic
   </div>
 
 </div>
@@ -1105,7 +1018,7 @@ export async function buildCertP1Html(data) {
 // TEMPLATE: CERTIFICADO página 2 — Plan de estudios
 // ============================================================
 export async function buildCertP2Html(data) {
-  const bgUrl = await imgProyecto('cert-bg-p2.png', data.project_slug);
+  const bgUrl = await imgBase64('cert-bg-p2.png');
   const {
     curso_nombre,
     modalidad = 'Online',

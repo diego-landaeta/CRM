@@ -2,7 +2,6 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import * as informes from '../modules/reports/report.model.js';
-import { correo, parrafo, seccion, boton, tarjetas, nota, enlace, esc, comparar, T } from '../shared/services/email-plantilla.service.js';
 import { vigilar } from './latido.js';
 
 /**
@@ -109,13 +108,34 @@ async function cobradoDeVerdad({ from, to }) {
   return Number(rows[0]?.cobrado || 0);
 }
 
-// La comparacion se mudo a la plantilla comun: la usan este correo y el resumen
-// del dia, y produce justo lo que consume `tarjetaCifra`. Se sigue exportando
-// desde aqui porque es parte del contrato de este fichero.
-export { comparar };
+/** La flecha y el porcentaje respecto a la semana anterior. */
+export function comparar(ahora, antes) {
+  const a = num(ahora);
+  const b = num(antes);
+  // Sin nada con que comparar no se inventa un porcentaje: de 0 a 5 no es
+  // «+500 %», es «antes no habia nada».
+  if (b === 0) return { texto: a === 0 ? '=' : 'nuevo', signo: a > 0 ? 'sube' : 'igual' };
+  const pct = Math.round(((a - b) / b) * 100);
+  if (pct === 0) return { texto: 'igual', signo: 'igual' };
+  return { texto: `${pct > 0 ? '+' : ''}${pct} %`, signo: pct > 0 ? 'sube' : 'baja' };
+}
 
 const eur = (v) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(num(v));
+
+function tarjeta(etiqueta, valor, cmp) {
+  const color = cmp.signo === 'sube' ? '#047857' : cmp.signo === 'baja' ? '#b91c1c' : '#6b7280';
+  const flecha = cmp.signo === 'sube' ? '▲' : cmp.signo === 'baja' ? '▼' : '·';
+  // Tabla y estilos en linea: es lo unico que se ve igual en Gmail, Outlook y
+  // el movil. Flex y clases se los come el cliente de correo.
+  return `
+    <td style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;
+               vertical-align:top;min-width:130px">
+      <div style="font:12px system-ui;color:#6b7280">${etiqueta}</div>
+      <div style="font:600 20px system-ui;color:#111;margin:2px 0">${valor}</div>
+      <div style="font:12px system-ui;color:${color}">${flecha} ${cmp.texto}</div>
+    </td>`;
+}
 
 export function cuerpo({ rango, ahora, antes, porAsesora, cobrado, cobradoAntes }) {
   const l = ahora.leads || {};
@@ -123,50 +143,49 @@ export function cuerpo({ rango, ahora, antes, porAsesora, cobrado, cobradoAntes 
   const c = ahora.conversions || {};
   const cAntes = antes.conversions || {};
 
-  // La tabla por gestora se queda escrita aqui y no en la plantilla comun: es
-  // la unica pieza que solo usa este correo, y meterla en `shared` seria dejar
-  // alli algo que nadie mas va a llamar.
   const filas = (porAsesora || []).slice(0, 12).map((a) => `
     <tr>
-      <td style="padding:8px 10px;border-bottom:1px solid ${T.borde};font-family:${T.fuente};
-                 font-size:14px;color:${T.texto}">${esc(a.vendedora)}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid ${T.borde};font-family:${T.fuente};
-                 font-size:14px;color:${T.texto};text-align:right">${num(a.ventas)}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid ${T.borde};font-family:${T.fuente};
-                 font-size:14px;color:${T.texto};text-align:right">${esc(eur(a.cobrado))}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font:14px system-ui">${a.vendedora}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font:14px system-ui;text-align:right">${num(a.ventas)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font:14px system-ui;text-align:right">${eur(a.cobrado)}</td>
     </tr>`).join('');
 
-  const cabecera = (t, alin = 'left') =>
-    `<th style="text-align:${alin};font-family:${T.fuente};font-size:12px;font-weight:600;
-                color:${T.tenue};padding:0 10px 6px">${t}</th>`;
+  return `
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#111">
+    <h2 style="font-size:18px;margin:0 0 2px">Semana del ${rango.from} al ${rango.to}</h2>
+    <p style="font-size:13px;color:#6b7280;margin:0 0 16px">
+      Comparado con la semana anterior.
+    </p>
 
-  return correo({
-    titulo: `Semana del ${rango.from} al ${rango.to}`,
-    resumen: `${num(l.total)} prospectos · ${num(c.total)} ventas · ${eur(cobrado)} cobrado`,
-    bloques: [
-      parrafo('Comparado con la semana anterior.'),
-      tarjetas([
-        { etiqueta: 'Prospectos',  valor: num(l.total),         comparacion: comparar(l.total, lAntes.total) },
-        { etiqueta: 'Convertidos', valor: num(l.convertido),    comparacion: comparar(l.convertido, lAntes.convertido) },
-        { etiqueta: 'Ventas',      valor: num(c.total),         comparacion: comparar(c.total, cAntes.total) },
-        { etiqueta: 'Cobrado',     valor: eur(cobrado),         comparacion: comparar(cobrado, cobradoAntes) },
-      ]),
-      filas ? seccion('Por gestora') : '',
-      filas ? `
-        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-          <tr>${cabecera('Gestora')}${cabecera('Ventas', 'right')}${cabecera('Cobrado', 'right')}</tr>
-          ${filas}
-        </table>` : '',
-      boton({ texto: 'Abrir Informes', url: enlace('informes') }),
-      // La advertencia del dinero se queda: es la contradiccion del ticket
-      // —cuadrar con el panel y cobrar de `conversion_payments` no se pueden a
-      // la vez— y quien lea el correo tiene que saber por que no cuadra.
-      nota(`Prospectos, convertidos y ventas salen del panel de Informes.
-            <strong>Lo cobrado sale de los pagos registrados</strong>, que es lo que ha
-            entrado de verdad — el panel lo calcula de otra forma y sale más alto.`),
-    ],
-    apagar: { texto: 'Recibes este reporte los lunes.' },
-  });
+    <table cellpadding="0" cellspacing="6" style="border-collapse:separate;width:100%">
+      <tr>
+        ${tarjeta('Prospectos', num(l.total), comparar(l.total, lAntes.total))}
+        ${tarjeta('Convertidos', num(l.convertido), comparar(l.convertido, lAntes.convertido))}
+      </tr>
+      <tr>
+        ${tarjeta('Ventas', num(c.total), comparar(c.total, cAntes.total))}
+        ${tarjeta('Cobrado', eur(cobrado), comparar(cobrado, cobradoAntes))}
+      </tr>
+    </table>
+
+    ${filas ? `
+      <h3 style="font-size:15px;margin:22px 0 6px">Por gestora</h3>
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">
+        <tr>
+          <th style="text-align:left;font:600 12px system-ui;color:#6b7280;padding:0 10px 4px">Gestora</th>
+          <th style="text-align:right;font:600 12px system-ui;color:#6b7280;padding:0 10px 4px">Ventas</th>
+          <th style="text-align:right;font:600 12px system-ui;color:#6b7280;padding:0 10px 4px">Cobrado</th>
+        </tr>
+        ${filas}
+      </table>` : ''}
+
+    <p style="font-size:12px;color:#9ca3af;margin-top:22px">
+      Prospectos, convertidos y ventas salen del panel de Informes.
+      <strong>Lo cobrado sale de los pagos registrados</strong>, que es lo que ha
+      entrado de verdad — el panel lo calcula de otra forma y sale mas alto.
+      Puedes apagar este correo en <em>Mis preferencias</em>.
+    </p>
+  </div>`;
 }
 
 async function vuelta() {
@@ -198,18 +217,14 @@ async function vuelta() {
       cobradoDeVerdad(anterior),
     ]);
 
-    // Se arma UNA vez y se manda a todos: el reporte no lleva nada de la
-    // persona dentro, asi que rehacerlo por destinatario seria repetir cuatro
-    // consultas de informes por cada uno.
-    const { htmlContent, textContent } = cuerpo({ rango: semana, ahora, antes, porAsesora, cobrado, cobradoAntes });
+    const html = cuerpo({ rango: semana, ahora, antes, porAsesora, cobrado, cobradoAntes });
 
     for (const persona of gente) {
       try {
         await sendEmail({
           to: persona.email,
           subject: `[CRM] Reporte semanal · ${semana.from} a ${semana.to}`,
-          htmlContent,
-          textContent,
+          htmlContent: html,
           tags: ['reporte', 'semanal'],
           // Una vez por persona y semana. Con la fecha del lunes dentro: el
           // reporte tiene que llegar cada semana, pero un reinicio no lo repite.

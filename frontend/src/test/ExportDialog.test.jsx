@@ -20,19 +20,6 @@ function mockClicks() {
   return vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 }
 
-/**
- * La linea de resumen del dialogo, entera.
- *
- * Se lee con `textContent` y no con `getByText('2 filas')` a proposito. El
- * componente pinta el numero dentro de un <strong>, y `getByText` solo mira el
- * texto DIRECTO de cada elemento: para el <p>, el «2» no cuenta como suyo
- * porque vive en un hijo. De ahi el «Unable to find an element» que tenia rojas
- * estas seis pruebas — el dialogo funcionaba, la prueba miraba mal.
- *
- * Asi tampoco se rompe la proxima vez que alguien ponga una etiqueta en medio.
- */
-const resumen = () => screen.getByText(/filas/).textContent.replace(/\s+/g, ' ');
-
 describe('ExportDialog', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -57,11 +44,8 @@ describe('ExportDialog', () => {
     render(<ExportDialog open onClose={() => {}} context="leads" title="Exportar prospectos"
       filename="test" columns={COLUMNS} rows={ROWS} />);
     expect(screen.getByText('Exportar prospectos')).toBeInTheDocument();
-    // El dialogo dice «3/3 columnas»; la prueba esperaba «3 de 3», que es como
-    // se escribia antes. Cambio la prueba, no el componente: la redaccion de
-    // ahora es la que esta desplegada.
-    expect(resumen()).toMatch(/2 filas/);
-    expect(resumen()).toMatch(/3\/3 columnas/);
+    expect(screen.getByText(/2 filas/)).toBeInTheDocument();
+    expect(screen.getByText(/3 de 3 columnas/)).toBeInTheDocument();
   });
 
   it('renderiza los 3 botones de formato', () => {
@@ -83,7 +67,7 @@ describe('ExportDialog', () => {
     render(<ExportDialog open onClose={() => {}} context="leads"
       filename="test" columns={COLUMNS} rows={ROWS} />);
     fireEvent.click(screen.getByText('Ninguna'));
-    expect(resumen()).toMatch(/0\/3 columnas/);
+    expect(screen.getByText(/0 de 3 columnas/)).toBeInTheDocument();
     const exportBtn = screen.getByText(/Exportar Excel/i).closest('button');
     expect(exportBtn).toBeDisabled();
   });
@@ -93,7 +77,7 @@ describe('ExportDialog', () => {
       filename="test" columns={COLUMNS} rows={ROWS} />);
     fireEvent.click(screen.getByText('Ninguna'));
     fireEvent.click(screen.getByText('Todas'));
-    expect(resumen()).toMatch(/3\/3 columnas/);
+    expect(screen.getByText(/3 de 3 columnas/)).toBeInTheDocument();
   });
 
   it('toggle individual de checkbox actualiza el contador', () => {
@@ -101,7 +85,7 @@ describe('ExportDialog', () => {
       filename="test" columns={COLUMNS} rows={ROWS} />);
     const checkbox = screen.getByLabelText(/Incluir columna Nombre/i);
     fireEvent.click(checkbox);
-    expect(resumen()).toMatch(/2\/3 columnas/);
+    expect(screen.getByText(/2 de 3 columnas/)).toBeInTheDocument();
   });
 
   it('renombrar la columna actualiza el input pero no el contador', () => {
@@ -110,7 +94,7 @@ describe('ExportDialog', () => {
     const labelInput = screen.getByLabelText(/Etiqueta de columna name/i);
     fireEvent.change(labelInput, { target: { value: 'Nombre completo' } });
     expect(labelInput.value).toBe('Nombre completo');
-    expect(resumen()).toMatch(/3\/3 columnas/);
+    expect(screen.getByText(/3 de 3 columnas/)).toBeInTheDocument();
   });
 
   it('botón Cancelar dispara onClose', () => {
@@ -171,7 +155,7 @@ describe('ExportDialog', () => {
       filename="test" columns={COLUMNS} rows={ROWS} />);
 
     fireEvent.click(screen.getByText('Solo email'));
-    expect(resumen()).toMatch(/1\/3 columnas/);
+    expect(screen.getByText(/1 de 3 columnas/)).toBeInTheDocument();
     expect(screen.getByText(/Exportar CSV/i)).toBeInTheDocument();
   });
 

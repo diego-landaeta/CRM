@@ -957,6 +957,9 @@ export default function ChatPage() {
       // De uno en uno: cada envio pasa por sus frenos y por su pausa. El pie
       // va solo en el primero, que es lo que hace WhatsApp — repetirlo en cada
       // uno seria mandar el mismo texto tres veces.
+      //
+      // `deQuien` dice de quien es el WhatsApp: sin el, un admin mirando la
+      // sesion de una gestora adjuntaria desde la suya.
       for (const [i, f] of porEnviar.entries()) {
         const r = await chatApi.adjunto(abierto, f, i === 0 ? pie : '', undefined, deQuien);
         if (!r.success) throw new Error(r.error || 'No se pudo enviar');
@@ -1102,7 +1105,7 @@ export default function ChatPage() {
       return;
     }
     try {
-      const r = await chatApi.abrirPorTelefono(t);
+      const r = await chatApi.abrirPorTelefono(t, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo abrir');
       setPidiendoTelefono(false); setTelefonoNuevo('');
       setNuevoAbierto(false); setBusca('');
@@ -1161,7 +1164,7 @@ export default function ChatPage() {
 
   async function abrirCon(leadId: number) {
     try {
-      const r = await chatApi.abrir(leadId);
+      const r = await chatApi.abrir(leadId, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo abrir');
       setNuevoAbierto(false); setBusca('');
       await cargarLista(); setAbierto(r.data.id);
@@ -1172,7 +1175,7 @@ export default function ChatPage() {
   async function pedirAdjunto(mensajeId: number) {
     try {
       setBajando((b) => [...b, mensajeId]);
-      const r = await chatApi.descargarAdjunto(mensajeId);
+      const r = await chatApi.descargarAdjunto(mensajeId, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo pedir');
       if (abierto) await cargarHilo(abierto);
     } catch (e) {
@@ -1186,7 +1189,7 @@ export default function ChatPage() {
 
   async function marcarNoEscribir() {
     if (!abierto) return;
-    const r = await chatApi.noEscribir(abierto, motivoNuevo.trim());
+    const r = await chatApi.noEscribir(abierto, motivoNuevo.trim(), deQuien);
     setPidiendoMotivo(false); setMotivoNuevo('');
     if (r.success) {
       toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este número.' });
@@ -1198,7 +1201,9 @@ export default function ChatPage() {
     // El chat de uno consigo mismo. WhatsApp no manda nombre para el —manda el
     // numero, y encima enmascarado— asi que salia un telefono donde deberia
     // decir lo que es.
-    const mio = (conexion?.numero || '').replace(/[^0-9]/g, '');
+    // Solo cuando miras TU sesion: en la de otra persona, ese numero es el
+    // suyo, no el tuyo, y poner «Tu» ahi seria mentir.
+    const mio = sesion.esMia ? (conexion?.numero || '').replace(/[^0-9]/g, '') : '';
     if (mio && c.telefono?.replace(/[^0-9]/g, '') === mio) return 'Tu (mensajes contigo mismo)';
     // `||` solo cae con un valor falso, y una cadena de ESPACIOS no lo es.
     //
@@ -1224,6 +1229,16 @@ export default function ChatPage() {
     documento: '📄 Documento', sticker: 'Sticker', llamada: '📞 Llamada',
     eliminado: 'Se eliminó este mensaje',
   };
+  // De que proyecto es cada chat, dicho SIEMPRE.
+  //
+  // La lista ya no filtra por el proyecto elegido —el WhatsApp de una gestora es
+  // una sola bandeja— asi que hace falta decir de donde viene cada conversacion.
+  // Y las que no son de ningun proyecto tambien lo dicen: son las de alguien que
+  // aun no esta en el CRM, y saber eso de un vistazo es justo lo util.
+  const etiquetaDe = (c: ChatWhatsapp) =>
+    c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
+
+
   const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
     // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
@@ -1329,12 +1344,16 @@ export default function ChatPage() {
         <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         {conexion?.conectado
           ? <span className="text-muted-foreground">
-              Tu WhatsApp: <strong className="text-foreground">
+              {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
           : <span className="wa-sin-enlazar text-amber-700 dark:text-amber-400">
-              No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link>
+              {/* Si miras la sesion de otra persona, «no tienes WhatsApp
+                  enlazado» es mentira: la que no lo tiene es ella. */}
+              {sesion.esMia
+                ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link></>
+                : `El WhatsApp de ${sesion.nombre} no está enlazado`}
             </span>}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}

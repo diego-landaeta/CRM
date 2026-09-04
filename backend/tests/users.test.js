@@ -112,13 +112,7 @@ describe('POST /api/users', () => {
     expect(res.body.code).toBe('EMAIL_EXISTS');
   });
 
-  it('se puede crear sin proyectos, y nace sin acceso a ninguno', async () => {
-    // Antes esto exigia un 400. Dejo de ser un error a proposito: `projectIds`
-    // es `.optional().default([])`, porque un soporte o un tutor no llevan
-    // proyectos y a un gestor se le asignan despues, desde su ficha.
-    //
-    // Lo que si importa comprobar es que no nazca con acceso a algo por
-    // descuido, que es lo que la regla vieja evitaba de refilon.
+  it('falla sin projectIds', async () => {
     const res = await request.post('/api/users')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
@@ -128,11 +122,7 @@ describe('POST /api/users', () => {
         projectIds: [],
       });
 
-    expect(res.status).toBe(201);
-
-    const { rows } = await pool.query(
-      'SELECT count(*)::int AS n FROM user_projects WHERE user_id = $1', [res.body.data.id]);
-    expect(rows[0].n).toBe(0);
+    expect(res.status).toBe(400);
   });
 
   it('falla con role superadmin', async () => {

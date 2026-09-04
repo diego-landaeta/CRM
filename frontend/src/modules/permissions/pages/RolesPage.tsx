@@ -89,6 +89,8 @@ export default function RolesPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Roles y Permisos"
+        backTo="/configuracion"
+        backLabel="Configuración"
         subtitle="Define qué puede hacer cada usuario según su rol"
         actions={
           <button

@@ -1,35 +1,28 @@
 // Vistas por defecto de los 4 roles fijos del sistema.
-//
-// OJO con las rutas: son direcciones REALES del frontal y se quedaron sin
-// actualizar cuando el CRM las paso a español. Decian `/dashboard`, `/leads` y
-// `/status/soporte`, y ninguna de las tres existe hoy — quien aterrizara ahi
-// se encontraba una pantalla en blanco.
-//
-// Si se cambia una ruta en `App.jsx`, hay que cambiarla aqui.
 // Los roles custom guardan su `default_view` JSONB en la tabla custom_roles.
 // El frontend recibe el view_config resuelto vía /auth/me.
 
 export const SYSTEM_ROLE_VIEWS = {
   superadmin: {
-    default_route: '/',
+    default_route: '/dashboard',
     hidden_sidebar_items: [],
     dashboard_widgets: ['stats_global', 'leads_today', 'conversions_recent', 'pipeline_summary', 'income_month'],
     compact_sidebar: false,
   },
   admin: {
-    default_route: '/',
+    default_route: '/dashboard',
     hidden_sidebar_items: [],
     dashboard_widgets: ['leads_today', 'conversions_recent', 'pipeline_summary', 'income_month', 'reminders_pending'],
     compact_sidebar: false,
   },
   gestor: {
-    default_route: '/prospectos',
+    default_route: '/leads',
     hidden_sidebar_items: ['accounting', 'payroll', 'reports', 'settings_advanced', 'webhooks', 'campaigns', 'users'],
     dashboard_widgets: ['my_leads_today', 'my_reminders', 'my_conversions_month'],
     compact_sidebar: false,
   },
   soporte: {
-    default_route: '/soporte',
+    default_route: '/status/soporte',
     hidden_sidebar_items: ['accounting', 'payroll', 'campaigns'],
     dashboard_widgets: ['system_status', 'errors_recent', 'incidents_active'],
     compact_sidebar: true,

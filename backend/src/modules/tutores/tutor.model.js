@@ -31,7 +31,7 @@ export async function listar({ projectId, activos = true }) {
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
             u.set_password_token IS NOT NULL AS pendiente_de_entrar,
-            perfil.dni_nif, perfil.iban, perfil.telefono, perfil.notas,
+            perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c
                JOIN products pp ON pp.id = c.product_id
@@ -63,7 +63,7 @@ export async function listar({ projectId, activos = true }) {
 export async function ficha(tutorId) {
   const { rows: [t] } = await query(
     `SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            p.dni_nif, p.iban, p.telefono, p.notas
+            p.dni_nif, p.iban, p.banco, p.telefono, p.notas
        FROM users u
        LEFT JOIN tutor_profiles p ON p.user_id = u.id
       WHERE u.id = $1 AND u.role = 'tutor'`,
@@ -112,7 +112,7 @@ export async function guardarPerfil(tutorId, datos = {}) {
   //
   // Zod ya distingue las dos cosas: `optional()` deja el campo fuera del objeto
   // y `nullable()` lo deja en null.
-  const COLUMNAS = { dniNif: 'dni_nif', iban: 'iban', telefono: 'telefono', notas: 'notas' };
+  const COLUMNAS = { dniNif: 'dni_nif', iban: 'iban', banco: 'banco', telefono: 'telefono', notas: 'notas' };
 
   const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
   const valor = (k) => {
@@ -379,10 +379,7 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
 }
 
 // Las comisiones ya creadas, con lo que hace falta para entender cada una.
-export async function comisiones({
-  periodo = null, tutorId = null, estado = null, projectId = null,
-  fechaCobro = null, limit = 1000,
-}) {
+export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
   const { rows } = await query(
     `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
             tc.fecha_liquidacion, tc.created_at,
@@ -390,14 +387,7 @@ export async function comisiones({
             tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
             cp.fecha AS fecha_cobro, cp.importe AS cobro,
             COALESCE(l.nombre, '—') AS alumno,
-            liq.nombre AS liquidada_por_nombre,
-            -- Que cuota es, de cuantas. Lo pide el aviso al tutor (#82): no es
-            -- lo mismo la primera de doce que la ultima. Sale de
-            -- conversion_installments, que ya guarda el numero y a que pago
-            -- corresponde; van como NULL cuando la venta no es a plazos.
-            ci.numero AS cuota_numero,
-            (SELECT COUNT(*)::int FROM conversion_installments ci2
-              WHERE ci2.conversion_id = cp.conversion_id) AS cuotas_total
+            liq.nombre AS liquidada_por_nombre
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        LEFT JOIN products p ON p.id = tc.product_id
@@ -405,17 +395,14 @@ export async function comisiones({
        LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
        LEFT JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
-       LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
        LEFT JOIN users liq ON liq.id = tc.liquidada_por
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
         AND ($4::int IS NULL OR p.project_id = $4)
-        -- Por dia de cobro, que es como lo mira el aviso del cierre de jornada.
-        AND ($5::date IS NULL OR cp.fecha = $5::date)
       ORDER BY tc.periodo DESC, u.nombre, cp.fecha
       LIMIT ${Number(limit) || 1000}`,
-    [periodo, tutorId, estado, projectId, fechaCobro]
+    [periodo, tutorId, estado, projectId]
   );
   return rows;
 }
@@ -424,6 +411,7 @@ export async function comisiones({
 export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
   const { rows } = await query(
     `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
+            u.email AS tutor_email, perfil.iban AS tutor_iban,
             COUNT(*)::int AS lineas,
             COALESCE(SUM(tc.base_calculo), 0) AS base,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pendiente'), 0) AS pendiente,
@@ -432,11 +420,14 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
             MAX(tc.fecha_liquidacion) AS ultima_liquidacion
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
+       -- El IBAN y el correo viajan con el resumen: pagar a un profesor
+       -- obligaba a abrir su ficha aparte para copiar la cuenta, una a una.
+       LEFT JOIN tutor_profiles perfil ON perfil.user_id = tc.tutor_id
        LEFT JOIN products p ON p.id = tc.product_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::int IS NULL OR p.project_id = $3)
-      GROUP BY tc.periodo, tc.tutor_id, u.nombre
+      GROUP BY tc.periodo, tc.tutor_id, u.nombre, u.email, perfil.iban
       ORDER BY tc.periodo DESC, u.nombre`,
     [periodo, tutorId, projectId]
   );
@@ -502,6 +493,61 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
         AND ($3::int IS NULL OR cv.project_id = $3)
       ORDER BY cp.fecha DESC, cp.importe DESC`,
     [desde, hasta, projectId]
+  );
+  return rows;
+}
+
+/**
+ * Formaciones que ya han vendido pero no tienen tutor.
+ *
+ * La pide Carlos: «dentro del catalogo de formaciones, tiene que existir al
+ * menos 1 pago / 1 alumno y que no tenga relacionado un tutor».
+ *
+ * El filtro de «al menos un pago» no es un detalle: el catalogo tiene miles de
+ * formaciones y casi ninguna se ha vendido nunca. Sin ese corte, la lista seria
+ * el catalogo entero y no serviria para nada. Asi salen solo las que ya estan
+ * generando dinero y no tienen a quien pagarle.
+ *
+ * Solo cuenta los cobros desde `tutor_settings.aplica_desde`, que es el
+
+ * arranque de las comisiones. Una venta de abril pudo tener tutor entonces y
+
+ * no tenerlo ahora: sacarla aqui seria acusar de un agujero que no existe.
+
+ *
+
+ * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
+ * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
+ */
+export async function formacionesSinTutor({ projectId = null } = {}) {
+  const { rows } = await query(
+    `SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
+            count(DISTINCT cv.id)::int  AS ventas,
+            count(DISTINCT cv.lead_id)::int AS alumnos,
+            count(cp.id)::int           AS pagos,
+            COALESCE(sum(cp.importe), 0) AS cobrado,
+            min(cp.fecha) AS primer_cobro,
+            max(cp.fecha) AS ultimo_cobro
+       FROM products p
+       JOIN conversions cv ON cv.producto_contratado_id = p.id
+       JOIN conversion_payments cp ON cp.conversion_id = cv.id
+       LEFT JOIN projects pr ON pr.id = p.project_id
+       CROSS JOIN tutor_settings s
+      WHERE NOT EXISTS (
+              SELECT 1 FROM tutor_collaborations tc
+               WHERE tc.product_id = p.id AND tc.activa
+            )
+        -- Solo los cobros desde que las comisiones aplican.
+        --
+        -- Antes de esa fecha no se genera comision de todos modos, y una venta
+        -- de abril pudo tener tutor entonces y no tenerlo ahora: sacarla aqui
+        -- seria acusar de un agujero que no existe.
+        AND cp.fecha >= s.aplica_desde
+        AND ($1::int IS NULL OR p.project_id = $1)
+      GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
+     HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
+      ORDER BY sum(cp.importe) DESC`,
+    [projectId]
   );
   return rows;
 }

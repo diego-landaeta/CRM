@@ -299,6 +299,7 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
+            (SELECT p.nombre FROM projects p WHERE p.id = c.project_id) AS proyecto_nombre,
             (c.jid LIKE '%@g.us') AS es_grupo,
             -- El ultimo mensaje: su texto, su tipo y QUIEN lo mando.
             --

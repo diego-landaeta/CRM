@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight } from '@phosphor-icons/react';
+import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -124,6 +124,17 @@ export default function ComisionesTutoresPage() {
     else toast({ title: 'No se ha podido revertir', description: r.error || '', variant: 'destructive' });
   }
 
+  // Copiar el IBAN sin abrir nada. Se avisa de que se copio: si no, nadie sabe
+  // si el clic hizo algo y acaba copiandolo a mano igualmente.
+  async function copiarIban(iban: string) {
+    try {
+      await navigator.clipboard.writeText(iban);
+      toast({ title: 'IBAN copiado', description: iban });
+    } catch {
+      toast({ title: 'No se pudo copiar', description: iban, variant: 'destructive' });
+    }
+  }
+
   if (!puede) {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
@@ -221,6 +232,30 @@ export default function ComisionesTutoresPage() {
                         </span>
                       </span>
                     </button>
+
+                    {/* El correo y la cuenta, en su propio hueco de la fila.
+                        Van FUERA del boton que despliega: dentro, copiar el IBAN
+                        abriria y cerraria el detalle de paso. */}
+                    <span className="hidden md:flex items-center gap-1.5 min-w-0 basis-64 text-xs text-muted-foreground">
+                      {r.tutor_email
+                        ? <>
+                            <Envelope size={13} weight="bold" className="shrink-0 opacity-70" />
+                            <span className="truncate" title={r.tutor_email}>{r.tutor_email}</span>
+                          </>
+                        : <span className="italic opacity-60">sin correo</span>}
+                    </span>
+
+                    <span className="hidden md:flex items-center gap-1.5 min-w-0 basis-56 text-xs text-muted-foreground">
+                      {r.tutor_iban
+                        ? <button type="button" title="Copiar el IBAN"
+                            onClick={(e) => { e.stopPropagation(); copiarIban(r.tutor_iban!); }}
+                            className="inline-flex items-center gap-1.5 min-w-0 hover:text-foreground">
+                            <Bank size={13} weight="bold" className="shrink-0 opacity-70" />
+                            <span className="font-mono tabular-nums truncate">{r.tutor_iban}</span>
+                            <Copy size={11} weight="bold" className="shrink-0 opacity-50" />
+                          </button>
+                        : <span className="italic opacity-60">sin IBAN</span>}
+                    </span>
 
                     <span className="text-base font-bold tabular-nums shrink-0">{euros(r.pendiente)}</span>
 

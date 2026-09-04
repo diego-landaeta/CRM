@@ -160,6 +160,7 @@ const BancoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/BancoPage'
 const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
+const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
@@ -178,6 +179,7 @@ const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
+const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -185,6 +187,7 @@ const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDet
 const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
+const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -197,7 +200,6 @@ const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
-const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
@@ -243,6 +245,7 @@ function App() {
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
+          <Route path="/prospectos/duplicados" element={<DuplicatesPage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
 
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />
@@ -253,6 +256,7 @@ function App() {
           <Route path="/whatsapp/banco" element={<BancoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
+          <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
 
           {/* Captación — tabs */}
@@ -307,6 +311,9 @@ function App() {
           <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
+          {/* Claves y variables (#80). El recorte de rol lo hace el servidor con
+              `soloRoles`; aqui solo se sirve la pantalla. */}
+          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
@@ -325,9 +332,6 @@ function App() {
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferencias" element={<PreferencesPage />} />
-          {/* Claves y variables (#80). El recorte de rol lo hace el servidor con
-              `soloRoles`; aqui solo se sirve la pantalla. */}
-          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

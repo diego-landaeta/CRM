@@ -51,10 +51,6 @@ describe('POST /api/accounting/expenses - crear egreso', () => {
         concepto: 'Hosting cloudflare',
         importe: 25,
         categoria: 'software',
-        // La fecha paso a ser obligatoria en el alta de egresos y esta prueba
-        // no la mandaba: contestaba 400, y de rebote la de borrar se quedaba
-        // sin egreso que borrar.
-        fecha: '2026-04-02',
       });
     expect(res.status).toBe(201);
     expect(res.body.data.project_id).toBeNull();
@@ -107,10 +103,7 @@ describe('DELETE /api/accounting/expenses/:id', () => {
   it('elimina egreso', async () => {
     const temp = await request.post('/api/accounting/expenses')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ concepto: 'Temp', importe: 10, fecha: '2026-04-03' });
-    // Si el alta falla, el mensaje util es ese y no un «undefined no tiene id»
-    // tres lineas mas abajo, que es lo que salia antes.
-    expect(temp.status).toBe(201);
+      .send({ concepto: 'Temp', importe: 10 });
     const id = temp.body.data.id;
 
     const res = await request.delete(`/api/accounting/expenses/${id}`)

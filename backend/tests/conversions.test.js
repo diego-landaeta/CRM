@@ -41,7 +41,6 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Curso Test',
         importe_total: 1000,
-        iva_incluido: true,
         importe_pagado: 0,
         metodo_pago: 'fraccionado',
       });
@@ -60,7 +59,6 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Curso Cash',
         importe_total: 500,
-        iva_incluido: true,
         importe_pagado: 500,
         metodo_pago: 'tarjeta',
       });
@@ -89,7 +87,6 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: testProjectId,
         producto_contratado: 'Fail',
         importe_total: 100,
-        iva_incluido: true,
         importe_pagado: 200,
       });
     expect(res.status).toBe(400);
@@ -103,7 +100,6 @@ describe('POST /api/conversions - crear conversion', () => {
         project_id: 999,
         producto_contratado: 'Fail',
         importe_total: 100,
-        iva_incluido: true,
       });
     expect(res.status).toBe(400);
   });
@@ -159,7 +155,6 @@ describe('POST /api/conversions/:id/payments - abonos parciales', () => {
         project_id: testProjectId,
         producto_contratado: 'Para abonos',
         importe_total: 1000,
-        iva_incluido: true,
         importe_pagado: 0,
         metodo_pago: 'fraccionado',
       });
@@ -220,7 +215,6 @@ describe('PATCH /api/conversions/:id - editar', () => {
         project_id: testProjectId,
         producto_contratado: 'Para editar',
         importe_total: 1500,
-        iva_incluido: true,
         importe_pagado: 500,
         metodo_pago: 'fraccionado',
       });
@@ -242,51 +236,5 @@ describe('PATCH /api/conversions/:id - editar', () => {
       .send({ importe_total: 300 });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('INVALID_TOTAL');
-  });
-});
-
-// ============================================================
-// El IVA cuando nadie lo dice
-// ============================================================
-
-describe('POST /api/conversions - el IVA por defecto', () => {
-  it('sin decir nada, el importe es el precio FINAL y no se le suma el 21 %', async () => {
-    // Antes era al reves: `importe_total: 1000` se guardaba como 1210 porque el
-    // servidor lo tomaba como base imponible. El dialogo del CRM manda siempre
-    // `iva_incluido`, asi que solo lo sufria quien entrara por API o desde Make
-    // — en silencio y en un documento fiscal.
-    const res = await request.post('/api/conversions')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        lead_id: testLeadId,
-        project_id: testProjectId,
-        producto_contratado: 'Curso sin decir el IVA',
-        importe_total: 1000,
-        importe_pagado: 0,
-        metodo_pago: 'transferencia',
-      });
-
-    expect(res.status).toBe(201);
-    expect(res.body.data.importe_total).toBe('1000.00');
-    createdConversionIds.push(res.body.data.id);
-  });
-
-  it('quien pida que se le sume, se le suma', async () => {
-    // La otra direccion sigue disponible: hay que pedirla.
-    const res = await request.post('/api/conversions')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        lead_id: testLeadId,
-        project_id: testProjectId,
-        producto_contratado: 'Curso con IVA aparte',
-        importe_total: 1000,
-        iva_incluido: false,
-        importe_pagado: 0,
-        metodo_pago: 'transferencia',
-      });
-
-    expect(res.status).toBe(201);
-    expect(res.body.data.importe_total).toBe('1210.00');
-    createdConversionIds.push(res.body.data.id);
   });
 });

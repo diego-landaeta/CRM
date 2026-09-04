@@ -1,6 +1,6 @@
 # Estado y pendientes
 
-Al 12 de agosto de 2026. Los diagramas se dibujan solos en GitHub.
+Al 4 de septiembre de 2026. Los diagramas se dibujan solos en GitHub.
 
 Dos CRMs con **paridad absoluta**: lo que se hace en uno se hace en el otro,
 salvo la marca y las rutas.
@@ -10,6 +10,71 @@ salvo la marca y las rutas.
 | Producción | `360crm.tech/crm/` | `crm.iseie.com` |
 | Pruebas | `360crm.tech/testeo/` | `crm.iseie.com/staging/` |
 | Proyectos | 9 | 1 |
+
+---
+
+## Dónde nos quedamos · 4 de septiembre
+
+Tres semanas desde la foto anterior. Lo que ha cambiado, en orden de peso:
+
+**WhatsApp está terminado y en producción, en los dos CRMs.** 96 commits entre
+agosto y septiembre. Chat completo con audios, notas de voz y citas; grupos con
+su etiqueta y el autor de cada mensaje; plantillas compartidas; banco de
+mensajes (#101); el administrador entra en la sesión de cualquier gestora y
+queda escrito quién miró qué. Lo único a medias son las **llamadas**: el aviso
+entrante llega y se puede rechazar con un texto, pero hablar desde el CRM no —
+por esa vía WhatsApp no da canal de audio. Sigue en investigación.
+
+**Tutores paga de verdad.** Colaboraciones con vigencia y varias marcas, la
+comisión calculada sobre lo cobrado —no sobre `importe_pagado`, que declara de
+más—, el reembolso que la deshace, y los datos bancarios, que era literalmente
+lo que impedía transferir.
+
+**Duplicados (#102).** Detección por correo, teléfono normalizado y usuario de
+WhatsApp; se vuelve a mirar al **completar** una ficha y no solo al crearla; y
+la fusión se lleva varias fichas de una vez, arrastrando también el chat.
+Al pasarlo sobre los datos reales salieron **313 grupos y 589 fichas** por
+revisar entre los dos CRMs.
+
+**Visibilidad entre gestoras (#109).** Seis puertas al mismo lead no
+comprobaban de quién era: por ellas se leía y se escribía el historial de una
+ficha ajena. Cerradas y probadas contra el código desplegado.
+
+**El rediseño** avanza por bloques (#32, #33, #34, #78, #79). Del #79 solo
+queda el punto 3, Ventas. Se aprueba cuando estén todas las ventanas.
+
+### Lo que se rompió, y qué enseña
+
+El 3 de septiembre, al fusionar 49 commits de Ángel, pasaron dos cosas que
+conviene tener escritas:
+
+1. **La fusión dejó fuera parte de su trabajo sin avisar.** Git registró los
+   commits como antepasados pero no trajo el contenido: nueve ficheros enteros
+   y varias funciones sueltas. Se descubrió porque la API no arrancaba. El
+   barrido que lo cazó compara **función exportada por función exportada y ruta
+   por ruta**, no lee el diff.
+
+2. **Un alias escrito como cadena montó un router en la raíz.** Quedaron dos
+   bloques haciendo lo mismo —uno esperaba lista, otro cadena— y recorrer una
+   cadena con `for...of` da sus letras: la primera es `/`. Ese router pedía
+   sesión, así que **todo lo público empezó a contestar 401**: el webhook de
+   Make, el de formularios, el widget en seis webs y el de WhatsApp. Quince
+   horas. Se recuperaron 81 mensajes de WhatsApp y tres leads.
+
+   No saltó al desplegar porque la API no se reinició hasta cuatro horas
+   después. **Desplegar y comprobar no es lo mismo que desplegar y reiniciar.**
+
+### Lo que queda abierto y muerde
+
+- **Los 313 grupos de duplicados** por revisar. Es trabajo de personas.
+- **#110** · un cargo de Stripe de 2.730 € colgado de un curso de 390, y ya
+  facturado a nombre de quien no lo pagó.
+- **#71** · las tablas de producción son de `postgres` y no del usuario del
+  CRM, así que cada `ALTER TABLE` hay que pasarlo a mano como `postgres`. El
+  guion está escrito y sin aplicar.
+- **La 132** no está aplicada en ninguno de los dos.
+- **El #80 no está en ISEIE**: el panel de claves solo existe en MultiCRM.
+- **945 cargos de Stripe sin asociar** en ISEIE.
 
 ---
 
@@ -312,6 +377,7 @@ mejora, pero nada de lo que hay hoy miente.
 - [`tutores-pendiente.md`](tutores-pendiente.md) — el detalle del módulo
 - [`tarea-stripe-proyectos-ia.md`](tarea-stripe-proyectos-ia.md) — la tarea de Ángel
 - [`PARIDAD-ENTRE-CRMS.md`](PARIDAD-ENTRE-CRMS.md) — qué se copia y qué no
+- [`INFORME-AGOSTO-2026.md`](INFORME-AGOSTO-2026.md) — el mes de WhatsApp y tutores, con las cifras sacadas del historial
 
 ---
 
@@ -342,84 +408,238 @@ tasa de cierre de Carlos (#39), filtros en Clientes (#40) y la limpieza de datos
 
 ---
 
+---
+
+## WhatsApp en produccion — 21/08/2026
+
+Lo que se probaba en pruebas ya corre en **los dos CRMs en produccion**: el chat
+con las conversaciones dentro del CRM, una sesion por gestora, el admin viendo y
+enlazando la de cada una, plantillas compartidas, notas de voz, responder a un
+mensaje concreto, el recorrido guiado y la pagina de ayuda.
+
+**El freno de escribir a desconocidos viene apagado.** Decision de Diego. Queda
+apuntado en el registro quien escribe a un numero que no es prospecto, pero no se
+impide: cuando el CRM se negaba, la gestora escribia desde su movil igual — sin
+registro, sin plantilla y sin los topes de ritmo.
+
+### Lo que hubo que arreglar para poder subirlo
+
+Lo que corria en pruebas **no estaba en ninguna rama entera**: era el trabajo de
+Angel con tres cambios nuestros copiados a mano encima. Al juntarlo salieron dos
+cosas:
+
+- **El freno tenia dos nombres con significados opuestos** —el suyo encendia, el
+  nuestro apagaba—. Queda uno solo, `WA_BLOQUEO_DESCONOCIDOS`, apagado. Si algun
+  `.env` conserva el viejo `WA_EXIGIR_CONSENTIMIENTO`, el servidor lo ignora y lo
+  avisa al arrancar en vez de obedecerlo en silencio.
+- **Una funcion rota en los dos entornos de pruebas.** `chat.controller.js`
+  llamaba a `ultimoLatido`, que `chat.service.js` ya no exportaba: lo pise al
+  copiar ese fichero suelto. `/api/whatsapp/sincronizacion` —lo que pregunta si
+  sigue entrando historial— reventaba. Arreglado en los cuatro entornos.
+
+Esa es la moraleja: **copiar ficheros sueltos a un servidor rompe cosas en
+silencio**. Lo que se sube, se sube desde una rama.
+
+### Como quedo cada sitio
+
+| | Migraciones 129 y 130 | Modulo | Frontal |
+|---|---|---|---|
+| MultiCRM produccion | aplicadas | 11 ficheros | publicado, ayuda incluida |
+| ISEIE produccion | aplicadas | 11 ficheros | publicado, ayuda incluida |
+| MultiCRM pruebas | ya estaban | al dia | sin tocar |
+| ISEIE pruebas | pendiente | al dia | sin tocar |
+
+Copias de seguridad antes de tocar: `crm_prod_db` 9,6 MB y `crm_iseie` 7,7 MB en
+`/var/backups/crm/`. Las conversaciones que ya habia siguen ahi, y la sesion
+conectada de ISEIE (`crm-u16`) aguanto el reinicio.
+
+### El atasco de Evolution en ISEIE — 21/08/2026
+
+Sintoma: se enlazo el numero de una gestora, se veia «conectado», y no salia ni
+entraba nada. El CRM decia «enviado» y el mensaje no llegaba a ningun sitio.
+
+**Evolution llevaba parado desde las 09:06 de esa manana.** Su propia base no
+guardo ni un mensaje en todo el dia. La traza:
+
+    await _o.emit -> retryWebhookRequest -> AxiosError: timeout of 60000ms
+    url: http://172.17.0.1:3005/api/whatsapp/webhook
+
+Evolution **espera** a que su aviso llegue antes de seguir con el evento. Como el
+aviso no llegaba, cada uno se comia 60 segundos y luego reintentaba: 109 en 12
+minutos. La cola entera parada. Por eso no salian los mensajes ni entraban los
+que escribian.
+
+**La causa: ufw esta activo en esta maquina** —en la de MultiCRM no— y cortaba
+lo que venia del contenedor. Y el detalle que costo encontrar: **el contenedor no
+esta en `docker0` (172.17.0.1) sino en su propia red de compose,
+`whatsapp_default` (172.18.0.0/16, puente `br-7ff3422bc513`)**. La primera regla
+se puso sobre docker0 y no sirvio de nada.
+
+La regla buena, por subred y no por nombre de puente —si se recrea la red, el
+puente cambia de nombre y la regla dejaria de valer sin que nadie se entere—:
+
+    ufw allow from 172.16.0.0/12 to any port 3005 proto tcp
+
+Solo abre el puerto del CRM a la red privada de docker. No expone nada a
+internet, no toca los 8 sitios de terceros de la maquina y se deshace con
+`ufw delete`. No hizo falta reiniciar el contenedor ni volver a enlazar ningun
+numero.
+
+En cuanto entro, la cola se vacio sola: Evolution paso de las 09:06 a la hora
+real y el CRM de 4 mensajes a 35.
+
+**Como reconocerlo la proxima vez:** si el numero sale «conectado» pero no se
+mueve nada, mirar `docker logs crm-whatsapp | grep 'timeout of 60000ms'`. Si hay
+tiempos agotados, el problema no es WhatsApp ni el CRM: es que Evolution no
+alcanza al CRM.
+
+### Evolution tiene que guardar los mensajes — 24/08/2026
+
+Los dos contenedores venian con `DATABASE_SAVE_DATA_NEW_MESSAGE: "false"` y
+`DATABASE_SAVE_MESSAGE_UPDATE: "false"`. Suena razonable —el CRM ya guarda su
+copia, para que duplicar— hasta que alguien pulsa **«Descargar audio»**: el CRM le
+pide el fichero a Evolution por el identificador del mensaje y Evolution contesta
+`Message not found`, porque nunca lo guardo. De ahi el «este archivo ya no se
+puede recuperar».
+
+Y lo segundo, menos visible: sin `SAVE_MESSAGE_UPDATE` **los tics no avanzan
+nunca**. Los acuses de WhatsApp llegan, pero Evolution no puede emparejarlos con
+un mensaje que no tiene, asi que todo se queda en un tic aunque este entregado.
+
+Las dos encendidas en los dos servidores. Recrear el contenedor **no desenlaza
+nada**: la sesion vive en su base de datos y vuelve sola en unos segundos —
+comprobado dos veces, con una gestora trabajando.
+
+### Los sintomas que confunden
+
+Merece la pena tenerlos juntos, porque los tres se parecen y son cosas distintas:
+
+| Lo que se ve | Que es |
+|---|---|
+| «Conectado» pero no se mueve nada | Evolution no alcanza al CRM. Mirar los tiempos agotados |
+| Un tic que nunca avanza | Evolution no guarda las actualizaciones |
+| «El archivo ya no se puede recuperar» | Evolution no guarda los mensajes |
+| El chat con el nombre de la gestora | `pushName` guardado en un mensaje que sale |
+
+Ninguno es que WhatsApp haya tumbado el numero, que es lo primero que uno teme.
+
+### Las rutas del frontal contra las del servidor — 24/08/2026
+
+Tres veces el mismo fallo en un dia: al pasar las rutas a español se renombraron
+las llamadas del frontal y **no** los prefijos del servidor. Pantallas enteras
+pidiendo a una direccion que no contestaba, sin que nadie lo notara hasta que
+alguien abria esa pantalla.
+
+| Modulo | El frontal pide | El servidor servia |
+|---|---|---|
+| Informes | `/api/informes` | `/api/reports` |
+| Ventas | `/api/ventas` | `/api/sales` |
+| Secuencias de email | `/api/secuencias-email` | `/api/email-sequences` |
+| Mensajes (MultiCRM) | `/api/mensajes` | `/api/messages` |
+
+Los cuatro pasan a su nombre en español y **conservan el viejo con `alias`**, que
+no cuesta nada y evita romper integraciones o pestañas abiertas.
+
+**Para que no haya una quinta vez:** `scripts/auditoria_rutas.py`. Saca los
+prefijos y rutas de cada modulo del servidor, las llamadas del frontal con su
+fichero y su linea, y las cruza. Se corre sin tocar ningun servidor:
+
+    python scripts/auditoria_rutas.py
+
+Antes de esto: **21 llamadas huerfanas en MultiCRM y 14 en ISEIE**. Despues:
+ninguna en los dos. Conviene pasarlo antes de cada despliegue grande, y
+obligatoriamente despues de renombrar cualquier ruta.
+
+Ojo con leerlo mal: se compara **por prefijo**, no por camino exacto. Una llamada
+como `/leads/${id}` llega al analisis como `/api/leads`, asi que lo que se
+detecta es que el servidor no tenga NADA colgando de ahi — que es justo el fallo
+del renombrado.
+
+### Lo que falta
+
+- **ISEIE pruebas no tiene Evolution configurado** en su `.env`, asi que alli el
+  WhatsApp no se puede probar. Si se quiere, hay que darle su propio prefijo de
+  sesion y su webhook, como se hizo con MultiCRM pruebas.
+- **Lo de Angel de la tarea #45** sigue como estaba: el aviso de configuracion
+  que se le ensena a la gestora, la vista previa de la imagen antes de mandarla,
+  el estado de «enviando» del audio y su duracion.
+- **Paridad de rutas**: en ISEIE `/leads` y `/clients` siguen en ingles; en
+  MultiCRM ya son `/prospectos` y `/clientes`. El resto de rutas si coinciden.
+
+---
+
 <!-- INDICE-TAREAS -->
 
 ## Todas las tareas abiertas
 
-Sacado de GitHub, no escrito a mano: **44 abiertas**. Para volver a
-generarlo, `scripts/indice_tareas.py`.
+Sacado de GitHub el 04/09/2026, no escrito a mano: **52 abiertas**.
+Para volver a generarlo, `scratchpad/actualizar_estado.py`.
+
+### sin fase · 13
+
+- **#98** Factura 2026/0752 (ISEIE): decidir a quién pertenece antes de enviarla — *sin asignar*
+- **#99** WhatsApp: los cinco arreglos de la interfaz que salieron al probar los grupos — *Ángel*
+- **#100** Ventas: vista de todos los proyectos y separar ventas de mensualidades — *sin asignar*
+- **#101** WhatsApp: un banco de mensajes, en tabla y por número, con copia de seguridad — *Ángel*
+- **#103** Ver todos los proyectos AGRUPADOS POR SOCIEDAD, no solo todos juntos — *sin asignar*
+- **#104** Clientes con la vista de Prospectos, adaptada — no calcada — *Fabián*
+- **#105** Un icono para cada sección principal del menú — *Fabián*
+- **#106** Los formularios, con el mismo formato en todo el CRM — sin tocar los campos — *Fabián*
+- **#107** Secciones de seguimiento: primero, segundo, tercero… como un plan — *sin asignar*
+- **#110** Sandra Gaitan (ISEIE): un cargo de Stripe de 2.730 EUR colgado de un curso de 390, y ya facturado — *sin asignar*
+- **#111** Notificaciones del CRM de pie a cabeza, y un registro de logs con vista general y todos — *Ángel*
+- **#112** WhatsApp: la ficha en popup solo se mira, la foto se pierde al abrir el chat, y el buscador de reenviar no encuentra — *Ángel*
+- **#113** Aviso: la fusion perdio parte de tu trabajo (repuesto), el panel de claves ya tiene menu, y falta portar el #80 a ISEIE — *Ángel*
+
+### Fase 2 · Construir · 19
+
+- **#30** Análisis de datos con IA — *Ángel*
+- **#32** Rediseño · tokens y primitivas — *Fabián*
+- **#33** Rediseño · el marco: menú, cabecera y estructura — *Fabián*
+- **#34** Rediseño · las 82 pantallas, por bloques — *Fabián*
+- **#35** Proceso de ventas editable — *Diego*
+- **#36** Search Console — *Diego*
+- **#37** Recuperar la contraseña por correo — *sin asignar*
+- **#38** Soporte de verdad — *sin asignar*
+- **#39** Tasa de cierre y baremo · lo de Carlos — *sin asignar*
+- **#44** Sincronizar los proyectos de IA con el CRM · Ángel y Fabián — *Fabián, Ángel*
+- **#48** Recibir el origen de los leads (ChatGPT incluido) y categorizarlo — *Diego*
+- **#78** Rediseño · llevar todas las pantallas al estilo SuiteDash de /testeo2 — *Fabián*
+- **#79** Rediseño · lo que hay que corregir de la primera vuelta (revisado en /testeo) — *Fabián*
+- **#86** Proceso · A · Plazas y cierre de convocatoria en el catálogo — *sin asignar*
+- **#87** Proceso · B · Los cinco pasos, en la base y editables — *sin asignar*
+- **#88** Proceso · C · Las plantillas de los cinco pasos, cargadas y rellenas — *sin asignar*
+- **#89** Proceso · D · «Qué toca hoy con este lead», en su ficha — *sin asignar*
+- **#90** Proceso · E · La cola del día: a quién le toca hoy — *sin asignar*
+- **#91** Proceso · F · Las reglas que el CRM hace cumplir solo — *sin asignar*
 
 ### Fase 1 · Desbloquear · 5
 
-| | Qué | Quién | |
-|---|---|---|---|
-| [#20](https://github.com/diego-landaeta/CRM/issues/20) | Mandar el origen del lead desde Make | Diego | **bloquea a otros** |
-| [#21](https://github.com/diego-landaeta/CRM/issues/21) | Aplicar la migración 122 (plantillas de WhatsApp) | Diego | **bloquea a otros** · lleva SQL |
-| [#22](https://github.com/diego-landaeta/CRM/issues/22) | Clave de IA y tope de gasto | Diego | **bloquea a otros** |
-| [#23](https://github.com/diego-landaeta/CRM/issues/23) | Usuario del CRM de pruebas para Fabián | Diego | **bloquea a otros** |
-| [#24](https://github.com/diego-landaeta/CRM/issues/24) | Decidir qué pasa con main | Diego |  |
+- **#22** Clave de IA y tope de gasto — *Diego*
+- **#24** Decidir qué pasa con main — *Diego*
+- **#63** WhatsApp: dos endpoints que solo existen en el puente de Baileys, no en Evolution — *Ángel*
+- **#67** WhatsApp: el botón de llamar no hace nada en el ordenador — *Ángel*
+- **#71** Las tablas de producción son de postgres, no del usuario del CRM — *Diego*
 
-### Fase 2 · Construir · 20
+### Fase 4 · Medir · 6
 
-| | Qué | Quién | |
-|---|---|---|---|
-| [#25](https://github.com/diego-landaeta/CRM/issues/25) | WhatsApp · plantillas compartidas y registro del contacto | Ángel |  |
-| [#26](https://github.com/diego-landaeta/CRM/issues/26) | Página de estado del sistema | Ángel |  |
-| [#27](https://github.com/diego-landaeta/CRM/issues/27) | El envío de correo del CRM · la tubería | Ángel |  |
-| [#28](https://github.com/diego-landaeta/CRM/issues/28) | Recordatorios por correo | Ángel |  |
-| [#29](https://github.com/diego-landaeta/CRM/issues/29) | Reporte semanal por correo | Ángel |  |
-| [#30](https://github.com/diego-landaeta/CRM/issues/30) | Análisis de datos con IA | Ángel |  |
-| [#31](https://github.com/diego-landaeta/CRM/issues/31) | Terminar la administración de usuarios | Fabián |  |
-| [#32](https://github.com/diego-landaeta/CRM/issues/32) | Rediseño · tokens y primitivas | Fabián |  |
-| [#33](https://github.com/diego-landaeta/CRM/issues/33) | Rediseño · el marco: menú, cabecera y estructura | Fabián |  |
-| [#34](https://github.com/diego-landaeta/CRM/issues/34) | Rediseño · las 82 pantallas, por bloques | Fabián |  |
-| [#35](https://github.com/diego-landaeta/CRM/issues/35) | Proceso de ventas editable | Diego | lleva SQL |
-| [#36](https://github.com/diego-landaeta/CRM/issues/36) | Search Console | Diego |  |
-| [#37](https://github.com/diego-landaeta/CRM/issues/37) | Recuperar la contraseña por correo | Yo |  |
-| [#38](https://github.com/diego-landaeta/CRM/issues/38) | Soporte de verdad | Yo | lleva SQL |
-| [#39](https://github.com/diego-landaeta/CRM/issues/39) | Tasa de cierre y baremo · lo de Carlos | Yo |  |
-| [#44](https://github.com/diego-landaeta/CRM/issues/44) | Sincronizar los proyectos de IA con el CRM · Ángel y Fabián | Ángel | compartida |
-| [#45](https://github.com/diego-landaeta/CRM/issues/45) | WhatsApp · el aviso, el tutorial y pulir lo que falta | Ángel |  |
-| [#47](https://github.com/diego-landaeta/CRM/issues/47) | WhatsApp · llamadas: registrarlas, y el manual | Ángel |  |
-| [#48](https://github.com/diego-landaeta/CRM/issues/48) | Recibir el origen de los leads (ChatGPT incluido) y categorizarlo | Diego |  |
-| [#50](https://github.com/diego-landaeta/CRM/issues/50) | Tipografía e iconos del apartado de administración (estilo formal) | Fabián |  |
+- **#53** Meta Ads: del gasto a la venta, no al lead — *sin asignar*
+- **#54** Google Ads: traer campañas y gasto al CRM — *sin asignar*
+- **#55** Google Analytics: lo que pasa antes del lead — *sin asignar*
+- **#56** Panel de canales: dónde poner el dinero — *sin asignar*
+- **#57** Pedirle a Daniela sus reportes de publicidad y ventas — *Diego*
+- **#66** Manual de usuario y vídeos tutoriales, por apartado y general — *Diego, Ángel*
 
-### Fase 3 · Cerrar · 11
+### Fase 3 · Cerrar · 9
 
-| | Qué | Quién | |
-|---|---|---|---|
-| [#2](https://github.com/diego-landaeta/CRM/issues/2) | Frontend: Dropdown categorías searchable + niveles separados cascade | Ángel |  |
-| [#6](https://github.com/diego-landaeta/CRM/issues/6) | Frontend: Panel UI de conectores con preview + mapping visual | Fabián |  |
-| [#11](https://github.com/diego-landaeta/CRM/issues/11) | Frontend: Panel 'próximo gestor' en /leads — visualizar round-robin | Fabián |  |
-| [#13](https://github.com/diego-landaeta/CRM/issues/13) | Backend: Activity feed (tabla + endpoint para 'qué pasó hoy') | Diego |  |
-| [#14](https://github.com/diego-landaeta/CRM/issues/14) | Backend: WooCommerce orders sync + cron flexible (manual/diario/semanal) | Diego |  |
-| [#15](https://github.com/diego-landaeta/CRM/issues/15) | Backend: Project types extension (educacion/ecommerce/servicios/inmobiliaria) | Ángel |  |
-| [#40](https://github.com/diego-landaeta/CRM/issues/40) | Filtros en Clientes y Matrículas | Yo |  |
-| [#41](https://github.com/diego-landaeta/CRM/issues/41) | Ventas sin formación identificada · 321 | Yo |  |
-| [#42](https://github.com/diego-landaeta/CRM/issues/42) | Los otros datos que no cuadran | Yo |  |
-| [#43](https://github.com/diego-landaeta/CRM/issues/43) | Lo que quedó a medias | Yo |  |
-| [#49](https://github.com/diego-landaeta/CRM/issues/49) | Rutas en español, con redirección desde las viejas | Yo |  |
-
-### Fase 4 · Medir · 5
-
-| | Qué | Quién | |
-|---|---|---|---|
-| [#53](https://github.com/diego-landaeta/CRM/issues/53) | Meta Ads: del gasto a la venta, no al lead | Diego |  |
-| [#54](https://github.com/diego-landaeta/CRM/issues/54) | Google Ads: traer campañas y gasto al CRM | Diego |  |
-| [#55](https://github.com/diego-landaeta/CRM/issues/55) | Google Analytics: lo que pasa antes del lead | Diego |  |
-| [#56](https://github.com/diego-landaeta/CRM/issues/56) | Panel de canales: dónde poner el dinero | Yo |  |
-| [#57](https://github.com/diego-landaeta/CRM/issues/57) | Pedirle a Daniela sus reportes de publicidad y ventas | Diego |  |
-
-### sin fase · 3
-
-| | Qué | Quién | |
-|---|---|---|---|
-| [#4](https://github.com/diego-landaeta/CRM/issues/4) | Frontend: Documentos/Certificados — selectores de programa, alumno y módulos auto | molinangel |  |
-| [#7](https://github.com/diego-landaeta/CRM/issues/7) | Frontend: Sistema completo de vistas por rol (sidebar dinámico + landing por rol) | molinangel |  |
-| [#8](https://github.com/diego-landaeta/CRM/issues/8) | Frontend: Settings — separar Categorías/Campos/Columnas por entidad (Leads/Clientes/Productos) | molinangel |  |
-
-> Las mismas tareas existen en el repositorio de ISEIE, bloqueadas con la
-> etiqueta `espera-multicrm`: se hacen aquí primero y se replican cuando Diego
-> las aprueba.
+- **#2** Frontend: Dropdown categorías searchable + niveles separados cascade — *Diego, Ángel*
+- **#6** Frontend: Panel UI de conectores con preview + mapping visual — *Fabián, Ángel*
+- **#11** Frontend: Panel 'próximo gestor' en /leads — visualizar round-robin — *Diego, Fabián, Ángel*
+- **#13** Backend: Activity feed (tabla + endpoint para 'qué pasó hoy') — *Diego*
+- **#14** Backend: WooCommerce orders sync + cron flexible (manual/diario/semanal) — *Diego*
+- **#40** Filtros en Clientes y Matrículas — *sin asignar*
+- **#41** Ventas sin formación identificada · 321 — *sin asignar*
+- **#42** Los otros datos que no cuadran — *sin asignar*
+- **#43** Lo que quedó a medias — *sin asignar*
 
 <!-- FIN-INDICE-TAREAS -->

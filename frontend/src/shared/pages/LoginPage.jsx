@@ -17,7 +17,7 @@ const TOPO_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, loading: authLoading, view } = useAuth();
+  const { login, isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -32,13 +32,8 @@ export default function LoginPage() {
     );
   }
 
-  // Este guard se dispara en cuanto hay sesion, y gana al `navigate()` de mas
-  // abajo: es el que decide de verdad a donde se entra. Por eso mira tambien la
-  // ruta del rol.
   if (isAuthenticated) {
-    const suya = view?.default_route;
-    const from = location.state?.from?.pathname
-      || (suya && RUTAS_VALIDAS.has(suya) ? suya : '/');
+    const from = location.state?.from?.pathname || '/';
     return <Navigate to={from} replace />;
   }
 
@@ -53,18 +48,8 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const datos = await login(email, password);
-      // Si venia de una pantalla concreta —le caduco la sesion a medias— se
-      // vuelve alli. Si no, a la ruta de su rol: una gestora no tiene por que
-      // aterrizar en el panel de direccion. Antes iban todos a `/`.
-      //
-      // La ruta se comprueba antes de usarla. Las del servidor se quedaron sin
-      // actualizar cuando el CRM paso las direcciones a español —decian
-      // `/dashboard` y `/leads`, que ya no existen— y aterrizar a alguien en
-      // una pantalla en blanco nada mas entrar es peor que llevarlo al inicio.
-      const suya = datos?.view?.default_route;
-      const from = location.state?.from?.pathname
-        || (suya && RUTAS_VALIDAS.has(suya) ? suya : '/');
+      await login(email, password);
+      const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Credenciales incorrectas');

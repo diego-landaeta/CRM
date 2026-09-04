@@ -64,7 +64,6 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
-import { startAvisoTutorScheduler } from './jobs/avisoTutorScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -79,6 +78,19 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
+// El webhook de WhatsApp entra por su propia puerta, mas ancha.
+//
+// Evolution manda la foto o el audio dentro del propio aviso, en base64, y eso
+// abulta un tercio mas que el archivo. Con el tope general de 5 MB, Express
+// rechazaba el aviso ENTERO con «request entity too large»: no es que llegara el
+// mensaje sin la foto, es que se perdia el mensaje. Paso el 21/08/2026.
+//
+// Se abre solo esta ruta y no el tope general: 25 MB en todos los endpoints es
+// una invitacion a tumbar el servidor mandando cuerpos enormes. Los 25 MB son
+// los mismos que deja pasar Nginx, para que no se rechace en dos sitios
+// distintos con dos mensajes distintos.
+app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
 app.use(cookieParser());
@@ -184,7 +196,13 @@ for (const { name, mod } of ALL_MODULES) {
   // Nombres viejos que se siguen atendiendo. Al pasar las rutas al castellano
   // hubo pantallas pidiendo a direcciones que ya no existian; el alias evita
   // que vuelva a pasar mientras quede algo apuntando al nombre anterior.
-  for (const viejo of mod.alias || []) {
+  //
+  // El `concat` NO es adorno: unos modulos declaran `alias` como cadena
+  // ('/api/sales') y otros como lista (['/api/messages']). Recorrer una CADENA
+  // con for...of da sus LETRAS, y la primera es '/', asi que el router de ese
+  // modulo acababa montado en la raiz y se tragaba la API entera: el webhook de
+  // Make paso a contestar 401 y los formularios dejaron de entrar. 04/09.
+  for (const viejo of [].concat(mod.alias || [])) {
     app.use(viejo, mod.router);
     logger.info(`Modulo registrado (alias): ${viejo} -> ${mod.prefix}`);
   }
@@ -280,7 +298,6 @@ if (process.env.NODE_ENV !== 'test') {
     startLeadSinTocarScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
-    startAvisoTutorScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }

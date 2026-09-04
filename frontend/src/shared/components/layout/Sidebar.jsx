@@ -49,10 +49,10 @@ import {
   Wallet,
   HandCoins,
   GitMerge,
+  CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode,
-} from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -163,6 +163,7 @@ const NAV_SECTIONS = [
       { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
+      { label: 'Sin tutor', to: '/tutores/sin-tutor', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
       { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
   },
@@ -180,7 +181,7 @@ const NAV_SECTIONS = [
       { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
+      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
       { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },
@@ -198,6 +199,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Buscar duplicados', to: '/prospectos/duplicados', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],
   },
@@ -210,6 +212,10 @@ const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
+      // Claves y variables (#80). Los mismos roles que exige el servidor con
+      // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
+      // no ofrecerlo.
+      { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
     ],
@@ -249,56 +255,9 @@ export function applyLabel(original, overrides) {
 // aviso de llamada entrante. Teniendolo en dos sitios se llega a que uno diga
 // que si y el otro que no.
 
-/**
- * De `hidden_sidebar_items` a las piezas del menu. Tarea #7.
- *
- * El backend nombra bloques —«accounting», «users»— y el menu se organiza por
- * claves de modulo y direcciones. Coinciden en tres (`payroll`, `reports`,
- * `webhooks`) y en el resto no, asi que hace falta traducir. Sin esta tabla, un
- * rol a medida que oculte «accounting» no ocultaria nada y nadie sabria por que.
- *
- * Se declara aqui, en una tabla que se lee de un vistazo, en vez de repartir
- * identificadores por las ciento y pico entradas del menu.
- */
-// Se mapea SOLO lo que no admite duda. «Cuentas por cobrar» estuvo aqui un rato
-// y hubo que sacarla: no tiene clave de modulo y su entrada dice
-// `roles: [..., 'gestor']` — alguien se la dio a las gestoras a proposito, y
-// esconderla por suponer que «accounting» la incluye era decidir por el.
-//
-// Cuando el nombre del bloque y lo que hay en el menu no encajan solos, se deja
-// fuera y se dice. Ocultar de mas es peor que no ocultar: quien lo sufre no
-// sabe que le falta algo, solo que no lo encuentra.
-const OCULTABLES = {
-  accounting: { modulos: ['accounting_income', 'accounting_expenses', 'accounting_payable'],
-                rutas: [] },
-  payroll:    { modulos: ['payroll'], rutas: [] },
-  reports:    { modulos: ['reports'], rutas: ['/informes'] },
-  webhooks:   { modulos: ['webhooks'], rutas: [] },
-  campaigns:  { modulos: [], rutas: ['/campanas'] },
-  users:      { modulos: [], rutas: ['/configuracion/usuarios', '/usuarios'] },
-  settings_advanced: { modulos: [], rutas: ['/configuracion'] },
-};
-
-/** ¿Lo esconde la vista de este rol? */
-function loEsconde(item, ocultos) {
-  if (!Array.isArray(ocultos) || !ocultos.length) return false;
-  return ocultos.some((clave) => {
-    const o = OCULTABLES[clave];
-    if (!o) return false;
-    if (item.module && o.modulos.includes(item.module)) return true;
-    // Por prefijo: ocultar «/configuracion» se lleva sus pantallas de dentro,
-    // que es lo que se espera al esconder un bloque entero.
-    return !!item.to && o.rutas.some((r) => item.to === r || item.to.startsWith(r + '/'));
-  });
-}
-
-function canSeeItem(item, role, modules, projectType, soloColaboraciones, ocultos) {
+function canSeeItem(item, role, modules, projectType, soloColaboraciones, permisos) {
   if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
-  // La vista del rol manda, y va ANTES que el atajo de superadmin: si alguien
-  // configura un rol a medida que esconde Finanzas, esconderla es justo lo que
-  // se ha pedido — no una sugerencia que el rol pueda saltarse.
-  if (loEsconde(item, ocultos)) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
@@ -317,14 +276,24 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, oculto
     if (item.module && modules && modules[item.module] === false) return false;
     return true;
   }
+  // Un permiso acotado manda sobre el rol.
+  //
+  // La entrada de Facturacion la ve quien PUEDE facturar, no todo el que sea
+  // gestor. En ISEIE ninguna gestora factura —lo hacen Adriana y Daniela, que
+  // son admin— y aun asi las doce veian el panel. En ISEIH lo veia Vanessa, que
+  // es «gestor» pero lleva tutores.
+  //
+  // Se comprueba solo para gestor: un admin puede facturar por su rol, y a
+  // soporte y superadmin se les ha dejado pasar justo arriba.
+  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
   if (item.roles && !item.roles.includes(role)) return false;
   if (item.module && modules && modules[item.module] === false) return false;
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, ocultos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
-    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, ocultos))
+    .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
   const location = useLocation();
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
@@ -704,10 +673,7 @@ function ProjectAvatar({ project, size = 'md' }) {
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
-  const { user, logout, view } = useAuth();
-  // Lo que la vista de este rol esconde. Vacio para los que no tienen nada
-  // configurado, que es el caso de hoy en los cuatro roles fijos.
-  const ocultos = view?.hidden_sidebar_items;
+  const { user, logout } = useAuth();
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
@@ -1180,7 +1146,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, ocultos));
+          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
@@ -1193,7 +1159,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 modules={activeProject?.modules}
                 projectType={activeProject?.type}
                 soloColab={soloColab}
-                ocultos={ocultos}
+                permisos={user}
                 labelOverrides={activeProject?.sidebar_labels}
                 onNavigate={onNavigate}
                 collapsed={collapsed}

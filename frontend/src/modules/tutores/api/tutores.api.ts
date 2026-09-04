@@ -10,6 +10,7 @@ export interface Tutor {
   pendiente_de_entrar: boolean;
   dni_nif: string | null;
   iban: string | null;
+  banco: string | null;
   telefono: string | null;
   notas: string | null;
   formaciones: number;
@@ -91,6 +92,23 @@ export interface ResumenComision {
   pagada: string;
   revertida: string;
   ultima_liquidacion: string | null;
+  /** Para poder pagarle sin ir a buscar su ficha. */
+  tutor_email: string | null;
+  tutor_iban: string | null;
+}
+
+export interface FormacionSinTutor {
+  id: number;
+  nombre: string;
+  precio: string | null;
+  proyecto: string | null;
+  project_id: number;
+  ventas: number;
+  alumnos: number;
+  pagos: number;
+  cobrado: string;
+  primer_cobro: string | null;
+  ultimo_cobro: string | null;
 }
 
 export interface PagoSinFormacion {
@@ -144,7 +162,9 @@ export const tutoresApi = {
     password?: string;
   }) => client.post('/tutores', datos) as Promise<ApiResponse<Tutor & { entraYa?: boolean }>>,
 
-  guardarPerfil: (id: number, datos: Record<string, string | null>) =>
+  // Ademas del perfil acepta `email` —que es la credencial— y
+  // `reenviarEnlace`, para mandarle el enlace de contraseña a la nueva.
+  guardarPerfil: (id: number, datos: Record<string, string | boolean | null | undefined>) =>
     client.patch(`/tutores/${id}/perfil`, datos) as Promise<ApiResponse<unknown>>,
 
   colaboraciones: (tutorId?: number | null) =>
@@ -191,6 +211,11 @@ export const tutoresApi = {
 
   revertirComision: (id: number, motivo: string) =>
     client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
+
+  // Las que ya venden y no tienen a quien pagarle.
+  formacionesSinTutor: (projectId?: number | null) =>
+    client.get('/tutores/formaciones-sin-tutor'
+      + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
 
   pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
