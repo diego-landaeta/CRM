@@ -5,6 +5,12 @@ import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
+// Estas dos vivían aquí dentro, copiadas de las de prospectos pero sin la
+// lectura de fechas sin hora: `new Date('2026-12-01')` se interpreta en UTC y
+// en España cae en el día anterior, así que las compras de más de un mes se
+// anunciaban un día antes («01 dic» salía «30 nov»). El servidor manda las
+// columnas DATE en crudo, así que le pasaba a toda la columna «Última compra».
+import { formatRelative, formatFecha as fmtFecha } from '@/shared/lib/fechas';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
@@ -56,20 +62,6 @@ function fmt(n: number | string): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
 
-function formatRelative(dateStr: string | null | undefined, { future = false }: { future?: boolean } = {}): string | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = future ? d.getTime() - now.getTime() : now.getTime() - d.getTime();
-  const diffDays = Math.round(diffMs / 86400000);
-  if (diffDays < 0) return future ? `hace ${-diffDays}d` : null;
-  if (diffDays === 0) return 'hoy';
-  if (diffDays === 1) return future ? 'mañana' : 'ayer';
-  if (diffDays < 7) return future ? `en ${diffDays}d` : `hace ${diffDays}d`;
-  if (diffDays < 30) return future ? `en ${Math.round(diffDays / 7)} sem` : `hace ${Math.round(diffDays / 7)} sem`;
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-}
-
 // El plan de cuotas de un vistazo: cuántas hay, cuántas se han cobrado y
 // cuántas quedan. Es lo que se mira para saber por dónde va un cliente.
 function CeldaCuotas({ client: c }: { client: Client }) {
@@ -91,13 +83,6 @@ function CeldaCuotas({ client: c }: { client: Client }) {
       </div>
     </div>
   );
-}
-
-// Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
-// exacto en que se registró el contacto, no "hoy"/"hace 3d".
-function fmtFecha(dateStr: string | null | undefined): string | null {
-  if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
 }
 
 interface QuickActionsProps {
