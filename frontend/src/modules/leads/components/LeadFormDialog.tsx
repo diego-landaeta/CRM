@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';import { useEffect, useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
@@ -12,7 +14,8 @@ import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
-import type { Lead } from '@/shared/types';
+import type { Lead } from '@/shared/types';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
 
 interface CustomFieldDef {
   id: number;
@@ -41,20 +44,6 @@ interface Props {
   onSubmit: (data: LeadFormData & { custom_fields: Record<string, unknown> }) => Promise<void> | void;
 }
 
-function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-        {label}
-      </label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-destructive mt-1 px-1">{error}</p>}
-    </div>
-  );
-}
-
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
@@ -230,7 +219,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold">{isEdit ? 'Editar prospecto' : 'Nuevo prospecto'}</h2>
-              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del lead' : 'Registra un nuevo lead manualmente'}</p>
+              <p className="text-muted-foreground text-sm mt-0.5">{isEdit ? 'Actualiza la información del prospecto' : 'Registra un nuevo prospecto manualmente'}</p>
             </div>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted">
               <X size={18} weight="bold" />
@@ -242,7 +231,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 a qué proyecto pertenece el lead antes de poder rellenar nada. */}
             {isAllProjects && !isEdit && (
               <div className="rounded-md border border-info/30 bg-info-soft p-3">
-                <label className="text-xs font-semibold text-info block mb-1.5">
+                <label className="mb-1.5 block px-1 text-secundario font-semibold text-info">
                   Proyecto al que pertenece este prospecto *
                 </label>
                 <select
@@ -261,14 +250,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 </p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <FilaCampos>
               <Field label="Nombre *" error={errors.nombre?.message}>
                 <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
               </Field>
               <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
                 <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
-            </div>
+            </FilaCampos>
 
             {duplicates.length > 0 && (
               <div className="bg-warning-soft border border-warning/30 rounded-md p-3 flex gap-3 items-start">
@@ -306,7 +295,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <FilaCampos>
               <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
                 <div className="relative">
                   <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
@@ -335,7 +324,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
               {/* Numero o usuario de WhatsApp.
                   El desplegable elige QUE se esta escribiendo, no «uno u otro
                   para siempre»: la misma persona puede tener los dos, y con
@@ -377,8 +366,8 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 </div>
               </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={`${productoLabel} de interes`}>
+            <FilaCampos>
+              <Field label={`${productoLabel} de interés`}>
                 <Controller
                   name="producto_interes"
                   control={control}
@@ -394,7 +383,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-              <Field label="Pais">
+              <Field label="País">
                 <Controller
                   name="pais"
                   control={control}
@@ -411,15 +400,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
 
             {customFields.length > 0 && (
               <div className="border-t border-border pt-3 mt-3 space-y-3">
-                <p className="text-xs text-muted-foreground text-muted-foreground">Campos personalizados</p>
+                <p className="mb-1.5 px-1 text-tabla uppercase text-muted-foreground">Campos personalizados</p>
                 <div className="grid grid-cols-2 gap-3">
                   {customFields.map(f => (
                     <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
-                      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
+                      <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                         {f.label} {f.required && <span className="text-destructive">*</span>}
                       </label>
                       {f.type === 'textarea' ? (
@@ -477,7 +466,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               >Cancelar</button>
               <button type="submit" disabled={isSubmitting}
                 className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear lead'}</button>
+              >{isSubmitting ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear prospecto'}</button>
             </div>
           </form>
         </div>
