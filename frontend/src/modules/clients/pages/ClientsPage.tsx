@@ -14,9 +14,16 @@ import { formatRelative, formatFecha as fmtFecha } from '@/shared/lib/fechas';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import ClientsFiltersBar from '../components/ClientsFiltersBar';
+import ClientsFiltersBar, { ESTADO_PAGO_LABELS, SORT_LABELS } from '../components/ClientsFiltersBar';
+import BarraFiltros from '@/shared/components/ui/BarraFiltros';
+import CifrasClientes from '../components/CifrasClientes';
+import SaludDeCobro from '../components/SaludDeCobro';
+import ProximosCobros from '../components/ProximosCobros';
+import AccesosClave from '@/shared/components/ui/AccesosClave';
+import useCobrosClientes from '../hooks/useCobrosClientes';
 import {
   UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash, Plus,
+  GraduationCap, Wallet, Receipt, ChartLineUp,
 } from '@phosphor-icons/react';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
@@ -284,6 +291,14 @@ export default function ClientsPage() {
   }, [setUrlFilters]);
   const totalPages = Math.max(1, Math.ceil(totalBackend / PAGE_SIZE));
 
+  // Lo que está pendiente de cobrar. Va aparte de la lista porque el endpoint
+  // que lo sabe es el de contabilidad, y trae todo sin paginar: así las
+  // columnas de abajo hablan de todo el proyecto y no de la página.
+  const { items: cobros, tramos } = useCobrosClientes({
+    projectId: isAllProjects ? null : (activeProject?.id ?? null),
+    responsableId: filterResp,
+  });
+
   const totalFacturado = filtered.reduce((s, c) => s + Number(c.total_compras), 0);
   const totalCobrado = filtered.reduce((s, c) => s + Number(c.total_pagado), 0);
   const totalPendiente = filtered.reduce((s, c) => s + Number(c.pendiente), 0);
@@ -307,22 +322,25 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <PageHeader
-          title="Clientes"
-          subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
-        />
-        {activeProject?.id && !isAllProjects && can('clients.create') && (
+      {/* La accion principal va DENTRO de la cabecera, como «Nuevo prospecto» en
+          Prospectos. Estaba al lado y por fuera: desde el marco del #33 la
+          cabecera sube a la barra de arriba y el boton se quedaba solo en medio
+          del contenido, sin el titulo al que acompanaba. */}
+      <PageHeader
+        title="Clientes"
+        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
+        actions={activeProject?.id && !isAllProjects && can('clients.create') ? (
           <button
             type="button"
             onClick={() => setSaleOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 self-start sm:self-auto"
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
           >
             <Plus size={14} weight="bold" />
-            Registrar venta
+            <span className="hidden sm:inline">Registrar venta</span>
+            <span className="sm:hidden">Vender</span>
           </button>
-        )}
-      </div>
+        ) : null}
+      />
 
       <Suspense fallback={null}>
         <RegisterSaleDialog
@@ -335,24 +353,85 @@ export default function ClientsPage() {
         />
       </Suspense>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Total facturado</p>
-          <p className="text-xl font-semibold tabular-nums">{fmt(totalFacturado)}</p>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Total cobrado</p>
-          <p className="text-xl font-semibold tabular-nums text-green-600">{fmt(totalCobrado)}</p>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Pendiente de cobro</p>
-          <p className="text-xl font-semibold tabular-nums text-orange-600">{fmt(totalPendiente)}</p>
-        </div>
-      </div>
+      <CifrasClientes
+        totalClientes={totalBackend}
+        facturado={totalFacturado}
+        cobrado={totalCobrado}
+        pendiente={totalPendiente}
+      />
+
+      {/* Las tres columnas, con las proporciones de Prospectos: el reparto del
+          cobro manda porque es lo que más se mira, y los accesos son la columna
+          estrecha. Antes aquí se pasaba de las cifras a la tabla directamente:
+          no había forma de saber qué tocaba cobrar sin irse a Contabilidad. */}
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
+        <SaludDeCobro
+          tramos={tramos}
+          onVerPorCobrar={() => navigate('/finanzas/por-cobrar')}
+        />
+        <ProximosCobros
+          cobros={cobros}
+          onAbrir={(leadId) => navigate(`/clientes/${leadId}`)}
+          onVerTodos={() => navigate('/finanzas/por-cobrar')}
+        />
+        <AccesosClave
+          accesos={[
+            { label: 'Matrículas', detail: 'Altas en cada curso', icon: GraduationCap, to: '/clientes/matriculas' },
+            { label: 'Por cobrar', detail: 'Cuotas pendientes', icon: Wallet, to: '/finanzas/por-cobrar' },
+            { label: 'Ventas', detail: 'Registrar y consultar', icon: Receipt, to: '/finanzas/ventas' },
+            { label: 'Reportes', detail: 'Numeros descargables', icon: ChartLineUp, to: '/informes' },
+          ]}
+        />
+      </section>
 
       {/* Barra de filtros FUERA del card de la tabla: el card lleva overflow-hidden
           (para recortar las esquinas de la tabla) y eso recortaba el popover de
           "Filtros". Va como fila propia encima del card, igual que en Prospectos. */}
+      {/* Los filtros que mas se usan, a la vista y en una fila, como en
+          Prospectos. Estaban TODOS detras del boton «Filtros»: para saber si
+          habia algo puesto habia que abrirlo, y un filtro que no se ve es un
+          filtro que se queda puesto sin querer — y entonces la pantalla ensena
+          menos de lo que hay sin decirlo.
+
+          Programa y fechas siguen detras del boton: no caben en una fila y no
+          se tocan a diario. */}
+      <BarraFiltros
+        busqueda={search}
+        onBusqueda={setSearch}
+        placeholder="Buscar por nombre, email o teléfono"
+        desplegables={[
+          ...(user?.role === 'gestor' ? [] : [{
+            nombre: 'Gestora',
+            valor: filterResp,
+            onChange: setFilterResp,
+            opciones: [
+              { value: '', label: 'Todas las gestoras' },
+              { value: 'unassigned', label: 'Sin asignar' },
+              ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
+            ],
+          }]),
+          {
+            nombre: 'Estado de pago',
+            valor: filterEstadoPago,
+            onChange: setFilterEstadoPago,
+            opciones: [
+              { value: '', label: 'Todos los pagos' },
+              ...Object.entries(ESTADO_PAGO_LABELS).map(([value, label]) => ({ value, label })),
+            ],
+          },
+          {
+            nombre: 'Orden',
+            valor: sortBy,
+            onChange: setSortBy,
+            opciones: Object.entries(SORT_LABELS).map(([value, label]) => ({ value, label })),
+          },
+        ]}
+        hayFiltros={hasActiveFilters}
+        onLimpiar={clearAllFilters}
+        onActualizar={() => setReloadKey((k) => k + 1)}
+        actualizando={loading}
+      />
+
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar
           user={user}

@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { IconProps } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 
 /**
@@ -23,8 +24,6 @@ const TONOS: Record<TonoCifra, string> = {
   peligro: 'bg-destructive-soft text-destructive-soft-foreground',
   bien: 'bg-success-soft text-success-soft-foreground',
 };
-
-interface IconProps { size?: number; weight?: string; className?: string }
 
 export function Cifra({
   icon: Icon, etiqueta, valor, detalle, tono = 'neutro', onClick, activo,
