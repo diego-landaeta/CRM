@@ -301,7 +301,13 @@ async function deWebhooks(filtros, limite) {
   params.push(limite);
   const { rows } = await query(
     `SELECT d.id, d.received_at AS cuando, d.result, d.lead_id, d.error_message,
-            w.nombre AS webhook, w.project_id
+            -- Es 'label', no 'nombre': asi se llama la columna en la tabla
+            -- make_webhooks desde la 063, en los dos CRMs. Pedir 'nombre'
+            -- tiraba la consulta entera y la fuente se quedaba sin filas.
+            --
+            -- (Sin comillas invertidas aqui dentro: esto va DENTRO de una
+            --  plantilla de JavaScript y una comilla invertida la cierra.)
+            w.label AS webhook, w.project_id
        FROM make_webhook_deliveries d
        LEFT JOIN make_webhooks w ON w.id = d.webhook_id
        ${donde}
@@ -406,6 +412,12 @@ export async function listar({ vista = 'general', ...filtros } = {}) {
 
   // Se le pide `limite` a cada una: para dar las N mas nuevas del conjunto
   // basta con las N mas nuevas de cada fuente.
+  // Las que revientan al leerse. Sin esto, una consulta rota se lee igual que
+  // un dia tranquilo: la fuente aparece en la lista de filtros y devuelve cero.
+  // Paso de verdad —se pedia `w.nombre` y la columna es `w.label`— y no lo vio
+  // nadie, porque cero filas es exactamente lo que se espera ver a veces.
+  const fallaron = [];
+
   const tandas = await Promise.all(usables.map(async (f) => {
     try {
       return await LECTORES[f](filtros, limite);
@@ -413,6 +425,7 @@ export async function listar({ vista = 'general', ...filtros } = {}) {
       // Una fuente rota no puede llevarse la pantalla por delante: se queda sin
       // sus filas y se dice cual, que es mas util que una pagina en blanco.
       logger.error({ err: err.message, fuente: f }, 'Registro: fuente que no se pudo leer');
+      fallaron.push(f);
       return [];
     }
   }));
@@ -437,6 +450,9 @@ export async function listar({ vista = 'general', ...filtros } = {}) {
     // tabla de esa fuente no esta» se leen igual, y es la diferencia entre un
     // dia tranquilo y una migracion sin aplicar.
     fuentes: usables,
+    // Que fuente no se pudo LEER, que es distinto de que no tenga tabla. Sin
+    // decirlo, una consulta rota es indistinguible de un dia sin sucesos.
+    fallaron,
     sinTabla: pedidas.filter((f) => !hay.has(f)),
   };
 }

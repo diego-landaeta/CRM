@@ -48,6 +48,7 @@ export default function RegistroPage() {
   const [fuentes, setFuentes] = useState<Fuente[]>([]);
   const [elegidas, setElegidas] = useState<string[]>([]);
   const [sinTabla, setSinTabla] = useState<string[]>([]);
+  const [fallaron, setFallaron] = useState<string[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [usuarioId, setUsuarioId] = useState<number | ''>('');
   const [desde, setDesde] = useState('');
@@ -79,6 +80,7 @@ export default function RegistroPage() {
       if (r.success) {
         setFilas(r.data.filas || []);
         setSinTabla(r.data.sinTabla || []);
+        setFallaron(r.data.fallaron || []);
       } else {
         setError(r.error || 'No se pudo leer el registro');
       }
@@ -223,6 +225,22 @@ export default function RegistroPage() {
             No se está mirando{' '}
             <strong>{sinTabla.map((n) => fuentes.find((f) => f.nombre === n)?.titulo || n).join(', ')}</strong>:
             falta aplicar su migración. Lo demás sí está completo.
+          </span>
+        </div>
+      )}
+
+      {/* Una consulta que revienta NO es un dia tranquilo.
+          Paso de verdad: se pedia `w.nombre` y la columna es `w.label`, asi que
+          la fuente devolvia cero filas y la pantalla la enseñaba como una mas.
+          Cero filas es justo lo que se espera ver a veces, por eso no lo vio
+          nadie. Ahora se dice. */}
+      {fallaron.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200/60 dark:border-red-800/40 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-sm">
+          <XCircle size={16} weight="fill" className="text-red-600 mt-0.5 shrink-0" />
+          <span>
+            No se ha podido leer{' '}
+            <strong>{fallaron.map((n) => fuentes.find((f) => f.nombre === n)?.titulo || n).join(', ')}</strong>.
+            Lo que ves está <strong>incompleto</strong>: falta lo de esa fuente, no es que no haya pasado nada.
           </span>
         </div>
       )}
