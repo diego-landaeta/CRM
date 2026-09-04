@@ -28,6 +28,7 @@ import {
   BookOpen,
   Headset,
   ActivityIcon as Activity,
+  ClipboardText,
   FilePdf,
   UserCircle,
   CaretUp,
@@ -216,6 +217,11 @@ const NAV_SECTIONS = [
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.
       { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
+      // El registro (#111). Los mismos roles que exige el servidor con
+      // `roleGuard('admin', 'superadmin')`: cruza todas las fichas y a todos
+      // los companeros, y ofrecerlo a quien la API va a negar es peor que no
+      // ofrecerlo.
+      { label: 'Registro', to: '/registro', icon: ClipboardText, roles: ['superadmin', 'admin'] },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
     ],
