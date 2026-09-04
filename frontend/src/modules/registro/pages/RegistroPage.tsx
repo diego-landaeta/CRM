@@ -18,6 +18,23 @@ import { registroApi, type SucesoDelRegistro, type Fuente } from '../api/registr
  * contrario: por que fallo algo, y ahi los sucesos del sistema son el dato.
  */
 
+/**
+ * Una lista, o una vacia. Nunca otra cosa.
+ *
+ * `setFuentes(r.data)` daba por hecho que el servidor manda un array. Si manda
+ * cualquier otra cosa —un error con forma rara, una respuesta a medias, un 200
+ * de un proxy— `fuentes.filter` revienta y la pantalla se queda EN BLANCO. No
+ * un aviso: en blanco.
+ *
+ * Lo cazo el smoke de rutas de ISEIE:
+ *
+ *     TypeError: fuentes.filter is not a function
+ *
+ * Una pantalla de registro que se cae cuando algo va mal es justo la que no
+ * sirve: se mira precisamente cuando algo va mal.
+ */
+const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : []);
+
 type Vista = 'general' | 'todos';
 
 interface Usuario { id: number; nombre: string }
@@ -78,9 +95,9 @@ export default function RegistroPage() {
     try {
       const r = await registroApi.listar(filtros);
       if (r.success) {
-        setFilas(r.data.filas || []);
-        setSinTabla(r.data.sinTabla || []);
-        setFallaron(r.data.fallaron || []);
+        setFilas(lista(r.data?.filas));
+        setSinTabla(lista(r.data?.sinTabla));
+        setFallaron(lista(r.data?.fallaron));
       } else {
         setError(r.error || 'No se pudo leer el registro');
       }
@@ -98,11 +115,11 @@ export default function RegistroPage() {
   }, [cargar]);
 
   useEffect(() => {
-    registroApi.fuentes().then((r) => { if (r.success) setFuentes(r.data); }).catch(() => {});
+    registroApi.fuentes().then((r) => { if (r.success) setFuentes(lista(r.data)); }).catch(() => {});
     // Para el filtro de usuario. Si no se puede —permisos, o la pantalla se
     // abre sin ellos— el filtro se queda sin lista y los demas siguen.
     client.get('/users?limit=200')
-      .then((r) => setUsuarios(r?.data?.map?.((u: any) => ({ id: u.id, nombre: u.nombre })) || []))
+      .then((r) => setUsuarios(lista(r?.data).map((u: any) => ({ id: u.id, nombre: u.nombre }))))
       .catch(() => {});
   }, []);
 
