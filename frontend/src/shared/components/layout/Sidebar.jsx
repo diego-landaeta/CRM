@@ -53,7 +53,7 @@ import {
   CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key, ListChecks } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -225,6 +225,12 @@ const NAV_SECTIONS = [
       // Claves y variables (#80). Los mismos roles que exige el servidor con
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.
+      // El proceso comercial (#115). Va en el menu y no solo dentro de
+      // Configuracion porque Carlos entra aqui: una pantalla a la que hay que
+      // saber llegar es una pantalla que no se usa. Lectura para todos —la
+      // gestora necesita ver en que paso va cada prospecto—; editar, solo
+      // administradores, y eso lo decide la propia pantalla.
+      { label: 'Proceso comercial', to: '/configuracion/proceso', detail: 'Los cinco pasos', icon: ListChecks },
       { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'soporte'] },
       { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
