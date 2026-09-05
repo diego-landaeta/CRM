@@ -123,6 +123,7 @@ const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWe
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -262,6 +263,7 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
+          <Route path="/configuracion/proceso" element={<ProcesoPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
