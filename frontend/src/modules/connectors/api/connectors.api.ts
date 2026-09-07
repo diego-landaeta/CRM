@@ -52,19 +52,23 @@ export const CAMPOS_POR_TIPO: Record<TipoConector, Array<{
   ],
   wp_rest: [
     { clave: 'base_url', label: 'Dirección del sitio', ayuda: 'https://misitio.com', requerido: true },
-    { clave: 'endpoint', label: 'Ruta', ayuda: 'Por defecto /wp-json/wp/v2/posts' },
+    { clave: 'endpoint', label: 'Ruta', ayuda: 'Por defecto wp/v2/posts' },
     { clave: 'wp_user', label: 'Usuario', ayuda: 'Solo si el contenido es privado' },
     { clave: 'wp_app_password', label: 'Contraseña de aplicación', secreto: true },
   ],
   acf: [
     { clave: 'base_url', label: 'Dirección del sitio', requerido: true },
-    { clave: 'endpoint', label: 'Ruta', ayuda: 'La del tipo de contenido con ACF' },
+    { clave: 'endpoint', label: 'Ruta', ayuda: 'Por defecto acf/v3/posts' },
     { clave: 'wp_user', label: 'Usuario' },
     { clave: 'wp_app_password', label: 'Contraseña de aplicación', secreto: true },
   ],
   custom_api: [
-    { clave: 'base_url', label: 'Dirección completa', ayuda: 'La URL que devuelve el JSON', requerido: true },
-    { clave: 'items_path', label: 'Dónde está la lista', ayuda: 'Por ejemplo data.items — vacío si el JSON ya es la lista' },
+    // `url`, no `base_url`: es lo que lee `customRequest` en el adaptador. Los
+    // demas tipos si usan `base_url`. Puse `base_url` de memoria y el conector
+    // contestaba «config.url requerida» — por eso las claves salen de leer el
+    // adaptador y no del ticket.
+    { clave: 'url', label: 'Dirección completa', ayuda: 'La URL que devuelve el JSON', requerido: true },
+    { clave: 'items_path', label: 'Dónde está la lista', ayuda: 'Por ejemplo data — vacío si el JSON ya es la lista' },
     { clave: 'bearer_token', label: 'Token', ayuda: 'Se manda como Authorization: Bearer', secreto: true },
   ],
 };

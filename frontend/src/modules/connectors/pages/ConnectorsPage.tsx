@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Plus, PlugsConnected, ArrowClockwise, Trash, PencilSimple,
-  CheckCircle, XCircle, WarningCircle, Clock,
+  CheckCircle, XCircle, WarningCircle, Clock, MagicWand, DownloadSimple,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -11,6 +11,7 @@ import {
   conectoresApi, TIPOS, DESTINOS, type Conector,
 } from '../api/connectors.api';
 import DialogoConector from '../components/DialogoConector';
+import PanelMapeo from '../components/PanelMapeo';
 
 /**
  * Conectores de un proyecto (#6).
@@ -59,9 +60,14 @@ function Estado({ c }: { c: Conector }) {
     );
   }
   if (c.last_sync_status === 'partial') {
+    // «0 traídos, hubo fallos» tiene que leerse distinto de «12 traídos, hubo
+    // fallos»: en el primero no entró NADA y el mensaje no puede sonar a que sí.
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-        <WarningCircle size={13} weight="fill" /> {cuantos} traídos, con fallos · {hace(c.last_sync_at)}
+        <WarningCircle size={13} weight="fill" />
+        {cuantos === 0
+          ? `No entró ninguno: todos fallaron · ${hace(c.last_sync_at)}`
+          : `${cuantos} traídos, algunos fallaron · ${hace(c.last_sync_at)}`}
       </span>
     );
   }
@@ -81,6 +87,8 @@ export default function ConnectorsPage() {
   const [error, setError] = useState<string | null>(null);
   // `undefined` = cerrado; `null` = alta; un conector = cambio.
   const [editando, setEditando] = useState<Conector | null | undefined>(undefined);
+  const [mapeando, setMapeando] = useState<Conector | null>(null);
+  const [importando, setImportando] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     if (!projectId) { setCargando(false); return; }
@@ -114,6 +122,40 @@ export default function ConnectorsPage() {
     }
   }
 
+  /**
+   * Lanza la importacion.
+   *
+   * El servidor contesta 202 en seguida y sigue por su cuenta, asi que el estado
+   * no llega en la respuesta: se relee la lista a los pocos segundos. Se avisa de
+   * que puede tardar en vez de dejar un boton girando sin explicacion.
+   */
+  async function importar(c: Conector) {
+    if (!Object.keys(c.field_mapping || {}).length) {
+      toast({
+        title: 'Antes hay que mapear',
+        description: 'Sin decir a qué campo va cada dato, la importación no puede crear nada.',
+        variant: 'destructive',
+      });
+      setMapeando(c);
+      return;
+    }
+    setImportando(c.id);
+    try {
+      const r = await conectoresApi.importar(c.id);
+      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo lanzar');
+      toast({
+        title: 'Importación lanzada',
+        description: 'Va por detrás. El resultado aparece aquí en cuanto termine.',
+      });
+      // Dos releidas: una pronto por si fue rapido, otra por si no.
+      setTimeout(cargar, 3000);
+      setTimeout(() => { cargar(); setImportando(null); }, 12000);
+    } catch (e: any) {
+      toast({ title: 'No se pudo lanzar', description: e?.message, variant: 'destructive' });
+      setImportando(null);
+    }
+  }
+
   if (!projectId) {
     return (
       <div className="space-y-4">
@@ -135,11 +177,11 @@ export default function ConnectorsPage() {
         actions={
           <div className="flex items-center gap-2">
             <button type="button" onClick={cargar} disabled={cargando}
-              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-50">
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-bold hover:bg-muted disabled:opacity-50">
               <ArrowClockwise size={15} className={cargando ? 'animate-spin' : ''} /> Actualizar
             </button>
             <button type="button" onClick={() => setEditando(null)}
-              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90">
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90">
               <Plus size={15} weight="bold" /> Nuevo conector
             </button>
           </div>
@@ -147,7 +189,7 @@ export default function ConnectorsPage() {
       />
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200/60 dark:border-red-800/40 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-sm">
+        <div className="flex items-center gap-2 rounded-md border border-red-200/60 dark:border-red-800/40 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-sm">
           <XCircle size={16} weight="fill" className="text-red-600 shrink-0" /> {error}
         </div>
       )}
@@ -161,7 +203,7 @@ export default function ConnectorsPage() {
           description="Un conector trae al CRM lo que ya tienes en otro sitio: los productos de una tienda WooCommerce, las entradas de un WordPress, o cualquier API que devuelva JSON."
           action={
             <button type="button" onClick={() => setEditando(null)}
-              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90">
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90">
               <Plus size={15} weight="bold" /> Crear el primero
             </button>
           }
@@ -169,9 +211,9 @@ export default function ConnectorsPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {conectores.map((c) => (
-            <div key={c.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div key={c.id} className="rounded-md border border-border bg-card shadow-sm p-4 space-y-3">
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
                   <PlugsConnected size={18} weight="duotone" className="text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -201,12 +243,30 @@ export default function ConnectorsPage() {
                   </button>
                 </div>
               </div>
-              <div className="pt-2 border-t border-border">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
                 <Estado c={c} />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={() => setMapeando(c)}
+                    className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-bold hover:bg-muted">
+                    <MagicWand size={12} /> Probar y mapear
+                  </button>
+                  <button type="button" onClick={() => importar(c)} disabled={importando === c.id}
+                    className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                    <DownloadSimple size={12} /> {importando === c.id ? 'Importando…' : 'Importar'}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {mapeando && (
+        <PanelMapeo
+          conector={mapeando}
+          onCerrar={() => setMapeando(null)}
+          onCambiado={() => { setMapeando(null); cargar(); }}
+        />
       )}
 
       {editando !== undefined && (

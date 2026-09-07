@@ -86,7 +86,7 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
       <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60" onClick={onCerrar}>
         <div
           role="dialog" aria-modal="true" aria-label={esAlta ? 'Nuevo conector' : 'Editar conector'}
-          className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+          className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-md border border-border bg-card shadow-sm"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -102,7 +102,7 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
               <span className="text-xs font-medium text-muted-foreground">Nombre</span>
               <input value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)}
                 placeholder="Tienda de Psiko Aprende"
-                className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-border bg-background" />
+                className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background" />
               <span className="text-[11px] text-muted-foreground">Para reconocerlo en la lista.</span>
             </label>
 
@@ -112,14 +112,14 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
                 <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoConector)}
                   disabled={!esAlta}
                   title={esAlta ? undefined : 'El tipo no se cambia: crea otro conector'}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-border bg-background disabled:opacity-60">
+                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background disabled:opacity-60">
                   {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-muted-foreground">Dónde acaba</span>
                 <select value={destino} onChange={(e) => setDestino(e.target.value as DestinoConector)}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-border bg-background">
+                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background">
                   {DESTINOS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
                 </select>
               </label>
@@ -137,7 +137,7 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
                     onChange={(e) => setCampos((p) => ({ ...p, [c.clave]: e.target.value }))}
                     placeholder={c.secreto && yaGuardado[c.clave] ? '•••••••• guardado' : (c.ayuda || '')}
                     autoComplete="off"
-                    className="mt-1 w-full text-sm px-3 py-2 rounded-lg border border-border bg-background font-mono" />
+                    className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background font-mono" />
                   {c.secreto && yaGuardado[c.clave] ? (
                     <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 mt-0.5">
                       <CheckCircle size={11} weight="fill" /> Ya hay uno guardado. Déjalo vacío para no cambiarlo.
@@ -151,7 +151,7 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
 
             {/* El texto va en su propio <span>: si se deja suelto, el <strong>
                 pasa a ser OTRO hijo del flex y se va a una columna aparte. */}
-            <p className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted rounded-lg p-2.5">
+            <p className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted rounded-md p-2.5">
               <Warning size={13} className="mt-0.5 shrink-0" />
               <span>
                 Las claves se guardan en el servidor y no se vuelven a mostrar. Este conector
@@ -162,12 +162,12 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
 
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
             <button type="button" onClick={onCerrar}
-              className="text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-muted">
+              className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-bold hover:bg-muted">
               Cancelar
             </button>
             <button type="button" onClick={guardar} disabled={guardando || falta || !etiqueta.trim()}
               title={falta ? 'Faltan campos obligatorios' : undefined}
-              className="text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50">
               {guardando ? 'Guardando…' : esAlta ? 'Crear' : 'Guardar'}
             </button>
           </div>
