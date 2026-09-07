@@ -48,6 +48,7 @@ const ROUTE_TITLES = {
   '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
+  '/captacion/conectores': 'Conectores',
   '/configuracion/atajos': 'Atajos rápidos',
   '/configuracion/documentos': 'Numeración de documentos',
   '/configuracion/plantillas-email': 'Plantillas de email',
@@ -192,6 +193,7 @@ const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
+const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
@@ -317,6 +319,7 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
+          <Route path="/captacion/conectores" element={<ConnectorsPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />

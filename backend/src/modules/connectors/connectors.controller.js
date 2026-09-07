@@ -23,6 +23,39 @@ const updateSchema = z.object({
   active:        z.boolean().optional(),
 });
 
+/**
+ * Las credenciales del conector NO salen de aqui.
+ *
+ * `config` guarda el `consumer_secret` de WooCommerce, la contrasena de
+ * aplicacion de WordPress y el `bearer_token` de una API propia — y el modelo
+ * las devuelve enteras, tanto al listar como al pedir una. O sea que estaban
+ * viajando al navegador en cada carga de la pantalla, en texto plano.
+ *
+ * Se tapan AQUI y no en el modelo a proposito: `previewConnector` y el importador
+ * leen del modelo y necesitan el valor de verdad para llamar al API externo. Lo
+ * que no puede salir es por la puerta HTTP.
+ *
+ * Se manda `true`/`false` en vez del valor: la pantalla necesita saber si hay
+ * algo guardado —para decir «•••• guardado, escribe para cambiarlo»— pero no
+ * necesita el secreto para nada.
+ *
+ * Es la misma regla del panel de claves (#80): el valor no se devuelve nunca en
+ * un listado.
+ */
+const SECRETOS = ['consumer_secret', 'wp_app_password', 'bearer_token', 'password', 'api_key', 'token'];
+
+function sinSecretos(conector) {
+  if (!conector) return conector;
+  const config = { ...(conector.config || {}) };
+  const guardados = {};
+  for (const clave of Object.keys(config)) {
+    if (!SECRETOS.includes(clave)) continue;
+    guardados[clave] = Boolean(config[clave]);
+    delete config[clave];
+  }
+  return { ...conector, config, secretos_guardados: guardados };
+}
+
 function pid(req) {
   const p = parseInt(req.query.projectId);
   if (isNaN(p) || p <= 0) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
@@ -35,14 +68,15 @@ function cid(req) {
 }
 
 export async function list(req, res, next) {
-  try { res.json({ success: true, data: await model.listByProject(pid(req)) }); } catch (err) { next(err); }
+  try { const conectores = await model.listByProject(pid(req));
+    res.json({ success: true, data: conectores.map(sinSecretos) }); } catch (err) { next(err); }
 }
 
 export async function getById(req, res, next) {
   try {
     const c = await model.findById(cid(req));
     if (!c) throw new AppError('No encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: c });
+    res.json({ success: true, data: sinSecretos(c) });
   } catch (err) { next(err); }
 }
 
@@ -51,7 +85,7 @@ export async function create(req, res, next) {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const c = await model.create(parsed.data);
-    res.status(201).json({ success: true, data: c });
+    res.status(201).json({ success: true, data: sinSecretos(c) });
   } catch (err) { next(err); }
 }
 
@@ -59,9 +93,27 @@ export async function update(req, res, next) {
   try {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const c = await model.update(cid(req), parsed.data);
+
+    // GUARDAR NO PUEDE BORRAR EL SECRETO QUE NO SE MANDO.
+    //
+    // `update` reemplaza `config` entero. Como la pantalla lo recibe SIN los
+    // secretos —los tapa `sinSecretos`— devolverlo tal cual al cambiar la
+    // etiqueta dejaria el conector sin `consumer_secret` y sin decir nada: la
+    // proxima importacion fallaria con un 401 y nadie relacionaria las dos cosas.
+    //
+    // Asi que el `config` que llega se FUSIONA sobre el guardado. Mandar una
+    // clave la cambia; no mandarla la deja como estaba. Para borrarla de verdad
+    // se manda vacia, que es explicito.
+    const datos = { ...parsed.data };
+    if (datos.config) {
+      const actual = await model.findById(cid(req));
+      if (!actual) throw new AppError('No encontrado', 404, 'NOT_FOUND');
+      datos.config = { ...(actual.config || {}), ...datos.config };
+    }
+
+    const c = await model.update(cid(req), datos);
     if (!c) throw new AppError('No encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: c });
+    res.json({ success: true, data: sinSecretos(c) });
   } catch (err) { next(err); }
 }
 

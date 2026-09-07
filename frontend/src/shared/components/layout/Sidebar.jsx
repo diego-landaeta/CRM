@@ -136,6 +136,10 @@ const NAV_SECTIONS = [
       { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
+      // Conectores (#6). El backend existia desde `bcf9c3e` y no habia forma de
+      // llegar: sin pantalla y sin entrada. Los mismos roles que el resto de
+      // Captacion.
+      { label: 'Conectores', to: '/captacion/conectores', icon: PlugsConnected, roles: ['superadmin', 'admin'], module: 'connectors' },
       { label: 'Widget web', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
