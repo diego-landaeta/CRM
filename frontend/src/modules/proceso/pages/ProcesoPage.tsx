@@ -74,7 +74,7 @@ export default function ProcesoPage() {
       recargar();
     } catch (e) {
       const err = e as { status?: number; message?: string };
-      setErrorDialogo(mensajeDeError(err?.status, err?.message || 'No se ha podido guardar.'));
+      setErrorDialogo(mensajeDeError(err?.status, err?.message || 'No se ha podido guardar.', creando ? 'crear' : 'editar'));
     } finally {
       setGuardando(false);
     }
@@ -90,7 +90,7 @@ export default function ProcesoPage() {
       const err = e as { status?: number; message?: string };
       toast({
         title: 'No se ha podido cambiar',
-        description: mensajeDeError(err?.status, err?.message || ''),
+        description: mensajeDeError(err?.status, err?.message || '', 'activar'),
         variant: 'destructive',
       });
     }
@@ -114,7 +114,7 @@ export default function ProcesoPage() {
       setPasos(antes);
       toast({
         title: 'No se ha podido reordenar',
-        description: mensajeDeError(err?.status, err?.message || ''),
+        description: mensajeDeError(err?.status, err?.message || '', 'reordenar'),
         variant: 'destructive',
       });
     }

@@ -62,15 +62,32 @@ export const procesoApi = {
     client.delete(`/proceso/pasos/${id}`),
 };
 
+/** Qué se estaba intentando cuando el servidor dijo que no. */
+export type Operacion = 'crear' | 'editar' | 'reordenar' | 'activar';
+
 /**
  * Lo que hay que enseñar cuando el servidor dice que no.
  *
- * Los tres que documenta el issue, con el porqué en cada uno: un «error 409»
- * a secas obliga a adivinar, y quien está delante no sabe qué es un 409.
+ * Con el porqué en cada uno: un «error 409» a secas obliga a adivinar, y quien
+ * está delante no sabe qué es un 409.
+ *
+ * EL 400 SIGNIFICA DOS COSAS DISTINTAS, y por eso hace falta saber qué se
+ * estaba haciendo. Guardando un paso es que el día final va antes que el
+ * inicial; reordenando es que la lista trae un paso que no es de este proyecto
+ * —lo dejó escrito Diego al contar cómo lo probó contra la base—. Enseñar lo
+ * de los días al fallar un reordenamiento no dice nada de lo que ha pasado.
  */
-export function mensajeDeError(estado: number | undefined, porDefecto: string): string {
+export function mensajeDeError(
+  estado: number | undefined,
+  porDefecto: string,
+  operacion: Operacion = 'editar',
+): string {
   if (estado === 409) return 'Ya hay un paso con esa clave en este proyecto. Elige otra.';
-  if (estado === 400) return 'El día final no puede ser anterior al inicial.';
+  if (estado === 400) {
+    return operacion === 'reordenar'
+      ? 'La lista incluye un paso que no es de este proyecto. Vuelve a cargar la pantalla.'
+      : 'El día final no puede ser anterior al inicial.';
+  }
   if (estado === 404) return 'Ese paso no es de este proyecto.';
   if (estado === 403) return 'Esto solo lo puede cambiar un administrador.';
   return porDefecto;

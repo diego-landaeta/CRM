@@ -59,6 +59,16 @@ describe('lo que se dice cuando el servidor dice que no', () => {
     expect(mensajeDeError(404, 'x')).toMatch(/no es de este proyecto/i);
   });
 
+  it('el 400 significa dos cosas y dice la que toca', () => {
+    // Diego dejo escrito, contando como lo probo contra la base, que reordenar
+    // con un paso ajeno tambien responde 400. Enseñar ahi lo de los dias no
+    // dice nada de lo que ha pasado.
+    expect(mensajeDeError(400, 'x', 'editar')).toMatch(/anterior al inicial/i);
+    expect(mensajeDeError(400, 'x', 'crear')).toMatch(/anterior al inicial/i);
+    expect(mensajeDeError(400, 'x', 'reordenar')).toMatch(/no es de este proyecto/i);
+    expect(mensajeDeError(400, 'x', 'reordenar')).not.toMatch(/anterior al inicial/i);
+  });
+
   it('el 403 dice de quién es la culpa, no que se ha roto algo', () => {
     expect(mensajeDeError(403, 'x')).toMatch(/administrador/i);
   });
