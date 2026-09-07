@@ -146,8 +146,8 @@ export default function ProcesoPage() {
         <Info size={17} weight="regular" className="mt-0.5 shrink-0 text-info" />
         <p className="text-normal text-muted-foreground">
           Los días son <strong className="text-foreground">días desde que entra el prospecto</strong>, no días de la
-          semana. «Cuándo» guarda la etiqueta del documento —«lunes o martes»— porque describe a alguien que entró un
-          lunes, pero lo que ordena el proceso es cuánto lleva esperando.
+          semana. Quien entra un jueves hace su primer paso el jueves o el viernes; no espera al lunes. El documento
+          comercial los cuenta por día de la semana porque describe a alguien que entró un lunes.
         </p>
       </Card>
 
