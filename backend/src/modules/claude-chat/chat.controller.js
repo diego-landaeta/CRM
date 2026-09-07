@@ -248,12 +248,17 @@ export async function status(req, res, next) {
   try {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const apiKey = await getAnthropicKey(projectId);
+    // El gasto va aqui y no en otra llamada: la pantalla pregunta «¿puedo
+    // escribir ahora?», y la clave sin el tope no contesta esa pregunta —
+    // se puede tener clave y estar agotado, y son avisos distintos.
+    const gastoAhora = await gasto.estado();
     res.json({
       success: true,
       data: {
         api_configured: !!apiKey,
         rate_limit_per_hour: RATE_LIMIT,
         used_last_hour: await model.countUserMessagesLastHour(req.user.userId),
+        gasto: gastoAhora,
         warning: apiKey ? null : 'ANTHROPIC_API_KEY no configurada. Configura en Settings > APIs.',
       },
     });
