@@ -100,6 +100,18 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
       { label: 'Prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, module: 'leads' },
+      // El proceso comercial (#115) va AQUI y no en Sistema.
+      //
+      // Estaba al final del menu, en la seccion que va plegada, y no lo
+      // encontraba nadie. Es configuracion, si —crea y ordena los cinco
+      // pasos—, pero es la configuracion de lo que hace el equipo todos los
+      // dias, y Carlos entra a esto. Una pantalla a la que hay que saber
+      // llegar es una pantalla que no se usa.
+      //
+      // Leerlo lo puede hacer cualquiera —la gestora necesita ver en que paso
+      // va cada prospecto—; editarlo, solo administradores, y eso lo decide la
+      // propia pantalla.
+      { label: 'Proceso comercial', to: '/configuracion/proceso', detail: 'Los cinco pasos', icon: ListChecks },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -240,12 +252,6 @@ const NAV_SECTIONS = [
       // Claves y variables (#80). Los mismos roles que exige el servidor con
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.
-      // El proceso comercial (#115). Va en el menu y no solo dentro de
-      // Configuracion porque Carlos entra aqui: una pantalla a la que hay que
-      // saber llegar es una pantalla que no se usa. Lectura para todos —la
-      // gestora necesita ver en que paso va cada prospecto—; editar, solo
-      // administradores, y eso lo decide la propia pantalla.
-      { label: 'Proceso comercial', to: '/configuracion/proceso', detail: 'Los cinco pasos', icon: ListChecks },
       { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'soporte'] },
       { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
