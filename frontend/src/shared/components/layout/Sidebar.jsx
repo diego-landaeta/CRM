@@ -674,7 +674,7 @@ function ProjectAvatar({ project, size = 'md' }) {
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { activeProject, switchProject, projects } = useProjectContext();
+  const { activeProject, switchProject, projects, activeIssuer, switchIssuer } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1001,8 +1001,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
               onClick={() => setPickerOpen((v) => !v)}
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
-              aria-label="Selector de proyecto"
-              title={collapsed ? activeProject?.nombre : undefined}
+              aria-label={`Selector de proyecto. Ahora: ${activeIssuer
+                ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+                : (activeProject?.nombre || 'sin elegir')}`}
+              title={activeIssuer
+                ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+                : (collapsed ? activeProject?.nombre : undefined)}
               className={cn(
                 'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
                 collapsed
@@ -1013,7 +1017,17 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
               <ProjectAvatar project={activeProject} size="sm" />
               {!collapsed && (
                 <>
-                  <span className="flex-1 truncate text-left">{activeProject?.nombre || 'Selecciona proyecto'}</span>
+                  <span className="flex-1 truncate text-left">
+                    {activeIssuer ? activeIssuer.nombre : (activeProject?.nombre || 'Selecciona proyecto')}
+                  </span>
+                  {/* La cuenta va aparte y no se recorta: es lo que distingue
+                      «CEDIA» de «CEDIA entera», y con un nombre largo se perdia
+                      dentro del texto cortado. */}
+                  {activeIssuer && (
+                    <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                      {activeIssuer.campus.length} campus
+                    </span>
+                  )}
                   <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </>
               )}
@@ -1048,14 +1062,21 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                       if (sA !== sB) return sA.localeCompare(sB, 'es');
                       return (a.id || 0) - (b.id || 0);
                     });
+                    // Para poder decir «CEDIA · 6 campus» sin recontar en
+                    // cada encabezado.
+                    const campusPorSociedad = projects.reduce((cuenta, p) => {
+                      const id = p.sociedad_emisora_id;
+                      if (id) cuenta[id] = (cuenta[id] || 0) + 1;
+                      return cuenta;
+                    }, {});
                     const allEntry = projects.length > 1 ? (
-                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
+                      <li key="__all__" role="option" aria-selected={!activeIssuer && activeProject?.id === -1}>
                         <button
                           type="button"
                           onClick={() => { switchProject(-1); setPickerOpen(false); }}
                           className={cn(
                             'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
-                            activeProject?.id === -1 && 'bg-secondary font-semibold'
+                            !activeIssuer && activeProject?.id === -1 && 'bg-secondary font-semibold'
                           )}
                         >
                           <ProjectAvatar project={{ isAll: true }} size="sm" />
@@ -1066,16 +1087,41 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     ) : null;
                     let lastSoc = undefined;
                     const items = sorted.map((p) => {
-                      const isActive = p.id === activeProject?.id;
+                      const isActive = !activeIssuer && p.id === activeProject?.id;
                       const soc = p.sociedad_nombre || null;
                       const showHeader = soc !== lastSoc;
                       lastSoc = soc;
                       return (
                         <div key={p.id}>
                           {showHeader && (
-                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
-                              {soc || 'Sin sociedad'}
-                            </div>
+                            // Los encabezados eran letra muerta: se leian y no
+                            // se podian pulsar (#120). Al elegir uno se pide esa
+                            // sociedad entera —sus campus sumados—, que es lo que
+                            // Carlos mira. «Sin sociedad» no agrupa nada, asi que
+                            // ese sigue siendo un titulo y no un boton.
+                            soc && p.sociedad_emisora_id ? (
+                              <li role="option" aria-selected={activeIssuer?.id === Number(p.sociedad_emisora_id)}>
+                                <button
+                                  type="button"
+                                  onClick={() => { switchIssuer(Number(p.sociedad_emisora_id)); setPickerOpen(false); }}
+                                  className={cn(
+                                    'w-full flex items-center gap-2 px-2 pt-2 pb-0.5 text-left hover:bg-secondary transition-colors',
+                                    activeIssuer?.id === Number(p.sociedad_emisora_id) && 'bg-secondary'
+                                  )}
+                                >
+                                  <span title={soc} className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60">
+                                    {soc}
+                                  </span>
+                                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {campusPorSociedad[p.sociedad_emisora_id] || 0} campus
+                                  </span>
+                                </button>
+                              </li>
+                            ) : (
+                              <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
+                                {soc || 'Sin sociedad'}
+                              </div>
+                            )
                           )}
                           <li role="option" aria-selected={isActive}>
                             <button

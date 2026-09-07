@@ -8,6 +8,7 @@ import { toast } from '@/shared/hooks/useToast';
 import {
   Users, CurrencyEur, Wallet, TrendUp, ChartBar, Package, Megaphone, UserList, DownloadSimple,
   FilePdf, ChartLineUp, Sparkle,
+  Buildings,
 } from '@phosphor-icons/react';
 import ReportsIAView from '@/modules/reports-ia/components/ReportsIAView';
 import { exportReportPDF } from '../lib/exportPdf';
@@ -75,7 +76,8 @@ function exportReportCSV(data, project, range) {
   a.click();
   URL.revokeObjectURL(url);
 }
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -93,7 +95,7 @@ const PIPELINE_COLORS = {
 
 
 export default function ReportsPage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState({
@@ -106,8 +108,9 @@ export default function ReportsPage() {
     async function load() {
       setLoading(true);
       try {
-        const params = { ...(activeProject?.id ? { projectId: activeProject.id } : {}), from: range.from, to: range.to };
-        const qs = new URLSearchParams(params).toString();
+        const p = new URLSearchParams({ from: range.from, to: range.to });
+        ponerAmbito(p, { activeIssuerId, activeProject });
+        const qs = p.toString();
         const res = await client.get(`/informes/overview?${qs}`);
         if (res.success) setData(res.data);
       } catch (err) {
@@ -115,7 +118,30 @@ export default function ReportsPage() {
       } finally { setLoading(false); }
     }
     load();
-  }, [activeProject?.id, range.from, range.to]);
+  }, [activeProject?.id, activeIssuerId, range.from, range.to]);
+
+  // Una sociedad sin campus asignados da un informe vacio A PROPOSITO. Sin
+  // decirlo, una tabla en blanco se lee como una averia y alguien acaba
+  // buscando el fallo donde no esta.
+  if (sociedadSinCampus(activeIssuer)) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title="Reportes" subtitle={activeIssuer.nombre} />
+        <EmptyState
+          icon={Buildings}
+          title={`${activeIssuer.nombre} no tiene campus asignados`}
+          description="Por eso no hay cifras que enseñar. En cuanto se le asigne alguno, el informe las sumará todas."
+        />
+      </div>
+    );
+  }
+
+  // Como se llama lo que se esta mirando. Con una sociedad elegida el informe
+  // decia «Todos los proyectos» mientras enseñaba las cifras de CEDIA, que es
+  // la peor combinacion posible: cifras de una cosa con el nombre de otra.
+  const nombreAmbito = activeIssuer
+    ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+    : (activeProject?.nombre || 'Todos los proyectos');
 
   if (loading && !data) {
     return (
@@ -144,7 +170,7 @@ export default function ReportsPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Reportes"
-        subtitle={activeProject ? `${activeProject.nombre}` : 'Todos los proyectos'}
+        subtitle={nombreAmbito}
         actions={
           tab === 'crm' ? (
             <div className="flex items-center gap-2 flex-wrap">
@@ -167,7 +193,7 @@ export default function ReportsPage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => exportReportCSV(data, activeProject?.nombre, range)}
+                    onClick={() => exportReportCSV(data, nombreAmbito, range)}
                     aria-label="Exportar reporte a CSV"
                     title="Exportar CSV"
                     className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -178,7 +204,7 @@ export default function ReportsPage() {
                     type="button"
                     onClick={async () => {
                       try {
-                        await exportReportPDF(data, activeProject?.nombre, range);
+                        await exportReportPDF(data, nombreAmbito, range);
                       } catch (err) {
                         toast({ title: 'Error generando PDF', description: err?.message || 'Inesperado', variant: 'destructive' });
                       }
@@ -233,7 +259,8 @@ export default function ReportsPage() {
           periodo anterior y la grafica con selector de serie. */}
       <PanelResumen
         projectId={activeProject?.id}
-        projectName={activeProject?.nombre}
+        issuerId={activeIssuerId}
+        projectName={nombreAmbito}
         from={range.from}
         to={range.to}
       />
@@ -245,7 +272,7 @@ export default function ReportsPage() {
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
 
-      <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={range.from} to={range.to} />
+      <ReportsDownloadSection projectId={activeProject?.id} issuerId={activeIssuerId} projectName={nombreAmbito} from={range.from} to={range.to} />
 
       {/* El catálogo de reportes por tema, igual que en el CRM hermano. */}
       <ReportesDisponibles />

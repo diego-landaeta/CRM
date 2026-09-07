@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Users, Receipt, CurrencyEur, ChartLineUp, TrendUp, TrendDown } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const ACCENT = {
   sky: { bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-600 dark:text-sky-400' },
@@ -84,7 +85,7 @@ function HeroTooltip({ active, payload, label, formatea, color, prevValue }) {
   );
 }
 
-export default function PanelResumen({ projectId, projectName, from, to }) {
+export default function PanelResumen({ projectId, issuerId, projectName, from, to }) {
   const [panel, setPanel] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [heroSerie, setHeroSerie] = useState('ingresos');
@@ -95,7 +96,7 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
     let vivo = true;
     setCargando(true);
     const q = new URLSearchParams();
-    if (projectId) q.set('projectId', String(projectId));
+    ponerAmbito(q, { activeIssuerId: issuerId, activeProject: { id: projectId } });
     if (from) q.set('from', from);
     if (to) q.set('to', to);
     client.get(`/informes/panel?${q.toString()}`)
@@ -103,7 +104,7 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
       .catch(() => { if (vivo) setPanel(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to]);
+  }, [projectId, issuerId, from, to]);
 
   const serie = panel?.serie || [];
   const chispa = (k) => serie.map((x) => Number(x[k] || 0));
