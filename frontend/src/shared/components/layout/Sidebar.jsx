@@ -42,6 +42,7 @@ import {
   Lightning,
   WebhooksLogo,
   Tree,
+  ListBullets,
   GraduationCap,
   CurrencyEur,
   TrendUp,
@@ -57,6 +58,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
+import { avatarColorForName } from '@/shared/lib/ui';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
@@ -78,15 +80,19 @@ const NAV_SECTIONS = [
   {
     label: 'Testeo',
     items: [
-      { label: 'TESTEO2', to: '/testeo2', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
-      { label: 'SUITE DASH', to: '/suite-dash', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
+      { label: 'TESTEO2', to: '/testeo2', detail: 'Maqueta del rediseño', href: '/testeo2/prospectos', icon: ChartBar, previewOnly: true, featured: true },
+      { label: 'SUITE DASH', to: '/suite-dash', detail: 'La referencia', href: '/testeo2/suite-dash', icon: Sparkle, previewOnly: true, featured: true },
+      // El muestrario de primitivas. Sin esta entrada existe pero no lo
+      // encuentra nadie: hay que escribir /dev/components a mano, que es
+      // exactamente lo que hacía que «no existiera».
+      { label: 'Las 22 primitivas', to: '/dev/components', detail: 'Las piezas, juntas', icon: Sparkle, previewOnly: true },
     ],
   },
   {
     label: 'Principal',
     items: [
-      { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
+      { label: 'Prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, module: 'leads' },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -101,13 +107,13 @@ const NAV_SECTIONS = [
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
           // que puede pasarle a su numero— ya esta, con su casilla y su registro
           // de quien lo acepto (tarea #45).
-          { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
-          { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          { label: 'Chat', to: '/whatsapp/chat', detail: 'Conversaciones', icon: ChatText },
+          { label: 'Plantillas', to: '/whatsapp/plantillas', detail: 'Mensajes preparados', icon: ChatText },
           // El banco de mensajes (#101). Va aqui y no dentro del chat porque no
           // es el chat: uno sirve para conversar y este para buscar, auditar y
           // llevarse una copia. El servidor recorta lo que ve cada cual — un
           // admin lo ve entero, una gestora solo su numero.
-          { label: 'Banco de mensajes', to: '/whatsapp/banco', icon: ChatText },
+          { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
@@ -117,107 +123,111 @@ const NAV_SECTIONS = [
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo. Estaba solo para administradores, asi que la
           // pantalla existia pero ninguna gestora podia llegar a ella.
-          { label: 'Conexión', to: '/whatsapp/conexion', icon: QrCode },
+          { label: 'Conexión', to: '/whatsapp/conexion', detail: 'Enlazar tu número', icon: QrCode },
           // La guia, en el menu y no escondida: si hay que preguntar donde esta,
           // ya se ha perdido a quien tenia que leerla.
-          { label: 'Cómo se usa', to: '/whatsapp/ayuda', icon: BookOpen },
+          { label: 'Cómo se usa', to: '/whatsapp/ayuda', detail: 'La guía, paso a paso', icon: BookOpen },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions' },
+      { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions' },
     ],
   },
   {
     label: 'Captación',
     items: [
-      { label: 'Email', to: '/secuencias-email', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
-      { label: 'Formularios', to: '/captacion', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
-      { label: 'Make', to: '/captacion/make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
-      { label: 'Webhooks', to: '/captacion/webhooks', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
-      { label: 'Widget web', to: '/captacion/whatsapp', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
-      { label: 'Campañas', to: '/campanas', icon: Megaphone, roles: ['superadmin', 'admin'] },
-      { label: 'Tráfico orgánico', to: '/campanas/seo', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
+      { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
+      { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
+      { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
+      { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
+      { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
+      { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'] },
+      { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
     ],
   },
   {
     label: 'Publicidad',
     items: [
-      { label: 'Meta Ads', to: '/meta-ads', icon: ChartBar, roles: ['superadmin', 'admin'] },
-      { label: 'Google Ads', to: '/google-ads', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
+      { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'] },
+      { label: 'Google Ads', to: '/google-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], comingSoon: true, statusTag: 'Próx.' },
     ],
   },
   {
     label: 'Catálogo',
     items: [
-      { label: 'Productos', to: '/productos', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'WooCommerce', to: '/productos/woocommerce', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
-      { label: 'Árbol de categorías', to: '/productos/arbol', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Certificados', to: '/documentos', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
+      { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Vendidos sin fecha', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'WooCommerce', to: '/productos/woocommerce', detail: 'Sincronía de tienda', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
+      // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
+      // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
+      // árbol de verdad no tenía entrada en ningún sitio.
+      { label: 'Productos por categoría', to: '/productos/arbol', detail: 'Productos agrupados', icon: ListBullets, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Árbol de categorías', to: '/productos/categorias', detail: 'Jerarquía de categorías', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Certificados', to: '/documentos', detail: 'Certificados', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
     ],
   },
   {
     label: 'Tutores',
     items: [
-      { label: 'Tutores', to: '/tutores', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { label: 'Mis cursos', to: '/mis-cursos', icon: GraduationCap, roles: ['tutor'] },
-      { label: 'Sin tutor', to: '/tutores/sin-tutor', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
-      { label: 'Comisiones', to: '/tutores/comisiones', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Mis cursos', to: '/mis-cursos', detail: 'Tus cursos y tu parte', icon: GraduationCap, roles: ['tutor'] },
+      { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
+      { label: 'Comisiones', to: '/tutores/comisiones', detail: 'Lo que se les debe', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
   },
   {
     label: 'Finanzas',
     items: [
-      { label: 'Dashboard', to: '/finanzas', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
-      { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
-      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
-      { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
-      { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
-      { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
-      { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Facturación', to: '/finanzas/facturas', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
-      { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
+      { label: 'Ingresos', to: '/finanzas/ingresos', detail: 'Entradas de dinero', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
+      { label: 'Conversiones', to: '/finanzas/conversiones', detail: 'Los que compraron', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
+      { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
+      { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
+      { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
+      { label: 'Comisiones', to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
+      { label: 'Nóminas', to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
+      { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
+      { label: 'Integraciones', to: '/finanzas/integraciones', detail: 'Servicios conectados', icon: PlugsConnected, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { label: 'Reportes', to: '/informes', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
-      { label: 'Análisis IA', to: '/informes/ia', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/chat-ia', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
     // Clientes = consulta de datos de clientes (no ventas). Va al final.
     label: 'Clientes',
     items: [
-      { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
-      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Buscar duplicados', to: '/prospectos/duplicados', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
-      { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
+      { label: 'Clientes', to: '/clientes', detail: 'Quién ya compró', icon: UserCheck, module: 'clients' },
+      { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas' },
     ],
   },
   {
     label: 'Sistema',
     items: [
-      { label: 'Mensajes', to: '/mensajes', icon: ChatsCircle },
-      { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', icon: GitMerge },
-      { label: 'Notificaciones', to: '/notificaciones', icon: BookOpen },
+      { label: 'Mensajes', to: '/mensajes', detail: 'Del equipo', icon: ChatsCircle },
+      { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge },
+      { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
-      { label: 'Soporte', to: '/soporte', icon: Headset },
+      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
+      { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
       // Claves y variables (#80). Los mismos roles que exige el servidor con
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.
-      { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
-      { label: 'Status', to: '/status', icon: Activity },
-      { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
+      { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'soporte'] },
+      { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
+      { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],
   },
 ];
@@ -317,7 +327,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
         title={displayLabel}
         aria-label={displayLabel}
         className={cn(
-          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          'w-full flex items-center justify-center h-9 rounded-md transition-colors',
           hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -331,7 +341,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] transition-all',
+          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-all',
           hasActiveChild ? 'text-foreground font-bold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
         )}
       >
@@ -401,7 +411,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
         aria-label={collapsed ? panel.label : panel.label}
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
         )}
       >
         <Icon size={18} weight="regular" />
@@ -424,7 +434,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5',
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5',
           isActive
             ? 'bg-primary/10 text-primary font-bold shadow-sm'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -444,7 +454,7 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
-function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, collapsed, featured }) {
+function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, onClick, collapsed, featured }) {
   const displayLabel = applyLabel(label, labelOverrides);
   const location = useLocation();
   const comingSoon = !href && !isBetaAllowed(to);
@@ -455,7 +465,7 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         aria-label={`${displayLabel} — Próximamente`}
         className={cn(
           'relative flex items-center rounded-md text-[13px] text-muted-foreground/50 cursor-not-allowed select-none',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+          collapsed ? 'justify-center h-9' : 'gap-2.5 px-3 py-1.5'
         )}
       >
         <Icon size={18} weight="regular" />
@@ -484,8 +494,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         className={cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -509,7 +519,17 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
             </span>
           )}
         </span>
-        {!collapsed && displayLabel}
+        {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{displayLabel}</span>
+            {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
+                de una pantalla no dice si es la que buscas —«Captacion» puede
+                ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
+            {detail && (
+              <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
+            )}
+          </span>
+        )}
         {!collapsed && badge && (
           <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
             {badge}
@@ -529,8 +549,8 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
         cn(
           'relative flex items-center rounded-md text-[13px] transition-all',
           collapsed
-            ? 'justify-center h-10'
-            : 'gap-3 px-3 py-2.5',
+            ? 'justify-center h-9'
+            : 'gap-2.5 px-3 py-1.5',
           isActive
             ? featured
               ? 'bg-primary text-primary-foreground font-bold shadow-sm'
@@ -557,7 +577,17 @@ function NavItem({ to, href, icon: Icon, label, badge, labelOverrides, onClick, 
               </span>
             )}
           </span>
-          {!collapsed && displayLabel}
+          {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{displayLabel}</span>
+            {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
+                de una pantalla no dice si es la que buscas —«Captacion» puede
+                ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
+            {detail && (
+              <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
+            )}
+          </span>
+        )}
           {!collapsed && badge && (
             <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
               {badge}
@@ -587,26 +617,12 @@ function inicialesDe(nombre = '') {
   return sinPrefijo.slice(0, 2);
 }
 
-// El color sale del propio nombre, siempre el mismo para la misma marca. Asi
-// ISECD es verde hoy y verde mañana: la memoria visual funciona porque el color
-// no cambia, no porque sea bonito.
-const TONOS = [
-  'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
-  'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
-];
-function tonoDe(nombre = '') {
-  let n = 0;
-  for (const ch of String(nombre)) n = (n * 31 + ch.charCodeAt(0)) % 9973;
-  return TONOS[n % TONOS.length];
-}
+// La paleta vive en shared/lib/ui.ts, que es el unico sitio donde puede vivir.
+// Aqui habia una copia; era la QUINTA del CRM, y la unica que llevaba variante
+// oscura — las otras cuatro pintaban un parche claro sobre fondo negro.
+const tonoDe = avatarColorForName;
 
-function ProjectAvatar({ project, size = 'md' }) {
+export function ProjectAvatar({ project, size = 'md' }) {
   const { theme } = useTheme();
   const [falloImagen, setFalloImagen] = useState(false);
   const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
@@ -614,7 +630,7 @@ function ProjectAvatar({ project, size = 'md' }) {
   // «Todos los proyectos» va primero: no es una marca, es una vista.
   if (project?.isAll) {
     return (
-      <div className={`${dim} rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
+      <div className={`${dim} rounded-lg bg-info-soft text-info-soft-foreground flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
         ALL
       </div>
     );
@@ -677,8 +693,6 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const { activeProject, switchProject, projects } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerPos, setPickerPos] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuPos, setUserMenuPos] = useState(null);
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
@@ -763,51 +777,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       duration: 6000,
     });
   }
-  const pickerRef = useRef(null);
-  const pickerBtnRef = useRef(null);
-  const pickerPopRef = useRef(null);
   const userBtnRef = useRef(null);
   const userMenuRef = useRef(null);
 
-  useEffect(() => {
-    if (!pickerOpen) return;
-    function compute() {
-      const btn = pickerBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const margin = 8;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const width = Math.max(rect.width, 220);
-      const maxH = Math.min(320, vh - rect.bottom - margin * 2);
-      let left = rect.left;
-      if (left + width + margin > vw) left = vw - width - margin;
-      if (left < margin) left = margin;
-      // Si no hay espacio abajo, abrir hacia arriba
-      let top = rect.bottom + 6;
-      if (top + maxH + margin > vh && rect.top > maxH) {
-        top = rect.top - 6 - maxH;
-      }
-      setPickerPos({ top, left, width, maxHeight: maxH });
-    }
-    compute();
-    function onDocClick(e) {
-      if (pickerBtnRef.current?.contains(e.target)) return;
-      if (pickerPopRef.current?.contains(e.target)) return;
-      setPickerOpen(false);
-    }
-    function onKey(e) { if (e.key === 'Escape') setPickerOpen(false); }
-    window.addEventListener('resize', compute);
-    window.addEventListener('scroll', compute, true);
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('resize', compute);
-      window.removeEventListener('scroll', compute, true);
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [pickerOpen]);
 
   // User menu: posicionamiento + click fuera
   useEffect(() => {
@@ -971,146 +943,37 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
               {BETA_MODE && (
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded flex-shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
                   BETA {BETA_VERSION}
                 </span>
               )}
             </div>
-            {/* La marca, ya con toda la anchura para ella: aqui si cabe entera. */}
-            <span className="block text-[11px] text-muted-foreground truncate">
-              {activeProject?.id === -1
-                ? 'todas las marcas'
-                : (activeProject?.nombre || 'sin marca elegida')}
-            </span>
+            {/* Aqui salia el nombre de la marca. Se ha quitado: salia TRES veces
+                en la misma pantalla —aqui, en el selector de abajo y en la
+                cabecera— y con eso no se sabe cual manda (#79, punto 2). Ahora
+                vive solo en la cabecera, y ademas desde alli se cambia. */}
           </div>
         )}
       </div>
 
-      {/* Project Selector */}
-      <div className={cn('mb-6', collapsed ? 'px-0' : 'px-1')}>
-        {!collapsed && (
-          <label className="text-xs font-medium text-muted-foreground px-2 mb-1.5 block">
-            Proyecto
-          </label>
-        )}
-        <div className={cn('flex items-center', collapsed ? 'flex-col gap-1.5' : 'gap-2')}>
-          <div className={cn('relative', collapsed ? 'w-full' : 'flex-1')} ref={pickerRef}>
-            <button
-              type="button"
-              ref={pickerBtnRef}
-              onClick={() => setPickerOpen((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={pickerOpen}
-              aria-label="Selector de proyecto"
-              title={collapsed ? activeProject?.nombre : undefined}
-              className={cn(
-                'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
-                collapsed
-                  ? 'w-full h-10 justify-center'
-                  : 'w-full h-9 pl-1 pr-8 gap-2'
-              )}
-            >
-              <ProjectAvatar project={activeProject} size="sm" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 truncate text-left">{activeProject?.nombre || 'Selecciona proyecto'}</span>
-                  <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                </>
-              )}
-            </button>
-            {pickerOpen && pickerPos && (
-              <Portal>
-                <ul
-                  ref={pickerPopRef}
-                  role="listbox"
-                  aria-label="Lista de proyectos"
-                  style={{
-                    position: 'fixed',
-                    top: pickerPos.top,
-                    left: pickerPos.left,
-                    width: pickerPos.width,
-                    maxHeight: pickerPos.maxHeight,
-                  }}
-                  className="z-[60] overflow-y-auto rounded-lg border border-border bg-card shadow-2xl py-1 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 sidebar-scroll"
-                >
-                  {(() => {
-                    // Orden: agrupado por SOCIEDAD emisora (los sin sociedad al
-                    // final) y, dentro de cada una, por antiguedad.
-                    //
-                    // Antes iba por orden alfabetico y eso mezclaba las marcas
-                    // con las que se trabaja todos los dias con las que aun no
-                    // tienen ni web: ISEIH quedaba la quinta, detras de ISAEG,
-                    // ISECD e ISEF. Por antiguedad, lo que mas se usa queda
-                    // arriba, que es donde se busca sin leer.
-                    const sorted = [...projects].sort((a, b) => {
-                      const sA = a.sociedad_nombre || 'zzz';
-                      const sB = b.sociedad_nombre || 'zzz';
-                      if (sA !== sB) return sA.localeCompare(sB, 'es');
-                      return (a.id || 0) - (b.id || 0);
-                    });
-                    const allEntry = projects.length > 1 ? (
-                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
-                        <button
-                          type="button"
-                          onClick={() => { switchProject(-1); setPickerOpen(false); }}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
-                            activeProject?.id === -1 && 'bg-secondary font-semibold'
-                          )}
-                        >
-                          <ProjectAvatar project={{ isAll: true }} size="sm" />
-                          <span className="flex-1 truncate">Todos los proyectos</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold">vista global</span>
-                        </button>
-                      </li>
-                    ) : null;
-                    let lastSoc = undefined;
-                    const items = sorted.map((p) => {
-                      const isActive = p.id === activeProject?.id;
-                      const soc = p.sociedad_nombre || null;
-                      const showHeader = soc !== lastSoc;
-                      lastSoc = soc;
-                      return (
-                        <div key={p.id}>
-                          {showHeader && (
-                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
-                              {soc || 'Sin sociedad'}
-                            </div>
-                          )}
-                          <li role="option" aria-selected={isActive}>
-                            <button
-                              type="button"
-                              onClick={() => { switchProject(Number(p.id)); setPickerOpen(false); }}
-                              className={cn(
-                                'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors',
-                                isActive && 'bg-secondary font-semibold'
-                              )}
-                            >
-                              <ProjectAvatar project={p} size="sm" />
-                              <span className="flex-1 truncate">{p.nombre}</span>
-                            </button>
-                          </li>
-                        </div>
-                      );
-                    });
-                    return <>{allEntry}{items}</>;
-                  })()}
-                </ul>
-              </Portal>
-            )}
-          </div>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
-            <button
-              onClick={() => setConfigOpen(true)}
-              className="w-9 h-9 rounded-lg border border-border bg-secondary hover:bg-muted flex items-center justify-center flex-shrink-0 transition-colors"
-              title={`Configurar ${activeProject.nombre}`}
-              aria-label="Configurar proyecto activo"
-            >
-              <Gear size={14} weight="bold" className="text-muted-foreground" />
-            </button>
-          )}
+      {/* Aqui vivia el selector de proyecto. Se ha ido a la cabecera (#79,
+          punto 2): el nombre de la marca salia tres veces en la misma pantalla
+          y para cambiarla habia que bajar hasta aqui. El engranaje de
+          configurar la marca se queda, pero suelto: es cosa de administradores
+          y no hace falta tenerlo al lado del selector. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && activeProject && !activeProject.isAll && !collapsed && (
+        <div className="mb-6 px-1">
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-secondary px-2 text-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={`Configurar ${activeProject.nombre}`}
+            aria-label="Configurar proyecto activo"
+          >
+            <Gear size={14} weight="bold" />
+            Configurar esta marca
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Buscador (oculto en collapsed; sigue accesible via Ctrl+K) */}
       {!collapsed && (
@@ -1142,7 +1005,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       {/* Navigation */}
       <nav className={cn(
         'flex-1 overflow-y-auto min-h-0 sidebar-scroll',
-        collapsed ? 'space-y-2 -mr-1 pr-1' : 'space-y-4 -mr-2 pr-2'
+        collapsed ? 'space-y-1.5 -mr-1 pr-1' : 'space-y-3 -mr-2 pr-2'
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
@@ -1273,9 +1136,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </>
           )}
         </button>
-        <Suspense fallback={<div className="w-9 h-9 rounded-lg bg-secondary flex-shrink-0" />}>
-          <NotificationsBell />
-        </Suspense>
+        {/* La campana subió a la cabecera (Topbar): arriba a la derecha es
+            donde se busca, y desde ahí se ve sin desplegar el menú. */}
       </div>
 
       {/* User menu (Portal — escapa del sidebar) */}
@@ -1286,7 +1148,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             role="menu"
             aria-label="Acciones de usuario"
             style={{ position: 'fixed', bottom: userMenuPos.bottom, left: userMenuPos.left, minWidth: userMenuPos.minWidth }}
-            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-xl ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
+            className="w-max max-w-[90vw] bg-card border border-border rounded-lg shadow-dialog ring-1 ring-black/5 dark:ring-white/5 z-[60] overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-1 duration-150"
           >
             {userMenuView === 'main' ? (
               <div className="py-1.5">
@@ -1367,7 +1229,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
 
 function UserMenuItem({ icon: Icon, label, onClick, tone = 'default' }) {
   const toneClasses = tone === 'danger'
-    ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
+    ? 'text-destructive hover:bg-destructive-soft'
     : 'text-foreground hover:bg-muted';
   return (
     <button

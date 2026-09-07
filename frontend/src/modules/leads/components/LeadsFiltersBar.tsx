@@ -1,3 +1,4 @@
+import { cssDeEstado } from '../lib/estadoTono';
 // LeadsFiltersBar — v2 UI Prospectos.
 // Reemplaza las 4 franjas (filtros, stats, quick-filters, leyenda) del LeadsPage v1
 // por una sola fila compacta con:
@@ -221,7 +222,7 @@ export default function LeadsFiltersBar(props: Props) {
           <div
             ref={panelRef}
             style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
-            className="bg-card border border-border rounded-lg shadow-xl overflow-hidden"
+            className="bg-card border border-border rounded-lg shadow-dialog overflow-hidden"
           >
             <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}
@@ -361,7 +362,7 @@ export default function LeadsFiltersBar(props: Props) {
                   Se aplican sobre los resultados ya cargados. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
                 </p>
                 {(quickFilter === 'urgent' || quickFilter === 'no-contact') && filterEstado && (
-                  <div className="mt-1.5 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1.5">
+                  <div className="mt-1.5 text-[11px] rounded-md border border-warning/30 bg-warning-soft text-warning px-2.5 py-1.5">
                     ⚠️ «{QUICK_LABELS[quickFilter] || quickFilter}» y «Estado» están activos a la vez y se contradicen — quita uno de los dos.
                   </div>
                 )}
@@ -383,12 +384,12 @@ export default function LeadsFiltersBar(props: Props) {
                 <Section title="Resumen">
                   <div className="flex flex-wrap gap-1.5">
                     <StatPill label="Total" value={stats.total || 0} />
-                    <StatPill label="Nuevos" value={stats.nuevo || 0} dot="#3b82f6" />
-                    <StatPill label="Por contactar" value={stats.por_contactar || 0} dot="#f59e0b" />
-                    <StatPill label="Contactados" value={stats.contactado || 0} dot="#10b981" />
-                    <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot="#eab308" />
-                    <StatPill label="Convertidos" value={stats.convertido || 0} dot="#8b5cf6" />
-                    <StatPill label="No interesado" value={stats.no_interesado || 0} dot="#ef4444" />
+                    <StatPill label="Nuevos" value={stats.nuevo || 0} dot={cssDeEstado('nuevo')} />
+                    <StatPill label="Por contactar" value={stats.por_contactar || 0} dot={cssDeEstado('por_contactar')} />
+                    <StatPill label="Contactados" value={stats.contactado || 0} dot={cssDeEstado('contactado')} />
+                    <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot={cssDeEstado('en_seguimiento')} />
+                    <StatPill label="Convertidos" value={stats.convertido || 0} dot={cssDeEstado('convertido')} />
+                    <StatPill label="No interesado" value={stats.no_interesado || 0} dot={cssDeEstado('no_interesado')} />
                   </div>
                   {quickFilter && (
                     <p className="text-[11px] text-muted-foreground mt-2">
@@ -441,13 +442,13 @@ export default function LeadsFiltersBar(props: Props) {
       {showAssignBtn && (
         <button
           onClick={onAssignPending}
-          className="ml-auto h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+          className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
           title="Aplica round-robin a todos los prospectos sin responsable"
         >
           <WarningCircle size={13} weight="fill" />
           Asignar pendientes
           {(stats?.sin_asignar ?? 0) > 0 && (
-            <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.5 rounded">
+            <span className="bg-white text-warning text-[10px] font-black px-1.5 py-0.5 rounded">
               {stats?.sin_asignar}
             </span>
           )}
@@ -489,13 +490,13 @@ type ChipTone = 'default' | 'danger' | 'warning';
 function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
   const toneActive: string = ({
     default: 'bg-primary text-white',
-    danger: 'bg-red-600 text-white',
-    warning: 'bg-amber-600 text-white',
+    danger: 'bg-destructive text-destructive-foreground',
+    warning: 'bg-warning text-warning-foreground',
   } as Record<ChipTone, string>)[tone];
   const toneIdleCount: string = ({
     default: 'bg-primary/15 text-primary',
-    danger: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
-    warning: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    danger: 'bg-destructive-soft text-destructive-soft-foreground',
+    warning: 'bg-warning-soft text-warning-soft-foreground',
   } as Record<ChipTone, string>)[tone];
   return (
     <button
