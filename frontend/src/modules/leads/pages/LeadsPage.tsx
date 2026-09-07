@@ -595,7 +595,11 @@ export default function LeadsPage() {
       {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
           de pasada, no algo que se busca: enterarse de que te toca a ti es
           justo lo que hoy no pasa hasta que el lead ya está asignado. */}
-      <ProximoGestor projectId={activeProject?.id} recargarSenal={colaSenal} />
+      <ProximoGestor
+        projectId={activeProject?.id}
+        recargarSenal={colaSenal}
+        onReasignado={refetch}
+      />
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

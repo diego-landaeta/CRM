@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Users, WarningCircle } from '@phosphor-icons/react';
+import {
+  ArrowRight, Users, WarningCircle, ArrowsClockwise,
+} from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { lista } from '@/shared/lib/lista';
+import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * A quién le toca el siguiente lead (#11).
@@ -41,6 +45,8 @@ interface EstadoCola {
   last_assigned_at: string | null;
   last_gestor: Gestor | null;
   next_gestor: Gestor | null;
+  /** Prospectos del proyecto que ahora mismo no tienen dueño. */
+  sin_responsable: number;
 }
 
 /** «hace 5 min», «hace 2 h», «hace 3 días». */
@@ -80,14 +86,18 @@ function Avatar({ g, destacado = false }: { g: Gestor; destacado?: boolean }) {
 }
 
 export default function ProximoGestor({
-  projectId, recargarSenal = 0,
+  projectId, recargarSenal = 0, onReasignado,
 }: {
   projectId: number | null | undefined;
   /** Cambia este número para releer (por ejemplo al crear un lead). */
   recargarSenal?: number;
+  /** Se llama tras repartir, para que el listado de al lado se entere. */
+  onReasignado?: () => void;
 }) {
   const [estado, setEstado] = useState<EstadoCola | null>(null);
   const [fallo, setFallo] = useState(false);
+  const [repartiendo, setRepartiendo] = useState(false);
+  const { can } = usePermission();
 
   const cargar = useCallback(async () => {
     if (!projectId) return;
@@ -109,6 +119,51 @@ export default function ProximoGestor({
     return () => clearInterval(id);
   }, [cargar, projectId]);
 
+  /**
+   * Reparte los prospectos que se quedaron sin dueño.
+   *
+   * Pasa cuando entra un lead sin nadie en el reparto —todos de ausencia, o
+   * el proyecto sin gestores— y esos se quedan ahí sin que nada vuelva a
+   * mirarlos. El endpoint ya existía y solo lo llamaba la baja de un usuario;
+   * aquí es lo que el issue pide poder hacer a mano.
+   */
+  async function repartirLosSueltos() {
+    if (!estado || !projectId) return;
+    const cuantos = estado.sin_responsable;
+    // Toca la propiedad de fichas de otras personas. Se pregunta con el número
+    // y entre cuántos van a repartirse, que es lo que decide si es lo que
+    // querías o no.
+    if (!window.confirm(
+      `Se van a repartir ${cuantos} prospecto${cuantos > 1 ? 's' : ''} sin responsable `
+      + `entre ${estado.gestores.length} del reparto.\n\n`
+      + 'Se asignan por turno, igual que los nuevos. ¿Seguir?'
+    )) return;
+
+    setRepartiendo(true);
+    try {
+      const r = await client.post(`/leads/reassign-pending?projectId=${projectId}`, {});
+      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
+      if (r.data?.reason === 'NO_ACTIVE_GESTORES') {
+        // No es un fallo: es que hoy no hay a quién dárselos. Decirlo así evita
+        // que se lea como que el botón está roto.
+        toast({
+          title: 'No hay nadie en el reparto',
+          description: 'Los prospectos siguen sin responsable hasta que haya alguien disponible.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: `${r.data?.reassigned ?? 0} repartidos`,
+          description: 'Se han asignado por turno entre los gestores del reparto.',
+        });
+      }
+      await cargar();
+      onReasignado?.();
+    } catch (e: any) {
+      toast({ title: 'No se pudo repartir', description: e?.message, variant: 'destructive' });
+    } finally { setRepartiendo(false); }
+  }
+
   if (!projectId) return null;
 
   // Si no se pudo leer, no se pinta nada. Enseñar el panel vacío se leería
@@ -127,6 +182,11 @@ export default function ProximoGestor({
           quedarán sin responsable hasta que haya alguien. Puede ser que nadie
           tenga el proyecto asignado, o que hoy estén todos de ausencia o marcados
           como no disponibles.
+          {estado.sin_responsable > 0 && (
+            // El dato que convierte el aviso en algo accionable: ya hay fichas
+            // paradas, no es un riesgo futuro.
+            <> Ya hay <strong>{estado.sin_responsable}</strong> esperando.</>
+          )}
         </span>
       </div>
     );
@@ -163,6 +223,23 @@ export default function ProximoGestor({
               <span className="shrink-0 italic">· ya no está en el reparto</span>
             )}
           </div>
+        )}
+
+        {/* Solo si hay algo que repartir y quien pueda hacerlo. Un botón que no
+            actúa sobre nada solo sirve para dudar de si hizo algo. */}
+        {estado.sin_responsable > 0 && can('leads.assign') && (
+          <button
+            type="button"
+            onClick={repartirLosSueltos}
+            disabled={repartiendo}
+            title="Asigna por turno los prospectos que se quedaron sin responsable"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[11px] font-bold hover:bg-muted disabled:opacity-50 shrink-0"
+          >
+            <ArrowsClockwise size={12} className={repartiendo ? 'animate-spin' : ''} />
+            {repartiendo
+              ? 'Repartiendo…'
+              : `Reasignar ${estado.sin_responsable} sin responsable`}
+          </button>
         )}
 
         <div className="flex items-center gap-1 ml-auto flex-wrap">

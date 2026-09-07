@@ -38,6 +38,16 @@ export async function getQueueState(req, res, next) {
       lastGestor = rows[0] ? { ...rows[0], fuera_del_reparto: true } : null;
     }
 
+    // Cuantos prospectos estan sin dueño ahora mismo. Va aqui para que el boton
+    // de repartirlos pueda decir cuantos son: un boton que no dice sobre que
+    // actua se pulsa a ciegas, y despues «0 reasignados» no distingue entre «no
+    // habia ninguno» y «algo fallo».
+    const { rows: sueltos } = await query(
+      `SELECT COUNT(*)::int AS n FROM leads
+        WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL`,
+      [projectId]
+    );
+
     res.json({
       success: true,
       data: {
@@ -45,6 +55,7 @@ export async function getQueueState(req, res, next) {
         last_assigned_at: state[0]?.updated_at || null,
         last_gestor: lastGestor,
         next_gestor: nextGestor,
+        sin_responsable: sueltos[0]?.n || 0,
       },
     });
   } catch (err) { next(err); }
