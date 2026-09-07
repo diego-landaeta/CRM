@@ -35,6 +35,8 @@ export interface ChatMessage {
   error?: string;
   /** 'NO_API_KEY' | 'TOPE_AGOTADO' | aviso de que queda poco. */
   warning?: string;
+  /** Cuándo se dijo. Las recién enviadas se sellan aquí; las guardadas traen la suya. */
+  ts?: string;
 }
 
 export interface UseClaudeChatResult {
@@ -116,8 +118,8 @@ export function useClaudeChat(projectId: number | null | undefined): UseClaudeCh
     const idClaude = `a_${Date.now()}`;
     setMensajes((prev) => [
       ...prev,
-      { id: idUsuario, role: 'user', content: t },
-      { id: idClaude, role: 'assistant', content: '', streaming: true },
+      { id: idUsuario, role: 'user', content: t, ts: new Date().toISOString() },
+      { id: idClaude, role: 'assistant', content: '', streaming: true, ts: new Date().toISOString() },
     ]);
     setEnviando(true);
 
@@ -172,10 +174,12 @@ export function useClaudeChat(projectId: number | null | undefined): UseClaudeCh
     try {
       const r = await mensajesDe(id);
       if (!r.success) return;
-      const guardados = lista<{ id: number; role: string; content: string }>(r.data?.messages);
+      const guardados = lista<{ id: number; role: string; content: string; created_at?: string }>(r.data?.messages);
       setMensajes(guardados
         .filter((m) => m.role === 'user' || m.role === 'assistant')
-        .map((m) => ({ id: `g_${m.id}`, role: m.role as ChatRole, content: m.content })));
+        .map((m) => ({
+          id: `g_${m.id}`, role: m.role as ChatRole, content: m.content, ts: m.created_at,
+        })));
       setConversacionId(id);
     } catch { /* si no se puede abrir, se queda la que estaba */ }
   }, []);

@@ -57,11 +57,16 @@ export default function Markdown({ children }: { children: string }) {
             </div>
           ),
           thead: ({ children: c }) => <thead className="bg-muted/60">{c}</thead>,
-          th: ({ children: c }) => (
-            <th className="border-b border-border px-2.5 py-1.5 text-left font-bold whitespace-nowrap">{c}</th>
+          // `style` se reenvia a proposito. GFM traduce el `|---:|` de la
+          // cabecera a `text-align: right`, y al poner componentes propios se
+          // perdia: los numeros quedaban pegados a la izquierda de columnas muy
+          // anchas, que es justo lo que hace que una tabla parezca sin acabar.
+          // La alineacion la decide quien escribe la tabla, no esto.
+          th: ({ children: c, style }) => (
+            <th style={style} className="border-b border-border px-2.5 py-1.5 text-left font-bold whitespace-nowrap">{c}</th>
           ),
-          td: ({ children: c }) => (
-            <td className="border-b border-border/60 px-2.5 py-1.5 align-top tabular-nums">{c}</td>
+          td: ({ children: c, style }) => (
+            <td style={style} className="border-b border-border/60 px-2.5 py-1.5 align-top tabular-nums">{c}</td>
           ),
           tr: ({ children: c }) => <tr className="last:[&>td]:border-0">{c}</tr>,
 

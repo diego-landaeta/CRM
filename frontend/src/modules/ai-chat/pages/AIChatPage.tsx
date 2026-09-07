@@ -112,6 +112,23 @@ function Copiar({ texto }: { texto: string }) {
   );
 }
 
+/** «14:32». Vacío si no se sabe, que es mejor que inventarse una hora. */
+const hora = (iso?: string) => (iso
+  ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  : '');
+
+/** «hoy», «ayer», «3 sept». Para la lista de conversaciones anteriores. */
+function cuando(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const hoy = new Date();
+  const dias = Math.floor((hoy.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000);
+  if (dias <= 0) return 'hoy';
+  if (dias === 1) return 'ayer';
+  if (dias < 7) return `hace ${dias} días`;
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
 /** Los tres puntos de «está escribiendo». */
 function Pensando() {
   return (
@@ -131,10 +148,11 @@ function Intercambio({ m }: { m: ChatMessage }) {
   // La pregunta: burbuja a la derecha, corta, de quien escribe.
   if (m.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
         <div className="max-w-[85%] rounded-lg rounded-br-sm bg-primary px-3.5 py-2.5 text-sm text-primary-foreground shadow-sm">
           <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
         </div>
+        {m.ts && <span className="text-[10px] text-muted-foreground tabular-nums pr-1">{hora(m.ts)}</span>}
       </div>
     );
   }
@@ -146,6 +164,10 @@ function Intercambio({ m }: { m: ChatMessage }) {
         <Sparkle size={15} weight="duotone" />
       </span>
       <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex items-baseline gap-2">
+          <span className="text-xs font-bold">Claude</span>
+          {m.ts && <span className="text-[10px] text-muted-foreground tabular-nums">{hora(m.ts)}</span>}
+        </div>
         {m.content && <Markdown>{m.content}</Markdown>}
         {m.streaming && <Pensando />}
         {m.error && (
@@ -259,16 +281,23 @@ export default function AIChatPage() {
                       type="button"
                       onClick={() => abrir(c.id)}
                       title={c.title || 'Sin título'}
-                      className={`group w-full flex items-center gap-1.5 rounded-md px-2 py-2 text-left text-xs transition-colors ${
+                      className={`group w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
                         activa
-                          ? 'bg-primary/10 text-primary font-bold'
+                          ? 'bg-primary/10 text-primary'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       }`}
                     >
-                      <span className="truncate flex-1">{c.title || 'Sin título'}</span>
-                      {!activa && (
-                        <ArrowRight size={11} className="opacity-0 group-hover:opacity-100 shrink-0" />
-                      )}
+                      <span className="flex items-center gap-1.5">
+                        <span className={`truncate flex-1 ${activa ? 'font-bold' : ''}`}>
+                          {c.title || 'Sin título'}
+                        </span>
+                        {!activa && (
+                          <ArrowRight size={11} className="opacity-0 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </span>
+                      {/* Cuando fue. Una lista de titulos sueltos no dice si la
+                          de arriba es de hace diez minutos o de marzo. */}
+                      <span className="block text-[10px] opacity-70">{cuando(c.updated_at)}</span>
                     </button>
                   </li>
                 );
@@ -310,8 +339,20 @@ export default function AIChatPage() {
                 </div>
               </div>
             ) : (
-              <div className="px-4 py-5 space-y-5">
-                {mensajes.map((m) => <Intercambio key={m.id} m={m} />)}
+              <div className="px-4 py-5">
+                {mensajes.map((m, i) => (
+                  <div
+                    key={m.id}
+                    // Una raya antes de cada pregunta menos la primera. Con
+                    // cuatro o cinco idas y venidas, sin separacion se lee como
+                    // un unico bloque y no se sabe donde acaba una respuesta.
+                    className={m.role === 'user' && i > 0
+                      ? 'mt-6 pt-6 border-t border-border/60'
+                      : 'mt-4 first:mt-0'}
+                  >
+                    <Intercambio m={m} />
+                  </div>
+                ))}
                 <div ref={abajo} />
               </div>
             )}
