@@ -174,7 +174,7 @@ export default function UserFormDialog({
               </div>
             ) : (
               <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block px-1">Email</label>
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Email</label>
                 <input value={user!.email} readOnly disabled className={`${inputClass} opacity-60 cursor-not-allowed`} />
                 <p className="text-secundario text-muted-foreground mt-1 px-1 flex items-start gap-1">
                   <Info size={11} className="mt-px flex-shrink-0" />
@@ -184,7 +184,7 @@ export default function UserFormDialog({
             )}
 
             <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block px-1">Rol *</label>
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Rol *</label>
               <Select<UserRole>
                 value={role}
                 onChange={setRole}
