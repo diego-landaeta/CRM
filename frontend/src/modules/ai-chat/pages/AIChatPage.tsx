@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ChatCircleText, PaperPlaneRight, Stop, Plus, WarningCircle, Sparkle,
-  TrendUp, Users, Copy, Check, ArrowRight,
+  TrendUp, Users, Copy, Check, ArrowRight, FilePdf, CircleNotch,
 } from '@phosphor-icons/react';
+import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import Markdown from '@/shared/components/ui/Markdown';
@@ -190,8 +191,51 @@ export default function AIChatPage() {
   } = useClaudeChat(projectId);
 
   const [texto, setTexto] = useState('');
+  const [haciendoPdf, setHaciendoPdf] = useState(false);
   const abajo = useRef<HTMLDivElement>(null);
   const caja = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * La conversación en PDF.
+   *
+   * Se pregunta a la IA para llevarse el análisis a algún sitio: a una reunión,
+   * a un correo. Copiar una respuesta suelta ya se podía; esto es la
+   * conversación entera con sus preguntas, que es lo que le da sentido a las
+   * respuestas — un análisis sin la pregunta que lo motivó no se entiende.
+   *
+   * Se arma en el navegador: el markdown ya está aquí.
+   */
+  async function aPdf() {
+    if (!mensajes.length || haciendoPdf) return;
+    setHaciendoPdf(true);
+    try {
+      const { pdfDeMarkdown } = await import('@/shared/lib/pdfDeMarkdown');
+      const cuerpo = mensajes
+        .filter((m) => m.content && !m.error)
+        .map((m) => (m.role === 'user'
+          // La pregunta como titular: en el PDF no hay burbujas ni colores, así
+          // que si no se marca de alguna forma se lee como parte de la
+          // respuesta anterior.
+          ? `## ${m.content}`
+          : m.content))
+        .join('\n\n');
+      const hoy = new Date();
+      await pdfDeMarkdown({
+        cabecera: 'CRM MultiProyecto · Consulta a la IA',
+        cabeceraDerecha: activeProject?.nombre || '',
+        titulo: conversaciones.find((c) => c.id === conversacionId)?.title || 'Consulta a la IA',
+        subtitulo: `Proyecto: ${activeProject?.nombre} · ${hoy.toLocaleString('es-ES')}`,
+        contenido: cuerpo,
+        // Se dice de dónde salen los números. Un PDF se reenvía, y quien lo
+        // recibe no estaba delante cuando se generó.
+        pie: 'Respuestas generadas con IA sobre los datos del CRM',
+        nombreArchivo: `consulta-ia-${(activeProject?.nombre || 'proyecto')
+          .replace(/[^a-z0-9-]/gi, '-').toLowerCase()}-${hoy.toISOString().slice(0, 10)}.pdf`,
+      });
+    } catch (e: any) {
+      toast({ title: 'No se pudo generar el PDF', description: e?.message, variant: 'destructive' });
+    } finally { setHaciendoPdf(false); }
+  }
 
   // Seguir la respuesta según se escribe. Sin esto hay que arrastrar la barra
   // a mano mientras Claude contesta, que es justo cuando no apetece.
@@ -239,6 +283,22 @@ export default function AIChatPage() {
         actions={
           <div className="flex items-center gap-2">
             {gasto && <Gasto g={gasto} />}
+            {/* Solo con algo que exportar. Un boton que genera un PDF de una
+                pagina en blanco es peor que no tenerlo. */}
+            {mensajes.length > 0 && (
+              <button
+                type="button"
+                onClick={aPdf}
+                disabled={haciendoPdf || enviando}
+                title="Descargar la conversación entera en PDF"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-bold hover:bg-muted disabled:opacity-50"
+              >
+                {haciendoPdf
+                  ? <CircleNotch size={14} weight="bold" className="animate-spin" />
+                  : <FilePdf size={14} weight="bold" />}
+                <span className="hidden sm:inline">{haciendoPdf ? 'Generando…' : 'PDF'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={nueva}
