@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
-  MessageSeparator, InfoButton, InputToolbox,
+  MessageSeparator, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
+import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -171,10 +171,25 @@ function colorDeNombre(nombre: string) {
  * La direccion que da WhatsApp caduca, asi que puede fallar en cualquier
  * momento: cuando pasa se cae a las letras en vez de dejar un hueco roto.
  */
-function Foto({ nombre, url, grupo }: { nombre: string; url?: string | null; grupo?: boolean }) {
-  const [rota, setRota] = useState(false);
-  if (url && !rota) {
-    return <img src={url} alt={nombre} className="wa-foto" onError={() => setRota(true)} />;
+export function Foto({ nombre, url, grupo }: { nombre: string; url?: string | null; grupo?: boolean }) {
+  // Se recuerda QUE direccion fallo, no un «fallo» a secas (#112, punto 2).
+  //
+  // Antes esto era `const [rota, setRota] = useState(false)`, y ese booleano
+  // vivia mientras viviera el componente. En la LISTA da igual: cada fila tiene
+  // su propia Foto, asi que una caducada solo se estropea a si misma. En la
+  // CABECERA hay UNA sola que sobrevive al cambiar de conversacion — y las
+  // direcciones que da WhatsApp caducan.
+  //
+  // Asi que bastaba abrir un chat con la foto caducada para que la cabecera se
+  // quedara en la inicial para TODOS los siguientes, con la lista enseñando la
+  // foto al lado. Es lo que vio Diego: en la fila la foto, en la cabecera una
+  // «D». El dato llegaba bien; lo viejo era el estado.
+  //
+  // Guardando la direccion, cambiar de chat lo reinicia solo: `falla !== url`
+  // vuelve a ser cierto sin efectos ni parpadeo.
+  const [falla, setFalla] = useState<string | null>(null);
+  if (url && falla !== url) {
+    return <img src={url} alt={nombre} className="wa-foto" onError={() => setFalla(url)} />;
   }
   // Un grupo sin foto se distingue de una persona sin foto.
   if (grupo) return <div className="wa-inicial" title={nombre}><UsersThree size={17} weight="fill" /></div>;
@@ -1586,7 +1601,14 @@ export default function ChatPage() {
                     className="wa-btn-ficha"
                     aria-label={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}
                     title={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}>
-                    <InfoButton />
+                    {/* Icono propio, no el `InfoButton` del kit.
+                        El kit pinta SU PROPIO <button>, asi que envuelto en el
+                        mio quedaba un boton dentro de otro: HTML invalido, y
+                        React lo gritaba en la consola en cada apertura de chat
+                        —enterrando lo que si importa mirar ahi—. Ademas sus dos
+                        vecinos ya usan iconos de phosphor a 17, con lo que de
+                        paso los tres van iguales. */}
+                    <Info size={17} />
                   </button>
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo cuando hay un numero de verdad al que llamar: a un
