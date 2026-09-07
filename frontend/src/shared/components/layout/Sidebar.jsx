@@ -229,7 +229,12 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
       { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
+      // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
+      // probado—, pero no se ofrece en el menu: enseñar una puerta que no
+      // lleva a ningun sitio es peor que no tenerla.
+      // Para devolverla, quitar el comentario de la linea de abajo.
+      // { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
