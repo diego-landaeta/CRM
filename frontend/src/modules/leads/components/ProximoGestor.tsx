@@ -99,14 +99,20 @@ export default function ProximoGestor({
   const [repartiendo, setRepartiendo] = useState(false);
   const { can } = usePermission();
 
+  // En modo «Todos los proyectos» el id vale -1, que es truthy: con un
+  // `if (!projectId)` esto pedia /projects/-1/queue-state y pintaba «sin
+  // gestores en el reparto» en una vista donde la pregunta ni siquiera aplica
+  // —cada proyecto tiene su propia cola—.
+  const hayProyecto = typeof projectId === 'number' && projectId > 0;
+
   const cargar = useCallback(async () => {
-    if (!projectId) return;
+    if (!hayProyecto) return;
     try {
       const r = await client.get(`/projects/${projectId}/queue-state`);
       if (r.success) { setEstado(r.data); setFallo(false); }
       else setFallo(true);
     } catch { setFallo(true); }
-  }, [projectId]);
+  }, [hayProyecto, projectId]);
 
   useEffect(() => { cargar(); }, [cargar, recargarSenal]);
 
@@ -114,10 +120,10 @@ export default function ProximoGestor({
   // pantalla—, así que sin releer el panel envejece sin avisar y sigue
   // enseñando con confianza a quien ya no le toca.
   useEffect(() => {
-    if (!projectId) return undefined;
+    if (!hayProyecto) return undefined;
     const id = setInterval(cargar, 30000);
     return () => clearInterval(id);
-  }, [cargar, projectId]);
+  }, [cargar, hayProyecto]);
 
   /**
    * Reparte los prospectos que se quedaron sin dueño.
@@ -128,7 +134,7 @@ export default function ProximoGestor({
    * aquí es lo que el issue pide poder hacer a mano.
    */
   async function repartirLosSueltos() {
-    if (!estado || !projectId) return;
+    if (!estado || !hayProyecto) return;
     const cuantos = estado.sin_responsable;
     // Toca la propiedad de fichas de otras personas. Se pregunta con el número
     // y entre cuántos van a repartirse, que es lo que decide si es lo que
@@ -151,9 +157,17 @@ export default function ProximoGestor({
           description: 'Los prospectos siguen sin responsable hasta que haya alguien disponible.',
           variant: 'destructive',
         });
+      } else if (!r.data?.reassigned) {
+        // El contador se lee cada 30 s: entre que sale el número y se pulsa,
+        // otra persona pudo repartirlos. «0 repartidos · se han asignado por
+        // turno» se contradice a sí mismo y hace dudar de si funcionó.
+        toast({
+          title: 'Ya no quedaba ninguno',
+          description: 'Alguien los repartió antes, o entraron a un responsable por su cuenta.',
+        });
       } else {
         toast({
-          title: `${r.data?.reassigned ?? 0} repartidos`,
+          title: `${r.data.reassigned} repartidos`,
           description: 'Se han asignado por turno entre los gestores del reparto.',
         });
       }
@@ -164,7 +178,7 @@ export default function ProximoGestor({
     } finally { setRepartiendo(false); }
   }
 
-  if (!projectId) return null;
+  if (!hayProyecto) return null;
 
   // Si no se pudo leer, no se pinta nada. Enseñar el panel vacío se leería
   // como «no hay gestores», que es una respuesta distinta y falsa.

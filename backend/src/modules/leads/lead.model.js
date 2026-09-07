@@ -1031,8 +1031,12 @@ export async function reassignPendingRoundRobin(projectId) {
     const gestorIds = gestores.map((g) => g.id);
 
     const { rows: pending } = await client.query(
+      // `deleted_at IS NULL` faltaba: sin el, esto repartia tambien las fichas
+      // borradas y las marcadas como spam, y aparecian en la bandeja de una
+      // gestora como trabajo por hacer. Pasaba de verdad, porque hasta ahora
+      // esto lo llamaba la baja de un usuario sin que nadie lo mirara.
       `SELECT id FROM leads
-       WHERE project_id = $1 AND responsable_id IS NULL
+       WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL
        ORDER BY created_at ASC`,
       [projectId]
     );

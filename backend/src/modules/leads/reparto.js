@@ -74,7 +74,16 @@ export async function gestoresDelReparto(ejecutar, projectId) {
  */
 export function aQuienLeToca(gestores, ultimoIndice) {
   if (!gestores.length) return { indice: null, gestor: null };
-  const indice = ((Number(ultimoIndice) ?? -1) + 1) % gestores.length;
+
+  // `Number(undefined) ?? -1` NO da -1: `??` solo mira null y undefined, y
+  // `NaN` no es ninguno de los dos. Se colaba como NaN hasta `gestores[NaN]`,
+  // o sea `undefined` haciendose pasar por una persona hasta la pantalla.
+  const n = Number(ultimoIndice);
+  const desde = Number.isFinite(n) ? Math.trunc(n) : -1;
+
+  // El doble resto es para los negativos: `(-5 + 1) % 3` es -1 en JavaScript,
+  // no 2. Un cursor negativo raro no puede acabar en un hueco de la lista.
+  const indice = (((desde + 1) % gestores.length) + gestores.length) % gestores.length;
   return { indice, gestor: gestores[indice] };
 }
 

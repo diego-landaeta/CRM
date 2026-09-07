@@ -194,4 +194,64 @@ describe('a quién le toca el siguiente', () => {
     // la pantalla como si fuera una persona.
     expect(aQuienLeToca([], 3)).toEqual({ indice: null, gestor: null });
   });
+
+  it('un cursor que no es un número no se cuela como NaN', async () => {
+    // `Number(undefined) ?? -1` da NaN, no -1: `??` solo mira null y undefined.
+    // Con NaN, `gestores[NaN]` es undefined, y eso llega a la pantalla como si
+    // fuera una persona con nombre vacío.
+    const g = await gestoresDelReparto(query, projectId);
+    for (const malo of [undefined, null, NaN, 'x', '']) {
+      const r = aQuienLeToca(g, malo);
+      expect(r.gestor, `con ${String(malo)}`).toBeTruthy();
+      expect(Number.isInteger(r.indice)).toBe(true);
+    }
+  });
+
+  it('un cursor negativo raro tampoco cae en un hueco', async () => {
+    // `(-5 + 1) % 3` es -1 en JavaScript, no 2.
+    const g = await gestoresDelReparto(query, projectId);
+    const r = aQuienLeToca(g, -5);
+    expect(r.indice).toBeGreaterThanOrEqual(0);
+    expect(r.gestor).toBeTruthy();
+  });
+});
+
+describe('los que se quedaron sin dueño', () => {
+  /**
+   * El botón dice «reasignar N» y luego la acción reparte los que sean. Si las
+   * dos cuentas no filtran igual, el número miente — y en este caso mentía en
+   * la dirección peor: la acción NO excluía las fichas borradas, así que el
+   * spam acababa en la bandeja de una gestora como trabajo por hacer.
+   */
+  it('una ficha borrada no cuenta como pendiente', async () => {
+    const { rows: viva } = await query(
+      `INSERT INTO leads (project_id, nombre, responsable_id) VALUES ($1, $2, NULL) RETURNING id`,
+      [projectId, `Viva ${marca}`]
+    );
+    const { rows: borrada } = await query(
+      `INSERT INTO leads (project_id, nombre, responsable_id, deleted_at)
+       VALUES ($1, $2, NULL, NOW()) RETURNING id`,
+      [projectId, `Borrada ${marca}`]
+    );
+
+    // La cuenta que enseña el panel.
+    const { rows: contadas } = await query(
+      `SELECT COUNT(*)::int AS n FROM leads
+        WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL`,
+      [projectId]
+    );
+    // La lista que reparte de verdad.
+    const { rows: repartibles } = await query(
+      `SELECT id FROM leads
+        WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL
+        ORDER BY created_at ASC`,
+      [projectId]
+    );
+
+    expect(contadas[0].n).toBe(1);
+    expect(repartibles.map((r) => r.id)).toEqual([viva[0].id]);
+    expect(repartibles.map((r) => r.id)).not.toContain(borrada[0].id);
+
+    await query('DELETE FROM leads WHERE id = ANY($1::int[])', [[viva[0].id, borrada[0].id]]);
+  });
 });

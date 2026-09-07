@@ -81,6 +81,21 @@ describe('lo que enseña', () => {
     expect(await screen.findByText(/ya no está en el reparto/)).toBeInTheDocument();
   });
 
+  it('en modo «Todos los proyectos» no sale, y ni siquiera pregunta', async () => {
+    // El id de «Todos» es -1, que es truthy: con un `if (!projectId)` esto
+    // pedía /projects/-1/queue-state y pintaba «sin gestores en el reparto» en
+    // una vista donde la pregunta ni aplica — cada proyecto tiene su cola.
+    const { container } = render(<ProximoGestor projectId={-1} />);
+    await waitFor(() => expect(container.textContent).toBe(''));
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('sin proyecto tampoco', async () => {
+    const { container } = render(<ProximoGestor projectId={null} />);
+    await waitFor(() => expect(container.textContent).toBe(''));
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('si no se puede leer, no pinta nada en vez de un panel vacío', async () => {
     // Un panel vacío se leería como «no hay gestores», que es otra respuesta.
     get.mockRejectedValue(new Error('sin red'));
@@ -151,6 +166,18 @@ describe('el botón de repartir los que no tienen dueño', () => {
     fireEvent.click(await screen.findByText('Reasignar 3 sin responsable'));
     await waitFor(() => expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'No hay nadie en el reparto' })
+    ));
+  });
+
+  it('si entre el número y el clic ya no quedaba ninguno, se dice sin contradecirse', async () => {
+    // El contador se relee cada 30 s. «0 repartidos · se han asignado por
+    // turno» dice dos cosas incompatibles y hace dudar de si funcionó.
+    post.mockResolvedValueOnce({ success: true, data: { reassigned: 0, total_pending: 0 } });
+    get.mockResolvedValue(estado({ sin_responsable: 3 }));
+    render(<ProximoGestor projectId={1} />);
+    fireEvent.click(await screen.findByText('Reasignar 3 sin responsable'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Ya no quedaba ninguno' })
     ));
   });
 
