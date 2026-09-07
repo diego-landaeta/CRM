@@ -74,7 +74,10 @@ import {
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
-// import ProximoGestor from '../components/ProximoGestor';  // ver el #11
+// El panel de «proximo gestor» se retiro: predecia con el round-robin del CRM
+// y quien reparte es Make. Se cambio por el de abajo, que enseña lo que ha
+// pasado en vez de lo que va a pasar. El componente viejo sigue en el repo.
+import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -603,19 +606,13 @@ export default function LeadsPage() {
       {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
           de pasada, no algo que se busca: enterarse de que te toca a ti es
           justo lo que hoy no pasa hasta que el lead ya está asignado. */}
-      {/* El panel del «proximo gestor» (#11) se ha QUITADO de aqui.
-
-          Anunciaba a quien le toca el siguiente lead segun el round-robin
-          del CRM, y ese round-robin no es quien reparte: los leads
-          automaticos los asigna Make en el webhook y ya llegan con gestora
-          puesta. Asi que acertaba en el caso raro —el alta a mano— y
-          fallaba en el habitual, sin dar error y con un nombre en pantalla
-          que se lee como una certeza.
-
-          Se rehace como una vista de admin del ULTIMO lead asignado a cada
-          gestora: eso es cierto venga de donde venga el lead. El componente
-          y `backend/src/modules/leads/reparto.js` se quedan, que el segundo
-          sigue haciendo falta para el alta manual. */}
+      {/* Lo que ha recibido cada gestora de verdad (#11).
+          Solo para quien manda: es una vista de como esta repartiendo Make
+          entre todo el equipo, no algo que una gestora necesite de sus
+          compañeras. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <UltimoLeadAsignado projectId={activeProject?.id} />
+      )}
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <PageHeader
