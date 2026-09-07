@@ -1237,10 +1237,6 @@ export default function ChatPage() {
   // una sola bandeja— asi que hace falta decir de donde viene cada conversacion.
   // Y las que no son de ningun proyecto tambien lo dicen: son las de alguien que
   // aun no esta en el CRM, y saber eso de un vistazo es justo lo util.
-  const etiquetaDe = (c: ChatWhatsapp) =>
-    c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
-
-
   const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
     // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
