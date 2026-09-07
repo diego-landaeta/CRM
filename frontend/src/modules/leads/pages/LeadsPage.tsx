@@ -66,6 +66,7 @@ import {
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
+import ProximoGestor from '../components/ProximoGestor';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -123,6 +124,8 @@ function SkeletonRow() {
 }
 
 export default function LeadsPage() {
+  // Sube cuando algo mueve la cola del reparto y el panel tiene que releer.
+  const [colaSenal, setColaSenal] = useState(0);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
@@ -552,6 +555,9 @@ export default function LeadsPage() {
 
         toast({ title: 'Lead creado', description: desc });
         await refetch();
+        // Un alta mueve la cola, así que el panel de «a quién le toca» queda
+        // viejo justo en el momento en que alguien lo está mirando.
+        setColaSenal((n) => n + 1);
       }
     } catch (err) {
       toast({
@@ -585,6 +591,11 @@ export default function LeadsPage() {
           />
         </Suspense>
       )}
+
+      {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
+          de pasada, no algo que se busca: enterarse de que te toca a ti es
+          justo lo que hoy no pasa hasta que el lead ya está asignado. */}
+      <ProximoGestor projectId={activeProject?.id} recargarSenal={colaSenal} />
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
