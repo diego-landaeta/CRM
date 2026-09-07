@@ -100,19 +100,30 @@ const NAV_SECTIONS = [
     icon: House,
     items: [
       { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, module: 'leads' },
-      // El proceso comercial (#115) va AQUI y no en Sistema.
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista y el proceso son
+      // el mismo sitio. El proceso describe por donde pasa cada prospecto, asi
+      // que colgarlo de Prospectos dice de que va sin tener que explicarlo; de
+      // «Sistema» o «Configuracion» no lo encontraba nadie.
       //
-      // Estaba al final del menu, en la seccion que va plegada, y no lo
-      // encontraba nadie. Es configuracion, si —crea y ordena los cinco
-      // pasos—, pero es la configuracion de lo que hace el equipo todos los
-      // dias, y Carlos entra a esto. Una pantalla a la que hay que saber
-      // llegar es una pantalla que no se usa.
+      // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
+      // cerrado, la gestora pagaria un clic de mas cada manana para llegar a lo
+      // que mas usa. Abierto, se ve igual que antes y ademas se ve el proceso.
       //
       // Leerlo lo puede hacer cualquiera —la gestora necesita ver en que paso
       // va cada prospecto—; editarlo, solo administradores, y eso lo decide la
       // propia pantalla.
-      { label: 'Proceso comercial', to: '/configuracion/proceso', detail: 'Los cinco pasos', icon: ListChecks },
+      {
+        label: 'Prospectos',
+        icon: Users,
+        module: 'leads',
+        defaultOpen: true,
+        children: [
+          // `end` porque si no, estando en /prospectos/proceso este tambien se
+          // marcaria activo: el resaltado diria que estas en dos sitios.
+          { label: 'Lista', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true },
+          { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -342,7 +353,7 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
     .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
@@ -350,7 +361,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
   // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
   // quedaria escondido. Cerrarlo a mano se respeta.
@@ -406,7 +417,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting'}
+                end={child.end ?? child.to === '/accounting'}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(

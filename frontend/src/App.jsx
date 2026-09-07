@@ -178,6 +178,10 @@ function App() {
             <Route path="pipeline" element={<LeadsPipelinePage />} />
             <Route path="audiencias" element={<AudienceExportPage />} />
           </Route>
+          {/* Antes que `:id`: React Router prioriza el tramo fijo, pero
+              tenerlos juntos evita que alguien meta otra ruta en medio y
+              «proceso» acabe leyendose como el id de un prospecto. */}
+          <Route path="/prospectos/proceso" element={<ProcesoPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 
           {/* Clientes — tabs */}
@@ -265,7 +269,7 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
-          <Route path="/configuracion/proceso" element={<ProcesoPage />} />
+          <Route path="/configuracion/proceso" element={<Navigate to="/prospectos/proceso" replace />} />
           <Route path="/captacion/conectores" element={<ConnectorsPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />

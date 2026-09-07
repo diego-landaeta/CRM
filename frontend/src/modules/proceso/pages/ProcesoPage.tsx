@@ -125,8 +125,8 @@ export default function ProcesoPage() {
       <PageHeader
         title="Proceso comercial"
         subtitle="Los pasos por los que pasa cada prospecto, en orden."
-        backTo="/configuracion"
-        backLabel="Configuración"
+        backTo="/prospectos"
+        backLabel="Prospectos"
         actions={admin ? (
           <button
             type="button"
