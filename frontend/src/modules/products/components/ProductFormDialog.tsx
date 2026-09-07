@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';import { useEffect, useState, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { productSchema, PAYMENT_LINK_TYPES } from '../validation/product.schema';
@@ -12,25 +14,9 @@ import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../a
 import { toast } from '@/shared/hooks/useToast';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
-
-// react-hook-form no siempre devuelve un string en `.message`: con campos que
-// son una unión o que pasan por `preprocess` puede venir el objeto de error
-// entero, y `Field` espera texto. Se saca aquí en vez de forzar el tipo.
-const textoError = (e: any): string | undefined =>
-  (typeof e?.message === 'string' ? e.message : undefined);
-
-function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">{label}</label>
-      {children}
-      {hint && <p className="text-[11px] text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
-    </div>
-  );
-}
 
 export default function ProductFormDialog({ open, onClose, product, onSubmit }) {
   useEscapeKey(onClose, open);
@@ -279,14 +265,14 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
           const msgs = Object.values(errs).map((e: any) => e?.message).filter(Boolean);
           toast({ title: 'Revisa el formulario', description: msgs.join(' · ') || 'Hay campos inválidos', variant: 'destructive' });
         })} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <FilaCampos>
             <Field label="Nombre *" error={errors.nombre?.message}>
               <input {...register('nombre')} placeholder={`Nombre del ${productoLabel.toLowerCase()}`} className={inputClass} />
             </Field>
             <Field label="SKU / código" error={errors.sku?.message}>
               <input {...register('sku')} placeholder="opcional" className={inputClass} />
             </Field>
-          </div>
+          </FilaCampos>
 
           <Field label="Descripción" error={errors.descripcion?.message}>
             <textarea
@@ -336,7 +322,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-muted-foreground">Régimen fiscal (IVA)</label>
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Régimen fiscal (IVA)</label>
               <Select<string>
                 value={regimenSel}
                 onChange={setRegimenSel}
@@ -450,7 +436,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="text-[11px] font-bold uppercase text-muted-foreground">
               Datos del programa <span className="font-normal normal-case opacity-70">(importados de WP/WC, editables)</span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <FilaCampos columnas={4}>
               <Field label="Horas">
                 <input {...register('horas')} placeholder="ej: 1500 horas" className={smallInput} />
               </Field>
@@ -463,7 +449,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
               <Field label="Fecha de inicio">
                 <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
               </Field>
-            </div>
+            </FilaCampos>
           </div>
 
           {/* === Convocatoria: plazas y cierre (#86) === */}
@@ -471,17 +457,17 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="text-[11px] font-bold uppercase text-muted-foreground">
               Convocatoria <span className="font-normal normal-case opacity-70">(las plazas salen en las plantillas del proceso comercial)</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <Field label="Plazas de la convocatoria" error={textoError(errors.plazas_totales)}>
+            <FilaCampos columnas={3}>
+              <Field label="Plazas de la convocatoria" error={errors.plazas_totales?.message}>
                 <input {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={smallInput} />
               </Field>
-              <Field label="Ya ocupadas antes del CRM" error={textoError(errors.plazas_ocupadas_previas)}>
+              <Field label="Ya ocupadas antes del CRM" error={errors.plazas_ocupadas_previas?.message}>
                 <input {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={smallInput} />
               </Field>
-              <Field label="Cierre de convocatoria" error={textoError(errors.fecha_cierre_convocatoria)}>
+              <Field label="Cierre de convocatoria" error={errors.fecha_cierre_convocatoria?.message}>
                 <input {...register('fecha_cierre_convocatoria')} type="date" className={smallInput} />
               </Field>
-            </div>
+            </FilaCampos>
             {/* Las ocupadas y las libres no se teclean: las cuenta el servidor desde
                 las ventas. Se enseñan aquí para que se vea el efecto de lo de arriba. */}
             {product && product.plazas_totales != null && (

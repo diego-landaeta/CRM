@@ -9,6 +9,10 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
 
 // Tutores y sus colaboraciones.
 //
@@ -622,39 +626,38 @@ export default function TutoresPage() {
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
               <section className="space-y-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-xs font-medium sm:col-span-2">
-                    Nombre y apellidos <span className="text-red-500">*</span>
-                    <input name="nombre" required autoFocus
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium sm:col-span-2">
-                    Correo <span className="text-red-500">*</span>
-                    <input name="email" type="email" required
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
-                      Es con lo que entra al CRM.
-                    </span>
-                  </label>
-                  <label className="text-xs font-medium">
-                    DNI / NIF
-                    <input name="dniNif"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium">
-                    Teléfono
-                    <input name="telefono"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
-                  </label>
-                  <label className="text-xs font-medium sm:col-span-2">
-                    IBAN
-                    <input name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
-                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
-                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
-                      Donde se le paga. Puedes dejarlo para más adelante.
-                    </span>
-                  </label>
-                </div>
+                {/* Cada campo con la envoltura compartida. Antes la etiqueta
+                    envolvia al campo y llevaba su propia clase escrita a mano
+                    —fondo distinto, sin anillo de foco— y el asterisco iba en
+                    `text-red-500`, un color suelto. */}
+                <FilaCampos>
+                  <Field label="Nombre y apellidos" required htmlFor="tutor-nombre" className="sm:col-span-2">
+                    <input id="tutor-nombre" name="nombre" required autoFocus className={inputClass} />
+                  </Field>
+                  <Field
+                    label="Correo"
+                    required
+                    htmlFor="tutor-email"
+                    hint="Es con lo que entra al CRM."
+                    className="sm:col-span-2"
+                  >
+                    <input id="tutor-email" name="email" type="email" required className={inputClass} />
+                  </Field>
+                  <Field label="DNI / NIF" htmlFor="tutor-dni">
+                    <input id="tutor-dni" name="dniNif" className={inputClass} />
+                  </Field>
+                  <Field label="Teléfono" htmlFor="tutor-tel">
+                    <input id="tutor-tel" name="telefono" className={inputClass} />
+                  </Field>
+                  <Field
+                    label="IBAN"
+                    htmlFor="tutor-iban"
+                    hint="Donde se le paga. Puedes dejarlo para más adelante."
+                    className="sm:col-span-2"
+                  >
+                    <input id="tutor-iban" name="iban" placeholder="ES00 0000 0000 0000 0000 0000" className={cn(inputClass, 'tabular-nums')} />
+                  </Field>
+                </FilaCampos>
               </section>
 
               <section className="space-y-2 border-t border-border pt-4">
@@ -720,7 +723,7 @@ export default function TutoresPage() {
                 </p>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
-                  <label className="text-[11px] text-muted-foreground min-w-0">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     Curso
                     <div className="mt-1">
                       <BuscadorEnLista
@@ -734,13 +737,13 @@ export default function TutoresPage() {
                       />
                     </div>
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     %
                     <input type="number" step="0.5" min="0" max="100" value={nuevoPct}
                       onChange={(e) => setNuevoPct(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm tabular-nums" />
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     Lo lleva desde
                     <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
@@ -776,7 +779,11 @@ export default function TutoresPage() {
                   </p>
                 )}
 
-                {ajustes && (
+                {/* Se comprueba la fecha, no solo que haya ajustes: sin ella
+                    el aviso decia «no se paga nada cobrado antes del
+                    undefined». Un aviso que dice «undefined» asusta mas que no
+                    decir nada. */}
+                {ajustes?.aplica_desde && (
                   <p className="text-[11px] text-muted-foreground flex gap-1.5">
                     <Warning size={13} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
                     <span>
@@ -825,17 +832,17 @@ export default function TutoresPage() {
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
 
             <div className="grid grid-cols-3 gap-2">
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Porcentaje
                 <input name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
                   className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Desde
                 <input name="desde" type="date" defaultValue={hoy()} required
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Hasta
                 <input name="hasta" type="date"
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />

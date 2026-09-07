@@ -214,16 +214,16 @@ function TemplateEditorDialog({ template, variables, onClose, onSave }: {
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre interno *</label>
+            <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Nombre interno *</label>
             <input value={name} onChange={e => setName(e.target.value)} className={inp} placeholder="ej: Bienvenida tras conversión" maxLength={120} />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Asunto *</label>
+            <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Asunto *</label>
             <input value={subject} onChange={e => setSubject(e.target.value)} className={inp} placeholder="Hola {{lead.nombre}}, ..." maxLength={500} />
             <VariablePicker variables={variables} onPick={tok => insertVar(tok, 'subject')} />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Cuerpo HTML *</label>
+            <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Cuerpo HTML *</label>
             <textarea
               value={body}
               onChange={e => setBody(e.target.value)}
@@ -235,7 +235,7 @@ function TemplateEditorDialog({ template, variables, onClose, onSave }: {
             <VariablePicker variables={variables} onPick={tok => insertVar(tok, 'body')} />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Descripción interna (opcional)</label>
+            <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Descripción interna (opcional)</label>
             <input value={description || ''} onChange={e => setDescription(e.target.value)} className={inp} placeholder="Cuándo usar esta plantilla" maxLength={1000} />
           </div>
         </div>
