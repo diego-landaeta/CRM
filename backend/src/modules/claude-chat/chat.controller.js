@@ -54,6 +54,20 @@ export async function chat(req, res, next) {
   try {
     const { message, projectId, conversationId } = req.body || {};
     if (!message) throw new AppError('message requerido', 400, 'VALIDATION_ERROR');
+    // `ai_conversations.project_id` es NOT NULL, y aqui abajo se creaba la
+    // conversacion con `projectId || null`: sin proyecto, el chat contestaba el
+    // error de Postgres en crudo —«null value in column project_id violates
+    // not-null constraint»— con un 500. Se dice antes y en castellano.
+    //
+    // Ademas el contexto que se le da al modelo sale ENTERO de un proyecto
+    // (sus leads, sus conversiones): sin proyecto no habria nada que
+    // consultar, asi que pedirlo no es una limitacion tecnica, es la pregunta.
+    if (!projectId) {
+      throw new AppError(
+        'Elige un proyecto antes de preguntar: el chat responde sobre los datos de uno concreto.',
+        400, 'PROJECT_REQUIRED'
+      );
+    }
 
     // Rate limit
     const used = await model.countUserMessagesLastHour(req.user.userId);

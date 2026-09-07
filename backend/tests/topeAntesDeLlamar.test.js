@@ -100,7 +100,7 @@ describe('el chat', () => {
     permitido = false;
     const res = resDeMentira();
     await chat.chat(
-      { body: { message: 'hola' }, user: { userId: 9 } },
+      { body: { message: 'hola', projectId: 1 }, user: { userId: 9 } },
       res,
       (err) => { throw err; }
     );
@@ -110,7 +110,7 @@ describe('el chat', () => {
   it('y dice por que, en vez de quedarse callado o dar un error raro', async () => {
     permitido = false;
     const res = resDeMentira();
-    await chat.chat({ body: { message: 'hola' }, user: { userId: 9 } }, res, (e) => { throw e; });
+    await chat.chat({ body: { message: 'hola', projectId: 1 }, user: { userId: 9 } }, res, (e) => { throw e; });
 
     const texto = res.enviado.filter((e) => e.type === 'delta').map((e) => e.content).join('');
     expect(texto).toMatch(/tope/i);
@@ -125,7 +125,7 @@ describe('el chat', () => {
     // usuario sin respuesta y parece que se perdio.
     permitido = false;
     await chat.chat(
-      { body: { message: 'hola' }, user: { userId: 9 } },
+      { body: { message: 'hola', projectId: 1 }, user: { userId: 9 } },
       resDeMentira(),
       (e) => { throw e; }
     );
@@ -137,7 +137,7 @@ describe('el chat', () => {
   it('no apunta gasto de una llamada que no se hizo', async () => {
     permitido = false;
     await chat.chat(
-      { body: { message: 'hola' }, user: { userId: 9 } },
+      { body: { message: 'hola', projectId: 1 }, user: { userId: 9 } },
       resDeMentira(),
       (e) => { throw e; }
     );
@@ -147,7 +147,7 @@ describe('el chat', () => {
   it('con margen si llama (y si falla, apunta lo gastado igual)', async () => {
     permitido = true;
     const res = resDeMentira();
-    await chat.chat({ body: { message: 'hola' }, user: { userId: 9 } }, res, (e) => { throw e; });
+    await chat.chat({ body: { message: 'hola', projectId: 1 }, user: { userId: 9 } }, res, (e) => { throw e; });
     expect(fetchLlamado).toBe(1);
     // El fetch de mentira revienta: es el camino de error, y ahi tambien se
     // apunta porque los tokens de entrada ya se pagaron.
