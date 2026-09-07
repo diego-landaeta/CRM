@@ -28,6 +28,7 @@ import {
   BookOpen,
   Headset,
   ActivityIcon as Activity,
+  ClipboardText,
   FilePdf,
   UserCircle,
   CaretUp,
@@ -161,6 +162,9 @@ const NAV_SECTIONS = [
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
+      // Conectores (#6). El backend existia desde `bcf9c3e` y no habia forma
+      // de llegar: sin pantalla y sin entrada.
+      { label: 'Conectores', to: '/captacion/conectores', detail: 'Traer datos de fuera', icon: PlugsConnected, roles: ['superadmin', 'admin'], module: 'connectors' },
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
@@ -253,6 +257,11 @@ const NAV_SECTIONS = [
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.
       { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'soporte'] },
+      // El registro (#111). Los mismos roles que exige el servidor con
+      // `roleGuard('admin', 'superadmin')`: cruza todas las fichas y a todos
+      // los compañeros, y ofrecerlo a quien la API va a negar es peor que no
+      // ofrecerlo.
+      { label: 'Registro', to: '/registro', detail: 'Todo lo que ha pasado', icon: ClipboardText, roles: ['superadmin', 'admin'] },
       { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],

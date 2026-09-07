@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { X, FloppyDisk } from '@phosphor-icons/react';
 import { invoicesApi } from '../api/invoices.api';
 import type { LeadFiscalData, InvoiceItem } from '../api/invoices.api';
-import { toast } from '@/shared/hooks/useToast';
+import { toast } from '@/shared/hooks/useToast';
+
 import Field from '@/shared/components/ui/Field';
 import { inputClass } from '@/shared/lib/ui';
 import { cn } from '@/shared/lib/utils';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
+// Si el servidor no manda una lista, la pantalla no se cae: se queda
+// vacia y se dice. (#113, el arreglo de las once pantallas en blanco.)
+import { lista } from '@/shared/lib/lista';
 
 interface Props {
   projectId: number;
@@ -66,7 +70,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     // Cargar empresas emisoras
     invoicesApi.listIssuers(projectId).then((res) => {
       if (res.success && res.data) {
-        setIssuers(res.data);
+        setIssuers(lista(res.data));
         const def = res.data.find(i => i.es_default) || res.data[0];
         if (def) setIssuerId(def.id);
       }

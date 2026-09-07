@@ -66,10 +66,16 @@ beforeEach(() => {
   integraciones.get.mockResolvedValue({ encrypted_value: 'x', iv: 'y', auth_tag: 'z' });
 });
 
-/** Un cobro tal cual lo devuelve Stripe. */
+/**
+ * Un cobro tal cual lo devuelve Stripe.
+ *
+ * Recien hecho, no con una fecha fija: hay reglas que dependen de la EDAD del
+ * cobro —el dia de gracia para que la plataforma lo estampe— y con una fecha
+ * escrita a mano las pruebas empiezan a fallar solas cuando pasa el tiempo.
+ */
 const cobro = (id, metadata = {}) => ({
   id, amount: 5000, currency: 'eur', status: 'succeeded',
-  created: Math.floor(new Date('2026-09-01').getTime() / 1000),
+  created: Math.floor(Date.now() / 1000) - 60,
   metadata, disputed: false,
 });
 
@@ -198,6 +204,27 @@ describe('el cobro sin marcar no se pierde, que es lo que costaria dinero', () =
     const r = await servicio.syncStripePayments(7);
     expect(r.sinMarcar).toBe(1);
     expect(r.imported).toBe(0);
+  });
+
+  it('pero solo un dia: pasado eso, no le van a poner marca', async () => {
+    // Sin este limite, un cobro que no se marca NUNCA —de otra plataforma que
+    // no marca, o con el webhook roto— dejaria la marca de agua clavada para
+    // siempre, releyendo una ventana cada vez mas grande cada cinco minutos.
+    conFiltro('tarot-ia');
+    const haceDosDias = Math.floor((Date.now() - 48 * 3600 * 1000) / 1000);
+    cobros = [{ ...cobro('ch_viejo', {}), created: haceDosDias }];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.sinMarcarViejos).toBe(1);
+    expect(r.sinMarcar, 'no deberia retener la marca de agua').toBe(0);
+  });
+
+  it('uno reciente SI la retiene: puede estar a punto de estamparse', async () => {
+    conFiltro('tarot-ia');
+    const haceUnaHora = Math.floor((Date.now() - 3600 * 1000) / 1000);
+    cobros = [{ ...cobro('ch_reciente', {}), created: haceUnaHora }];
+    const r = await servicio.syncStripePayments(7);
+    expect(r.sinMarcar).toBe(1);
+    expect(r.sinMarcarViejos).toBe(0);
   });
 
   it('uno de OTRO proyecto si deja avanzar: ese no va a cambiar', async () => {

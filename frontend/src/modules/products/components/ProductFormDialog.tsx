@@ -12,7 +12,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
-import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import CascadaDeCategorias from '@/modules/product-categories/components/CascadaDeCategorias';
 
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 
@@ -180,26 +180,6 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
 
   if (!open) return null;
 
-  // CRM-247 fix temporal: el modelo viejo asumía 2 niveles. Ahora el árbol es N niveles
-  // (Cursos > Para Profesionales > Psicología Org. > Trauma > ...). Mostramos TODAS las
-  // categorías en el primer selector con su path completo, e ignoramos subcategoria_id.
-  function pathOf(c: any): string {
-    const parts = [c.nombre];
-    let cur = c;
-    let safety = 0;
-    while (cur.parent_id && safety++ < 10) {
-      const parent = categories.find((x: any) => x.id === cur.parent_id);
-      if (!parent) break;
-      parts.unshift(parent.nombre);
-      cur = parent;
-    }
-    return parts.join(' › ');
-  }
-  const allCategoriesWithPath = categories
-    .map((c: any) => ({ id: c.id, label: pathOf(c), nombre: c.nombre, parent_id: c.parent_id }))
-    .sort((a: any, b: any) => a.label.localeCompare(b.label));
-  const subs = categories.filter(c => String(c.parent_id) === categoriaSel);
-
   function addPaymentLink() {
     setPaymentLinks((prev) => [...prev, { label: '', url: '', tipo: 'completo' }]);
   }
@@ -287,40 +267,28 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <Tag size={12} /> Categorización
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Se escribe, no se scrollea (#2).
-                  Aqui habia un desplegable con TODAS las categorias y su ruta
-                  entera concatenada: «Cursos › Para Profesionales › Adicciones
-                  y Conductas Compulsivas», cincuenta y pico lineas, sin forma
-                  de buscar. Encontrar una era bajar a ojo.
-                  Es el mismo buscador que ya resolvia esto con los 787 cursos
-                  de ISEIE: sin acentos y por trozos sueltos, asi que «adicc» o
-                  «prof adicc» llegan igual. */}
-              <BuscadorEnLista
-                opciones={allCategoriesWithPath.map((c: any) => ({
-                  id: c.id,
-                  nombre: c.nombre,
-                  // La ruta va en la nota: el nombre suelto se repite entre
-                  // ramas —hay varias «Adicciones»— y sin ella no se sabe cual
-                  // es. Pero el nombre manda, que es lo que se busca.
-                  nota: c.label === c.nombre ? null : c.label.replace(` › ${c.nombre}`, ''),
-                }))}
-                valor={categoriaSel ? Number(categoriaSel) : null}
-                onElegir={(id) => { setCategoriaSel(id ? String(id) : ''); setSubcategoriaSel(''); }}
-                placeholder="Escribe para buscar una categoría…"
-                sinResultados="Ninguna categoría con «{texto}»."
-              />
-              <Select<string>
-                value={subcategoriaSel}
-                onChange={setSubcategoriaSel}
-                options={[
-                  { value: '', label: subs.length ? 'Sin subcategoría' : '—' },
-                  ...subs.map(c => ({ value: String(c.id), label: c.nombre })),
-                ]}
-                ariaLabel="Subcategoría"
-                disabled={!subs.length}
-              />
-            </div>
+            {/* Se escribe o se baja, y son la misma cosa vista de dos maneras (#2).
+                Aqui habia un desplegable con TODAS las categorias y su ruta
+                entera concatenada —«Cursos › Para Profesionales › Adicciones y
+                Conductas Compulsivas», cincuenta y pico lineas— y al lado un
+                selector de «subcategoria» del modelo viejo de dos niveles. El
+                arbol real tiene cinco, asi que del tercero para abajo no habia
+                forma de llegar bajando: o lo buscabas o no existia. */}
+            <CascadaDeCategorias
+              categorias={categories}
+              valor={categoriaSel ? Number(categoriaSel) : null}
+              onCambiar={(id) => {
+                setCategoriaSel(id ? String(id) : '');
+                // `subcategoria_id` es del modelo de dos niveles y hoy solo se
+                // usa para ENSEÑAR un nombre en el listado; el filtro va por
+                // `categoria_id` y ya baja a los descendientes por su cuenta.
+                // Se limpia al tocar la categorizacion —la ruta entera queda en
+                // `categoria_id`— pero NO si se edita el precio y nada mas: no
+                // se tira un dato que la sincronizacion de WooCommerce puso y
+                // que nadie ha pedido cambiar.
+                setSubcategoriaSel('');
+              }}
+            />
             <div>
               <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Régimen fiscal (IVA)</label>
               <Select<string>
