@@ -7,6 +7,7 @@ import {
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import client from '@/shared/api/client';
+import { lista } from '@/shared/lib/lista';
 import { registroApi, type SucesoDelRegistro, type Fuente } from '../api/registro.api';
 
 /**
@@ -18,22 +19,6 @@ import { registroApi, type SucesoDelRegistro, type Fuente } from '../api/registr
  * contrario: por que fallo algo, y ahi los sucesos del sistema son el dato.
  */
 
-/**
- * Una lista, o una vacia. Nunca otra cosa.
- *
- * `setFuentes(r.data)` daba por hecho que el servidor manda un array. Si manda
- * cualquier otra cosa —un error con forma rara, una respuesta a medias, un 200
- * de un proxy— `fuentes.filter` revienta y la pantalla se queda EN BLANCO. No
- * un aviso: en blanco.
- *
- * Lo cazo el smoke de rutas de ISEIE:
- *
- *     TypeError: fuentes.filter is not a function
- *
- * Una pantalla de registro que se cae cuando algo va mal es justo la que no
- * sirve: se mira precisamente cuando algo va mal.
- */
-const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : []);
 
 type Vista = 'general' | 'todos';
 

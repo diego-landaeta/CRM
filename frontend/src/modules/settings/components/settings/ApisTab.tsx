@@ -5,6 +5,7 @@ import client from '@/shared/api/client';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import { SERVICES_CATALOG } from './shared';
+import { lista } from '@/shared/lib/lista';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -19,7 +20,7 @@ export default function ApisTab() {
     setLoading(true);
     try {
       const res = await client.get('/credentials');
-      if (res.success) setCredentials(res.data);
+      if (res.success) setCredentials(lista(res.data));
     } catch (err) {
       if (err.status !== 403) toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {

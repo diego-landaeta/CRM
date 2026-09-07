@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { EnvelopeSimple, PaperPlaneTilt, CaretDown, CaretRight, Spinner } from '@phosphor-icons/react';
 import { leadEmailsApi, type LeadEmail } from '../api/lead-emails.api';
+import { lista } from '@/shared/lib/lista';
 
 interface LeadEmailsCardProps {
   leadId: number;
@@ -30,7 +31,7 @@ export default function LeadEmailsCard({ leadId, hasEmail, onCompose, refreshKey
       try {
         const res = await leadEmailsApi.list(leadId);
         if (cancelled) return;
-        if (res.success && res.data) setEmails(res.data);
+        if (res.success && res.data) setEmails(lista(res.data));
         else setError('No se pudo cargar el historial');
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Error de red');

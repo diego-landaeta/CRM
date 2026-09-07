@@ -6,6 +6,7 @@ import {
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { conectoresApi, type Conector, type VistaPrevia } from '../api/connectors.api';
+import { lista } from '@/shared/lib/lista';
 
 /**
  * Probar el conector y decirle a que campo del CRM va cada dato (#6, parte 2).
@@ -33,9 +34,6 @@ interface Props {
   onCerrar: () => void;
   onCambiado: () => void;
 }
-
-/** Una lista, o una vacia. */
-const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : []);
 
 /** Un valor de muestra, recortado para que quepa en una celda. */
 function comoTexto(v: unknown): string {

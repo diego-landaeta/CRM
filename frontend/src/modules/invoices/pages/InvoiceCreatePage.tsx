@@ -10,6 +10,7 @@ import { invoicesApi } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import { lista } from '@/shared/lib/lista';
 
 type Tipo = 'persona' | 'empresa' | 'contado';
 interface LeadHit { id: number; nombre: string; email?: string | null; telefono?: string | null }
@@ -135,7 +136,7 @@ export default function InvoiceCreatePage() {
     }).catch(() => {});
     invoicesApi.listIssuers(pid).then((res) => {
       if (res.success && res.data) {
-        setIssuers(res.data);
+        setIssuers(lista(res.data));
         const def = res.data.find((i) => i.es_default) || res.data[0];
         if (def) setIssuerId(def.id);
       }

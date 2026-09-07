@@ -11,6 +11,7 @@ import {
   conectoresApi, TIPOS, DESTINOS, type Conector,
 } from '../api/connectors.api';
 import DialogoConector from '../components/DialogoConector';
+import { lista } from '@/shared/lib/lista';
 import PanelMapeo from '../components/PanelMapeo';
 
 /**
@@ -22,9 +23,6 @@ import PanelMapeo from '../components/PanelMapeo';
  * El backend estaba hecho desde `bcf9c3e` y no habia forma de usarlo: ni
  * pantalla, ni modulo en el frontend. Esto es la puerta.
  */
-
-/** Una lista, o una vacia. El servidor puede contestar cualquier cosa. */
-const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? v as T[] : []);
 
 const nombreTipo = (t: string) => TIPOS.find((x) => x.id === t)?.label || t;
 const nombreDestino = (d: string) => DESTINOS.find((x) => x.id === d)?.label || d;
