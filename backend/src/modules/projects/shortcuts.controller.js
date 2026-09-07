@@ -18,13 +18,38 @@ import { gestoresDelReparto, aQuienLeToca } from '../leads/reparto.js';
 // una: es CUANTO LLEVA SIN RECIBIR UNO. Por eso va `horas_sin_recibir`.
 export async function getUltimoLead(req, res, next) {
   try {
-    const projectId = parseInt(req.params.id);
-    if (isNaN(projectId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // El id de la URL puede ser un proyecto, o `-1` cuando esta puesto «Todos
+    // los proyectos», o venir acompañado de `issuerId` con una sociedad. Los
+    // tres casos valen: la pantalla se mira desde arriba, y obligar a elegir un
+    // campus para ver como reparte Make es pedir un dato que no hace falta.
+    const crudo = parseInt(req.params.id);
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+
+    let proyectos = null;                       // null = todos
+    if (issuerId) {
+      const { rows } = await query(
+        `SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id`, [issuerId]);
+      // Una sociedad sin campus NO puede acabar significando «todos».
+      proyectos = rows.length ? rows.map((r) => r.id) : [-1];
+    } else if (!isNaN(crudo) && crudo > 0) {
+      proyectos = [crudo];
+    }
 
     // La lista de quien entra en el reparto sale de `reparto.js`, la misma que
     // usa el alta: si aqui se hiciera una consulta propia, las dos se
     // desviarian y la pantalla contaria gente que no recibe.
-    const gestores = await gestoresDelReparto(query, projectId);
+    //
+    // Con varios proyectos se pide para cada uno y se juntan sin repetir: una
+    // gestora que trabaja en dos campus es una sola persona.
+    const yaEsta = new Map();
+    for (const p of (proyectos || (await query(
+        `SELECT id FROM projects WHERE active`)).rows.map((r) => r.id))) {
+      for (const g of await gestoresDelReparto(query, p)) {
+        if (!yaEsta.has(g.id)) yaEsta.set(g.id, g);
+      }
+    }
+    const gestores = [...yaEsta.values()];
+    const projectId = proyectos && proyectos.length === 1 ? proyectos[0] : null;
 
     // Y ademas, quien HA RECIBIDO leads este mes aunque hoy no este en el
     // reparto — de vacaciones, o se fue. Sus numeros son historia y esconderlos
@@ -33,14 +58,21 @@ export async function getUltimoLead(req, res, next) {
       `WITH mios AS (
          SELECT l.id, l.nombre, l.responsable_id, l.producto_interes_id,
                 COALESCE(l.fecha_solicitud, l.created_at) AS entro,
+                l.landing_url, l.custom_fields,
                 l.updated_at
            FROM leads l
-          WHERE l.project_id = $1 AND l.deleted_at IS NULL
+          WHERE ($1::int[] IS NULL OR l.project_id = ANY($1::int[]))
+            AND l.deleted_at IS NULL
             AND l.responsable_id IS NOT NULL
        ),
        ultimo AS (
          SELECT DISTINCT ON (responsable_id)
-                responsable_id, id, nombre, entro, producto_interes_id
+                responsable_id, id, nombre, entro, producto_interes_id,
+                -- De donde entro. Es lo que Diego pide ver junto al nombre:
+                -- no es lo mismo un lead de WhatsApp que uno de un anuncio.
+                COALESCE(custom_fields->>'origen', custom_fields->>'canal',
+                         CASE WHEN landing_url IS NOT NULL THEN 'Formulario web' END,
+                         'Sin origen') AS canal
            FROM mios ORDER BY responsable_id, entro DESC
        )
        SELECT u.id, u.nombre AS gestora, u.avatar_url,
@@ -59,7 +91,7 @@ export async function getUltimoLead(req, res, next) {
         WHERE u.id = ANY($2::int[])
         GROUP BY u.id, u.nombre, u.avatar_url, ul.id, ul.nombre, ul.entro, p.nombre
         ORDER BY ul.entro DESC NULLS LAST`,
-      [projectId, gestores.map((g) => g.id)]
+      [proyectos, gestores.map((g) => g.id)]
     );
 
     // Quien esta en el reparto y NO sale arriba es que nunca ha recibido: se
@@ -77,8 +109,9 @@ export async function getUltimoLead(req, res, next) {
 
     const { rows: sueltos } = await query(
       `SELECT COUNT(*)::int AS n FROM leads
-        WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL`,
-      [projectId]
+        WHERE ($1::int[] IS NULL OR project_id = ANY($1::int[]))
+          AND responsable_id IS NULL AND deleted_at IS NULL`,
+      [proyectos]
     );
 
     res.json({

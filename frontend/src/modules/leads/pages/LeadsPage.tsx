@@ -157,7 +157,7 @@ export default function LeadsPage() {
     loading, error, refetch,
   } = useLeads();
 
-  const { activeProject, projects } = useProjectContext();
+  const { activeProject, projects, activeIssuerId } = useProjectContext();
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
@@ -611,7 +611,7 @@ export default function LeadsPage() {
           entre todo el equipo, no algo que una gestora necesite de sus
           compañeras. */}
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
-        <UltimoLeadAsignado projectId={activeProject?.id} />
+        <UltimoLeadAsignado projectId={activeProject?.id} issuerId={activeIssuerId} />
       )}
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}

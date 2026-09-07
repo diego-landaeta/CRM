@@ -42,6 +42,7 @@ interface FilaGestora {
   lead_nombre: string | null;
   lead_entro: string | null;
   lead_producto: string | null;
+  lead_canal: string | null;
   horas_sin_recibir: number | null;
   hoy: number;
   semana: number;
@@ -65,15 +66,18 @@ function cuantoHace(horas: number | null): string {
   return `hace ${dias} ${dias === 1 ? 'día' : 'días'}`;
 }
 
-export default function UltimoLeadAsignado({ projectId }: { projectId?: number | null }) {
+export default function UltimoLeadAsignado(
+  { projectId, issuerId }: { projectId?: number | null; issuerId?: number | null },
+) {
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(false);
 
   const traer = useCallback(async () => {
-    if (!projectId) return;
     setCargando(true);
     try {
-      const r = await client.get(`/projects/${projectId}/ultimo-lead`);
+      // Sin proyecto se manda `-1`, que es lo que el CRM usa para «todos».
+      const q = issuerId ? `?issuerId=${issuerId}` : '';
+      const r = await client.get(`/projects/${projectId || -1}/ultimo-lead${q}`);
       // `lista()` y no `r.data` a secas: si el servidor contesta cualquier otra
       // cosa, la pantalla se queda vacía en vez de caerse entera.
       if (r.success) {
@@ -88,11 +92,11 @@ export default function UltimoLeadAsignado({ projectId }: { projectId?: number |
     } finally {
       setCargando(false);
     }
-  }, [projectId]);
+  }, [projectId, issuerId]);
 
   useEffect(() => { traer(); }, [traer]);
 
-  if (!projectId || (!datos && !cargando)) return null;
+  if (!datos && !cargando) return null;
 
   const filas = datos?.gestoras ?? [];
   const paradas = filas.filter(
@@ -136,6 +140,7 @@ export default function UltimoLeadAsignado({ projectId }: { projectId?: number |
             <tr className="text-muted-foreground border-b border-border">
               <th className="text-left font-medium py-1.5 pr-3">Gestora</th>
               <th className="text-left font-medium py-1.5 pr-3">Su último lead</th>
+              <th className="text-left font-medium py-1.5 pr-3">Canal</th>
               <th className="text-left font-medium py-1.5 pr-3">Cuándo</th>
               <th className="text-right font-medium py-1.5 px-2">Hoy</th>
               <th className="text-right font-medium py-1.5 px-2">Semana</th>
@@ -154,9 +159,18 @@ export default function UltimoLeadAsignado({ projectId }: { projectId?: number |
                       <span className="block text-[10px] opacity-70">{f.lead_producto}</span>
                     )}
                   </td>
+                  <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">
+                    {f.lead_canal || '—'}
+                  </td>
                   <td className={`py-2 pr-3 whitespace-nowrap ${parada ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-muted-foreground'}`}>
                     {parada && <Clock size={11} weight="bold" className="inline mr-1 -mt-0.5" />}
                     {cuantoHace(f.horas_sin_recibir)}
+                    {f.lead_entro && (
+                      <span className="block text-[10px] font-normal opacity-70">
+                        {new Date(f.lead_entro).toLocaleString('es-ES',
+                          { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-right tabular-nums">{f.hoy}</td>
                   <td className="py-2 px-2 text-right tabular-nums">{f.semana}</td>

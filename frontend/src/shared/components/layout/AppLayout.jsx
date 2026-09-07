@@ -41,6 +41,26 @@ const ALL_PROJECTS_OK = [
   // sueltas. Sin esto, quien tenga puesto «Todos los proyectos» —que es lo
   // normal— se encuentra el aviso de «elige un proyecto» en vez de la pantalla.
   /^\/dev\/components$/,
+
+  // WhatsApp. Las conversaciones son del NÚMERO de la gestora, no de un
+  // proyecto: pedir uno era exigir un dato que la pantalla no usa para lo
+  // principal. Las dos cosas que sí lo necesitan —el buscador de prospectos y
+  // las plantillas— ya se esconden solas cuando no lo hay.
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/plantillas$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
+
+  // Reportes. El servidor sabe contestar sin proyecto desde el #103 —y eso
+  // significa «todos»—, así que la puerta cerrada era un olvido: enseñaba un
+  // muro delante de una pantalla que ya funcionaba.
+  /^\/informes$/,
+
+  // El registro (#111) cruza todas las fichas y a todos los compañeros: por
+  // definición no es de un proyecto.
+  /^\/registro$/,
 ];
 
 function pathAllowsAll(pathname) {
