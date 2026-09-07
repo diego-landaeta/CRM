@@ -22,7 +22,7 @@ import { ProjectAvatar } from './Sidebar';
  * la cabecera, que es `sticky` y estrecha, si no se recorta.
  */
 export default function SelectorProyecto({ compacto = false, className }) {
-  const { activeProject, projects, switchProject } = useProjectContext();
+  const { activeProject, projects, switchProject, activeIssuer, switchIssuer } = useProjectContext();
   const [abierto, setAbierto] = useState(false);
   const [pos, setPos] = useState(null);
   const botonRef = useRef(null);
@@ -81,6 +81,33 @@ export default function SelectorProyecto({ compacto = false, className }) {
     setAbierto(false);
   }
 
+  // Los encabezados de sociedad eran letra muerta: se leian y no se podian
+  // pulsar (#120). Al elegir uno se enseña esa sociedad entera.
+  function elegirSociedad(id) {
+    switchIssuer(id);
+    setAbierto(false);
+  }
+
+  // Cuantos campus cuelgan de cada sociedad, para poder decir «CEDIA · 6
+  // campus» sin recontar en cada sitio.
+  const campusPorSociedad = (projects || []).reduce((cuenta, p) => {
+    const id = p.sociedad_emisora_id;
+    if (id) cuenta[id] = (cuenta[id] || 0) + 1;
+    return cuenta;
+  }, {});
+
+  // Lo que dice el boton. Tres estados, no dos.
+  const etiquetaActual = activeIssuer
+    ? activeIssuer.nombre
+    : activeProject?.id === -1
+      ? 'Todos los proyectos'
+      : (activeProject?.nombre || 'Selecciona proyecto');
+
+  // Para el `title` y para los lectores de pantalla, con la cuenta dentro.
+  const etiquetaCompleta = activeIssuer
+    ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+    : etiquetaActual;
+
   // Agrupado por sociedad emisora —las que no tienen, al final— y dentro de
   // cada una por antigüedad. Por orden alfabético, ISEIH quedaba la quinta
   // detrás de marcas que aún no tienen ni web: lo que más se usa tiene que
@@ -102,8 +129,8 @@ export default function SelectorProyecto({ compacto = false, className }) {
         onClick={() => setAbierto((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={abierto}
-        aria-label="Selector de proyecto"
-        title={compacto ? activeProject?.nombre : undefined}
+        aria-label={`Selector de proyecto. Ahora: ${etiquetaCompleta}`}
+        title={etiquetaCompleta}
         className={cn(
           'flex items-center rounded-md border border-border bg-card text-normal font-medium',
           'outline-none transition-colors hover:bg-muted',
@@ -115,8 +142,16 @@ export default function SelectorProyecto({ compacto = false, className }) {
         {!compacto && (
           <>
             <span className="max-w-[10rem] flex-1 truncate text-left">
-              {activeProject?.id === -1 ? 'Todos los proyectos' : (activeProject?.nombre || 'Selecciona proyecto')}
+              {etiquetaActual}
             </span>
+            {/* La cuenta va aparte y no se recorta: es lo que distingue «CEDIA»
+                de «CEDIA entera», y con un nombre largo se perdia dentro del
+                texto cortado. */}
+            {activeIssuer && (
+              <span className="shrink-0 rounded bg-info-soft px-1.5 py-0.5 text-secundario font-bold text-info-soft-foreground">
+                {activeIssuer.campus.length} campus
+              </span>
+            )}
             <CaretDown size={12} weight="bold" className="shrink-0 text-muted-foreground" />
           </>
         )}
@@ -132,13 +167,13 @@ export default function SelectorProyecto({ compacto = false, className }) {
             className="z-[60] animate-in fade-in zoom-in-95 slide-in-from-top-1 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-dialog duration-150 sidebar-scroll"
           >
             {projects?.length > 1 && (
-              <li role="option" aria-selected={activeProject?.id === -1}>
+              <li role="option" aria-selected={!activeIssuer && activeProject?.id === -1}>
                 <button
                   type="button"
                   onClick={() => elegir(-1)}
                   className={cn(
                     'flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-left text-normal transition-colors hover:bg-secondary',
-                    activeProject?.id === -1 && 'bg-secondary font-semibold',
+                    !activeIssuer && activeProject?.id === -1 && 'bg-secondary font-semibold',
                   )}
                 >
                   <ProjectAvatar project={{ isAll: true }} size="sm" />
@@ -151,16 +186,39 @@ export default function SelectorProyecto({ compacto = false, className }) {
             )}
 
             {ordenados.map((p) => {
-              const activo = p.id === activeProject?.id;
+              const activo = !activeIssuer && p.id === activeProject?.id;
               const soc = p.sociedad_nombre || null;
               const cabecera = soc !== ultimaSociedad;
               ultimaSociedad = soc;
               return (
                 <div key={p.id}>
                   {cabecera && (
-                    <div className="select-none px-2 pb-0.5 pt-2 text-tabla uppercase text-muted-foreground/60">
-                      {soc || 'Sin sociedad'}
-                    </div>
+                    soc && p.sociedad_emisora_id ? (
+                      // La sociedad entera. Era un titulo muerto; ahora es la
+                      // tercera opcion: sus campus sumados.
+                      <li role="option" aria-selected={activeIssuer?.id === Number(p.sociedad_emisora_id)}>
+                        <button
+                          type="button"
+                          onClick={() => elegirSociedad(Number(p.sociedad_emisora_id))}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-2 pb-0.5 pt-2 text-left transition-colors hover:bg-secondary',
+                            activeIssuer?.id === Number(p.sociedad_emisora_id) && 'bg-secondary',
+                          )}
+                        >
+                          <span title={soc} className="min-w-0 flex-1 truncate text-tabla uppercase text-muted-foreground/60">
+                            {soc}
+                          </span>
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-secundario font-semibold text-muted-foreground">
+                            {campusPorSociedad[p.sociedad_emisora_id] || 0} campus
+                          </span>
+                        </button>
+                      </li>
+                    ) : (
+                      // «Sin sociedad» no es una sociedad: no hay nada que sumar.
+                      <div className="select-none px-2 pb-0.5 pt-2 text-tabla uppercase text-muted-foreground/60">
+                        {soc || 'Sin sociedad'}
+                      </div>
+                    )
                   )}
                   <li role="option" aria-selected={activo}>
                     <button
