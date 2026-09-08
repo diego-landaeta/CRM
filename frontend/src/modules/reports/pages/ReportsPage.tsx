@@ -16,6 +16,7 @@ import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import PanelResumen from '@/shared/components/PanelResumen';
+import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
 
 function exportReportCSV(data, project, range) {
@@ -384,6 +385,9 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      <PanelSeguimiento projectId={activeProject?.id} issuerId={activeIssuerId}
+        from={range.from} to={range.to} />
 
       {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
           periodo anterior y la grafica con selector de serie. */}
