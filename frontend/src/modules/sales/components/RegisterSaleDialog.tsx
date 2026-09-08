@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
-import Portal from '@/shared/components/ui/portal';
+import Portal from '@/shared/components/ui/portal';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
 
 interface Product { id: number; nombre: string; precio?: number | string; moneda?: string }
 interface Project { id: number; nombre?: string }
@@ -350,7 +351,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                   <input value={nombre} onChange={(e) => setNombre(e.target.value)}
                     className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <FilaCampos>
                   <div>
                     <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Email</label>
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
@@ -363,7 +364,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                       placeholder="+34..."
                       className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
                   </div>
-                </div>
+                </FilaCampos>
                 <p className="text-[11px] text-muted-foreground -mt-1">Requerido al menos uno de los dos.</p>
               </div>
             )}
@@ -414,7 +415,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <FilaCampos>
                 <div>
                   <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Importe total *</label>
                   <input type="number" min="0" step="0.01" value={importeTotal}
@@ -428,9 +429,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                     placeholder={`Por defecto: ${importeTotal || 'igual al total'}`}
                     className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
                 </div>
-              </div>
+              </FilaCampos>
 
-              <div className="grid grid-cols-2 gap-3">
+              <FilaCampos>
                 <div>
                   <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Método de pago</label>
                   <select value={metodo} onChange={(e) => setMetodo(e.target.value)}
@@ -446,7 +447,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                   <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
                     className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
                 </div>
-              </div>
+              </FilaCampos>
 
               {/* Cuotas — solo cuando método es fraccionado */}
               {metodo === 'fraccionado' && (
@@ -459,7 +460,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                       Auto-distribuir
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <FilaCampos>
                     <div>
                       <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">N° de cuotas</label>
                       <input type="number" min={2} max={36} value={numCuotas}
@@ -472,7 +473,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                         onChange={(e) => { setFechaPrimeraCuota(e.target.value); setInstallmentsDirty(false); }}
                         className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm" />
                     </div>
-                  </div>
+                  </FilaCampos>
                   {installments.length > 0 && (
                     <div className="space-y-1.5">
                       <div className="grid grid-cols-[40px_1fr_1fr] gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">

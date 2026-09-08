@@ -78,6 +78,7 @@ function exportReportCSV(data, project, range) {
 }
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
+import DesglosePorCampus from '../components/DesglosePorCampus';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -95,7 +96,7 @@ const PIPELINE_COLORS = {
 
 
 export default function ReportsPage() {
-  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext();
+  const { activeProject, activeIssuerId, activeIssuer, projects, switchIssuer } = useProjectContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState({
@@ -103,6 +104,23 @@ export default function ReportsPage() {
     to: new Date().toISOString().slice(0, 10),
   });
   const [tab, setTab] = useState('crm');
+
+  // «Por defecto en los reportes debe salir la sociedad, luego elegir
+  // proyecto» (#125). Es como se factura y como mira Carlos: primero la
+  // empresa, luego el campus.
+  //
+  // Se hace UNA vez al entrar y solo si no hay ya una sociedad puesta: si
+  // reimpusiera la sociedad en cada vuelta, bajar a un campus desde el
+  // selector seria imposible —volveria solo—.
+  const [ambitoElegidoAqui, setAmbitoElegidoAqui] = useState(false);
+  useEffect(() => {
+    if (ambitoElegidoAqui || activeIssuerId) return;
+    const suya = (projects || []).find((p) => p.id === activeProject?.id)?.sociedad_emisora_id;
+    if (suya) {
+      switchIssuer(Number(suya));
+      setAmbitoElegidoAqui(true);
+    }
+  }, [ambitoElegidoAqui, activeIssuerId, activeProject?.id, projects, switchIssuer]);
 
   useEffect(() => {
     async function load() {
@@ -257,6 +275,18 @@ export default function ReportsPage() {
 
       {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
           periodo anterior y la grafica con selector de serie. */}
+      {/* De donde vienen las cifras de la sociedad: el reparto por campus
+          (#125). Sin esto, «120.409 €» es un numero del que no se puede hacer
+          nada. */}
+      {activeIssuer && (
+        <DesglosePorCampus
+          campus={activeIssuer.campus}
+          from={range.from}
+          to={range.to}
+          cobradoDeLaSociedad={Number(data?.conversions?.cobrado) || null}
+        />
+      )}
+
       <PanelResumen
         projectId={activeProject?.id}
         issuerId={activeIssuerId}
