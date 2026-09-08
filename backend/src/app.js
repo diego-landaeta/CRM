@@ -37,6 +37,7 @@ import payrollModule from './modules/payroll/index.js';
 import woocommerceModule from './modules/woocommerce/index.js';
 import webhookTokensModule from './modules/webhook-tokens/index.js';
 import audiencesModule from './modules/audiences/index.js';
+import procesoModule from './modules/proceso/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
@@ -127,6 +128,10 @@ const ALL_MODULES = [
   { name: 'auth', mod: authModule },
   { name: 'users', mod: usersModule },
   { name: 'leads', mod: leadsModule },
+  // El proceso comercial (#87). Va en el bundle `leads` y no en `comercial`
+  // porque todo lo suyo cuelga del prospecto: el paso se deriva de sus
+  // interacciones y la cola del dia es su lista. El catalogo solo lo enriquece.
+  { name: 'proceso', mod: procesoModule },
   { name: 'products', mod: productsModule },
   { name: 'dossiers', mod: dossiersModule },
   { name: 'conversions', mod: conversionsModule },
