@@ -54,6 +54,24 @@ function exportReportCSV(data, project, range) {
     sections.push('');
   }
 
+  // Va justo detras de los KPI, en el mismo orden que la pantalla: lo que se
+  // baja tiene que poder leerse al lado de lo que se ve.
+  if ((data.por_proyecto || []).length > 1) {
+    sections.push(sep(['Cuánto pone cada proyecto']));
+    sections.push(sep(['Proyecto', 'Prospectos', 'Ventas', 'Facturado (€)', 'Cobrado (€)']));
+    data.por_proyecto.forEach(f => sections.push(sep([
+      f.nombre, f.leads, f.ventas, Number(f.facturado).toFixed(2), Number(f.cobrado).toFixed(2),
+    ])));
+    sections.push(sep([
+      'TOTAL',
+      data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0),
+      data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0),
+      data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0).toFixed(2),
+      data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0).toFixed(2),
+    ]));
+    sections.push('');
+  }
+
   if ((data.top_productos || []).length) {
     sections.push(sep(['Top productos']));
     sections.push(sep(['Producto', 'Ventas', 'Facturado (€)', 'Cobrado (€)']));
@@ -280,6 +298,56 @@ export default function ReportsPage() {
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
 
+      {/* Cuanto pone cada campus (#120).
+          Con una sociedad elegida, «82.395 EUR» no dice de donde salen. Solo
+          aparece cuando el ambito abarca mas de un proyecto: con uno solo, la
+          tabla seria una fila repitiendo el KPI de arriba. */}
+      {(data.por_proyecto || []).length > 1 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <Buildings size={16} /> Cuánto pone cada proyecto
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Proyecto</th>
+                  <th className="py-2 px-3 font-medium text-right">Prospectos</th>
+                  <th className="py-2 px-3 font-medium text-right">Ventas</th>
+                  <th className="py-2 px-3 font-medium text-right">Facturado</th>
+                  <th className="py-2 pl-3 font-medium text-right">Cobrado</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {data.por_proyecto.map((f) => (
+                  <tr key={f.project_id} className="border-b border-border/50 last:border-0">
+                    {/* Un campus sin ventas sale igual, con ceros y apagado: si
+                        no apareciera se leeria como que no existe, y lo que
+                        pasa es que no vendio. */}
+                    <td className={'py-2 pr-3' + (Number(f.ventas) === 0 ? ' text-muted-foreground' : '')}>{f.nombre}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{Number(f.leads).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right">{Number(f.ventas).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{fmt(f.facturado)}</td>
+                    <td className="py-2 pl-3 text-right font-semibold">{fmt(f.cobrado)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {/* El total va escrito para que se pueda comprobar contra los
+                    KPI de arriba: si no cuadra, no se cree ninguno de los dos. */}
+                <tr className="border-t-2 border-border font-semibold tabular-nums">
+                  <td className="py-2 pr-3">Total</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0))}</td>
+                  <td className="py-2 pl-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
           periodo anterior y la grafica con selector de serie. */}
       <PanelResumen
@@ -422,56 +490,6 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
-
-      {/* Cuanto pone cada campus (#120).
-          Con una sociedad elegida, «82.395 EUR» no dice de donde salen. Solo
-          aparece cuando el ambito abarca mas de un proyecto: con uno solo, la
-          tabla seria una fila repitiendo el KPI de arriba. */}
-      {(data.por_proyecto || []).length > 1 && (
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
-            <Buildings size={16} /> Cuánto pone cada proyecto
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Proyecto</th>
-                  <th className="py-2 px-3 font-medium text-right">Prospectos</th>
-                  <th className="py-2 px-3 font-medium text-right">Ventas</th>
-                  <th className="py-2 px-3 font-medium text-right">Facturado</th>
-                  <th className="py-2 pl-3 font-medium text-right">Cobrado</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {data.por_proyecto.map((f) => (
-                  <tr key={f.project_id} className="border-b border-border/50 last:border-0">
-                    {/* Un campus sin ventas sale igual, con ceros y apagado: si
-                        no apareciera se leeria como que no existe, y lo que
-                        pasa es que no vendio. */}
-                    <td className={'py-2 pr-3' + (Number(f.ventas) === 0 ? ' text-muted-foreground' : '')}>{f.nombre}</td>
-                    <td className="py-2 px-3 text-right text-muted-foreground">{Number(f.leads).toLocaleString('es-ES')}</td>
-                    <td className="py-2 px-3 text-right">{Number(f.ventas).toLocaleString('es-ES')}</td>
-                    <td className="py-2 px-3 text-right text-muted-foreground">{fmt(f.facturado)}</td>
-                    <td className="py-2 pl-3 text-right font-semibold">{fmt(f.cobrado)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                {/* El total va escrito para que se pueda comprobar contra los
-                    KPI de arriba: si no cuadra, no se cree ninguno de los dos. */}
-                <tr className="border-t-2 border-border font-semibold tabular-nums">
-                  <td className="py-2 pr-3">Total</td>
-                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0).toLocaleString('es-ES')}</td>
-                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0).toLocaleString('es-ES')}</td>
-                  <td className="py-2 px-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0))}</td>
-                  <td className="py-2 pl-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0))}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Top productos */}
       <div className="bg-card border border-border rounded-lg p-4">

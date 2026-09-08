@@ -994,7 +994,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           </label>
         )}
         <div className={cn('flex items-center', collapsed ? 'flex-col gap-1.5' : 'gap-2')}>
-          <div className={cn('relative', collapsed ? 'w-full' : 'flex-1')} ref={pickerRef}>
+          <div className={cn('relative', collapsed ? 'w-full' : 'min-w-0 flex-1')} ref={pickerRef}>
             <button
               type="button"
               ref={pickerBtnRef}
@@ -1011,7 +1011,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
                 collapsed
                   ? 'w-full h-10 justify-center'
-                  : 'w-full min-h-9 py-1 pl-1 pr-8 gap-2'
+                  : 'w-full min-w-0 min-h-9 py-1 pl-1 pr-8 gap-2'
               )}
             >
               <ProjectAvatar project={activeProject} size="sm" />

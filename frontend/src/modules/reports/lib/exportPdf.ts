@@ -20,6 +20,7 @@ interface OverviewData {
   leads_por_gestor?: Array<{ gestor: string; total: number; convertidos: number }>;
   top_productos?: Array<{ producto: string; ventas: number; total: number; cobrado: number }>;
   ingresos_mensual?: Array<{ mes: string; ingresos: number }>;
+  por_proyecto?: Array<{ project_id: number; nombre: string; leads: number; ventas: number; facturado: number; cobrado: number }>;
 }
 
 const fmtEur = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -97,6 +98,23 @@ export async function exportReportPDF(data: OverviewData, projectName: string | 
       return [g.gestor, String(g.total), String(g.convertidos), `${tasa}%`];
     });
     drawTable(doc, ['Gestor', 'Total', 'Convertidos', 'Tasa'], rows, MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Prospectos por gestor');
+  }
+
+  // Cuanto pone cada proyecto. En el mismo sitio que en pantalla: detras de
+  // los KPI, que es lo que explica de donde salen.
+  if ((data.por_proyecto?.length ?? 0) > 1) {
+    const rows = data.por_proyecto!.map(f => [
+      f.nombre, String(f.leads), String(f.ventas), fmtEur(f.facturado), fmtEur(f.cobrado),
+    ]);
+    rows.push([
+      'TOTAL',
+      String(data.por_proyecto!.reduce((a, f) => a + Number(f.leads || 0), 0)),
+      String(data.por_proyecto!.reduce((a, f) => a + Number(f.ventas || 0), 0)),
+      fmtEur(data.por_proyecto!.reduce((a, f) => a + Number(f.facturado || 0), 0)),
+      fmtEur(data.por_proyecto!.reduce((a, f) => a + Number(f.cobrado || 0), 0)),
+    ]);
+    drawTable(doc, ['Proyecto', 'Prospectos', 'Ventas', 'Facturado', 'Cobrado'], rows,
+      MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Cuánto pone cada proyecto');
   }
 
   // Tabla Top productos
