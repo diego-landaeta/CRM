@@ -633,10 +633,65 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
+/**
+ * Los filtros rapidos, en SQL (#132).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUE SUBEN AL SERVIDOR
+ *
+ * Estaban en `LeadsPage.tsx`, aplicados sobre `leads` — que es UNA PAGINA de 20
+ * de `total`. Asi que `?qf=tomorrow` no enseñaba los de mañana: enseñaba los de
+ * mañana QUE CAYERAN EN LA PAGINA QUE ESTUVIERAS MIRANDO.
+ *
+ * Con 300 prospectos y doce para mañana, podian salir dos. O ninguno.
+ *
+ * Diego lo dijo dos veces en el #132, y es la condicion para poder mandar el
+ * correo: «un aviso que dice "7 personas" y abre una lista con 2 es peor que no
+ * mandar nada». Un correo que miente se deja de abrir a la semana, y entonces
+ * tampoco se lee el que importa.
+ *
+ * LAS FECHAS NO DERIVAN, Y ESTA COMPROBADO
+ *
+ * `lead_reminders.fecha_recordatorio` es `date` pelado, no `timestamptz`, y la
+ * API lo devuelve como texto plano («2026-09-07»). El frontend hacia
+ * `String(x).slice(0, 10)`. Asi que `CURRENT_DATE` de aqui y la fecha de alli
+ * son el mismo dia — sin conversion de zona por medio, que es lo que habria
+ * hecho que el numero del correo y el de la lista se separasen por un dia.
+ *
+ * UNA SOLA DEFINICION
+ *
+ * La misma cadena la usan la lista, los contadores de las pestañas y el correo.
+ * El ticket lo pide asi —«es el mismo dato, contado en tres sitios; que salga de
+ * una sola consulta»— y es lo unico que garantiza que digan lo mismo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const PROXIMO = `(SELECT MIN(r.fecha_recordatorio) FROM lead_reminders r
+                   WHERE r.lead_id = l.id AND r.completado = false)`;
+const ULTIMO_CONTACTO = `(SELECT MAX(i.fecha) FROM lead_interactions i WHERE i.lead_id = l.id)`;
+// «Sin tocar» = ni una interaccion Y todavia en la entrada del embudo.
+const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_contactar'))`;
+
+export const FILTROS_RAPIDOS = {
+  // Ojo: `NULL < CURRENT_DATE` es NULL, o sea que no pasa el filtro. Es lo que
+  // se quiere —«sin recordatorio» no es «atrasado»— y coincide con el `next &&`
+  // que hacia el frontend.
+  overdue: `${PROXIMO} < CURRENT_DATE`,
+  today: `${PROXIMO} = CURRENT_DATE`,
+  tomorrow: `${PROXIMO} = CURRENT_DATE + 1`,
+  week: `${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`,
+  'no-reminder': `${PROXIMO} IS NULL`,
+  'no-contact': SIN_TOCAR,
+  urgent: `(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`,
+};
+
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
+
+  // El filtro rapido. Va sin parametros: son fragmentos fijos de este fichero,
+  // elegidos por clave de un objeto cerrado — no llega nada del usuario al SQL.
+  if (qf && FILTROS_RAPIDOS[qf]) conditions.push(FILTROS_RAPIDOS[qf]);
 
   // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
   if (Array.isArray(projectIds) && projectIds.length > 0) {
@@ -844,6 +899,56 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   );
 
   return { leads: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
+/**
+ * Cuantos hay en cada filtro rapido, de UNA consulta (#132).
+ *
+ * Los contadores de las pestañas tambien se calculaban en el navegador sobre la
+ * pagina, asi que la pestaña decia «3» y en la base habia doce.
+ *
+ * Y este es el numero que va a llevar el correo del resumen. El ticket lo pide
+ * literal: «el numero del correo y el numero de la lista tienen que ser el
+ * mismo». La unica forma de garantizarlo es que salgan de aqui los dos, con las
+ * mismas cadenas de `FILTROS_RAPIDOS`.
+ *
+ * `responsableId` es lo que hace que el correo de una gestora lleve lo suyo y
+ * no lo de otra.
+ */
+export async function contarFiltrosRapidos({ projectId, projectIds, responsableId, includeConverted = false }) {
+  const cond = ['l.deleted_at IS NULL'];
+  const params = [];
+  let i = 1;
+
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    cond.push(`l.project_id = ANY($${i++}::int[])`);
+    params.push(projectIds);
+  } else if (projectId) {
+    cond.push(`l.project_id = $${i++}`);
+    params.push(projectId);
+  }
+  if (responsableId) {
+    cond.push(`l.responsable_id = $${i++}`);
+    params.push(responsableId);
+  }
+  // Igual que el listado: los convertidos no cuentan salvo que se pidan.
+  if (!includeConverted) cond.push(`l.status <> 'convertido'`);
+
+  const cuenta = (clave) => `COUNT(*) FILTER (WHERE ${FILTROS_RAPIDOS[clave]})::int`;
+  const { rows } = await query(
+    `SELECT ${cuenta('overdue')}     AS overdue,
+            ${cuenta('today')}       AS today,
+            ${cuenta('tomorrow')}    AS tomorrow,
+            ${cuenta('week')}        AS week,
+            ${cuenta('no-reminder')} AS no_reminder,
+            ${cuenta('no-contact')}  AS no_contact,
+            ${cuenta('urgent')}      AS urgent,
+            COUNT(*)::int            AS total
+       FROM leads l
+      WHERE ${cond.join(' AND ')}`,
+    params
+  );
+  return rows[0];
 }
 
 export async function findById(id) {

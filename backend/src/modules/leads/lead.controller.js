@@ -1,7 +1,7 @@
 import * as leadService from './lead.service.js';
 import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, quickCountsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -82,6 +82,32 @@ export async function list(req, res, next) {
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/leads/quick-counts — cuantos hay en cada filtro rapido (#132).
+ *
+ * Las pestañas del listado los contaban en el navegador sobre la pagina de 20,
+ * asi que decian «3» cuando en la base habia doce.
+ *
+ * Y es el mismo numero que va a llevar el correo del resumen de mañana. Sale de
+ * aqui para los dos, con las mismas cadenas de `FILTROS_RAPIDOS`: es la unica
+ * forma de que el correo diga «7 personas» y la lista enseñe siete.
+ *
+ * Misma regla de rol que el listado: una gestora cuenta lo suyo, y el
+ * `responsableId` que venga del cliente se ignora.
+ */
+export async function quickCounts(req, res, next) {
+  try {
+    const parsed = quickCountsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const filtros = { ...parsed.data };
+    if (req.user.role === 'gestor') filtros.responsableId = req.user.userId;
+
+    res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
   } catch (err) { next(err); }
 }
 

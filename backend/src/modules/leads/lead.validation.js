@@ -61,6 +61,10 @@ export const listLeadsSchema = z.object({
   // Filtro por rango de fechas (sobre fecha_solicitud o created_at)
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateFrom: YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
+  // Filtro rapido, el mismo que las pestañas del listado (#132). Se valida
+  // como enum porque su valor elige un fragmento de SQL: cerrado por
+  // construccion, no por confianza.
+  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent']).optional(),
   // Orden: recent = cronológico puro (DEFAULT). dir invierte asc/desc.
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
   dir: z.enum(['asc', 'desc']).optional(),
@@ -158,4 +162,13 @@ export const updateLeadSchema = z.object({
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
+});
+
+/** Contadores de los filtros rapidos (#132). */
+export const quickCountsSchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    .transform((v) => v ? v.split(',').map(Number) : undefined),
+  responsableId: z.coerce.number().int().positive().optional(),
+  includeConverted: z.coerce.boolean().optional(),
 });
