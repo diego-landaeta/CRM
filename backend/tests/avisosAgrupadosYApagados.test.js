@@ -82,6 +82,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await limpiar();
+  if (usuaria) await query(`DELETE FROM avisos_apagados WHERE user_id = $1`, [usuaria.id]);
   avisos._olvidar();
 });
 
@@ -223,32 +224,88 @@ describe('2 · hacer y saber no van en la misma lista', () => {
   });
 });
 
-describe('3 · apagar avisos, sin la migración 146 aplicada', () => {
-  it('la pantalla lo dice en vez de fingir que guarda', async () => {
+describe('3 · apagar avisos por tipo y por persona', () => {
+  it('se usa la tabla que ya existe, no una nueva', async () => {
+    // `avisos_apagados` viene de la migracion 132 y ya esta aplicada. Escribi
+    // una tabla nueva antes de verlo; dos tablas para «esta persona no quiere
+    // este aviso» es lo que el #111 llama «dos sistemas».
     const p = await avisos.preferencias(usuaria.id);
-    expect(p.guardable).toBe(false);
-    expect(p.aviso).toMatch(/146/);
+    expect(p.guardable).toBe(true);
+    expect(p.aviso).toBeNull();
   });
 
-  it('pero enseña igual los tipos, para que se vea qué habrá', async () => {
+  it('apagado, deja de salir en la lista', async () => {
+    await creado({ type: 'catalogo_revision', title: 'Revisión diaria' });
+    await creado({ type: 'lead_asignado', title: 'Un prospecto' });
+
+    await avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']);
+    avisos._olvidar();
+
+    const lista = await avisos.list({ userId: usuaria.id, role: 'gestor' });
+    expect(lista.some((n) => n.type === 'catalogo_revision')).toBe(false);
+    expect(lista.some((n) => n.type === 'lead_asignado')).toBe(true);
+  });
+
+  it('y tampoco cuenta para el número', async () => {
+    await creado({ type: 'catalogo_revision', title: 'Revisión diaria' });
+    await avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']);
+
+    const c = await avisos.unreadCount(usuaria.id, 'gestor');
+    expect(c.aviso).toBe(0);
+  });
+
+  it('al encenderlo vuelve a estar, con su fecha: no se borro nada', async () => {
+    const cuando = new Date(Date.now() - 3 * 86400000);
+    await creado({ type: 'catalogo_revision', title: 'Revisión diaria', cuando });
+
+    await avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']);
+    expect((await avisos.list({ userId: usuaria.id, role: 'gestor' }))
+      .some((n) => n.type === 'catalogo_revision')).toBe(false);
+
+    await avisos.guardarPreferencias(usuaria.id, []);
+    const vuelta = (await avisos.list({ userId: usuaria.id, role: 'gestor' }))
+      .find((n) => n.type === 'catalogo_revision');
+
+    expect(vuelta).toBeTruthy();
+    expect(new Date(vuelta.created_at).toISOString().slice(0, 10))
+      .toBe(cuando.toISOString().slice(0, 10));
+  });
+
+  it('lo de una persona no apaga lo de otra', async () => {
+    await creado({ type: 'catalogo_revision', title: 'Revisión diaria', target: null });
+    await avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']);
+
+    const deAdmin = await avisos.list({ userId: admin.id, role: admin.role });
+    expect(deAdmin.some((n) => n.type === 'catalogo_revision')).toBe(true);
+  });
+
+  it('GUARDAR NO SE COME LOS AVISOS POR CORREO', async () => {
+    // En esa tabla viven tambien 'resumen_del_dia' y 'plan_de_manana', que se
+    // apagan desde `/api/users/mis-avisos`. Un `DELETE` por `user_id` a secas
+    // —que es lo que escribi primero— le borraria a alguien sus preferencias
+    // de correo al guardar aqui, y sin decirselo.
+    await query(
+      `INSERT INTO avisos_apagados (user_id, aviso) VALUES ($1, 'resumen_del_dia')
+       ON CONFLICT DO NOTHING`, [usuaria.id]);
+
+    await avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']);
+
+    const { rows } = await query(
+      `SELECT aviso FROM avisos_apagados WHERE user_id = $1 ORDER BY aviso`, [usuaria.id]);
+    expect(rows.map((r) => r.aviso)).toEqual(['catalogo_revision', 'resumen_del_dia']);
+  });
+
+  it('un tipo inventado no se guarda', async () => {
+    await avisos.guardarPreferencias(usuaria.id, ['no_existe_este_aviso']);
+    const { rows } = await query(
+      `SELECT aviso FROM avisos_apagados WHERE user_id = $1`, [usuaria.id]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('la lista de tipos sale con su clase, para pintar la pantalla', async () => {
     const p = await avisos.preferencias(usuaria.id);
     expect(p.tipos.length).toBeGreaterThan(5);
-    expect(p.tipos.map((t) => t.tipo)).toContain('catalogo_revision');
-    expect(p.apagados).toEqual([]);
-  });
-
-  it('guardar avisa con un 503, no se lo traga', async () => {
-    // La versión anterior guardaba en `localStorage` y encima con nombres de
-    // tipo que no existen (`lead_assigned` cuando el backend emite
-    // `lead_asignado`). O sea que apagar no apagaba nada y nadie se enteraba.
-    await expect(avisos.guardarPreferencias(usuaria.id, ['catalogo_revision']))
-      .rejects.toMatchObject({ statusCode: 503 });
-  });
-
-  it('y mientras tanto la campana funciona igual que hoy', async () => {
-    await creado({ type: 'catalogo_revision', title: 'Revisión diaria' });
-    const lista = await avisos.list({ userId: usuaria.id, role: 'gestor' });
-    expect(lista.some((n) => n.type === 'catalogo_revision')).toBe(true);
+    expect(p.tipos.find((t) => t.tipo === 'catalogo_revision').clase).toBe(AVISO);
   });
 });
 
@@ -349,15 +406,16 @@ describe('las rutas nuevas contestan', () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data.tipos)).toBe(true);
-    expect(res.body.data.guardable).toBe(false);   // falta la migracion 146
+    expect(res.body.data.guardable).toBe(true);
   });
 
-  it('y guardar sin la migracion contesta 503, no un 200 mentiroso', async () => {
+  it('y guardar funciona, sin esperar a ninguna migracion', async () => {
     const res = await request.put('/api/notifications/preferences')
       .set('Authorization', `Bearer ${token}`)
-      .send({ apagados: ['catalogo_revision'] });
+      .send({ apagados: [] });
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
+    expect(res.body.data.apagados).toEqual([]);
   });
 
   it('sin sesion no se entra', async () => {

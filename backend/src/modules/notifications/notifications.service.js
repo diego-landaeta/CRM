@@ -46,9 +46,24 @@ export async function notifyUsers({ targetUserIds, type, title, message = null, 
 
 // ── Los avisos que alguien ha apagado (#111) ────────────────────────────────
 //
-// La tabla llega en la migracion 146, que no esta aplicada. Hasta que lo este,
-// no se apaga nada y la pantalla de preferencias lo dice — en vez de aceptar
-// el clic y perderlo, que es lo que hacia la version de `localStorage`.
+// Se usa `avisos_apagados`, que YA EXISTE desde la migracion 132 y ya esta
+// aplicada. Llegue a escribir una tabla nueva —`notification_mutes`— antes de
+// darme cuenta de que era la misma idea con otro nombre: `(user_id, aviso)`,
+// sin fila = lo recibe.
+//
+// Dos tablas para «esta persona no quiere este aviso» es exactamente lo que el
+// #111 dice que no: «es el mismo suceso contado dos veces, no dos sistemas».
+// Y para la persona seria peor todavia, porque apagar `lead_sin_tocar` en una
+// pantalla lo dejaria encendido en la otra.
+//
+// Compartirla tiene un premio: no hace falta migracion. Esto funciona hoy, sin
+// esperar a que nadie aplique nada.
+//
+// CUIDADO AL GUARDAR: en esa tabla viven TAMBIEN los avisos por correo
+// —'resumen_del_dia', 'plan_de_manana'—, que se apagan desde
+// `/api/users/mis-avisos`. Por eso el guardado de aqui solo toca las filas de
+// los tipos que gestiona esta pantalla. Un `DELETE` por `user_id` a secas le
+// borraria a alguien sus preferencias de correo sin que se entere.
 
 let hayTablaDeApagados = null;   // null = sin mirar todavia
 let yaAvisadoDeLaTabla = false;
@@ -64,17 +79,17 @@ async function tablaDeApagados() {
   try {
     const { rows } = await query(
       `SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'notification_mutes'`);
+        WHERE table_schema = 'public' AND table_name = 'avisos_apagados'`);
     hayTablaDeApagados = rows.length > 0;
   } catch (err) {
     // Si ni siquiera se puede preguntar, se asume que no esta: mejor enseñar
     // todos los avisos que esconderlos por un fallo de conexion.
-    logger.warn({ err: err.message }, 'No se pudo comprobar notification_mutes');
+    logger.warn({ err: err.message }, 'No se pudo comprobar avisos_apagados');
     hayTablaDeApagados = false;
   }
   if (!hayTablaDeApagados && !yaAvisadoDeLaTabla) {
     yaAvisadoDeLaTabla = true;
-    logger.warn('Falta la migracion 146 (notification_mutes): no se puede apagar ningun aviso');
+    logger.warn('Falta la migracion 132 (avisos_apagados): no se puede apagar ningun aviso');
   }
   return hayTablaDeApagados;
 }
@@ -84,8 +99,8 @@ async function apagadosDe(userId) {
   if (!(await tablaDeApagados())) return [];
   try {
     const { rows } = await query(
-      `SELECT type FROM notification_mutes WHERE user_id = $1`, [userId]);
-    return rows.map((r) => r.type);
+      `SELECT aviso FROM avisos_apagados WHERE user_id = $1`, [userId]);
+    return rows.map((r) => r.aviso);
   } catch (err) {
     logger.warn({ err: err.message, userId }, 'No se pudieron leer los avisos apagados');
     return [];
@@ -261,8 +276,8 @@ export async function markAllRead(userId) {
 /**
  * Los tipos que hay, cuales tiene apagados esta persona, y si se puede guardar.
  *
- * `guardable: false` cuando falta la migracion 146. La pantalla lo dice en vez
- * de aceptar el clic y perderlo.
+ * `guardable: false` solo si faltara `avisos_apagados`, que lleva aplicada
+ * desde la 132. La pantalla lo diria en vez de aceptar el clic y perderlo.
  */
 export async function preferencias(userId) {
   const disponible = await tablaDeApagados();
@@ -271,7 +286,7 @@ export async function preferencias(userId) {
     apagados: await apagadosDe(userId),
     guardable: disponible,
     aviso: disponible ? null
-      : 'Falta aplicar la migración 146 (notification_mutes): de momento no se puede apagar ningún aviso.',
+      : 'Falta aplicar la migración 132 (avisos_apagados): de momento no se puede apagar ningún aviso.',
   };
 }
 
@@ -280,7 +295,7 @@ export async function guardarPreferencias(userId, apagados) {
   if (!Array.isArray(apagados)) throw new AppError('Lista de tipos requerida', 400, 'INVALID_BODY');
   if (!(await tablaDeApagados())) {
     throw new AppError(
-      'Todavía no se pueden apagar avisos: falta aplicar la migración 146.',
+      'Todavía no se pueden apagar avisos: falta aplicar la migración 132.',
       503, 'MIGRATION_PENDING');
   }
   // Solo tipos conocidos: un `type` cualquiera en la tabla no apagaria nada y
@@ -288,13 +303,20 @@ export async function guardarPreferencias(userId, apagados) {
   const conocidos = new Set(tiposApagables().map((t) => t.tipo));
   const limpios = [...new Set(apagados.filter((t) => conocidos.has(t)))];
 
+  const mios = [...conocidos];
   await query('BEGIN');
   try {
-    await query(`DELETE FROM notification_mutes WHERE user_id = $1`, [userId]);
+    // Solo las filas de los tipos de ESTA pantalla. Sin el `AND aviso = ANY`,
+    // guardar aqui le borraria a la persona los avisos por correo que tuviera
+    // apagados desde `/api/users/mis-avisos`, que viven en la misma tabla.
+    await query(
+      `DELETE FROM avisos_apagados WHERE user_id = $1 AND aviso = ANY($2::text[])`,
+      [userId, mios]);
     if (limpios.length) {
       await query(
-        `INSERT INTO notification_mutes (user_id, type)
-         SELECT $1, UNNEST($2::text[])`, [userId, limpios]);
+        `INSERT INTO avisos_apagados (user_id, aviso)
+         SELECT $1, UNNEST($2::text[])
+         ON CONFLICT (user_id, aviso) DO NOTHING`, [userId, limpios]);
     }
     await query('COMMIT');
   } catch (err) {

@@ -41,7 +41,7 @@ export interface TipoDeAviso {
 export interface Preferencias {
   tipos: TipoDeAviso[];
   apagados: string[];
-  /** `false` mientras falte la migración 146. */
+  /** `false` solo si faltara `avisos_apagados` (migración 132, ya aplicada). */
   guardable: boolean;
   aviso: string | null;
 }
