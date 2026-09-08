@@ -190,6 +190,14 @@ async function _createLeadCore(project, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Canal: override de Make > deteccion automatica por UTMs.
+  //
+  // Se declara AQUI y no mas abajo porque el burst-merge de justo debajo lo
+  // devuelve, y `const` no se puede leer antes de su linea: daba
+  // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
+  // sea un 500 cada vez que entraba esa rama.
+  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
+
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
   // al lead original. Esto agrupa los rebotes de Make / form duplicados y
@@ -229,9 +237,6 @@ async function _createLeadCore(project, leadData) {
     converted.producto_interes_id !== productoInteresId
   );
   const propuestoDe = esPropuesto ? converted.id : null;
-
-  // Canal: override de Make > deteccion automatica por UTMs
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
   // Si es spam recurrente, no malgastamos un slot del round-robin.
   // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
