@@ -21,7 +21,7 @@ import {
 } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { formatDate } from '@/shared/lib/format';
-import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import { ponerAmbito } from '@/shared/lib/ambito';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));

@@ -15,7 +15,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
 import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
-import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import { ponerAmbito } from '@/shared/lib/ambito';
 
 function fmtMoney(n) {
   // Con decimales: sin ellos los importes no cuadraban con las facturas.

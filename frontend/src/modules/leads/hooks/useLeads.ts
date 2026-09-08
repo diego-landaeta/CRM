@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import client from '@/shared/api/client';
-import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
+import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambito';
 
 const PAGE_SIZE = 20;
 
@@ -80,10 +81,11 @@ function normalizeLead<T extends Partial<Lead>>(lead: T): T {
 }
 
 export function useLeads(): UseLeadsResult {
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   const pid = activeProject?.id;
 
@@ -138,12 +140,15 @@ export function useLeads(): UseLeadsResult {
   const fetchLeads = useCallback(async (): Promise<void> => {
     // Modo "Todos los proyectos": cruza todos los IDs del usuario, SALVO que
     // el filtro "Proyecto" tenga una selección — esa manda (bug: antes se ignoraba).
-    const effectiveIds = isAllProjects
-      ? (selectedProjectIds.length > 0 ? selectedProjectIds : (projects || []).map((p) => p.id))
+    // Con una sociedad elegida el conjunto es el de SUS campus, no el de
+    // todos (#103). El filtro «Proyecto» sigue mandando sobre ambos.
+    const delAmbito = idsDelAmbito({ activeIssuer, isAllProjects, projects });
+    const effectiveIds = delAmbito.length > 0
+      ? (selectedProjectIds.length > 0 ? selectedProjectIds : delAmbito)
       : selectedProjectIds;
     const hasMulti = effectiveIds.length > 0;
     if (!hasMulti && !pid) return;
-    if (isAllProjects && (!projects || projects.length === 0)) return;
+    if ((isAllProjects || activeIssuer) && delAmbito.length === 0) return;
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -188,7 +193,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, activeIssuer, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   // Trae TODOS los leads que cumplen los filtros actuales (sin paginar) para
   // exportar. El listado va paginado de 20 en 20; el export debe llevarse todo
@@ -197,9 +202,11 @@ export function useLeads(): UseLeadsResult {
     // Alcance de proyectos: override explícito del diálogo, o el de la vista actual.
     const scopeIds = opts?.projectIds && opts.projectIds.length
       ? opts.projectIds
-      : (isAllProjects
-          ? (selectedProjectIds.length > 0 ? selectedProjectIds : (projects || []).map((p) => p.id))
-          : selectedProjectIds);
+      : (() => {
+          const pool = idsDelAmbito({ activeIssuer, isAllProjects, projects });
+          if (pool.length === 0) return selectedProjectIds;
+          return selectedProjectIds.length > 0 ? selectedProjectIds : pool;
+        })();
     const hasMulti = scopeIds.length > 0;
     if (!hasMulti && !pid) return [];
     const ignoreFilters = !!opts?.ignoreFilters;
@@ -242,7 +249,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, activeIssuer, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();

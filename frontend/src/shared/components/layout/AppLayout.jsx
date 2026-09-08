@@ -47,11 +47,22 @@ function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
-// Con una sociedad elegida (#120), Reportes SI funciona: pide sus campus
-// sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
-// concreto, asi que se comportan igual que con «todos los proyectos» — que es
-// lo que ya sabian hacer.
-const CON_SOCIEDAD_OK = [/^\/informes$/];
+// Las pantallas que SI saben acotar a una sociedad (#120, #103).
+//
+// Reportes lo pide con `issuerId`; Prospectos y Clientes con la lista de ids
+// de sus campus, que es lo que `/leads` ya sabia recibir.
+//
+// El resto NO estan aqui a proposito. Con una sociedad elegida enseñarian los
+// datos de todos los proyectos bajo la etiqueta «CEDIA» —cifras de una cosa
+// con el nombre de otra—, que es peor que no enseñarlas: se leen como buenas.
+const CON_SOCIEDAD_OK = [
+  /^\/informes$/,
+  /^\/prospectos$/,
+  /^\/prospectos\/pipeline$/,
+  /^\/prospectos\/\d+$/,
+  /^\/clientes$/,
+  /^\/clientes\/\d+$/,
+];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
@@ -59,7 +70,14 @@ function rutaAceptaSociedad(pathname) {
 
 function AllProjectsGuard({ pathname, children }) {
   const { isAllProjects, activeIssuer } = useProjectContext();
-  if (activeIssuer && rutaAceptaSociedad(pathname)) return children;
+  if (activeIssuer) {
+    if (rutaAceptaSociedad(pathname)) return children;
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <NeedsProjectBanner sociedad={activeIssuer.nombre} />
+      </div>
+    );
+  }
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }

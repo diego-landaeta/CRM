@@ -47,7 +47,8 @@ function exportCSV(clients: Client[], filename: string): void {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-import { toast } from '@/shared/hooks/useToast';
+import { toast } from '@/shared/hooks/useToast';
+import { idsDelAmbito } from '@/shared/lib/ambito';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
@@ -160,10 +161,11 @@ export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   // Filtros persistidos en URL para deep-linking + refresh-safe.
   // Server-side: search, resp(id), prod(id), from, to, sort. Client-side (post-fetch):
@@ -237,7 +239,7 @@ export default function ClientsPage() {
     try {
       const params = new URLSearchParams();
       if (isAllProjects) {
-        params.set('projectIds', projects.map((p) => p.id).join(','));
+        params.set('projectIds', idsDelAmbito({ activeIssuer, isAllProjects, projects }).join(','));
       } else {
         params.set('projectId', String(activeProject.id));
       }
@@ -325,7 +327,7 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <PageHeader
           title="Clientes"
-          subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
+          subtitle={`Prospectos convertidos en ${activeIssuer ? `${activeIssuer.nombre} (${activeIssuer.campus.length} campus)` : (activeProject?.nombre || 'todos los proyectos')} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
         />
         {activeProject?.id && !isAllProjects && can('clients.create') && (
           <button
