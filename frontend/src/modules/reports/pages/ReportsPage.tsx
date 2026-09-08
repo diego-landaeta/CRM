@@ -77,7 +77,7 @@ function exportReportCSV(data, project, range) {
   URL.revokeObjectURL(url);
 }
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
-import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
+import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambito';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));

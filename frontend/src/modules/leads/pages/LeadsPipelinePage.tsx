@@ -9,7 +9,8 @@ import { toast } from '@/shared/hooks/useToast';
 import { Plus, User, DotsSixVertical, Users, CalendarBlank } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import type { Lead, LeadStatus } from '@/shared/types';
+import type { Lead, LeadStatus } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambito';
 
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 
@@ -153,10 +154,11 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
 }
 
 export default function LeadsPipelinePage() {
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   const pid = activeProject?.id;
 
@@ -180,7 +182,7 @@ export default function LeadsPipelinePage() {
     setLoading(true);
     try {
       const qs = isAllProjects
-        ? `projectIds=${projects.map((p) => p.id).join(',')}&limit=200&includeConverted=1`
+        ? `projectIds=${idsDelAmbito({ activeIssuer, isAllProjects, projects }).join(',')}&limit=200&includeConverted=1`
         : `projectId=${pid}&limit=200&includeConverted=1`;
       const res = await client.get<PipelineLead[]>(`/leads?${qs}`);
       if (res.success) {

@@ -9,7 +9,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { GlobeHemisphereWest, ListChecks, FileCsv } from '@phosphor-icons/react';
 import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
-import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import { ponerAmbito } from '@/shared/lib/ambito';
 
 const fmtMoney = (n) => new Intl.NumberFormat('es-ES', {
   style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
