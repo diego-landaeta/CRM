@@ -214,7 +214,7 @@ export default function ColaDelDiaPage() {
                             <li key={canal} className="flex items-center gap-1">
                               {i > 0 && <CaretRight size={9} weight="bold" className="text-muted-foreground/50" />}
                               <span className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px]">
-                                <Icono size={11} /> {nombreDeCanal(canal)}
+                                {Icono && <Icono size={11} />} {nombreDeCanal(canal)}
                               </span>
                             </li>
                           );

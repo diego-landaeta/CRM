@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import {
+  ListChecks, useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   CalendarCheck,
@@ -103,6 +104,11 @@ const NAV_SECTIONS = [
           // activo y el menu diria que estas en dos sitios.
           { label: 'Lista', to: '/prospectos', icon: Users, end: true },
           { label: 'La cola del día', to: '/prospectos/cola', icon: CalendarCheck },
+          // El proceso, al lado de la cola: es lo que la cola aplica. Leerlo
+          // lo puede hacer cualquiera —la gestora necesita saber en que paso
+          // va cada prospecto—; editarlo, solo admin, y eso lo decide la
+          // propia pantalla y el servidor.
+          { label: 'Proceso comercial', to: '/prospectos/proceso', icon: ListChecks },
         ],
       },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
