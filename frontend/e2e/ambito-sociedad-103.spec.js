@@ -115,6 +115,24 @@ test.describe('ámbito por sociedad en el resto del CRM (#103)', () => {
     await expect(contenido).not.toContainText(/vista Todos los proyectos/i);
   });
 
+  test('Facturas obedece a la sociedad de la cabecera', async ({ page }) => {
+    // Es la pantalla que el issue pone de ejemplo: ya sabia filtrar por
+    // sociedad. Con dos formas de elegirla —la cabecera y su desplegable— lo
+    // que no puede pasar es que discrepen.
+    const vistas = [];
+    await simular(page);
+    await page.route(`**/crm/api/invoices**`, (r) => {
+      vistas.push(new URL(r.request().url()).searchParams.get('issuerId'));
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } }) });
+    });
+    await ir(page, '/prospectos');
+    await elegir(page, /CEDIA INVESTIGACI/i);
+    await ir(page, '/finanzas/facturas');
+    // Y no el aviso: esta pantalla SI sabe hacerlo.
+    await expect(page.locator('#main-content')).not.toContainText(/elige un campus/i);
+    await expect.poll(() => vistas.includes(String(CEDIA))).toBe(true);
+  });
+
   test('sin sociedad, ese mismo aviso sigue hablando de «todos»', async ({ page }) => {
     await simular(page);
     await ir(page, '/prospectos');

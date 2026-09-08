@@ -62,6 +62,10 @@ const CON_SOCIEDAD_OK = [
   /^\/prospectos\/\d+$/,
   /^\/clientes$/,
   /^\/clientes\/\d+$/,
+  // Facturas es la pantalla que Diego pone de ejemplo: sabia filtrar por
+  // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
+  // campus» justo a la unica que no lo necesitaba.
+  /^\/finanzas\/facturas$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
