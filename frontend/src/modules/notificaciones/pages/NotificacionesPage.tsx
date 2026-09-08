@@ -212,7 +212,9 @@ export default function NotificacionesPage() {
             <p className="font-semibold text-foreground">Estado de la integración</p>
             <ul className="text-xs space-y-1 list-disc ml-4">
               <li>
-                <strong>In-app:</strong> activo. La campana del header (
+                <strong>In-app:</strong> activo. Lo repetido va en una sola fila con su
+                «×N», y lo que pide hacer algo va separado de lo que solo hay que saber.
+                La campana del header (
                 <Bell size={11} weight="bold" className="inline mx-0.5" />) muestra recordatorios vencidos,
                 cobros atrasados y leads recientes desde los datos del CRM.
               </li>
@@ -227,9 +229,15 @@ export default function NotificacionesPage() {
                 aún no hay templates para notificaciones por evento.
               </li>
             </ul>
+            {/* Decia «se guardan en este navegador. Cuando exista
+                /api/notification-preferences, se sincronizaran con tu cuenta».
+                Las dos cosas dejaron de ser verdad al hacer el #111: se guardan
+                por usuario y el endpoint existe. Un pie que miente sobre donde
+                van tus datos es peor que no ponerlo. */}
             <p className="text-xs italic pt-1">
-              Tus preferencias se guardan en este navegador. Cuando exista{' '}
-              <code>/api/notification-preferences</code>, se sincronizarán con tu cuenta.
+              Lo que apagues arriba se guarda en tu cuenta, no en este navegador, y es
+              lo mismo que se apaga en <strong>Mis avisos por correo</strong>: un aviso
+              apagado lo está en los dos sitios.
             </p>
           </div>
         </div>
