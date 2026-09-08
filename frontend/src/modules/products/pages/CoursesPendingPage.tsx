@@ -47,18 +47,26 @@ export default function CoursesPendingPage() {
     setLoading(true);
     setError(null);
     try {
-      // Endpoint dedicado (CRM-141 backend) cuando exista
-      let res;
-      try {
-        res = await client.get(`/products/${activeProject.id}?estado_creacion=pendiente_crear`);
-      } catch {
-        // Fallback: traer todos y filtrar en cliente
-        res = await client.get(`/products/${activeProject.id}`);
-      }
+      // La lista de un proyecto es `GET /products?projectId=`.
+      //
+      // Antes se pedía `/products/{id}`, que es el detalle de UN producto: el
+      // middleware projectAccess busca `projectId` en params, body o query, y
+      // ahí el parámetro de ruta se llama `id`. Respondía «projectId requerido»
+      // y esta pantalla no llegó a cargar nunca — ni por el camino principal ni
+      // por el de reserva, que repetía la misma dirección.
+      //
+      // El listado no filtra por estado_creacion (solo acepta categoryId e
+      // includeInactive), así que se filtra abajo, en cliente.
+      const res = await client.get('/products', { params: { projectId: activeProject.id } });
       if (res.success) {
         const all = res.data || [];
-        // Si el backend no devuelve estado_creacion, hacemos fallback heurístico:
-        // productos sin precio o con flag custom (placeholder).
+        // OJO: hoy esto siempre da cero. Ni `estado_creacion` ni
+        // `is_pending_creation` existen en el backend —no están en ninguna
+        // migración ni en el código del servidor—, así que ningún producto
+        // puede cumplir la condición. La pantalla se queda vacía a propósito
+        // hasta que exista el campo (era la parte de servidor de CRM-141, que
+        // nunca se hizo). Marcar como creado tampoco llegará a guardar: el
+        // schema de Zod descarta el campo y devuelve 400, que abajo se recoge.
         const pending = all.filter(
           (p) => p.estado_creacion === 'pendiente_crear' || (!p.estado_creacion && p.is_pending_creation === true),
         );

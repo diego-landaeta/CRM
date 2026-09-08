@@ -90,24 +90,34 @@ export function useNotifications(): UseNotificationsResult {
       if (next !== 'granted') return false;
     }
 
-    // En producción aquí iría:
+    // NO se marca como suscrita. Lo que había aquí antes:
+    //
+    //     const placeholder = { endpoint: 'local-only', ... };
+    //     localStorage.setItem(SUBSCRIPTION_KEY, JSON.stringify(placeholder));
+    //     setIsSubscribed(true);
+    //     return true;
+    //
+    // Escribía un marcador en el navegador y le decía a la gestora que estaba
+    // suscrita. No lo estaba: `/api/push-subscriptions` no existe, no hay claves
+    // VAPID en ninguna parte y nunca se registró nada en el servidor. Una
+    // pantalla que dice «activado» sobre algo apagado es peor que una que dice
+    // «todavía no»: con la primera nadie lo arregla, porque nadie sabe que está
+    // roto.
+    //
+    // El permiso SÍ se pide arriba y SÍ sirve: con el CRM abierto, el aviso de
+    // un mensaje de WhatsApp ya llega — lo hace AvisoDeMensaje, en el layout.
+    // Lo que falta es el push con el CRM cerrado.
+    //
+    // Cuando exista el endpoint, aquí va:
     //   const reg = await navigator.serviceWorker.ready;
     //   const sub = await reg.pushManager.subscribe({
-    //     userVisibleOnly: true,
-    //     applicationServerKey: VAPID_PUBLIC_KEY,
-    //   });
-    //   await fetch('/api/push-subscriptions', { method: 'POST', body: JSON.stringify(sub) });
-    //
-    // Por ahora marcamos suscripción local hasta que backend tenga el endpoint.
+    //     userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY });
+    //   await client.post('/push-subscriptions', sub);
+    //   setIsSubscribed(true); return true;
     try {
-      const placeholder = {
-        endpoint: 'local-only',
-        createdAt: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-      };
-      localStorage.setItem(SUBSCRIPTION_KEY, JSON.stringify(placeholder));
-      setIsSubscribed(true);
-      return true;
+      localStorage.removeItem(SUBSCRIPTION_KEY);
+      setIsSubscribed(false);
+      return false;
     } catch {
       return false;
     }

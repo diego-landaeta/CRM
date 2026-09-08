@@ -11,6 +11,7 @@ import Select from '@/shared/components/ui/Select';
 import { Plus, X, Receipt, Trash, PencilSimple, Paperclip, UploadSimple, Lightning, DownloadSimple } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { formatDate } from '@/shared/lib/format';
+import { lista } from '@/shared/lib/lista';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -104,7 +105,7 @@ export default function ExpensesPage() {
       if (activeProject?.id) params.projectId = activeProject.id;
       if (filterCat) params.categoria = filterCat;
       const res = await accountingApi.listExpenses(params);
-      if (res.success) setExpenses(res.data);
+      if (res.success) setExpenses(lista(res.data));
     } catch (err) {
       toast({ title: 'Error cargando egresos', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
@@ -217,7 +218,7 @@ export default function ExpensesPage() {
         <>
           {/* Desktop table */}
           <div className="hidden lg:block bg-card border border-border rounded-lg overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                 <tr>
                   <th className="text-left px-5 py-2.5 font-bold">Fecha</th>

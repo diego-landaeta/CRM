@@ -169,7 +169,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       {cola.length > 0 && (
         <div className="mt-3">
           <div className="max-h-72 overflow-auto border border-border rounded-md">
-            <table className="w-full text-[11px]">
+            <table className="tabla-cifras w-full text-[11px]">
               <thead className="bg-muted/50 text-muted-foreground sticky top-0">
                 <tr>
                   <th className="text-left px-2 py-1.5 font-bold">Fecha del pago</th>

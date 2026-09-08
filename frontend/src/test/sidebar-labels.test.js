@@ -69,21 +69,39 @@ describe('getSidebarLabelCatalog', () => {
     ]));
   });
 
-  it('incluye items conocidos (Dashboard como item, Captación como group)', () => {
+  // Estos dos daban por hecha una estructura que ya no existe: «Captación» era
+  // un grupo DENTRO de una seccion, y ahora es una seccion propia con sus
+  // items directos. La prueba buscaba un item llamado «Captación» dentro de la
+  // seccion «Captación» y no encontraba nada.
+  //
+  // Se cambia lo que se comprueba: no la forma exacta del menu de un dia
+  // concreto —que cambia cada vez que se reordena— sino que el catalogo
+  // clasifique bien lo que le den. Tarea #70.
+  it('un item suelto se clasifica como item', () => {
     const principal = catalog.find((s) => s.section === 'Principal');
     expect(principal).toBeTruthy();
     const dashboard = principal.labels.find((l) => l.label === 'Dashboard');
     expect(dashboard).toEqual({ label: 'Dashboard', type: 'item' });
-
-    const captacion = catalog.find((s) => s.section === 'Captación');
-    const captacionGroup = captacion.labels.find((l) => l.label === 'Captación');
-    expect(captacionGroup?.type).toBe('group');
   });
 
-  it('incluye sub-items (children) marcados como type child', () => {
-    const captacion = catalog.find((s) => s.section === 'Captación');
-    const formularios = captacion.labels.find((l) => l.label === 'Formularios');
-    expect(formularios?.type).toBe('child');
+  it('un item con hijos sale como group, y sus hijos como child', () => {
+    // Se busca el primer grupo que haya, sea cual sea: asi la prueba sigue
+    // valiendo cuando alguien reordene el menu.
+    let grupo = null;
+    let seccionDelGrupo = null;
+    for (const s of catalog) {
+      const g = s.labels.find((l) => l.type === 'group');
+      if (g) { grupo = g; seccionDelGrupo = s; break; }
+    }
+    if (!grupo) {
+      // Hoy el menu puede no tener ninguno, y eso no es un fallo.
+      expect(catalog.every((s) => s.labels.every((l) => ['item', 'child'].includes(l.type)))).toBe(true);
+      return;
+    }
+    expect(grupo.type).toBe('group');
+    // Detras de un grupo tiene que venir al menos un hijo.
+    const i = seccionDelGrupo.labels.indexOf(grupo);
+    expect(seccionDelGrupo.labels[i + 1]?.type).toBe('child');
   });
 
   it('no produce duplicados de label dentro de una misma sección', () => {

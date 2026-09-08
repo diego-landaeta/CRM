@@ -73,10 +73,32 @@ export default [
 
       // JS general
       'no-empty': ['warn', { allowEmptyCatch: true }],
-      'no-undef': 'off', // TS lo cubre y nos confunde con globals JSX
+      'no-undef': 'off', // en .ts/.tsx lo cubre TypeScript; ver el bloque de abajo
       'no-prototype-builtins': 'warn',
       'no-useless-escape': 'warn',
       'no-irregular-whitespace': 'warn',
+    },
+  },
+
+  // ── El agujero de los .js y .jsx ────────────────────────────────────────────
+  //
+  // `no-undef` estaba apagado para todo con el motivo «TS lo cubre». Y lo cubre,
+  // pero SOLO en .ts y .tsx: los .jsx no los mira nadie. Entre ellos estan
+  // App.jsx, AppLayout.jsx y Sidebar.jsx, o sea lo que se monta en todas las
+  // pantallas.
+  //
+  // El 21/08/2026 se subio un `moduloApagado(...)` sin su import en Sidebar.jsx.
+  // Pasó lint, pasó typecheck, pasó el build, y tumbó el CRM entero al abrirlo:
+  // «moduloApagado is not defined» en la pantalla de error, y nada mas. Una
+  // variable mal escrita en uno de esos ficheros llega a produccion.
+  //
+  // Aqui se enciende solo para .js y .jsx, que es donde no hay nada mas que
+  // mire. En .ts/.tsx sigue apagado, porque ahi si duplicaria a TypeScript y
+  // ademas se confunde con los tipos globales.
+  {
+    files: ['**/*.js', '**/*.jsx'],
+    rules: {
+      'no-undef': 'error',
     },
   },
 ];

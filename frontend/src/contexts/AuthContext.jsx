@@ -17,6 +17,29 @@ const FAKE_PROJECTS = [
   { id: 4, nombre: 'ICTESS', slug: 'ictess', type: 'multi' },
 ];
 
+
+/**
+ * El proyecto que pide la direccion, si la persona lo tiene (#132).
+ *
+ * Los enlaces del resumen de mañana llevan `?projectId=N&qf=...`, y el numero
+ * del correo se calcula PARA ESE proyecto. Sin esto, el enlace abriria el
+ * listado con el proyecto que estuviera activo de antes: el correo diria «7» y
+ * la pantalla enseñaria otra cosa, que es lo que el ticket prohibe.
+ *
+ * Se lee de `window.location` y no del router porque esto corre por encima de
+ * el. Y se comprueba contra los proyectos de la persona: un id en la barra de
+ * direcciones no da acceso a nada — solo elige entre lo que ya tiene.
+ */
+function proyectoDeLaUrl(proyectos) {
+  try {
+    const pedido = Number(new URLSearchParams(window.location.search).get('projectId'));
+    if (!Number.isInteger(pedido) || pedido <= 0) return null;
+    return proyectos?.find((p) => p.id === pedido)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
   const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
@@ -59,7 +82,11 @@ export function AuthProvider({ children }) {
             const validProjectId = savedNum === ALL_PROJECTS_ID
               ? ALL_PROJECTS_ID
               : meRes.data.projects?.find((p) => p.id === savedNum)?.id;
-            setActiveProjectId(validProjectId || meRes.data.projects?.[0]?.id || null);
+            // La direccion manda sobre lo guardado: si vienes de un enlace del
+            // correo, tiene que abrirse el proyecto de ese enlace (#132).
+            const deLaUrl = proyectoDeLaUrl(meRes.data.projects);
+            setActiveProjectId(deLaUrl || validProjectId || meRes.data.projects?.[0]?.id || null);
+            if (deLaUrl) localStorage.setItem('crm_active_project_id', String(deLaUrl));
           }
         }
       } catch {
@@ -97,7 +124,8 @@ export function AuthProvider({ children }) {
 
     // Usar proyecto activo del login o el primero disponible
     const savedProjectId = localStorage.getItem('crm_active_project_id');
-    const projectId = userProjects?.find((p) => p.id === Number(savedProjectId))?.id
+    const projectId = proyectoDeLaUrl(userProjects)
+      || userProjects?.find((p) => p.id === Number(savedProjectId))?.id
       || apiProjectId
       || userProjects?.[0]?.id
       || null;

@@ -3,6 +3,7 @@ import { createProjectSchema, updateProjectSchema, createSociedadSchema } from '
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import crypto from 'crypto';
+import { catalogo, tiposEnLaBase } from './tipos.js';
 
 export async function list(req, res, next) {
   try {
@@ -21,10 +22,44 @@ export async function getById(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/projects/types — los tipos de proyecto que hay (#15).
+ *
+ * Con `disponible` en cada uno: la base es un enum de Postgres y los tipos
+ * nuevos no entran hasta que se aplique la migracion 140.
+ */
+export async function types(req, res, next) {
+  try {
+    res.json({ success: true, data: await catalogo() });
+  } catch (err) { next(err); }
+}
+
+/**
+ * ¿Puede la base guardar este tipo?
+ *
+ * Sin esto, elegir un tipo que la migracion todavia no ha creado no da un error
+ * entendible: Postgres contesta 22P02 «invalid input value for enum» y el
+ * manejador lo tapa con «error del sistema». Ya nos costo media hora con
+ * `lead_status` y `proxima_convocatoria`, buscando en el sitio equivocado.
+ *
+ * Aqui se dice lo que pasa y que hay que hacer.
+ */
+async function exigirTipoQueLaBaseAcepte(tipo) {
+  if (!tipo) return;
+  const hay = await tiposEnLaBase();
+  if (!hay.includes(tipo)) {
+    throw new AppError(
+      `El tipo «${tipo}» todavia no esta habilitado en la base de datos. Falta aplicar la migracion 140.`,
+      409, 'TIPO_NO_DISPONIBLE'
+    );
+  }
+}
+
 export async function create(req, res, next) {
   try {
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    await exigirTipoQueLaBaseAcepte(parsed.data.type);
     const exists = await model.slugExists(parsed.data.slug);
     if (exists) throw new AppError('El slug ya existe', 409, 'SLUG_EXISTS');
     const project = await model.create(parsed.data);
@@ -38,6 +73,7 @@ export async function update(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = updateProjectSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    await exigirTipoQueLaBaseAcepte(parsed.data.type);
     const updated = await model.update(id, parsed.data);
     if (!updated) throw new AppError('No se actualizo', 400, 'NO_FIELDS');
     res.json({ success: true, data: updated });

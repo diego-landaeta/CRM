@@ -224,7 +224,7 @@ export default function AccountingDashboardPage() {
           <EmptyState icon={CurrencyEur} title="Sin ventas" description="No hay ventas en este período" />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
                   <th className="py-2 font-medium">Vendedora</th>
@@ -267,7 +267,7 @@ export default function AccountingDashboardPage() {
           <>
             {/* Desktop table */}
             <div className="hidden lg:block overflow-x-auto -mx-4">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     <th className="text-left px-5 py-2.5 font-bold">Lead</th>

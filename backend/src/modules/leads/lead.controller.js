@@ -1,7 +1,7 @@
 import * as leadService from './lead.service.js';
 import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, quickCountsSchema, revisarLeadSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -20,6 +20,10 @@ import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared
 //
 // Se hace aqui, en el servidor, y no escondiendo el boton: lo otro no es un
 // permiso, es un adorno.
+// Una gestora solo alcanza los leads que tiene asignados — la ficha Y su
+// historial. Va en TODO handler que reciba un :id de lead: la ficha estaba
+// protegida pero seis puertas al mismo lead no lo estaban, y por ahi se leia y
+// se escribia el historial de fichas ajenas (#109).
 async function exigirQueSeaSuyo(req, leadId) {
   if (req.user.role !== 'gestor') return;              // admin, superadmin y soporte ven todo
   const { rows } = await query(
@@ -77,6 +81,93 @@ export async function list(req, res, next) {
       success: true,
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/leads/quick-counts — cuantos hay en cada filtro rapido (#132).
+ *
+ * Las pestañas del listado los contaban en el navegador sobre la pagina de 20,
+ * asi que decian «3» cuando en la base habia doce.
+ *
+ * Y es el mismo numero que va a llevar el correo del resumen de mañana. Sale de
+ * aqui para los dos, con las mismas cadenas de `FILTROS_RAPIDOS`: es la unica
+ * forma de que el correo diga «7 personas» y la lista enseñe siete.
+ *
+ * Misma regla de rol que el listado: una gestora cuenta lo suyo, y el
+ * `responsableId` que venga del cliente se ignora.
+ */
+export async function quickCounts(req, res, next) {
+  try {
+    const parsed = quickCountsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const filtros = { ...parsed.data };
+    if (req.user.role === 'gestor') filtros.responsableId = req.user.userId;
+
+    res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/leads/:id/revisar — el repaso de fin de mes (#132).
+ *
+ * Diego: «tiene que poder responderse; si el correo solo enseña, nadie valida
+ * nada». Esto es el "responder".
+ *
+ * Una gestora solo puede revisar lo suyo. Sin esto, el enlace del correo seria
+ * una puerta para marcar fichas de otra.
+ */
+export async function revisar(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+
+    if (!(await leadModel.sePuedeRevisar())) {
+      throw new AppError(
+        'Todavia no se puede validar la base: falta aplicar la migracion 149.',
+        503, 'MIGRATION_PENDING');
+    }
+    const parsed = revisarLeadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const lead = await leadModel.findById(id);
+    if (!lead) throw new AppError('Prospecto no encontrado', 404, 'NOT_FOUND');
+    if (req.user.role === 'gestor' && lead.responsable_id !== req.user.userId) {
+      throw new AppError('Ese prospecto no es tuyo', 403, 'FORBIDDEN');
+    }
+
+    const hecho = await leadModel.apuntarRevision({
+      leadId: id, userId: req.user.userId, ...parsed.data,
+    });
+    // Se devuelve el progreso con la respuesta: la pantalla necesita decir
+    // cuanto queda sin tener que pedirlo aparte en cada clic.
+    const progreso = await leadModel.comoVaLaRevision({
+      projectId: lead.project_id,
+      responsableId: req.user.role === 'gestor' ? req.user.userId : null,
+    });
+    res.status(201).json({ success: true, data: { revision: hecho, progreso } });
+  } catch (err) { next(err); }
+}
+
+/** GET /api/leads/revision — cuanto lleva y cuanto le queda del repaso (#132). */
+export async function progresoRevision(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const progreso = await leadModel.comoVaLaRevision({
+      projectId,
+      responsableId: req.user.role === 'gestor' ? req.user.userId : null,
+    });
+    res.json({
+      success: true,
+      data: {
+        ...progreso,
+        aviso: progreso.disponible ? null
+          : 'Falta aplicar la migracion 149 (lead_revisiones): todavia no se puede validar la base.',
+      },
     });
   } catch (err) { next(err); }
 }
@@ -229,6 +320,14 @@ export async function changeStatus(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Una gestora, solo los suyos. Es la regla de negocio escrita, y aqui
+    // faltaba: se comprobo con la sesion de Laura, que paso un lead de Diego a
+    // «convertido» y recibio un 200. Anadir una NOTA al mismo lead si le daba
+    // 403 — o sea que el handler de al lado ya lo comprobaba y este no.
+    //
+    // Y de todos los campos, el estado es el peor para dejar suelto: «convertido»
+    // es lo que alimenta el informe de ventas.
+    await exigirQueSeaSuyo(req, id);
     const parsed = updateStatusSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
@@ -257,6 +356,7 @@ export async function updateInteraction(req, res, next) {
     const leadId = parseInt(req.params.id);
     const interactionId = parseInt(req.params.interactionId);
     if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, leadId);
     const parsed = updateInteractionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const result = await leadService.updateInteractionFn(leadId, interactionId, parsed.data, req.user);
@@ -269,6 +369,7 @@ export async function deleteInteraction(req, res, next) {
     const leadId = parseInt(req.params.id);
     const interactionId = parseInt(req.params.interactionId);
     if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, leadId);
     await leadService.deleteInteractionFn(leadId, interactionId, req.user);
     res.json({ success: true });
   } catch (err) { next(err); }
@@ -278,6 +379,9 @@ export async function addReminder(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Lo mismo: un recordatorio en el lead de otra le aparece a ELLA en su cola
+    // del dia. No es grave como el estado, pero es la misma regla.
+    await exigirQueSeaSuyo(req, id);
     const parsed = createReminderSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
@@ -363,6 +467,7 @@ export async function getPurchaseHistory(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
     const data = await leadService.getPurchaseHistory(id);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -388,15 +493,33 @@ export async function mergeLeads(req, res, next) {
   try {
     const winnerId = parseInt(req.params.id);
     await exigirQueSeaSuyo(req, winnerId);
-    const loserId = parseInt(req.body?.loser_id);
+    // Acepta una ficha (loser_id) o varias (loser_ids). De la misma persona
+    // llega a haber tres y cuatro, y de dos en dos no se acababa nunca (#102).
+    const brutos = Array.isArray(req.body?.loser_ids) && req.body.loser_ids.length
+      ? req.body.loser_ids
+      : [req.body?.loser_id];
+    const loserIds = [...new Set(
+      brutos.map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x))
+    )];
     const comment = (req.body?.comment || '').trim();
-    if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
+    if (isNaN(winnerId) || !loserIds.length) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
     if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
 
     // Cualquiera puede fusionar: los duplicados suelen caer en carteras
     // distintas y exigir ser la dueña dejaba la fusion sin hacer.
-    const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
+    const result = await leadService.mergeLeads({ winnerId, loserIds, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// #102 - Las fichas repetidas que ya estan en la base de datos, agrupadas.
+// No es la cola de revision (#13), que solo recoge lo que llega por el webhook:
+// esto repasa TODO lo que hay, incluido lo que se completo a mano despues.
+export async function listDuplicateGroups(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { groups, total } = await leadService.listDuplicateGroups({ projectId });
+    res.json({ success: true, data: groups, total });
   } catch (err) { next(err); }
 }
 
@@ -439,6 +562,7 @@ export async function getLeadSequences(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
     const result = await leadService.getLeadSequences(id, req.user);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

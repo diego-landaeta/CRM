@@ -35,6 +35,15 @@ export interface ApiClient {
   upload<T = any>(url: string, file: File | Blob): Promise<ApiResponse<T>>;
 }
 
+/**
+ * La raiz de la API, ya con el prefijo del despliegue (/crm/, /testeo/…).
+ *
+ * Estaba exportada en `client.js` y NO declarada aqui, asi que los dos ficheros
+ * que la importan llevaban error de tipos desde que se escribieron. Un `.d.ts`
+ * escrito a mano se queda atras en cuanto el `.js` crece; esto es de eso.
+ */
+export const API_BASE_URL: string;
+
 export function setAccessToken(token: string | null): void;
 export function getAccessToken(): string | null;
 export function setOnAuthFailure(cb: (() => void) | null): void;

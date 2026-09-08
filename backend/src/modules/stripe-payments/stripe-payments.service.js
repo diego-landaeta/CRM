@@ -126,6 +126,33 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   // numeradas con lo que hubiera en la ficha en ese momento.
   logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
     'cobro de Stripe registrado; queda en la cola de facturacion');
+
+  // AVISAR DE LA VENTA AUTOMATICA (#111).
+  //
+  // «Hoy pasa en silencio, y es justo lo que hay que mirar.» Un cobro de Stripe
+  // entra solo, salda una cuota y se pone en la cola de facturacion sin que
+  // nadie se entere: quien lleva ese prospecto no sabe que le han pagado.
+  //
+  // Va a la gestora de la ficha, que es a quien le afecta. Si no tiene
+  // responsable no se avisa a nadie: sin dueño no hay a quien decirselo, y
+  // mandarlo a los admin convertiria esto en el ruido que la tarea quiere
+  // quitar.
+  //
+  // No duplica correo: hoy este suceso no manda ninguno.
+  if (lead.responsable_id) {
+    const { notifyUsers } = await import('../notifications/notifications.service.js');
+    const euros = Number(payment.amount).toLocaleString('es-ES', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+    await notifyUsers({
+      targetUserIds: [lead.responsable_id],
+      type: 'venta_automatica',
+      title: `Cobro de ${euros} € de ${lead.nombre || payment.customer_email}`,
+      message: 'Entro por Stripe y se registro solo en su venta. Queda en la cola de facturacion.',
+      link_path: `/prospectos/${lead.id}`,
+      metadata: { lead_id: lead.id, conversion_id: conv.id, stripe_id: payment.stripe_id },
+    }).catch(() => {});
+  }
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -151,6 +178,75 @@ async function fetchAndUpdateDispute(apiKey, projectId, charge) {
   }
 }
 
+/**
+ * Cuando varios proyectos comparten la MISMA cuenta de Stripe (#44).
+ *
+ * El indice unico de `stripe_payments` es `(project_id, stripe_id)`, asi que el
+ * mismo cobro importado por dos proyectos crea DOS filas: el mismo dinero
+ * contado dos veces, alimentando dos juegos de cifras y dos calculos de
+ * comision. Con cuentas separadas no pasa; con una compartida, pasa siempre.
+ *
+ * Y no hay forma de adivinarlo mirando el cobro. Comprobado en el checkout de
+ * una de las plataformas: manda `metadata: { user_id, plan_type }`, y
+ * `plan_type` es generico —monthly, annual, single— o sea el MISMO en todas.
+ * Dos cobros de dos plataformas distintas son indistinguibles.
+ *
+ * Asi que se declara. En la integracion de Stripe del proyecto:
+ *
+ *     config_public.filtro_metadata = { clave: 'proyecto', valor: 'tarot-ia' }
+ *
+ * y la plataforma añade ese par a su checkout. Es una linea alli y cero aqui.
+ *
+ * Sin declararlo NO se filtra nada, que es lo correcto para una cuenta
+ * dedicada: es el caso normal y no tiene por que configurarse.
+ */
+async function filtroDeMetadata(projectId) {
+  try {
+    const row = await integrationsModel.get(projectId, 'stripe');
+    const f = row?.config_public?.filtro_metadata;
+    if (f?.clave && f?.valor) return { clave: String(f.clave), valor: String(f.valor) };
+  } catch { /* sin integracion, sin filtro */ }
+  return null;
+}
+
+/**
+ * ¿De quien es este cobro? Tres respuestas, y la tercera es la que importa.
+ *
+ *   'mio'        — lleva la marca de este proyecto
+ *   'ajeno'      — lleva la marca de OTRO: seguro que no es nuestro
+ *   'sin_marcar' — no lleva ninguna, y eso NO significa que no sea nuestro
+ *
+ * La tercera existe por como se marcan las renovaciones. En una suscripcion, el
+ * cobro de renovacion lo genera Stripe sin pasar por el checkout, asi que la
+ * plataforma solo puede marcarlo A POSTERIORI desde su webhook. Entre que Stripe
+ * lo crea y la plataforma lo estampa hay una ventana, y si el CRM lee justo ahi
+ * ve un cobro sin marca.
+ *
+ * Tratarlo como ajeno seria perder ese cobro para siempre. Por eso se distingue.
+ */
+/**
+ * Cuanto se espera a que la plataforma estampe un cobro suyo.
+ *
+ * La marca de agua se queda esperando a los cobros sin marcar, y eso esta bien
+ * durante la ventana de estampado — minutos. Pero si uno no se marca NUNCA
+ * —porque es de otra plataforma que no marca, o porque su webhook esta roto— la
+ * marca de agua se quedaria clavada para siempre y cada vuelta releeria una
+ * ventana un poco mas grande, cada cinco minutos, hasta que alguien se diera
+ * cuenta. Nadie se daria cuenta.
+ *
+ * Un dia es mucho mas que la ventana real y poco para el ritmo del negocio: si a
+ * las 24 horas sigue sin marca, no es un desfase, es que no le van a poner
+ * ninguna.
+ */
+const GRACIA_SIN_MARCAR_MS = 24 * 60 * 60 * 1000;
+
+function deQuienEs(charge, filtro) {
+  if (!filtro) return 'mio';
+  const marca = charge?.metadata?.[filtro.clave];
+  if (marca == null || marca === '') return 'sin_marcar';
+  return String(marca) === filtro.valor ? 'mio' : 'ajeno';
+}
+
 export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
@@ -161,7 +257,38 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     createdGte = Math.floor(new Date(state.last_synced_until).getTime() / 1000) - 3600;
   }
 
+  // LO ANTERIOR AL ALTA DEL PROYECTO NO ENTRA (#44).
+  //
+  // En la PRIMERA sincronizacion no hay estado previo, asi que `createdGte` era
+  // null y se le pedian a Stripe todos los cobros de la historia del proyecto
+  // —hasta veinte mil— y todos se guardaban. Con un proyecto que lleva meses
+  // cobrando, eso entra como ventas de este mes e infla las cifras y las
+  // comisiones. Es justo lo que la tarea llama «la regla que no se negocia».
+  //
+  // El corte ya existia, pero solo al LISTAR lo pendiente de facturar. De
+  // `stripe_payments` leen ademas las pantallas de dinero, asi que filtrar al
+  // final no bastaba: habia que no traerlo.
+  //
+  // Se aplica tambien con `fullHistory`, que ahora significa «todo desde el
+  // alta». La salida de emergencia sigue siendo la de siempre y esta escrita en
+  // el modelo: mover `al_dia_hasta` hacia atras.
+  const corte = await model.fechaDeCorte(projectId);
+  if (corte) {
+    const desdeElAlta = Math.floor(new Date(corte).getTime() / 1000);
+    // El mayor de los dos: si ya se sincronizo hasta ayer, no se vuelve a pedir
+    // desde el alta.
+    createdGte = createdGte == null ? desdeElAlta : Math.max(createdGte, desdeElAlta);
+  }
+
+  const filtro = await filtroDeMetadata(projectId);
+
   let imported = 0;
+  let ajenos = 0;
+  let sinMarcar = 0;
+  let sinMarcarViejos = 0;
+  // El cobro sin marcar MAS ANTIGUO de esta vuelta. La marca de agua no puede
+  // pasar de ahi: ver abajo.
+  let primeroSinMarcar = null;
   let disputesFound = 0;
   let lastCreated = state?.last_synced_until ? Math.floor(new Date(state.last_synced_until).getTime() / 1000) : 0;
   let startingAfter = null;
@@ -178,6 +305,28 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
 
     for (const ch of data.data) {
       try {
+        const duenno = deQuienEs(ch, filtro);
+        // De otro proyecto de la misma cuenta: ni se guarda ni cuenta como
+        // importado, pero SI se apunta cuantos, para que al conectar se vea que
+        // el filtro esta haciendo algo y no que no llega nada.
+        if (duenno === 'ajeno') { ajenos++; continue; }
+        // Sin marca todavia: puede ser una renovacion que su plataforma aun no
+        // ha estampado. Se deja pasar de largo SIN mover la marca de agua, para
+        // volver a mirarlo en la siguiente vuelta.
+        if (duenno === 'sin_marcar') {
+          const edadMs = Date.now() - ch.created * 1000;
+          if (edadMs > GRACIA_SIN_MARCAR_MS) {
+            // Ya no es un desfase de estampado: a estas alturas no le van a
+            // poner marca. Se deja pasar la marca de agua y se apunta, porque
+            // esto SI hay que mirarlo — o es de otra plataforma que no marca, o
+            // su webhook no esta estampando.
+            sinMarcarViejos++;
+            continue;
+          }
+          sinMarcar++;
+          if (primeroSinMarcar == null || ch.created < primeroSinMarcar) primeroSinMarcar = ch.created;
+          continue;
+        }
         const payment = chargeToPayment(ch, projectId);
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
@@ -230,6 +379,20 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     logger.warn({ err: e.message }, 'no se pudo reintentar la asociacion de pendientes');
   }
 
+  // LA MARCA DE AGUA NO PASA DE UN COBRO SIN MARCAR.
+  //
+  // Si avanzara, la proxima vuelta empezaria despues de el y ese cobro no se
+  // volveria a mirar NUNCA. Cuando su plataforma lo estampe —las renovaciones se
+  // marcan a posteriori, desde su webhook— ya seria tarde: dinero perdido en
+  // silencio, que es el peor final posible.
+  //
+  // Asi que se retrocede hasta un segundo antes del mas antiguo sin marcar. Se
+  // vuelve a leer un trozo pequeño cada vez, y en cuanto aparezca la marca
+  // entra y la marca de agua sigue su camino.
+  if (primeroSinMarcar != null) {
+    lastCreated = Math.min(lastCreated || primeroSinMarcar, primeroSinMarcar - 1);
+  }
+
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
     last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
@@ -238,8 +401,16 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     last_error: null,
   });
 
-  logger.info({ projectId, imported, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, disputes: disputesFound, pages, reasociados };
+  // Los viejos sin marcar se avisan aparte y como aviso, no como dato: si esto
+  // sale, o hay una plataforma compartiendo cuenta sin marcar sus cobros, o el
+  // estampado de la nuestra se ha roto. Las dos cosas hay que mirarlas.
+  if (sinMarcarViejos) {
+    logger.warn({ projectId, sinMarcarViejos },
+      'Stripe: cobros de mas de un dia SIN marca de plataforma. O son de otra que no marca, ' +
+      'o el estampado del webhook de la nuestra no esta funcionando.');
+  }
+  logger.info({ projectId, imported, ajenos, sinMarcar, sinMarcarViejos, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, ajenos, sinMarcar, sinMarcarViejos, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
@@ -248,8 +419,18 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
   let yaExistia = false;
   if (conversionId) {
     const { rows } = await query(
-      `SELECT amount, stripe_id, stripe_created_at FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
-    const amount = Number(rows[0]?.amount || 0);
+      `SELECT amount, stripe_id, stripe_created_at, status FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
+    // Un cargo que NO se cobro no registra pago. Nunca.
+    //
+    // Aqui no se miraba el estado: asociar un cargo fallido creaba un cobro por
+    // su importe, o sea dinero que no entro figurando como cobrado, y de ahi a
+    // una factura emitida por algo que nadie pago. Hoy hay 225 cargos fallidos
+    // en MultiCRM y 401 en ISEIE: cualquiera estaba a un clic.
+    //
+    // El enlace SI se hace —queda dicho de quien es el intento fallido, que
+    // sirve para perseguirlo— pero sin cobro detras.
+    const cobrado = rows[0]?.status === 'succeeded';
+    const amount = cobrado ? Number(rows[0]?.amount || 0) : 0;
     // Fecha REAL del cobro en Stripe (antes se guardaba la de hoy y la factura salía con
     // fecha equivocada). Si faltara, se cae a hoy.
     const fecha = rows[0]?.stripe_created_at
@@ -273,6 +454,10 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
         cpId = res?.payment?.id || null;
       }
     }
+  }
+  if (conversionId && !cpId) {
+    logger.warn({ stripePaymentId, conversionId },
+      'cargo asociado SIN registrar cobro: no consta como cobrado en Stripe');
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
   // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y

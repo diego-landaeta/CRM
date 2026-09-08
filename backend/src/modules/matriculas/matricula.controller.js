@@ -70,7 +70,7 @@ export async function setEstado(req, res, next) {
     if (parsed.data.estado === 'rechazada' && !parsed.data.motivo_rechazo) {
       throw new AppError('motivo_rechazo requerido al rechazar', 400, 'MOTIVO_REQUIRED');
     }
-    const updated = await model.setEstado(parseInt(req.params.id), parsed.data.estado, req.user.id, parsed.data.motivo_rechazo);
+    const updated = await model.setEstado(parseInt(req.params.id), parsed.data.estado, req.user.userId, parsed.data.motivo_rechazo);
     if (!updated) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }

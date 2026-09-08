@@ -7,8 +7,10 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { Lead, Conversion } from '@/shared/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { conversionsApi } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -55,7 +57,6 @@ function fmtDateTime(d) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-function cleanPhone(p) { return (p || '').replace(/[^\d+]/g, ''); }
 function getInitials(name) {
   if (!name) return '??';
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -109,6 +110,7 @@ export default function ClientDetailPage() {
     navigate(destino);
   }
   const { user } = useAuth();
+  const { can } = usePermission();
   const { activeProject } = useProjectContext();
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -120,11 +122,13 @@ export default function ClientDetailPage() {
   const [mergeOpen, setMergeOpen] = useState<boolean>(false);
   const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
 
-  // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
-  // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
-  const canManage = user?.role === 'admin'
-    || user?.role === 'superadmin'
-    || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
+  // Dos condiciones, y hacen falta las dos: que el rol tenga el permiso, y que
+  // el cliente sea suyo. El permiso dice QUE puede hacer; ser el responsable
+  // dice SOBRE QUIEN. Un gestor sin `conversions.edit` no toca ni los propios.
+  const canManage = can('conversions.edit')
+    && (user?.role === 'admin'
+      || user?.role === 'superadmin'
+      || lead?.responsable_id === user?.id);
 
   // Token de request: evita que la respuesta lenta de un cliente anterior pise
   // los datos del cliente actual al navegar rápido entre fichas.
@@ -185,7 +189,7 @@ export default function ClientDetailPage() {
 
   const avatarColor = AVATAR_COLORS[lead.id % AVATAR_COLORS.length];
   const initials = getInitials(lead.nombre);
-  const waPhone = cleanPhone(lead.telefono);
+  const waPhone = telefonoParaWhatsapp(lead.telefono);
 
   const totalFacturado = conversions.reduce((s, c) => s + Number(c.importe_total || 0), 0);
   const totalPagado = conversions.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);

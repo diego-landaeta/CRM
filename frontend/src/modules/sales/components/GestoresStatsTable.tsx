@@ -106,7 +106,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
         <p className="text-xs text-muted-foreground text-center py-4">No hay gestores activos.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="tabla-cifras w-full text-sm">
             <thead className="text-[11px] text-muted-foreground border-b border-border">
               <tr>
                 <th className="text-left py-2 font-medium">Gestor</th>

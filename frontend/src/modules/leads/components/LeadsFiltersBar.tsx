@@ -47,6 +47,7 @@ const QUICK_LABELS: Record<string, string> = {
   week: '7 días',
   'no-reminder': 'Sin programar',
   'no-contact': 'Sin contacto',
+  'sin-revisar': 'Por validar',
 };
 
 const SORT_LABELS: Record<string, string> = {
@@ -73,7 +74,7 @@ interface Props {
   sortMode: string; setSortMode: (v: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
   sortDir: 'asc' | 'desc'; setSortDir: (d: 'asc' | 'desc') => void;
   quickFilter: string; setQuickFilter: (v: string) => void;
-  quickCounts: { overdue: number; today: number; tomorrow: number; week: number; noReminder: number; noContact: number; urgent: number };
+  quickCounts: { overdue: number; today: number; tomorrow: number; week: number; noReminder: number; noContact: number; urgent: number; sinRevisar?: number | null };
   filterDup: boolean; setFilterDup: (v: boolean) => void;
   filterReincidente: boolean; setFilterReincidente: (v: boolean) => void;
   stats: Record<string, number> | null | undefined;
@@ -356,9 +357,19 @@ export default function LeadsFiltersBar(props: Props) {
                     label="Sin programar" count={quickCounts.noReminder} tone="default" />
                   <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
                     label="Sin contacto" count={quickCounts.noContact} tone="default" />
+                  {/* El repaso de fin de mes (#132). Solo aparece si se puede
+                      marcar de verdad: un filtro que lleva a una lista donde no
+                      se puede hacer nada es peor que no tenerlo. */}
+                  {quickCounts.sinRevisar != null && (
+                    <QuickChip active={quickFilter === 'sin-revisar'} onClick={() => setQuickFilter('sin-revisar')}
+                      label="Por validar" count={quickCounts.sinRevisar} tone="default" />
+                  )}
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1.5 px-0.5">
-                  Se aplican sobre los resultados ya cargados. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
+                  {/* Decia «se aplican sobre los resultados ya cargados», y desde
+                      el #132 eso es falso: los resuelve el servidor sobre TODA la
+                      base, no sobre la pagina. */}
+                  Se aplican sobre toda la base, no sobre la página que ves. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
                 </p>
                 {(quickFilter === 'urgent' || quickFilter === 'no-contact') && filterEstado && (
                   <div className="mt-1.5 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1.5">

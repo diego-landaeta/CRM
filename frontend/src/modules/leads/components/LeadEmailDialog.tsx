@@ -5,6 +5,7 @@ import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { lista } from '@/shared/lib/lista';
 
 interface LeadEmailDialogProps {
   open: boolean;
@@ -41,7 +42,7 @@ export default function LeadEmailDialog({
     if (!open || !activeProject?.id) return;
     let cancelled = false;
     emailTemplatesApi.list(activeProject.id, false)
-      .then(res => { if (!cancelled && res.success && res.data) setTemplates(res.data); })
+      .then(res => { if (!cancelled && res.success && res.data) setTemplates(lista(res.data)); })
       .catch(() => { /* silencioso, seccion opcional */ });
     return () => { cancelled = true; };
   }, [open, activeProject?.id]);

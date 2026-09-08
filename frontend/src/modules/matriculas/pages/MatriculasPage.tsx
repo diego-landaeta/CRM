@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import usePermission from '@/shared/hooks/usePermission';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
@@ -28,6 +29,7 @@ const ESTADO_COLOR = {
 
 export default function MatriculasPage() {
   const { activeProject } = useProjectContext();
+  const { can } = usePermission();
   const [tab, setTab] = useState('list');
   const [data, setData] = useState([]);
   const [stats, setStats] = useState<{ total: number; pendientes: number; validadas: number; rechazadas: number }>({ total: 0, pendientes: 0, validadas: 0, rechazadas: 0 });
@@ -220,7 +222,7 @@ export default function MatriculasPage() {
 
       </>}
 
-      {detail && <MatriculaDetail matricula={detail} onClose={() => setDetail(null)} onChange={load} onEstado={handleEstado} />}
+      {detail && <MatriculaDetail matricula={detail} onClose={() => setDetail(null)} onChange={load} onEstado={can('matriculas.edit') ? handleEstado : undefined} />}
       <PromptDialog
         open={!!rechazoTarget}
         title="Rechazar matrícula"

@@ -61,6 +61,16 @@ export function formatRelative(
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
+/**
+ * Solo los digitos. NO sirve para armar un enlace de WhatsApp ni para decidir
+ * si un telefono es utilizable — usa `telefonoParaWhatsapp` de
+ * `@/shared/lib/telefono`, que aplica el mismo criterio que el backend.
+ *
+ * Esta se limita a tirar lo que no sea un digito, y con eso un «0034 600…» sale
+ * como «0034600…» —el 00 hay que cambiarlo por «+», no conservarlo— y un
+ * «600123456.0» de Excel sale con un cero de mas. Los tres sitios que la usaban
+ * para el boton de WhatsApp ya no lo hacen (tarea #25).
+ */
 export function cleanPhone(phone: string | null | undefined): string {
   return (phone || '').replace(/[^\d]/g, '');
 }

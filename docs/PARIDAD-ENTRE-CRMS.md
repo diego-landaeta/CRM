@@ -86,9 +86,11 @@ cambia todas las URLs de uno de los dos y rompe los enlaces guardados.
 1. **Grupo A entero.** Son fallos, no diferencias. Poco trabajo y quitan riesgo
    real: la fuga de `sales` es de la misma familia que la de Facturación que ya
    cerramos.
-2. **Plantillas de WhatsApp en ISEIE.** Y de paso subirlas a base de datos en
-   los dos: hoy viven en el `localStorage` del navegador, así que no se comparten
-   entre gestoras ni sobreviven a un cambio de equipo.
+2. **Plantillas de WhatsApp en ISEIE.** En ISEIH ya están en base de datos
+   (migración 122, tarea #25, 21/08/2026): compartidas por proyecto, con ámbito
+   `compartida` / `personal`, y editables desde `/whatsapp/plantillas`. Queda
+   subirlas igual en ISEIE, donde el hook sigue siendo un stub vacío — hasta
+   entonces la diferencia entre los dos CRMs es mayor, no menor.
 3. **Las columnas y el endpoint que faltan** (`products`, `wc_credentials`,
    `dashboard-summary`). Son migraciones de una línea.
 4. **El bloque de IA y mensajería en ISEIE**: es la diferencia grande de verdad.

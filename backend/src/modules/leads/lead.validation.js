@@ -5,6 +5,8 @@ export const webhookLeadSchema = z.object({
   // Email opcional: Make ya filtra spam y a veces el lead llega sólo por WhatsApp/telefono
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().or(z.literal('')),
   telefono: z.string().max(50).optional(),
+  // Quien se contacta por usuario y no da numero. Convive con el telefono.
+  whatsapp_usuario: z.string().max(120).optional().or(z.literal('')),
   producto_interes: z.string().max(255).optional(),
   producto_interes_id: z.coerce.number().int().positive().optional(),
   // SKU del producto (clave universal cuando hay multi-sitio con nombres distintos
@@ -31,8 +33,15 @@ export const webhookLeadSchema = z.object({
   // incluido — con un "Expected object, received null" que no decia nada.
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
-  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
-  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+// Un prospecto necesita ALGUNA forma de contacto, pero no una en concreto.
+//
+// El aviso NO va sobre el correo. Iba en `path: ['email']`, asi que faltando los
+// tres se pintaba en rojo debajo del correo y parecia que el obligatorio era
+// ese. Se avisaba del problema correcto en el sitio equivocado.
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 export const listLeadsSchema = z.object({
@@ -52,6 +61,10 @@ export const listLeadsSchema = z.object({
   // Filtro por rango de fechas (sobre fecha_solicitud o created_at)
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateFrom: YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato dateTo: YYYY-MM-DD').optional(),
+  // Filtro rapido, el mismo que las pestañas del listado (#132). Se valida
+  // como enum porque su valor elige un fragmento de SQL: cerrado por
+  // construccion, no por confianza.
+  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent', 'sin-revisar']).optional(),
   // Orden: recent = cronológico puro (DEFAULT). dir invierte asc/desc.
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
   dir: z.enum(['asc', 'desc']).optional(),
@@ -70,9 +83,17 @@ export const checkDuplicateSchema = z.object({
   project_id: z.number().int().positive(),
   email: z.string().email().optional().or(z.literal('')).or(z.null()),
   telefono: z.string().max(50).optional().or(z.literal('')).or(z.null()),
+  whatsapp_usuario: z.string().max(120).optional().or(z.literal('')).or(z.null()),
 }).refine(
-  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
-  { message: 'Debes proporcionar email o teléfono', path: ['email'] }
+// Un prospecto necesita ALGUNA forma de contacto, pero no una en concreto.
+//
+// El aviso NO va sobre el correo. Iba en `path: ['email']`, asi que faltando los
+// tres se pintaba en rojo debajo del correo y parecia que el obligatorio era
+// ese. Se avisaba del problema correcto en el sitio equivocado.
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 // Motivo opcional para cambios "neutrales" (avanzar pipeline). Solo es
@@ -113,6 +134,7 @@ export const createLeadManualSchema = z.object({
   // Email opcional ahora (un lead puede venir solo por WhatsApp con teléfono)
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().nullable().or(z.literal('')),
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
+  whatsapp_usuario: z.string().max(120).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive().optional().nullable(),
   canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp']).default('directo'),
   notas: z.string().max(2000).optional().or(z.literal('')),
@@ -121,8 +143,10 @@ export const createLeadManualSchema = z.object({
   // incluido — con un "Expected object, received null" que no decia nada.
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
-  (data) => (data.email && data.email.length > 0) || (data.telefono && data.telefono.length > 0),
-  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 export const updateLeadSchema = z.object({
@@ -138,4 +162,28 @@ export const updateLeadSchema = z.object({
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
+});
+
+/** Contadores de los filtros rapidos (#132). */
+export const quickCountsSchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    .transform((v) => v ? v.split(',').map(Number) : undefined),
+  responsableId: z.coerce.number().int().positive().optional(),
+  includeConverted: z.coerce.boolean().optional(),
+});
+
+/**
+ * El repaso de fin de mes: que dijo la gestora al mirar la ficha (#132).
+ *
+ * Los tres valores son los que pidio Diego: «quien sigue vivo, quien ya no,
+ * quien cambio de idea». Cerrado por enum y no por texto libre, porque de esto
+ * se cuenta despues: con texto libre acabarian conviviendo «no sigue», «No
+ * Sigue» y «ya no» y no se podria sumar nada.
+ */
+export const revisarLeadSchema = z.object({
+  resultado: z.enum(['sigue', 'no_sigue', 'cambio'], {
+    message: 'resultado debe ser sigue, no_sigue o cambio',
+  }),
+  nota: z.string().max(1000).optional().nullable(),
 });

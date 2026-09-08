@@ -79,6 +79,8 @@ export default function EmailTemplatesPage() {
     <div className="space-y-6 pb-8">
       <PageHeader
         title="Plantillas de email"
+        backTo="/configuracion"
+        backLabel="Configuración"
         subtitle="Reutiliza textos para enviar a leads · variables dinámicas con {{...}}"
         actions={isAdmin ? (
           <button

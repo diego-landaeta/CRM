@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { gestoresDelReparto } from './reparto.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -25,57 +26,111 @@ export async function findDuplicateByEmail(email, projectId) {
   return rows[0] || null;
 }
 
-// Detecta duplicado por email O por telefono (E.164). Cualquiera que matchee
-// se considera duplicado. Útil cuando el lead llega solo con tel (WhatsApp).
-export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
-  const cleanEmail = (email && email.trim()) || null;
-  const cleanTel = (telefono && telefono.trim()) || null;
-  if (!cleanEmail && !cleanTel) return null;
+// Clave canonica de un telefono para poder compararlo con otro. Se queda solo
+// con los digitos —asi "+506 8319 8792", "50683198792" y "00506 83198792" son
+// el mismo numero, que es justo lo que se escapaba en el #65— y colapsa el "1"
+// de Mexico y el "9" de Argentina, que la gente escribe o no segun el dia.
+const claveTelefono = (col) => {
+  const d = `ltrim(regexp_replace(${col}, '[^0-9]', '', 'g'), '0')`;
+  return `CASE
+      WHEN length(${d}) < 7 THEN NULL
+      WHEN left(${d}, 3) = '521' AND length(${d}) = 13 THEN '52' || substring(${d} from 4)
+      WHEN left(${d}, 3) = '549' AND length(${d}) = 13 THEN '54' || substring(${d} from 4)
+      ELSE ${d}
+    END`;
+};
 
-  // Comparación canónica MX/AR: dos formas del mismo número (con/sin "1"/"9"
-  // de móvil) deben colapsar como duplicado. Generamos la forma canónica del
-  // teléfono entrante y de cada candidato con CASE inline en SQL.
-  const canonExpr = `
-    CASE
-      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '521'
-           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
-        THEN '+52' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
-      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '549'
-           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
-        THEN '+54' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
-      ELSE $3::text
-    END
-  `;
-  const candidateCanonExpr = `
-    CASE
-      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '521'
-           AND length(replace(l.telefono, '+', '')) = 13
-        THEN '+52' || substring(replace(l.telefono, '+', '') from 4)
-      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '549'
-           AND length(replace(l.telefono, '+', '')) = 13
-        THEN '+54' || substring(replace(l.telefono, '+', '') from 4)
-      ELSE l.telefono
-    END
-  `;
+// Detecta si esta ficha ya existe: por correo, por telefono O por usuario de
+// WhatsApp. Cualquiera de los tres vale, porque muchos prospectos entran sin
+// correo —los de WhatsApp casi todos— y ahi antes no habia deteccion ninguna.
+// `excludeId` sirve para preguntar por una ficha ya guardada sin que se
+// encuentre a si misma.
+export async function findDuplicateByEmailOrPhone(email, telefono, projectId, whatsappUsuario = null, excludeId = null) {
+  const cleanEmail = (email && String(email).trim().toLowerCase()) || null;
+  const cleanTel = (telefono && String(telefono).trim()) || null;
+  const cleanWa = (whatsappUsuario && String(whatsappUsuario).trim().replace(/^@+/, '').toLowerCase()) || null;
+  if (!cleanEmail && !cleanTel && !cleanWa) return null;
+
+  const claveEntrante = claveTelefono('$3::text');
+  const claveFicha = claveTelefono('l.telefono');
+  const porCorreo = `($2::text IS NOT NULL AND lower(l.email) = $2)`;
+  const porTelefono = `($3::text IS NOT NULL AND ${claveFicha} IS NOT NULL AND ${claveFicha} = ${claveEntrante})`;
+  const porWhatsapp = `($4::text IS NOT NULL AND lower(ltrim(l.whatsapp_usuario, '@')) = $4)`;
 
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.producto_interes_id,
             l.responsable_id, l.created_at, l.fecha_solicitud,
             u.nombre AS responsable_nombre,
-            ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
-            ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr}) AS match_by_phone
+            ${porCorreo} AS match_by_email,
+            ${porTelefono} AS match_by_phone,
+            ${porWhatsapp} AS match_by_whatsapp
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      WHERE l.project_id = $1 AND l.deleted_at IS NULL
-       AND (
-         ($2::text IS NOT NULL AND l.email = $2)
-         OR ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr})
-       )
-     ORDER BY ($2::text IS NOT NULL AND l.email = $2) DESC, l.created_at DESC
+       AND ($5::int IS NULL OR l.id <> $5::int)
+       AND (${porCorreo} OR ${porTelefono} OR ${porWhatsapp})
+     ORDER BY ${porCorreo} DESC, l.created_at DESC
      LIMIT 1`,
-    [projectId, cleanEmail, cleanTel]
+    [projectId, cleanEmail, cleanTel, cleanWa, excludeId]
   );
   return rows[0] || null;
+}
+
+// #102 - Todas las fichas del proyecto que comparten correo, telefono o usuario
+// de WhatsApp con alguna otra. Devuelve una fila por ficha y clave compartida;
+// encadenar las que se tocan (A comparte el correo con B, B el telefono con C)
+// se hace en el servicio, que es donde se recorre un grafo con comodidad.
+export async function findDuplicateKeys(projectId) {
+  const { rows } = await query(
+    `WITH base AS (
+       SELECT l.id, l.email, l.telefono, l.whatsapp_usuario
+       FROM leads l
+       WHERE l.project_id = $1 AND l.deleted_at IS NULL
+     ),
+     claves AS (
+       SELECT id, 'correo' AS por, lower(trim(email)) AS clave
+         FROM base WHERE email IS NOT NULL AND trim(email) <> ''
+       UNION ALL
+       SELECT id, 'telefono' AS por, ${claveTelefono('telefono')} AS clave
+         FROM base WHERE telefono IS NOT NULL
+       UNION ALL
+       SELECT id, 'whatsapp' AS por, lower(ltrim(trim(whatsapp_usuario), '@')) AS clave
+         FROM base WHERE whatsapp_usuario IS NOT NULL AND trim(ltrim(whatsapp_usuario, '@')) <> ''
+     ),
+     repetidas AS (
+       SELECT por, clave FROM claves
+       WHERE clave IS NOT NULL AND clave <> ''
+       GROUP BY por, clave HAVING count(DISTINCT id) > 1
+     )
+     SELECT c.id, c.por, c.clave
+     FROM claves c
+     JOIN repetidas r ON r.por = c.por AND r.clave = c.clave
+     ORDER BY c.por, c.clave, c.id`,
+    [projectId]
+  );
+  return rows;
+}
+
+// Los datos de las fichas repetidas, con lo que hace falta para decidir cual se
+// queda: quien la lleva, cuanto historial tiene y —lo que mas pesa— si tiene
+// alguna venta colgando.
+export async function findLeadsForDuplicates(ids) {
+  if (!ids || !ids.length) return [];
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status::text AS status,
+            l.created_at, l.lead_duplicado_de, l.responsable_id, l.landing_url,
+            u.nombre AS responsable_nombre,
+            p.nombre AS producto_nombre,
+            (SELECT count(*) FROM lead_interactions i WHERE i.lead_id = l.id) AS n_interacciones,
+            (SELECT count(*) FROM conversions cv WHERE cv.lead_id = l.id) AS n_conversiones
+     FROM leads l
+     LEFT JOIN users u ON u.id = l.responsable_id
+     LEFT JOIN products p ON p.id = l.producto_interes_id
+     WHERE l.id = ANY($1::int[])
+     ORDER BY l.created_at ASC, l.id ASC`,
+    [ids]
+  );
+  return rows;
 }
 
 // Busca cualquier lead CONVERTIDO previo de este email en el proyecto.
@@ -139,90 +194,119 @@ export async function softDeleteLead(leadId, { reason, motivo, userId }) {
   return rows[0] || null;
 }
 
-// Fusiona dos leads: mueve TODO el historial del loser al winner,
-// marca al loser como duplicado_de y lo soft-deletea con motivo=comentario.
-// Devuelve resumen { moved: {...counts}, winner_id, loser_id }.
-export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+// Fusiona una ficha con otra, o con VARIAS a la vez: mueve todo el historial de
+// las que se cierran a la que se queda, las marca como duplicadas de ella y las
+// deja en la papelera con el motivo. Antes solo se podia de dos en dos, y de la
+// misma persona llega a haber tres y cuatro fichas (#102).
+// Devuelve { winner_id, loser_ids, moved }.
+export async function mergeLeads({ winnerId, loserId, loserIds, comment, userId }) {
+  const perdedores = [...new Set(
+    (Array.isArray(loserIds) && loserIds.length ? loserIds : [loserId])
+      .map((x) => parseInt(x, 10))
+      .filter((x) => Number.isInteger(x))
+  )];
+  if (!perdedores.length) throw new Error('No hay ninguna ficha que fusionar');
+
   const { getClient } = await import('../../shared/config/db.js');
   const c = await getClient();
   try {
     await c.query('BEGIN');
 
-    // Verificar que ambos existen, mismo proyecto, y ninguno borrado
     const lw = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [winnerId]);
-    const ll = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [loserId]);
-    if (!lw.rows[0] || !ll.rows[0]) throw new Error('Lead no encontrado');
-    if (lw.rows[0].project_id !== ll.rows[0].project_id) throw new Error('Los leads pertenecen a proyectos distintos');
-    if (lw.rows[0].deleted_at || ll.rows[0].deleted_at) throw new Error('No se pueden fusionar leads eliminados');
-    if (winnerId === loserId) throw new Error('No se puede fusionar un lead consigo mismo');
+    if (!lw.rows[0]) throw new Error('Lead no encontrado');
+    if (lw.rows[0].deleted_at) throw new Error('No se pueden fusionar leads eliminados');
 
-    // Mover hijos. Cada UPDATE devuelve count.
-    const counts = {};
+    // Se comprueban TODAS antes de mover nada: o entran todas o no entra
+    // ninguna. Con varias fichas, quedarse a medias seria lo peor de todo.
+    const fichas = {};
+    for (const id of perdedores) {
+      if (id === winnerId) throw new Error('No se puede fusionar un lead consigo mismo');
+      const ll = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [id]);
+      if (!ll.rows[0]) throw new Error(`Lead #${id} no encontrado`);
+      if (ll.rows[0].project_id !== lw.rows[0].project_id) throw new Error(`El lead #${id} es de otro proyecto`);
+      if (ll.rows[0].deleted_at) throw new Error(`El lead #${id} ya esta eliminado`);
+      fichas[id] = ll.rows[0];
+    }
+
     const moveTables = [
       'lead_interactions', 'lead_reminders', 'lead_utms',
       'lead_status_history', 'lead_audit_log',
       'conversions', 'matriculas',
       'email_sequence_runs', 'lead_emails',
+      // La conversacion de WhatsApp tambien es historial: si no se mueve, el
+      // chat se queda colgado de una ficha que esta en la papelera.
+      'wa_conversaciones',
     ];
-    // Tablas 1-1 con UNIQUE(lead_id): si el winner ya tiene fila, el UPDATE
-    // del loser viola la constraint. Política: el del winner gana, el del loser
-    // se descarta (típicamente UTMs del primer toque del original son los buenos).
+    // Tablas 1-1 con UNIQUE(lead_id): si la que se queda ya tiene fila, el
+    // UPDATE de la otra viola la constraint. Politica: gana la que se queda
+    // (los UTMs del primer toque del original son los buenos).
     const oneToOneTables = new Set(['lead_utms']);
-    for (const t of moveTables) {
-      try {
-        if (oneToOneTables.has(t)) {
-          const w = await c.query(`SELECT 1 FROM ${t} WHERE lead_id = $1 LIMIT 1`, [winnerId]);
-          if (w.rowCount > 0) {
-            const d = await c.query(`DELETE FROM ${t} WHERE lead_id = $1`, [loserId]);
-            counts[t] = `discarded ${d.rowCount}`;
-            continue;
+
+    const counts = {};
+    const suma = (t, n) => {
+      if (typeof n !== 'number') { counts[t] = counts[t] ?? n; return; }
+      counts[t] = (typeof counts[t] === 'number' ? counts[t] : 0) + n;
+    };
+
+    for (const id of perdedores) {
+      for (const t of moveTables) {
+        try {
+          if (oneToOneTables.has(t)) {
+            const w = await c.query(`SELECT 1 FROM ${t} WHERE lead_id = $1 LIMIT 1`, [winnerId]);
+            if (w.rowCount > 0) {
+              const d = await c.query(`DELETE FROM ${t} WHERE lead_id = $1`, [id]);
+              suma(t, `descartadas ${d.rowCount}`);
+              continue;
+            }
           }
+          const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, id]);
+          suma(t, r.rowCount);
+        } catch (err) {
+          // La tabla puede no existir en este entorno - se ignora.
+          if (err.code !== '42P01') throw err;
+          counts[t] = 'skipped';
         }
-        const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, loserId]);
-        counts[t] = r.rowCount;
-      } catch (err) {
-        // Tabla puede no existir en este entorno — ignoramos
-        if (err.code !== '42P01') throw err;
-        counts[t] = 'skipped';
       }
+
+      // La que se cierra apunta a la que se queda...
+      await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, id]);
+      // ...y las que apuntaban a ella pasan a apuntar a la que se queda, para
+      // que la cadena no se rompa al fusionar tres o cuatro fichas seguidas.
+      await c.query(
+        `UPDATE leads SET lead_duplicado_de = $1 WHERE lead_duplicado_de = $2 AND id <> $1`,
+        [winnerId, id]
+      );
+
+      await c.query(
+        `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+         VALUES ($1, 'nota', $2, $3, NOW())`,
+        [winnerId, `\u{1F517} Fusionado con lead #${id} (${fichas[id].nombre || '\u2014'}). Comentario: ${comment}`, userId]
+      );
+      // Nota en la que se cierra (queda si se restaura desde papelera)
+      await c.query(
+        `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+         VALUES ($1, 'nota', $2, $3, NOW())`,
+        [id, `\u{274C} Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '\u2014'}). Lead cerrado por fusi\u00F3n. Comentario: ${comment}`, userId]
+      );
+      await c.query(
+        `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+         VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
+        [winnerId, String(id), userId, id, String(winnerId)]
+      );
+      await c.query(
+        `UPDATE leads
+         SET deleted_at = NOW(),
+             deleted_reason = 'duplicado_manual',
+             deleted_motivo = $1,
+             deleted_by = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [`Fusionado en lead #${winnerId}. ${comment}`, userId, id]
+      );
     }
 
-    // Apuntar lead_duplicado_de del loser al winner (auditoría)
-    await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, loserId]);
-
-    // Nota en el winner explicando la fusión
-    await c.query(
-      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
-       VALUES ($1, 'nota', $2, $3, NOW())`,
-      [winnerId, `🔗 Fusionado con lead #${loserId} (${ll.rows[0].nombre || '—'}). Comentario: ${comment}`, userId]
-    );
-    // Nota en el loser (queda si se restaura desde papelera)
-    await c.query(
-      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
-       VALUES ($1, 'nota', $2, $3, NOW())`,
-      [loserId, `❌ Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '—'}). Lead cerrado por fusión. Comentario: ${comment}`, userId]
-    );
-    // Audit log de la operación en ambos
-    await c.query(
-      `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
-       VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
-      [winnerId, String(loserId), userId, loserId, String(winnerId)]
-    );
-
-    // Soft-delete del loser
-    await c.query(
-      `UPDATE leads
-       SET deleted_at = NOW(),
-           deleted_reason = 'duplicado_manual',
-           deleted_motivo = $1,
-           deleted_by = $2,
-           updated_at = NOW()
-       WHERE id = $3`,
-      [`Fusionado en lead #${winnerId}. ${comment}`, userId, loserId]
-    );
-
     await c.query('COMMIT');
-    return { winner_id: winnerId, loser_id: loserId, moved: counts };
+    return { winner_id: winnerId, loser_id: perdedores[0], loser_ids: perdedores, moved: counts };
   } catch (err) {
     await c.query('ROLLBACK');
     throw err;
@@ -351,7 +435,7 @@ export async function deleteProductAlias(aliasId, projectId) {
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, whatsappUsuario = null, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -375,28 +459,13 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       }
     }
 
-    // Obtener gestores activos del proyecto.
-    // Filtros: usuario activo + rol admin/gestor + disponible (is_available)
-    //          + sin bloque de ausencia activo para hoy.
-    const { rows: gestorRows } = await client.query(
-      `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id
-        AND u.active = true
-        AND u.is_available = true
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
-        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
-        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
-        -- nadie llama — no es su trabajo ni mira esa bandeja.
-        AND NOT COALESCE(u.gestor_colaboraciones, false)
-       WHERE up.project_id = $1 AND up.active = true
-         AND NOT EXISTS (
-           SELECT 1 FROM user_availability_blocks ab
-           WHERE ab.user_id = u.id
-             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
-         )
-       ORDER BY up.orden_cola`,
-      [projectId]
+    // Quien entra en el reparto. La consulta vive en `reparto.js` porque la
+    // pantalla de «a quien le toca» (#11) tiene que contestar exactamente esto
+    // mismo, y cuando estaba escrita dos veces no lo hacia: le faltaban las
+    // ausencias, `is_available` y lo de las colaboraciones.
+    const gestorRows = await gestoresDelReparto(
+      (sql, params) => client.query(sql, params),
+      projectId
     );
 
     let responsableId = null;
@@ -422,7 +491,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     }
 
     if (!responsableId && !skipRoundRobin && gestorRows.length > 0) {
-      const gestores = gestorRows.map(r => r.user_id);
+      const gestores = gestorRows.map(r => r.id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
       responsableId = gestores[nextIndex];
@@ -434,7 +503,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     } else if (advanceRoundRobinAnyway && gestorRows.length > 0) {
       // Lead manual creado por gestor: se queda con quien lo creó (forcedResponsableId)
       // pero avanzamos la cola igual para que el siguiente lead automatico no le toque otra vez.
-      const gestores = gestorRows.map(r => r.user_id);
+      const gestores = gestorRows.map(r => r.id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
       await client.query(
@@ -445,10 +514,10 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
+      `INSERT INTO leads (project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id, project_id, nombre, email, telefono, whatsapp_usuario, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, whatsappUsuario || null, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
        customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
@@ -564,10 +633,105 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
+/**
+ * Los filtros rapidos, en SQL (#132).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUE SUBEN AL SERVIDOR
+ *
+ * Estaban en `LeadsPage.tsx`, aplicados sobre `leads` — que es UNA PAGINA de 20
+ * de `total`. Asi que `?qf=tomorrow` no enseñaba los de mañana: enseñaba los de
+ * mañana QUE CAYERAN EN LA PAGINA QUE ESTUVIERAS MIRANDO.
+ *
+ * Con 300 prospectos y doce para mañana, podian salir dos. O ninguno.
+ *
+ * Diego lo dijo dos veces en el #132, y es la condicion para poder mandar el
+ * correo: «un aviso que dice "7 personas" y abre una lista con 2 es peor que no
+ * mandar nada». Un correo que miente se deja de abrir a la semana, y entonces
+ * tampoco se lee el que importa.
+ *
+ * LAS FECHAS NO DERIVAN, Y ESTA COMPROBADO
+ *
+ * `lead_reminders.fecha_recordatorio` es `date` pelado, no `timestamptz`, y la
+ * API lo devuelve como texto plano («2026-09-07»). El frontend hacia
+ * `String(x).slice(0, 10)`. Asi que `CURRENT_DATE` de aqui y la fecha de alli
+ * son el mismo dia — sin conversion de zona por medio, que es lo que habria
+ * hecho que el numero del correo y el de la lista se separasen por un dia.
+ *
+ * UNA SOLA DEFINICION
+ *
+ * La misma cadena la usan la lista, los contadores de las pestañas y el correo.
+ * El ticket lo pide asi —«es el mismo dato, contado en tres sitios; que salga de
+ * una sola consulta»— y es lo unico que garantiza que digan lo mismo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const PROXIMO = `(SELECT MIN(r.fecha_recordatorio) FROM lead_reminders r
+                   WHERE r.lead_id = l.id AND r.completado = false)`;
+const ULTIMO_CONTACTO = `(SELECT MAX(i.fecha) FROM lead_interactions i WHERE i.lead_id = l.id)`;
+// «Sin tocar» = ni una interaccion Y todavia en la entrada del embudo.
+const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_contactar'))`;
+
+/**
+ * «Sin revisar este mes» (#132, el repaso de fin de mes).
+ *
+ * Va aparte de `FILTROS_RAPIDOS` porque es el unico que depende de una tabla
+ * que puede no estar —`lead_revisiones`, migracion 149—. Metido con los demas,
+ * la falta de esa tabla tumbaria el listado ENTERO con un 42P01, y el listado
+ * es la pantalla principal del CRM.
+ *
+ * El mes se corta con `date_trunc`: el repaso es «de este mes», no «de los
+ * ultimos 30 dias». Si fuera lo segundo, una ficha revisada el 31 de agosto
+ * seguiria contando como hecha el 15 de septiembre y nunca se repasaria.
+ */
+export const FILTRO_SIN_REVISAR = `NOT EXISTS (
+  SELECT 1 FROM lead_revisiones rv
+   WHERE rv.lead_id = l.id
+     AND rv.revisado_at >= date_trunc('month', CURRENT_DATE))`;
+
+let hayTablaDeRevisiones = null;
+
+/** Para las pruebas: vuelve a mirar si la tabla existe. */
+export function _olvidarRevisiones() { hayTablaDeRevisiones = null; }
+
+/** `true` si la migracion 149 esta aplicada. Se mira una vez. */
+export async function sePuedeRevisar() {
+  if (hayTablaDeRevisiones !== null) return hayTablaDeRevisiones;
+  try {
+    const { rows } = await query(
+      `SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'lead_revisiones'`);
+    hayTablaDeRevisiones = rows.length > 0;
+  } catch {
+    hayTablaDeRevisiones = false;
+  }
+  return hayTablaDeRevisiones;
+}
+
+export const FILTROS_RAPIDOS = {
+  // Ojo: `NULL < CURRENT_DATE` es NULL, o sea que no pasa el filtro. Es lo que
+  // se quiere —«sin recordatorio» no es «atrasado»— y coincide con el `next &&`
+  // que hacia el frontend.
+  overdue: `${PROXIMO} < CURRENT_DATE`,
+  today: `${PROXIMO} = CURRENT_DATE`,
+  tomorrow: `${PROXIMO} = CURRENT_DATE + 1`,
+  week: `${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`,
+  'no-reminder': `${PROXIMO} IS NULL`,
+  'no-contact': SIN_TOCAR,
+  urgent: `(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`,
+};
+
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
+
+  // El filtro rapido. Va sin parametros: son fragmentos fijos de este fichero,
+  // elegidos por clave de un objeto cerrado — no llega nada del usuario al SQL.
+  if (qf && FILTROS_RAPIDOS[qf]) conditions.push(FILTROS_RAPIDOS[qf]);
+  // El de revisiones solo si su tabla existe. Quien pregunta por el sin
+  // migracion recibe un aviso del controller, no una lista silenciosamente
+  // equivocada.
+  if (qf === 'sin-revisar' && await sePuedeRevisar()) conditions.push(FILTRO_SIN_REVISAR);
 
   // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
   if (Array.isArray(projectIds) && projectIds.length > 0) {
@@ -631,7 +795,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(productId);
   }
   if (search) {
-    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx})`);
+    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
     params.push(`%${search}%`);
     paramIdx++;
   }
@@ -742,7 +906,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
      ) client_stats ON TRUE` : '';
 
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
@@ -775,6 +939,99 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   );
 
   return { leads: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
+/**
+ * Cuantos hay en cada filtro rapido, de UNA consulta (#132).
+ *
+ * Los contadores de las pestañas tambien se calculaban en el navegador sobre la
+ * pagina, asi que la pestaña decia «3» y en la base habia doce.
+ *
+ * Y este es el numero que va a llevar el correo del resumen. El ticket lo pide
+ * literal: «el numero del correo y el numero de la lista tienen que ser el
+ * mismo». La unica forma de garantizarlo es que salgan de aqui los dos, con las
+ * mismas cadenas de `FILTROS_RAPIDOS`.
+ *
+ * `responsableId` es lo que hace que el correo de una gestora lleve lo suyo y
+ * no lo de otra.
+ */
+export async function contarFiltrosRapidos({ projectId, projectIds, responsableId, includeConverted = false }) {
+  const cond = ['l.deleted_at IS NULL'];
+  const params = [];
+  let i = 1;
+
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    cond.push(`l.project_id = ANY($${i++}::int[])`);
+    params.push(projectIds);
+  } else if (projectId) {
+    cond.push(`l.project_id = $${i++}`);
+    params.push(projectId);
+  }
+  if (responsableId) {
+    cond.push(`l.responsable_id = $${i++}`);
+    params.push(responsableId);
+  }
+  // Igual que el listado: los convertidos no cuentan salvo que se pidan.
+  if (!includeConverted) cond.push(`l.status <> 'convertido'`);
+
+  const cuenta = (clave) => `COUNT(*) FILTER (WHERE ${FILTROS_RAPIDOS[clave]})::int`;
+  const { rows } = await query(
+    `SELECT ${cuenta('overdue')}     AS overdue,
+            ${cuenta('today')}       AS today,
+            ${cuenta('tomorrow')}    AS tomorrow,
+            ${cuenta('week')}        AS week,
+            ${cuenta('no-reminder')} AS no_reminder,
+            ${cuenta('no-contact')}  AS no_contact,
+            ${cuenta('urgent')}      AS urgent,
+            COUNT(*)::int            AS total
+       FROM leads l
+      WHERE ${cond.join(' AND ')}`,
+    params
+  );
+  return rows[0];
+}
+
+/**
+ * Como va el repaso de fin de mes (#132).
+ *
+ * «Que se note cuanto le queda» — sin eso, la gestora abre la lista, marca
+ * tres, cierra, y no sabe si va por el 5 % o por el 90 %. Un repaso sin
+ * progreso visible no se termina.
+ */
+export async function comoVaLaRevision({ projectId, responsableId }) {
+  if (!(await sePuedeRevisar())) {
+    return { disponible: false, total: 0, revisadas: 0, pendientes: 0 };
+  }
+  const cond = ['l.deleted_at IS NULL', `l.status <> 'convertido'`];
+  const params = [];
+  let i = 1;
+  if (projectId) { cond.push(`l.project_id = $${i++}`); params.push(projectId); }
+  if (responsableId) { cond.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE NOT (${FILTRO_SIN_REVISAR}))::int AS revisadas,
+            COUNT(*) FILTER (WHERE ${FILTRO_SIN_REVISAR})::int      AS pendientes
+       FROM leads l
+      WHERE ${cond.join(' AND ')}`, params);
+  return { disponible: true, ...rows[0] };
+}
+
+/**
+ * Apunta que alguien miro esta ficha y que dijo.
+ *
+ * No cambia el `status`: son dos cosas. «La revise y sigue viva» no es lo
+ * mismo que «esta en seguimiento», y machacar el estado desde aqui borraria el
+ * trabajo de la gestora con un clic pensado para otra cosa. Si al revisarla
+ * decide cambiarlo, lo cambia por su sitio de siempre.
+ */
+export async function apuntarRevision({ leadId, userId, resultado, nota = null }) {
+  const { rows } = await query(
+    `INSERT INTO lead_revisiones (lead_id, revisado_por, resultado, nota)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, lead_id, resultado, revisado_at`,
+    [leadId, userId, resultado, nota]);
+  return rows[0];
 }
 
 export async function findById(id) {
@@ -946,36 +1203,28 @@ export async function reassignPendingRoundRobin(projectId) {
   try {
     await client.query('BEGIN');
 
-    const { rows: gestores } = await client.query(
-      `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id
-        AND u.active = true
-        AND u.is_available = true
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
-        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
-        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
-        -- nadie llama — no es su trabajo ni mira esa bandeja.
-        AND NOT COALESCE(u.gestor_colaboraciones, false)
-       WHERE up.project_id = $1 AND up.active = true
-         AND NOT EXISTS (
-           SELECT 1 FROM user_availability_blocks ab
-           WHERE ab.user_id = u.id
-             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
-         )
-       ORDER BY up.orden_cola`,
-      [projectId]
+    // La tercera copia de la misma lista. Ahora sale de `reparto.js` como las
+    // otras dos: reasignar los pendientes tiene que repartir entre exactamente
+    // la misma gente que reparte el alta, o se le asignan leads a quien el alta
+    // habria saltado.
+    const gestores = await gestoresDelReparto(
+      (sql, params) => client.query(sql, params),
+      projectId
     );
 
     if (gestores.length === 0) {
       await client.query('ROLLBACK');
       return { reassigned: 0, total_pending: 0, reason: 'NO_ACTIVE_GESTORES' };
     }
-    const gestorIds = gestores.map((g) => g.user_id);
+    const gestorIds = gestores.map((g) => g.id);
 
     const { rows: pending } = await client.query(
+      // `deleted_at IS NULL` faltaba: sin el, esto repartia tambien las fichas
+      // borradas y las marcadas como spam, y aparecian en la bandeja de una
+      // gestora como trabajo por hacer. Pasaba de verdad, porque hasta ahora
+      // esto lo llamaba la baja de un usuario sin que nadie lo mirara.
       `SELECT id FROM leads
-       WHERE project_id = $1 AND responsable_id IS NULL
+       WHERE project_id = $1 AND responsable_id IS NULL AND deleted_at IS NULL
        ORDER BY created_at ASC`,
       [projectId]
     );
@@ -1030,7 +1279,7 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const allowed = ['nombre', 'email', 'telefono', 'whatsapp_usuario', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);

@@ -68,7 +68,7 @@ function Tarta({ titulo, datos, colores, campoN }) {
         </ResponsiveContainer>
       </div>
       {/* La tabla es la que manda: el color solo acompaña. */}
-      <table className="w-full text-xs mt-1">
+      <table className="tabla-cifras w-full text-xs mt-1">
         <tbody>
           {datos.map((d, i) => (
             <tr key={d.tipo} className="border-t border-border/60">

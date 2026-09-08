@@ -729,7 +729,7 @@ export const importNow = async (req, res, next) => {
     const projectId = pid(req);
     const creds = await model.getCreds(projectId);
     if (!creds || !creds.active) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
-    const run = await model.startRun(projectId, req.user.id);
+    const run = await model.startRun(projectId, req.user.userId);
     res.json({ success: true, data: { run_id: run.id, status: 'running' } });
     setImmediate(() => runFullImport(creds, projectId, run.id));
   } catch (e) { next(e); }

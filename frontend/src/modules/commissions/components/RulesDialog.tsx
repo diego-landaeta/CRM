@@ -56,7 +56,11 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
     if (!newRule.project_id) { setProducts([]); return; }
     (async () => {
       try {
-        const r = await client.get(`/products/${newRule.project_id}`);
+        // `/products/{id}` es el detalle de un producto, no la lista de un
+        // proyecto: pedía la lista por ahí y el backend cortaba con «projectId
+        // requerido». Como el catch va vacío, el desplegable se quedaba sin
+        // productos y sin decir por qué.
+        const r = await client.get('/products', { params: { projectId: newRule.project_id } });
         if (r.success) setProducts((r.data as ProductOption[]) || []);
       } catch {}
     })();

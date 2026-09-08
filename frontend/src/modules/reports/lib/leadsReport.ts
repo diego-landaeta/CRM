@@ -5,7 +5,7 @@
 // Prospectos. Reutiliza las columnas del export universal (getLeadExportColumns).
 import client from '@/shared/api/client';
 import type { Lead } from '@/shared/types';
-import { runExport, type ExportFormat } from '@/shared/lib/export';
+import { runExport, type ExportFormat, type ExportColumn } from '@/shared/lib/export';
 import { getLeadExportColumns } from '@/modules/leads/lib/leadFormat';
 
 export interface ReportLeadFilters {

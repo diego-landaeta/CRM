@@ -55,6 +55,13 @@ const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
 const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'));
 const OfflineBanner = lazy(() => import('./OfflineBanner'));
+// Avisa de una llamada de WhatsApp desde cualquier pantalla del CRM. Va aqui
+// y no en el modulo de WhatsApp a proposito: la llamada se pierde justo
+// cuando la gestora esta en otra parte y el movil no lo tiene delante.
+const AvisoDeLlamada = lazy(() => import('./AvisoDeLlamada'));
+// Avisa de un mensaje entrante desde cualquier pantalla. Antes de esto el CRM
+// no avisaba de nada cuando entraba un WhatsApp.
+const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -272,6 +279,10 @@ export default function AppLayout() {
       </Suspense>
       <Suspense fallback={null}>
         <OfflineBanner />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AvisoDeLlamada />
+        <AvisoDeMensaje />
       </Suspense>
     </div>
   );

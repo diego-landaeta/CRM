@@ -23,7 +23,8 @@ interface Props {
   matricula: Matricula;
   onClose: () => void;
   onChange: () => void;
-  onEstado: (m: Matricula, estado: string) => void;
+  // Sin permiso para editar no llega: la botonera entera desaparece.
+  onEstado?: (m: Matricula, estado: string) => void;
 }
 
 export default function MatriculaDetail({ matricula, onClose, onChange, onEstado }: Props) {
@@ -106,6 +107,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
             <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-lg text-xs text-red-700 dark:text-red-300"><strong>Motivo:</strong> {m.motivo_rechazo}</div>
           )}
 
+          {onEstado && (
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
             {m.estado !== 'validada' && (
               <button
@@ -132,6 +134,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>

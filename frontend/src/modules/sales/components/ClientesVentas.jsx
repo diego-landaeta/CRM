@@ -119,7 +119,7 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
         </p>
       ) : abierto && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="tabla-cifras w-full text-xs">
             <thead>
               <tr className="text-muted-foreground border-b border-border">
                 <th className="text-left font-semibold py-1.5 pr-2">Cliente</th>

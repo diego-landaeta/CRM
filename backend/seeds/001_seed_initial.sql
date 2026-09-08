@@ -13,9 +13,9 @@ BEGIN;
 
 -- password: CrmTemp2026! (bcrypt cost 12)
 INSERT INTO users (nombre, email, password_hash, role) VALUES
-  ('Manuel Casas', 'manuel@empresa.com', '$2b$12$LJ3m5Gq8z5Kv0mQpJx0eVOzR1vKpW5tY6nH3cX9bA2dF8gE4iO6Wy', 'superadmin'),
-  ('Diego R.',     'diego@empresa.com',  '$2b$12$LJ3m5Gq8z5Kv0mQpJx0eVOzR1vKpW5tY6nH3cX9bA2dF8gE4iO6Wy', 'admin'),
-  ('Angel M.',     'angel@empresa.com',  '$2b$12$LJ3m5Gq8z5Kv0mQpJx0eVOzR1vKpW5tY6nH3cX9bA2dF8gE4iO6Wy', 'admin');
+  ('Manuel Casas', 'manuel@empresa.com', '$2b$12$3N1uKKYT.cQeowf6klOmp.xHV9f6/e6VCFazA4.gCN/1G/r3oL9za', 'superadmin'),
+  ('Diego R.',     'diego@empresa.com',  '$2b$12$3N1uKKYT.cQeowf6klOmp.xHV9f6/e6VCFazA4.gCN/1G/r3oL9za', 'admin'),
+  ('Angel M.',     'angel@empresa.com',  '$2b$12$3N1uKKYT.cQeowf6klOmp.xHV9f6/e6VCFazA4.gCN/1G/r3oL9za', 'admin');
 
 -- ============================================================
 -- PROYECTOS

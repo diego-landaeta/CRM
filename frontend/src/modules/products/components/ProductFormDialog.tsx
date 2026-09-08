@@ -10,9 +10,16 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
+import CascadaDeCategorias from '@/modules/product-categories/components/CascadaDeCategorias';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+
+// react-hook-form no siempre devuelve un string en `.message`: con campos que
+// son una unión o que pasan por `preprocess` puede venir el objeto de error
+// entero, y `Field` espera texto. Se saca aquí en vez de forzar el tipo.
+const textoError = (e: any): string | undefined =>
+  (typeof e?.message === 'string' ? e.message : undefined);
 
 function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -55,6 +62,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
     defaultValues: {
       nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
       horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+      plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
       presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
       para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
       metodologia_texto: '', faqs_texto: '', profesores_texto: '',
@@ -90,6 +98,11 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
         num_modulos: product.num_modulos != null ? String(product.num_modulos) : '',
         modalidad: product.modalidad || '',
         fecha_inicio_texto: product.fecha_inicio_texto || '',
+        plazas_totales: product.plazas_totales != null ? String(product.plazas_totales) : '',
+        plazas_ocupadas_previas: product.plazas_ocupadas_previas ? String(product.plazas_ocupadas_previas) : '',
+        // Llega como fecha completa; el <input type="date"> solo entiende AAAA-MM-DD.
+        fecha_cierre_convocatoria: product.fecha_cierre_convocatoria
+          ? String(product.fecha_cierre_convocatoria).slice(0, 10) : '',
         presentacion_texto: product.presentacion_texto || '',
         objetivos_texto: product.objetivos_texto || '',
         beneficios_texto: product.beneficios_texto || '',
@@ -103,6 +116,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       } : {
         nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
         horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+        plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
         presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
         para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
         metodologia_texto: '', faqs_texto: '', profesores_texto: '',
@@ -179,26 +193,6 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
   }
 
   if (!open) return null;
-
-  // CRM-247 fix temporal: el modelo viejo asumía 2 niveles. Ahora el árbol es N niveles
-  // (Cursos > Para Profesionales > Psicología Org. > Trauma > ...). Mostramos TODAS las
-  // categorías en el primer selector con su path completo, e ignoramos subcategoria_id.
-  function pathOf(c: any): string {
-    const parts = [c.nombre];
-    let cur = c;
-    let safety = 0;
-    while (cur.parent_id && safety++ < 10) {
-      const parent = categories.find((x: any) => x.id === cur.parent_id);
-      if (!parent) break;
-      parts.unshift(parent.nombre);
-      cur = parent;
-    }
-    return parts.join(' › ');
-  }
-  const allCategoriesWithPath = categories
-    .map((c: any) => ({ id: c.id, label: pathOf(c), nombre: c.nombre, parent_id: c.parent_id }))
-    .sort((a: any, b: any) => a.label.localeCompare(b.label));
-  const subs = categories.filter(c => String(c.parent_id) === categoriaSel);
 
   function addPaymentLink() {
     setPaymentLinks((prev) => [...prev, { label: '', url: '', tipo: 'completo' }]);
@@ -287,27 +281,28 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
             <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <Tag size={12} /> Categorización
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Select<string>
-                value={categoriaSel}
-                onChange={(v) => { setCategoriaSel(v); setSubcategoriaSel(''); }}
-                options={[
-                  { value: '', label: 'Sin categoría' },
-                  ...allCategoriesWithPath.map(c => ({ value: String(c.id), label: c.label })),
-                ]}
-                ariaLabel="Categoría"
-              />
-              <Select<string>
-                value={subcategoriaSel}
-                onChange={setSubcategoriaSel}
-                options={[
-                  { value: '', label: subs.length ? 'Sin subcategoría' : '—' },
-                  ...subs.map(c => ({ value: String(c.id), label: c.nombre })),
-                ]}
-                ariaLabel="Subcategoría"
-                disabled={!subs.length}
-              />
-            </div>
+            {/* Se escribe o se baja, y son la misma cosa vista de dos maneras (#2).
+                Aqui habia un desplegable con TODAS las categorias y su ruta
+                entera concatenada —«Cursos › Para Profesionales › Adicciones y
+                Conductas Compulsivas», cincuenta y pico lineas— y al lado un
+                selector de «subcategoria» del modelo viejo de dos niveles. El
+                arbol real tiene cinco, asi que del tercero para abajo no habia
+                forma de llegar bajando: o lo buscabas o no existia. */}
+            <CascadaDeCategorias
+              categorias={categories}
+              valor={categoriaSel ? Number(categoriaSel) : null}
+              onCambiar={(id) => {
+                setCategoriaSel(id ? String(id) : '');
+                // `subcategoria_id` es del modelo de dos niveles y hoy solo se
+                // usa para ENSEÑAR un nombre en el listado; el filtro va por
+                // `categoria_id` y ya baja a los descendientes por su cuenta.
+                // Se limpia al tocar la categorizacion —la ruta entera queda en
+                // `categoria_id`— pero NO si se edita el precio y nada mas: no
+                // se tira un dato que la sincronizacion de WooCommerce puso y
+                // que nadie ha pedido cambiar.
+                setSubcategoriaSel('');
+              }}
+            />
             <div>
               <label className="text-[11px] font-medium text-muted-foreground">Régimen fiscal (IVA)</label>
               <Select<string>
@@ -437,6 +432,36 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
               </Field>
             </div>
+          </div>
+
+          {/* === Convocatoria: plazas y cierre (#86) === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="text-[11px] font-bold uppercase text-muted-foreground">
+              Convocatoria <span className="font-normal normal-case opacity-70">(las plazas salen en las plantillas del proceso comercial)</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <Field label="Plazas de la convocatoria" error={textoError(errors.plazas_totales)}>
+                <input {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={smallInput} />
+              </Field>
+              <Field label="Ya ocupadas antes del CRM" error={textoError(errors.plazas_ocupadas_previas)}>
+                <input {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={smallInput} />
+              </Field>
+              <Field label="Cierre de convocatoria" error={textoError(errors.fecha_cierre_convocatoria)}>
+                <input {...register('fecha_cierre_convocatoria')} type="date" className={smallInput} />
+              </Field>
+            </div>
+            {/* Las ocupadas y las libres no se teclean: las cuenta el servidor desde
+                las ventas. Se enseñan aquí para que se vea el efecto de lo de arriba. */}
+            {product && product.plazas_totales != null && (
+              <div className="text-[11px] text-muted-foreground">
+                Ahora mismo: <strong className="text-foreground">{product.plazas_ocupadas}</strong> ocupadas
+                {' · '}
+                <strong className={Number(product.plazas_libres) <= 0 ? 'text-destructive' : 'text-foreground'}>
+                  {product.plazas_libres}
+                </strong>{' '}libres de {product.plazas_totales}.
+                {' '}Las ocupadas se cuentan de las ventas, no se escriben.
+              </div>
+            )}
           </div>
 
           {/* === Secciones extraídas (texto) === */}
