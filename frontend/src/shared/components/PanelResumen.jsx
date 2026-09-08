@@ -85,7 +85,7 @@ function HeroTooltip({ active, payload, label, formatea, color, prevValue }) {
   );
 }
 
-export default function PanelResumen({ projectId, issuerId, projectName, from, to }) {
+export default function PanelResumen({ projectId, issuerId, projectName, from, to , onDatos }) {
   const [panel, setPanel] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [heroSerie, setHeroSerie] = useState('ingresos');
@@ -105,6 +105,10 @@ export default function PanelResumen({ projectId, issuerId, projectName, from, t
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
   }, [projectId, issuerId, from, to]);
+
+  // La pagina necesita esto para la descarga: pedirlo otra vez desde
+  // arriba serian dos viajes para el mismo dato.
+  useEffect(() => { onDatos?.(panel); }, [panel]);
 
   const serie = panel?.serie || [];
   const chispa = (k) => serie.map((x) => Number(x[k] || 0));

@@ -19,7 +19,7 @@ import PanelResumen from '@/shared/components/PanelResumen';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
 
-function exportReportCSV(data, project, range) {
+function exportReportCSV(data, project, range, panel, seguimiento) {
   const sections = [];
   const sep = row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
 
@@ -80,6 +80,62 @@ function exportReportCSV(data, project, range) {
     sections.push('');
   }
 
+  // El Resumen del periodo y las metricas de seguimiento. Vienen de otros dos
+  // endpoints, asi que los paneles los pasan hacia arriba (`onDatos`) en vez de
+  // pedirlos por segunda vez.
+  if (panel?.kpis) {
+    const k = panel.kpis;
+    const v = (x) => Number(k?.[x]?.value ?? 0);
+    sections.push(sep(['Resumen del periodo']));
+    sections.push(sep(['Métrica', 'Valor', 'Periodo anterior', 'Variación (%)']));
+    for (const [campo, etiqueta] of [
+      ['prospectos', 'Prospectos'], ['ventas', 'Ventas'], ['vendido', 'Vendido (€)'],
+      ['ingresos', 'Ingresos — dinero que entró (€)'],
+      ['ingresos_venta', '· de ventas (€)'], ['ingresos_cuotas', '· de cuotas (€)'],
+      ['mensualidades', 'Cobros de cuotas'], ['tasa', 'Tasa conversión (%)'],
+    ]) {
+      if (!k[campo]) continue;
+      sections.push(sep([etiqueta, v(campo), Number(k[campo].prev ?? 0), k[campo].trend ?? '—']));
+    }
+    sections.push('');
+    if ((panel.serie || []).length) {
+      sections.push(sep(['Resumen del periodo · serie']));
+      sections.push(sep(['Periodo', 'Prospectos', 'Ventas', 'Vendido (€)', 'Ingresos (€)', 'Tasa (%)']));
+      panel.serie.forEach(r => sections.push(sep([
+        r.periodo, r.prospectos, r.ventas, Number(r.vendido).toFixed(2),
+        Number(r.ingresos).toFixed(2), r.tasa,
+      ])));
+      sections.push('');
+    }
+  }
+
+  if (seguimiento?.cohorte) {
+    const co = seguimiento.cohorte;
+    const ac = seguimiento.actividad || {};
+    sections.push(sep(['Seguimiento y tiempos · de los que ENTRARON en el periodo']));
+    sections.push(sep(['Métrica', 'Valor']));
+    sections.push(sep(['Entraron', co.entraron]));
+    sections.push(sep(['Con seguimiento', `${co.con_seguimiento} (${co.pct_con_seguimiento}%)`]));
+    sections.push(sep(['Contactados (sin notas internas)', `${co.contactados} (${co.pct_contactados}%)`]));
+    sections.push(sep(['Compraron', `${co.compraron} (${co.pct_compraron}%)`]));
+    sections.push(sep(['Mediana hasta el 1er contacto (segundos)', co.mediana_primer_contacto_seg ?? '—']));
+    sections.push(sep(['Mediana hasta la venta (días)', co.mediana_dias_venta ?? '—']));
+    sections.push('');
+    if ((co.embudo || []).length) {
+      sections.push(sep(['Hasta qué seguimiento llega cada uno']));
+      sections.push(sep(['Seguimiento', 'Llegaron', '% de los que entraron', 'Compraron', 'Tasa (%)', 'Desde el anterior (segundos)']));
+      co.embudo.forEach(f => sections.push(sep([
+        f.nivel, f.personas, f.pct, f.compraron, f.tasa, f.mediana_desde_anterior_seg ?? '—',
+      ])));
+      sections.push('');
+    }
+    sections.push(sep(['Trabajo hecho en el periodo']));
+    sections.push(sep(['Contactos', 'Personas', 'Por persona', 'WhatsApp', 'Llamadas', 'Correos', 'Notas']));
+    const t = ac.por_tipo || {};
+    sections.push(sep([ac.toques, ac.personas, ac.toques_por_persona, t.whatsapp, t.llamada, t.email, t.nota]));
+    sections.push('');
+  }
+
   if ((data.ingresos_mensual || []).length) {
     sections.push(sep(['Ingresos mensuales']));
     sections.push(sep(['Mes', 'Ingresos (€)']));
@@ -116,7 +172,27 @@ const PIPELINE_COLORS = {
 
 
 export default function ReportsPage() {
-  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext();
+  const { activeProject, activeIssuerId, activeIssuer, projects } = useProjectContext();
+
+  // ARRANCA EN LA SOCIEDAD, no en el campus (#125 · 5).
+  //
+  // Es local a esta pantalla a proposito: `switchIssuer` cambia el ambito de
+  // TODO el CRM, y entrar en Reportes no puede dejarte en «todos los
+  // proyectos» al salir. Aqui solo cambia lo que este informe pide.
+  const [soloCampus, setSoloCampus] = useState(false);
+  const socDelProyecto = activeProject?.sociedad_emisora_id
+    ? Number(activeProject.sociedad_emisora_id) : null;
+  // La sociedad elegida a mano manda sobre el arranque automatico.
+  const issuerEfectivo = activeIssuerId ?? (soloCampus ? null : socDelProyecto);
+  // Con una sociedad por medio, el proyecto no acota: acota la sociedad.
+  const proyectoEfectivo = issuerEfectivo && !activeIssuerId ? { id: -1 } : activeProject;
+  // Cuantos campus tiene, para poder decirlo sin recontar.
+  const campusDeLaSociedad = issuerEfectivo
+    ? (projects || []).filter((x) => Number(x.sociedad_emisora_id) === issuerEfectivo)
+    : [];
+  const nombreDeLaSociedad = activeIssuer?.nombre
+    || campusDeLaSociedad[0]?.sociedad_nombre
+    || 'la sociedad';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   // Arranca en el MES en curso. Antes era el ano entero, que es lo que casi
@@ -125,13 +201,19 @@ export default function ReportsPage() {
   const [range, setRange] = useState(() => rangoPorDefecto());
   const atajoActivo = atajoDe(range);
   const [tab, setTab] = useState('crm');
+  // Lo que traen los dos paneles que piden sus datos aparte. Se guarda aqui
+  // solo para que la descarga se lo pueda llevar: sin esto, el CSV enseñaba
+  // los KPI y el desglose pero no el Resumen ni las metricas de seguimiento,
+  // que es media pantalla.
+  const [panelResumen, setPanelResumen] = useState(null);
+  const [panelSeguimiento, setPanelSeguimiento] = useState(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
         const p = new URLSearchParams({ from: range.from, to: range.to });
-        ponerAmbito(p, { activeIssuerId, activeProject });
+        ponerAmbito(p, { activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo });
         const qs = p.toString();
         const res = await client.get(`/informes/overview?${qs}`);
         if (res.success) setData(res.data);
@@ -140,7 +222,7 @@ export default function ReportsPage() {
       } finally { setLoading(false); }
     }
     load();
-  }, [activeProject?.id, activeIssuerId, range.from, range.to]);
+  }, [activeProject?.id, issuerEfectivo, range.from, range.to]);
 
   // Una sociedad sin campus asignados da un informe vacio A PROPOSITO. Sin
   // decirlo, una tabla en blanco se lee como una averia y alguien acaba
@@ -161,8 +243,8 @@ export default function ReportsPage() {
   // Como se llama lo que se esta mirando. Con una sociedad elegida el informe
   // decia «Todos los proyectos» mientras enseñaba las cifras de CEDIA, que es
   // la peor combinacion posible: cifras de una cosa con el nombre de otra.
-  const nombreAmbito = activeIssuer
-    ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+  const nombreAmbito = issuerEfectivo
+    ? `${nombreDeLaSociedad} · ${campusDeLaSociedad.length} campus`
     : (activeProject?.nombre || 'Todos los proyectos');
 
   if (loading && !data) {
@@ -200,6 +282,25 @@ export default function ReportsPage() {
                   pasada, de lunes a domingo — no los siete dias anteriores,
                   que pedidos un martes mezclan media semana con media de la
                   otra y no cuadran con lo que dice nadie. */}
+              {/* Se puede bajar al campus, pero hay que pedirlo: el que
+                  manda es el conjunto. Solo sale cuando hay mas de uno. */}
+              {socDelProyecto && !activeIssuerId && campusDeLaSociedad.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSoloCampus((v) => !v)}
+                  className={
+                    'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                    (soloCampus
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                  }
+                  title={soloCampus
+                    ? `Ver ${nombreDeLaSociedad} entera`
+                    : `Ver solo ${activeProject?.nombre}`}
+                >
+                  {soloCampus ? `Solo ${activeProject?.nombre}` : 'Solo este campus'}
+                </button>
+              )}
               <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rapidos">
                 {ATAJOS.map((a) => (
                   <button
@@ -237,7 +338,7 @@ export default function ReportsPage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => exportReportCSV(data, nombreAmbito, range)}
+                    onClick={() => exportReportCSV(data, nombreAmbito, range, panelResumen, panelSeguimiento)}
                     aria-label="Exportar reporte a CSV"
                     title="Exportar CSV"
                     className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -248,7 +349,7 @@ export default function ReportsPage() {
                     type="button"
                     onClick={async () => {
                       try {
-                        await exportReportPDF(data, nombreAmbito, range);
+                        await exportReportPDF({ ...data, _panel: panelResumen, _seguimiento: panelSeguimiento }, nombreAmbito, range);
                       } catch (err) {
                         toast({ title: 'Error generando PDF', description: err?.message || 'Inesperado', variant: 'destructive' });
                       }
@@ -386,18 +487,18 @@ export default function ReportsPage() {
         </div>
       )}
 
-      <PanelSeguimiento projectId={activeProject?.id} issuerId={activeIssuerId}
-        from={range.from} to={range.to} />
+      <PanelSeguimiento projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo}
+        from={range.from} to={range.to} onDatos={setPanelSeguimiento} />
 
       {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
           periodo anterior y la grafica con selector de serie. */}
       <PanelResumen
         projectId={activeProject?.id}
-        issuerId={activeIssuerId}
+        issuerId={issuerEfectivo}
         projectName={nombreAmbito}
         from={range.from}
         to={range.to}
-      />
+      onDatos={setPanelResumen} />
 
       {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
       {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
@@ -406,7 +507,7 @@ export default function ReportsPage() {
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
 
-      <ReportsDownloadSection projectId={activeProject?.id} issuerId={activeIssuerId} projectName={nombreAmbito} from={range.from} to={range.to} />
+      <ReportsDownloadSection projectId={proyectoEfectivo?.id} issuerId={issuerEfectivo} projectName={nombreAmbito} from={range.from} to={range.to} />
 
       {/* El catálogo de reportes por tema, igual que en el CRM hermano. */}
       <ReportesDisponibles />
