@@ -297,6 +297,17 @@ export default function ReportsPage() {
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
+      {/* Que cuenta esta fila, escrito.
+          La misma pantalla daba tres cifras de «ingresos» sin decir que cada
+          una cuenta una cosa: aqui las ventas cerradas en el periodo, en
+          «Resumen del periodo» el dinero que entro, y en «Asesoras» lo que
+          diga su propio interruptor. Las tres pueden ser correctas a la vez;
+          lo que no puede es no saberse cual es cual. */}
+      <p className="text-xs text-muted-foreground -mt-1">
+        Cuenta las <strong className="text-foreground">ventas cerradas en el periodo</strong>, por su fecha de
+        venta. «Ventas cobradas» es lo que se ha cobrado <em>de esas</em> ventas — no el dinero que entró en el
+        periodo, que es lo que mide «Resumen del periodo» más abajo.
+      </p>
 
       {/* Cuanto pone cada campus (#120).
           Con una sociedad elegida, «82.395 EUR» no dice de donde salen. Solo
