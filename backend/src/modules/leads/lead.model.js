@@ -675,7 +675,7 @@ const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_co
  * «Sin revisar este mes» (#132, el repaso de fin de mes).
  *
  * Va aparte de `FILTROS_RAPIDOS` porque es el unico que depende de una tabla
- * que puede no estar —`lead_revisiones`, migracion 147—. Metido con los demas,
+ * que puede no estar —`lead_revisiones`, migracion 149—. Metido con los demas,
  * la falta de esa tabla tumbaria el listado ENTERO con un 42P01, y el listado
  * es la pantalla principal del CRM.
  *
@@ -693,7 +693,7 @@ let hayTablaDeRevisiones = null;
 /** Para las pruebas: vuelve a mirar si la tabla existe. */
 export function _olvidarRevisiones() { hayTablaDeRevisiones = null; }
 
-/** `true` si la migracion 147 esta aplicada. Se mira una vez. */
+/** `true` si la migracion 149 esta aplicada. Se mira una vez. */
 export async function sePuedeRevisar() {
   if (hayTablaDeRevisiones !== null) return hayTablaDeRevisiones;
   try {

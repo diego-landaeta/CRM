@@ -19,7 +19,7 @@ import * as leadModel from '../src/modules/leads/lead.model.js';
  * Así que lo que importa aquí no es que el correo salga, sino que **se pueda
  * marcar** y que **el número baje**.
  *
- * LA 147 PUEDE ESTAR O NO, Y LAS DOS COSAS SON EL CONTRATO
+ * LA 149 PUEDE ESTAR O NO, Y LAS DOS COSAS SON EL CONTRATO
  *
  * En la base local no está —es como estará en el servidor hasta que Diego la
  * aplique—. En CI sí, porque allí la base se construye corriendo todas las
@@ -59,7 +59,7 @@ afterAll(async () => {
  * ─────────────────────────────────────────────────────────────────────────────
  * POR QUE ESTO MIRA EL ESTADO EN VEZ DE DARLO POR HECHO
  *
- * La primera version de estas pruebas afirmaba «la 147 no esta aplicada». En mi
+ * La primera version de estas pruebas afirmaba «la 149 no esta aplicada». En mi
  * maquina era verdad; en CI es falso, porque alli la base se construye
  * corriendo TODAS las migraciones. Verde en local, rojo en CI — y no por el
  * codigo, por la prueba: estaba comprobando mi entorno, no un comportamiento.
@@ -72,7 +72,7 @@ afterAll(async () => {
  * conteste 200. Es la pantalla principal del CRM y no puede caerse por esto.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-describe('el repaso, con y sin la migracion 147', () => {
+describe('el repaso, con y sin la migracion 149', () => {
   it('el listado NUNCA se cae al pedir «sin revisar»', async () => {
     // Lo que mas importa del fichero, y vale en los dos estados. Si el filtro
     // entrara en el WHERE sin comprobar que la tabla existe, Postgres contesta
@@ -99,7 +99,7 @@ describe('el repaso, con y sin la migracion 147', () => {
     } else {
       // Sin tabla: lo dice y nombra la migracion. Ceros con `disponible: true`
       // seria decirle a la gestora que ya lo tiene todo repasado.
-      expect(res.body.data.aviso).toMatch(/147/);
+      expect(res.body.data.aviso).toMatch(/149/);
     }
   });
 

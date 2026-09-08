@@ -302,7 +302,7 @@ async function vuelta() {
     // El repaso mensual. `DIA_VALIDACION` por defecto el 25: con margen para
     // que dé tiempo antes de fin de mes, que es cuando toca el quinto paso.
     if (hora === HORA_PLAN && new Date().getDate() === DIA_VALIDACION) {
-      // Si la migracion 147 no esta, NO se manda. Un correo que dice «valida tu
+      // Si la migracion 149 no esta, NO se manda. Un correo que dice «valida tu
       // base» y lleva a una pantalla donde no se puede marcar es peor que no
       // mandarlo: se abre, no se puede hacer nada, y el mes siguiente ya no se
       // abre.
@@ -316,7 +316,7 @@ async function vuelta() {
         );
         logger.info({ ...r, aviso: 'validacion_mensual' }, 'Validacion mensual');
       } else {
-        logger.warn('Falta la migracion 147 (lead_revisiones): no se manda la validacion mensual');
+        logger.warn('Falta la migracion 149 (lead_revisiones): no se manda la validacion mensual');
       }
     }
 
