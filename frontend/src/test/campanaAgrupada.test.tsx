@@ -24,7 +24,7 @@ vi.mock('react-router-dom', async () => {
   return { ...real, useNavigate: () => (r: string) => { navegado.push(r); } };
 });
 
-const patch = vi.fn(async () => ({ success: true, data: {} }));
+const patch = vi.fn(async (..._a: any[]) => ({ success: true, data: {} }));
 let filas: any[] = [];
 vi.mock('@/shared/api/client', () => ({
   default: {
