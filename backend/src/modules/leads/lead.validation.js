@@ -64,7 +64,7 @@ export const listLeadsSchema = z.object({
   // Filtro rapido, el mismo que las pestañas del listado (#132). Se valida
   // como enum porque su valor elige un fragmento de SQL: cerrado por
   // construccion, no por confianza.
-  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent']).optional(),
+  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent', 'sin-revisar']).optional(),
   // Orden: recent = cronológico puro (DEFAULT). dir invierte asc/desc.
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
   dir: z.enum(['asc', 'desc']).optional(),
@@ -171,4 +171,19 @@ export const quickCountsSchema = z.object({
     .transform((v) => v ? v.split(',').map(Number) : undefined),
   responsableId: z.coerce.number().int().positive().optional(),
   includeConverted: z.coerce.boolean().optional(),
+});
+
+/**
+ * El repaso de fin de mes: que dijo la gestora al mirar la ficha (#132).
+ *
+ * Los tres valores son los que pidio Diego: «quien sigue vivo, quien ya no,
+ * quien cambio de idea». Cerrado por enum y no por texto libre, porque de esto
+ * se cuenta despues: con texto libre acabarian conviviendo «no sigue», «No
+ * Sigue» y «ya no» y no se podria sumar nada.
+ */
+export const revisarLeadSchema = z.object({
+  resultado: z.enum(['sigue', 'no_sigue', 'cambio'], {
+    message: 'resultado debe ser sigue, no_sigue o cambio',
+  }),
+  nota: z.string().max(1000).optional().nullable(),
 });

@@ -671,6 +671,42 @@ const ULTIMO_CONTACTO = `(SELECT MAX(i.fecha) FROM lead_interactions i WHERE i.l
 // «Sin tocar» = ni una interaccion Y todavia en la entrada del embudo.
 const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_contactar'))`;
 
+/**
+ * «Sin revisar este mes» (#132, el repaso de fin de mes).
+ *
+ * Va aparte de `FILTROS_RAPIDOS` porque es el unico que depende de una tabla
+ * que puede no estar —`lead_revisiones`, migracion 147—. Metido con los demas,
+ * la falta de esa tabla tumbaria el listado ENTERO con un 42P01, y el listado
+ * es la pantalla principal del CRM.
+ *
+ * El mes se corta con `date_trunc`: el repaso es «de este mes», no «de los
+ * ultimos 30 dias». Si fuera lo segundo, una ficha revisada el 31 de agosto
+ * seguiria contando como hecha el 15 de septiembre y nunca se repasaria.
+ */
+export const FILTRO_SIN_REVISAR = `NOT EXISTS (
+  SELECT 1 FROM lead_revisiones rv
+   WHERE rv.lead_id = l.id
+     AND rv.revisado_at >= date_trunc('month', CURRENT_DATE))`;
+
+let hayTablaDeRevisiones = null;
+
+/** Para las pruebas: vuelve a mirar si la tabla existe. */
+export function _olvidarRevisiones() { hayTablaDeRevisiones = null; }
+
+/** `true` si la migracion 147 esta aplicada. Se mira una vez. */
+export async function sePuedeRevisar() {
+  if (hayTablaDeRevisiones !== null) return hayTablaDeRevisiones;
+  try {
+    const { rows } = await query(
+      `SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'lead_revisiones'`);
+    hayTablaDeRevisiones = rows.length > 0;
+  } catch {
+    hayTablaDeRevisiones = false;
+  }
+  return hayTablaDeRevisiones;
+}
+
 export const FILTROS_RAPIDOS = {
   // Ojo: `NULL < CURRENT_DATE` es NULL, o sea que no pasa el filtro. Es lo que
   // se quiere —«sin recordatorio» no es «atrasado»— y coincide con el `next &&`
@@ -692,6 +728,10 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   // El filtro rapido. Va sin parametros: son fragmentos fijos de este fichero,
   // elegidos por clave de un objeto cerrado — no llega nada del usuario al SQL.
   if (qf && FILTROS_RAPIDOS[qf]) conditions.push(FILTROS_RAPIDOS[qf]);
+  // El de revisiones solo si su tabla existe. Quien pregunta por el sin
+  // migracion recibe un aviso del controller, no una lista silenciosamente
+  // equivocada.
+  if (qf === 'sin-revisar' && await sePuedeRevisar()) conditions.push(FILTRO_SIN_REVISAR);
 
   // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
   if (Array.isArray(projectIds) && projectIds.length > 0) {
@@ -948,6 +988,49 @@ export async function contarFiltrosRapidos({ projectId, projectIds, responsableI
       WHERE ${cond.join(' AND ')}`,
     params
   );
+  return rows[0];
+}
+
+/**
+ * Como va el repaso de fin de mes (#132).
+ *
+ * «Que se note cuanto le queda» — sin eso, la gestora abre la lista, marca
+ * tres, cierra, y no sabe si va por el 5 % o por el 90 %. Un repaso sin
+ * progreso visible no se termina.
+ */
+export async function comoVaLaRevision({ projectId, responsableId }) {
+  if (!(await sePuedeRevisar())) {
+    return { disponible: false, total: 0, revisadas: 0, pendientes: 0 };
+  }
+  const cond = ['l.deleted_at IS NULL', `l.status <> 'convertido'`];
+  const params = [];
+  let i = 1;
+  if (projectId) { cond.push(`l.project_id = $${i++}`); params.push(projectId); }
+  if (responsableId) { cond.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE NOT (${FILTRO_SIN_REVISAR}))::int AS revisadas,
+            COUNT(*) FILTER (WHERE ${FILTRO_SIN_REVISAR})::int      AS pendientes
+       FROM leads l
+      WHERE ${cond.join(' AND ')}`, params);
+  return { disponible: true, ...rows[0] };
+}
+
+/**
+ * Apunta que alguien miro esta ficha y que dijo.
+ *
+ * No cambia el `status`: son dos cosas. «La revise y sigue viva» no es lo
+ * mismo que «esta en seguimiento», y machacar el estado desde aqui borraria el
+ * trabajo de la gestora con un clic pensado para otra cosa. Si al revisarla
+ * decide cambiarlo, lo cambia por su sitio de siempre.
+ */
+export async function apuntarRevision({ leadId, userId, resultado, nota = null }) {
+  const { rows } = await query(
+    `INSERT INTO lead_revisiones (lead_id, revisado_por, resultado, nota)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, lead_id, resultado, revisado_at`,
+    [leadId, userId, resultado, nota]);
   return rows[0];
 }
 

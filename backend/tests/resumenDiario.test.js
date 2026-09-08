@@ -59,14 +59,14 @@ describe('una vez al dia, y cada dia', () => {
   it('la clave lleva la fecha, al reves que el aviso de prospecto sin tocar', async () => {
     // Alli la clave es el id del lead —el aviso es ESE prospecto y repetirlo
     // seria acosar—. Aqui es «lo de hoy», y tiene que llegar cada dia.
-    await _internos.mandar('resumen_del_dia', ['gestor'], 'Resumen', async () => ({}));
+    await _internos.mandar('resumen_del_dia', ['gestor'], 'Resumen', async () => ({}), () => 'cuerpo');
     expect(enviados).toHaveLength(1);
     expect(enviados[0].clave).toMatch(/^resumen_del_dia-1-\d{4}-\d{2}-\d{2}$/);
   });
 
   it('cada persona lleva su propia clave', async () => {
     // Sin el id dentro, el primero en recibirlo dejaria sin aviso a los demas.
-    await _internos.mandar('resumen_del_dia', ['gestor'], 'Resumen', async () => ({}));
+    await _internos.mandar('resumen_del_dia', ['gestor'], 'Resumen', async () => ({}), () => 'cuerpo');
     expect(enviados[0].clave).toContain('-1-');
   });
 

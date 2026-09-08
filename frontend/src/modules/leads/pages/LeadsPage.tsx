@@ -324,6 +324,9 @@ export default function LeadsPage() {
   // lo resuelve con un OR, que es lo que significa «urgente».
   const [quickCounts, setQuickCounts] = useState({
     overdue: 0, today: 0, tomorrow: 0, week: 0, noReminder: 0, noContact: 0, urgent: 0,
+    // `null` mientras no exista la migracion 147: la pestaña «Por validar» no
+    // se pinta, en vez de enseñar un 0 que parece «ya lo tienes todo hecho».
+    sinRevisar: null as number | null,
   });
   useEffect(() => {
     const pidParam = activeProject?.id && activeProject.id > 0 ? `?projectId=${activeProject.id}` : '';
@@ -331,13 +334,27 @@ export default function LeadsPage() {
       .then((res) => {
         if (!res.success) return;
         const d = res.data || {};
-        setQuickCounts({
+        setQuickCounts((prev) => ({
+          ...prev,
           overdue: d.overdue || 0, today: d.today || 0, tomorrow: d.tomorrow || 0,
           week: d.week || 0, noReminder: d.no_reminder || 0, noContact: d.no_contact || 0,
           urgent: d.urgent || 0,
-        });
+          sinRevisar: prev.sinRevisar,
+        }));
       })
       .catch(() => { /* las pestañas se quedan a cero, la lista sigue */ });
+
+    // El repaso de fin de mes va aparte: depende de una tabla que puede no
+    // estar, y no puede tumbar los otros siete contadores si falta.
+    client.get(`/leads/revision${pidParam}`)
+      .then((res) => {
+        const d = res?.data;
+        setQuickCounts((prev) => ({
+          ...prev,
+          sinRevisar: d?.disponible ? (d.pendientes || 0) : null,
+        }));
+      })
+      .catch(() => { /* sin repaso: la pestaña no aparece */ });
     // `leads` en las dependencias a proposito: al cambiar de estado un prospecto
     // los numeros tienen que moverse, y esa es la señal de que algo cambio.
   }, [activeProject?.id, leads]);
