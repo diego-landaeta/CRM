@@ -180,6 +180,7 @@ const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/Ch
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
+const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -235,6 +236,9 @@ function App() {
             <Route path="pipeline" element={<LeadsPipelinePage />} />
             <Route path="audiencias" element={<AudienceExportPage />} />
           </Route>
+          {/* Antes que `:id`: React Router prioriza el tramo fijo, pero
+              tenerlos juntos evita que alguien meta otra ruta en medio. */}
+          <Route path="/prospectos/cola" element={<ColaDelDiaPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 
           {/* Clientes — tabs */}

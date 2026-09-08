@@ -15,6 +15,7 @@ const ALL_PROJECTS_OK = [
   /^\/$/,                          // Dashboard
   // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
   /^\/prospectos$/,                // Lista de prospectos
+  /^\/prospectos\/cola$/,          // La cola del dia — el servidor acota por gestora
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  CalendarCheck,
   SquaresFour,
   Users,
   Package,
@@ -86,7 +87,24 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista y la cola del
+      // dia son el mismo sitio. La cola describe por donde va cada prospecto,
+      // asi que colgarla de aqui dice de que va sin tener que explicarlo.
+      //
+      // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
+      // cerrado, la gestora pagaria un clic de mas cada manana.
+      {
+        label: 'Prospectos',
+        icon: Users,
+        module: 'leads',
+        defaultOpen: true,
+        children: [
+          // `end` porque si no, estando en la cola este tambien se marcaria
+          // activo y el menu diria que estas en dos sitios.
+          { label: 'Lista', to: '/prospectos', icon: Users, end: true },
+          { label: 'La cola del día', to: '/prospectos/cola', icon: CalendarCheck },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -291,7 +309,7 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
     .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
@@ -299,7 +317,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
   // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
   // quedaria escondido. Cerrarlo a mano se respeta.
@@ -355,7 +373,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting'}
+                end={child.end ?? child.to === '/accounting'}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
