@@ -170,8 +170,13 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     leads_por_gestor: byGestor,
     conversions: convKpi[0],
     top_productos: topProductos,
-    ingresos_mensual: trend,
-    por_proyecto: porProyecto,
+    // Numeros, no cadenas: ver la nota de arriba sobre el eje de la grafica.
+    ingresos_mensual: trend.map((r) => ({ mes: r.mes, ingresos: Number(r.ingresos) })),
+    por_proyecto: porProyecto.map((r) => ({
+      ...r,
+      facturado: Number(r.facturado),
+      cobrado: Number(r.cobrado),
+    })),
     tasa_conversion,
   };
 }

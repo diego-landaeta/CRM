@@ -318,7 +318,8 @@ export default function ReportsPage() {
           <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
             <Buildings size={16} /> Cuánto pone cada proyecto
           </h3>
-          <div className="overflow-x-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <div className="lg:col-span-2 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -355,6 +356,31 @@ export default function ReportsPage() {
                 </tr>
               </tfoot>
             </table>
+          </div>
+          {/* La tarta solo con los que han cobrado algo: un trozo de 0 EUR no
+              se ve y solo ensucia la leyenda. Si no ha cobrado nadie, no hay
+              tarta que pintar. */}
+          {data.por_proyecto.some((f) => Number(f.cobrado) > 0) && (
+            <div>
+              <ResponsiveContainer width="100%" height={230} minHeight={200}>
+                <PieChart>
+                  <Pie
+                    data={data.por_proyecto.filter((f) => Number(f.cobrado) > 0)}
+                    dataKey="cobrado"
+                    nameKey="nombre"
+                    cx="50%" cy="45%" innerRadius={45} outerRadius={78} paddingAngle={2}
+                  >
+                    {data.por_proyecto.filter((f) => Number(f.cobrado) > 0).map((f, i) => (
+                      <Cell key={f.project_id} fill={CANAL_COLORS[i % CANAL_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                  <Legend verticalAlign="bottom" height={36} iconSize={9}
+                    wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           </div>
         </div>
       )}
