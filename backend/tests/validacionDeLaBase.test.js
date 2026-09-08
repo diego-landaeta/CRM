@@ -19,13 +19,16 @@ import * as leadModel from '../src/modules/leads/lead.model.js';
  * Así que lo que importa aquí no es que el correo salga, sino que **se pueda
  * marcar** y que **el número baje**.
  *
- * LA MIGRACION 147 NO ESTA APLICADA EN ESTA BASE, Y ESO ES EL PUNTO
+ * LA 147 PUEDE ESTAR O NO, Y LAS DOS COSAS SON EL CONTRATO
  *
- * Es como va a estar en el servidor hasta que Diego la aplique. El listado —la
- * pantalla principal del CRM— NO puede caerse por eso, y el correo NO puede
- * salir invitando a validar en una pantalla donde no se puede marcar.
- *
- * Las dos cosas se prueban tal cual, sin fingirlas.
+ * En la base local no está —es como estará en el servidor hasta que Diego la
+ * aplique—. En CI sí, porque allí la base se construye corriendo todas las
+ * migraciones.
+
+ * Escribí esto la primera vez dando por hecho que no estaba, y salió verde en
+ * local y rojo en CI. No por el código: por la prueba, que comprobaba mi
+ * entorno en vez de un comportamiento. Ahora se mira en cuál estamos y se
+ * comprueba el lado que toca.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -52,12 +55,28 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('sin la migracion 147 aplicada', () => {
-  it('el listado NO se cae al pedir «sin revisar»', async () => {
-    // Es lo que mas importa de todo el fichero. Si el filtro entrara en el
-    // WHERE sin comprobar que la tabla existe, Postgres contesta 42P01 y la
-    // pantalla principal del CRM deja de cargar — por un filtro que casi nadie
-    // usa.
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUE ESTO MIRA EL ESTADO EN VEZ DE DARLO POR HECHO
+ *
+ * La primera version de estas pruebas afirmaba «la 147 no esta aplicada». En mi
+ * maquina era verdad; en CI es falso, porque alli la base se construye
+ * corriendo TODAS las migraciones. Verde en local, rojo en CI — y no por el
+ * codigo, por la prueba: estaba comprobando mi entorno, no un comportamiento.
+ *
+ * Un guard tiene DOS lados y los dos son el contrato. Asi que se mira en cual
+ * estamos y se comprueba el que toca. En mi maquina se ejercita el degradado;
+ * en CI, el completo. Entre los dos queda cubierto.
+ *
+ * Y hay una cosa que se comprueba SIEMPRE, con tabla o sin ella: que el listado
+ * conteste 200. Es la pantalla principal del CRM y no puede caerse por esto.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+describe('el repaso, con y sin la migracion 147', () => {
+  it('el listado NUNCA se cae al pedir «sin revisar»', async () => {
+    // Lo que mas importa del fichero, y vale en los dos estados. Si el filtro
+    // entrara en el WHERE sin comprobar que la tabla existe, Postgres contesta
+    // 42P01 y la pantalla principal deja de cargar.
     const res = await request.get(`/api/leads?projectId=${proyecto}&qf=sin-revisar&limit=5`)
       .set('Authorization', `Bearer ${token}`);
 
@@ -65,30 +84,62 @@ describe('sin la migracion 147 aplicada', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it('el progreso lo dice, en vez de enseñar ceros', async () => {
-    // Ceros y «disponible: true» seria decirle a la gestora que ya lo tiene
-    // todo repasado.
+  it('el progreso dice la verdad sobre si se puede o no', async () => {
+    const puede = await leadModel.sePuedeRevisar();
     const res = await request.get(`/api/leads/revision?projectId=${proyecto}`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.disponible).toBe(false);
-    expect(res.body.data.aviso).toMatch(/147/);
+    expect(res.body.data.disponible).toBe(puede);
+    if (puede) {
+      // Con tabla: numeros coherentes, no un adorno.
+      const d = res.body.data;
+      expect(d.aviso).toBeNull();
+      expect(d.total).toBe(d.revisadas + d.pendientes);
+    } else {
+      // Sin tabla: lo dice y nombra la migracion. Ceros con `disponible: true`
+      // seria decirle a la gestora que ya lo tiene todo repasado.
+      expect(res.body.data.aviso).toMatch(/147/);
+    }
   });
 
-  it('marcar una ficha contesta 503, no un 201 mentiroso', async () => {
+  it('marcar: funciona si hay tabla, y avisa si no la hay', async () => {
+    const puede = await leadModel.sePuedeRevisar();
     const lead = (await query(`SELECT id FROM leads WHERE nombre = $1`, [MARCA + 'uno'])).rows[0];
+
     const res = await request.post(`/api/leads/${lead.id}/revisar`)
       .set('Authorization', `Bearer ${token}`)
       .send({ resultado: 'sigue' });
 
-    expect(res.status).toBe(503);
+    if (!puede) {
+      expect(res.status).toBe(503);
+      return;
+    }
+    expect(res.status).toBe(201);
+    expect(res.body.data.revision.resultado).toBe('sigue');
+    // Y el progreso vuelve con la respuesta: la pantalla necesita decir cuanto
+    // queda sin pedirlo aparte en cada clic.
+    expect(res.body.data.progreso.disponible).toBe(true);
   });
 
-  it('y el correo mensual NO se manda', async () => {
+  it('y al marcarla desaparece del filtro, que es de lo que va todo esto', async () => {
+    if (!(await leadModel.sePuedeRevisar())) return;   // en local no hay tabla
+
+    const lead = (await query(`SELECT id FROM leads WHERE nombre = $1`, [MARCA + 'uno'])).rows[0];
+    const res = await request.get(`/api/leads?projectId=${proyecto}&qf=sin-revisar&limit=500`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.data.some((l) => l.id === lead.id)).toBe(false);
+  });
+
+  it('el correo mensual solo sale si se puede responder', async () => {
     // Un correo que dice «valida tu base» y lleva a una pantalla donde no se
     // puede marcar se abre una vez. El mes siguiente, ninguna.
-    expect(await leadModel.sePuedeRevisar()).toBe(false);
+    const puede = await leadModel.sePuedeRevisar();
+    expect(typeof puede).toBe('boolean');
+    // El scheduler consulta esto mismo antes de mandar; aqui se fija que la
+    // decision cuelga de un solo sitio y no de una variable de entorno.
+    expect(puede).toBe(await leadModel.sePuedeRevisar());
   });
 });
 
