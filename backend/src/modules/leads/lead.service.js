@@ -8,6 +8,7 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
+import { planificarPasosDeLead } from '../proceso/proceso.model.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
 async function triggerSequences(triggerEvent, leadId, projectId) {
@@ -284,6 +285,21 @@ async function _createLeadCore(project, leadData) {
       spam_previous_lead_id: spamHistory.id,
       canal: canalDetectado,
     };
+  }
+
+  // La agenda de esta persona: sus pasos del proceso comercial, con la fecha
+  // contada desde que entro (#89 · #90).
+  //
+  // Se AWAITA a proposito, no como el correo: son cuatro filas de una sola
+  // consulta, y si se dispara y se olvida, un fallo deja al prospecto sin
+  // agenda y nadie se entera hasta que no aparece en la cola de nadie.
+  //
+  // Y va envuelto: que la planificacion falle NO puede tumbar el alta de un
+  // lead. Sin agenda se puede trabajar —se replanifica—, sin lead no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo planificar la agenda del prospecto');
   }
 
   // Disparar email sequences con trigger lead_created (async)
