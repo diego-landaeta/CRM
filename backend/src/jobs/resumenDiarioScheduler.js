@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { vigilar } from './latido.js';
+import { contarFiltrosRapidos } from '../modules/leads/lead.model.js';
 
 /**
  * Los dos avisos de final y principio de jornada, de la tarea #28.
@@ -69,24 +70,45 @@ async function loDeHoy(userId) {
   return rows[0];
 }
 
-/** Lo que le espera mañana: lo pendiente de hoy mas sus recordatorios. */
+/**
+ * Lo que le espera mañana, contado como lo cuenta la pantalla (#132).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUE NO SE CUENTA AQUI
+ *
+ * Habia una consulta propia en este fichero, y contaba otra cosa:
+ *
+ *     fecha_recordatorio <= CURRENT_DATE + 1
+ *
+ * o sea atrasados, los de hoy y los de mañana JUNTOS, en un numero llamado
+ * «recordatorios que vencen». No existe ninguna pantalla que enseñe eso, asi
+ * que a esa linea no se le podia poner enlace ni aunque se quisiera.
+ *
+ * Era la cuarta definicion de los mismos criterios —la lista, los contadores de
+ * las pestañas, el export y esto—. Ahora sale de `contarFiltrosRapidos`, que es
+ * la misma que usa el listado. El ticket lo pide asi: «el numero del correo y el
+ * numero de la lista tienen que ser el mismo».
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 async function loDeManana(userId) {
-  const { rows } = await query(
-    `SELECT
-       (SELECT count(*)::int FROM leads l
-         WHERE l.responsable_id = $1 AND l.deleted_at IS NULL
-           AND l.status IN ('nuevo','por_contactar')
-           AND NOT EXISTS (SELECT 1 FROM lead_interactions i WHERE i.lead_id = l.id)) AS sin_tocar,
-       (SELECT count(*)::int FROM leads
-         WHERE responsable_id = $1 AND deleted_at IS NULL
-           AND status = 'en_seguimiento') AS en_seguimiento,
-       (SELECT count(*)::int FROM lead_reminders r
-          JOIN leads l ON l.id = r.lead_id
-         WHERE l.responsable_id = $1 AND r.completado = false
-           AND r.fecha_recordatorio <= CURRENT_DATE + 1) AS recordatorios`,
-    [userId]
-  );
-  return rows[0];
+  // Por proyecto, no en bloque.
+  //
+  // El listado del CRM SIEMPRE trabaja sobre un proyecto: si el correo sumara
+  // los de todos, diria «7» y la pantalla que abre enseñaria los de uno solo.
+  // Es exactamente el desajuste que el ticket prohibe, y no se ve hasta que
+  // alguien lleva dos marcas.
+  const { rows: suyos } = await query(
+    `SELECT p.id, p.nombre
+       FROM user_projects up JOIN projects p ON p.id = up.project_id
+      WHERE up.user_id = $1 AND up.active AND p.active
+      ORDER BY p.nombre`, [userId]);
+
+  const bloques = [];
+  for (const proyecto of suyos) {
+    const c = await contarFiltrosRapidos({ projectId: proyecto.id, responsableId: userId });
+    if (c.tomorrow || c.no_contact || c.overdue) bloques.push({ proyecto, ...c });
+  }
+  return { bloques, variosProyectos: suyos.length > 1 };
 }
 
 const fila = (etiqueta, valor) =>
@@ -113,18 +135,54 @@ function textoResumen(nombre, d) {
   `;
 }
 
+/**
+ * El plan de mañana, con enlaces que abren el CRM ya filtrado (#132).
+ *
+ * Es la frase que Diego subrayo del pedido:
+ *
+ *     «...y que sea un enlace, y cuando lo abra, el CRM con eso puesto.»
+ *
+ * Un correo que dice «tienes 12» y te deja buscandolos no sirve: la gestora
+ * entra, no encuentra los doce, y a la semana deja de abrir el correo.
+ *
+ * Cada `qf` de aqui es el mismo que resuelve el servidor en el listado, asi que
+ * el numero de la linea y el de la pantalla que abre son el mismo. Hasta hace
+ * un rato no lo eran: el filtro se aplicaba sobre la pagina de 20.
+ */
+const BASE = () => (process.env.CRM_BASE_URL || 'http://localhost:5173/crm').replace(/\/+$/, '');
+
+const lineaConEnlace = (etiqueta, valor, qf, projectId) => (valor
+  ? `<li style="margin:6px 0">
+       <strong>${valor}</strong> ${etiqueta}
+       &nbsp;<a href="${BASE()}/prospectos?projectId=${projectId}&qf=${qf}"
+               style="color:#4f4fcc;font-weight:600;text-decoration:none">abrir &rarr;</a>
+     </li>`
+  : '');
+
 function textoPlan(nombre, d) {
-  const nada = !d.sin_tocar && !d.en_seguimiento && !d.recordatorios;
+  const bloques = d?.bloques || [];
+  if (!bloques.length) {
+    return `
+      <p>Hola ${nombre},</p>
+      <p>Mañana no tienes nada pendiente. Descansa.</p>
+      <p style="font-size:12px;color:#666">Puedes apagar este aviso en <em>Mis preferencias</em>.</p>
+    `;
+  }
+  const trozo = (b) => `
+    ${d.variosProyectos ? `<p style="margin:14px 0 4px"><strong>${b.proyecto.nombre}</strong></p>` : ''}
+    <ul style="padding-left:18px;margin:4px 0">
+      ${lineaConEnlace('con recordatorio para mañana', b.tomorrow, 'tomorrow', b.proyecto.id)}
+      ${lineaConEnlace('sin contactar todavia', b.no_contact, 'no-contact', b.proyecto.id)}
+      ${lineaConEnlace('con el recordatorio ya vencido', b.overdue, 'overdue', b.proyecto.id)}
+    </ul>`;
   return `
     <p>Hola ${nombre},</p>
-    ${nada
-      ? '<p>Mañana no tienes nada pendiente. Descansa.</p>'
-      : `<p>Lo que te espera mañana:</p>
-         <ul>
-           ${d.sin_tocar ? fila('sin contactar todavia', d.sin_tocar) : ''}
-           ${d.en_seguimiento ? fila('en seguimiento', d.en_seguimiento) : ''}
-           ${d.recordatorios ? fila('recordatorios que vencen', d.recordatorios) : ''}
-         </ul>`}
+    <p>Lo que te espera mañana:</p>
+    ${bloques.map(trozo).join('')}
+    <p style="font-size:13px;color:#555">
+      Cada «abrir» te deja en el listado con ese filtro puesto y en ese proyecto.
+      El numero de aqui es el mismo que veras alli.
+    </p>
     <p style="font-size:12px;color:#666">Puedes apagar este aviso en <em>Mis preferencias</em>.</p>
   `;
 }
