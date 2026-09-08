@@ -408,7 +408,12 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
     // A la ficha, no a `/prospectos/papelera`: esa ruta NO existe en el
     // router. Y como `/prospectos/:id` si existe, el aviso no daba un 404
     // honesto — abria una ficha con el id «papelera», o sea una pantalla rota.
-    // `findById` no filtra por `deleted_at`, asi que el borrado se ve.
+    //
+    // Va a la ficha porque el `findById` de ESTE repositorio no filtra por
+    // `deleted_at` y el borrado se ve. Al portarlo hay que mirarlo: en ISEIE
+    // hace `if (!r || r.deleted_at) return null`, asi que alli este mismo
+    // enlace daria una pantalla vacia y toca apuntar a su pantalla de
+    // archivados.
     link_path: `/prospectos/${leadId}`,
     metadata: { lead_id: leadId, reason, motivo, project_id: leadInfo.project_id },
     triggered_by_user_id: userId || null,

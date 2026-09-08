@@ -24,6 +24,19 @@
  * ultima hace 2h»). Uno que habla de una ficha concreta, no: seis prospectos
  * nuevos son seis cosas que hacer, no una.
  *
+ * AL PORTARLO: ESTE MAPA NO SE COPIA TAL CUAL
+ *
+ * Aqui hay once porque este CRM emite once. ISEIE emite cinco: no tiene el
+ * vigilante de catalogo —de donde salen las «Revisión diaria» repetidas—, ni el
+ * reparto que avisa de prospecto asignado, ni el cobro de Stripe que cierra
+ * ventas solo.
+ *
+ * Copiar los once alli seria repetir el fallo que este ticket arregla: la
+ * pantalla de preferencias tenia siete interruptores para tipos que no existen,
+ * asi que apagabas y no apagabas nada. El mapa se rehace con
+ * `grep -rn "notifyAdmins({\|notifyUsers({" -A 6 backend/src` de cada
+ * repositorio. Todo lo demas de este fichero vale igual en los dos.
+ *
  * SOBRE LOS TIPOS QUE NO ESTAN AQUI
  *
  * Salen igual, como aviso y sin agrupar, con el nombre crudo por etiqueta. Un

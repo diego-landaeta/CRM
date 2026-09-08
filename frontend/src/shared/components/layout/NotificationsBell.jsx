@@ -51,6 +51,8 @@ export default function NotificationsBell({ collapsed = false, className = '' })
             // 'por_contactar' y no 'nuevo': la migracion 076 cambio el DEFAULT de la
             // columna. Buscando 'nuevo' este bloque solo encontraba fichas de antes
             // de junio, y se llamaba «nuevos prospectos».
+            //
+            // El fallo esta en los dos CRMs, pero el numero no: alli es la 075.
             client.get(`/leads`, { params: { projectId: activeProject.id, status: 'por_contactar', limit: 3 } }).catch(() => ({ success: false, data: [] })),
           ]);
         }
