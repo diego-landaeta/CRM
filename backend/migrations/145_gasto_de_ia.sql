@@ -1,4 +1,4 @@
--- 143 · Lo que cuesta la IA, apuntado (#30, y sobre todo #22)
+-- 145 · Lo que cuesta la IA, apuntado (#30, y sobre todo #22)
 --
 -- Hoy hay DOS sitios que llaman a Anthropic —el chat (`claude-chat`) y el
 -- reporte mensual (`reports-ia`)— y ninguno de los dos lleva la cuenta de lo

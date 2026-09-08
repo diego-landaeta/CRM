@@ -416,7 +416,7 @@ antes que el tope, hay una ventana con dos endpoints llamando a Anthropic sin
 que nadie cuente nada — que es exactamente lo que el issue dice que no puede
 pasar.
 
-1. **Aplicar `143_gasto_de_ia.sql`.** Crea la tabla donde se apunta cada
+1. **Aplicar `145_gasto_de_ia.sql`.** Crea la tabla donde se apunta cada
    llamada. Mientras no esté, el código no falla: avisa una vez en el log y deja
    pasar, o sea el CRM se queda como está hoy, sin tope.
 2. **Poner en el `.env` del servidor:** `IA_TOPE_MENSUAL_USD=20` (o lo que

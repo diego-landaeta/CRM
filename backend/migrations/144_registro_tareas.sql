@@ -1,4 +1,4 @@
--- 142 · El rastro de las tareas programadas (#111, la pantalla de registro)
+-- 144 · El rastro de las tareas programadas (#111, la pantalla de registro)
 --
 -- La vista «todos» del registro tiene que enseñar los sucesos del sistema:
 -- trabajos programados, webhooks, sincronizaciones y errores. Tres de los
