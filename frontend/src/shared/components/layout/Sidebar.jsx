@@ -1011,23 +1011,26 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                 'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
                 collapsed
                   ? 'w-full h-10 justify-center'
-                  : 'w-full h-9 pl-1 pr-8 gap-2'
+                  : 'w-full min-h-9 py-1 pl-1 pr-8 gap-2'
               )}
             >
               <ProjectAvatar project={activeProject} size="sm" />
               {!collapsed && (
                 <>
-                  <span className="flex-1 truncate text-left">
-                    {activeIssuer ? activeIssuer.nombre : (activeProject?.nombre || 'Selecciona proyecto')}
-                  </span>
-                  {/* La cuenta va aparte y no se recorta: es lo que distingue
-                      «CEDIA» de «CEDIA entera», y con un nombre largo se perdia
-                      dentro del texto cortado. */}
-                  {activeIssuer && (
-                    <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                      {activeIssuer.campus.length} campus
+                  {/* La cuenta va DEBAJO, no al lado. En la misma linea le
+                      quitaba el ancho al nombre y «CEDIA Investigacion y
+                      Desarrollo» se quedaba en «CEDIA Investigacion y Desarroll…»,
+                      que es justo lo que hay que poder leer. */}
+                  <span className="min-w-0 flex-1 text-left leading-tight">
+                    <span className="block truncate">
+                      {activeIssuer ? activeIssuer.nombre : (activeProject?.nombre || 'Selecciona proyecto')}
                     </span>
-                  )}
+                    {activeIssuer && (
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-300">
+                        {activeIssuer.campus.length} campus
+                      </span>
+                    )}
+                  </span>
                   <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </>
               )}

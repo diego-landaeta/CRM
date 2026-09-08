@@ -76,8 +76,10 @@ function exportReportCSV(data, project, range) {
   a.click();
   URL.revokeObjectURL(url);
 }
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
+
 import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
+import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -98,10 +100,11 @@ export default function ReportsPage() {
   const { activeProject, activeIssuerId, activeIssuer } = useProjectContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState({
-    from: new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
-    to: new Date().toISOString().slice(0, 10),
-  });
+  // Arranca en el MES en curso. Antes era el ano entero, que es lo que casi
+  // nadie quiere mirar al abrir: se venia a ver como va el mes y habia que
+  // acotar a mano cada vez.
+  const [range, setRange] = useState(() => rangoPorDefecto());
+  const atajoActivo = atajoDe(range);
   const [tab, setTab] = useState('crm');
 
   useEffect(() => {
@@ -174,6 +177,28 @@ export default function ReportsPage() {
         actions={
           tab === 'crm' ? (
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Los atajos por calendario. «La semana pasada» es la semana
+                  pasada, de lunes a domingo — no los siete dias anteriores,
+                  que pedidos un martes mezclan media semana con media de la
+                  otra y no cuadran con lo que dice nadie. */}
+              <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rapidos">
+                {ATAJOS.map((a) => (
+                  <button
+                    key={a.clave}
+                    type="button"
+                    onClick={() => setRange(a.calcular(new Date()))}
+                    aria-pressed={atajoActivo === a.clave}
+                    className={
+                      'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                      (atajoActivo === a.clave
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                    }
+                  >
+                    {a.etiqueta}
+                  </button>
+                ))}
+              </div>
               <input
                 type="date"
                 value={range.from}
@@ -397,6 +422,56 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+
+      {/* Cuanto pone cada campus (#120).
+          Con una sociedad elegida, «82.395 EUR» no dice de donde salen. Solo
+          aparece cuando el ambito abarca mas de un proyecto: con uno solo, la
+          tabla seria una fila repitiendo el KPI de arriba. */}
+      {(data.por_proyecto || []).length > 1 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <Buildings size={16} /> Cuánto pone cada proyecto
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Proyecto</th>
+                  <th className="py-2 px-3 font-medium text-right">Prospectos</th>
+                  <th className="py-2 px-3 font-medium text-right">Ventas</th>
+                  <th className="py-2 px-3 font-medium text-right">Facturado</th>
+                  <th className="py-2 pl-3 font-medium text-right">Cobrado</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {data.por_proyecto.map((f) => (
+                  <tr key={f.project_id} className="border-b border-border/50 last:border-0">
+                    {/* Un campus sin ventas sale igual, con ceros y apagado: si
+                        no apareciera se leeria como que no existe, y lo que
+                        pasa es que no vendio. */}
+                    <td className={'py-2 pr-3' + (Number(f.ventas) === 0 ? ' text-muted-foreground' : '')}>{f.nombre}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{Number(f.leads).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right">{Number(f.ventas).toLocaleString('es-ES')}</td>
+                    <td className="py-2 px-3 text-right text-muted-foreground">{fmt(f.facturado)}</td>
+                    <td className="py-2 pl-3 text-right font-semibold">{fmt(f.cobrado)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {/* El total va escrito para que se pueda comprobar contra los
+                    KPI de arriba: si no cuadra, no se cree ninguno de los dos. */}
+                <tr className="border-t-2 border-border font-semibold tabular-nums">
+                  <td className="py-2 pr-3">Total</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.leads || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{data.por_proyecto.reduce((a, f) => a + Number(f.ventas || 0), 0).toLocaleString('es-ES')}</td>
+                  <td className="py-2 px-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.facturado || 0), 0))}</td>
+                  <td className="py-2 pl-3 text-right">{fmt(data.por_proyecto.reduce((a, f) => a + Number(f.cobrado || 0), 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Top productos */}
       <div className="bg-card border border-border rounded-lg p-4">
