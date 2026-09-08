@@ -3,6 +3,7 @@ import { useState } from 'react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import SpamReportsSection from '../components/SpamReportsSection';
 import NotificationsList from '../components/NotificationsList';
+import QueAvisosQuiero from '../components/QueAvisosQuiero';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -195,91 +196,13 @@ export default function NotificacionesPage() {
         </div>
       </section>
 
-      {/* Preferencias por tipo */}
-      {permission === 'granted' && (
-        <section className="space-y-3">
-          <header className="flex items-baseline justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-              Tipos de notificación
-            </h3>
-            {savingPrefs && <span className="text-[10px] text-muted-foreground italic">guardado…</span>}
-          </header>
-          <p className="text-xs text-muted-foreground">
-            Activa o desactiva cada tipo y elige por qué canales recibirlo. Las{' '}
-            <strong>alertas del sistema</strong> siempre se entregan (incluso en modo no molestar).
-          </p>
+      {/* Qué avisos quiero — apagar por tipo (#111).
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(Object.keys(KIND_META) as NotificationKind[]).map((kind) => {
-              const meta = KIND_META[kind];
-              const enabled = prefs.enabled[kind];
-              const channels = prefs.channels[kind] || [];
-              const isSystem = kind === 'system_alert';
-              return (
-                <article
-                  key={kind}
-                  className={`bg-card border border-border rounded-xl p-4 transition-colors ${
-                    !enabled ? 'opacity-60' : ''
-                  }`}
-                >
-                  <header className="flex items-start gap-3 mb-3">
-                    <button
-                      type="button"
-                      onClick={() => !isSystem && toggleKind(kind)}
-                      disabled={isSystem}
-                      aria-label={enabled ? `Desactivar ${meta.label}` : `Activar ${meta.label}`}
-                      className={`w-10 h-6 rounded-full flex items-center transition-colors flex-shrink-0 ${
-                        enabled ? 'bg-primary justify-end' : 'bg-muted justify-start'
-                      } ${isSystem ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <span className="w-5 h-5 rounded-full bg-white shadow mx-0.5 transition-transform" />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-semibold text-sm">{meta.label}</h4>
-                        {isSystem && (
-                          <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                            <ShieldCheck size={9} weight="bold" /> Siempre activa
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{meta.description}</p>
-                    </div>
-                  </header>
-                  {enabled && (
-                    <div className="flex flex-wrap gap-1.5 ml-13">
-                      {(['inApp', 'push', 'email'] as NotificationChannel[]).map((ch) => {
-                        const active = channels.includes(ch);
-                        const m = CHANNEL_META[ch];
-                        const ChIcon = m.Icon;
-                        const disabled = ch === 'push' && !isPushSupported;
-                        return (
-                          <button
-                            key={ch}
-                            type="button"
-                            onClick={() => !disabled && toggleChannel(kind, ch)}
-                            disabled={disabled}
-                            title={disabled ? 'Push no soportado en este navegador' : m.help}
-                            className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
-                              active
-                                ? 'bg-primary/10 text-primary border-primary/30 font-medium'
-                                : 'bg-card border-border text-muted-foreground hover:bg-muted'
-                            } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                          >
-                            <ChIcon size={11} weight={active ? 'fill' : 'regular'} />
-                            {m.label}
-                            {active && <CheckCircle size={9} weight="fill" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
+          Sustituye a los siete interruptores que había aquí. Aquellos no
+          apagaban nada: guardaban en `localStorage` y encima con nombres de
+          tipo que el backend no emite. Y solo se veían con el permiso de push
+          concedido, que no tiene nada que ver con la campana de dentro. */}
+      <QueAvisosQuiero />
 
       {/* Estado backend */}
       <section className="bg-muted/40 border border-border rounded-xl p-5">

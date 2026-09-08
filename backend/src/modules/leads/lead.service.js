@@ -405,7 +405,11 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
     type: 'lead_deleted',
     title: `Lead #${leadId} eliminado`,
     message: `${leadInfo.nombre || '—'} (${leadInfo.email || leadInfo.telefono || '—'}) — motivo: ${reason}${motivo ? ' · ' + motivo : ''}`,
-    link_path: `/prospectos/papelera`,
+    // A la ficha, no a `/prospectos/papelera`: esa ruta NO existe en el
+    // router. Y como `/prospectos/:id` si existe, el aviso no daba un 404
+    // honesto — abria una ficha con el id «papelera», o sea una pantalla rota.
+    // `findById` no filtra por `deleted_at`, asi que el borrado se ve.
+    link_path: `/prospectos/${leadId}`,
     metadata: { lead_id: leadId, reason, motivo, project_id: leadInfo.project_id },
     triggered_by_user_id: userId || null,
   });
