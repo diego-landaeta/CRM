@@ -69,8 +69,16 @@ export default function ResumenVentas({ projectId, issuerId = null, from, to, re
       {/* Cobrado DE ESAS VENTAS, aunque el pago entrara despues del periodo.
           La tarta de abajo cuenta otra cosa: el dinero que entro EN el periodo,
           venga de una venta de ahora o de una de hace meses. */}
+      {/* De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan
+          (#100). Mezclado no habia forma de saber que es dinero NUEVO y que es
+          una cuota de algo vendido hace meses, que es justo lo que hay que
+          mirar para saber como va el mes.
+          Solo se dice cuando hay cuotas: si no las hay, el pie util es cuantas
+          ventas estan saldadas. */}
       <Cifra icon={CheckCircle} etiqueta="Cobrado de esas ventas" valor={eur(d.cobrado)}
-        pie={`${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
+        pie={d.cobrado_cuotas > 0
+          ? `${eur(d.cobrado_matricula)} de la venta · ${eur(d.cobrado_cuotas)} en cuotas`
+          : `${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
       <Cifra icon={Clock} etiqueta="Pendiente" valor={eur(d.pendiente)}
         pie={`${num(d.con_saldo)} con saldo`} />
       <Cifra icon={ChartBar} etiqueta="Cuotas" valor={`${num(cuotas.cobradas)} / ${num(cuotas.total)}`}

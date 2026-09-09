@@ -255,6 +255,25 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
 const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
                          FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
+// Lo que abrio la venta y lo que son cuotas posteriores del plan, por separado
+// (#100). Es la misma regla que `ES_MATRICULA` del desglose —el primer cobro
+// de la venta es la matricula, el resto son cuotas— escrita con el alias de
+// esta consulta. Que las dos cuenten igual es el motivo de repetirla y no
+// inventar otra definicion.
+//
+// Sin esto, «cobrado» juntaba dinero NUEVO con cuotas de ventas que ya estaban
+// cerradas, y no habia forma de saber cuanto se habia vendido de verdad.
+const COBRADO_MATRICULA = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND NOT EXISTS (SELECT 1 FROM conversion_payments p0
+                      WHERE p0.conversion_id = cp.conversion_id
+                        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+const COBRADO_CUOTAS = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND EXISTS (SELECT 1 FROM conversion_payments p0
+                  WHERE p0.conversion_id = cp.conversion_id
+                    AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
   const { where, params } = filtrosVentas(filtros);
@@ -264,6 +283,9 @@ export async function getResumenVentas(filtros = {}) {
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
             COALESCE(SUM(cv.importe_total), 0) AS importe,
             COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
+            COALESCE(SUM(${COBRADO_MATRICULA}), 0) AS cobrado_matricula,
+            COALESCE(SUM(${COBRADO_CUOTAS}), 0) AS cobrado_cuotas,
+            COUNT(*) FILTER (WHERE ${COBRADO_CUOTAS} > 0)::int AS ventas_con_cuotas,
             COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
@@ -297,6 +319,10 @@ export async function getResumenVentas(filtros = {}) {
     asesoras: r.asesoras,
     importe: Number(r.importe),
     cobrado: Number(r.cobrado),
+    // De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan (#100).
+    cobrado_matricula: Number(r.cobrado_matricula),
+    cobrado_cuotas: Number(r.cobrado_cuotas),
+    ventas_con_cuotas: r.ventas_con_cuotas,
     pendiente: Number(r.pendiente),
     liquidadas: r.liquidadas,
     con_saldo: r.con_saldo,
