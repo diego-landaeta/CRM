@@ -40,7 +40,12 @@ export async function gestoresStats(req, res, next) {
   try {
     const { projectId, projectIds } = await proyectosDelAmbito(req);
     const periodo = req.query.periodo || null;
-    const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo });
+    // Las fechas mandan sobre el mes: si la pantalla esta mirando un dia, la
+    // tabla del equipo tiene que enseñar ESE dia y no el mes entero.
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const from = re.test(req.query.from || '') ? req.query.from : null;
+    const to = re.test(req.query.to || '') ? req.query.to : null;
+    const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

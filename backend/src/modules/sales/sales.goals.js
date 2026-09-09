@@ -1,7 +1,7 @@
 // Metas de venta + estadísticas por gestor.
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { comoLista } from '../../shared/utils/ambito.js';
+import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 function currentPeriodo() {
   // Server timezone — para CRM single-tenant es suficiente.
@@ -14,24 +14,46 @@ function currentPeriodo() {
  * Si projectId, filtra a ese proyecto.
  * Devuelve también la meta cuando existe.
  */
-export async function getGestoresStats({ projectId = null, projectIds = null, periodo = null } = {}) {
+export async function getGestoresStats({
+  projectId = null, projectIds = null, periodo = null, from = null, to = null,
+} = {}) {
   // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
   const allTime = periodo === 'all';
   const per = allTime ? null : (periodo || currentPeriodo());
-  const params = allTime ? [] : [per];
+  // Las FECHAS mandan sobre el mes.
+  //
+  // Diego: «las ventas generales siguen mostrando mal y cuando usas los filtros
+  // se siguen mostrando mal». Con el filtro puesto en el 8 de septiembre, la
+  // lista de abajo enseñaba UNA venta y esta tabla decia que Ana llevaba tres
+  // por 1.860,50 €: estaba contando el mes entero, porque solo sabia de meses.
+  // Dos cifras que se contradicen en la misma pantalla.
+  //
+  // Las METAS siguen siendo mensuales —lo son— y por eso el mes se calcula
+  // igual: lo que cambia es que las VENTAS se cuentan del periodo que se pidio.
+  const porFechas = Boolean(from && to);
+  const params = [];
 
   // El ambito puede ser un proyecto O una sociedad entera. Con una sociedad
   // elegida NO se puede dejar el filtro vacio: enseñaria las metas de todas las
   // demas justo cuando se pidio acotar a una.
   const lista = comoLista(projectId, projectIds);
-  const projectFilter = lista ? `AND c.project_id = ANY($${params.push(lista)}::int[])` : '';
-  const projectGoalFilter = lista
-    ? `AND (g.project_id = ANY($${params.length}::int[]) OR g.project_id IS NULL)` : '';
+  const projectFilter = lista
+    ? `AND c.project_id = ANY($${params.push(lista)}::int[])`
+    // Sin proyecto elegido, «todos» no incluye el proyecto de pruebas: cinco
+    // ventas inventadas no pueden aparecer en el total de nadie.
+    : `AND ${SIN_PRUEBAS('c.project_id')}`;
+  const idxLista = lista ? params.length : null;
   const userProjectJoin = lista
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = ANY($${params.length}::int[]) AND up.active = TRUE`
+    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = ANY($${idxLista}::int[]) AND up.active = TRUE`
     : '';
 
-  const dateFilter = allTime ? '' : `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1`;
+  let dateFilter = '';
+  if (porFechas) {
+    dateFilter = `AND c.fecha_conversion >= $${params.push(from)}`
+      + ` AND c.fecha_conversion <= $${params.push(to)}`;
+  } else if (!allTime) {
+    dateFilter = `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $${params.push(per)}`;
+  }
 
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
@@ -40,8 +62,18 @@ export async function getGestoresStats({ projectId = null, projectIds = null, pe
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
      ${userProjectJoin}
-     LEFT JOIN leads l ON l.responsable_id = u.id
-     LEFT JOIN conversions c ON c.lead_id = l.id
+     -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha.
+     --
+     -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id:
+     -- una venta que cerro otra persona se le apuntaba a la gestora del
+     -- prospecto. Es el mismo COALESCE que usan Ventas y los informes, y por
+     -- eso las tres pantallas daban numeros distintos para la misma pregunta.
+     LEFT JOIN (
+       SELECT c.id, c.importe_total, c.importe_pagado, c.fecha_conversion, c.project_id,
+              COALESCE(c.vendedora_id, l.responsable_id) AS vendedora_id
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+     ) c ON c.vendedora_id = u.id
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
@@ -54,6 +86,8 @@ export async function getGestoresStats({ projectId = null, projectIds = null, pe
   let goalByUser = {};
   if (!allTime) {
     const goalsParams = [per];
+    const projectGoalFilter = lista
+      ? `AND (g.project_id = ANY($2::int[]) OR g.project_id IS NULL)` : '';
     const { rows: goals } = await query(
       `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
               su.nombre AS set_by_nombre
@@ -67,6 +101,10 @@ export async function getGestoresStats({ projectId = null, projectIds = null, pe
 
   return {
     periodo: per,
+    // Lo que de verdad se ha contado, para que la pantalla no titule un mes
+    // cuando esta enseñando un dia.
+    desde: porFechas ? from : null,
+    hasta: porFechas ? to : null,
     project_id: projectId,
     gestores: stats.map((s) => {
       const g = goalByUser[s.user_id] || null;
