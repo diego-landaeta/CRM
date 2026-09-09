@@ -1,5 +1,35 @@
 import { query } from '../../shared/config/db.js';
 
+// #86 · Las plazas ocupadas NO se guardan en ninguna columna: se cuentan aqui,
+// cada vez. Es lo que exige el proceso comercial —«se comprueba antes de cada
+// envio, nunca se arrastra el dato del mensaje anterior»— y lo unico que evita
+// que la plantilla salga al cliente con la cifra de la semana pasada.
+//
+// Se cuentan LEADS distintos, no filas de venta: la misma persona puede tener
+// dos ventas del mismo producto (un plan que se partio, una cuota suelta) y
+// sigue ocupando una plaza. Por eso mismo `es_mensualidad` queda fuera: una
+// mensualidad no es una matricula nueva.
+//
+// `plazas_ocupadas_previas` se suma porque hay matriculas anteriores al CRM que
+// ocupan plaza y de las que aqui no hay venta.
+const PLAZAS_JOIN = `
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(p.plazas_ocupadas_previas, 0) + COUNT(DISTINCT cv.lead_id) AS ocupadas
+      FROM conversions cv
+     WHERE cv.producto_contratado_id = p.id
+       AND cv.es_mensualidad IS NOT TRUE
+  ) pl ON TRUE`;
+
+// `plazas_libres` puede salir NEGATIVA, y se deja asi a proposito: significa que
+// la convocatoria esta sobrevendida y el administrador tiene que verlo. Quien
+// pinte una plantilla de cara al cliente es el que corta en cero, no esto.
+const PLAZAS_COLS = `
+  pl.ocupadas AS plazas_ocupadas,
+  CASE WHEN p.plazas_totales IS NULL THEN NULL
+       ELSE p.plazas_totales - pl.ocupadas END AS plazas_libres,
+  CASE WHEN p.fecha_cierre_convocatoria IS NULL THEN NULL
+       ELSE (p.fecha_cierre_convocatoria - CURRENT_DATE) END AS dias_para_cierre`;
+
 // Listado: omite _texto pesados. Para detalle completo usar findById(id).
 const LIST_COLS = [
   'p.id', 'p.project_id', 'p.nombre', 'p.sku', 'p.precio', 'p.moneda',
@@ -7,6 +37,7 @@ const LIST_COLS = [
   'p.image_url', 'p.url_info', 'p.stripe_link',
   'p.source_type', 'p.wc_product_id',
   'p.categoria_id', 'p.subcategoria_id', 'p.regimen_fiscal_id',
+  'p.plazas_totales', 'p.plazas_ocupadas_previas', 'p.fecha_cierre_convocatoria',
   'p.active', 'p.created_at', 'p.updated_at',
   "LEFT(p.descripcion, 280) AS descripcion",
 ].join(', ');
@@ -26,10 +57,12 @@ export async function findByProject(projectId, { includeInactive = false, catego
     )`;
     params.push(categoryId);
   }
-  const base = `SELECT ${LIST_COLS}, c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre
+  const base = `SELECT ${LIST_COLS}, ${PLAZAS_COLS},
+                       c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre
                 FROM products p
                 LEFT JOIN product_categories c ON c.id = p.categoria_id
                 LEFT JOIN product_categories sc ON sc.id = p.subcategoria_id
+                ${PLAZAS_JOIN}
                 WHERE p.project_id = $1 ${categoryFilter}`;
   const sql = includeInactive
     ? base + ' ORDER BY p.created_at DESC'
@@ -39,7 +72,10 @@ export async function findByProject(projectId, { includeInactive = false, catego
 }
 
 export async function findById(id) {
-  const { rows } = await query('SELECT * FROM products WHERE id = $1', [id]);
+  const { rows } = await query(
+    `SELECT p.*, ${PLAZAS_COLS} FROM products p ${PLAZAS_JOIN} WHERE p.id = $1`,
+    [id]
+  );
   return rows[0] || null;
 }
 
@@ -59,6 +95,7 @@ export async function update(id, data) {
                    'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info',
                    'image_url', 'regimen_fiscal_id',
                    'horas', 'num_modulos', 'modalidad', 'fecha_inicio_texto',
+                   'plazas_totales', 'plazas_ocupadas_previas', 'fecha_cierre_convocatoria',
                    'presentacion_texto', 'objetivos_texto', 'beneficios_texto',
                    'dirigido_a_texto', 'para_que_te_prepara_texto', 'por_que_estudiar_texto',
                    'modulos_texto', 'metodologia_texto', 'faqs_texto', 'profesores_texto'];
