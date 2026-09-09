@@ -4,7 +4,8 @@
 import { useState, useEffect } from 'react';
 import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
-import { toast } from '@/shared/hooks/useToast';
+import { toast } from '@/shared/hooks/useToast';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 type ColType = 'string' | 'number' | 'date' | 'estado';
 interface Col { h: string; k: string; t?: ColType }
@@ -187,7 +188,7 @@ function downloadBlob(blob: Blob, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ReportsDownloadSection({ projectId, projectName, from: desdeArriba, to: hastaArriba }: { projectId?: number; projectName?: string; from?: string; to?: string }) {
+export default function ReportsDownloadSection({ projectId, issuerId, projectName, from: desdeArriba, to: hastaArriba }: { projectId?: number; issuerId?: number | null; projectName?: string; from?: string; to?: string }) {
   // El rango lo manda la cabecera de la pagina: aqui no se elige aparte.
   const from = desdeArriba || '';
   const to = hastaArriba || '';
@@ -208,7 +209,9 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     if (!from || !to) { seguir(); return; }
     setComprobando(true);
     try {
-      const r = await client.get(`/informes/aviso-sin-factura?from=${from}&to=${to}${projectId ? `&projectId=${projectId}` : ''}`);
+      const p0 = new URLSearchParams({ from, to });
+      ponerAmbito(p0, { activeIssuerId: issuerId, activeProject: { id: projectId } });
+      const r = await client.get(`/informes/aviso-sin-factura?${p0.toString()}`);
       const d = r?.success ? r.data : null;
       if (d && d.ventas > 0) { setAviso(d); setPendiente(() => seguir); return; }
     } catch { /* si la comprobacion falla no se bloquea la descarga */ }
@@ -222,7 +225,7 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     setBajandoTodo(true);
     try {
       const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
-      const r = await descargarReportePrincipal({ projectId, projectName, from, to });
+      const r = await descargarReportePrincipal({ projectId, issuerId, projectName, from, to });
       if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
       toast({ title: 'Reporte principal descargado', description: `${r.hojas} hojas · ${r.nombre}` });
     } catch (err) {
@@ -235,7 +238,7 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     const dFrom = from && to && from > to ? to : from;
     const dTo = from && to && from > to ? from : to;
     const p = new URLSearchParams();
-    if (projectId) p.set('projectId', String(projectId));
+    ponerAmbito(p, { activeIssuerId: issuerId, activeProject: { id: projectId } });
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
     const res = await client.get(`/informes/${report.key}?${p.toString()}`);

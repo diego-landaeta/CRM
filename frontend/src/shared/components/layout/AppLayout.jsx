@@ -47,8 +47,19 @@ function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
+// Con una sociedad elegida (#120), Reportes SI funciona: pide sus campus
+// sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
+// concreto, asi que se comportan igual que con «todos los proyectos» — que es
+// lo que ya sabian hacer.
+const CON_SOCIEDAD_OK = [/^\/informes$/];
+
+function rutaAceptaSociedad(pathname) {
+  return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
+}
+
 function AllProjectsGuard({ pathname, children }) {
-  const { isAllProjects } = useProjectContext();
+  const { isAllProjects, activeIssuer } = useProjectContext();
+  if (activeIssuer && rutaAceptaSociedad(pathname)) return children;
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }
