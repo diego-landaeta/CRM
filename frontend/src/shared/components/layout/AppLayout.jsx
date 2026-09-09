@@ -16,6 +16,13 @@ const ALL_PROJECTS_OK = [
   // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
   /^\/prospectos$/,                // Lista de prospectos
   /^\/prospectos\/cola$/,          // La cola del dia — el servidor acota por gestora
+  // Tutores: las tres consultas ya aceptan «sin proyecto» y devuelven el
+  // nombre del proyecto en cada fila, asi que la vista general se lee sola.
+  // Quien lleva las colaboraciones trabaja con los profesores de todas las
+  // marcas a la vez: obligarle a elegir una por una era pedirle nueve vueltas.
+  /^\/tutores$/,
+  /^\/tutores\/sin-tutor$/,
+  /^\/tutores\/comisiones$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto
