@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
+import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -401,58 +402,10 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda, i.total_divisa,
             u.nombre AS gestora_nombre,
-            /*
-              Que es esta factura: una VENTA NUEVA o una CUOTA.
-
-              Diego: «veo todos los proyectos, esos pagos, y no se cuales son
-              cuotas o compras». Y es lo que hacia que las cifras parecieran
-              contradecirse: en un dia con 7 facturas y 3 ventas, quien cuenta
-              filas ve siete ventas donde hay tres. Una venta a plazos emite una
-              factura por cada cobro, asi que la mayoria de las filas de un mes
-              cualquiera NO son ventas de ese mes.
-
-              La regla es la de siempre --el primer cobro de una venta es la
-              matricula, el resto son cuotas-- para que esta pantalla y Ventas
-              no puedan discrepar.
-
-                venta   la factura del primer cobro: se vendio algo
-                cuota   un cobro posterior de una venta anterior
-                suelta  no cuelga de ninguna venta
-            */
-            CASE
-              WHEN i.conversion_id IS NULL THEN 'suelta'
-              /*
-                OTRA FACTURA DE UNA VENTA YA FACTURADA.
-
-                Diego: «veo 4 ventas hechas en facturas y en ventas muestra 3».
-                Tenia razon y el fallo era mio. La venta de Flavia Gerez --251 €,
-                una sola venta-- se partio en DOS facturas de 125,50: la 2026/0101
-                con su cobro apuntado y la 2026/0102 con payment_id a NULL.
-                Como no tenia cobro que mirar, caia en la rama de «venta» y se
-                contaban cuatro donde hay tres.
-
-                No es una venta nueva ni es una cuota: es la misma venta partida
-                en dos papeles. Se dice asi.
-              */
-              WHEN i.payment_id IS NULL AND EXISTS (
-                SELECT 1 FROM invoices x
-                 WHERE x.conversion_id = i.conversion_id
-                   AND x.id <> i.id
-                   AND x.tipo <> 'proforma' AND x.estado <> 'cancelada'
-                   AND (x.fecha_emision < i.fecha_emision
-                        OR (x.fecha_emision = i.fecha_emision AND x.numero < i.numero))
-              ) THEN 'parte'
-              WHEN i.payment_id IS NULL THEN 'venta'
-              WHEN NOT EXISTS (
-                SELECT 1 FROM conversion_payments p0
-                 JOIN conversion_payments pi ON pi.id = i.payment_id
-                 WHERE p0.conversion_id = pi.conversion_id
-                   AND (p0.fecha < pi.fecha OR (p0.fecha = pi.fecha AND p0.id < pi.id))
-              ) THEN 'venta'
-              ELSE 'cuota'
-            END AS clase,
+            ${CLASE_FACTURA} AS clase,
             -- De cuando es la venta, para poder decir «cuota de una venta del 6/7».
-            cv.fecha_conversion AS fecha_de_la_venta
+            cv.fecha_conversion AS fecha_de_la_venta,
+            ${SOSPECHA_DUPLICADA} AS sospecha_duplicada
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
      -- La gestora sale de la VENTA. invoices.lead_id esta vacio en toda la carga
