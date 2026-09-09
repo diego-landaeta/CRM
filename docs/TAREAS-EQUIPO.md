@@ -409,6 +409,29 @@ publicidad van aparte.
 
 Ninguna migración se aplica sola. Se escribe, se sube y la ejecutas tú.
 
+## D4 · El tope de gasto en IA, antes que la clave (#22)
+
+Está escrito y probado, falta lo tuyo. **El orden importa**: si la clave entra
+antes que el tope, hay una ventana con dos endpoints llamando a Anthropic sin
+que nadie cuente nada — que es exactamente lo que el issue dice que no puede
+pasar.
+
+1. **Aplicar `143_gasto_de_ia.sql`.** Crea la tabla donde se apunta cada
+   llamada. Mientras no esté, el código no falla: avisa una vez en el log y deja
+   pasar, o sea el CRM se queda como está hoy, sin tope.
+2. **Poner en el `.env` del servidor:** `IA_TOPE_MENSUAL_USD=20` (o lo que
+   decidas). Va en **dólares**, que es como factura Anthropic; convertir a euros
+   aquí sería inventarse un cambio que además se mueve solo. Con `=0` no hay
+   tope pero se sigue apuntando el gasto.
+3. **Comprobar antes de meter la clave:** `GET /api/ia/gasto` tiene que
+   contestar `instalado: true`. Si dice `false`, es que falta el paso 1 — y
+   entonces no hay tope, aunque el `.env` esté puesto.
+4. **Ya con eso**, la clave de #22.
+
+Cuando se agota, el chat contesta diciendo que se agotó y el reporte mensual
+sale igual pero con los datos del CRM, sin IA. Ninguno de los dos se queda en
+blanco ni da un error raro.
+
 ---
 
 # Yo

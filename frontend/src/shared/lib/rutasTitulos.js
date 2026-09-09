@@ -60,6 +60,7 @@ export const ROUTE_TITLES = {
   '/notificaciones': 'Notificaciones',
   '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/proceso': 'Proceso comercial',
   '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',

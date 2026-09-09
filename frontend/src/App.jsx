@@ -71,6 +71,7 @@ const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashbo
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
 const StatusPage = lazy(() => import('./modules/status/pages/StatusPage'));
+const RegistroPage = lazy(() => import('./modules/registro/pages/RegistroPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
@@ -123,9 +124,11 @@ const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWe
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
+const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
@@ -262,6 +265,8 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
+          <Route path="/configuracion/proceso" element={<ProcesoPage />} />
+          <Route path="/captacion/conectores" element={<ConnectorsPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
@@ -269,6 +274,7 @@ function App() {
           <Route path="/informes/ia" element={<ReportsIAPage />} />
           <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
+          <Route path="/registro" element={<RegistroPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/mensajes" element={<MessagesPage />} />

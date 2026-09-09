@@ -27,7 +27,7 @@ export async function create(data) {
       notas_pago,
       items,             // array opcional [{descripcion, cantidad, precio_unitario, product_id?}]
       iva_pct,           // default 21
-      iva_incluido,      // default false (sumar IVA al subtotal)
+      iva_incluido,      // default TRUE — ver abajo
       iva_exento,        // default false
       descuento_tipo,    // 'none' | 'pct' | 'monto'
       descuento_valor,   // % o monto fijo
@@ -36,7 +36,35 @@ export async function create(data) {
 
     const ivaPctVal = Number(iva_pct ?? 21);
     const isExento = !!iva_exento;
-    const isIncluido = !!iva_incluido;
+    /**
+     * Por defecto el precio YA LLEVA el IVA.
+     *
+     * Antes era al reves —si no te lo decian, se sumaba el 21 %— y eso hacia
+     * que el mismo numero significara dos cosas distintas segun quien llamara:
+     * el dialogo del CRM manda `iva_incluido: true` («el precio del curso ya es
+     * el precio final»), y cualquier otro que omitiera el campo veia su
+     * `importe_total: 1000` guardado como 1210.
+     *
+     * No lo usaba nadie de dentro: el unico sitio que crea conversiones es
+     * `ConversionDialog`, y siempre lo manda. Solo perjudicaba a quien entra
+     * por API o desde Make, en silencio y en un documento fiscal.
+     *
+     * Se elige `true` por dos motivos, y el segundo pesa mas:
+     *
+     *   · Es lo que dice el negocio: el precio de un curso es el precio final.
+     *   · De las dos formas de equivocarse, esta declara de MENOS. Inflar un
+     *     ingreso un 21 % sin que nadie lo pida es la que acaba en un informe
+     *     mal y en una factura mal, que es de lo que iba la #71.
+     *
+     * `=== false` explicito y no `!!`: hay que distinguir «me han dicho que no»
+     * de «no me han dicho nada».
+     *
+     * ESTO YA ESTABA ARREGLADO Y LA FUSION LO DESHIZO. Se repone. Si vuelve a
+     * desaparecer, mirar antes el diff de la fusion que el codigo.
+     */
+    const isIncluido = iva_incluido === undefined || iva_incluido === null
+      ? true
+      : iva_incluido !== false;
     const descTipo = ['pct', 'monto'].includes(descuento_tipo) ? descuento_tipo : 'none';
     const descVal = Number(descuento_valor || 0);
 

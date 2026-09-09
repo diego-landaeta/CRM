@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, MagnifyingGlass, UsersThree } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
-import type { ChatWhatsapp } from '../api/whatsapp.api';
+import { chatApi, type ChatWhatsapp } from '../api/whatsapp.api';
 
 /**
  * A que chat reenviar (#99, punto 5).
@@ -24,6 +24,7 @@ import type { ChatWhatsapp } from '../api/whatsapp.api';
 export default function ElegirChat({
   chats,
   excluirId,
+  deQuien,
   nombreDe,
   enviando,
   onElegir,
@@ -31,6 +32,8 @@ export default function ElegirChat({
 }: {
   chats: ChatWhatsapp[];
   excluirId: number | null;
+  /** De quien es la sesion: sin esto un admin busca en la suya, no en la de la gestora. */
+  deQuien?: number | null;
   nombreDe: (c: ChatWhatsapp) => string;
   enviando: boolean;
   onElegir: (c: ChatWhatsapp) => void;
@@ -38,19 +41,64 @@ export default function ElegirChat({
 }) {
   const [filtro, setFiltro] = useState('');
 
+  // Se busca en TODAS, no en las cargadas (#112).
+  //
+  // Antes se filtraba el array que ya estaba en memoria. Con 131 conversaciones
+  // y solo unas pocas cargadas, reenviar a alguien con quien no has hablado hoy
+  // era imposible: contestaba «ningun chat» sin haber mirado.
+  //
+  // Es el mismo fallo que ya se arreglo en la lista principal —«buscar un chat
+  // busca en todos, no en los 50 cargados»— y aqui se habia quedado.
+  const [deLaBusqueda, setDeLaBusqueda] = useState<ChatWhatsapp[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    const t = filtro.trim();
+    if (!t) { setDeLaBusqueda(null); return undefined; }
+    // Un respiro antes de preguntar: escribir «dieguis» son siete pulsaciones y
+    // no hacen falta siete consultas.
+    let vivo = true;
+    setBuscando(true);
+    const id = setTimeout(async () => {
+      try {
+        const r = await chatApi.lista(null, deQuien ?? null, t, null);
+        if (vivo) setDeLaBusqueda(r?.success ? (r.data || []) : []);
+      } catch {
+        // Sin respuesta se sigue con lo cargado: peor es quedarse en blanco.
+        if (vivo) setDeLaBusqueda(null);
+      } finally {
+        if (vivo) setBuscando(false);
+      }
+    }, 300);
+    return () => { vivo = false; clearTimeout(id); };
+  }, [filtro, deQuien]);
+
+  /** ¿Lo que se busca es el chat que ya esta abierto? */
+  const esElAbierto = useMemo(() => {
+    const t = filtro.trim().toLowerCase();
+    if (!t || excluirId == null) return false;
+    const cifras = t.replace(/\D/g, '');
+    const abierto = (deLaBusqueda || chats).find((c) => c.id === excluirId);
+    if (!abierto) return false;
+    if (nombreDe(abierto).toLowerCase().includes(t)) return true;
+    return Boolean(cifras) && String(abierto.telefono || '').replace(/\D/g, '').includes(cifras);
+  }, [filtro, excluirId, deLaBusqueda, chats, nombreDe]);
+
   const visibles = useMemo(() => {
     const t = filtro.trim().toLowerCase();
     const cifras = t.replace(/\D/g, '');
-    return chats
+    // Con busqueda, manda lo que dijo el servidor; sin ella, lo cargado.
+    const fuente = deLaBusqueda ?? chats;
+    return fuente
       .filter((c) => c.id !== excluirId)
       .filter((c) => {
-        if (!t) return true;
+        if (!t || deLaBusqueda) return true;   // el servidor ya filtro
         if (nombreDe(c).toLowerCase().includes(t)) return true;
         // El telefono, solo con cifras: buscar «+34 612» contra «34612…» no
         // casaba por el mas y los espacios.
         return Boolean(cifras) && String(c.telefono || '').replace(/\D/g, '').includes(cifras);
       });
-  }, [chats, excluirId, filtro, nombreDe]);
+  }, [chats, deLaBusqueda, excluirId, filtro, nombreDe]);
 
   return (
     <Portal>
@@ -103,9 +151,17 @@ export default function ElegirChat({
           <div className="overflow-y-auto">
             {!visibles.length ? (
               <p className="wa-elegir-tenue text-sm text-center py-8 px-4">
-                {chats.length <= 1
-                  ? 'No tienes otro chat al que reenviar.'
-                  : 'Ningún chat con ese nombre o número.'}
+                {buscando
+                  ? 'Buscando…'
+                  /* Si lo que busca ES el chat abierto, decirlo. Excluirlo esta
+                     bien —no tiene sentido reenviarse a uno mismo— pero
+                     contestar «ninguno» es mentira: ese chat existe y lo tiene
+                     delante. */
+                  : esElAbierto
+                    ? 'Ese es el chat en el que estás. Elige otro para reenviar.'
+                    : chats.length <= 1
+                      ? 'No tienes otro chat al que reenviar.'
+                      : 'Ningún chat con ese nombre o número.'}
               </p>
             ) : (
               <ul>

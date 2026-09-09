@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+
+import Field from '@/shared/components/ui/Field';import { useEffect, useState } from 'react';
 import { X, WhatsappLogo, DownloadSimple, Info } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
@@ -266,14 +267,5 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
         </div>
       </div>
     </Portal>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">{label}</label>
-      {children}
-    </div>
   );
 }

@@ -270,8 +270,18 @@ export const chatApi = {
    * Va contra el endpoint que ya existe. No hay estado propio del chat: es el
    * del prospecto, que es lo que viaja con la persona.
    */
-  cambiarEstado: (leadId: number, status: string): Promise<ApiResponse<unknown>> =>
-    client.patch(`/leads/${leadId}/status`, { status }),
+  cambiarEstado: (leadId: number, status: string, motivo?: string | null): Promise<ApiResponse<unknown>> =>
+    client.patch(`/leads/${leadId}/status`, motivo ? { status, motivo } : { status }),
+
+  /**
+   * Apuntar una nota en la ficha, sin salir del chat (#112).
+   *
+   * «Es lo que la gestora acaba de hacer —hablar con la persona— y el sitio
+   * natural para escribirlo es donde esta mirando.» Antes habia que abrir otra
+   * pestaña, que es justo lo que el popup venia a evitar.
+   */
+  apuntarNota: (leadId: number, nota: string): Promise<ApiResponse<unknown>> =>
+    client.post(`/leads/${leadId}/interactions`, { tipo: 'nota', nota }),
 
   /**
    * La ficha del prospecto de una conversacion, para el popup del chat.
