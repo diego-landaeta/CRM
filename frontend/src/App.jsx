@@ -116,6 +116,8 @@ const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/Ch
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
+const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -124,7 +126,6 @@ const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWe
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
-const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -180,7 +181,8 @@ function App() {
           </Route>
           {/* Antes que `:id`: React Router prioriza el tramo fijo, pero
               tenerlos juntos evita que alguien meta otra ruta en medio y
-              «proceso» acabe leyendose como el id de un prospecto. */}
+              «cola» o «proceso» acaben leyendose como el id de un prospecto. */}
+          <Route path="/prospectos/cola" element={<ColaDelDiaPage />} />
           <Route path="/prospectos/proceso" element={<ProcesoPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 

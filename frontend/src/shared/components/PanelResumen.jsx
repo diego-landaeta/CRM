@@ -9,7 +9,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Users, Receipt, CurrencyEur, ChartLineUp, TrendUp, TrendDown } from '@phosphor-icons/react';
-import client from '@/shared/api/client';
+import client from '@/shared/api/client';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const ACCENT = {
@@ -71,7 +71,7 @@ function HeroTooltip({ active, payload, label, formatea, color, prevValue }) {
   const v = payload[0]?.value ?? 0;
   const delta = prevValue > 0 ? Math.round(((v - prevValue) / prevValue) * 100) : null;
   return (
-    <div className="rounded-lg border border-border bg-card/95 backdrop-blur shadow-popover px-3 py-2 min-w-[140px]">
+    <div className="rounded-lg border border-border bg-card/95 backdrop-blur shadow-lg px-3 py-2 min-w-[140px]">
       <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">{label}</div>
       <div className="flex items-baseline gap-2">
         <span className="text-base font-semibold tabular-nums tracking-tight" style={{ color }}>{formatea(v)}</span>
@@ -85,7 +85,7 @@ function HeroTooltip({ active, payload, label, formatea, color, prevValue }) {
   );
 }
 
-export default function PanelResumen({ projectId, issuerId, projectName, from, to }) {
+export default function PanelResumen({ projectId, issuerId, projectName, from, to , onDatos }) {
   const [panel, setPanel] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [heroSerie, setHeroSerie] = useState('ingresos');
@@ -106,6 +106,10 @@ export default function PanelResumen({ projectId, issuerId, projectName, from, t
     return () => { vivo = false; };
   }, [projectId, issuerId, from, to]);
 
+  // La pagina necesita esto para la descarga: pedirlo otra vez desde
+  // arriba serian dos viajes para el mismo dato.
+  useEffect(() => { onDatos?.(panel); }, [panel]);
+
   const serie = panel?.serie || [];
   const chispa = (k) => serie.map((x) => Number(x[k] || 0));
   const kpi = (k, campo) => ({
@@ -117,12 +121,26 @@ export default function PanelResumen({ projectId, issuerId, projectName, from, t
   const ventas = kpi('ventas', 'ventas');
   const ingresos = kpi('ingresos', 'ingresos');
   const tasa = kpi('tasa', 'tasa');
+  // De donde sale el dinero que entro: primer cobro de una venta, o cuota de
+  // una venta anterior. Es la diferencia EXACTA entre este bloque y el KPI
+  // «Ventas cobradas» de arriba, y sin verla los dos numeros parecian
+  // contradecirse.
+  const deVentas = Number(panel?.kpis?.ingresos_venta?.value || 0);
+  const deCuotas = Number(panel?.kpis?.ingresos_cuotas?.value || 0);
+  const nCuotas = Number(panel?.kpis?.mensualidades?.value || 0);
 
+  // Cada serie lleva escrito QUE cuenta. Sin eso, este bloque y los KPI de
+  // arriba dan dos cifras distintas de «ingresos» sin decir por que: aquellos
+  // miran las ventas cerradas en el periodo, y este el dinero que entro.
   const HERO_SERIES = {
-    leads: { label: 'Prospectos', campo: 'prospectos', color: 'hsl(199 89% 48%)', fmt },
-    ventas: { label: 'Ventas', campo: 'ventas', color: 'hsl(160 84% 39%)', fmt },
-    ingresos: { label: 'Ingresos', campo: 'ingresos', color: 'hsl(258 90% 66%)', fmt: fmtMoney },
-    tasa: { label: 'Tasa conv.', campo: 'tasa', color: 'hsl(43 96% 56%)', fmt: (v) => `${Math.round(v)}%` },
+    leads: { label: 'Prospectos', campo: 'prospectos', color: 'hsl(199 89% 48%)', fmt,
+      nota: 'por su fecha de entrada' },
+    ventas: { label: 'Ventas', campo: 'ventas', color: 'hsl(160 84% 39%)', fmt,
+      nota: 'cerradas en el periodo, por fecha de venta' },
+    ingresos: { label: 'Ingresos', campo: 'ingresos', color: 'hsl(258 90% 66%)', fmt: fmtMoney,
+      nota: 'dinero que ENTRÓ en el periodo, incluidas cuotas de ventas anteriores' },
+    tasa: { label: 'Tasa conv.', campo: 'tasa', color: 'hsl(43 96% 56%)', fmt: (v) => `${Math.round(v)}%`,
+      nota: 'ventas del periodo sobre prospectos del periodo' },
   };
   const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
   const heroCampo = heroActive.campo;
@@ -196,6 +214,17 @@ export default function PanelResumen({ projectId, issuerId, projectName, from, t
                     {heroActive.label} · {etiquetaRango}
                   </span>
                 </div>
+                {heroActive.nota && (
+                  <p className="text-[11px] text-muted-foreground">{heroActive.nota}</p>
+                )}
+                {heroSerie === 'ingresos' && (deVentas > 0 || deCuotas > 0) && (
+                  <p className="text-[11px] text-muted-foreground">
+                    <strong className="text-foreground tabular-nums">{fmtMoney(deVentas)}</strong> de ventas
+                    <span className="opacity-40"> · </span>
+                    <strong className="text-foreground tabular-nums">{fmtMoney(deCuotas)}</strong> de cuotas
+                    {nCuotas > 0 && ` (${nCuotas} ${nCuotas === 1 ? 'cobro' : 'cobros'})`}
+                  </p>
+                )}
                 <div className="flex items-baseline gap-3 flex-wrap">
                   {/* Manda lo filtrado, no el último punto de la serie. */}
                   <span className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight"

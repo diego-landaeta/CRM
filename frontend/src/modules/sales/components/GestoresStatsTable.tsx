@@ -21,6 +21,7 @@ interface GestorRow {
 
 interface Props {
   projectId?: number | null;
+  issuerId?: number | null;
   className?: string;
   /** Si false, no muestra columna de acciones (modo solo lectura) */
   canEdit?: boolean;
@@ -37,7 +38,7 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function GestoresStatsTable({ projectId, className = '', canEdit = true, periodo: periodoProp }: Props) {
+export default function GestoresStatsTable({ projectId, issuerId = null, className = '', canEdit = true, periodo: periodoProp }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -51,6 +52,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
     // backend y salia todo a cero aunque arriba se estuviera mirando el año.
     if (periodo) params.periodo = periodo;
@@ -60,7 +62,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, issuerId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(row: GestorRow) {
     setEditingId(row.user_id);

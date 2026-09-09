@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Topbar from './Topbar';
-import { CabeceraProvider } from './CabeceraContext';
 import Toaster from './Toaster';
 import CommandPalette from './CommandPalette';
-import { X } from '@phosphor-icons/react';
+import { List, X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -17,6 +15,14 @@ const ALL_PROJECTS_OK = [
   /^\/$/,                          // Dashboard
   // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
   /^\/prospectos$/,                // Lista de prospectos
+  /^\/prospectos\/cola$/,          // La cola del dia — el servidor acota por gestora
+  // Tutores: las tres consultas ya aceptan «sin proyecto» y devuelven el
+  // nombre del proyecto en cada fila, asi que la vista general se lee sola.
+  // Quien lleva las colaboraciones trabaja con los profesores de todas las
+  // marcas a la vez: obligarle a elegir una por una era pedirle nueve vueltas.
+  /^\/tutores$/,
+  /^\/tutores\/sin-tutor$/,
+  /^\/tutores\/comisiones$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto
@@ -37,30 +43,6 @@ const ALL_PROJECTS_OK = [
   /^\/status$/,
   /^\/ai-chat$/,
   /^\/prueba_ui(?:_[a-z]+)?$/,
-  // El muestrario de primitivas no depende de ningún proyecto: son piezas
-  // sueltas. Sin esto, quien tenga puesto «Todos los proyectos» —que es lo
-  // normal— se encuentra el aviso de «elige un proyecto» en vez de la pantalla.
-  /^\/dev\/components$/,
-
-  // WhatsApp. Las conversaciones son del NÚMERO de la gestora, no de un
-  // proyecto: pedir uno era exigir un dato que la pantalla no usa para lo
-  // principal. Las dos cosas que sí lo necesitan —el buscador de prospectos y
-  // las plantillas— ya se esconden solas cuando no lo hay.
-  /^\/whatsapp$/,
-  /^\/whatsapp\/chat$/,
-  /^\/whatsapp\/plantillas$/,
-  /^\/whatsapp\/banco$/,
-  /^\/whatsapp\/conexion$/,
-  /^\/whatsapp\/ayuda$/,
-
-  // Reportes. El servidor sabe contestar sin proyecto desde el #103 —y eso
-  // significa «todos»—, así que la puerta cerrada era un olvido: enseñaba un
-  // muro delante de una pantalla que ya funcionaba.
-  /^\/informes$/,
-
-  // El registro (#111) cruza todas las fichas y a todos los compañeros: por
-  // definición no es de un proyecto.
-  /^\/registro$/,
 ];
 
 function pathAllowsAll(pathname) {
@@ -71,7 +53,12 @@ function pathAllowsAll(pathname) {
 // sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
 // concreto, asi que se comportan igual que con «todos los proyectos» — que es
 // lo que ya sabian hacer.
-const CON_SOCIEDAD_OK = [/^\/informes$/];
+// Las pantallas de CIFRAS aceptan una sociedad: sumar varios campus
+// significa algo. Las de configuracion no entran aqui a proposito —un
+// webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
+// CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
+// correcta, no un fallo.
+const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
@@ -225,21 +212,26 @@ export default function AppLayout() {
   }, [navigate, pathname]);
 
   return (
-    // El provider envuelve a los dos: la pantalla publica su cabecera desde
-    // dentro del contenido, y Topbar la lee desde arriba.
-    <CabeceraProvider>
     <div className="min-h-screen bg-background">
       {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-3 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-popover focus:font-semibold focus:text-sm"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-3 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-lg focus:font-semibold focus:text-sm"
       >
         Saltar al contenido
       </a>
 
-      {/* Aquí vivía una barra fija SOLO para móvil, que decía «MultiCRM» y
-          nada más. La sustituye Topbar, que va en todos los tamaños y sí dice
-          en qué pantalla y en qué marca estás. */}
+      {/* Mobile topbar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-30">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menu"
+          className="p-2 rounded-md hover:bg-muted transition-colors"
+        >
+          <List size={22} weight="bold" />
+        </button>
+        <span className="ml-3 font-semibold text-sm">MultiCRM</span>
+      </div>
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -270,30 +262,22 @@ export default function AppLayout() {
         aria-label="Contenido principal"
         tabIndex={-1}
         className={cn(
-          'transition-[margin] duration-200 focus:outline-none',
+          'p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8 transition-[margin] duration-200 focus:outline-none',
           collapsed ? 'lg:ml-16' : 'lg:ml-64'
         )}
       >
-        {/* La cabecera va DENTRO de la columna de contenido y es `sticky`, no
-            `fixed`: así respeta el ancho del menú lateral al plegarse y no hay
-            que compensar su altura con relleno arriba, que era el `pt-[72px]`
-            de antes — un número a ojo que se descuadraba al cambiar la barra. */}
-        <Topbar onAbrirMenu={() => setMobileOpen(true)} />
-
-        <div className="p-4 lg:p-6 xl:p-8">
-          <Suspense fallback={
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-            </div>
-          }>
-            {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
-            <div key={pathname} className="animate-in fade-in duration-200">
-              <AllProjectsGuard pathname={pathname}>
-                <Outlet />
-              </AllProjectsGuard>
-            </div>
-          </Suspense>
-        </div>
+        <Suspense fallback={
+          <div className="flex items-center justify-center py-20">
+            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        }>
+          {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
+          <div key={pathname} className="animate-in fade-in duration-200">
+            <AllProjectsGuard pathname={pathname}>
+              <Outlet />
+            </AllProjectsGuard>
+          </div>
+        </Suspense>
       </main>
 
       <Toaster />
@@ -325,6 +309,5 @@ export default function AppLayout() {
         <AvisoDeMensaje />
       </Suspense>
     </div>
-    </CabeceraProvider>
   );
 }

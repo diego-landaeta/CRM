@@ -10,7 +10,7 @@ import { query, getClient } from '../../shared/config/db.js';
 
 // ── Tutores ─────────────────────────────────────────────────────────────────
 
-export async function listar({ projectId, activos = true }) {
+export async function listar({ projectId, projectIds = null, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
   //
@@ -24,10 +24,14 @@ export async function listar({ projectId, activos = true }) {
        SELECT p.id,
               (p.id = $1) AS es_el_elegido
          FROM projects p
-        WHERE $1::int IS NULL
-           OR p.id = $1
-           OR (p.sociedad_emisora_id IS NOT NULL
-               AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))
+        -- Con una SOCIEDAD elegida, el alcance son sus campus y punto: no se
+        -- amplia a la sociedad de nadie porque ya ES una sociedad.
+        WHERE ($2::int[] IS NOT NULL AND p.id = ANY($2::int[]))
+           OR ($2::int[] IS NULL AND (
+                $1::int IS NULL
+                OR p.id = $1
+                OR (p.sociedad_emisora_id IS NOT NULL
+                    AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
             u.set_password_token IS NOT NULL AS pendiente_de_entrar,
@@ -55,7 +59,7 @@ export async function listar({ projectId, activos = true }) {
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
       ORDER BY es_de_este_proyecto DESC, u.nombre`,
-    [projectId || null]
+    [projectId || null, (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -379,7 +383,7 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
 }
 
 // Las comisiones ya creadas, con lo que hace falta para entender cada una.
-export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
+export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, projectIds = null, limit = 1000 }) {
   const { rows } = await query(
     `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
             tc.fecha_liquidacion, tc.created_at,
@@ -399,10 +403,12 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
-        AND ($4::int IS NULL OR p.project_id = $4)
+        AND ($5::int[] IS NOT NULL AND p.project_id = ANY($5::int[])
+             OR $5::int[] IS NULL AND ($4::int IS NULL OR p.project_id = $4))
       ORDER BY tc.periodo DESC, u.nombre, cp.fecha
       LIMIT ${Number(limit) || 1000}`,
-    [periodo, tutorId, estado, projectId]
+    [periodo, tutorId, estado, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -519,7 +525,7 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
  * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
  * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
  */
-export async function formacionesSinTutor({ projectId = null } = {}) {
+export async function formacionesSinTutor({ projectId = null, projectIds = null } = {}) {
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
             count(DISTINCT cv.id)::int  AS ventas,
@@ -543,11 +549,13 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
         -- de abril pudo tener tutor entonces y no tenerlo ahora: sacarla aqui
         -- seria acusar de un agujero que no existe.
         AND cp.fecha >= s.aplica_desde
-        AND ($1::int IS NULL OR p.project_id = $1)
+        AND ($2::int[] IS NOT NULL AND p.project_id = ANY($2::int[])
+             OR $2::int[] IS NULL AND ($1::int IS NULL OR p.project_id = $1))
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
       ORDER BY sum(cp.importe) DESC`,
-    [projectId]
+    [projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }

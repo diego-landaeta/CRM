@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  CalendarCheck,
   SquaresFour,
   Users,
   Package,
@@ -100,27 +101,29 @@ const NAV_SECTIONS = [
     icon: House,
     items: [
       { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
-      // Prospectos cuelga de si mismo, como WhatsApp: la lista y el proceso son
-      // el mismo sitio. El proceso describe por donde pasa cada prospecto, asi
-      // que colgarlo de Prospectos dice de que va sin tener que explicarlo; de
-      // «Sistema» o «Configuracion» no lo encontraba nadie.
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista, la cola del dia
+      // y el proceso son el mismo sitio. La cola dice a quien le toca hoy y el
+      // proceso es lo que la cola aplica; de «Sistema» o «Configuracion» no lo
+      // encontraba nadie.
       //
       // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
       // cerrado, la gestora pagaria un clic de mas cada manana para llegar a lo
-      // que mas usa. Abierto, se ve igual que antes y ademas se ve el proceso.
+      // que mas usa.
       //
       // Leerlo lo puede hacer cualquiera —la gestora necesita ver en que paso
       // va cada prospecto—; editarlo, solo administradores, y eso lo decide la
-      // propia pantalla.
+      // propia pantalla y el servidor.
       {
         label: 'Prospectos',
         icon: Users,
         module: 'leads',
         defaultOpen: true,
         children: [
-          // `end` porque si no, estando en /prospectos/proceso este tambien se
-          // marcaria activo: el resaltado diria que estas en dos sitios.
+          // `end` porque si no, estando en la cola o en el proceso este
+          // tambien se marcaria activo: el resaltado diria que estas en dos
+          // sitios a la vez.
           { label: 'Lista', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true },
+          { label: 'La cola del día', to: '/prospectos/cola', detail: 'A quién le toca hoy', icon: CalendarCheck },
           { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks },
         ],
       },
@@ -330,7 +333,16 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to);
   }
 
   // soporte ve todo (rol generico tipo dev)
@@ -742,7 +754,7 @@ export function ProjectAvatar({ project, size = 'md' }) {
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { activeProject, switchProject, projects } = useProjectContext();
+  const { activeProject, switchProject, projects, activeIssuer, switchIssuer } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);

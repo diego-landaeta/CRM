@@ -47,12 +47,21 @@ function generarContrasena() {
 
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject, projects } = useProjectContext() as {
+  const { activeProject, projects, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number } | null;
+    activeIssuerId: number | null;
     projects: Array<{ id: number; nombre: string }>;
   };
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
+  // lee siempre: quien lleva las colaboraciones trabaja con la plantilla
+  // entera, y cada fila dice de qué marca es.
+  const issuerId = activeIssuerId ?? null;
+  // Dar de alta a alguien o asignarle un curso SÍ necesita un proyecto
+  // concreto: hay que saber en cuál se le da de alta y de qué catálogo sale el
+  // curso. Eso se apaga, no se tapia la pantalla entera.
+  const puedeAlta = Boolean(projectId);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
   const [elegido, setElegido] = useState<Tutor | null>(null);
@@ -93,10 +102,10 @@ export default function TutoresPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await tutoresApi.listar(projectId, verRetirados);
+      const r = await tutoresApi.listar(projectId, verRetirados, issuerId);
       setTutores(r.success ? (r.data || []) : []);
     } finally { setCargando(false); }
-  }, [projectId, verRetirados]);
+  }, [projectId, issuerId, verRetirados]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -387,21 +396,21 @@ export default function TutoresPage() {
       </div>
     );
   }
-  if (!projectId) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-        Elige un proyecto concreto para ver sus tutores.
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">
       <PageHeader
         title="Tutores"
-        subtitle={cargando ? 'cargando…' : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`}
+        subtitle={cargando
+          ? 'cargando…'
+          : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'}`
+            + ' · cobran un porcentaje de lo que se cobra de sus formaciones'
+            + (puedeAlta ? '' : ' · elige un proyecto para dar de alta a alguien')}
         actions={(
-          <Button onClick={abrirAlta}>
+          // Dar de alta necesita saber EN QUE proyecto: se apaga el boton y se
+          // dice por que, en vez de tapiar la pantalla entera como antes.
+          <Button onClick={abrirAlta} disabled={!puedeAlta}
+            title={puedeAlta ? undefined : 'Elige un proyecto concreto para dar de alta a alguien'}>
             <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
           </Button>
         )}

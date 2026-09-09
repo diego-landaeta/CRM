@@ -13,26 +13,37 @@ import { textoDeDias, puedeEditar } from '@/modules/proceso/pages/ProcesoPage';
 
 describe('cómo se leen los días', () => {
   it('un rango se escribe como rango', () => {
-    expect(textoDeDias(0, 1)).toBe('Días 0-1');
-    expect(textoDeDias(7, 8)).toBe('Días 7-8');
+    expect(textoDeDias(0, 1)).toBe('El mismo día o al siguiente');
+    // «7 u 8», no «7 o 8»: ocho empieza por o.
+    expect(textoDeDias(7, 8)).toBe('A los 7 u 8 días');
+    expect(textoDeDias(2, 3)).toBe('A los 2 o 3 días');
+    expect(textoDeDias(10, 11)).toBe('A los 10 u 11 días');
   });
 
   it('un solo día no se escribe como rango de sí mismo', () => {
     // El paso 3 es «día 4», no «días 4-4».
-    expect(textoDeDias(4, 4)).toBe('Día 4');
-    expect(textoDeDias(4, null)).toBe('Día 4');
-    expect(textoDeDias(null, 4)).toBe('Día 4');
+    expect(textoDeDias(4, 4)).toBe('A los 4 días');
+    expect(textoDeDias(4, null)).toBe('A los 4 días');
+    expect(textoDeDias(null, 4)).toBe('A los 4 días');
+    // El primer día no es «a los 0 días».
+    expect(textoDeDias(0, 0)).toBe('El mismo día');
+    expect(textoDeDias(1, 1)).toBe('Al día siguiente');
   });
 
   it('el de seguimiento no tiene días y lo dice', () => {
     // `dia_desde` y `dia_hasta` llegan a null: es de fin de mes, no de la cola.
-    expect(textoDeDias(null, null)).toBe('—');
+    // Devuelve null: sin ventana manda `cuando` —«Final de mes»—, y eso lo
+    // decide la fila, no esta función.
+    expect(textoDeDias(null, null)).toBeNull();
   });
 
   it('el día cero es un día, no un vacío', () => {
     // Con un `||` en vez de un `??` esto saldría «—», y el paso 1 empieza el
     // mismo día que entra el prospecto.
-    expect(textoDeDias(0, 0)).toBe('Día 0');
+    // «El mismo día», no «a los 0 días»: el cero es un día de verdad —el
+    // paso 1 empieza el mismo que entra el prospecto— y con un `||` en vez
+    // de un `??` habria salido un guion.
+    expect(textoDeDias(0, 0)).toBe('El mismo día');
   });
 });
 
