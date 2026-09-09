@@ -186,14 +186,21 @@ export default function ColaDelDiaPage() {
                 }
               >
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold tabular-nums text-muted-foreground">
-                    {p.orden}
+                  {/* Un «2» suelto no dice nada. Ahora dice de que va: es el
+                      seguimiento numero 2, y debajo cuantos lleva hechos.
+                      Diego: «esto no se entiende de los pasos · falta poner la
+                      cantidad de seguimiento que es». */}
+                  <span className="mt-0.5 flex shrink-0 flex-col items-center justify-center rounded-md bg-muted px-2 py-1 text-muted-foreground">
+                    <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Seg.</span>
+                    <span className="text-sm font-bold tabular-nums leading-tight">{p.orden}</span>
                   </span>
 
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span className="font-semibold truncate">{p.lead_nombre || 'Sin nombre'}</span>
-                      <span className="text-xs text-muted-foreground">{p.paso_nombre || p.clave}</span>
+                      <span className="text-xs text-muted-foreground">
+                        Seguimiento {p.orden} · {p.paso_nombre || p.clave}
+                      </span>
                       <span className={
                         'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide '
                         + (c.urgente
@@ -234,7 +241,9 @@ export default function ColaDelDiaPage() {
                       <div className="inline-flex items-center gap-1"><User size={11} />{p.gestora}</div>
                     )}
                     <div className="tabular-nums">
-                      {p.contactos} {p.contactos === 1 ? 'contacto' : 'contactos'}
+                      {p.contactos === 0
+                        ? 'sin contactar aún'
+                        : `${p.contactos} ${p.contactos === 1 ? 'contacto hecho' : 'contactos hechos'}`}
                     </div>
                   </div>
                 </div>

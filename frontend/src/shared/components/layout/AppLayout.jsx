@@ -16,6 +16,10 @@ const ALL_PROJECTS_OK = [
   // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
   /^\/prospectos$/,                // Lista de prospectos
   /^\/prospectos\/cola$/,          // La cola del dia — el servidor acota por gestora
+  // Ventas: la consulta ya sabe hacerlo sin proyecto —cada fila dice de cual
+  // es— y el muro tapaba una vista que funcionaba.
+  /^\/finanzas\/ventas$/,
+  /^\/ventas$/,
   // Tutores: las tres consultas ya aceptan «sin proyecto» y devuelven el
   // nombre del proyecto en cada fila, asi que la vista general se lee sola.
   // Quien lleva las colaboraciones trabaja con los profesores de todas las
@@ -58,7 +62,7 @@ function pathAllowsAll(pathname) {
 // webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
 // CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
 // correcta, no un fallo.
-const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/];
+const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));

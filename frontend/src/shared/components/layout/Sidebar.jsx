@@ -100,14 +100,13 @@ const NAV_SECTIONS = [
         module: 'leads',
         defaultOpen: true,
         children: [
-          // `end` porque si no, estando en la cola este tambien se marcaria
-          // activo y el menu diria que estas en dos sitios.
-          { label: 'Lista', to: '/prospectos', icon: Users, end: true },
+          // `end` porque si no, estando en la cola o en el proceso este
+          // tambien se marcaria activo: el resaltado diria que estas en dos
+          // sitios a la vez.
+          { label: 'Lista de prospectos', to: '/prospectos', icon: Users, end: true },
           { label: 'La cola del día', to: '/prospectos/cola', icon: CalendarCheck },
           // El proceso, al lado de la cola: es lo que la cola aplica. Leerlo
-          // lo puede hacer cualquiera —la gestora necesita saber en que paso
-          // va cada prospecto—; editarlo, solo admin, y eso lo decide la
-          // propia pantalla y el servidor.
+          // lo puede hacer cualquiera; editarlo, solo admin.
           { label: 'Proceso comercial', to: '/prospectos/proceso', icon: ListChecks },
         ],
       },
