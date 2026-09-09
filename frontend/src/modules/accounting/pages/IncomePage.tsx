@@ -9,6 +9,9 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
 import { formatDate } from '@/shared/lib/format';
+// Las metas son mensuales: el mes que toque segun el filtro de fechas. Misma
+// funcion que usa SalesPage, para que las dos pantallas digan el mismo mes.
+import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
@@ -57,7 +60,7 @@ function atajosDeFecha() {
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
-  const { activeProject, activeIssuerId } = useProjectContext();
+  const { activeProject, activeIssuerId, projects, switchProject } = useProjectContext();
   // El ambito: un proyecto, una sociedad entera o todos.
   //
   // OJO CON EL -1: «Todos los proyectos» es el id -1, un valor interno del CRM.
@@ -98,7 +101,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   useEffect(() => {
     const params: Record<string, any> = {};
-    if (activeProject?.id) params.projectId = activeProject.id;
+    // Aqui tambien colaba el -1 de «todos los proyectos»: la lista de cursos
+    // salia vacia y el filtro de curso no ofrecia nada que elegir.
+    if (projectIdParam) params.projectId = projectIdParam;
+    if (issuerIdParam) params.issuerId = issuerIdParam;
     if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
     client.get('/conversions/productos', { params })
       .then((r) => setCursos(r?.data || []))
@@ -175,6 +181,29 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
       {(
         <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+          {/*
+            El proyecto, aquí dentro.
+
+            «Todos los proyectos» ya existía, pero había que SALIR de la pantalla
+            para activarlo, en el selector de la barra lateral, y desde aquí nada
+            lo sugería (#100 · 2). Es el mismo estado que el de la barra: cambiar
+            en un sitio cambia en el otro, no son dos filtros distintos.
+          */}
+          {projects.length > 1 && (
+            <>
+              <label className="text-xs font-semibold text-muted-foreground">Proyecto:</label>
+              <select
+                value={String(activeProject?.id ?? '')}
+                onChange={(e) => switchProject(Number(e.target.value))}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[180px]"
+              >
+                <option value="-1">— Todos los proyectos —</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </>
+          )}
           {isAdmin && gestores.length > 0 && (
             <>
               <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
@@ -314,16 +343,22 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
-          <MyGoalCard projectId={activeProject?.id} />
+          <MyGoalCard projectId={projectIdParam} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
+          <TopProductsCard projectId={projectIdParam} issuerId={issuerIdParam}
+            from={rango.from || null} to={rango.to || null}
+            responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
         </Suspense>
       </div>
 
       {isAdmin && (
         <Suspense fallback={null}>
-          <GestoresStatsTable projectId={activeProject?.id} canEdit={true} />
+          {/* El mes ES el del filtro de arriba. Sin pasarlo, la tabla cogia
+              siempre el mes en curso: con el filtro en agosto decia
+              «Equipo de ventas — 2026-09» y todos a cero (#100 · 4). */}
+          <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam}
+            periodo={mesDe(rango.from, rango.to)} canEdit={true} />
         </Suspense>
       )}
 
