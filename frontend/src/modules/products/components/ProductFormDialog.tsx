@@ -12,7 +12,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
-import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
@@ -50,6 +50,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
       para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
       metodologia_texto: '', faqs_texto: '', profesores_texto: '',
+      plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
     },
   });
 
@@ -92,12 +93,18 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
         metodologia_texto: product.metodologia_texto || '',
         faqs_texto: product.faqs_texto || '',
         profesores_texto: product.profesores_texto || '',
+        plazas_totales: product.plazas_totales != null ? String(product.plazas_totales) : '',
+        plazas_ocupadas_previas: product.plazas_ocupadas_previas ? String(product.plazas_ocupadas_previas) : '',
+        // Llega como fecha completa y el input de fecha solo quiere el dia.
+        fecha_cierre_convocatoria: product.fecha_cierre_convocatoria
+          ? String(product.fecha_cierre_convocatoria).slice(0, 10) : '',
       } : {
         nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
         horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
         presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
         para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
         metodologia_texto: '', faqs_texto: '', profesores_texto: '',
+        plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
       });
       setCategoriaSel(product?.categoria_id ? String(product.categoria_id) : '');
       setSubcategoriaSel(product?.subcategoria_id ? String(product.subcategoria_id) : '');
@@ -442,6 +449,41 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
               </Field>
             </FilaCampos>
+          </div>
+
+          {/* === Convocatoria: plazas y cierre (#86) === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="text-[11px] font-bold uppercase text-muted-foreground">
+              Convocatoria <span className="font-normal normal-case opacity-70">(las plazas salen en las plantillas del proceso comercial)</span>
+            </div>
+            {/* Dibujado con FilaCampos y el Field compartido, no con una rejilla a
+                mano: es la regla del #127 para cuando choca formato con contenido
+                —gana el formato del que unifica y el contenido se repone encima—.
+                De paso los tres campos se apilan solos en un movil, que es lo que
+                venia a arreglar el #106. */}
+            <FilaCampos columnas={3}>
+              <Field label="Plazas de la convocatoria" error={errors.plazas_totales?.message}>
+                <input {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={smallInput} />
+              </Field>
+              <Field label="Ya ocupadas antes del CRM" error={errors.plazas_ocupadas_previas?.message}>
+                <input {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={smallInput} />
+              </Field>
+              <Field label="Cierre de convocatoria" error={errors.fecha_cierre_convocatoria?.message}>
+                <input {...register('fecha_cierre_convocatoria')} type="date" className={smallInput} />
+              </Field>
+            </FilaCampos>
+            {/* Las ocupadas y las libres no se teclean: las cuenta el servidor desde
+                las ventas. Se enseñan aquí para que se vea el efecto de lo de arriba. */}
+            {product && product.plazas_totales != null && (
+              <div className="text-[11px] text-muted-foreground">
+                Ahora mismo: <strong className="text-foreground">{product.plazas_ocupadas}</strong> ocupadas
+                {' · '}
+                <strong className={Number(product.plazas_libres) <= 0 ? 'text-destructive' : 'text-foreground'}>
+                  {product.plazas_libres}
+                </strong>{' '}libres de {product.plazas_totales}.
+                {' '}Las ocupadas se cuentan de las ventas, no se escriben.
+              </div>
+            )}
           </div>
 
           {/* === Secciones extraídas (texto) === */}
