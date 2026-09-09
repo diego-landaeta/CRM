@@ -282,7 +282,14 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
             COALESCE(SUM(c.importe_total), 0) AS total_importe,
             COALESCE(SUM(c.importe_pagado), 0) AS total_pagado,
             COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
-            COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva
+            COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva,
+            -- Cuantas de estas ventas tienen factura de verdad. Una proforma no
+            -- cuenta: es un presupuesto, no obliga a nadie. Una anulada tampoco.
+            COUNT(*) FILTER (WHERE EXISTS (
+              SELECT 1 FROM invoices i
+               WHERE i.conversion_id = c.id
+                 AND i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+            )) AS facturadas
        FROM conversions c ${countJoin} ${where}`,
     params
   );
@@ -292,7 +299,44 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     pagado: Number(countRows[0].total_pagado),
     pendiente: Number(countRows[0].total_pendiente),
     iva: Number(countRows[0].total_iva),
+    facturadas: Number(countRows[0].facturadas),
+    sinFactura: total - Number(countRows[0].facturadas),
   };
+
+  /*
+    Por que Facturacion enseña mas filas que Ventas en el mismo dia.
+
+    Diego, el 09/09: «pongo ventas del 8 al 8 y sale 1». Y salia bien: ese dia en
+    ISEIH hubo UNA venta nueva y DOS facturas, porque la otra era una cuota de
+    una venta del 6 de julio. Una venta a plazos emite una factura por cada
+    cobro, y esas facturas caen en el mes en que se cobran, no en el que se
+    vendio.
+
+    Ventas cuenta VENTAS y Facturacion cuenta FACTURAS: las dos cifras son
+    correctas y distintas. Lo que faltaba era que la pantalla lo dijera. Asi que
+    se cuentan aparte las facturas del periodo que pertenecen a ventas
+    anteriores, que son exactamente las que sobran al comparar.
+  */
+  let facturasDeAntes = { n: 0, importe: 0 };
+  if (from && to) {
+    const args = [from, to];
+    // El mismo recorte de proyecto que el resto de la consulta, pero sobre la
+    // factura: si se esta mirando una sociedad, sus facturas y no las demas.
+    let alcance = SIN_PRUEBAS('i.project_id');
+    if (lista) { args.push(lista); alcance = `i.project_id = ANY($3::int[])`; }
+    const { rows: [fa] } = await query(
+      `SELECT COUNT(*)::int AS n, COALESCE(SUM(i.total), 0) AS importe
+         FROM invoices i
+         LEFT JOIN conversions cv ON cv.id = i.conversion_id
+        WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+          AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
+          -- La venta es anterior al periodo, o la factura no cuelga de ninguna.
+          AND (cv.id IS NULL OR cv.fecha_conversion < $1)
+          AND ${alcance}`,
+      args);
+    facturasDeAntes = { n: Number(fa.n), importe: Number(fa.importe) };
+  }
+  totales.facturasDeAntes = facturasDeAntes;
 
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
