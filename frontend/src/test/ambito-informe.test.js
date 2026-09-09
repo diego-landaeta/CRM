@@ -6,7 +6,7 @@ import {
   proyectosDelAmbito,
   idsDelAmbito,
   TODOS_LOS_PROYECTOS,
-} from '@/shared/lib/ambito';
+} from '@/shared/lib/ambitoInforme';
 
 /*
   De qué va un informe (#120).

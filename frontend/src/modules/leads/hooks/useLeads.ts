@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import client from '@/shared/api/client';
-import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
-import { idsDelAmbito } from '@/shared/lib/ambito';
+import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const PAGE_SIZE = 20;
 

@@ -9,8 +9,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Users, Receipt, CurrencyEur, ChartLineUp, TrendUp, TrendDown } from '@phosphor-icons/react';
-import client from '@/shared/api/client';
-import { ponerAmbito } from '@/shared/lib/ambito';
+import client from '@/shared/api/client';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const ACCENT = {
   sky: { bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-600 dark:text-sky-400' },

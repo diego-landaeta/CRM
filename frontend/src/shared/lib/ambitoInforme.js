@@ -13,6 +13,12 @@
 
   Aquí se decide una vez.
 
+  EL NOMBRE SE QUEDA CORTO A PROPÓSITO. Esto ya no es solo de informes, así que
+  «ambitoInforme» no lo describe bien. Pero lo importan nueve pantallas y
+  renombrarlo convierte un cambio de nueve líneas en nueve conflictos con quien
+  esté tocando esas pantallas — que es exactamente el #127. Un nombre regular
+  cuesta menos que una fusión perdida.
+
   LA REGLA
   --------
     una sociedad  →  issuerId=3      (sus campus sumados)

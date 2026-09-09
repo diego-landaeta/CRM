@@ -47,8 +47,8 @@ function exportCSV(clients: Client[], filename: string): void {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-import { toast } from '@/shared/hooks/useToast';
-import { idsDelAmbito } from '@/shared/lib/ambito';
+import { toast } from '@/shared/hooks/useToast';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));

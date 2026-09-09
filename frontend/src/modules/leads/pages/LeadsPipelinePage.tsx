@@ -9,8 +9,8 @@ import { toast } from '@/shared/hooks/useToast';
 import { Plus, User, DotsSixVertical, Users, CalendarBlank } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import type { Lead, LeadStatus } from '@/shared/types';
-import { idsDelAmbito } from '@/shared/lib/ambito';
+import type { Lead, LeadStatus } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 

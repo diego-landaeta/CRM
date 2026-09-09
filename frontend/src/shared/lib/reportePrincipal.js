@@ -8,8 +8,8 @@
 // Ojo con las tres fechas, que no son la misma: los leads cuentan por su fecha
 // de entrada, las ventas por su fecha de venta y los cobros por su fecha de
 // cobro. Por eso una asesora puede cobrar en julio algo que vendió en mayo.
-import client from '@/shared/api/client';
-import { ponerAmbito } from '@/shared/lib/ambito';
+import client from '@/shared/api/client';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const cab = (t) => ({ value: t, fontWeight: 'bold' });
 const num = (v) => ({ value: v == null ? null : Number(v), type: Number });
