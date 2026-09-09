@@ -83,7 +83,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [total, setTotal] = useState(0);
   const [totales, setTotales] = useState({
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
-    facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 },
+    facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0,
+    facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
     cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } },
   });
@@ -142,10 +143,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotal(res.pagination?.total ?? (res.data || []).length);
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
       } finally { setLoading(false); }
     })();
   }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -388,13 +389,17 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         {/* Ventas por facturas: cuantas de estas ventas tienen factura.
             El detalle va en el texto que sale al pasar el raton, que es donde
             lo pidio Diego — la tarjeta enseña la proporcion de un vistazo. */}
-        <div title={`${totales.facturadas} ventas facturadas · ${totales.sinFactura} ventas no facturadas`}>
+        <div title={`${totales.facturadas} ventas facturadas · ${totales.noRequiereFactura} no necesitan factura · ${totales.pendientesDeFacturar} pendientes de facturar`}>
           <KpiCard
             icon={Receipt}
             iconBg="bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-400"
             label="Ventas por facturas"
             value={`${totales.facturadas} / ${total}`}
-            badge={totales.sinFactura > 0 ? `${totales.sinFactura} sin factura` : null}
+            /* El aviso solo cuando hay algo que HACER. Antes contaba tambien las
+               marcadas «no requiere factura» —189 en 2026— y esa cifra en ambar
+               tapaba la unica que importa: las 16 que si estan pendientes. */
+            badge={totales.pendientesDeFacturar > 0
+              ? `${totales.pendientesDeFacturar} por facturar` : null}
             badgeColor="bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
             trend="down"
           />
@@ -429,6 +434,24 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           format={fmt}
         />
       </div>
+
+      {/* Lo unico que hay que HACER: las ventas que esperan factura. Lleva a la
+          pantalla donde se emiten, que cuenta exactamente lo mismo. */}
+      {totales.pendientesDeFacturar > 0 && (
+        <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            <strong>{totales.pendientesDeFacturar}</strong>{' '}
+            {totales.pendientesDeFacturar === 1 ? 'venta de estas fechas espera factura' : 'ventas de estas fechas esperan factura'}.
+          </p>
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            Las {totales.noRequiereFactura > 0 ? `otras ${totales.noRequiereFactura} sin factura están marcadas «no requiere factura»` : 'demás están facturadas'}.
+          </p>
+          <button type="button" onClick={() => navigate('/finanzas/facturas')}
+            className="ml-auto text-xs font-semibold text-amber-900 dark:text-amber-200 underline hover:no-underline">
+            Ir a facturarlas
+          </button>
+        </div>
+      )}
 
       {/*
         Por que Facturacion enseña mas filas que esta pantalla en el mismo dia.
@@ -510,9 +533,27 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                         <td className="px-3 py-1.5 whitespace-nowrap">
                           {/* Sin factura NO es un hueco en blanco: es dinero
                               cobrado que no se ha declarado, y se dice. */}
-                          {q.factura
-                            ? <span className="font-medium">{q.factura}</span>
-                            : <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>}
+                          {q.factura ? (
+                            <>
+                              <span className="font-medium">{q.factura}</span>
+                              {/*
+                                La fecha de la factura, SOLO cuando no es la del
+                                cobro. Es lo que explica el «1 cuota en Facturación
+                                y 2 en Ventas» del 8/9: el cobro de Laura Estrada
+                                entró el 8 y se facturó el 9, así que aquí sale
+                                —se cuenta por cobro— y allí no —se cuenta por
+                                factura—. Pasa en 52 de los 142 cobros facturados
+                                de 2026, así que no es una rareza.
+                              */}
+                              {q.factura_fecha && String(q.factura_fecha).slice(0, 10) !== String(q.fecha).slice(0, 10) && (
+                                <span className="ml-1 text-[10px] text-muted-foreground">
+                                  emitida {formatDate(q.factura_fecha)}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -289,7 +289,29 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
               SELECT 1 FROM invoices i
                WHERE i.conversion_id = c.id
                  AND i.tipo <> 'proforma' AND i.estado <> 'cancelada'
-            )) AS facturadas
+            )) AS facturadas,
+            /*
+              «Sin factura» no significa lo mismo en todos los casos.
+
+              Diego: «revisa que todo en facturas este coherente con ventas». Al
+              reconciliar 2026 entero salieron 224 ventas sin factura, y parecia
+              un agujero enorme. No lo es: 189 estan marcadas NO REQUIERE
+              FACTURA --una decision tomada, no un descuido-- y 19 no tienen
+              importe. Pendientes de verdad hay 16, por 6.723,68 €.
+
+              Meterlas todas en el mismo saco convertia la unica cifra que hay
+              que vigilar en ruido. Se separan, y la que se enseña en rojo es la
+              que se puede arreglar: la misma que sale en «Pendientes de
+              facturar», para que las dos pantallas digan el mismo numero.
+            */
+            COUNT(*) FILTER (WHERE c.factura_no_requerida IS TRUE) AS no_requiere_factura,
+            COUNT(*) FILTER (WHERE
+              NOT EXISTS (SELECT 1 FROM invoices i
+                           WHERE i.conversion_id = c.id
+                             AND i.tipo <> 'proforma' AND i.estado <> 'cancelada')
+              AND c.factura_no_requerida IS NOT TRUE
+              AND COALESCE(c.importe_total, 0) > 0
+            ) AS pendientes_de_facturar
        FROM conversions c ${countJoin} ${where}`,
     params
   );
@@ -301,6 +323,10 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     iva: Number(countRows[0].total_iva),
     facturadas: Number(countRows[0].facturadas),
     sinFactura: total - Number(countRows[0].facturadas),
+    // De las que no tienen factura: cuantas es porque no la necesitan y
+    // cuantas estan de verdad pendientes.
+    noRequiereFactura: Number(countRows[0].no_requiere_factura),
+    pendientesDeFacturar: Number(countRows[0].pendientes_de_facturar),
   };
 
   /*
@@ -478,7 +504,12 @@ export async function cuotasDelPeriodo({
             COALESCE(p.nombre, NULLIF(TRIM(c.producto_contratado), '')) AS producto,
             -- La factura de ESE cobro. Una proforma no cuenta: es un
             -- presupuesto, no una factura. Una anulada, tampoco.
-            i.codigo AS factura, i.id AS factura_id
+            i.codigo AS factura, i.id AS factura_id,
+            -- Cuando se emitio esa factura. Casi nunca es el dia del cobro: de
+            -- los 142 cobros facturados de 2026, 52 llevan fecha distinta. Sin
+            -- decirlo, Ventas y Facturacion cuentan cuotas distintas para el
+            -- mismo dia y parece un fallo cuando es la fecha de otra cosa.
+            i.fecha_emision AS factura_fecha
        FROM cobros cb
        JOIN conversions c ON c.id = cb.conversion_id
        LEFT JOIN leads l ON l.id = c.lead_id

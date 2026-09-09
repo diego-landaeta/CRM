@@ -111,7 +111,7 @@ export interface Invoice {
   rectifica_codigo?: string | null;
   /** Qué es la factura: la de una venta nueva, una cuota de una venta anterior,
    *  o una suelta que no cuelga de ninguna venta. */
-  clase?: 'venta' | 'cuota' | 'suelta';
+  clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
   /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
   fecha_de_la_venta?: string | null;
   motivo_rectificacion?: string | null;
@@ -215,7 +215,12 @@ export const invoicesApi = {
     if (params.issuerId) qs.set('issuerId', String(params.issuerId));
     return client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?${qs}`);
   },
-  ventasSinFactura: (projectId: number) => client.get<VentaSinFactura[]>(`/invoices/ventas-sin-factura?projectId=${projectId}`),
+  ventasSinFactura: (scope: { projectId?: number | null; issuerId?: number | null }) =>
+    client.get<VentaSinFactura[]>('/invoices/ventas-sin-factura?'
+      + new URLSearchParams(
+          scope.issuerId ? { issuerId: String(scope.issuerId) }
+            : scope.projectId ? { projectId: String(scope.projectId) } : {}
+        ).toString()),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),

@@ -2,6 +2,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -420,6 +421,27 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             */
             CASE
               WHEN i.conversion_id IS NULL THEN 'suelta'
+              /*
+                OTRA FACTURA DE UNA VENTA YA FACTURADA.
+
+                Diego: «veo 4 ventas hechas en facturas y en ventas muestra 3».
+                Tenia razon y el fallo era mio. La venta de Flavia Gerez --251 €,
+                una sola venta-- se partio en DOS facturas de 125,50: la 2026/0101
+                con su cobro apuntado y la 2026/0102 con payment_id a NULL.
+                Como no tenia cobro que mirar, caia en la rama de «venta» y se
+                contaban cuatro donde hay tres.
+
+                No es una venta nueva ni es una cuota: es la misma venta partida
+                en dos papeles. Se dice asi.
+              */
+              WHEN i.payment_id IS NULL AND EXISTS (
+                SELECT 1 FROM invoices x
+                 WHERE x.conversion_id = i.conversion_id
+                   AND x.id <> i.id
+                   AND x.tipo <> 'proforma' AND x.estado <> 'cancelada'
+                   AND (x.fecha_emision < i.fecha_emision
+                        OR (x.fecha_emision = i.fecha_emision AND x.numero < i.numero))
+              ) THEN 'parte'
               WHEN i.payment_id IS NULL THEN 'venta'
               WHEN NOT EXISTS (
                 SELECT 1 FROM conversion_payments p0
@@ -1424,19 +1446,33 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura(projectId) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null } = {}) {
+  /*
+    Un proyecto O UNA SOCIEDAD ENTERA.
+
+    Diego: «si elijo facturas y estoy eligiendo CEDIA debe de salir». Esta
+    consulta solo sabia de un proyecto, asi que con una sociedad elegida la
+    pantalla no tenia nada que pedir y salia el muro de «elige un proyecto»
+    --justo en la pantalla que dice QUE FALTA POR FACTURAR de toda la empresa.
+
+    Se devuelve tambien el proyecto de cada venta: mirando siete campus a la vez,
+    una fila sin marca no dice a quien hay que facturarle.
+  */
+  const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre,
-            c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
+            c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago,
+            c.project_id, pr.nombre AS proyecto_nombre
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN projects pr ON pr.id = c.project_id
        LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'
-      WHERE c.project_id = $1
+      WHERE ($1::int[] IS NULL OR c.project_id = ANY($1::int[]))
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
         AND c.factura_no_requerida IS NOT TRUE
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [projectId]
+    [lista]
   );
   return rows;
 }

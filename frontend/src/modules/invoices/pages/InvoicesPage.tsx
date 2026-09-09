@@ -115,8 +115,9 @@ export default function InvoicesPage() {
     if (!pid) return;
     setLoading(true);
     try {
-      // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
-      // (stats, emisores, ventas sin factura) sigue por proyecto activo.
+      // Modo sociedad (admin): facturas globales de esa empresa emisora. Las
+      // ventas sin factura tambien van por sociedad; los emisores y los ajustes
+      // siguen siendo por proyecto, que es como se configuran.
       const listParams = porSociedad
         ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, page, limit: PER_PAGE }
         : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
@@ -126,7 +127,12 @@ export default function InvoicesPage() {
           ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
           : invoicesApi.stats({ projectId: pid }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
-        invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+        // Con una sociedad elegida se piden las de TODOS sus campus: es la
+        // pantalla que dice que falta por facturar, y acotarla a un proyecto
+        // dejaba fuera justo lo que se estaba mirando.
+        invoicesApi.ventasSinFactura(porSociedad
+          ? { issuerId: Number(filterIssuer) }
+          : { projectId: pid }).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -391,7 +397,8 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {!porSociedad && !esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
+      {/* Ya no se esconde en modo sociedad: la consulta acepta los campus. */}
+      {!esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
@@ -493,6 +500,22 @@ export default function InvoicesPage() {
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
                           title={inv.fecha_de_la_venta ? `Cuota de una venta del ${fmtDate(inv.fecha_de_la_venta)}` : 'Cuota de una venta anterior'}>
                           CUOTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* La misma venta partida en varias facturas. No es una
+                        venta nueva --contarla como tal daba 4 donde habia 3--
+                        ni es una cuota: es otro papel de lo mismo. */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          title="Otra factura de una venta ya facturada: la misma venta partida en varios papeles. No cuenta como venta nueva.">
+                          MISMA VENTA
                         </span>
                         {inv.fecha_de_la_venta && (
                           <span className="ml-1 text-[10px] text-muted-foreground font-normal">

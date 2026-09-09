@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -599,8 +600,10 @@ export async function deleteTemplate(req, res, next) {
 
 export async function ventasSinFactura(req, res, next) {
   try {
-    const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    // Un proyecto O una sociedad entera: el mismo helper que Ventas y Reportes.
+    // Antes solo sabia de un proyecto y con CEDIA elegida no devolvia nada.
+    res.json({ success: true, data: await model.listVentasSinFactura(
+      await proyectosDelAmbito(req)) });
   } catch (e) { next(e); }
 }
 

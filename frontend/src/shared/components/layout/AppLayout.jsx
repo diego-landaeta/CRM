@@ -62,7 +62,13 @@ function pathAllowsAll(pathname) {
 // webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
 // CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
 // correcta, no un fallo.
-const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/];
+const CON_SOCIEDAD_OK = [
+  /^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/,
+  // Facturacion: el listado ya filtra por `issuer_id` --la sociedad que emite la
+  // factura-- y las ventas sin factura por sus campus. Diego: «si elijo facturas
+  // y estoy eligiendo CEDIA debe de salir, no debe de salir esto».
+  /^\/finanzas\/facturas$/,
+];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
