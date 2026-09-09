@@ -43,8 +43,24 @@ export async function getGestoresStats({
     // ventas inventadas no pueden aparecer en el total de nadie.
     : `AND ${SIN_PRUEBAS('c.project_id')}`;
   const idxLista = lista ? params.length : null;
+  /*
+    Quien sale en la tabla: quien trabaja en alguno de esos proyectos.
+
+    CON *EXISTS* Y NO CON *JOIN*, y esto no es un detalle de estilo: un JOIN
+    devuelve UNA FILA POR CADA proyecto al que esta asignada la persona, y como
+    despues se agrupa y se suma, cada venta se contaba tantas veces como
+    proyectos tuviera. Con una sociedad de siete campus, las 2 ventas de Ana
+    salian como 14 y en la pantalla de CEDIA se veian 56 ventas y 29.988,35 EUR
+    donde habia 7 y 3.748,54.
+
+    No se notaba con UN proyecto elegido --una asignacion, una fila, sin
+    multiplicar-- y por eso ha durado tanto: solo se rompe en modo sociedad, que
+    es lo ultimo que se añadio.
+  */
   const userProjectJoin = lista
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = ANY($${idxLista}::int[]) AND up.active = TRUE`
+    ? `AND EXISTS (SELECT 1 FROM user_projects up
+                    WHERE up.user_id = u.id AND up.active = TRUE
+                      AND up.project_id = ANY($${idxLista}::int[]))`
     : '';
 
   let dateFilter = '';
@@ -61,7 +77,6 @@ export async function getGestoresStats({
             COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
-     ${userProjectJoin}
      -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha.
      --
      -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id:
@@ -77,6 +92,7 @@ export async function getGestoresStats({
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
+       ${userProjectJoin}
      GROUP BY u.id, u.nombre, u.email, u.role, u.is_available
      ORDER BY ventas DESC, facturado DESC`,
     params
