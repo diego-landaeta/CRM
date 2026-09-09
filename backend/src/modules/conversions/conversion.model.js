@@ -403,6 +403,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
   }
   totales.cobrosDelPeriodo = cobrosDelPeriodo;
 
+
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
             c.importe_total, c.importe_pagado,
@@ -425,6 +426,70 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
   );
 
   return { conversions: rows, total, totales, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
+/**
+ * Las cuotas cobradas en un periodo, una por una y con su factura.
+ *
+ * Diego: «tiene que decir cuáles son las cuotas y su número de factura, y si no
+ * tiene número de factura poner: sin factura».
+ *
+ * Un total sin desglose no se puede comprobar. Con la lista delante se ve de qué
+ * venta viene cada euro, y sobre todo QUÉ FALTA POR FACTURAR: un cobro sin
+ * factura es dinero cobrado que no se ha declarado, y hasta ahora esa lista no
+ * existía en ninguna pantalla.
+ *
+ * Misma definición de cuota que en los totales —cualquier cobro que no sea el
+ * primero de su venta—, para que el desglose sume exactamente lo que dice la
+ * tarjeta.
+ */
+export async function cuotasDelPeriodo({
+  projectId = null, projectIds = null, from, to, responsableId = null, limit = 300,
+} = {}) {
+  if (!from || !to) return [];
+  const args = [from, to];
+  const lista = comoLista(projectId, projectIds);
+  let alcance = SIN_PRUEBAS('c.project_id');
+  if (lista) { args.push(lista); alcance = `c.project_id = ANY($${args.length}::int[])`; }
+  let porGestora = '';
+  if (responsableId) {
+    args.push(responsableId);
+    porGestora = `AND COALESCE(c.vendedora_id, l0.responsable_id) = $${args.length}`;
+  }
+  args.push(limit);
+
+  const { rows } = await query(
+    `WITH cobros AS (
+       SELECT cp.id, cp.importe, cp.fecha, cp.conversion_id,
+              (NOT c.es_mensualidad AND NOT EXISTS (
+                 SELECT 1 FROM conversion_payments p0
+                  WHERE p0.conversion_id = cp.conversion_id
+                    AND (p0.fecha < cp.fecha
+                         OR (p0.fecha = cp.fecha AND p0.id < cp.id))
+               )) AS es_matricula
+         FROM conversion_payments cp
+         JOIN conversions c ON c.id = cp.conversion_id
+         LEFT JOIN leads l0 ON l0.id = c.lead_id
+        WHERE cp.fecha >= $1 AND cp.fecha <= $2 AND ${alcance} ${porGestora}
+     )
+     SELECT cb.id, cb.fecha, cb.importe,
+            c.id AS venta_id, c.fecha_conversion AS fecha_de_la_venta,
+            l.nombre AS cliente,
+            COALESCE(p.nombre, NULLIF(TRIM(c.producto_contratado), '')) AS producto,
+            -- La factura de ESE cobro. Una proforma no cuenta: es un
+            -- presupuesto, no una factura. Una anulada, tampoco.
+            i.codigo AS factura, i.id AS factura_id
+       FROM cobros cb
+       JOIN conversions c ON c.id = cb.conversion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN products p ON p.id = c.producto_contratado_id
+       LEFT JOIN invoices i ON i.payment_id = cb.id
+                           AND i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+      WHERE NOT cb.es_matricula
+      ORDER BY cb.fecha DESC, cb.id DESC
+      LIMIT $${args.length}`,
+    args);
+  return rows;
 }
 
 export async function update(id, fields) {

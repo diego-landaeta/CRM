@@ -60,7 +60,7 @@ function atajosDeFecha() {
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
-  const { activeProject, activeIssuerId, projects, switchProject } = useProjectContext();
+  const { activeProject, activeIssuer, activeIssuerId, projects, switchProject, switchIssuer } = useProjectContext();
   // El ambito: un proyecto, una sociedad entera o todos.
   //
   // OJO CON EL -1: «Todos los proyectos» es el id -1, un valor interno del CRM.
@@ -89,6 +89,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   });
   const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
+  // El desglose de las cuotas: cuales son y con que factura. Se pide al abrirlo
+  // y no al cargar la pantalla, porque casi nunca hace falta.
+  const [cuotas, setCuotas] = useState([]);
+  const [verCuotas, setVerCuotas] = useState(false);
+  const [cargandoCuotas, setCargandoCuotas] = useState(false);
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
@@ -113,7 +118,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       .catch(() => setCursos([]));
   }, [projectIdParam, issuerIdParam, effectiveResponsableId, reloadKey]);
 
-  // Cualquier cambio de filtro devuelve a la primera pagina.
+  // Cualquier cambio de filtro devuelve a la primera pagina, y tira el desglose
+  // de cuotas: era el de las fechas de antes.
+  useEffect(() => { setCuotas([]); setVerCuotas(false); },
+    [projectIdParam, issuerIdParam, effectiveResponsableId, rango.from, rango.to]);
+
   useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, rango.from, rango.to]);
 
   useEffect(() => {
@@ -141,6 +150,22 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     })();
   }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
 
+  async function abrirCuotas() {
+    if (verCuotas) { setVerCuotas(false); return; }
+    setVerCuotas(true);
+    if (cuotas.length) return;
+    setCargandoCuotas(true);
+    try {
+      const params: Record<string, any> = { from: rango.from, to: rango.to };
+      if (projectIdParam) params.projectId = projectIdParam;
+      if (issuerIdParam) params.issuerId = issuerIdParam;
+      if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+      const r = await client.get('/conversions/cuotas', { params });
+      setCuotas(r?.success ? (r.data || []) : []);
+    } catch { setCuotas([]); }
+    finally { setCargandoCuotas(false); }
+  }
+
   const visibleItems = items;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -149,7 +174,12 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <PageHeader
           title={title}
-          subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
+          /* Con una empresa elegida decia «en Todos los proyectos», que es
+             justo lo contrario de lo que se esta mirando: son los campus de esa
+             empresa y ninguno mas. */
+          subtitle={`${subtitlePrefix}${
+            activeIssuer ? ' en ' + activeIssuer.nombre + ' (todos sus campus)'
+              : activeProject ? ' en ' + activeProject.nombre : ''}`}
         />
         <div className="flex items-center gap-2 self-start sm:self-auto">
         <button
@@ -184,28 +214,82 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       {(
         <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
           {/*
-            El proyecto, aquí dentro.
+            Empresa y proyecto, aquí dentro.
 
             «Todos los proyectos» ya existía, pero había que SALIR de la pantalla
-            para activarlo, en el selector de la barra lateral, y desde aquí nada
-            lo sugería (#100 · 2). Es el mismo estado que el de la barra: cambiar
-            en un sitio cambia en el otro, no son dos filtros distintos.
+            para activarlo (#100 · 2). Es el mismo estado que el de la barra
+            lateral: cambiar aquí cambia allí, no son dos filtros distintos.
+
+            SON DOS COSAS DISTINTAS Y SE VEN COMO TALES. Diego: «tiene que
+            diferenciar qué empresa y por proyecto, no puede ser todos juntos de
+            todos». Una lista plana con las diez marcas mezcladas no dice cuál
+            pertenece a quién, y con CEDIA elegida ofrecía además los proyectos
+            que NO son de CEDIA. Ahora hay un grupo de empresas —cada una con
+            sus campus sumados— y los proyectos van agrupados bajo la suya, así
+            que se ve de un vistazo de quién es cada uno.
           */}
-          {projects.length > 1 && (
-            <>
-              <label className="text-xs font-semibold text-muted-foreground">Proyecto:</label>
-              <select
-                value={String(activeProject?.id ?? '')}
-                onChange={(e) => switchProject(Number(e.target.value))}
-                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[180px]"
-              >
-                <option value="-1">— Todos los proyectos —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            </>
-          )}
+          {projects.length > 1 && (() => {
+            // Las empresas salen de los propios proyectos: cada uno dice a cuál
+            // pertenece. No hace falta pedirlas aparte.
+            const empresas = [];
+            const porEmpresa = new Map();
+            const sueltos = [];
+            for (const p of projects) {
+              const id = p.sociedad_emisora_id;
+              if (!id) { sueltos.push(p); continue; }
+              if (!porEmpresa.has(id)) {
+                porEmpresa.set(id, []);
+                empresas.push({ id, nombre: p.sociedad_nombre || `Empresa ${id}` });
+              }
+              porEmpresa.get(id).push(p);
+            }
+            // Qué está elegido AHORA: la empresa manda sobre el proyecto, que es
+            // como funciona el estado por debajo.
+            const valor = activeIssuerId ? `soc:${activeIssuerId}`
+              : (activeProject?.id === -1 || !activeProject?.id) ? 'all'
+              : `proj:${activeProject.id}`;
+            return (
+              <>
+                <label className="text-xs font-semibold text-muted-foreground">Empresa o proyecto:</label>
+                <select
+                  value={valor}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === 'all') switchProject(-1);
+                    else if (v.startsWith('soc:')) switchIssuer(Number(v.slice(4)));
+                    else switchProject(Number(v.slice(5)));
+                  }}
+                  className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[220px] max-w-[300px]"
+                >
+                  <option value="all">— Todos los proyectos —</option>
+                  {empresas.length > 0 && (
+                    <optgroup label="Empresas (todos sus campus)">
+                      {empresas.map((e) => (
+                        <option key={`soc:${e.id}`} value={`soc:${e.id}`}>
+                          {e.nombre} · {porEmpresa.get(e.id).length}{' '}
+                          {porEmpresa.get(e.id).length === 1 ? 'campus' : 'campus'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {empresas.map((e) => (
+                    <optgroup key={`g:${e.id}`} label={`Proyectos de ${e.nombre}`}>
+                      {porEmpresa.get(e.id).map((p) => (
+                        <option key={p.id} value={`proj:${p.id}`}>{p.nombre}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  {sueltos.length > 0 && (
+                    <optgroup label="Sin empresa asignada">
+                      {sueltos.map((p) => (
+                        <option key={p.id} value={`proj:${p.id}`}>{p.nombre}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </>
+            );
+          })()}
           {isAdmin && gestores.length > 0 && (
             <>
               <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
@@ -386,8 +470,56 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               <strong>{fmt(totales.cobrosDelPeriodo.matricula.importe)}</strong> son de ventas
               nuevas y <strong>{fmt(totales.cobrosDelPeriodo.cuotas.importe)}</strong> son{' '}
               {totales.cobrosDelPeriodo.cuotas.n} {totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}{' '}
-              de ventas anteriores.
+              de ventas anteriores.{' '}
+              <button type="button" onClick={abrirCuotas}
+                className="font-semibold underline hover:no-underline">
+                {verCuotas ? 'Ocultar el detalle' : 'Ver cuáles son'}
+              </button>
             </p>
+          )}
+
+          {verCuotas && (
+            <div className="mt-2 rounded-md border border-sky-200 dark:border-sky-900 bg-card overflow-x-auto">
+              {cargandoCuotas ? (
+                <p className="p-3 text-xs text-muted-foreground">cargando…</p>
+              ) : cuotas.length === 0 ? (
+                <p className="p-3 text-xs text-muted-foreground">No se pudo cargar el detalle.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="text-left font-medium px-3 py-2">Cobrada</th>
+                      <th className="text-left font-medium px-3 py-2">Cliente</th>
+                      <th className="text-left font-medium px-3 py-2 hidden md:table-cell">Formación</th>
+                      <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Venta de</th>
+                      <th className="text-right font-medium px-3 py-2">Importe</th>
+                      <th className="text-left font-medium px-3 py-2">Factura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cuotas.map((q: any) => (
+                      <tr key={q.id} className="border-t border-border">
+                        <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(q.fecha)}</td>
+                        <td className="px-3 py-1.5">{q.cliente || 'Sin nombre'}</td>
+                        <td className="px-3 py-1.5 hidden md:table-cell max-w-[280px] truncate"
+                          title={q.producto || ''}>{q.producto || '—'}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                          {formatDate(q.fecha_de_la_venta)}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmt(q.importe)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          {/* Sin factura NO es un hueco en blanco: es dinero
+                              cobrado que no se ha declarado, y se dice. */}
+                          {q.factura
+                            ? <span className="font-medium">{q.factura}</span>
+                            : <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           )}
         </div>
       )}
