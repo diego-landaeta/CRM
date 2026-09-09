@@ -349,6 +349,60 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
   totales.facturasDeAntes = facturasDeAntes;
   totales.facturadoEnPeriodo = facturadoEnPeriodo;
 
+  /*
+    El dinero que ENTRO en estas fechas, partido en dos.
+
+    Diego: «en esa pantalla tienes que poner ventas, mensualidades cobradas o
+    cuotas cobradas». Es el punto 1 del #100 y no se podia hacer por
+    `es_mensualidad`: esa columna esta a false en las 491 ventas, nadie la marca
+    nunca. Lo que si esta en los datos es cual fue el PRIMER cobro de cada venta.
+
+      · matricula — el primer cobro de una venta. Es dinero de una venta nueva.
+      · cuota     — cualquier cobro posterior. Es una mensualidad de algo que ya
+                    estaba vendido, aunque entre este mes.
+
+    Es la misma regla que `ES_MATRICULA` de los informes, a proposito: si aqui
+    se inventara otra definicion, las dos pantallas darian cifras distintas para
+    la misma pregunta y volveriamos al punto de partida.
+
+    Y OJO CON LA DIFERENCIA respecto a «Cobrado de esas ventas»: esto son los
+    cobros CUYA FECHA cae en el periodo, vengan de la venta que vengan. Aquello
+    es todo lo pagado de las ventas del periodo, aunque se pagara despues.
+  */
+  let cobrosDelPeriodo = {
+    matricula: { n: 0, importe: 0 },
+    cuotas: { n: 0, importe: 0 },
+  };
+  if (from && to) {
+    const args = [from, to];
+    let alcance = SIN_PRUEBAS('c.project_id');
+    if (lista) { args.push(lista); alcance = `c.project_id = ANY($3::int[])`; }
+    const { rows: [cb] } = await query(
+      `WITH cobros AS (
+         SELECT cp.importe,
+                (NOT c.es_mensualidad AND NOT EXISTS (
+                   SELECT 1 FROM conversion_payments p0
+                    WHERE p0.conversion_id = cp.conversion_id
+                      AND (p0.fecha < cp.fecha
+                           OR (p0.fecha = cp.fecha AND p0.id < cp.id))
+                 )) AS es_matricula
+           FROM conversion_payments cp
+           JOIN conversions c ON c.id = cp.conversion_id
+          WHERE cp.fecha >= $1 AND cp.fecha <= $2 AND ${alcance}
+       )
+       SELECT COUNT(*) FILTER (WHERE es_matricula)::int AS n_matricula,
+              COALESCE(SUM(importe) FILTER (WHERE es_matricula), 0) AS importe_matricula,
+              COUNT(*) FILTER (WHERE NOT es_matricula)::int AS n_cuotas,
+              COALESCE(SUM(importe) FILTER (WHERE NOT es_matricula), 0) AS importe_cuotas
+         FROM cobros`,
+      args);
+    cobrosDelPeriodo = {
+      matricula: { n: Number(cb.n_matricula), importe: Number(cb.importe_matricula) },
+      cuotas: { n: Number(cb.n_cuotas), importe: Number(cb.importe_cuotas) },
+    };
+  }
+  totales.cobrosDelPeriodo = cobrosDelPeriodo;
+
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
             c.importe_total, c.importe_pagado,
