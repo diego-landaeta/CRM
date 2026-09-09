@@ -20,6 +20,11 @@ interface OverviewData {
   leads_por_gestor?: Array<{ gestor: string; total: number; convertidos: number }>;
   top_productos?: Array<{ producto: string; ventas: number; total: number; cobrado: number }>;
   ingresos_mensual?: Array<{ mes: string; ingresos: number }>;
+  por_proyecto?: Array<{ project_id: number; nombre: string; leads: number; ventas: number; facturado: number; cobrado: number }>;
+  // Los dos paneles que piden sus datos aparte. Llegan por aqui para que el
+  // PDF lleve lo mismo que la pantalla y no media pagina.
+  _panel?: any;
+  _seguimiento?: any;
 }
 
 const fmtEur = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -99,10 +104,73 @@ export async function exportReportPDF(data: OverviewData, projectName: string | 
     drawTable(doc, ['Gestor', 'Total', 'Convertidos', 'Tasa'], rows, MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Prospectos por gestor');
   }
 
+  // Cuanto pone cada proyecto. En el mismo sitio que en pantalla: detras de
+  // los KPI, que es lo que explica de donde salen.
+  if ((data.por_proyecto?.length ?? 0) > 1) {
+    const rows = data.por_proyecto!.map(f => [
+      f.nombre, String(f.leads), String(f.ventas), fmtEur(f.facturado), fmtEur(f.cobrado),
+    ]);
+    rows.push([
+      'TOTAL',
+      String(data.por_proyecto!.reduce((a, f) => a + Number(f.leads || 0), 0)),
+      String(data.por_proyecto!.reduce((a, f) => a + Number(f.ventas || 0), 0)),
+      fmtEur(data.por_proyecto!.reduce((a, f) => a + Number(f.facturado || 0), 0)),
+      fmtEur(data.por_proyecto!.reduce((a, f) => a + Number(f.cobrado || 0), 0)),
+    ]);
+    drawTable(doc, ['Proyecto', 'Prospectos', 'Ventas', 'Facturado', 'Cobrado'], rows,
+      MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Cuánto pone cada proyecto');
+  }
+
   // Tabla Top productos
   if (data.top_productos?.length) {
     const rows = data.top_productos.map(p => [p.producto, String(p.ventas), fmtEur(p.total), fmtEur(p.cobrado)]);
     drawTable(doc, ['Producto', 'Ventas', 'Facturado', 'Cobrado'], rows, MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Top productos por ventas');
+  }
+
+  // Resumen del periodo
+  if (data._panel?.kpis) {
+    const k = data._panel.kpis;
+    const num = (x: string) => Number(k?.[x]?.value ?? 0);
+    const filas: string[][] = [];
+    for (const [campo, etiqueta, dinero] of [
+      ['prospectos', 'Prospectos', false], ['ventas', 'Ventas', false],
+      ['vendido', 'Vendido', true], ['ingresos', 'Ingresos (dinero que entró)', true],
+      ['ingresos_venta', '· de ventas', true], ['ingresos_cuotas', '· de cuotas', true],
+      ['tasa', 'Tasa conversión', false],
+    ] as Array<[string, string, boolean]>) {
+      if (!k[campo]) continue;
+      filas.push([etiqueta, dinero ? fmtEur(num(campo)) : String(num(campo)),
+        k[campo].trend == null ? '—' : `${k[campo].trend}%`]);
+    }
+    if (filas.length) {
+      drawTable(doc, ['Métrica', 'Valor', 'vs anterior'], filas, MARGIN, CONTENT_W,
+        () => y, (newY) => { y = newY; }, ensureSpace, 'Resumen del periodo');
+    }
+  }
+
+  // Seguimiento y tiempos
+  if (data._seguimiento?.cohorte) {
+    const co = data._seguimiento.cohorte;
+    const ac = data._seguimiento.actividad || {};
+    const seg = (v: any) => v == null ? '—' : (Number(v) < 86400
+      ? `${(Number(v) / 3600).toFixed(1)} h` : `${(Number(v) / 86400).toFixed(1)} d`);
+    drawTable(doc, ['Métrica', 'Valor'], [
+      ['Entraron en el periodo', String(co.entraron)],
+      ['Con seguimiento', `${co.con_seguimiento} (${co.pct_con_seguimiento}%)`],
+      ['Compraron', `${co.compraron} (${co.pct_compraron}%)`],
+      ['Mediana hasta el 1er contacto', seg(co.mediana_primer_contacto_seg)],
+      ['Mediana hasta la venta', co.mediana_dias_venta == null ? '—' : `${co.mediana_dias_venta} días`],
+      ['Contactos en el periodo', `${ac.toques} a ${ac.personas} personas`],
+    ], MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace, 'Seguimiento y tiempos');
+
+    if ((co.embudo || []).length) {
+      drawTable(doc, ['Seguimiento', 'Llegaron', '%', 'Compraron', 'Tasa', 'Desde el anterior'],
+        co.embudo.map((f: any) => [
+          `${f.nivel}.º`, String(f.personas), `${f.pct}%`, String(f.compraron),
+          `${f.tasa}%`, seg(f.mediana_desde_anterior_seg),
+        ]), MARGIN, CONTENT_W, () => y, (newY) => { y = newY; }, ensureSpace,
+        'Hasta qué seguimiento llega cada uno');
+    }
   }
 
   // Tabla Ingresos mensuales

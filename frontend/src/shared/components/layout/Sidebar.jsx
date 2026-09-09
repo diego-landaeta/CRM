@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  CalendarCheck,
   SquaresFour,
   Users,
   Package,
@@ -100,19 +101,32 @@ const NAV_SECTIONS = [
     icon: House,
     items: [
       { label: 'Dashboard', to: '/', detail: 'Cómo va hoy', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, module: 'leads' },
-      // El proceso comercial (#115) va AQUI y no en Sistema.
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista, la cola del dia
+      // y el proceso son el mismo sitio. La cola dice a quien le toca hoy y el
+      // proceso es lo que la cola aplica; de «Sistema» o «Configuracion» no lo
+      // encontraba nadie.
       //
-      // Estaba al final del menu, en la seccion que va plegada, y no lo
-      // encontraba nadie. Es configuracion, si —crea y ordena los cinco
-      // pasos—, pero es la configuracion de lo que hace el equipo todos los
-      // dias, y Carlos entra a esto. Una pantalla a la que hay que saber
-      // llegar es una pantalla que no se usa.
+      // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
+      // cerrado, la gestora pagaria un clic de mas cada manana para llegar a lo
+      // que mas usa.
       //
       // Leerlo lo puede hacer cualquiera —la gestora necesita ver en que paso
       // va cada prospecto—; editarlo, solo administradores, y eso lo decide la
-      // propia pantalla.
-      { label: 'Proceso comercial', to: '/configuracion/proceso', detail: 'Los cinco pasos', icon: ListChecks },
+      // propia pantalla y el servidor.
+      {
+        label: 'Prospectos',
+        icon: Users,
+        module: 'leads',
+        defaultOpen: true,
+        children: [
+          // `end` porque si no, estando en la cola o en el proceso este
+          // tambien se marcaria activo: el resaltado diria que estas en dos
+          // sitios a la vez.
+          { label: 'Lista de prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true },
+          { label: 'La cola del día', to: '/prospectos/cola', detail: 'A quién le toca hoy', icon: CalendarCheck },
+          { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -229,7 +243,12 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
       { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
-      { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
+      // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
+      // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
+      // probado—, pero no se ofrece en el menu: enseñar una puerta que no
+      // lleva a ningun sitio es peor que no tenerla.
+      // Para devolverla, quitar el comentario de la linea de abajo.
+      // { label: 'Chat IA', to: '/chat-ia', detail: 'Preguntar a tus datos', icon: ChatCircleText, roles: ['superadmin', 'admin'] },
     ],
   },
   {
@@ -354,7 +373,16 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to);
   }
 
   // soporte ve todo (rol generico tipo dev)
@@ -377,7 +405,7 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
     .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
@@ -385,7 +413,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
   // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
   // quedaria escondido. Cerrarlo a mano se respeta.
@@ -441,7 +469,11 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting' || hayRutaMasConcreta(location.pathname, child.to)}
+                // El `end` explicito del menu manda —lo lleva «Lista de
+                // prospectos»—; donde no lo hay, se deduce. Ver
+                // `hayRutaMasConcreta`: es lo que impedia que Conectores se
+                // encendiera al abrirlo.
+                end={child.end ?? (child.to === '/accounting' || hayRutaMasConcreta(location.pathname, child.to))}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -768,7 +800,7 @@ export function ProjectAvatar({ project, size = 'md' }) {
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { activeProject, switchProject, projects } = useProjectContext();
+  const { activeProject, switchProject, projects, activeIssuer, switchIssuer } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);

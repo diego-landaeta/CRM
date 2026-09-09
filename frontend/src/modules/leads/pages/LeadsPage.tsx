@@ -74,7 +74,10 @@ import {
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
-import ProximoGestor from '../components/ProximoGestor';
+// El panel de «proximo gestor» se retiro: predecia con el round-robin del CRM
+// y quien reparte es Make. Se cambio por el de abajo, que enseña lo que ha
+// pasado en vez de lo que va a pasar. El componente viejo sigue en el repo.
+import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 
 
 function StatPill({ label, value, dot }: { label: string; value: number; dot?: string }) {
@@ -154,7 +157,7 @@ export default function LeadsPage() {
     loading, error, refetch,
   } = useLeads();
 
-  const { activeProject, projects } = useProjectContext();
+  const { activeProject, projects, activeIssuerId } = useProjectContext();
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
@@ -603,11 +606,13 @@ export default function LeadsPage() {
       {/* A quién le toca el siguiente (#11). Va arriba porque es lo que se mira
           de pasada, no algo que se busca: enterarse de que te toca a ti es
           justo lo que hoy no pasa hasta que el lead ya está asignado. */}
-      <ProximoGestor
-        projectId={activeProject?.id}
-        recargarSenal={colaSenal}
-        onReasignado={refetch}
-      />
+      {/* Lo que ha recibido cada gestora de verdad (#11).
+          Solo para quien manda: es una vista de como esta repartiendo Make
+          entre todo el equipo, no algo que una gestora necesite de sus
+          compañeras. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <UltimoLeadAsignado projectId={activeProject?.id} issuerId={activeIssuerId} />
+      )}
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <PageHeader

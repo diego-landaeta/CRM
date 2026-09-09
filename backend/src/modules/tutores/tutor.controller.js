@@ -6,6 +6,7 @@ import {
   altaTutorSchema, perfilSchema, colaboracionSchema,
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
 } from './tutor.validation.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 // Quien manda aqui.
 //
@@ -42,7 +43,9 @@ export async function listar(req, res, next) {
   try {
     await exigirGestion(req);
     res.json({ success: true, data: await model.listar({
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      // Un proyecto, una sociedad entera o todos: lo resuelve el mismo helper
+      // que usan Reportes y Ventas, para que las tres digan lo mismo.
+      ...(await proyectosDelAmbito(req)),
       activos: req.query.activos !== '0',
     })});
   } catch (err) { next(err); }
@@ -241,7 +244,8 @@ export async function simulacion(req, res, next) {
       //
       // El tutor no filtra: el ve sus cursos, esten donde esten. Lo suyo es
       // suyo aunque esté repartido entre dos marcas.
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Un tutor no acota por proyecto: ve las suyas, esten donde esten.
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -334,8 +338,8 @@ export async function revertirComision(req, res, next) {
 export async function formacionesSinTutor(req, res, next) {
   try {
     await exigirGestion(req);
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
-    res.json({ success: true, data: await model.formacionesSinTutor({ projectId }) });
+    res.json({ success: true, data: await model.formacionesSinTutor(
+      await proyectosDelAmbito(req)) });
   } catch (err) { next(err); }
 }
 

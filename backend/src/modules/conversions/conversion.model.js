@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
 
@@ -273,12 +274,15 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
+export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  // Un proyecto, una sociedad entera o todos: el mismo helper que Reportes.
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { conditions.push(`c.project_id = ANY($${idx++}::int[])`); params.push(lista); }
+  else conditions.push(SIN_PRUEBAS('c.project_id'));
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
   if (responsableId) { conditions.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
@@ -502,11 +506,13 @@ export async function deleteConversion(id) {
 
 // Valores distintos de producto para el desplegable de filtros. Va aparte de
 // findAll porque el listado esta paginado y no ve el catalogo completo.
-export async function listProductos({ projectId, responsableId }) {
+export async function listProductos({ projectId, projectIds = null, responsableId }) {
   const cond = ["TRIM(COALESCE(c.producto_contratado, '')) <> ''"];
   const params = [];
   let idx = 1;
-  if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  const listaP = comoLista(projectId, projectIds);
+  if (listaP) { cond.push(`c.project_id = ANY($${idx++}::int[])`); params.push(listaP); }
+  else cond.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { cond.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
   const { rows } = await query(
     `SELECT DISTINCT TRIM(c.producto_contratado) AS producto

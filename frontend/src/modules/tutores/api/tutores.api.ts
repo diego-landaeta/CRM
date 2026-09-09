@@ -147,9 +147,11 @@ export const tutoresApi = {
   /** Por defecto solo los que dan clase hoy. Con `incluirRetirados` salen
    *  tambien los que se dieron de baja — es la unica forma de volver a
    *  activar a alguien, porque retirado desaparece de la lista. */
-  listar: (projectId?: number | null, incluirRetirados = false) => {
+  listar: (projectId?: number | null, incluirRetirados = false, issuerId?: number | null) => {
     const q = new URLSearchParams();
     if (projectId) q.set('projectId', String(projectId));
+    // Una sociedad manda sobre el proyecto: el servidor la traduce a sus campus.
+    if (issuerId) q.set('issuerId', String(issuerId));
     if (incluirRetirados) q.set('activos', '0');
     const cola = q.toString();
     return client.get(`/tutores${cola ? `?${cola}` : ''}`) as Promise<ApiResponse<Tutor[]>>;
