@@ -23,7 +23,15 @@ const PER_PAGE = 50;
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
+  // El ambito: un proyecto, una sociedad entera o todos.
+  //
+  // OJO CON EL -1: «Todos los proyectos» es el id -1, un valor interno del CRM.
+  // Con `if (activeProject?.id)` colaba —menos uno es un numero verdadero— y se
+  // pedia el proyecto numero MENOS UNO, que no existe: la pantalla salia vacia
+  // y parecia que faltaban ventas.
+  const projectIdParam = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const issuerIdParam = activeIssuerId ?? null;
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [items, setItems] = useState([]);
@@ -41,11 +49,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
-    if (!activeProject?.id || !isAdmin) return;
-    client.get('/ventas/gestores-stats', { params: { projectId: activeProject.id, periodo: 'all' } })
+    if (!isAdmin) return;
+    client.get('/ventas/gestores-stats', { params: {
+      ...(projectIdParam ? { projectId: projectIdParam } : {}),
+      ...(issuerIdParam ? { issuerId: issuerIdParam } : {}),
+      periodo: 'all' } })
       .then((r) => setGestores(r?.data?.gestores || []))
       .catch(() => setGestores([]));
-  }, [activeProject?.id, isAdmin, reloadKey]);
+  }, [projectIdParam, issuerIdParam, isAdmin, reloadKey]);
 
   useEffect(() => {
     const params: Record<string, any> = {};
@@ -54,17 +65,18 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     client.get('/conversions/productos', { params })
       .then((r) => setCursos(r?.data || []))
       .catch(() => setCursos([]));
-  }, [activeProject?.id, effectiveResponsableId, reloadKey]);
+  }, [projectIdParam, issuerIdParam, effectiveResponsableId, reloadKey]);
 
   // Cualquier cambio de filtro devuelve a la primera pagina.
-  useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, rango.from, rango.to]);
+  useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, rango.from, rango.to]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
         const params: Record<string, any> = { page, limit: PER_PAGE };
-        if (activeProject?.id) params.projectId = activeProject.id;
+        if (projectIdParam) params.projectId = projectIdParam;
+        if (issuerIdParam) params.issuerId = issuerIdParam;
         if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
         if (filterCurso !== 'all') params.producto = filterCurso;
         if (rango.from) params.from = rango.from;
@@ -81,7 +93,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0 });
       } finally { setLoading(false); }
     })();
-  }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
+  }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
 
   const visibleItems = items;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));

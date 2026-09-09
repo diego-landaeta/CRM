@@ -122,7 +122,7 @@ const NAV_SECTIONS = [
           // `end` porque si no, estando en la cola o en el proceso este
           // tambien se marcaria activo: el resaltado diria que estas en dos
           // sitios a la vez.
-          { label: 'Lista', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true },
+          { label: 'Lista de prospectos', to: '/prospectos', detail: 'Lista, pipeline y más', icon: Users, end: true },
           { label: 'La cola del día', to: '/prospectos/cola', detail: 'A quién le toca hoy', icon: CalendarCheck },
           { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks },
         ],
