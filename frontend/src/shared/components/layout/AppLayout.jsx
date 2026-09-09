@@ -46,7 +46,12 @@ function pathAllowsAll(pathname) {
 // sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
 // concreto, asi que se comportan igual que con «todos los proyectos» — que es
 // lo que ya sabian hacer.
-const CON_SOCIEDAD_OK = [/^\/informes$/];
+// Las pantallas de CIFRAS aceptan una sociedad: sumar varios campus
+// significa algo. Las de configuracion no entran aqui a proposito —un
+// webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
+// CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
+// correcta, no un fallo.
+const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));

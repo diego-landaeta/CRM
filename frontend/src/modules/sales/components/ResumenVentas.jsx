@@ -26,15 +26,19 @@ function Cifra({ icon: Icon, etiqueta, valor, pie }) {
   );
 }
 
-export default function ResumenVentas({ projectId, from, to, responsableId = null }) {
+export default function ResumenVentas({ projectId, issuerId = null, from, to, responsableId = null }) {
   const [d, setD] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    if (!projectId) return undefined;
+    // Con una sociedad elegida tambien hay ambito: no se puede salir por
+    // la puerta de «no hay proyecto».
+    if (!projectId && !issuerId) return undefined;
     let vivo = true;
     setCargando(true);
-    const p = new URLSearchParams({ projectId: String(projectId) });
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    if (issuerId) p.set('issuerId', String(issuerId));
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
@@ -43,7 +47,7 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
       .catch(() => { if (vivo) setD(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId]);
 
   if (cargando || !d) {
     return (

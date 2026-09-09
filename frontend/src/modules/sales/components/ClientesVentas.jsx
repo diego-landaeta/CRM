@@ -22,7 +22,7 @@ const VISTAS = [
   { clave: 'debe', etiqueta: 'Quién debe' },
 ];
 
-export default function ClientesVentas({ projectId = null, from = null, to = null, responsableId = null, tope = 10 }) {
+export default function ClientesVentas({ projectId = null, issuerId = null, from = null, to = null, responsableId = null, tope = 10 }) {
   const [filas, setFilas] = useState([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -35,6 +35,7 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
     setCargando(true); setError(null);
     const params = { limit: 200, page: 1 };
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
     client.get('/ventas/por-cliente', { params })
@@ -46,7 +47,7 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar los clientes'); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId]);
 
   const { lista, deudaTotal, cuantosDeben } = useMemo(() => {
     const limpias = filas.map((f) => ({

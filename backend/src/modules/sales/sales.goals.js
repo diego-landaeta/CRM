@@ -1,6 +1,7 @@
 // Metas de venta + estadísticas por gestor.
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 
 function currentPeriodo() {
   // Server timezone — para CRM single-tenant es suficiente.
@@ -13,16 +14,21 @@ function currentPeriodo() {
  * Si projectId, filtra a ese proyecto.
  * Devuelve también la meta cuando existe.
  */
-export async function getGestoresStats({ projectId = null, periodo = null } = {}) {
+export async function getGestoresStats({ projectId = null, projectIds = null, periodo = null } = {}) {
   // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
   const allTime = periodo === 'all';
   const per = allTime ? null : (periodo || currentPeriodo());
   const params = allTime ? [] : [per];
 
-  const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
-  const projectGoalFilter = projectId ? `AND (g.project_id = $${params.length} OR g.project_id IS NULL)` : '';
-  const userProjectJoin = projectId
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${params.length} AND up.active = TRUE`
+  // El ambito puede ser un proyecto O una sociedad entera. Con una sociedad
+  // elegida NO se puede dejar el filtro vacio: enseñaria las metas de todas las
+  // demas justo cuando se pidio acotar a una.
+  const lista = comoLista(projectId, projectIds);
+  const projectFilter = lista ? `AND c.project_id = ANY($${params.push(lista)}::int[])` : '';
+  const projectGoalFilter = lista
+    ? `AND (g.project_id = ANY($${params.length}::int[]) OR g.project_id IS NULL)` : '';
+  const userProjectJoin = lista
+    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = ANY($${params.length}::int[]) AND up.active = TRUE`
     : '';
 
   const dateFilter = allTime ? '' : `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1`;
@@ -54,7 +60,7 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
        FROM sales_goals g
        LEFT JOIN users su ON su.id = g.set_by_user_id
        WHERE g.periodo_yyyymm = $1 ${projectGoalFilter}`,
-      projectId ? [...goalsParams, projectId] : goalsParams
+      lista ? [...goalsParams, lista] : goalsParams
     );
     goalByUser = Object.fromEntries(goals.map((g) => [g.user_id, g]));
   }
@@ -89,9 +95,9 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
 /**
  * Stats del gestor actual (vista personal del gestor / admin para sí mismo).
  */
-export async function getMyStats(userId, { projectId = null, periodo = null } = {}) {
+export async function getMyStats(userId, { projectId = null, projectIds = null, periodo = null } = {}) {
   const per = periodo || currentPeriodo();
-  const all = await getGestoresStats({ projectId, periodo: per });
+  const all = await getGestoresStats({ projectId, projectIds, periodo: per });
   const me = all.gestores.find((g) => g.user_id === userId);
   return me || { user_id: userId, ventas: 0, facturado: 0, cobrado: 0, meta_ventas: null, meta_facturacion: null, periodo: per };
 }

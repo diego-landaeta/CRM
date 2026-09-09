@@ -20,6 +20,7 @@ interface MyStats {
 
 interface Props {
   projectId?: number | null;
+  issuerId?: number | null;
   className?: string;
   /** Mes 'YYYY-MM' que manda el filtro de la pantalla. 'all' = rango que cruza meses. */
   periodo?: string | null;
@@ -34,7 +35,7 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function MyGoalCard({ projectId, className = '', periodo: periodoProp }: Props) {
+export default function MyGoalCard({ projectId, issuerId = null, className = '', periodo: periodoProp }: Props) {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -49,6 +50,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     params.periodo = periodo;
     client.get<MyStats>('/ventas/my-stats', { params })
       .then((r) => { setStats(r?.data || null); })
@@ -56,7 +58,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, issuerId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && stats) {

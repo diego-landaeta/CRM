@@ -90,7 +90,7 @@ function Aviso({ activo, payload, etiqueta, medida }) {
   );
 }
 
-export default function EvolucionVentas({ projectId = null, from = null, to = null, responsableId = null }) {
+export default function EvolucionVentas({ projectId = null, issuerId = null, from = null, to = null, responsableId = null }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -108,6 +108,7 @@ export default function EvolucionVentas({ projectId = null, from = null, to = nu
     setCargando(true); setError(null);
     const params = {};
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
     client.get('/ventas/serie', { params })
@@ -115,7 +116,7 @@ export default function EvolucionVentas({ projectId = null, from = null, to = nu
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudo cargar la evolución'); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId]);
 
   const medida = MEDIDAS.find((m) => m.clave === medidaClave) || MEDIDAS[0];
 
