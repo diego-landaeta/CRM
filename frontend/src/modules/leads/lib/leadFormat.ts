@@ -1,18 +1,8 @@
+import { avatarColorFor } from '@/shared/lib/ui';
 // Helpers de formato y avatar para LeadsPage. Extraídos de la página
 // para facilitar su test unitario y aliviar el archivo principal.
 import type { Lead } from '@/shared/types';
 import type { ExportColumn } from '@/shared/lib/export';
-
-const AVATAR_COLORS: ReadonlyArray<string> = [
-  'bg-rose-100 text-rose-700',
-  'bg-sky-100 text-sky-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-teal-100 text-teal-700',
-  'bg-pink-100 text-pink-700',
-  'bg-indigo-100 text-indigo-700',
-];
 
 export function getInitials(name: string | null | undefined): string {
   if (!name) return '??';
@@ -20,7 +10,7 @@ export function getInitials(name: string | null | undefined): string {
 }
 
 export function getAvatarColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+  return avatarColorFor(id);
 }
 
 export function formatDate(dateStr: string | null | undefined): string {

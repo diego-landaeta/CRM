@@ -10,8 +10,8 @@ interface Props {
 // documentos…), mostramos esta tarjeta en lugar de la pantalla vacía/errores.
 export default function NeedsProjectBanner({ feature = 'esta sección', className = '' }: Props) {
   return (
-    <div className={`bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-lg p-6 text-center ${className}`}>
-      <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 mx-auto mb-3 flex items-center justify-center">
+    <div className={`bg-info-soft border border-border rounded-md p-6 text-center shadow-sm ${className}`}>
+      <div className="w-10 h-10 rounded-md bg-info text-info-foreground mx-auto mb-3 flex items-center justify-center">
         <Info size={20} weight="regular" />
       </div>
       <p className="text-sm font-semibold mb-1">Selecciona un proyecto</p>

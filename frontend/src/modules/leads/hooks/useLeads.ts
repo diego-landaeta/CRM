@@ -296,6 +296,11 @@ export function useLeads(): UseLeadsResult {
         en_seguimiento: Number(merged.en_seguimiento) || 0,
         convertido: Number(merged.convertidos) || 0,
         no_interesado: Number(merged.no_interesados) || 0,
+        // Se sumaba arriba y luego se tiraba aqui, asi que `stats.sin_asignar`
+        // era `undefined` para todo el mundo. El servidor lo devuelve
+        // (lead.model.js: responsable_id IS NULL y aun vivo) y es el numero que
+        // dice si hay prospectos que no esta trabajando nadie.
+        sin_asignar: Number(merged.sin_asignar) || 0,
       } as Partial<LeadStats>);
     } catch {
       // Stats son secundarios, no bloquear UI
@@ -418,15 +423,18 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
   const statusHistory = lead?.statusHistory || [];
   const auditLog = ((lead as unknown) as { auditLog?: any[] })?.auditLog || [];
 
-  const FIELD_LABELS: Record<string, { label: string; emoji: string }> = {
-    nombre: { label: 'Nombre', emoji: '📝' },
-    email: { label: 'Email', emoji: '✉️' },
-    telefono: { label: 'Teléfono', emoji: '📞' },
-    notas: { label: 'Notas', emoji: '🗒️' },
-    producto_interes_id: { label: 'Producto de interés', emoji: '📦' },
-    canal: { label: 'Canal', emoji: '🛰️' },
-    responsable_id: { label: 'Responsable', emoji: '👤' },
-    custom_fields: { label: 'Campos custom', emoji: '⚙️' },
+  // Sin emoji. La etiqueta ya dice que campo es —«Nombre», «Telefono»— y el
+  // emoji delante no anade nada: es ruido en una linea que se lee de corrido.
+  // Ademas la regla del rediseno es iconos, nunca emojis.
+  const FIELD_LABELS: Record<string, { label: string }> = {
+    nombre: { label: 'Nombre' },
+    email: { label: 'Email' },
+    telefono: { label: 'Teléfono' },
+    notas: { label: 'Notas' },
+    producto_interes_id: { label: 'Producto de interés' },
+    canal: { label: 'Canal' },
+    responsable_id: { label: 'Responsable' },
+    custom_fields: { label: 'Campos custom' },
   };
   const fmtVal = (v: string | null | undefined) => (v == null || v === '' ? '∅' : (v.length > 60 ? v.slice(0, 60) + '…' : v));
 
@@ -436,17 +444,17 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
     date: h.changed_at ? new Date(h.changed_at).toLocaleString('es-ES') : '',
     _ts: h.changed_at ? new Date(h.changed_at).getTime() : 0,
     source: 'Sistema',
-    color: '#4361ee',
+    color: 'hsl(var(--primary))',
   }));
   const timelineAudit: TimelineItem[] = auditLog.map((a: any, i: number) => {
-    const meta = FIELD_LABELS[a.field_name] || { label: a.field_name, emoji: '📝' };
+    const meta = FIELD_LABELS[a.field_name] || { label: a.field_name };
     return {
       id: `a-${a.id || i}`,
-      action: `${meta.emoji} ${meta.label}: ${fmtVal(a.old_value)} → ${fmtVal(a.new_value)}${a.changed_by_nombre ? ' · por ' + a.changed_by_nombre : ''}`,
+      action: `${meta.label}: ${fmtVal(a.old_value)} → ${fmtVal(a.new_value)}${a.changed_by_nombre ? ' · por ' + a.changed_by_nombre : ''}`,
       date: a.changed_at ? new Date(a.changed_at).toLocaleString('es-ES') : '',
       _ts: a.changed_at ? new Date(a.changed_at).getTime() : 0,
       source: 'Edición',
-      color: '#7c3aed',
+      color: 'hsl(var(--info))',
     };
   });
 
@@ -459,7 +467,7 @@ export function useLeadDetail(id: number | string | null | undefined): UseLeadDe
       action: 'Lead creado',
       date: lead.created_at ? new Date(lead.created_at).toLocaleString('es-ES') : '',
       source: 'Sistema',
-      color: '#4361ee',
+      color: 'hsl(var(--primary))',
     });
   }
 

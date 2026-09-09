@@ -162,7 +162,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-6xl max-h-[86vh] flex flex-col">
+      <div className="bg-card border border-border rounded-xl shadow-dialog w-full max-w-6xl max-h-[86vh] flex flex-col">
         <div className="flex items-start justify-between gap-3 p-4 border-b border-border">
           <div className="min-w-0">
             <h3 className="font-semibold">{TITULOS[consulta?.tipo] || 'Detalle'}</h3>

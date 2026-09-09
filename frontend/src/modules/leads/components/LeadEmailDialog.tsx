@@ -106,7 +106,7 @@ export default function LeadEmailDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="lead-email-title"
-        className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-2xl flex flex-col max-h-[92vh]"
+        className="bg-card rounded-xl border border-border shadow-dialog w-full max-w-2xl flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
@@ -131,8 +131,8 @@ export default function LeadEmailDialog({
 
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {!leadEmail && (
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-md p-3 text-xs text-amber-700 dark:text-amber-400">
-              Este lead no tiene email. Edita la ficha y añade uno antes de enviar.
+            <div className="bg-warning-soft border border-warning/30/50 rounded-md p-3 text-xs text-warning">
+              Este prospecto no tiene email. Edita la ficha y añade uno antes de enviar.
             </div>
           )}
           {templates.length > 0 && (
