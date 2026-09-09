@@ -112,9 +112,9 @@ SELECT p.id, d.clave, d.nombre, d.orden, d.cuando, d.dia_desde, d.dia_hasta,
     4, 4, ARRAY['llamada','whatsapp','email'], false,
     'El 5 % solo aplica en máster y diplomado, y se ofrece aquí, no antes.'),
 
-   ('paso_4', 'Convocatoria de becas CETLAT', 4, NULL,
+   ('paso_4', 'Descuento de última oportunidad', 4, NULL,
     7, 8, ARRAY['llamada','whatsapp','email'], false,
-    'Interno, no se comparte: formación nueva máx. 40 %; formación ya habilitada hasta 70 %, reservado para quien casi no ha respondido.'),
+    'Interno, no se comparte: el descuento se decide en la venta. Formación nueva, máximo 40 %; formación ya habilitada, hasta 70 %, reservado para quien casi no ha respondido.'),
 
    ('seguimiento_mensual', 'Seguimiento de toda la base', 5, 'Final de mes',
     NULL, NULL, ARRAY['wasapi'], true,
