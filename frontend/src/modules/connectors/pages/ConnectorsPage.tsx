@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Plus, PlugsConnected, ArrowClockwise, Trash, PencilSimple,
   CheckCircle, XCircle, WarningCircle, Clock, MagicWand, DownloadSimple,
+  Question, ArrowSquareOut, ShoppingBag,
 } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
@@ -22,6 +24,24 @@ import PanelMapeo from '../components/PanelMapeo';
  *
  * El backend estaba hecho desde `bcf9c3e` y no habia forma de usarlo: ni
  * pantalla, ni modulo en el frontend. Esto es la puerta.
+ *
+ * QUE LA DISTINGUE DE LAS OTRAS CUATRO (#131)
+ *
+ * Diego, mirando /testeo: «no entiendo que hacen ahi, y le doy a nuevo conector
+ * y no entiendo, porque no es como los otros». Hay cinco sitios en el CRM que
+ * dicen casi la misma frase —Formularios, Make, Webhooks, Conectores y la
+ * pantalla de WooCommerce— y ninguno decia en que se diferencia. «Entradas de
+ * fuera» y «traer datos de fuera» son la misma frase.
+ *
+ * La division que importa es quien da el primer paso:
+ *
+ *   RECIBEN, alguien de fuera empuja      Formularios · Make · Webhooks
+ *   VAN A BUSCAR, el CRM tira             Conectores · WooCommerce
+ *
+ * Eso es lo que ahora dice la pantalla cuando esta vacia, en vez de repetir la
+ * frase que ya dicen las otras. Y por eso se enlaza a Webhooks: quien llega
+ * aqui buscando «que me avisen cuando entre un prospecto» esta en la puerta
+ * equivocada, y decirselo cuesta una linea.
  */
 
 const nombreTipo = (t: string) => TIPOS.find((x) => x.id === t)?.label || t;
@@ -69,10 +89,68 @@ function Estado({ c }: { c: Conector }) {
       </span>
     );
   }
+  if (c.last_sync_status === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+        <XCircle size={13} weight="fill" /> Falló · {hace(c.last_sync_at)}
+      </span>
+    );
+  }
+  // «No sé qué pasó» y «falló» no son lo mismo, y el primero no debe alarmar
+  // (#131). Antes el rojo era el caso por defecto: cualquier valor que la
+  // pantalla no conociera se pintaba como fallo. Diego sembró un conector de
+  // prueba con `last_sync_status = 'ok'` —los buenos son success, partial y
+  // error— y la pantalla dijo «Falló» de algo que nunca llegó a fallar.
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
-      <XCircle size={13} weight="fill" /> Falló · {hace(c.last_sync_at)}
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Question size={13} /> Terminó, pero no se sabe cómo · {hace(c.last_sync_at)}
     </span>
+  );
+}
+
+/**
+ * Lo que esta pantalla NO es, que es lo que hacía falta decir (#131).
+ *
+ * Sale solo con la lista vacía: quien ya tiene conectores funcionando no
+ * necesita que le expliquen dónde está. Quien llega por primera vez, sí — y
+ * llega desde un menú donde cinco entradas dicen casi lo mismo.
+ */
+function QueNoEsEsto() {
+  return (
+    <div className="mx-auto max-w-xl space-y-2">
+      <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60">
+        Si buscabas otra cosa
+      </p>
+
+      <Link
+        to="/captacion/webhooks"
+        className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted"
+      >
+        <ArrowSquareOut size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 text-xs">
+          <span className="block font-semibold">Que te avisen cuando entre un prospecto → Webhooks</span>
+          <span className="block text-muted-foreground">
+            Ahí el de fuera empuja y el CRM espera. Aquí es al revés: el CRM va a buscar,
+            cuando tú le das a importar.
+          </span>
+        </span>
+      </Link>
+
+      <Link
+        to="/productos/woocommerce"
+        className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted"
+      >
+        <ShoppingBag size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 text-xs">
+          <span className="block font-semibold">Una tienda WooCommerce → tiene su propia pantalla</span>
+          <span className="block text-muted-foreground">
+            Trae lo mismo que un conector y además sincroniza sola cada X minutos y saca
+            el temario de la ficha del curso. Un conector de WooCommerce importa cuando
+            se lo pides, y nada más.
+          </span>
+        </span>
+      </Link>
+    </div>
   );
 }
 
@@ -157,7 +235,7 @@ export default function ConnectorsPage() {
   if (!projectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Conectores" subtitle="Traer al CRM lo que ya existe fuera." />
+        <PageHeader title="Conectores" subtitle="El CRM va a buscar fuera lo que ya está escrito allí." />
         <EmptyState
           icon={PlugsConnected}
           title="Elige un proyecto"
@@ -171,7 +249,9 @@ export default function ConnectorsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Conectores"
-        subtitle={`Traer al CRM lo que ya existe fuera · ${activeProject?.nombre || ''}`}
+        // «Traer datos de fuera» era la misma frase que dice Webhooks («entradas
+        // de fuera») en el menú. Lo que las separa es quién da el primer paso.
+        subtitle={`El CRM va a buscar fuera lo que ya está escrito allí · ${activeProject?.nombre || ''}`}
         actions={
           <div className="flex items-center gap-2">
             <button type="button" onClick={cargar} disabled={cargando}
@@ -195,17 +275,20 @@ export default function ConnectorsPage() {
       {cargando && !conectores.length ? (
         <p className="p-8 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : !conectores.length ? (
-        <EmptyState
-          icon={PlugsConnected}
-          title="Todavía no hay conectores"
-          description="Un conector trae al CRM lo que ya tienes en otro sitio: los productos de una tienda WooCommerce, las entradas de un WordPress, o cualquier API que devuelva JSON."
-          action={
-            <button type="button" onClick={() => setEditando(null)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90">
-              <Plus size={15} weight="bold" /> Crear el primero
-            </button>
-          }
-        />
+        <>
+          <EmptyState
+            icon={PlugsConnected}
+            title="Todavía no hay conectores"
+            description="Un conector va a buscar a otro sitio lo que ya tienes escrito allí y lo trae al CRM. Por ejemplo: los cursos de tu tienda WooCommerce pasan al catálogo sin copiarlos a mano, uno por uno."
+            action={
+              <button type="button" onClick={() => setEditando(null)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90">
+                <Plus size={15} weight="bold" /> Crear el primero
+              </button>
+            }
+          />
+          <QueNoEsEsto />
+        </>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {conectores.map((c) => (
