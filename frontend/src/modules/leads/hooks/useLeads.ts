@@ -6,9 +6,10 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
+const URL_DEFAULTS: { q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
   q: '',
   estado: '',
+  seg: '',   // por que seguimiento va: 1..4, o 5 = «cinco o mas»
   origen: '',
   resp: '',
   prod: '',
@@ -43,7 +44,9 @@ export interface UseLeadsResult {
   search: string;
   setSearch: (v: string) => void;
   filterEstado: string;
+  filterSeguimiento: string;
   setFilterEstado: (v: string) => void;
+  setFilterSeguimiento: (v: string) => void;
   filterOrigen: string;
   setFilterOrigen: (v: string) => void;
   filterResponsable: string;
@@ -88,8 +91,8 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
+  const { q: search, estado: filterEstado, seg: filterSeguimiento, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
+    q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
   };
   // Default CRONOLÓGICO ('recent') descendente = más reciente primero.
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent') as 'value' | 'recent' | 'urgency' | 'recent_value';
@@ -100,6 +103,9 @@ export function useLeads(): UseLeadsResult {
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
+  // Al cambiar de estado se limpia: «seguimiento 3» dentro de «no interesado»
+  // no significa nada, y dejarlo puesto daria una lista vacia sin decir por que.
+  const setFilterSeguimiento = useCallback((v: string) => setUrlFilters({ seg: v, page: 1 }), [setUrlFilters]);
   const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
@@ -161,6 +167,7 @@ export function useLeads(): UseLeadsResult {
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (filterEstado) params.set('status', filterEstado);
+      if (filterSeguimiento) params.set('seguimiento', filterSeguimiento);
       if (filterOrigen) params.set('canal', filterOrigen);
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
       else if (filterResponsable) params.set('responsableId', filterResponsable);
@@ -188,7 +195,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   // Trae TODOS los leads que cumplen los filtros actuales (sin paginar) para
   // exportar. El listado va paginado de 20 en 20; el export debe llevarse todo
@@ -211,6 +218,7 @@ export function useLeads(): UseLeadsResult {
       if (!ignoreFilters) {
         if (debouncedSearch) p.set('search', debouncedSearch);
         if (filterEstado) p.set('status', filterEstado);
+        if (filterSeguimiento) p.set('seguimiento', filterSeguimiento);
         if (filterOrigen) p.set('canal', filterOrigen);
         if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
         else if (filterResponsable) p.set('responsableId', filterResponsable);
@@ -242,7 +250,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -320,7 +328,9 @@ export function useLeads(): UseLeadsResult {
     search,
     setSearch,
     filterEstado,
+    filterSeguimiento,
     setFilterEstado,
+    setFilterSeguimiento,
     filterOrigen,
     setFilterOrigen,
     filterResponsable,

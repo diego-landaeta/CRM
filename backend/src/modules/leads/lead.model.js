@@ -647,7 +647,7 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
+export async function findAll({ projectId, projectIds, status, seguimiento, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -688,6 +688,27 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(status);
   } else if (!includeConverted && !conConversion) {
     conditions.push(`l.status <> 'convertido'`);
+  }
+  // POR QUE SEGUIMIENTO VA (#100).
+  //
+  // Diego: «sería seguimiento 1, 2, y eso en el estado de seguimiento, como un
+  // submenú del seguimiento en los filtros».
+  //
+  // El numero es CUANTAS VECES se ha contactado de verdad: la misma regla que
+  // usan la cola del dia y el embudo de Reportes —el contacto n.º N cierra el
+  // paso n.º N—, para que las tres pantallas digan lo mismo. Una nota interna
+  // no cuenta: no es haber hablado con nadie.
+  //
+  // `5` significa «cinco o mas»: a partir de ahi da igual el numero exacto, lo
+  // que dice es que lleva muchos y no cierra.
+  if (seguimiento) {
+    const n = parseInt(seguimiento, 10);
+    if (Number.isInteger(n) && n > 0) {
+      const CUANTOS = `(SELECT count(*) FROM lead_interactions li
+                         WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+      conditions.push(n >= 5 ? `${CUANTOS} >= $${paramIdx++}` : `${CUANTOS} = $${paramIdx++}`);
+      params.push(n);
+    }
   }
   if (unassigned) {
     conditions.push(`l.responsable_id IS NULL`);

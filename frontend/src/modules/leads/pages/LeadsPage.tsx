@@ -130,6 +130,7 @@ export default function LeadsPage() {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
+    filterSeguimiento, setFilterSeguimiento,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
@@ -722,6 +723,7 @@ export default function LeadsPage() {
         user={user}
         search={search} setSearch={setSearch}
         filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+        filterSeguimiento={filterSeguimiento} setFilterSeguimiento={setFilterSeguimiento}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}

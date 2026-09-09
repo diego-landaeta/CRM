@@ -5,6 +5,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import {
   altaTutorSchema, perfilSchema, colaboracionSchema,
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
+  busquedaDeTutorSchema,
 } from './tutor.validation.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
@@ -339,6 +340,41 @@ export async function formacionesSinTutor(req, res, next) {
   try {
     await exigirGestion(req);
     res.json({ success: true, data: await model.formacionesSinTutor(
+      await proyectosDelAmbito(req)) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/tutores/formaciones/:productId/busqueda
+//
+// «Se busca tutor para esta formacion», y con que anuncio de Meta si lo hay.
+// Lo pidio Diego como columna META en «Formaciones sin tutor»: el CRM tiene la
+// publicidad sincronizada pero NADIE ha dicho nunca que anuncio va con que
+// formacion, asi que esto es lo unico que puede saberlo.
+export async function marcarBusqueda(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isInteger(productId)) throw new AppError('Formacion no valida', 400, 'VALIDATION_ERROR');
+    const d = valida(busquedaDeTutorSchema, req.body || {});
+    const b = await model.marcarBusquedaDeTutor({
+      productId,
+      buscando: d.buscando,
+      adsetId: d.adsetId || null,
+      campaignId: d.campaignId || null,
+      nota: d.nota || null,
+      userId: req.user.userId,
+    });
+    if (!b) throw new AppError('Esa formacion no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: b });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/anuncios?projectId=
+// Los anuncios de Meta que se pueden enganchar a una formacion.
+export async function anunciosDeTutores(req, res, next) {
+  try {
+    await exigirGestion(req);
+    res.json({ success: true, data: await model.anunciosDeTutores(
       await proyectosDelAmbito(req)) });
   } catch (err) { next(err); }
 }

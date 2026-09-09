@@ -50,6 +50,9 @@ export const listLeadsSchema = z.object({
   projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
     .transform((v) => v ? v.split(',').map(Number) : undefined),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
+  // Por que seguimiento va: 1, 2, 3, 4 o «5 o más». El tope evita que
+  // alguien pida el seguimiento 900 y se lleve una consulta por delante.
+  seguimiento: z.coerce.number().int().min(1).max(20).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
