@@ -287,6 +287,46 @@ const NAV_SECTIONS = [
   },
 ];
 
+/**
+ * Cuál de las entradas está encendida. Gana la más concreta (#131).
+ *
+ * `NavLink` sin `end` enciende una entrada en cualquier ruta que cuelgue de la
+ * suya. Como `/captacion` es la de Formularios y Conectores vive en
+ * `/captacion/conectores`, al abrir Conectores el menú marcaba **Formularios**.
+ * Pasaba igual en todo el Catálogo: estando en WooCommerce —`/productos/
+ * woocommerce`— se encendía «Productos».
+ *
+ * Y no es un detalle de pintura: el #131 va de que cinco entradas parecidas no
+ * se distinguen. Que el menú señale la equivocada es la misma confusión, pero
+ * afirmada por el propio CRM.
+ *
+ * No vale con exigir coincidencia exacta: la ficha de un producto vive en
+ * `/productos/123`, no está en el menú, y ahí «Productos» SÍ tiene que
+ * encenderse. La regla es la de siempre en un menú: coincide la que encaja, y
+ * si encajan varias, gana la más larga.
+ */
+const RUTAS_DEL_MENU = NAV_SECTIONS.flatMap((s) =>
+  s.items.flatMap((it) => [it.to, ...(it.children || []).map((c) => c.to)]),
+).filter(Boolean);
+
+const encaja = (camino, ruta) => camino === ruta || camino.startsWith(`${ruta}/`);
+
+/**
+ * ¿Hay en el menú otra entrada más concreta que también encaje aquí?
+ *
+ * Se le pasa a `NavLink` como `end`, en vez de decidir el encendido por fuera:
+ * así el `aria-current="page"` que pone el router coincide con lo que se ve.
+ * Pintar una cosa y anunciar otra es peor que no pintar nada.
+ */
+export function hayRutaMasConcreta(camino, ruta, rutas = RUTAS_DEL_MENU) {
+  // «Más concreta QUE ESTA» solo significa algo si esta encaja. Sin esta línea
+  // devolvía true para una entrada que no pinta nada en la ruta actual: da
+  // igual para el `end` —esa entrada no se enciende de ninguna manera— pero
+  // hace que la función mienta, y alguien la va a leer para otra cosa.
+  if (!ruta || !encaja(camino, ruta)) return false;
+  return rutas.some((otra) => otra.length > ruta.length && encaja(camino, otra));
+}
+
 // CRM-217: catálogo de labels personalizables del sidebar para el editor de
 // "Etiquetas sidebar" en ProjectSettingsDialog. Cada label original sirve de
 // clave de override en `projects.sidebar_labels`.
@@ -429,7 +469,11 @@ function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, pro
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.end ?? child.to === '/accounting'}
+                // El `end` explicito del menu manda —lo lleva «Lista de
+                // prospectos»—; donde no lo hay, se deduce. Ver
+                // `hayRutaMasConcreta`: es lo que impedia que Conectores se
+                // encendiera al abrirlo.
+                end={child.end ?? (child.to === '/accounting' || hayRutaMasConcreta(location.pathname, child.to))}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -605,7 +649,9 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      // Exacta solo cuando otra entrada del menú cubre esta ruta mejor. Ver
+      // `hayRutaMasConcreta`: es lo que impedía que Conectores se encendiera.
+      end={to === '/' || hayRutaMasConcreta(location.pathname, to)}
       onClick={onClick}
       title={collapsed ? displayLabel : undefined}
       aria-label={collapsed ? displayLabel : undefined}
