@@ -13,6 +13,7 @@ interface Row {
 
 interface Props {
   projectId?: number | null;
+  issuerId?: number | null;
   responsableId?: number | null;
   /** null = all-time, número = últimos N días */
   days?: number | null;
@@ -28,7 +29,7 @@ function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 }
 
-export default function TopProductsCard({ projectId, responsableId = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
+export default function TopProductsCard({ projectId, issuerId = null, responsableId = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +38,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
     setLoading(true);
     const params: Record<string, string | number> = { limit };
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     if (from && to) { params.from = from; params.to = to; } else if (days) params.days = days;
     if (responsableId) params.responsableId = responsableId;
     client.get<Row[]>('/ventas/top-products', { params })
@@ -44,7 +46,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, responsableId, days, limit, from, to]);
+  }, [projectId, issuerId, responsableId, days, limit, from, to]);
 
   return (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>

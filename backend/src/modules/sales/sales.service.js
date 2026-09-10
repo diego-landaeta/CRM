@@ -3,6 +3,7 @@ import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 /**
  * Registra una venta — flujo orquestado:
@@ -163,10 +164,12 @@ export async function createSale(data, requestUser) {
  * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
  *   days=null → all-time. days=30 → últimos 30 días.
  */
-export async function getTopProducts({ projectId, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
+export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
   const params = [];
   const where = [];
-  if (projectId) { params.push(projectId); where.push(`c.project_id = $${params.length}`); }
+  const listaTop = comoLista(projectId, projectIds);
+  if (listaTop) { params.push(listaTop); where.push(`c.project_id = ANY($${params.length}::int[])`); }
+  else where.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { params.push(responsableId); where.push(`l.responsable_id = $${params.length}`); }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).
@@ -220,11 +223,13 @@ const SIN_TILDES = (expr) =>
                       'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUNcC')`;
 
 
-function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx = 1) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search }, startIdx = 1) {
   const cond = [];
   const params = [];
   let idx = startIdx;
-  if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { cond.push(`cv.project_id = ANY($${idx++}::int[])`); params.push(lista); }
+  else cond.push(SIN_PRUEBAS('cv.project_id'));
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
@@ -250,6 +255,25 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
                          FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
+// Lo que abrio la venta y lo que son cuotas posteriores del plan, por separado
+// (#100). Es la misma regla que `ES_MATRICULA` del desglose —el primer cobro
+// de la venta es la matricula, el resto son cuotas— escrita con el alias de
+// esta consulta. Que las dos cuenten igual es el motivo de repetirla y no
+// inventar otra definicion.
+//
+// Sin esto, «cobrado» juntaba dinero NUEVO con cuotas de ventas que ya estaban
+// cerradas, y no habia forma de saber cuanto se habia vendido de verdad.
+const COBRADO_MATRICULA = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND NOT EXISTS (SELECT 1 FROM conversion_payments p0
+                      WHERE p0.conversion_id = cp.conversion_id
+                        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+const COBRADO_CUOTAS = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND EXISTS (SELECT 1 FROM conversion_payments p0
+                  WHERE p0.conversion_id = cp.conversion_id
+                    AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
   const { where, params } = filtrosVentas(filtros);
@@ -259,6 +283,9 @@ export async function getResumenVentas(filtros = {}) {
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
             COALESCE(SUM(cv.importe_total), 0) AS importe,
             COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
+            COALESCE(SUM(${COBRADO_MATRICULA}), 0) AS cobrado_matricula,
+            COALESCE(SUM(${COBRADO_CUOTAS}), 0) AS cobrado_cuotas,
+            COUNT(*) FILTER (WHERE ${COBRADO_CUOTAS} > 0)::int AS ventas_con_cuotas,
             COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
@@ -292,6 +319,10 @@ export async function getResumenVentas(filtros = {}) {
     asesoras: r.asesoras,
     importe: Number(r.importe),
     cobrado: Number(r.cobrado),
+    // De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan (#100).
+    cobrado_matricula: Number(r.cobrado_matricula),
+    cobrado_cuotas: Number(r.cobrado_cuotas),
+    ventas_con_cuotas: r.ventas_con_cuotas,
     pendiente: Number(r.pendiente),
     liquidadas: r.liquidadas,
     con_saldo: r.con_saldo,
@@ -432,10 +463,12 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, from = null, to = null, responsableId = null } = {}) {
+export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const pv = [];
   const wv = [];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  const listaV = comoLista(projectId, projectIds);
+  if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  else wv.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { pv.push(responsableId); wv.push(`${VENDEDORA_C} = $${pv.length}`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
@@ -453,7 +486,9 @@ export async function getDesglose({ projectId = null, from = null, to = null, re
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  const listaC = comoLista(projectId, projectIds);
+  if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  else wc.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { pc.push(responsableId); wc.push(`${VENDEDORA_C} = $${pc.length}`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
@@ -507,7 +542,7 @@ function restarDias(fecha, dias) {
 }
 
 // Un tramo: ventas, dinero y leads agrupados por dia o por mes.
-async function tramo({ projectId, from, to, responsableId, porMes }) {
+async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes }) {
   const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
     : "to_char(%s, 'YYYY-MM-DD')";
 
@@ -515,7 +550,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   const wv = ['NOT c.es_mensualidad',
     // Una venta sin ningun cobro es una proforma que no se pago.
     'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  const listaV = comoLista(projectId, projectIds);
+  if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  else wv.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
     pv.push(responsableId);
     wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pv.length}`);
@@ -534,7 +571,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  const listaC = comoLista(projectId, projectIds);
+  if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  else wc.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
     pc.push(responsableId);
     wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pc.length}`);
@@ -552,7 +591,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
 
   const pl = [];
   const wl = ['l.deleted_at IS NULL'];
-  if (projectId) { pl.push(projectId); wl.push(`l.project_id = $${pl.length}`); }
+  const listaL = comoLista(projectId, projectIds);
+  if (listaL) { pl.push(listaL); wl.push(`l.project_id = ANY($${pl.length}::int[])`); }
+  else wl.push(SIN_PRUEBAS('l.project_id'));
   if (responsableId) { pl.push(responsableId); wl.push(`l.responsable_id = $${pl.length}`); }
   pl.push(from); const lFrom = pl.length;
   pl.push(to); const lTo = pl.length;
@@ -605,7 +646,7 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   };
 }
 
-export async function getSerieVentas({ projectId = null, from = null, to = null, responsableId = null } = {}) {
+export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const hoy = new Date().toISOString().slice(0, 10);
   const desde = from || `${new Date().getFullYear()}-01-01`;
   const hasta = to || hoy;
@@ -613,7 +654,7 @@ export async function getSerieVentas({ projectId = null, from = null, to = null,
   // Hasta dos meses se ve por dias; a partir de ahi, por meses.
   const porMes = dias > 62;
 
-  const actual = await tramo({ projectId, from: desde, to: hasta, responsableId, porMes });
+  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes });
 
   // El periodo justo anterior, del mismo tamaño.
   const finAnterior = restarDias(desde, 1);
