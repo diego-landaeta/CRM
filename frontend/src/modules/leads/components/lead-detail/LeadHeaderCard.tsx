@@ -7,6 +7,9 @@ import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
 
 const MergeLeadDialog = lazy(() => import('../MergeLeadDialog'));
+// Repartir la venta de este prospecto entre dos gestoras. Se carga aparte
+// porque solo lo ven admin y superadmin.
+const CompartirVentaBoton = lazy(() => import('@/modules/sales/components/CompartirVentaBoton'));
 
 interface LeadHeaderCardProps {
   lead: Lead;
@@ -62,6 +65,15 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
+            {/* «Compartir» va antes de «Reasignar» porque son la misma familia:
+                reasignar es pasarsela a otra, compartir es atenderla entre dos.
+                Diego: «no es nada intuitivo» — la funcion existia pero habia que
+                entrar a la ficha de la venta para encontrarla. */}
+            {isAdmin && (
+              <Suspense fallback={null}>
+                <CompartirVentaBoton leadId={lead.id} />
+              </Suspense>
+            )}
             {isAdmin && (
               <button
                 onClick={onReassign}
