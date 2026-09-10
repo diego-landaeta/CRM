@@ -12,7 +12,6 @@
   o saltarse un paso, y eso se hace desde la ficha de la persona.
 */
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise,
 } from '@phosphor-icons/react';
@@ -23,6 +22,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import { contarPorPaso, trasSacar } from '../lib/cola';
+import PanelDeCola from '../components/PanelDeCola';
+import { toast } from '@/shared/hooks/useToast';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
 function cuando(fecha: string, retraso: number) {
@@ -58,7 +60,6 @@ function Contador({ icon: Icon, etiqueta, valor, tono, activo, onClick }: any) {
 export default function ColaDelDiaPage() {
   const { activeProject } = useProjectContext();
   const { user } = useAuth();
-  const navegar = useNavigate();
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [cola, setCola] = useState<PasoEnCola[]>([]);
@@ -108,12 +109,76 @@ export default function ColaDelDiaPage() {
       .catch(() => { /* si falla, se queda sin filtro y ya */ });
   }, [esAdmin, proyecto]);
 
-  const visibles = useMemo(() => {
+  // Qué paso se está mirando, si es que se ha elegido uno. Va aparte del tramo
+  // de fechas: se cruzan, no se sustituyen —«los atrasados del paso 2» es la
+  // pregunta que de verdad se hace por la mañana—.
+  const [paso, setPaso] = useState<string | null>(null);
+  // A quién se está atendiendo ahora mismo. Un índice, no una fila: la lista
+  // cambia debajo al ir sacando gente, y guardar la fila dejaría el panel
+  // enseñando a alguien que ya no está.
+  const [enFoco, setEnFoco] = useState<number | null>(null);
+  const [apuntando, setApuntando] = useState(false);
+
+  const porTramo = useMemo(() => {
     if (tramo === 'atrasados') return cola.filter((x) => x.dias_de_retraso > 0);
     if (tramo === 'hoy') return cola.filter((x) => x.dias_de_retraso === 0);
     if (tramo === 'manana') return cola.filter((x) => x.dias_de_retraso === -1);
     return cola;
   }, [cola, tramo]);
+
+  // Las cuentas por paso se sacan de lo que hay en el tramo, no de la cola
+  // entera: si se está mirando lo atrasado, «paso 2: 14» tiene que ser catorce
+  // atrasados y no catorce en total.
+  const grupos = useMemo(() => contarPorPaso(porTramo), [porTramo]);
+
+  const visibles = useMemo(
+    () => (paso ? porTramo.filter((x) => x.clave === paso) : porTramo),
+    [porTramo, paso],
+  );
+
+  // Si el filtro deja la lista sin la fila que se estaba atendiendo, se cierra
+  // el panel en vez de enseñar a otra persona en su sitio.
+  useEffect(() => {
+    if (enFoco !== null && enFoco >= visibles.length) setEnFoco(null);
+  }, [visibles.length, enFoco]);
+
+  /**
+   * Apunta el contacto y pasa al siguiente.
+   *
+   * NO SE MARCA EL PASO. Se apunta lo que ha pasado de verdad —una llamada, un
+   * WhatsApp— y el servidor cierra el paso solo, porque lo deduce de cuántos
+   * contactos lleva la persona. Por eso al volver ya no sale en la cola.
+   */
+  async function apuntarContacto(tipo: string, nota: string) {
+    if (enFoco === null) return;
+    const fila = visibles[enFoco];
+    if (!fila) return;
+    setApuntando(true);
+    try {
+      await client.post(`/leads/${fila.lead_id}/interactions`, {
+        tipo,
+        nota: nota || `Contacto del seguimiento ${fila.orden}`,
+        fecha: new Date().toISOString(),
+      });
+      // Se saca de la lista aquí mismo en vez de recargar: recargar 300 filas
+      // para quitar una parpadea y pierde el sitio donde ibas.
+      setCola((c) => c.filter((x) => x.lead_id !== fila.lead_id));
+      setEnFoco(trasSacar(visibles.length, enFoco));
+      toast({ title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola.` });
+      // Los contadores de arriba sí se rehacen contra el servidor, en segundo
+      // plano: son los que dicen cuánto queda del día.
+      traerResumen({ projectId: proyecto, gestoraId }).then((r) => { if (r) setResumen(r); }).catch(() => {});
+    } catch (e) {
+      const err = e as { message?: string };
+      toast({
+        title: 'No se ha podido apuntar',
+        description: err?.message || 'Inténtalo otra vez; no se ha guardado nada.',
+        variant: 'destructive',
+      });
+    } finally {
+      setApuntando(false);
+    }
+  }
 
   const titulo = esAdmin && !gestoraId ? 'La cola del equipo' : 'Tu día';
 
@@ -156,6 +221,59 @@ export default function ColaDelDiaPage() {
         </div>
       )}
 
+      {/* CUÁNTOS DE CADA PASO, que es como lo pide el issue: «agrupada por
+          paso: cuántos del 1, cuántos del 2…».
+          No se reordena la lista para agruparla —el orden por urgencia es lo
+          que deja arriba lo que lleva más esperando, y agrupar lo escondería
+          detrás del paso 1—: se cuenta y se filtra por encima del mismo orden.
+          Y sirve para lo que se hace de verdad por la mañana: los del paso 2
+          seguidos, que llevan el mismo mensaje. */}
+      {!cargando && grupos.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+            Por paso
+          </span>
+          <button
+            type="button"
+            onClick={() => setPaso(null)}
+            aria-pressed={paso === null}
+            aria-label={`Ver todos los pasos, ${porTramo.length}`}
+            className={
+              'rounded-md border px-2.5 py-1 text-normal transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
+              + (paso === null ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')
+            }
+          >
+            Todos <span className="tabular-nums opacity-70">{porTramo.length}</span>
+          </button>
+          {grupos.map((g) => (
+            <button
+              key={g.clave}
+              type="button"
+              onClick={() => setPaso(paso === g.clave ? null : g.clave)}
+              aria-pressed={paso === g.clave}
+              title={g.nombre}
+              // «Seg. 2» a secas se repite en cada fila de la lista y no dice
+              // de qué paso habla. Leído tiene que bastar por sí solo.
+              aria-label={`Ver solo ${g.nombre}: ${g.cuantos}${g.atrasados > 0 ? `, ${g.atrasados} con retraso` : ''}`}
+              className={
+                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-normal transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                + (paso === g.clave ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')
+              }
+            >
+              <span>Seg. {g.orden}</span>
+              <span className="tabular-nums opacity-70">{g.cuantos}</span>
+              {/* Cuántos de ese paso llegan tarde. Un «14» a secas no dice si
+                  ese grupo urge o simplemente es grande. */}
+              {g.atrasados > 0 && (
+                <span className="rounded bg-red-100 px-1 text-[10px] font-bold tabular-nums text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                  {g.atrasados} tarde
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {cargando ? (
         <div className="space-y-2">
           {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />)}
@@ -172,13 +290,16 @@ export default function ColaDelDiaPage() {
         />
       ) : (
         <div className="space-y-2">
-          {visibles.map((p) => {
+          {visibles.map((p, i) => {
             const c = cuando(p.fecha_prevista, p.dias_de_retraso);
             return (
               <button
                 key={p.lead_id}
                 type="button"
-                onClick={() => navegar(`/prospectos/${p.lead_id}`)}
+                // Abre el panel, no la ficha. Salir a la ficha por cada persona
+                // es lo que rompía el hilo: se hacía uno, atrás, y a buscar por
+                // dónde ibas. La ficha entera sigue a un clic, dentro.
+                onClick={() => setEnFoco(i)}
                 className={
                   'w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 '
                   + 'focus:outline-none focus:ring-2 focus:ring-primary/40 '
@@ -257,6 +378,19 @@ export default function ColaDelDiaPage() {
         Los pasos <strong className="text-foreground">se cierran solos</strong> al registrar un contacto con la
         persona: no hay que marcarlos. Para mover una fecha o saltarse un paso, entra en su ficha.
       </p>
+
+      {enFoco !== null && visibles[enFoco] && (
+        <PanelDeCola
+          fila={visibles[enFoco]}
+          posicion={enFoco + 1}
+          total={visibles.length}
+          guardando={apuntando}
+          onContactado={(tipo, nota) => apuntarContacto(tipo, nota)}
+          onAnterior={() => setEnFoco((n) => (n === null ? null : Math.max(0, n - 1)))}
+          onSiguiente={() => setEnFoco((n) => (n === null ? null : Math.min(visibles.length - 1, n + 1)))}
+          onCerrar={() => setEnFoco(null)}
+        />
+      )}
     </div>
   );
 }
