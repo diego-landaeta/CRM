@@ -84,7 +84,7 @@ export async function getGestoresStats({
         AND NOT COALESCE(u.gestor_colaboraciones, false)
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.active = TRUE
-                       AND ${idxLista ? `up.project_id = ANY($${idxLista}::int[])` : 'TRUE'}
+                       AND ${idxLista ? `up.project_id = ANY($${idxLista}::int[])` : SIN_PRUEBAS('up.project_id')}
                        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
 
   const { rows: stats } = await query(
