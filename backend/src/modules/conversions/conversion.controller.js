@@ -7,6 +7,7 @@ import {
   listConversionsSchema,
 } from './conversion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 export async function create(req, res, next) {
   try {
@@ -21,7 +22,9 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const filters = { ...parsed.data };
+    // Un proyecto, una sociedad entera o todos. Se resuelve aqui y el modelo
+    // recibe ya la lista, igual que en Reportes.
+    const filters = { ...parsed.data, ...(await proyectosDelAmbito(req)) };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
     if (req.user.role === 'gestor') {
       filters.responsableId = req.user.userId;
@@ -223,10 +226,10 @@ export async function unpayInstallment(req, res, next) {
 
 export async function listProductos(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     if (req.user.role === 'gestor') responsableId = req.user.userId;
-    const data = await conversionService.listProductos({ projectId, responsableId });
+    const data = await conversionService.listProductos({ projectId, projectIds, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

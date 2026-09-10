@@ -135,23 +135,24 @@ export default function SelectorProyecto({ compacto = false, className }) {
           'flex items-center rounded-md border border-border bg-card text-normal font-medium',
           'outline-none transition-colors hover:bg-muted',
           'focus:border-ring focus:ring-2 focus:ring-ring/20',
-          compacto ? 'h-9 w-9 justify-center' : 'h-9 gap-2 pl-1.5 pr-2',
+          compacto ? 'h-9 w-9 justify-center' : 'min-h-9 min-w-0 gap-2 py-1 pl-1.5 pr-2',
         )}
       >
         <ProjectAvatar project={activeProject} size="sm" />
         {!compacto && (
           <>
-            <span className="max-w-[10rem] flex-1 truncate text-left">
-              {etiquetaActual}
+            {/* La cuenta va DEBAJO, no al lado. En la misma linea le quitaba el
+                ancho al nombre y «CEDIA Investigacion y Desarrollo» se quedaba
+                en «CEDIA Investigacion y Desarroll…», que es justo lo que hay
+                que poder leer. */}
+            <span className="min-w-0 max-w-[12rem] flex-1 text-left leading-tight">
+              <span className="block truncate">{etiquetaActual}</span>
+              {activeIssuer && (
+                <span className="block text-secundario font-bold uppercase tracking-wide text-info-soft-foreground">
+                  {activeIssuer.campus.length} campus
+                </span>
+              )}
             </span>
-            {/* La cuenta va aparte y no se recorta: es lo que distingue «CEDIA»
-                de «CEDIA entera», y con un nombre largo se perdia dentro del
-                texto cortado. */}
-            {activeIssuer && (
-              <span className="shrink-0 rounded bg-info-soft px-1.5 py-0.5 text-secundario font-bold text-info-soft-foreground">
-                {activeIssuer.campus.length} campus
-              </span>
-            )}
             <CaretDown size={12} weight="bold" className="shrink-0 text-muted-foreground" />
           </>
         )}

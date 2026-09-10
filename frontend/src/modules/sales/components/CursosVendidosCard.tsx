@@ -13,6 +13,7 @@ interface Row {
 
 interface Props {
   projectId?: number | null;
+  issuerId?: number | null;
   responsableId?: number | null;
   className?: string;
   title?: string;
@@ -64,7 +65,7 @@ const PERIODS: ReadonlyArray<{ key: Period; label: string }> = [
   { key: 'custom', label: 'Personalizado' },
 ];
 
-export default function CursosVendidosCard({ projectId, responsableId = null, className = '', title = 'Cursos vendidos', from: fromProp = null, to: toProp = null }: Props) {
+export default function CursosVendidosCard({ projectId, issuerId = null, responsableId = null, className = '', title = 'Cursos vendidos', from: fromProp = null, to: toProp = null }: Props) {
   const mandaFuera = !!(fromProp && toProp);
   // Arranca en el mes: al entrar interesa como va el mes, no si se ha vendido
   // algo en las ultimas horas. Con 'hoy' la tarjeta salia en blanco casi
@@ -85,13 +86,14 @@ export default function CursosVendidosCard({ projectId, responsableId = null, cl
     setLoading(true);
     const params: Record<string, string | number> = { from, to, limit: 100 };
     if (projectId) params.projectId = projectId;
+    if (issuerId) params.issuerId = issuerId;
     if (responsableId) params.responsableId = responsableId;
     client.get<Row[]>('/ventas/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, responsableId, from, to, customIncompleto]);
+  }, [projectId, issuerId, responsableId, from, to, customIncompleto]);
 
   const totalCursos = rows.reduce((s, r) => s + (r.ventas || 0), 0);
   const totalFacturado = rows.reduce((s, r) => s + Number(r.facturado || 0), 0);
