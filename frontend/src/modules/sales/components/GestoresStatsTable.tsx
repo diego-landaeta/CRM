@@ -10,7 +10,10 @@ interface GestorRow {
   email: string;
   role: string;
   is_available: boolean;
+  /** Puede traer media venta (3,5) cuando alguna esta repartida con otra gestora. */
   ventas: number;
+  /** Cuantas de esas ventas comparte con alguien. Metrica suya, no de la empresa. */
+  compartidas?: number;
   facturado: number;
   cobrado: number;
   /** Recibe leads en el ambito: si sale sin esto es porque vendio en el periodo. */
@@ -37,6 +40,20 @@ interface Props {
 
 function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+}
+
+/**
+ * El numero de ventas, con decimal SOLO cuando lo hay.
+ *
+ * Una venta repartida entre dos vale media para cada una, asi que aqui pueden
+ * salir 3,5. Pero quien no comparte nada sigue viendo un 3 limpio: enseñar
+ * «3,0» a todo el mundo por si acaso ensucia la columna entera.
+ */
+function nVentas(n: number) {
+  const v = Number(n) || 0;
+  return Number.isInteger(v)
+    ? String(v)
+    : v.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
 function currentPeriodo() {
@@ -152,8 +169,19 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                           className="w-20 h-8 px-2 rounded border border-border bg-card text-right text-sm" />
                       ) : (
                         <>
-                          <span className="font-semibold">{r.ventas}</span>
+                          <span className="font-semibold">{nVentas(r.ventas)}</span>
                           <span className="text-muted-foreground"> / {r.meta_ventas ?? '—'}</span>
+                          {/* Por que sale un 2,5: la venta compartida vale media
+                              para cada una, y asi la suma de la tabla sigue
+                              siendo el total real de la empresa. */}
+                          {!!r.compartidas && (
+                            <span
+                              className="text-[11px] text-violet-700 dark:text-violet-300 block"
+                              title="Ventas atendidas a medias con otra gestora. Cada una suma su parte."
+                            >
+                              {r.compartidas === 1 ? '1 compartida' : `${r.compartidas} compartidas`}
+                            </span>
+                          )}
                           {r.meta_ventas != null && r.meta_ventas > 0 && (
                             <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden ml-auto" style={{ maxWidth: 100 }}>
                               <div className={`h-full ${pctV >= 100 ? 'bg-emerald-500' : pctV >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctV}%` }} />
