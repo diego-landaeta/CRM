@@ -62,7 +62,15 @@ function pathAllowsAll(pathname) {
 // webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
 // CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
 // correcta, no un fallo.
-const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/];
+const CON_SOCIEDAD_OK = [
+  /^\/informes$/,
+  /^\/ventas$/,
+  /^\/finanzas\/ventas$/,
+  // Análisis de ventas (#136). Su servidor es el mismo módulo `sales` que ya
+  // sabe de sociedades; lo único que le faltaba era que la pantalla mandara
+  // `issuerId` y que la ruta no chocara con el muro de aquí.
+  /^\/finanzas\/ventas-analisis$/,
+];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
