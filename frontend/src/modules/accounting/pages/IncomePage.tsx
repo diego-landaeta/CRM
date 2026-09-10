@@ -7,13 +7,14 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
+import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus, GraduationCap } from '@phosphor-icons/react';
 import { formatDate } from '@/shared/lib/format';
 // Las metas son mensuales: el mes que toque segun el filtro de fechas. Misma
 // funcion que usa SalesPage, para que las dos pantallas digan el mismo mes.
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
+const TutorialesVentas = lazy(() => import('@/modules/sales/components/TutorialesVentas'));
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const MyGoalCard = lazy(() => import('@/modules/sales/components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('@/modules/sales/components/GestoresStatsTable'));
@@ -113,6 +114,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [tutorialesOpen, setTutorialesOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
@@ -262,6 +264,17 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               : activeProject ? ' en ' + activeProject.nombre : ''}`}
         />
         <div className="flex items-center gap-2 self-start sm:self-auto">
+        {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
+            cifras que cuentan cosas distintas, asi que se explica aqui mismo. */}
+        <button
+          type="button"
+          onClick={() => setTutorialesOpen(true)}
+          title="Cómo leer esta pantalla"
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+        >
+          <GraduationCap size={16} weight="duotone" className="text-violet-600" />
+          Tutoriales
+        </button>
         <button
           type="button"
           onClick={() => navigate('/finanzas/ventas-analisis')}
@@ -281,6 +294,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         )}
         </div>
       </div>
+
+      <Suspense fallback={null}>
+        {tutorialesOpen && <TutorialesVentas onCerrar={() => setTutorialesOpen(false)} />}
+      </Suspense>
 
       <Suspense fallback={null}>
         <RegisterSaleDialog
