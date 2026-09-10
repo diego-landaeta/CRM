@@ -4,6 +4,7 @@ import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -165,6 +166,7 @@ export default function ClientsPage() {
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
   };
+  const idsDelAmbito = useIdsDelAmbito();
   // Filtros persistidos en URL para deep-linking + refresh-safe.
   // Server-side: search, resp(id), prod(id), from, to, sort. Client-side (post-fetch):
   // estado_pago (depende de cálculos local de conversiones).
@@ -237,7 +239,8 @@ export default function ClientsPage() {
     try {
       const params = new URLSearchParams();
       if (isAllProjects) {
-        params.set('projectIds', projects.map((p) => p.id).join(','));
+        // Con una empresa elegida, «todos» son sus campus y ninguno mas.
+        params.set('projectIds', idsDelAmbito.join(','));
       } else {
         params.set('projectId', String(activeProject.id));
       }

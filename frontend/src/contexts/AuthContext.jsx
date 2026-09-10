@@ -24,7 +24,8 @@ const FAKE_PROJECTS = [
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
   const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
-  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
+  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
+
   // Null salvo que se haya elegido una sociedad entera (#120).
   const [activeIssuerId, setActiveIssuerId] = useState(() => {
     const guardada = localStorage.getItem(CLAVE_SOCIEDAD);
@@ -153,7 +154,9 @@ export function AuthProvider({ children }) {
    * 310 sitios que leen `activeProject.id` y meterles ahi el id de una sociedad
    * seria mandar un numero de sociedad donde se espera uno de proyecto.
    *
-   * Quien entiende de sociedades —hoy solo Reportes— lee `activeIssuerId`.
+   * Quien entiende de sociedades lee `activeIssuerId`. Ya no es solo
+   * Reportes: prospectos, clientes, el pipeline y el dashboard tambien
+   * acotan por empresa (via useIdsDelAmbito).
    */
   const switchIssuer = useCallback((issuerId) => {
     const tiene = projects.some((p) => Number(p.sociedad_emisora_id) === Number(issuerId));
