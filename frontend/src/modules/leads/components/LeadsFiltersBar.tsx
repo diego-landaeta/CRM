@@ -226,46 +226,16 @@ export default function LeadsFiltersBar(props: Props) {
           >
             <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}
-              <Section title="Búsqueda">
-                <div className="relative">
-                  <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nombre, email o teléfono…"
-                    className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </Section>
+              {/* Aqui habia otro buscador, otro «Estado» y otro «Orden». Los
+                  tres estan en la fila de arriba, a la vista (#125): tenerlos
+                  dos veces obliga a mirar en dos sitios para saber que hay
+                  puesto, y a acordarse de limpiarlos en los dos.
+
+                  Detras del boton se queda lo que NO cabe en la fila: gestor,
+                  programa, proyecto, fechas, direccion y lo de admin. */}
 
               {/* Filtros principales */}
               <Section title="Filtros principales">
-                <Row label="Estado">
-                  <select
-                    value={filterEstado}
-                    onChange={(e) => setFilterEstado(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
-                  >
-                    <option value="">Todos los estados</option>
-                    {/* "Convertido" NO se filtra aquí: los convertidos se ven en
-                        Clientes/Ventas, no en Prospectos. */}
-                    {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'convertido').map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </Row>
-                <Row label="Canal">
-                  <SearchableSelect
-                    value={filterOrigen}
-                    onChange={(v) => setFilterOrigen(v)}
-                    options={Object.entries(ORIGEN_LABELS).map(([value, label]) => ({ value, label }))}
-                    placeholder="Buscar canal…"
-                    allLabel="Todos los canales"
-                    ariaLabel="Canal"
-                    maxWidth="100%"
-                  />
-                </Row>
                 {isAdmin && (
                   <Row label="Gestor">
                     <SearchableSelect
@@ -311,17 +281,6 @@ export default function LeadsFiltersBar(props: Props) {
                 )}
                 <Row label="Fechas">
                   <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => setDateRange(f, t)} />
-                </Row>
-                <Row label="Orden">
-                  <select
-                    value={sortMode}
-                    onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
-                  >
-                    {Object.entries(SORT_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
                 </Row>
                 {/* Dirección del orden cronológico: descendente (más reciente
                     primero, default) o ascendente (más antiguo primero). */}

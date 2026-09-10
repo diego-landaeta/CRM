@@ -74,6 +74,7 @@ import {
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
+import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 // El panel de «proximo gestor» se retiro: predecia con el round-robin del CRM
 // y quien reparte es Make. Se cambio por el de abajo, que enseña lo que ha
 // pasado en vez de lo que va a pasar. El componente viejo sigue en el repo.
@@ -633,24 +634,10 @@ export default function LeadsPage() {
       {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
           arriba, en la cabecera del marco, igual que en todas las demas. */}
       <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => { setNewCount(0); refetch(); }}
-            title="Refrescar lista de prospectos"
-            aria-label="Refrescar"
-            className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
-              newCount > 0
-                ? 'border-success/30 bg-success-soft text-success animate-pulse'
-                : 'border-border bg-card hover:bg-muted'
-            }`}
-          >
-            <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
-            <span className="hidden md:inline">Refrescar</span>
-            {newCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-success-foreground text-[10px] font-bold flex items-center justify-center">
-                {newCount > 9 ? '9+' : newCount}
-              </span>
-            )}
-          </button>
+          {/* Aqui habia un «Refrescar». Hacia lo mismo que el «Actualizar» de
+              la fila de filtros —dos botones de recargar en la misma pantalla,
+              #125— y lo unico que aportaba de mas, el aviso de cuantos han
+              entrado, se ha mudado alli. */}
           {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
               las mismas tres pantallas que las pestanas de arriba. Dos sitios
               para lo mismo, uno encima del otro. */}
@@ -666,22 +653,13 @@ export default function LeadsPage() {
               <span className="hidden md:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
             </button>
           )}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/informes')}
-              title="Ir a Reportes (descargables)"
-              aria-label="Reportes"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <ChartLineUp size={14} weight="bold" />
-              <span className="hidden md:inline">Reportes</span>
-            </button>
-          )}
+          {/* Y aqui un «Reportes», que llevaba al mismo sitio que el acceso
+              «Reportes» del bloque de arriba. Se queda el del bloque. */}
           <button
             onClick={() => setWasapiOpen(true)}
             title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
             aria-label="Wasapi"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-success/30 bg-success-soft text-success text-xs sm:text-sm font-medium hover:bg-success-soft transition-colors focus:outline-none focus:ring-2 focus:ring-success/40"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <WhatsappLogo size={14} weight="bold" />
             <span className="hidden md:inline">Wasapi</span>
@@ -746,6 +724,19 @@ export default function LeadsPage() {
         onFiltroRapido={(clave) => setQuickFilter(clave || '')}
       />
 
+      {/* Plegable y con memoria (#125): «esta super bien, pero que se pueda
+          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
+          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
+          organizarse el dia le hace falta. */}
+      <BloquePlegable
+        clave="prospectos-resumen"
+        titulo="Resumen del dia"
+        resumen={
+          quickCounts.urgent > 0
+            ? `${quickCounts.urgent} piden atención`
+            : 'Nada urgente'
+        }
+      >
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
         <SaludComercial
           stats={stats}
@@ -766,6 +757,7 @@ export default function LeadsPage() {
           ]}
         />
       </section>
+      </BloquePlegable>
 
       {/* Los cuatro filtros que más se usan, a la vista y en una fila, como la
           maqueta. Estaban TODOS dentro del desplegable «Filtros»: para saber si
@@ -823,6 +815,7 @@ export default function LeadsPage() {
           setFilterReincidente(false);
           setQuickFilter('');
         }}
+        nuevos={newCount}
         onActualizar={() => { setNewCount(0); refetch(); }}
         actualizando={loading}
       />
