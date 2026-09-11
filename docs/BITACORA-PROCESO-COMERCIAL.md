@@ -213,6 +213,35 @@ nada; lo único que hace es no dejar que se olvide.
 **En las 4 bases:** MultiCRM 10 plantillas piden adjunto y 69 llevan pista;
 ISEIE 1 y 7. **Desplegado en /testeo**, backend y frontend, API 200.
 
+### 2026-09-11 · Paso 5 — El proceso en la ficha del prospecto
+
+**Commit** `fcc64c5` (ISEIH) · `01bccbf` (ISEIE)
+
+Diego: «en los prospectos también debería de salir: próximos pasos».
+
+**Por qué hacía falta.** La cola del día responde *«¿a quién le toca hoy?»*. Al
+abrir una ficha la pregunta es otra: *«¿por dónde voy con esta persona y qué le
+toca ahora?»*. Había que acordarse, o irse a la cola y buscarla.
+
+**Y la columna «Próximo» de la lista no servía para esto**: es el próximo
+**recordatorio**, no el paso comercial. Dos cosas distintas que se veían igual.
+
+**Qué enseña.** El paso que toca, con sus canales **en orden** y la chuleta del
+documento; si viene arrastrado y cuántos días; y debajo los cinco pasos, con los
+hechos tachados.
+
+**Se marca UN solo paso como «el siguiente»**, el primero pendiente. Si alguien
+lleva tres sin hacer, lo que necesita es que le llamen una vez, no tres avisos.
+Y si no hay pasos planificados —alguien que ya compró, o anterior al proceso— la
+tarjeta no aparece: una tarjeta vacía solo estorba.
+
+**Desplegado en /testeo.**
+
+**Nota de operación:** el despliegue falló dos veces con «Error reading SSH
+protocol banner». La web respondía y el puerto 22 estaba abierto: era el
+servidor limitando conexiones SSH después de muchísimas seguidas. Reintentando
+entró. Si vuelve a pasar, es esperar, no un fallo del código.
+
 ---
 
 ## Pendiente
