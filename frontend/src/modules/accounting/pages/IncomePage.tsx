@@ -172,7 +172,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // de cuotas: era el de las fechas de antes.
   useEffect(() => { setCuotas([]); setVerCuotas(false); },
     [projectIdParam, issuerIdParam, effectiveResponsableId, rango.from, rango.to]);
-
   useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, rango.from, rango.to]);
 
   useEffect(() => {

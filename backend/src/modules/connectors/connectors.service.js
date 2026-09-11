@@ -86,7 +86,12 @@ async function upsertProduct(projectId, mapped, originalItem) {
     nombre: mapped.nombre,
     descripcion: mapped.descripcion || null,
     precio: mapped.precio !== undefined ? parseFloat(mapped.precio) || null : null,
-    moneda: mapped.moneda || null,
+    // `|| null` no vale aqui: `products.moneda` es NOT NULL con DEFAULT 'EUR'.
+    // Mandando null explicito, Postgres NO aplica el defecto y revienta — asi
+    // que CUALQUIER importacion que no mapeara la moneda fallaba en todos sus
+    // elementos, y el producto de WooCommerce no la trae. Se cae al defecto de
+    // la columna, que es el que ya usa el resto del CRM.
+    moneda: mapped.moneda || 'EUR',
     sku: sku,
     duracion: mapped.duracion || null,
     url_info: mapped.url_info || null,
@@ -219,7 +224,17 @@ export async function importFromConnector(connectorId) {
         logger.warn({ err: err.message, connectorId }, 'Connector: error en item');
       }
     }
-    await model.recordSync(connectorId, errors === 0 ? 'success' : 'partial', items.length);
+    // Se guardan los que ENTRARON, no los que se miraron.
+    //
+    // Antes se guardaba `items.length`, o sea cuantos habia en el origen. La
+    // pantalla lo enseña como «N traidos», asi que una importacion donde los
+    // tres items fallaron —por ejemplo por un NOT NULL de `products.moneda`—
+    // decia «3 traidos» con cero productos creados. Que es exactamente lo que
+    // no puede hacer un contador.
+    //
+    // `partial` ya distingue que hubo fallos; el numero tiene que decir lo que
+    // hay, no lo que se intento.
+    await model.recordSync(connectorId, errors === 0 ? 'success' : 'partial', created + updated);
     return { total: items.length, created, updated, skipped, errors };
   } catch (err) {
     await model.recordSync(connectorId, 'error', 0);

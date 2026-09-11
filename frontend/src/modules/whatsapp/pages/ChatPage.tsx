@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
-  MessageSeparator, InfoButton, InputToolbox,
+  MessageSeparator, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
+import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -23,6 +23,7 @@ import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import type { DatosParaRellenar } from '../lib/plantilla';
+import { altoDelMarco, rellenoDeAbajo } from '../lib/altoDelMarco';
 import './chat.css';
 import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
@@ -170,10 +171,25 @@ function colorDeNombre(nombre: string) {
  * La direccion que da WhatsApp caduca, asi que puede fallar en cualquier
  * momento: cuando pasa se cae a las letras en vez de dejar un hueco roto.
  */
-function Foto({ nombre, url, grupo }: { nombre: string; url?: string | null; grupo?: boolean }) {
-  const [rota, setRota] = useState(false);
-  if (url && !rota) {
-    return <img src={url} alt={nombre} className="wa-foto" onError={() => setRota(true)} />;
+export function Foto({ nombre, url, grupo }: { nombre: string; url?: string | null; grupo?: boolean }) {
+  // Se recuerda QUE direccion fallo, no un «fallo» a secas (#112, punto 2).
+  //
+  // Antes esto era `const [rota, setRota] = useState(false)`, y ese booleano
+  // vivia mientras viviera el componente. En la LISTA da igual: cada fila tiene
+  // su propia Foto, asi que una caducada solo se estropea a si misma. En la
+  // CABECERA hay UNA sola que sobrevive al cambiar de conversacion — y las
+  // direcciones que da WhatsApp caducan.
+  //
+  // Asi que bastaba abrir un chat con la foto caducada para que la cabecera se
+  // quedara en la inicial para TODOS los siguientes, con la lista enseñando la
+  // foto al lado. Es lo que vio Diego: en la fila la foto, en la cabecera una
+  // «D». El dato llegaba bien; lo viejo era el estado.
+  //
+  // Guardando la direccion, cambiar de chat lo reinicia solo: `falla !== url`
+  // vuelve a ser cierto sin efectos ni parpadeo.
+  const [falla, setFalla] = useState<string | null>(null);
+  if (url && falla !== url) {
+    return <img src={url} alt={nombre} className="wa-foto" onError={() => setFalla(url)} />;
   }
   // Un grupo sin foto se distingue de una persona sin foto.
   if (grupo) return <div className="wa-inicial" title={nombre}><UsersThree size={17} weight="fill" /></div>;
@@ -626,45 +642,31 @@ export default function ChatPage() {
   // Estaba fijado a `100vh - 225px`, que es el mismo error que ya cometi con el
   // marco anterior: encima hay una barra de estado que aparece y desaparece, y
   // el relleno de la pagina cambia con el ancho. Sobraba media pantalla sin
-  // usar. Se mide donde empieza el marco y se le da todo lo que queda.
-  // Lo que ocupa el relleno de la pagina POR DEBAJO del marco.
-  //
-  // Se descubre midiendo, no se adivina. Restaba 16 px a ojo y la pagina
-  // desbordaba justo 16: el contenedor de la pantalla anade su propio relleno
-  // abajo, y eso saca una barra de desplazamiento en el navegador ademas de la
-  // del chat. Dos barras, y la de fuera mueve todo.
-  //
-  // Se apunta una sola vez y se reutiliza: recalcularlo en cada medicion
-  // encogeria el marco un poco mas cada vuelta, porque cambiar su alto vuelve a
-  // disparar la medicion.
-  const sobra = useRef(0);
-
+  // usar. Se mide donde empieza el marco y se le da todo lo que queda, menos el
+  // relleno de los contenedores — el porque de eso esta en `altoDelMarco.ts`.
   useEffect(() => {
     const medir = () => {
       const arriba = marco.current?.getBoundingClientRect().top;
       if (arriba === undefined) return;
-      setAlto(Math.max(420, Math.round(window.innerHeight - arriba - sobra.current)));
+      setAlto(altoDelMarco(arriba, window.innerHeight, rellenoDeAbajo(marco.current)));
     };
     const mirarAncho = () => setEstrecho(window.innerWidth < 900);
     mirarAncho();
     window.addEventListener('resize', mirarAncho);
     medir();
-    // Tras pintar: si la pagina desborda, ese sobrante es el relleno de abajo.
-    const t = setTimeout(() => {
-      const raiz = document.documentElement;
-      const extra = raiz.scrollHeight - raiz.clientHeight;
-      if (extra > 2) { sobra.current += extra; medir(); }
-    }, 120);
     const ro = new ResizeObserver(medir);
     if (document.body) ro.observe(document.body);
     window.addEventListener('resize', medir);
     return () => {
-      clearTimeout(t); ro.disconnect();
+      ro.disconnect();
       window.removeEventListener('resize', medir);
       window.removeEventListener('resize', mirarAncho);
     };
-  }, []);
-
+    // `aPantalla` cambia el contenedor del que cuelga el marco, y con el lo que
+    // sobra por debajo. Sin volver a medir aqui, ampliar deja el alto de la
+    // pagina —y salir, el de la pantalla completa—: el ResizeObserver mira el
+    // body, que en ninguno de los dos casos cambia de tamaño.
+  }, [aPantalla]);
   // Se pregunta al servidor si sigue entrando historial, en vez de adivinarlo
   // mirando si la lista crece: al emparejar hay tandas de varios minutos con
   // pausas largas en medio, y por el tamaño de la lista parecia que se habia
@@ -1235,10 +1237,6 @@ export default function ChatPage() {
   // una sola bandeja— asi que hace falta decir de donde viene cada conversacion.
   // Y las que no son de ningun proyecto tambien lo dicen: son las de alguien que
   // aun no esta en el CRM, y saber eso de un vistazo es justo lo util.
-  const etiquetaDe = (c: ChatWhatsapp) =>
-    c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
-
-
   const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
     // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
@@ -1599,7 +1597,14 @@ export default function ChatPage() {
                     className="wa-btn-ficha"
                     aria-label={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}
                     title={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}>
-                    <InfoButton />
+                    {/* Icono propio, no el `InfoButton` del kit.
+                        El kit pinta SU PROPIO <button>, asi que envuelto en el
+                        mio quedaba un boton dentro de otro: HTML invalido, y
+                        React lo gritaba en la consola en cada apertura de chat
+                        —enterrando lo que si importa mirar ahi—. Ademas sus dos
+                        vecinos ya usan iconos de phosphor a 17, con lo que de
+                        paso los tres van iguales. */}
+                    <Info size={17} />
                   </button>
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo cuando hay un numero de verdad al que llamar: a un
@@ -2073,6 +2078,7 @@ export default function ChatPage() {
         <ElegirChat
           chats={chats}
           excluirId={abierto}
+          deQuien={deQuien}
           nombreDe={nombreDe}
           enviando={reenvioEnCurso}
           onCerrar={() => setReenviando(null)}
