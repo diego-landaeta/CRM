@@ -147,7 +147,7 @@ describe('leer el tope de la configuracion', () => {
   });
 });
 
-describe('cuando la migracion 143 todavia no esta aplicada', () => {
+describe('cuando la migracion 145 todavia no esta aplicada', () => {
   beforeEach(() => { tablaExiste = false; });
 
   it('no revienta: el chat sigue funcionando igual que hoy', async () => {
@@ -163,7 +163,7 @@ describe('cuando la migracion 143 todavia no esta aplicada', () => {
 
   it('pero lo dice, para que no parezca que hay tope', async () => {
     const e = await gasto.estado();
-    expect(e.aviso).toMatch(/143/);
+    expect(e.aviso).toMatch(/145/);
     expect(avisos.warn).toHaveBeenCalled();
   });
 

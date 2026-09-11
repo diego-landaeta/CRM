@@ -13,7 +13,46 @@ export const createUserSchema = z.object({
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
   projects: z.array(projectAssignmentSchema).optional(),
-});
+}).refine(
+  (d) => !['admin', 'gestor'].includes(d.role)
+    || (d.projectIds?.length > 0 || d.projects?.length > 0),
+  {
+    message: 'Un admin o un gestor sin proyectos no ve nada: asigna al menos uno',
+    path: ['projectIds'],
+  }
+);
+
+/*
+ * POR QUE VUELVE A HABER UN MINIMO, Y POR QUE NO ES PARA TODOS
+ *
+ * Hasta el 25 de abril esto era `.min(1, 'Debe asignar al menos un proyecto')`.
+ * Desaparecio dentro de 2e936e7 —un commit de cinco features que no lo
+ * menciona— y la prueba que lo cazaba lleva roja desde entonces, enterrada
+ * entre otras seis.
+ *
+ * Pero devolver el `.min(1)` tal cual tampoco era correcto, porque no todos los
+ * roles lo necesitan. Lo decide `projectAccess`:
+ *
+ *     if (req.user.role === 'superadmin' || req.user.role === 'soporte') {
+ *       req.projectId = Number(projectId);
+ *       return next();
+ *     }
+ *     ... SELECT 1 FROM user_projects ... -> 403 si no hay fila
+ *
+ * O sea:
+ *
+ *   admin    sin proyectos -> 403 en cada endpoint con projectId. Es un alta
+ *                             que parece buena y no sirve para nada.
+ *   gestor   sin proyectos -> ademas no ve ningun prospecto y nunca entra en
+ *                             el reparto: las dos cosas van por `user_projects`.
+ *   soporte  sin proyectos -> funciona. Pasa por encima del filtro.
+ *   tutor                  -> no usa endpoints con projectId, y ademas se da de
+ *                             alta por `tutor.controller.js`, que llama al
+ *                             service sin pasar por este esquema.
+ *
+ * Asi que el minimo va solo donde el alta quedaria rota. Y vale igual si los
+ * proyectos vienen en `projectIds` (lo viejo) o en `projects` (lo nuevo).
+ */
 
 // Los permisos acotados de facturacion y colaboraciones.
 //

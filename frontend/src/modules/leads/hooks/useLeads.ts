@@ -7,7 +7,7 @@ import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
+const URL_DEFAULTS: { q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string; qf: string } = {
   q: '',
   estado: '',
   seg: '',   // por que seguimiento va: 1..4, o 5 = «cinco o mas»
@@ -21,6 +21,10 @@ const URL_DEFAULTS: { q: string; estado: string; seg: string; origen: string; re
   dir: 'desc',     // default: más reciente primero
   page: 1,
   dup: '',
+  // El filtro rapido. Va aqui, y no suelto en la pagina, porque ahora lo
+  // resuelve el servidor: si no viaja con la peticion, la lista sigue
+  // enseñando lo de la pagina que toque (#132).
+  qf: '',
   rein: '',
 };
 
@@ -94,8 +98,8 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, seg: filterSeguimiento, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
-    q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
+  const { q: search, estado: filterEstado, seg: filterSeguimiento, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, multi: multiRaw, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente, qf: filtroRapido } = urlFilters as {
+    q: string; estado: string; seg: string; origen: string; resp: string; prod: string; multi: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string; qf: string;
   };
   // Default CRONOLÓGICO ('recent') descendente = más reciente primero.
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent') as 'value' | 'recent' | 'urgency' | 'recent_value';
@@ -181,6 +185,9 @@ export function useLeads(): UseLeadsResult {
       if (sortDir) params.set('dir', sortDir);
       if (filterDup === '1') params.set('duplicated', 'true');
       if (filterReincidente === '1') params.set('reincidente', 'true');
+      // Al servidor: antes se aplicaba aqui sobre las 20 filas de la pagina, o
+      // sea que «mañana» enseñaba los de mañana QUE CAYERAN en esa pagina.
+      if (filtroRapido) params.set('qf', filtroRapido);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -198,7 +205,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, idsDelAmbito, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, idsDelAmbito, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, filtroRapido]);
 
   // Trae TODOS los leads que cumplen los filtros actuales (sin paginar) para
   // exportar. El listado va paginado de 20 en 20; el export debe llevarse todo
@@ -230,6 +237,9 @@ export function useLeads(): UseLeadsResult {
         if (dateTo) p.set('dateTo', dateTo);
         if (filterDup === '1') p.set('duplicated', 'true');
         if (filterReincidente === '1') p.set('reincidente', 'true');
+        // Tambien aqui: el export «con los filtros puestos» tiene que incluir
+        // el filtro rapido, o exportaria mas gente de la que se ve.
+        if (filtroRapido) p.set('qf', filtroRapido);
       }
       if (sortMode) p.set('sort', sortMode);
       if (sortDir) p.set('dir', sortDir);
@@ -253,7 +263,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, idsDelAmbito, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterSeguimiento, filterOrigen, filterResponsable, filterProducto, multiRaw, isAllProjects, projects, idsDelAmbito, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, filtroRapido]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();

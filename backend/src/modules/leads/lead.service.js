@@ -191,6 +191,14 @@ async function _createLeadCore(project, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Canal: override de Make > deteccion automatica por UTMs.
+  //
+  // Se declara AQUI y no mas abajo porque el burst-merge de justo debajo lo
+  // devuelve, y `const` no se puede leer antes de su linea: daba
+  // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
+  // sea un 500 cada vez que entraba esa rama.
+  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
+
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
   // al lead original. Esto agrupa los rebotes de Make / form duplicados y
@@ -230,9 +238,6 @@ async function _createLeadCore(project, leadData) {
     converted.producto_interes_id !== productoInteresId
   );
   const propuestoDe = esPropuesto ? converted.id : null;
-
-  // Canal: override de Make > deteccion automatica por UTMs
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
 
   // Si es spam recurrente, no malgastamos un slot del round-robin.
   // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
@@ -416,7 +421,16 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
     type: 'lead_deleted',
     title: `Lead #${leadId} eliminado`,
     message: `${leadInfo.nombre || '—'} (${leadInfo.email || leadInfo.telefono || '—'}) — motivo: ${reason}${motivo ? ' · ' + motivo : ''}`,
-    link_path: `/prospectos/papelera`,
+    // A la ficha, no a `/prospectos/papelera`: esa ruta NO existe en el
+    // router. Y como `/prospectos/:id` si existe, el aviso no daba un 404
+    // honesto — abria una ficha con el id «papelera», o sea una pantalla rota.
+    //
+    // Va a la ficha porque el `findById` de ESTE repositorio no filtra por
+    // `deleted_at` y el borrado se ve. Al portarlo hay que mirarlo: en ISEIE
+    // hace `if (!r || r.deleted_at) return null`, asi que alli este mismo
+    // enlace daria una pantalla vacia y toca apuntar a su pantalla de
+    // archivados.
+    link_path: `/prospectos/${leadId}`,
     metadata: { lead_id: leadId, reason, motivo, project_id: leadInfo.project_id },
     triggered_by_user_id: userId || null,
   });

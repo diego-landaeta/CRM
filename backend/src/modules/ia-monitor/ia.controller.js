@@ -115,7 +115,7 @@ export async function getMetrics(req, res, next) {
  *
  * Existe para que «¿esta puesto el tope?» se pueda contestar mirando, no
  * leyendo el codigo ni el .env del servidor. `instalado: false` quiere decir
- * que falta la migracion 143 y que por tanto NO hay tope — no que el gasto sea
+ * que falta la migracion 145 y que por tanto NO hay tope — no que el gasto sea
  * cero.
  */
 export async function getGasto(req, res, next) {
