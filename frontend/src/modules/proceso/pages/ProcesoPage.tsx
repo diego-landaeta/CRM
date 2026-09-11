@@ -11,6 +11,7 @@ import useProcesoPasos from '../hooks/useProcesoPasos';
 import { procesoApi, mensajeDeError, type Paso } from '../api/proceso.api';
 import DialogoPaso, { type DatosPaso } from '../components/DialogoPaso';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import { textoDeDias } from '../lib/cuando';
 
 /**
  * El proceso comercial de la casa: cinco pasos que vivían en un PDF.
@@ -25,22 +26,9 @@ export function puedeEditar(rol: string | undefined): boolean {
   return rol === 'admin' || rol === 'superadmin';
 }
 
-/** «Días 0-1», «Día 4», «—». Lo que se lee de un vistazo en la lista. */
-export function textoDeDias(desde: number | null, hasta: number | null): string | null {
-  // Sin ventana no hay nada que decir aquí: manda lo que ponga `cuando` —el
-  // seguimiento mensual es «Final de mes», que no se cuenta en días.
-  if (desde === null && hasta === null) return null;
-  const a = desde ?? hasta!;
-  const b = hasta ?? desde!;
-  if (a === 0 && b === 0) return 'El mismo día';
-  if (a === 0 && b === 1) return 'El mismo día o al siguiente';
-  if (a === 1 && b === 1) return 'Al día siguiente';
-  if (a === b) return `A los ${a} días`;
-  // «7 u 8», no «7 o 8»: delante de una palabra que empieza por o- la
-  // conjunción es «u», y ocho y once empiezan por o.
-  const conjuncion = b === 8 || b === 11 ? 'u' : 'o';
-  return `A los ${a} ${conjuncion} ${b} días`;
-}
+// La frase que dice cuándo toca un paso ya no se escribe aquí: vive en
+// `lib/cuando`, porque la necesitan esta lista y el diálogo. Tenerla en un solo
+// sitio es justo lo que pedía Diego al cerrar el #87.
 
 export default function ProcesoPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
