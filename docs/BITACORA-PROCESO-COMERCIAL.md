@@ -334,11 +334,53 @@ la vista de reparto con 496 ventas. Producción de ISEIE, intacta y sirviendo.
 
 ---
 
+### 2026-09-11 · Paso 8 — Las plazas: el CRM avisa, no cuenta
+
+Diego: «eso lo hacen ellas desde otro sistema, no en el CRM, pero sí es un paso
+a poner» y «que el CRM no lo recuerde, solamente sea que toca mandar ese mensaje
+de seguimiento y como un disclaimer de verificar cuántas plazas quedan».
+
+**Deshace parte de lo que monté.** La cola calculaba las plazas libres
+(`plazas_totales` − ocupadas) y las pintaba con semáforo verde/ámbar/rojo, más
+el aviso «sin plazas configuradas». Eso era montar una **segunda contabilidad**
+de las plazas dentro del CRM, y de dos solo una puede tener razón: la de
+admisiones. Un número nuestro que no cuadre con el suyo es **peor que no dar
+número**, porque acaba dentro de un mensaje que ya salió al cliente.
+
+**Lo que queda:** el paso dice que su mensaje habla de plazas y la pantalla pone
+un «comprueba las plazas» — en la cola y en la ficha del prospecto—, más la
+misma advertencia en la pista de la plantilla, que es donde de verdad hace falta:
+delante de la gestora en el momento de enviar.
+
+**Migración 154**, aplicada en las cuatro bases. La marca **no se pone por la
+clave del paso sino por lo que dice SU mensaje en ESE proyecto**, y la
+diferencia no es teórica:
+
+| | día 4 | ¿avisa? |
+|---|---|---|
+| MultiCRM | Descuento de última oportunidad | **sí**, habla de plazas |
+| ISEIE | Convocatoria de becas CETLAT | **no**, no las menciona |
+
+Marcarlos por igual —que es lo que hice en el primer intento— habría puesto un
+«comprueba las plazas» encima de un mensaje que no lleva ninguna. Se vio al
+comprobar el resultado en ISEIE, no al escribirlo.
+
+**Las columnas de `products` NO se tocan.** `plazas_totales`,
+`plazas_ocupadas_previas` y `fecha_cierre_convocatoria` siguen en la ficha del
+producto para quien las quiera usar. Lo que se quita es que el proceso dependa
+de ellas.
+
+**Desplegado y comprobado en los dos testeo**: día 1 y día 3 avisan, el día 2
+(opiniones) no, y el día 4 de ISEIE tampoco.
+
+---
+
 ## Pendiente
 
 | Qué | De quién |
 |---|---|
-| **Rellenar las plazas** de los productos: hoy 0 de 3.175 | Negocio |
+| ~~Rellenar las plazas de los productos~~ | **Ya no hace falta**: las llevan en admisiones, fuera del CRM. El CRM solo avisa de comprobarlas (paso 8) |
+| ISEIE no tiene el **rediseño de la cabecera** (`PageHeader` por portal + `CabeceraContext`): su pantalla de Proceso pasa `backTo` y no sale el botón de volver | Pendiente de replicar |
 | Los **tres adjuntos obligatorios** del día 1 | Esperando: Diego dice «el correo se hará». Cuando exista el envío, la validación va encima |
 | ~~Aviso de Opynio~~ | **Cerrado**: la reseña sale de la página de Opynio, el CRM no la conoce. Queda el enlace y el recordatorio en la nota del paso |
 | La **llamada por centralita** de los días 2, 3 y 4 | Ángel (Zadarma) |
