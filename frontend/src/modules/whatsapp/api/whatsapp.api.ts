@@ -10,6 +10,13 @@ export interface PlantillaWhatsapp {
   owner_id: number | null;
   orden: number;
   creada_por?: string | null;
+  /** Esta plantilla va con una imagen detrás: al elegirla se abre el selector.
+      El día 2 del proceso es el caso: el mensaje anuncia la opinión y la
+      captura va justo después. */
+  pide_adjunto?: boolean;
+  /** Aviso para la gestora. NO se envía: es la letra pequeña del documento
+      comercial, que hasta ahora solo estaba en el PDF. */
+  pista?: string | null;
 }
 
 export interface ProspectoCola {
