@@ -62,6 +62,7 @@ function exportCSV(clients: Client[], filename: string): void {
   URL.revokeObjectURL(url);
 }
 import { toast } from '@/shared/hooks/useToast';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
@@ -153,10 +154,11 @@ export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   const idsDelAmbito = useIdsDelAmbito();
   // Filtros persistidos en URL para deep-linking + refresh-safe.
@@ -331,7 +333,7 @@ export default function ClientsPage() {
           del contenido, sin el titulo al que acompanaba. */}
       <PageHeader
         title="Clientes"
-        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
+        subtitle={`Prospectos convertidos en ${activeIssuer ? `${activeIssuer.nombre} (${activeIssuer.campus.length} campus)` : (activeProject?.nombre || 'todos los proyectos')} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
         actions={activeProject?.id && !isAllProjects && can('clients.create') ? (
           <button
             type="button"

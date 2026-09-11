@@ -34,8 +34,9 @@ const ESTADO_BADGE: Record<string, string> = {
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject, projects, switchProject } = useProjectContext() as {
+  const { activeProject, projects, switchProject, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
     switchProject: (id: number) => void;
   };
@@ -71,7 +72,14 @@ export default function InvoicesPage() {
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
   // sociedad entre proyectos (global), con la columna Proyecto.
-  const [filterIssuer, setFilterIssuer] = useState<string>('');
+  // Si en la cabecera hay una sociedad elegida (#103), manda ella: son dos
+  // formas de pedir lo mismo y tenerlas discrepando —la cabecera diciendo
+  // CEDIA y la tabla enseñando ICTESS— es peor que tener solo una.
+  const [filterIssuer, setFilterIssuer] = useState<string>(() => (activeIssuer ? String(activeIssuer.id) : ''));
+
+  useEffect(() => {
+    if (activeIssuer) setFilterIssuer(String(activeIssuer.id));
+  }, [activeIssuer?.id]);
   // Dentro de una sociedad: filtrar por uno de sus proyectos. '' = todos.
   const [filterProject, setFilterProject] = useState<string>('');
   const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);

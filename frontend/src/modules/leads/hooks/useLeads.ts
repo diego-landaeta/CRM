@@ -4,6 +4,7 @@ import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import client from '@/shared/api/client';
 import type { Lead, LeadStatus, LeadOrigen } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const PAGE_SIZE = 20;
 
@@ -92,6 +93,7 @@ export function useLeads(): UseLeadsResult {
     activeProject: { id?: number } | null;
     projects: Array<{ id: number; sociedad_emisora_id?: number | null }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
 
   const idsDelAmbito = useIdsDelAmbito();

@@ -53,20 +53,33 @@ function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
-// Con una sociedad elegida (#120), Reportes SI funciona: pide sus campus
-// sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
-// concreto, asi que se comportan igual que con «todos los proyectos» — que es
-// lo que ya sabian hacer.
-// Las pantallas de CIFRAS aceptan una sociedad: sumar varios campus
-// significa algo. Las de configuracion no entran aqui a proposito —un
-// webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
-// CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
-// correcta, no un fallo.
+// Las pantallas que SI saben acotar a una sociedad (#120, #103, Ventas).
+//
+// Sumar varios campus tiene que significar algo para que la pantalla entre
+// aqui. Reportes y Ventas lo piden con `issuerId`; Prospectos y Clientes con
+// la lista de ids de sus campus, que es lo que `/leads` ya sabia recibir.
+//
+// El resto NO estan aqui a proposito, y son dos casos distintos:
+//
+//   Las de CIFRAS que aun no saben sumar campus enseñarian los datos de todos
+//   los proyectos bajo la etiqueta «CEDIA» —cifras de una cosa con el nombre
+//   de otra—, que es peor que no enseñarlas: se leen como buenas.
+//
+//   Las de CONFIGURACION no entran nunca: un webhook o un formulario se montan
+//   PARA UN PROYECTO, y «el webhook de CEDIA» no existe. Ahi el muro de «elige
+//   un proyecto» es la respuesta correcta, no un fallo.
 const CON_SOCIEDAD_OK = [
-  /^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/,
-  // Facturacion: el listado ya filtra por `issuer_id` --la sociedad que emite la
-  // factura-- y las ventas sin factura por sus campus. Diego: «si elijo facturas
-  // y estoy eligiendo CEDIA debe de salir, no debe de salir esto».
+  /^\/informes$/,
+  /^\/ventas$/,
+  /^\/finanzas\/ventas$/,
+  /^\/prospectos$/,
+  /^\/prospectos\/pipeline$/,
+  /^\/prospectos\/\d+$/,
+  /^\/clientes$/,
+  /^\/clientes\/\d+$/,
+  // Facturas es la pantalla que Diego pone de ejemplo: sabia filtrar por
+  // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
+  // campus» justo a la unica que no lo necesitaba.
   /^\/finanzas\/facturas$/,
 ];
 
@@ -76,7 +89,14 @@ function rutaAceptaSociedad(pathname) {
 
 function AllProjectsGuard({ pathname, children }) {
   const { isAllProjects, activeIssuer } = useProjectContext();
-  if (activeIssuer && rutaAceptaSociedad(pathname)) return children;
+  if (activeIssuer) {
+    if (rutaAceptaSociedad(pathname)) return children;
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <NeedsProjectBanner sociedad={activeIssuer.nombre} />
+      </div>
+    );
+  }
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }

@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
-import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 function fmtMoney(n) {
