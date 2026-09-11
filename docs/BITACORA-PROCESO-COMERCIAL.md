@@ -153,15 +153,40 @@ cómo se llegó a esto. Se le dejó `plazas.sql.js` y `product.model.js`, que so
 coherentes entre sí y no rompen nada —comprobado, API 200—, pero necesita un
 despliegue completo desde el repo.
 
+### 2026-09-11 · Paso 3 — El día 4 sin CETLAT, y el enlace de opiniones
+
+**Commit** `44d968b` (ISEIH) · `0dbfba3` (ISEIE) · migración 152
+
+Diego: «agárralo del doc». Y tenía razón: el documento **sí** cubre el día 4. Lo
+titula «Convocatoria de becas CETLAT» —que es alianza de ISEIE— pero el
+contenido es el mismo en los dos casos: un porcentaje sobre el importe de la
+matrícula, ofrecido como último recurso antes del cierre.
+
+**El techo va donde lo ve la gestora, no el cliente.** El documento lo marca
+«INTERNO · NO SE COMPARTE: formación nueva máx. 40 %; formación ya habilitada
+hasta 70 %, reservado para quien casi no ha respondido». Así que el porcentaje
+va como hueco en la plantilla y la regla queda en la **nota del paso**.
+
+**Opynio.** Diego: «lo tienen que sacar desde la página de Opynio de ISEIE, el
+CRM no te va a dar la reseña». Exacto, y eso cierra la duda que tenía: la reseña
+vive fuera y no hay nada que sincronizar. Lo único que puede hacer el CRM es no
+obligar a buscar la dirección cada vez — en ISEIE el enlace ya queda escrito, y
+en los demás se deja el hueco, porque poner el de otra institución sería peor. Y
+la nota del paso 2 recuerda pedir que se cree la opinión si esa formación no
+tiene, que es lo que el documento manda y no se puede automatizar.
+
+**Resultado.** MultiCRM: 9 plantillas y 9 correos de descuento, techo en la nota
+de los 9 pasos. ISEIE: su beca intacta y el enlace de Opynio escrito. En las 4
+bases.
+
 ---
 
 ## Pendiente
 
 | Qué | De quién |
 |---|---|
-| El texto del **día 4 de MultiCRM** («Descuento de última oportunidad») | Diego |
 | **Rellenar las plazas** de los productos: hoy 0 de 3.175 | Negocio |
-| Los **tres adjuntos obligatorios** del día 1 | Bloqueado: no existe el envío de ese correo desde el CRM, y Diego dijo «no enviemos NADA por correo» |
-| **Aviso de Opynio** cuando una formación no tiene opiniones | Necesita decidir de dónde sale el dato: Opynio es externo |
+| Los **tres adjuntos obligatorios** del día 1 | Esperando: Diego dice «el correo se hará». Cuando exista el envío, la validación va encima |
+| ~~Aviso de Opynio~~ | **Cerrado**: la reseña sale de la página de Opynio, el CRM no la conoce. Queda el enlace y el recordatorio en la nota del paso |
 | La **llamada por centralita** de los días 2, 3 y 4 | Ángel (Zadarma) |
 | **Sincronizar ISEIE staging** con el repo | Diego |
