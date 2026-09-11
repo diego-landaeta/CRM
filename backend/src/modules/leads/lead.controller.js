@@ -127,7 +127,7 @@ export async function revisar(req, res, next) {
 
     if (!(await leadModel.sePuedeRevisar())) {
       throw new AppError(
-        'Todavia no se puede validar la base: falta aplicar la migracion 149.',
+        'Todavia no se puede validar la base: falta aplicar la migracion 155.',
         503, 'MIGRATION_PENDING');
     }
     const parsed = revisarLeadSchema.safeParse(req.body);
@@ -166,7 +166,7 @@ export async function progresoRevision(req, res, next) {
       data: {
         ...progreso,
         aviso: progreso.disponible ? null
-          : 'Falta aplicar la migracion 149 (lead_revisiones): todavia no se puede validar la base.',
+          : 'Falta aplicar la migracion 155 (lead_revisiones): todavia no se puede validar la base.',
       },
     });
   } catch (err) { next(err); }

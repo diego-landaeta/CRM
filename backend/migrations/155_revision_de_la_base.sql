@@ -1,4 +1,4 @@
--- 149 · Que quede apuntado que una ficha se reviso (#132)
+-- 155 · Que quede apuntado que una ficha se reviso (#132)
 --
 -- Diego, sobre el quinto paso del proceso —«Seguimiento de toda la base», fin
 -- de mes—:
