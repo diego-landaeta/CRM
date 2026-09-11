@@ -81,6 +81,10 @@ const CON_SOCIEDAD_OK = [
   // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
   // campus» justo a la unica que no lo necesitaba.
   /^\/finanzas\/facturas$/,
+  // Análisis de ventas (#136). Su servidor es el mismo módulo `sales` que ya
+  // sabe de sociedades; lo único que le faltaba era que la pantalla mandara
+  // `issuerId` y que la ruta no chocara con el muro de aquí.
+  /^\/finanzas\/ventas-analisis$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
