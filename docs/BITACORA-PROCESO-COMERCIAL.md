@@ -108,3 +108,60 @@ Conviene revisar qué más le falta a esa base.
 **Queda pendiente de Diego:** el texto del **día 4 de MultiCRM** («Descuento de
 última oportunidad»). Hace falta el porcentaje, si tiene fecha límite y con qué
 nombre se presenta.
+
+### 2026-09-11 · Paso 2 — La cola del día dice la formación y las plazas
+
+**Commit** `060e9c0` (ISEIH) · `2d1f450` (ISEIE)
+
+**Por qué.** El documento pide el número de plazas en **cuatro de los cinco
+pasos** y es explícito: «se comprueba antes de cada envío, nunca se arrastra el
+dato del mensaje anterior». La cola no lo enseñaba, así que para comprobarlo
+había que salirse de la pantalla — y entonces no se comprueba.
+
+**Qué se hizo.** Cada fila de la cola lleva ahora la formación, las plazas
+libres y, si queda menos de un mes, cuánto falta para el cierre. Verde, ámbar
+por debajo de cuatro, rojo sin plazas.
+
+**El cálculo no se duplica.** `PLAZAS_JOIN` y `PLAZAS_COLS` eran constantes
+privadas de `product.model.js`; salen a `products/plazas.sql.js` y las usan el
+catálogo y la cola. Si cada pantalla se lo calculara aparte, dirían números
+distintos de la misma convocatoria — y al cliente le llegaría el que la gestora
+tuviera más a mano.
+
+**Un fallo que ya estaba, corregido de paso.** `if (pProj) par.push(...)` era
+SIEMPRE cierto —es una cadena no vacía en las dos ramas— así que con la lista de
+proyectos vacía se empujaba un parámetro de más y la consulta reventaba: «bind
+message supplies 2 parameters, but requires 1». No había saltado porque el
+controlador siempre manda una lista con algo. Estaba en dos sitios.
+
+**Comprobado contra producción** antes de desplegar: mismas filas que antes,
+ningún campo perdido, cinco nuevos, y el caso que reventaba ahora responde.
+
+**LO QUE DESTAPA, y es lo importante:** de **2.416 productos activos en MultiCRM
+y 759 en ISEIE, NINGUNO tiene plazas configuradas**. Los campos existen desde la
+migración 142 y están los 3.175 vacíos. Por eso la fila dice «sin plazas
+configuradas» en ámbar en vez de callarse: el dato que el documento exige no
+está, y ahora se ve. **Esto no lo arregla el código: alguien tiene que
+rellenarlo.**
+
+**Desplegado en /testeo** (MultiCRM): backend y frontend, API 200.
+
+**ISEIE staging NO**, y conviene saber por qué: su código es del **24 de
+agosto**, le faltan dos módulos enteros (`proceso` y `convocatorias`) y 23
+ficheros. No es un entorno de pruebas usable y parchearlo fichero a fichero es
+cómo se llegó a esto. Se le dejó `plazas.sql.js` y `product.model.js`, que son
+coherentes entre sí y no rompen nada —comprobado, API 200—, pero necesita un
+despliegue completo desde el repo.
+
+---
+
+## Pendiente
+
+| Qué | De quién |
+|---|---|
+| El texto del **día 4 de MultiCRM** («Descuento de última oportunidad») | Diego |
+| **Rellenar las plazas** de los productos: hoy 0 de 3.175 | Negocio |
+| Los **tres adjuntos obligatorios** del día 1 | Bloqueado: no existe el envío de ese correo desde el CRM, y Diego dijo «no enviemos NADA por correo» |
+| **Aviso de Opynio** cuando una formación no tiene opiniones | Necesita decidir de dónde sale el dato: Opynio es externo |
+| La **llamada por centralita** de los días 2, 3 y 4 | Ángel (Zadarma) |
+| **Sincronizar ISEIE staging** con el repo | Diego |
