@@ -294,6 +294,46 @@ un `mv`, no vaciando la carpeta en caliente. La vez que lo hice al revés dejé
 
 ---
 
+### 2026-09-11 · Paso 7 — El otro «testeo»: ISEIE se pone al día
+
+**Commit** `e2118eb` (ISEIE)
+
+La regla es paridad absoluta, así que después de dejar /testeo de MultiCRM al
+día tocaba mirar el de ISEIE. Estaba **parado en agosto**: el código del 24 y el
+frontend del 20, sin los módulos `proceso` ni `convocatorias`.
+
+**Primero la base, que si no el código da error.** A `crm_iseie_staging` le
+faltaban `commercial_steps`, `lead_steps`, `convocatorias` y
+`convocatoria_ofrecimientos`. Se aplicaron las migraciones **142, 143, 146, 147,
+148 y 149** —todas protegidas contra repetirse, comprobado leyéndolas antes—.
+
+**Luego el código**: 73 ficheros de 279, comparando uno a uno contra el repo.
+Faltaba además una dependencia (`@ffmpeg-installer/ffmpeg`, los audios de
+WhatsApp); sin ella la importación habría fallado. Se instaló primero.
+
+**Y el arreglo del IVA**, que ISEIE no tenía. `!!iva_incluido` hacía que un campo
+**ausente** valiera «no incluido» y el CRM sumaba el 21% encima — y la pantalla
+de Ventas crea la conversión **sin mandar ese campo**. Medido antes de tocar:
+
+| | ventas afectadas | de más |
+|---|---|---|
+| MultiCRM producción | 5 | 1.088,22 € |
+| MultiCRM /testeo | 3 | 547,05 € |
+| ISEIE producción | 2 | 81,90 € |
+| ISEIE staging | 1 | 81,90 € |
+
+Poco dinero, pero dos de las de MultiCRM figuraban como **106,05 € pendientes de
+cobro** que ya estaban cobrados.
+
+**Comprobado en ISEIE staging:** los cinco pasos (200), la cola (200, vacía
+porque nadie tiene pasos planificados aún), convocatorias (200, la de CETLAT),
+ventas (200, 762 filas), plantillas (200, 10 con la del día 2 pidiendo imagen) y
+la vista de reparto con 496 ventas. Producción de ISEIE, intacta y sirviendo.
+
+**Los dos «testeo» dan ahora lo mismo**: 10 plantillas, 1 con imagen, misma ruta.
+
+---
+
 ## Pendiente
 
 | Qué | De quién |
@@ -302,4 +342,7 @@ un `mv`, no vaciando la carpeta en caliente. La vez que lo hice al revés dejé
 | Los **tres adjuntos obligatorios** del día 1 | Esperando: Diego dice «el correo se hará». Cuando exista el envío, la validación va encima |
 | ~~Aviso de Opynio~~ | **Cerrado**: la reseña sale de la página de Opynio, el CRM no la conoce. Queda el enlace y el recordatorio en la nota del paso |
 | La **llamada por centralita** de los días 2, 3 y 4 | Ángel (Zadarma) |
-| **Sincronizar ISEIE staging** con el repo | Diego |
+| ~~Sincronizar ISEIE staging con el repo~~ | **Hecho el 11/09**: base al día (migraciones 142-149), 73 ficheros y la dependencia que faltaba |
+| El **ámbito por empresa** en ISEIE: `ambito.js` está pero no lo usa nadie | Pendiente. Su modelo de conversiones no acepta lista de proyectos en `findAll`, `filasDelPeriodo` ni `listProductos` |
+| El **arreglo del IVA** sigue sin llegar a las DOS producciones | Decide Diego: está en los dos staging, probado |
+| Los módulos de Fabián que ISEIE no tiene: `registro`, `gastoIA.service`, `leads/reparto.js` | Pendiente de replicar |
