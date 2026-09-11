@@ -179,6 +179,40 @@ tiene, que es lo que el documento manda y no se puede automatizar.
 de los 9 pasos. ISEIE: su beca intacta y el enlace de Opynio escrito. En las 4
 bases.
 
+### 2026-09-11 · Paso 4 — La plantilla que lleva imagen, y la letra pequeña
+
+**Commit** `2e579ef` (ISEIH) · `96c952a` (ISEIE) · migración 153
+
+Diego: «la de Opynio es como el mensaje de "mira esta reseña" y pones ahí para
+insertar imagen».
+
+**El problema.** El documento, día 2: el primer mensaje anuncia la opinión y
+«(enviar la captura justo después)». El chat ya sabía mandar imágenes, pero al
+elegir la plantilla se te ponía el texto y **nada te recordaba el clip** — que es
+justo lo que se olvida con prisa.
+
+**Dos campos, y no uno**, porque son dos cosas distintas:
+
+| Campo | Para quién | Qué hace |
+|---|---|---|
+| `pide_adjunto` | la máquina | Al elegir la plantilla, el chat abre el selector de archivos |
+| `pista` | la persona | Un aviso que **NO se envía** |
+
+**La pista no podía ir en el cuerpo.** Lo que está en el cuerpo se manda, y un
+«[adjunta la captura]» acabaría en el móvil de un cliente.
+
+**Y de paso recupera la letra pequeña del PDF**, que hasta hoy no estaba en
+ninguna parte del CRM: «funciona mejor en nota de voz», «va separado: es el que
+abre conversación», «el 5 % solo en máster y diplomado», «comprueba las plazas
+ANTES de enviar». Eso lo lee la gestora mientras elige, que es cuando sirve — el
+PDF nadie lo tiene abierto mientras escribe.
+
+**La reseña sigue saliendo de Opynio.** El CRM no la conoce y no se inventa
+nada; lo único que hace es no dejar que se olvide.
+
+**En las 4 bases:** MultiCRM 10 plantillas piden adjunto y 69 llevan pista;
+ISEIE 1 y 7. **Desplegado en /testeo**, backend y frontend, API 200.
+
 ---
 
 ## Pendiente
