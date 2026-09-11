@@ -65,3 +65,46 @@ documento pide: «lo marcado en amarillo se sustituye antes de enviar».
 Sin tocar código todavía. Comprobado contra las dos bases de producción:
 `whatsapp_templates` (36 genéricas), `email_templates` (0),
 `commercial_steps` (45 en MultiCRM = 5 × 9 proyectos; 5 en ISEIE).
+
+### 2026-09-11 · Paso 1 — Las plantillas, cargadas
+
+**Commit** `a498768` (ISEIH) · `5919233` (ISEIE) — *feat(proceso): las plantillas
+del documento comercial, cargadas de verdad*
+
+**Qué se hizo**
+
+- `docs/plantillas-proceso-comercial.md` — las plantillas del PDF adaptadas a
+  las variables del CRM. Es a la vez la copia para Ángel y la fuente de la
+  migración.
+- `backend/migrations/151_plantillas_proceso_comercial.sql` — las carga.
+  Idempotente: se puede repetir sin duplicar.
+
+**Decisiones, y por qué**
+
+| Decisión | Motivo |
+|---|---|
+| Las 4 genéricas se **desactivan**, no se borran | La pantalla filtra por `active`: dejan de salir y no se pierde nada |
+| El día 2 son **tres** plantillas y el día 3 **dos** | El documento: «si no cabe en la pantalla del móvil sin desplazarse, parte el mensaje» |
+| Los `[corchetes]` se quedan sin rellenar | El CRM no sabe las plazas reales ni los importes del plan. Rellenarlos sería enviar cifras inventadas |
+| El día 4 lo decide `commercial_steps`, no el fichero | Así la migración es **idéntica en los dos repos** y distingue CETLAT (ISEIE) de descuento (MultiCRM) con los datos |
+| La del día 4 de MultiCRM **no se carga** | El documento no trae ese texto. Una plantilla inactiva sería invisible y se olvidaría; una activa con «[pendiente]» se acabaría enviando a un cliente |
+
+**Resultado en las 4 bases**
+
+| Base | WhatsApp | Correo | CETLAT |
+|---|---|---|---|
+| MultiCRM producción | 90 (9 × 10 proyectos) | 20 | 0 |
+| MultiCRM /testeo | 81 (9 × 9) | 18 | 0 |
+| ISEIE producción | 10 | 3 | 1 |
+| ISEIE staging | 10 | 3 | 1 |
+
+Genéricas activas que quedan: **0** en las cuatro. Y comprobado que el usuario
+del CRM las lee (#71), no solo que existan.
+
+**Algo que apareció por el camino:** ISEIE staging **no tenía la migración 143**
+— la tabla `commercial_steps` no existía. Se aplicó antes de repetir la 151.
+Conviene revisar qué más le falta a esa base.
+
+**Queda pendiente de Diego:** el texto del **día 4 de MultiCRM** («Descuento de
+última oportunidad»). Hace falta el porcentaje, si tiene fecha límite y con qué
+nombre se presenta.
