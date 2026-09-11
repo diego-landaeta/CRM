@@ -13,6 +13,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadHeaderCard from '../components/lead-detail/LeadHeaderCard';
 import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
 import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
+// El proceso comercial de esta persona: que paso le toca y por donde va.
+import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
 import LeadRemindersCard, { ReminderDialog } from '../components/lead-detail/LeadRemindersCard';
@@ -231,6 +233,7 @@ export default function LeadDetailPage() {
           <LeadInfoCard lead={lead} onUpdate={updateLead}
             onLlamada={(nota) => addInteraction('llamada', nota)}
             onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
+          <AgendaDelProspecto leadId={lead.id} />
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard
