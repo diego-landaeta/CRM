@@ -244,6 +244,56 @@ entró. Si vuelve a pasar, es esperar, no un fallo del código.
 
 ---
 
+### 2026-09-11 · Paso 6 — La rama de Fabián entra, y /testeo queda con las dos líneas
+
+**Commit** `3277f1c` (ISEIH) · fusión de `origin/integracion/fabian`
+
+Diego: «verifica y monta todo en testeo».
+
+**Antes de tocar nada** se comprobó que /testeo estaba al día con la rama —13 de
+13 ficheros del backend y el bundle con todas las cadenas nuevas— y se marcó el
+punto de vuelta atrás: etiqueta `antes-fusion-fabian` en `b97fc2f`.
+
+**Cuatro conflictos, seis bloques.** Tres se resolvieron a mi favor y el
+`Sidebar.jsx` al suyo, que ahí el rediseño del menú es suyo.
+
+**Y el hallazgo que justifica la tarde:** el lado de Fabián en
+`conversion.model.js` traía un arreglo que mi rama **no tenía** —el IVA incluido
+por defecto cuando nadie dice lo contrario— y venía **fuera de las marcas de
+conflicto**, ya casado por git. Mi propio documento de orden decía resolver ese
+fichero con `git checkout --theirs`, que se lo habría llevado por delante **por
+segunda vez**: su comentario en el código ya avisaba de que una fusión anterior
+se lo había deshecho. Corregido en `docs/ORDEN-FUSION-FABIAN.md`.
+
+> **`--ours` y `--theirs` son de fichero entero, no de bloque.** En un fichero
+> que dos personas han reescrito, resolver así tira trabajo que git ya había
+> casado bien. Se resuelven los bloques marcados y se verifica el resto.
+
+**El otro hallazgo.** Comparando el árbol del servidor contra la rama —310
+ficheros, uno a uno, normalizando los saltos de línea— aparecieron **tres**
+diferencias, no las 25 que traía la fusión: Fabián ya tenía su backend
+desplegado. Y una de las tres era que /testeo tenía `conversion.validation.js`
+**más viejo que las dos ramas**, sin las líneas de `issuerId`. Ese era el
+«con la empresa puesta sale todo a cero» que reportó Diego: la validación se
+comía el parámetro antes de que llegara al modelo.
+
+**Comprobado en /testeo, contra la API y no solo compilando:**
+
+| | |
+|---|---|
+| `/prospectos/cola` | 200, con formación y plazas |
+| Ficha del prospecto | 200 · 4 pasos · «ahora le toca: Última plaza y facilidades de pago» |
+| `/prospectos/proceso` | 200, los cinco pasos |
+| `/finanzas/ventas` con CEDIA (7 campus) | **377 filas** de 447 — antes, cero |
+| Plantillas con imagen | 9, una por proyecto |
+| Vista de reparto | 433 ventas, ninguna suma distinta de 1 |
+
+**Nota de operación:** el frontend se montó en `frontend.nuevo` y se cambió con
+un `mv`, no vaciando la carpeta en caliente. La vez que lo hice al revés dejé
+/testeo sin JS tres minutos.
+
+---
+
 ## Pendiente
 
 | Qué | De quién |

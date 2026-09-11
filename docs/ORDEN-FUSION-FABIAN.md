@@ -2,6 +2,12 @@
 
 Revisado el **2026-09-11**. Diego: «revisa lo de Fabián y dale orden».
 
+> **ACTUALIZADO el 11/09 por la tarde: la fusión ya está hecha, la hice yo.**
+> No tienes que resolver nada. Salta al final, a «Qué te toca a ti ahora».
+> Lo de arriba se queda porque explica **qué se decidió en cada conflicto** y,
+> sobre todo, **el error que tenía este mismo documento** y que casi te borra un
+> arreglo tuyo por segunda vez.
+
 ## Lo primero: tu trabajo está bien
 
 `integracion/fabian` está **al día con el tronco** (`integracion/todo`): tus 88
@@ -12,58 +18,54 @@ septiembre y `staging` estaba 212 commits por detrás. Y yo me salí del flujo:
 trabajé en `release/reportes-empresa` y el 11/09 la subí directamente a
 `staging`. Es mi parte de culpa y por eso te escribo la orden yo.
 
-## La buena noticia: son 4 conflictos, no 83
+## Cómo quedó cada conflicto
 
-Hicimos la fusión en seco. De los 83 ficheros que tocamos los dos, git resuelve
-79 solo. Quedan **cuatro**, y tres de ellos son el mismo cambio duplicado.
+De los 83 ficheros que tocamos los dos, git resolvió 79 solo. Los cuatro
+restantes, así:
 
-## Qué hacer
+### 1. `backend/src/modules/conversions/conversion.model.js` → **las dos partes**
 
-```bash
-git fetch origin
-git checkout integracion/fabian
-git merge origin/staging
+**Aquí este documento estaba MAL.** Decía «quédate con `staging`» y
+`git checkout --theirs`. Eso te habría **borrado otra vez el arreglo del IVA**:
+
+```js
+const isIncluido = iva_incluido === undefined || iva_incluido === null
+  ? true
+  : iva_incluido !== false;
 ```
 
-Y resolver así, fichero por fichero:
+Tu propio comentario encima ya avisaba: *«esto ya estaba arreglado y la fusión lo
+deshizo»*. Tenías razón, y por poco pasa por tercera vez. Ese trozo venía
+**fuera** de las marcas de conflicto —git lo daba por fusionado— así que
+resolver el fichero entero de un lado se lo llevaba por delante sin avisar.
 
-### 1. `backend/src/modules/conversions/conversion.model.js` → **quédate con `staging`**
+Lección, y va para mí: **`--ours` y `--theirs` son de fichero entero, no de
+bloque.** En un fichero que los dos hemos reescrito, resolver así tira trabajo
+que git ya había casado bien.
 
-Tus 40 líneas ahí son el arreglo del «proyecto menos uno». **Es el mismo código
-que ya está en staging** —lo escribí yo el 09/09 sobre tu línea, y en la mía
-existe con otro hash—. Lo de staging son 428 líneas que lo incluyen: ventas
-compartidas, el filtro por gestora vía `conversion_reparto`, la columna
-`compartida` y las plazas.
+Lo que quedó: mis 428 líneas (ventas compartidas, filtro por gestora vía
+`conversion_reparto`, columna `compartida`, plazas) **más tu arreglo del IVA**,
+verificado a mano después de fusionar.
 
-```bash
-git checkout --theirs backend/src/modules/conversions/conversion.model.js
-```
+### 2. `frontend/src/modules/accounting/pages/IncomePage.tsx` → **de `staging`**
 
-### 2. `frontend/src/modules/accounting/pages/IncomePage.tsx` → **quédate con `staging`**
+Aquí sí: tu bloque y el de staging eran **el mismo código con el mismo
+comentario**, incluido el `OJO CON EL -1`. Staging tiene además los atajos de
+fecha, las seis tarjetas, la lista que distingue venta de cuota, el reparto por
+proyecto y los tutoriales.
 
-Lo mismo, y esta vez es literal: tu bloque y el de staging son **el mismo código
-con el mismo comentario**, incluido el `OJO CON EL -1`. Staging tiene además los
-atajos de fecha, las seis tarjetas, la lista que distingue venta de cuota, el
-reparto por proyecto y los tutoriales.
+### 3. `frontend/src/shared/components/layout/Sidebar.jsx` → **LO TUYO**
 
-### 3. `frontend/src/shared/components/layout/Sidebar.jsx` → **quédate con LO TUYO**
+Mandas tú: 197 líneas nuevas y 335 quitadas, el rediseño del menú y que el
+proceso comercial cuelgue de Prospectos. Se quedaron tus subtítulos —«Lista,
+pipeline y más», «A quién le toca hoy», «Los cinco pasos»— y encima el
+renombrado a «Lista de prospectos», que era lo único mío que valía la pena.
 
-Aquí mandas tú: son 197 líneas nuevas y 335 quitadas — el rediseño del menú y
-que el proceso comercial cuelgue de Prospectos como submenú.
+### 4. `frontend/src/shared/components/layout/AppLayout.jsx` → **de `staging`**
 
-Lo mío ahí es **cosmético**: renombrar «Lista» por «Lista de prospectos» y
-reescribir dos comentarios. Si te gusta el nombre nuevo, lo aplicas encima; si
-no, lo descartas. Tú decides.
-
-```bash
-git checkout --ours frontend/src/shared/components/layout/Sidebar.jsx
-```
-
-### 4. `frontend/src/shared/components/layout/AppLayout.jsx` → **hay que juntar**
-
-Es el único que necesita las dos partes. La lista `CON_SOCIEDAD_OK` dice qué
-pantallas se pueden ver con una sociedad elegida en vez de un proyecto. Tiene que
-quedar con **las cuatro rutas**:
+`CON_SOCIEDAD_OK` dice qué pantallas se pueden ver con una sociedad elegida en
+vez de un proyecto. La de staging es la tuya **más** `/finanzas/facturas`, así
+que con quedarse la larga están las dos:
 
 ```js
 const CON_SOCIEDAD_OK = [
@@ -76,21 +78,44 @@ const CON_SOCIEDAD_OK = [
 ];
 ```
 
-## Después de fusionar, comprueba esto
+## Lo que se comprobó en /testeo después de fusionar
 
-No basta con que compile:
+No basta con que compile. Contra la API de /testeo, con las cinco del guion:
 
-1. **`/prospectos/cola`** — cada fila debe decir la formación y las plazas. Hoy
-   dirá «sin plazas configuradas» en ámbar: es correcto, ningún producto las
-   tiene rellenas todavía.
-2. **La ficha de un prospecto** — tarjeta «Proceso comercial» con el paso que le
-   toca. Es nueva, del 11/09.
-3. **`/prospectos/proceso`** — tu pantalla de los cinco pasos. Comprueba que
-   sigue entera después del merge: los dos hemos tocado ese módulo.
-4. **`/finanzas/ventas`** con una empresa elegida — las cifras deben salir, no a
-   cero.
-5. **El chat, plantillas** — al elegir «Día 2 · Opiniones · 1 de 3» se abre el
-   selector de archivos. Es del 11/09.
+| | Resultado |
+|---|---|
+| **`/prospectos/cola`** | 200, con formación y plazas en cada fila |
+| **Ficha del prospecto** | 200 · lead 2468, 4 pasos, «ahora le toca: Última plaza y facilidades de pago» |
+| **`/prospectos/proceso`** (tu pantalla) | 200, los cinco pasos enteros |
+| **`/finanzas/ventas`** con CEDIA (7 campus) | **377 filas** de 447 · antes salía a cero |
+| **Plantillas con imagen** | 9, una por proyecto, con su pista de Opynio |
+
+Y de propina: 433 ventas en la vista de reparto, ninguna suma distinta de 1.
+
+**Un hallazgo del camino.** /testeo tenía `conversion.validation.js` **más viejo
+que las dos ramas**: le faltaban las dos líneas de `issuerId`. Por eso al elegir
+una empresa salía todo a cero — la validación se comía el parámetro antes de
+llegar al modelo. Ya está subido.
+
+## Qué te toca a ti ahora
+
+La fusión está en `staging` y desplegada en /testeo. Tú solo tienes que ponerte
+encima:
+
+```bash
+git fetch origin
+git checkout integracion/fabian
+git merge origin/staging      # deberia entrar limpio
+git push origin integracion/fabian
+```
+
+Si ahí sale algún conflicto, es de algo que hayas tocado después del 11/09: mira
+el bloque, no el fichero entero. Y si toca `conversion.model.js`, comprueba el
+IVA antes de dar por bueno nada:
+
+```bash
+grep -n "iva_incluido === undefined" backend/src/modules/conversions/conversion.model.js
+```
 
 ## Ojo con las migraciones
 
@@ -106,17 +131,9 @@ falta. Lo que traen:
 | 152 | el día 4 sin CETLAT y el enlace de Opynio |
 | 153 | plantillas que piden imagen, y su pista |
 
-## Y cuando esté
+## Lo que sigue sin resolverse
 
-```bash
-git push origin integracion/fabian
-git push origin integracion/fabian:integracion/todo
-git push origin integracion/fabian:staging
-```
-
-Con eso /testeo vuelve a tener las dos líneas y el flujo recupera su orden:
-`feat/*` → `integracion/*` → `integracion/todo` → `staging`.
-
-**Faltan también los 28 commits de Ángel** que están en esa misma línea sin
-llegar a staging. Si tu merge los arrastra, mejor; si no, habrá que hacer lo
-mismo con los suyos.
+**Los 28 commits de Ángel** siguen en esa misma línea sin llegar a staging. Esta
+fusión no los arrastra. Habrá que hacer lo mismo con los suyos, y conviene
+hacerlo pronto: cuanto más esperan, más caros salen —esta ha costado una tarde
+por llevar cuatro días de retraso.
