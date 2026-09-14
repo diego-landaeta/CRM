@@ -31,6 +31,11 @@ export default function InvoiceCreatePage() {
   // sobre TODO (cliente/leads, catálogo de cursos, emisores, régimen fiscal).
   // Solo se ofrecen proyectos de la MISMA sociedad emisora (no se factura cruzado).
   const [projectId, setProjectId] = useState<number | null>(null);
+  // EL NUMERO DE FACTURA, a mano. Diego, 14/09: «que se ponga con numero de
+  // factura y que salga el numero siguiente disponible, pero que pueda poner
+  // ese u otro». Vacio = el siguiente libre.
+  const [numeroManual, setNumeroManual] = useState<string>('');
+  const [sugerido, setSugerido] = useState<{ codigo: string; siguiente: number; serie: string; huecos: number[] } | null>(null);
   useEffect(() => {
     if (activeProject?.id && activeProject.id !== -1) setProjectId((p) => p ?? activeProject.id!);
   }, [activeProject?.id]);
@@ -53,6 +58,7 @@ export default function InvoiceCreatePage() {
     initTipo === 'proforma' ? 'proforma' : initTipo === 'rectificativa' ? 'rectificativa' : 'factura'
   );
   const esProforma = docTipo === 'proforma';
+
 
   // Que el aviso diga QUE ha pasado, no «Error» a secas.
   //
@@ -122,6 +128,20 @@ export default function InvoiceCreatePage() {
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   const [issuerId, setIssuerId] = useState<number | null>(null);
+
+  // Cual seria el siguiente numero. Se pregunta al servidor y no se calcula
+  // aqui: el contador es de la SERIE, y dos proyectos de la misma sociedad
+  // comparten numeracion.
+  useEffect(() => {
+    if (!projectId || docTipo !== 'factura') { setSugerido(null); return; }
+    let vivo = true;
+    const q = new URLSearchParams({ projectId: String(projectId) });
+    if (issuerId) q.set('issuerId', String(issuerId));
+    client.get(`/invoices/siguiente-numero?${q}`)
+      .then((r) => { if (vivo && r?.success) setSugerido(r.data); })
+      .catch(() => { if (vivo) setSugerido(null); });
+    return () => { vivo = false; };
+  }, [projectId, issuerId, docTipo]);
   const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
   const [regimenId, setRegimenId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -290,6 +310,9 @@ export default function InvoiceCreatePage() {
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
         moneda: moneda !== 'EUR' ? moneda : undefined,
       totalEur: moneda !== 'EUR' ? Number(totalEur || 0) : undefined,
+        // Vacio = el siguiente libre. Con valor, el servidor comprueba que no
+        // este cogido y, si lo esta, dice de quien es.
+        numero: numeroManual ? Number(numeroManual) : undefined,
       };
       // Edición (admin/superadmin): si la factura ya está emitida/pagada se CORRIGE
       // (mantiene su número fiscal); si es borrador, PATCH normal; si no, crear.
@@ -506,6 +529,42 @@ export default function InvoiceCreatePage() {
                 En la factura siempre sale la razón social real. */}
             {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.alias || iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
+
+          {/* EL NUMERO. Vacio = el siguiente libre, que es lo de siempre. Se
+              puede escribir otro para cuadrar con el Excel o rellenar un hueco;
+              si ese numero ya existe, el servidor dice QUIEN lo tiene. */}
+          {!esProforma && !esRect && (
+            <div className="mt-3">
+              <label className="text-xs font-bold uppercase text-muted-foreground">Número de factura</label>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <input
+                  value={numeroManual}
+                  onChange={(e) => setNumeroManual(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder={sugerido ? String(sugerido.siguiente) : 'automático'}
+                  inputMode="numeric"
+                  className="h-9 w-32 px-2 rounded border border-border bg-background text-sm tabular-nums"
+                />
+                {sugerido && (
+                  <span className="text-xs text-muted-foreground">
+                    El siguiente disponible es <b className="text-foreground tabular-nums">{sugerido.codigo}</b>
+                    {!numeroManual && ' — se usará ese si lo dejas vacío'}
+                  </span>
+                )}
+                {numeroManual && sugerido && Number(numeroManual) !== sugerido.siguiente && (
+                  <button type="button" onClick={() => setNumeroManual('')}
+                    className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted/60">
+                    usar el siguiente
+                  </button>
+                )}
+              </div>
+              {sugerido && sugerido.huecos.length > 0 && (
+                <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  Faltan números en esta serie: <b className="tabular-nums">{sugerido.huecos.join(', ')}</b>.
+                  {' '}Si alguno es de una factura que hay que recuperar, ponlo aquí.
+                </p>
+              )}
+            </div>
+          )}
           {fiscalMissing && !esProforma && (
             <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>
               <span className="font-bold">{fiscalBlock ? '⛔' : '⚠'}</span>

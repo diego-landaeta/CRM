@@ -18,6 +18,9 @@ router.post('/cola/generar',          ctrl.generarDeCola);
 router.post('/cola/emitir-hasta',     ctrl.emitirColaHasta);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
+// Que numero tocaria ahora. Va ANTES de '/:id' para que «siguiente-numero» no
+// se lea como el id de una factura.
+router.get('/siguiente-numero',       ctrl.siguienteNumero);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);
 router.get('/regimenes',              ctrl.listRegimenes);
 router.get('/resolve-regimen',        ctrl.resolveRegimen);

@@ -18,6 +18,33 @@ async function issuerOfProject(exec, projectId) {
 // de una misma sociedad comparten contador por serie+año, aunque sean de proyectos
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
+/** Reservar un numero ELEGIDO A MANO (Diego, 14/09). Mismo cerrojo que el
+ *  automatico: dos personas eligiendo el mismo no lo consiguen las dos. Y si
+ *  esta cogido se dice DE QUIEN es, que es lo que hace falta para decidir. */
+export async function reservarNumero(client, projectId, issuerId, ano, serie, numero) {
+  const n = Number(numero);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new AppError('El número de factura tiene que ser un entero mayor que cero', 400, 'BAD_NUMBER');
+  }
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${ano}:${serie}`]);
+  const { rows: [ocupado] } = await client.query(
+    `SELECT codigo, cliente_nombre, total, fecha_emision::date::text AS fecha
+       FROM invoices WHERE ano = $1 AND serie = $2 AND numero = $3 LIMIT 1`,
+    [ano, serie, n]);
+  if (ocupado) {
+    throw new AppError(
+      `El número ${ano}/${String(n).padStart(4, '0')} ya lo tiene la factura de `
+      + `${ocupado.cliente_nombre || 'sin nombre'} (${Number(ocupado.total).toFixed(2)} €, ${ocupado.fecha}). Elige otro.`,
+      409, 'NUMBER_TAKEN');
+  }
+  // El contador solo sube: rellenar un hueco no debe bajarlo, o el siguiente
+  // automatico chocaria con lo que ya existe.
+  await client.query(
+    'UPDATE invoice_sequences SET ultimo_numero = GREATEST(ultimo_numero, $1) WHERE ano = $2 AND serie = $3',
+    [n, ano, serie]);
+  return n;
+}
+
 export async function nextNumero(client, projectId, issuerId, ano, serie) {
   // El numero es unico por SERIE Y AÑO, mire desde el proyecto que mire.
   //
@@ -142,7 +169,31 @@ export async function create(data, userId) {
     // número de la secuencia y se numera con el mismo formato.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
-    const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
+    /* ANTES DE NUMERAR: si esa venta ya tiene una factura igual hoy, no se
+       emite y se dice cual. Es lo que produjo la 2026/0102. No bloquea del
+       todo --dos cobros reales el mismo dia son legitimos-- pero obliga a
+       verlo antes. */
+    if (!isBorrador && data.conversionId && !data.permitirParecida) {
+      const { rows: par } = await client.query(
+        `SELECT codigo, total, fecha_emision::date::text AS fecha FROM invoices
+          WHERE conversion_id = $1 AND tipo = 'normal' AND estado NOT IN ('cancelada','borrador')
+            AND ROUND(total::numeric, 2) = ROUND($2::numeric, 2)
+            AND fecha_emision::date = COALESCE($3::date, CURRENT_DATE) LIMIT 1`,
+        [data.conversionId, data.totalEur ?? data.total ?? 0, data.fechaEmision || null]);
+      if (par.length) {
+        throw new AppError(
+          `Esta venta ya tiene la factura ${par[0].codigo} por ${Number(par[0].total).toFixed(2)} € del ${par[0].fecha}. `
+          + 'Si de verdad son dos cobros distintos, vuelve a darle para emitirla igualmente.',
+          409, 'INVOICE_LOOKS_DUPLICATE');
+      }
+    }
+
+    // El numero: el que elija quien emite, o el siguiente libre.
+    const numero = isBorrador
+      ? null
+      : (data.numero != null && data.numero !== ''
+          ? await reservarNumero(client, data.projectId, iss?.id || null, ano, serie, data.numero)
+          : await nextNumero(client, data.projectId, iss?.id || null, ano, serie));
     const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
@@ -1640,4 +1691,25 @@ export async function marcarEntregada(id, { entregada, userId }) {
     [id, !!entregada]
   );
   return rows[0] || null;
+}
+
+/** Que numero saldria ahora, sin reservarlo, y los huecos de la serie. */
+export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
+  const y = ano || new Date().getFullYear();
+  const { rows: [cfg] } = await query(
+    `SELECT COALESCE(e.serie, p.serie_factura, 'FAC') AS serie FROM projects p
+       LEFT JOIN invoice_issuers e ON e.id = $2 WHERE p.id = $1`,
+    [projectId, issuerId]).catch(() => ({ rows: [] }));
+  const serie = cfg?.serie || 'FAC';
+  const { rows: [t] } = await query(
+    `SELECT GREATEST(
+       COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano=$1 AND serie=$2), 0),
+       COALESCE((SELECT MAX(numero) FROM invoices WHERE ano=$1 AND serie=$2 AND numero IS NOT NULL), 0)) AS usado`,
+    [y, serie]);
+  const n = Number(t.usado) + 1;
+  const { rows: huecos } = await query(
+    `SELECT g AS n FROM generate_series(1, $3) g
+      WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.ano=$1 AND i.serie=$2 AND i.numero=g)
+      ORDER BY g LIMIT 10`, [y, serie, Number(t.usado)]);
+  return { ano: y, serie, siguiente: n, codigo: `${y}/${String(n).padStart(4,'0')}`, huecos: huecos.map(h => Number(h.n)) };
 }

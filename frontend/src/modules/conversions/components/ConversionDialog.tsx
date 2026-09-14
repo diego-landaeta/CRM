@@ -702,7 +702,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 />
               </div>
               <div>
-                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha conversion</label>
+                {/* Diego: «la fecha de conversion seria fecha de pago». Es cuando entro el
+                    dinero, que es la fecha que usan los informes. */}
+                <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">Fecha de pago</label>
                 <input type="date" value={form.fecha_conversion} onChange={e => update('fecha_conversion', e.target.value)} className={inputClass} />
               </div>
             </div>

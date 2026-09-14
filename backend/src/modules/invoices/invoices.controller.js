@@ -717,3 +717,16 @@ export async function marcarEntregada(req, res, next) {
     res.json({ success: true, data: fila });
   } catch (e) { next(e); }
 }
+
+/** GET /invoices/siguiente-numero — que numero tocaria ahora, y los huecos. */
+export async function siguienteNumero(req, res, next) {
+  try {
+    const projectId = Number(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
+    res.json({ success: true, data: await model.siguienteLibre({
+      projectId,
+      issuerId: req.query.issuerId ? Number(req.query.issuerId) : null,
+      ano: req.query.ano ? Number(req.query.ano) : null,
+    }) });
+  } catch (e) { next(e); }
+}
