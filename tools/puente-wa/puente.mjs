@@ -353,11 +353,18 @@ async function aTelefono(s, jid, key) {
     return tel;
   };
 
+  // Sin el numero de dispositivo.
+  //
+  // WhatsApp devuelve a veces `34722134659:0@s.whatsapp.net` —el `:0` es el
+  // aparato desde el que se hablo— y las conversaciones se guardan sin el. Con
+  // el sufijo no casan: se vio traduciendo el @lid de una etiqueta.
+  const sinAparato = (j) => String(j).replace(/:\d+(?=@)/, '');
+
   const alterno = key?.remoteJidAlt || key?.senderPn;
-  if (alterno?.endsWith('@s.whatsapp.net')) return conNombre(alterno);
+  if (alterno?.endsWith('@s.whatsapp.net')) return conNombre(sinAparato(alterno));
   try {
     const pn = await s.sock?.signalRepository?.lidMapping?.getPNForLID?.(jid);
-    if (pn) return conNombre(pn.includes('@') ? pn : `${pn}@s.whatsapp.net`);
+    if (pn) return conNombre(sinAparato(pn.includes('@') ? pn : `${pn}@s.whatsapp.net`));
   } catch { /* sin equivalencia conocida todavia */ }
   return jid;
 }
@@ -1060,13 +1067,27 @@ async function abrirSocket(s) {
     }).catch(() => {});
   });
 
-  sock.ev.on('labels.association', ({ association, type }) => {
+  sock.ev.on('labels.association', async ({ association, type }) => {
     if (!vigente()) return;
-    log(`[${s.nombre}] etiqueta ${type}: ${association?.labelId} en ${association?.chatId}`);
     if (!association?.chatId || association?.labelId == null) return;
+
+    // El chat de la etiqueta se traduce IGUAL que el de un mensaje.
+    //
+    // Este puente ha decidido que direcciona por telefono: traduce el `@lid` de
+    // todos los mensajes (`aTelefono`). No hacerlo tambien aqui no era respetar
+    // la paridad con Evolution — era ser incoherente consigo mismo: mandaba las
+    // conversaciones con una llave y las etiquetas de esas mismas
+    // conversaciones con otra, y el CRM no podia juntarlas.
+    //
+    // Evolution no traduce ninguna de las dos, asi que alli las dos llegan con
+    // `@lid` y tambien casan. Cada uno coherente por su lado, que es lo que
+    // hace que lo que se prueba aqui valga para alli.
+    const chat = await aTelefono(s, association.chatId, null);
+    log(`[${s.nombre}] etiqueta ${type}: ${association.labelId} en ${chat}`
+      + (chat !== association.chatId ? ` (era ${association.chatId})` : ''));
     s.avisarCRM({
       event: 'labels.association',
-      data: { type, chatId: association.chatId, labelId: String(association.labelId) },
+      data: { type, chatId: chat, labelId: String(association.labelId) },
     }).catch(() => {});
   });
 

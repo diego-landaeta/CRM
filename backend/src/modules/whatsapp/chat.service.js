@@ -1394,7 +1394,14 @@ async function etiquetaTocada(cuerpo) {
 async function etiquetaEnUnChat(cuerpo) {
   const instancia = cuerpo?.instance || cuerpo?.instanceName || cuerpo?.data?.instance || null;
   const d = cuerpo?.data || cuerpo;
-  const jid = d?.chatId ?? d?.association?.chatId;
+  // Sin el numero de dispositivo.
+  //
+  // WhatsApp direcciona a veces con el aparato dentro —«34722134659:0@s.whats
+  // app.net», donde el «:0» es desde que telefono se hablo— y las
+  // conversaciones se guardan sin el. Con el sufijo no casan y la etiqueta se
+  // queda esperando a un chat que no existira nunca. Se vio en vivo, traduciendo
+  // el @lid de una etiqueta puesta desde el movil.
+  const jid = String(d?.chatId ?? d?.association?.chatId ?? '').replace(/:\d+(?=@)/, '') || null;
   const waIdEtiqueta = d?.labelId ?? d?.association?.labelId;
   if (!instancia || !jid || waIdEtiqueta == null) {
     return { ignorado: 'aviso de asociacion incompleto' };

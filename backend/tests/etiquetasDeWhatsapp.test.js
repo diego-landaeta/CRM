@@ -114,6 +114,21 @@ describe('los avisos de etiquetas llegan y se atienden', () => {
     expect(asociarEtiqueta).toHaveBeenCalledWith(expect.objectContaining({ poner: true }));
   });
 
+  it('el numero de dispositivo no cuenta', async () => {
+    // WhatsApp direcciona a veces con el aparato dentro —«...:0@s.whatsapp.net»,
+    // el «:0» es desde que telefono se hablo— y las conversaciones se guardan
+    // sin el. Con el sufijo no casan, y la etiqueta se queda esperando a un chat
+    // que no existira nunca. Salio en vivo al traducir el @lid de una etiqueta
+    // puesta desde el movil.
+    await servicio.recibir({
+      event: 'labels.association', instance: 'crm-u4',
+      data: { type: 'add', chatId: '34722134659:0@s.whatsapp.net', labelId: '12' },
+    });
+    expect(asociarEtiqueta).toHaveBeenCalledWith(
+      expect.objectContaining({ jid: '34722134659@s.whatsapp.net' })
+    );
+  });
+
   it('un aviso incompleto no revienta ni inventa', async () => {
     // El webhook contesta 200 siempre: si devolviera error, Evolution reintenta
     // en bucle y se para su cola.
