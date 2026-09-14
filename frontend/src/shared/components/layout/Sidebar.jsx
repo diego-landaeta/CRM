@@ -562,6 +562,20 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
+/**
+ * Los subtitulos del menu, de momento solo en /testeo.
+ *
+ * Diego, 14/09: «cambiaste todo de las interfaces, eso se queda en testeo».
+ * Tenia razon: el despliegue de hoy metio 13 subtitulos nuevos en produccion
+ * sin que nadie los hubiera aprobado, y el menu es lo primero que ve todo el
+ * equipo cada mañana. Un cambio asi se enseña antes, no se cuela dentro de un
+ * despliegue que iba de facturacion.
+ *
+ * No se BORRAN --son de Fabian y estan bien--: se quedan visibles en testeo
+ * hasta que Diego los vea y diga. Quitar la bandera es una linea.
+ */
+const MOSTRAR_SUBTITULOS = import.meta.env.MODE !== 'production';
+
 function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, onClick, collapsed, featured }) {
   const displayLabel = applyLabel(label, labelOverrides);
   const location = useLocation();
@@ -633,7 +647,7 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
             {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
                 de una pantalla no dice si es la que buscas —«Captacion» puede
                 ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
-            {detail && (
+            {MOSTRAR_SUBTITULOS && detail && (
               <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
             )}
           </span>
@@ -693,7 +707,7 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
             {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
                 de una pantalla no dice si es la que buscas —«Captacion» puede
                 ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
-            {detail && (
+            {MOSTRAR_SUBTITULOS && detail && (
               <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
             )}
           </span>
