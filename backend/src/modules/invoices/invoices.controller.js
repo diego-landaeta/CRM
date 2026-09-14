@@ -703,3 +703,17 @@ export async function emitirColaHasta(req, res, next) {
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }
 }
+
+/** PATCH /invoices/:id/entregada — apunta que ya se le paso al cliente. No envia. */
+export async function marcarEntregada(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Factura no valida', 400, 'BAD_ID');
+    const fila = await model.marcarEntregada(id, {
+      entregada: req.body?.entregada !== false,
+      userId: req.user?.userId,
+    });
+    if (!fila) throw new AppError('Esa factura no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: fila });
+  } catch (e) { next(e); }
+}
