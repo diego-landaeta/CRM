@@ -9,7 +9,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
-import { porQueNoPuede } from './roles.js';
+import { porQueNoPuede, porQueNoUsa } from './roles.js';
+import { usaSuWhatsapp } from './usaWhatsapp.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -54,7 +55,19 @@ async function usuarioObjetivo(req) {
   if (suyo) throw new AppError(suyo, 403, 'SIN_WHATSAPP');
 
   const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
-  if (!Number.isInteger(pedido) || pedido === propio) return propio;
+  if (!Number.isInteger(pedido) || pedido === propio) {
+    // La casilla de su ficha (#128). El rol dice si le CORRESPONDE tener
+    // WhatsApp y viaja en el testigo; esto dice si lo usa, y se pregunta a la
+    // base porque el testigo dura ocho horas y apagar a alguien tiene que
+    // notarse hoy. Se recuerda medio minuto: ver `usaWhatsapp.js`.
+    if (!await usaSuWhatsapp(propio)) {
+      throw new AppError(
+        'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+        403, 'SIN_WHATSAPP'
+      );
+    }
+    return propio;
+  }
 
   if (!['admin', 'superadmin'].includes(req.user.role)) {
     throw new AppError('Solo puedes trabajar con tu propio WhatsApp', 403, 'SOLO_EL_TUYO');
@@ -62,6 +75,11 @@ async function usuarioObjetivo(req) {
 
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.active, u.role, u.gestor_colaboraciones,
+            -- Con to_jsonb para que no reviente mientras la 156 no este
+            -- aplicada: sin la columna vale cierto y todo sigue como hoy.
+            -- (Sin comillas invertidas aqui dentro: esto va en una plantilla de
+            --  texto de JavaScript y cerrarian la cadena.)
+            COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp,
             EXISTS (
               SELECT 1 FROM user_projects a
               JOIN user_projects b ON b.project_id = a.project_id AND b.active
@@ -76,7 +94,10 @@ async function usuarioObjetivo(req) {
   // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
   // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
   // la pantalla no se la enseñara. La regla vive en `roles.js`, una sola vez.
-  const noPuede = porQueNoPuede(u);
+  //
+  // `porQueNoUsa` es el mismo candado mas la casilla de su ficha: a quien esta
+  // apagado tampoco se le entra por el numero, no solo se le quita de la lista.
+  const noPuede = porQueNoUsa(u);
   if (noPuede) throw new AppError(noPuede, 403, 'SIN_WHATSAPP');
 
   // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
@@ -131,6 +152,16 @@ async function sesionesQuePuedeMirar(req) {
   if (['admin', 'superadmin'].includes(req.user.role)) return null;
   // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
   // clientes dentro: nunca todas las lineas para cualquiera.
+  //
+  // Y si tiene la casilla apagada (#128), tampoco al suyo: apagar es dejar de
+  // usar el WhatsApp del CRM, no solo dejar de salir en una lista. Quien manda
+  // si entra, porque el banco es su herramienta de supervision.
+  if (!await usaSuWhatsapp(req.user.userId)) {
+    throw new AppError(
+      'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+      403, 'SIN_WHATSAPP'
+    );
+  }
   return [evolution.instanciaDe(req.user.userId)];
 }
 
@@ -926,6 +957,19 @@ export async function conexion(req, res, next) {
  */
 export async function emparejar(req, res, next) {
   try {
+    // El aviso, lo PRIMERO de todo.
+    //
+    // Estaba mas abajo y daba igual mientras resolver la instancia no costara
+    // nada. Desde el #128 si cuesta —hay que mirar la casilla en la base—, y una
+    // peticion a la que le falta la aceptacion no merece ni eso: se rechaza con
+    // lo que trae puesto. Lo fija `whatsappConsentimiento.test.js`.
+    if (req.body?.enterado !== true) {
+      throw new AppError(
+        'Hay que leer y aceptar el aviso antes de enlazar un numero',
+        400, 'FALTA_CONSENTIMIENTO'
+      );
+    }
+
     // Quien no manda solo puede enlazar el suyo: usuarioObjetivo lo impone. Un
     // administrador si puede enlazar el de una gestora —tenerla al lado con su
     // movil y hacerlo desde aqui es mas rapido que explicarselo por telefono—.
@@ -938,18 +982,13 @@ export async function emparejar(req, res, next) {
     // recortar—, asi que los 30 dias los aplica el CRM al recibir.
     politica.apuntarModo(instancia, modo);
 
-    // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
+    // El aviso se acepta ANTES de que salga el codigo (comprobado arriba), y
+    // queda escrito.
     //
     // Sin esto la casilla de la pantalla no vale nada: bastaria con llamar al
     // endpoint a mano. Y hace falta guardarlo porque el numero es de una
     // persona — si WhatsApp se lo bloquea, tiene que poder verse que se le
     // advirtio, cuando, y con que texto.
-    if (req.body?.enterado !== true) {
-      throw new AppError(
-        'Hay que leer y aceptar el aviso antes de enlazar un numero',
-        400, 'FALTA_CONSENTIMIENTO'
-      );
-    }
     const objetivo = await usuarioObjetivo(req);
     const apuntado = await model.apuntarConsentimiento({
       userId: objetivo,
@@ -1083,8 +1122,9 @@ export async function usuarios(req, res, next) {
 
     const { rows } = await query(
       soloMio
-        ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
-             FROM users WHERE id = $1`
+        ? `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                  COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+             FROM users u WHERE u.id = $1`
         : (req.user.role === 'superadmin'
             // NO se filtra por rol aqui.
             //
@@ -1093,10 +1133,11 @@ export async function usuarios(req, res, next) {
             // que, y no salir es la peor forma de negar algo: parece un fallo.
             // Ahora salen todos y cada uno dice si puede tener WhatsApp y, si no,
             // por que. Quien decide es `roles.js`, en un solo sitio.
-            ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
-                 FROM users
-                WHERE active
-                ORDER BY (id = $1) DESC, nombre`
+            ? `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                      COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+                 FROM users u
+                WHERE u.active
+                ORDER BY (u.id = $1) DESC, u.nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
             // Tal como estaba, Postgres rechazaba la consulta entera: «for
@@ -1108,7 +1149,8 @@ export async function usuarios(req, res, next) {
             //
             // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
             // pregunta si comparte algun proyecto y se para en el primero.
-            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones
+            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                      COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
                  FROM users u
                 WHERE u.active
                   AND EXISTS (
@@ -1145,6 +1187,11 @@ export async function usuarios(req, res, next) {
       // Se dice quien NO puede y por que, en vez de esconderlo. La pantalla lo
       // enseña apagado con su motivo, que es lo que pide la tarea #68.
       const motivo = porQueNoPuede(u);
+      // Y aparte, si lo USA (#128). Son dos cosas: un admin puede tener derecho
+      // a WhatsApp y no usarlo —hoy son las gestoras y Daniela—, y entonces no
+      // pinta en el selector aunque su rol lo permita. La pantalla lo esconde;
+      // la API lo dice, para que no haya que adivinar por que falta alguien.
+      const usa = u.usa_whatsapp !== false;
       return {
         id: u.id, nombre: u.nombre, email: u.email, role: u.role,
         soyYo: u.id === yo,
@@ -1152,6 +1199,7 @@ export async function usuarios(req, res, next) {
         numero: est.numero || null,
         puede: motivo === null,
         motivo,
+        usa,
       };
     })});
   } catch (err) { next(err); }

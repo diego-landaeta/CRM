@@ -458,6 +458,15 @@ export interface UsuarioWhatsapp {
    */
   puede: boolean;
   motivo: string | null;
+  /**
+   * Si ADEMAS lo usa (#128): la casilla de su ficha.
+   *
+   * Son dos preguntas: un admin puede tener derecho a WhatsApp y no usarlo. Los
+   * apagados no se pintan en la lista —eso pidio Diego— pero el servidor los
+   * sigue devolviendo y se cuentan al pie, para que no desaparezca gente sin
+   * explicacion, que es lo que la #68 vino a arreglar.
+   */
+  usa: boolean;
 }
 
 /**

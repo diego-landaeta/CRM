@@ -17,6 +17,7 @@ export interface UserFormValues {
   whatsapp_phone: string;
   factura_manager: boolean;
   editar_fechas_factura: boolean;
+  usa_whatsapp: boolean;
 }
 
 interface Props {
@@ -45,6 +46,11 @@ export default function UserFormDialog({
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
   const [facturaManager, setFacturaManager] = useState(!!user?.factura_manager);
   const [editarFechas, setEditarFechas] = useState(!!user?.editar_fechas_factura);
+  // WhatsApp del CRM (#128). `null` no es «apagado»: es que falta la migracion
+  // 156. Se separa para poder decirlo en vez de enseñar una casilla que no
+  // guardaria nada.
+  const faltaMigracionWhatsapp = esEdicion && user?.usa_whatsapp === null;
+  const [usaWhatsapp, setUsaWhatsapp] = useState(!!user?.usa_whatsapp);
 
   const [nuevaPass, setNuevaPass] = useState('');
   const [guardandoPass, setGuardandoPass] = useState(false);
@@ -89,6 +95,7 @@ export default function UserFormDialog({
       // Poder cambiar fechas sin poder facturar no sirve de nada: la pantalla de
       // fechas se abre desde la factura. Si se quita lo primero, cae lo segundo.
       editar_fechas_factura: facturaManager && editarFechas,
+      usa_whatsapp: usaWhatsapp,
     });
   }
 
@@ -242,6 +249,37 @@ export default function UserFormDialog({
                     </span>
                   </span>
                 </label>
+              </div>
+            )}
+
+            {/* WhatsApp del CRM (#128). Aparte del rol a proposito: el rol dice
+                quien PUEDE tenerlo —un tutor no— y esto quien lo usa. Hoy son
+                las gestoras y Daniela; manana entra alguien y se enciende aqui,
+                sin desplegar nada. Un tutor no lo ve porque no le corresponde. */}
+            {esEdicion && role !== 'tutor' && (
+              <div className="rounded-lg border border-border p-3">
+                <label className={`flex items-start gap-2 px-1 ${faltaMigracionWhatsapp ? 'opacity-50' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    checked={usaWhatsapp}
+                    disabled={faltaMigracionWhatsapp}
+                    onChange={(e) => setUsaWhatsapp(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-sm">
+                    Usa el WhatsApp del CRM
+                    <span className="block text-secundario text-muted-foreground">
+                      Sale en el panel de sesiones y puede enlazar su número.
+                      Apagarlo no desvincula el número que ya tenga.
+                    </span>
+                  </span>
+                </label>
+                {faltaMigracionWhatsapp && (
+                  <p className="text-secundario text-amber-600 dark:text-amber-500 mt-1.5 px-1">
+                    Falta aplicar la migración 156. Hasta entonces esto no se
+                    puede guardar y el panel sigue enseñando a todo el que puede.
+                  </p>
+                )}
               </div>
             )}
 
