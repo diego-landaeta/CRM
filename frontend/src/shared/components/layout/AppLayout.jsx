@@ -82,7 +82,16 @@ function rutaAceptaSociedad(pathname) {
 
 function AllProjectsGuard({ pathname, children }) {
   const { isAllProjects, activeIssuer } = useProjectContext();
-  if (activeIssuer && rutaAceptaSociedad(pathname)) return children;
+  if (activeIssuer) {
+    if (rutaAceptaSociedad(pathname)) return children;
+    // El aviso decia «tienes activa la vista Todos los proyectos» con CEDIA
+    // puesta. No era verdad, y mandaba a tocar el selector equivocado.
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <NeedsProjectBanner sociedad={activeIssuer.nombre} />
+      </div>
+    );
+  }
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }
