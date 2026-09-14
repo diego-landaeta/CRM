@@ -197,7 +197,10 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
+  // con un 500. Se arreglo en testeo el 11/09; aqui seguia.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
   const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
@@ -256,7 +259,10 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
+  // con un 500. Se arreglo en testeo el 11/09; aqui seguia.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
 
