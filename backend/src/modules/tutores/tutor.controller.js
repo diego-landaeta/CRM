@@ -109,6 +109,9 @@ export async function guardarPerfil(req, res, next) {
       reenviarEnlace: d.reenviarEnlace === true,
     });
 
+    // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
+    if (d.nombre) await model.renombrarTutor(id, d.nombre);
+
     const perfil = await model.guardarPerfil(id, d);
     res.json({ success: true, data: { ...perfil, correo } });
   } catch (err) { next(err); }
