@@ -386,6 +386,17 @@ export default function InvoicesPage() {
             <span className="font-semibold text-sm">Ventas sin factura</span>
             <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
           </div>
+          {/* Diego: «las ventas sin factura y la cola de facturación son como
+              lo mismo». Se solapan y la pantalla no lo decia. No son iguales:
+              arriba van los COBROS pendientes de facturar, en orden; aqui las
+              VENTAS sin ninguna factura, incluidas las que todavia no han
+              cobrado nada. Una venta con cobro sale en las dos. */}
+          <p className="px-4 py-2 text-[11px] leading-snug text-muted-foreground border-b border-amber-200 dark:border-amber-900/40">
+            Esto son <b>ventas</b>; arriba, en la cola, van los <b>cobros</b> pendientes de facturar.
+            {' '}Una venta que ya tiene algún cobro sale en las dos:
+            {' '}<b>emítela desde la cola</b>, que es la que respeta el orden de la numeración.
+            {' '}Aquí quedan sobre todo las que aún no han cobrado nada, y por eso todavía no se pueden facturar.
+          </p>
           <div className="overflow-x-auto">
             <table className="tabla-cifras w-full text-[13px]">
               <thead className="bg-amber-100/40 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-900/40">
