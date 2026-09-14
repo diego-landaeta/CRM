@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -319,6 +320,7 @@ export default function ReportsPage() {
                   </button>
                 ))}
               </div>
+              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}
