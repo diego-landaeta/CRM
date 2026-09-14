@@ -32,6 +32,11 @@ export const altaTutorSchema = z.object({
 });
 
 export const perfilSchema = z.object({
+  // El nombre vive en `users`, como el correo. Se edita desde aqui porque esta
+  // es la unica pantalla del tutor, y hasta hoy no se podia cambiar en ningun
+  // sitio: quien entraba mal escrito se quedaba mal escrito. Diego, 14/09:
+  // «necesitamos algo visible para poder editar tutores».
+  nombre: z.string().trim().min(2, 'El nombre es demasiado corto').max(120).optional(),
   dniNif: z.string().max(32).optional().nullable(),
   // El IBAN se comprueba de verdad: antes entraba cualquier cosa de 40
   // caracteres, y un digito mal no se descubre hasta que rebota la

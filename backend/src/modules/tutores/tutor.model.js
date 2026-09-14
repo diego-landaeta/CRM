@@ -96,6 +96,20 @@ export async function ponerContrasena(userId, password) {
   );
 }
 
+/**
+ * Cambiar el nombre del tutor. Vive en `users` y solo se toca si es OTRO:
+ * un UPDATE que escribe lo mismo ensucia `updated_at` y no dice nada.
+ */
+export async function renombrarTutor(tutorId, nombre) {
+  const { rows } = await query(
+    `UPDATE users SET nombre = $2, updated_at = now()
+      WHERE id = $1 AND role = 'tutor' AND nombre IS DISTINCT FROM $2
+      RETURNING id, nombre`,
+    [tutorId, String(nombre).trim()]
+  );
+  return rows[0] || null;
+}
+
 export async function guardarPerfil(tutorId, datos = {}) {
   // Lo que NO se manda no se toca.
   //
