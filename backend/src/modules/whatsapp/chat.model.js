@@ -72,7 +72,7 @@ export function nombreLimpio(v) {
 }
 
 /** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false }) {
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false, cuando = null }) {
   nombrePush = nombreLimpio(nombrePush);
 
   // EL NOMBRE DE UN MENSAJE QUE MANDAS TU ERES TU.
@@ -116,8 +116,21 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
   const lead = (esGrupo || esIdentificador) ? null : await leadPorTelefono(telefono);
 
   const { rows } = await query(
+    // LA FECHA ES LA DEL MENSAJE, NO LA DE AHORA.
+    //
+    // Iba `NOW()` en los dos sitios, y con mensajes en vivo daba casi igual: el
+    // mensaje llega en el momento en que se manda. Con historial es otra cosa —
+    // se importan de golpe conversaciones de hace tres semanas y todas quedaban
+    // con la hora de la importacion.
+    //
+    // Se vio enlazando un numero de verdad: 52 de 54 chats con la misma hora, y
+    // la lista ordenada por cuando se guardo en vez de por cuando se hablo. No
+    // se parecia en nada a la del movil, que es con lo que se compara.
+    //
+    // `GREATEST` para que no retroceda: si llega una tanda vieja despues de un
+    // mensaje de hoy, el chat no se va para atras en la lista.
     `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))
      ON CONFLICT (instancia, jid) DO UPDATE
        SET nombre_push = COALESCE(EXCLUDED.nombre_push, wa_conversaciones.nombre_push),
            -- La foto caduca, asi que la nueva manda; pero si viene vacia se
@@ -127,10 +140,12 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
            -- ata solo. Pero nunca se desata uno ya atado.
            lead_id     = COALESCE(wa_conversaciones.lead_id, EXCLUDED.lead_id),
            project_id  = COALESCE(wa_conversaciones.project_id, EXCLUDED.project_id),
-           ultimo_at   = NOW()
+           ultimo_at   = GREATEST(
+                           COALESCE(wa_conversaciones.ultimo_at, COALESCE($8::timestamptz, NOW())),
+                           COALESCE($8::timestamptz, NOW()))
      RETURNING *`,
     [instancia, jid, telefono, nombrePush || null, avatarUrl || null,
-     lead?.id || null, lead?.project_id || null]
+     lead?.id || null, lead?.project_id || null, cuando || null]
   );
   return rows[0];
 }
@@ -1238,6 +1253,18 @@ function noHayEtiquetas(err) {
  */
 export async function guardarEtiqueta({ instancia, waId, nombre, color }) {
   try {
+    // El nombre se limpia igual que el de una conversacion.
+    //
+    // Salio enlazando un numero de verdad: las tres etiquetas que trae WhatsApp
+    // de fabrica llegan como «‎Favoritos», «‎Grupos» y «‎No
+    // leidos», con una marca de direccion de texto invisible delante. No se ve,
+    // pero se cuela en la lista de chats y rompe cualquier comparacion por
+    // nombre — «Favoritos» no es igual a «‎Favoritos».
+    //
+    // Evolution no tiene este problema porque pela el nombre entero al
+    // guardarlo, y de paso se lleva los acentos y los emojis. Aqui se quita solo
+    // lo invisible.
+    nombre = nombreLimpio(nombre) || `Etiqueta ${waId}`;
     const { rows } = await query(
       `INSERT INTO wa_etiquetas (instancia, wa_id, nombre, color)
             VALUES ($1, $2, $3, $4)

@@ -480,6 +480,31 @@ export async function recibir(cuerpo) {
     logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
     return { ignorado: 'sin instancia' };
   }
+  // CUANDO se dijo esto. Se calcula aqui arriba y no mas abajo porque de ello
+  // dependen las dos cosas que vienen: si el mensaje entra, y con que fecha se
+  // queda su conversacion. `messageTimestamp` viene en segundos.
+  const cuando = datos?.messageTimestamp
+    ? new Date(Number(datos.messageTimestamp) * 1000)
+    : new Date();
+
+  // «El ultimo mes» tiene que ser un mes (#73), y se decide ANTES DE CREAR NADA.
+  //
+  // Estaba treinta lineas mas abajo, despues de `conversacionDe`, y el propio
+  // comentario decia que iba antes: descartar el mensaje despues de crear la
+  // conversacion deja un chat VACIO en la lista, que es peor que no tenerlo.
+  //
+  // En local no se notaba porque el puente ya recorta antes de mandar. Con
+  // Evolution no: manda el historial entero y lo recorta el CRM, asi que
+  // enlazar «el ultimo mes» un numero con dos años de conversaciones iba a
+  // crear cientos de chats vacios. Es otra vez lo de siempre — lo que se prueba
+  // no es lo que corre.
+  //
+  // Solo salta con el modo «rapido» apuntado y una fecha de hace mas de 30
+  // dias, y un mensaje en vivo nunca cumple lo segundo.
+  if (politica.sobraDelHistorial(instancia, cuando)) {
+    return { ignorado: 'mas viejo que el mes que se pidio' };
+  }
+
   // En un grupo, `pushName` es QUIEN ESCRIBIO, no el grupo.
   //
   // Usarlo como nombre de la conversacion hacia que «Psiko Aprende General»
@@ -496,6 +521,9 @@ export async function recibir(cuerpo) {
     // En lo que mandamos nosotros, `pushName` somos NOSOTROS. Se dice aqui y la
     // regla se aplica dentro, que es donde no se puede olvidar.
     mensajeMio: Boolean(key.fromMe),
+    // CUANDO, para que la lista se ordene por la conversacion y no por cuando
+    // se importo. Ver `conversacionDe`.
+    cuando,
   });
 
   // La foto de perfil, UNA vez por conversacion y sin bloquear.
@@ -564,23 +592,6 @@ export async function recibir(cuerpo) {
   // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
   // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
   // failed». El webhook tiene que contestar rapido y soltar.
-  // messageTimestamp viene en segundos.
-  const cuando = datos?.messageTimestamp
-    ? new Date(Number(datos.messageTimestamp) * 1000)
-    : new Date();
-
-  // «El ultimo mes» tiene que ser un mes (#73).
-  //
-  // El recorte vivia solo en el puente de Baileys, asi que en produccion no
-  // existia. Se hace ANTES de crear nada: descartarlo despues de guardar la
-  // conversacion dejaria chats vacios en la lista, que es peor que no tenerlos.
-  //
-  // Solo puede saltar con el modo «rapido» apuntado y una fecha de hace mas de
-  // 30 dias, y un mensaje en vivo nunca cumple lo segundo.
-  if (politica.sobraDelHistorial(instancia, cuando)) {
-    return { ignorado: 'mas viejo que el mes que se pidio' };
-  }
-
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,

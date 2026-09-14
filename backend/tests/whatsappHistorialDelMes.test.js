@@ -167,3 +167,51 @@ describe('el historial entra por messages.set, no por messages.upsert', () => {
     expect(guardarMensaje).toHaveBeenCalledTimes(2);
   });
 });
+
+// ── Que la lista se parezca a la del movil ───────────────────────────────────
+//
+// Reportado enlazando un numero de verdad: «lo del ultimo mes no aparece
+// organizado como en mi movil». No era el orden de la consulta —ordena por
+// `ultimo_at`— sino la FECHA: `conversacionDe` la ponia a `NOW()`, asi que al
+// importar el historial los 54 chats quedaron con la hora de la importacion.
+// Ordenados por cuando se guardaron, no por cuando se hablo.
+//
+// Con mensajes en vivo no se veia: llegan en el momento en que se mandan.
+
+describe('la fecha del chat es la de su mensaje, no la de la importacion', () => {
+  beforeEach(() => {
+    guardarMensaje.mockClear();
+    conversacionDe.mockClear();
+    politica._olvidarModos();
+  });
+
+  it('se le pasa CUANDO a la conversacion', async () => {
+    const hace10 = HOY - 10 * 24 * 3600;
+    await servicio.recibir(tanda([mensaje('A', hace10)]));
+    await servicio._historialGuardado();
+    const args = conversacionDe.mock.calls[0][0];
+    expect(args.cuando).toBeInstanceOf(Date);
+    // La del mensaje, no la de ahora: diez dias de diferencia.
+    expect(Math.round((Date.now() - args.cuando.getTime()) / 86400000)).toBe(10);
+  });
+
+  it('un mensaje viejo NO crea la conversacion', async () => {
+    // El recorte va ANTES de crear nada. Estaba despues, y con Evolution
+    // —que manda el historial entero— enlazar «el ultimo mes» un numero con dos
+    // años de conversaciones iba a dejar cientos de chats vacios en la lista.
+    // En local no se veia porque el puente recorta antes de mandar.
+    politica.apuntarModo('crm-u4', 'rapido');
+    await servicio.recibir(tanda([mensaje('VIEJO', HACE_40_DIAS)]));
+    await servicio._historialGuardado();
+    expect(conversacionDe).not.toHaveBeenCalled();
+    expect(guardarMensaje).not.toHaveBeenCalled();
+  });
+
+  it('y uno de dentro del mes si la crea', async () => {
+    politica.apuntarModo('crm-u4', 'rapido');
+    await servicio.recibir(tanda([mensaje('NUEVO', HACE_10_DIAS)]));
+    await servicio._historialGuardado();
+    expect(conversacionDe).toHaveBeenCalled();
+    expect(guardarMensaje).toHaveBeenCalledTimes(1);
+  });
+});
