@@ -8,6 +8,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
+import LoQueFactura from '../components/LoQueFactura';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -36,26 +37,6 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   revertida: 'Revertida',
 };
 
-/*
-  Lo que el tutor tiene que facturar.
-
-  Diego, 14/09: «necesito el cálculo que el profesional me tiene que enviar, que
-  sería la cantidad de 17,82 € + 21 % de 17,82 € (3,74 €) − retención del 15 %
-  (2,67 €) = 18,89 €».
-
-  Se redondea CADA LINEA a dos decimales, no el resultado: con 17,82 el IVA es
-  3,7422 y la retencion 2,673, y redondear al final da un centimo distinto del
-  que el tutor va a escribir en su factura.
-*/
-const IVA = 0.21;
-const IRPF = 0.15;
-const dos = (n: number) => Math.round(n * 100) / 100;
-
-function loQueFactura(base: number) {
-  const iva = dos(base * IVA);
-  const retencion = dos(base * IRPF);
-  return { base: dos(base), iva, retencion, total: dos(dos(base) + iva - retencion) };
-}
 
 function mesActual() {
   const h = new Date();
@@ -405,46 +386,14 @@ export default function ComisionesTutoresPage() {
                       {/* Lo que el profesional tiene que facturar. Va debajo de
                           sus filas y no en un informe aparte: es la cuenta que
                           hay que mandarle, y el total del mes --no una linea--
-                          es la base. Diego, 14/09. */}
-                      {(() => {
-                        const porFacturar = suyas
+                          es la base. El mismo cuadro lo ve el tutor en «Mis
+                          cursos». */}
+                      <LoQueFactura
+                        className="mt-3"
+                        base={suyas
                           .filter((x) => x.estado !== 'revertida' && x.estado !== 'pagada')
-                          .reduce((a, x) => a + Number(x.importe), 0);
-                        if (porFacturar <= 0) return null;
-                        const f = loQueFactura(porFacturar);
-                        return (
-                          <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                              Lo que tiene que facturar
-                            </p>
-                            <dl className="space-y-1 text-xs max-w-xs">
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">Comisión</dt>
-                                <dd className="tabular-nums font-semibold">{euros(f.base)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">+ IVA (21 %)</dt>
-                                <dd className="tabular-nums">{euros(f.iva)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">− retención IRPF (15 %)</dt>
-                                <dd className="tabular-nums">−{euros(f.retencion)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4 border-t border-border pt-1 mt-1">
-                                <dt className="font-semibold">Total a facturar</dt>
-                                <dd className="tabular-nums font-bold text-sm">{euros(f.total)}</dd>
-                              </div>
-                            </dl>
-                            <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
-                              <li>— Comisión sujeta a IVA (21 %).</li>
-                              <li>
-                                — Retención de IRPF orientativa: cada profesional aplica la suya;
-                                el 15 % es la más común.
-                              </li>
-                            </ul>
-                          </div>
-                        );
-                      })()}
+                          .reduce((a, x) => a + Number(x.importe), 0)}
+                      />
                     </div>
                   )}
                 </div>
