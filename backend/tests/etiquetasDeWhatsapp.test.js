@@ -284,4 +284,30 @@ describe('la misma persona, con sus dos llaves', () => {
     });
     expect(conversacionDe).toHaveBeenCalledWith(expect.objectContaining({ otraLlave: null }));
   });
+
+  it('tambien se mira la cola al APRENDER la otra llave, no solo al nacer', async () => {
+    // Este se vio en caliente. La etiqueta llego direccionada por `@lid`, el
+    // chat de esa persona YA EXISTIA —solo se actualizaba, no nacia— y la
+    // etiqueta se quedaba en la cola para siempre aunque el par ya se supiera.
+    aplicarEtiquetasPendientes.mockClear();
+    conversacionDe.mockResolvedValueOnce({
+      id: 7, lead_id: null, avatar_url: null, nombre: 'Dieguis', recien_creada: false,
+    });
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: {
+          id: 'L4', remoteJid: '34600111222@s.whatsapp.net', fromMe: false,
+          remoteJidAlt: '230850516013259@lid',
+        },
+        message: { conversation: 'hola' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    // Con la llave que trae el mensaje, que es con la que llego la etiqueta.
+    expect(aplicarEtiquetasPendientes).toHaveBeenCalledWith(
+      expect.objectContaining({ jid: '230850516013259@lid' })
+    );
+  });
 });

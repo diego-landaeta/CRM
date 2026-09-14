@@ -238,6 +238,26 @@ async function permitirEnvio(conversacionId) {
  * En los dos casos hay que mandar el jid ENTERO y dejar que el otro lado lo
  * resuelva. Solo se pelan las cifras cuando de verdad es un telefono.
  */
+/**
+ * La OTRA llave de esta persona, si el mensaje la trae (migracion 159).
+ *
+ * WhatsApp direcciona cada vez mas por `@lid`, un identificador que ocupa el
+ * lugar del telefono sin revelarlo, y la misma persona llega unas veces con uno
+ * y otras con el otro. Los avisos de etiquetas usan el que tengan a mano, asi
+ * que sin el par no hay forma de saber en que chat va la etiqueta.
+ *
+ * Se descarta lo que no aporte: si la otra llave es la MISMA que el jid, no es
+ * un par — es el mismo dato dos veces, y guardarlo solo sirve para creer que ya
+ * se sabe algo que no se sabe. Paso de verdad: el puente traducia el @lid y
+ * dejaba el telefono en los dos campos.
+ */
+function otraLlaveDe(key) {
+  const suya = String(key?.remoteJid || '');
+  const otra = key?.remoteJidAlt || key?.senderPn || null;
+  if (!otra || String(otra) === suya) return null;
+  return String(otra);
+}
+
 const numeroDe = (conv) => {
   const jid = String(conv.jid);
   if (jid.endsWith('@g.us') || jid.endsWith('@lid')) return jid;
@@ -505,6 +525,9 @@ export async function recibir(cuerpo) {
     return { ignorado: 'mas viejo que el mes que se pidio' };
   }
 
+  // La otra llave de esta persona, si el mensaje la trae. Ver `otraLlaveDe`.
+  const otraLlave = otraLlaveDe(key);
+
   // En un grupo, `pushName` es QUIEN ESCRIBIO, no el grupo.
   //
   // Usarlo como nombre de la conversacion hacia que «Psiko Aprende General»
@@ -534,7 +557,7 @@ export async function recibir(cuerpo) {
     //
     // El par viaja en la propia clave, asi que se aprende del primer mensaje que
     // lo traiga y la conversacion queda localizable por las dos.
-    otraLlave: (datos?.key?.remoteJidAlt || datos?.key?.senderPn || null),
+    otraLlave,
   });
 
   // Si esta conversacion acaba de nacer, puede haber etiquetas esperandola.
@@ -545,8 +568,22 @@ export async function recibir(cuerpo) {
   //
   // Suelto y solo al nacer: en cada mensaje seria una consulta de mas por cada
   // uno de los miles que entran al emparejar.
-  if (conv?.recien_creada) {
-    model.aplicarEtiquetasPendientes?.({ instancia, jid: key.remoteJid })
+  //
+  // Se mira en DOS momentos, y hacen falta los dos:
+  //
+  //   · cuando la conversacion NACE, con su jid;
+  //   · y cuando APRENDE su otra llave, con esa. Este segundo faltaba y se vio
+  //     enseguida: la etiqueta llego direccionada por `@lid`, el chat de esa
+  //     persona ya existia —solo se actualizaba— y la etiqueta se quedaba en la
+  //     cola para siempre aunque el par ya se supiera.
+  //
+  // La cola se vacia con un DELETE ... RETURNING, asi que cuando no hay nada
+  // esperando esto es una consulta por indice que no devuelve filas.
+  const llaves = [];
+  if (conv?.recien_creada) llaves.push(key.remoteJid);
+  if (otraLlave) llaves.push(otraLlave);
+  for (const llave of llaves) {
+    model.aplicarEtiquetasPendientes?.({ instancia, jid: llave })
       ?.catch(() => { /* ya se registra dentro */ });
   }
 

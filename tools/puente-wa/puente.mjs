@@ -827,7 +827,18 @@ async function abrirSocket(s) {
       // Se traduce ANTES de guardar y de avisar: si no, la misma persona acaba
       // partida en dos conversaciones que nadie puede juntar despues.
       const jid = await aTelefono(s, bruto, m.key);
-      if (jid !== bruto) m.key = { ...m.key, remoteJid: jid };
+      // Al traducir el @lid se GUARDA el original, no se pisa.
+      //
+      // Aqui se reescribia `remoteJid` con el telefono y `remoteJidAlt` se
+      // quedaba con... el telefono tambien, porque de ahi salia la traduccion.
+      // O sea que el par «este @lid es esta persona» se perdia justo en el paso
+      // que lo habia averiguado, y el CRM no podia aprenderlo.
+      //
+      // Importa para las etiquetas (#138): WhatsApp las direcciona por @lid, y
+      // sin el par no hay forma de saber en que chat va. Evolution manda las dos
+      // llaves —`remoteJid` el @lid y `remoteJidAlt` el telefono—; aqui van al
+      // reves porque este puente si traduce, pero las dos viajan igual.
+      if (jid !== bruto) m.key = { ...m.key, remoteJid: jid, remoteJidAlt: bruto };
       // Se desenvuelve ANTES de guardar: si llega dentro de un sobre —efimero,
       // ver una vez, documento con pie— lo de fuera no tiene ni tipo ni datos,
       // y el mensaje acababa guardado como «otro» y sin adjunto.
@@ -977,7 +988,18 @@ async function abrirSocket(s) {
       const bruto = m.key?.remoteJid;
       if (!esConversacion(bruto)) continue;
       const jid = await aTelefono(s, bruto, m.key);
-      if (jid !== bruto) m.key = { ...m.key, remoteJid: jid };
+      // Al traducir el @lid se GUARDA el original, no se pisa.
+      //
+      // Aqui se reescribia `remoteJid` con el telefono y `remoteJidAlt` se
+      // quedaba con... el telefono tambien, porque de ahi salia la traduccion.
+      // O sea que el par «este @lid es esta persona» se perdia justo en el paso
+      // que lo habia averiguado, y el CRM no podia aprenderlo.
+      //
+      // Importa para las etiquetas (#138): WhatsApp las direcciona por @lid, y
+      // sin el par no hay forma de saber en que chat va. Evolution manda las dos
+      // llaves —`remoteJid` el @lid y `remoteJidAlt` el telefono—; aqui van al
+      // reves porque este puente si traduce, pero las dos viajan igual.
+      if (jid !== bruto) m.key = { ...m.key, remoteJid: jid, remoteJidAlt: bruto };
       if (desde && Number(m.messageTimestamp || 0) * 1000 < desde) { viejos++; continue; }
       // Guardar ANTES de avisar: el CRM pide el adjunto nada mas recibir el
       // aviso, y para descifrarlo hace falta el mensaje original.
