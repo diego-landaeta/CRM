@@ -61,12 +61,38 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
   useEffect(() => { cargar(); }, [cargar]);
 
 
-  async function generar(paymentId: number, forzar = false) {
+  /*
+    ANTES DE EMITIR, PREGUNTAR EL NUMERO.
+
+    Diego, 14/09: «le doy a generar factura y me debe indicar el numero que voy
+    a generar, para cambiarlo o ponerlo manualmente».
+
+    Antes este boton emitia en el acto y te enterabas del numero por el aviso,
+    cuando ya estaba gastado. Ahora primero se pide cual toca, se enseña, y se
+    puede cambiar. Cancelar no consume numero.
+  */
+  const [pidiendoNumero, setPidiendoNumero] = useState<{ paymentId: number; forzar: boolean; sugerido: string; texto: string } | null>(null);
+
+  async function pedirNumero(paymentId: number, forzar = false) {
+    if (!projectId) return;
+    setGenerando(paymentId);
+    try {
+      const r = await client.get<{ codigo: string; siguiente: number; serie: string }>(
+        `/invoices/siguiente-numero?projectId=${projectId}`);
+      const sug = r?.success ? String(r.data.siguiente) : '';
+      setPidiendoNumero({ paymentId, forzar, sugerido: sug, texto: sug });
+    } catch {
+      // Si no se puede consultar, se deja escribirlo a mano igualmente.
+      setPidiendoNumero({ paymentId, forzar, sugerido: '', texto: '' });
+    } finally { setGenerando(null); }
+  }
+
+  async function generar(paymentId: number, forzar = false, numero?: string) {
     if (!projectId) return;
     setGenerando(paymentId);
     try {
       const r = await client.post<{ codigo?: string }>('/invoices/cola/generar',
-        { projectId, paymentId, ...(forzar ? { forzar: true } : {}) });
+        { projectId, paymentId, ...(forzar ? { forzar: true } : {}), ...(numero ? { numero: Number(numero) } : {}) });
       if (r.success) {
         toast({ title: 'Factura generada', description: r.data?.codigo || '' });
         cargar();
@@ -77,7 +103,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
         if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
           setGenerando(null);
-          return generar(paymentId, true);
+          return generar(paymentId, true, pidiendoNumero?.texto);
         }
       } else {
         toast({
@@ -109,8 +135,80 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
   if (!estado) return null;
   const cola = estado.cola || [];
 
+  // El cuadro que pide el numero. Va antes que nada: mientras esta abierto,
+
+  // no se ha emitido nada y cancelar no gasta numero.
+
+  const cuadroNumero = pidiendoNumero && (
+
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
+
+      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl">
+
+        <h3 className="text-sm font-semibold">Número de la factura</h3>
+
+        <p className="mt-1 text-xs text-muted-foreground">
+
+          {pidiendoNumero.sugerido
+
+            ? <>El siguiente disponible es el <b className="text-foreground tabular-nums">{pidiendoNumero.sugerido}</b>. Puedes dejarlo o poner otro.</>
+
+            : 'Escribe el número que quieres darle.'}
+
+        </p>
+
+        {/* Diego, 14/09: que antes de emitir se recuerde mirar el Excel. El CRM
+            sabe cual es el siguiente de SU serie, pero el orden bueno esta en la
+            hoja --y cuando los dos no coinciden, manda la hoja--. */}
+        <p className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          <span aria-hidden="true">⚠</span>
+          <span>Comprueba la numeración en el Excel de facturación primero.</span>
+        </p>
+        <input
+
+          autoFocus
+
+          value={pidiendoNumero.texto}
+
+          onChange={(e) => setPidiendoNumero({ ...pidiendoNumero, texto: e.target.value.replace(/[^0-9]/g, '') })}
+
+          onKeyDown={(e) => { if (e.key === 'Enter' && pidiendoNumero.texto) { const p = pidiendoNumero; setPidiendoNumero(null); generar(p.paymentId, p.forzar, p.texto); } }}
+
+          inputMode="numeric"
+
+          className="mt-3 h-10 w-full rounded-md border border-border bg-background px-3 text-lg tabular-nums"
+
+        />
+
+        <div className="mt-4 flex justify-end gap-2">
+
+          <button type="button" onClick={() => setPidiendoNumero(null)}
+
+            className="h-9 px-3 rounded-md border border-border text-sm">Cancelar</button>
+
+          <button type="button" disabled={!pidiendoNumero.texto}
+
+            onClick={() => { const p = pidiendoNumero; setPidiendoNumero(null); generar(p.paymentId, p.forzar, p.texto); }}
+
+            className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40">
+
+            Emitir la factura
+
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <>
+      {cuadroNumero}
+      <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
@@ -203,7 +301,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
                       {puedeFacturar ? (
                         <button
                           type="button"
-                          onClick={() => generar(c.payment_id)}
+                          onClick={() => pedirNumero(c.payment_id)}
                           disabled={generando === c.payment_id}
                           className={`h-6 px-2 rounded font-semibold whitespace-nowrap disabled:opacity-40 ${
                             c.es_el_siguiente
@@ -262,5 +360,6 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       )}
 
     </div>
+    </>
   );
 }

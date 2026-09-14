@@ -685,8 +685,11 @@ export async function generarDeCola(req, res, next) {
     if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId, {
+      forzar: req.body?.forzar === true,
+      // El numero que haya elegido quien factura. Sin el, el siguiente libre.
+      numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+    });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }
@@ -718,15 +721,13 @@ export async function marcarEntregada(req, res, next) {
   } catch (e) { next(e); }
 }
 
-/** GET /invoices/siguiente-numero — que numero tocaria ahora, y los huecos. */
+/** GET /invoices/siguiente-numero — que numero saldria ahora, y los huecos. */
 export async function siguienteNumero(req, res, next) {
   try {
     const projectId = Number(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
-    res.json({ success: true, data: await model.siguienteLibre({
-      projectId,
-      issuerId: req.query.issuerId ? Number(req.query.issuerId) : null,
-      ano: req.query.ano ? Number(req.query.ano) : null,
-    }) });
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    const ano = req.query.ano ? Number(req.query.ano) : null;
+    res.json({ success: true, data: await model.siguienteLibre({ projectId, issuerId, ano }) });
   } catch (e) { next(e); }
 }

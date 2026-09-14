@@ -18,9 +18,18 @@ async function issuerOfProject(exec, projectId) {
 // de una misma sociedad comparten contador por serie+año, aunque sean de proyectos
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
-/** Reservar un numero ELEGIDO A MANO (Diego, 14/09). Mismo cerrojo que el
- *  automatico: dos personas eligiendo el mismo no lo consiguen las dos. Y si
- *  esta cogido se dice DE QUIEN es, que es lo que hace falta para decidir. */
+/**
+ * Reservar un numero ELEGIDO A MANO.
+ *
+ * Diego, 14/09: «que se ponga con numero de factura y que salga el numero
+ * siguiente disponible, pero que pueda poner ese u otro».
+ *
+ * Se comprueba dentro de la misma transaccion y con el mismo cerrojo que el
+ * automatico: si no, dos personas eligiendo el mismo numero a la vez lo
+ * cogerian las dos. Y si ya esta usado se dice CUAL lo tiene, que es lo que
+ * hace falta para decidir --un numero repetido en una serie fiscal no es un
+ * aviso, es un problema--.
+ */
 export async function reservarNumero(client, projectId, issuerId, ano, serie, numero) {
   const n = Number(numero);
   if (!Number.isInteger(n) || n <= 0) {
@@ -30,18 +39,22 @@ export async function reservarNumero(client, projectId, issuerId, ano, serie, nu
   const { rows: [ocupado] } = await client.query(
     `SELECT codigo, cliente_nombre, total, fecha_emision::date::text AS fecha
        FROM invoices WHERE ano = $1 AND serie = $2 AND numero = $3 LIMIT 1`,
-    [ano, serie, n]);
+    [ano, serie, n]
+  );
   if (ocupado) {
     throw new AppError(
       `El número ${ano}/${String(n).padStart(4, '0')} ya lo tiene la factura de `
-      + `${ocupado.cliente_nombre || 'sin nombre'} (${Number(ocupado.total).toFixed(2)} €, ${ocupado.fecha}). Elige otro.`,
+      + `${ocupado.cliente_nombre || 'sin nombre'} (${Number(ocupado.total).toFixed(2)} €, ${ocupado.fecha}). `
+      + 'Elige otro.',
       409, 'NUMBER_TAKEN');
   }
-  // El contador solo sube: rellenar un hueco no debe bajarlo, o el siguiente
-  // automatico chocaria con lo que ya existe.
+  // El contador solo sube: si se rellena un hueco anterior, no se baja, porque
+  // el siguiente automatico volveria a chocar con lo que ya existe.
   await client.query(
-    'UPDATE invoice_sequences SET ultimo_numero = GREATEST(ultimo_numero, $1) WHERE ano = $2 AND serie = $3',
-    [n, ano, serie]);
+    `UPDATE invoice_sequences SET ultimo_numero = GREATEST(ultimo_numero, $1)
+      WHERE ano = $2 AND serie = $3`,
+    [n, ano, serie]
+  );
   return n;
 }
 
@@ -169,26 +182,40 @@ export async function create(data, userId) {
     // número de la secuencia y se numera con el mismo formato.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
-    /* ANTES DE NUMERAR: si esa venta ya tiene una factura igual hoy, no se
-       emite y se dice cual. Es lo que produjo la 2026/0102. No bloquea del
-       todo --dos cobros reales el mismo dia son legitimos-- pero obliga a
-       verlo antes. */
+    /*
+      ANTES DE NUMERAR: mirar si esa venta ya tiene una factura igual hoy.
+
+      Es lo que produjo la 2026/0102. A las 14:14:07 el CRM emitio la 0101 al
+      entrar el cobro de Stripe; 33 segundos despues la gestora emitio otra a
+      mano sin ver la primera. Un cobro, dos facturas, y nadie se entero hasta
+      que Diego las encontro un mes despues.
+
+      No se bloquea del todo: hay casos legitimos --dos cobros de verdad el
+      mismo dia, como los de Bibiana-- y por eso se puede seguir con
+      `permitirParecida`. Lo que no puede pasar es que salga sin que nadie lo
+      vea.
+    */
     if (!isBorrador && data.conversionId && !data.permitirParecida) {
-      const { rows: par } = await client.query(
-        `SELECT codigo, total, fecha_emision::date::text AS fecha FROM invoices
-          WHERE conversion_id = $1 AND tipo = 'normal' AND estado NOT IN ('cancelada','borrador')
+      const { rows: parecidas } = await client.query(
+        `SELECT codigo, total, fecha_emision::date::text AS fecha
+           FROM invoices
+          WHERE conversion_id = $1 AND tipo = 'normal'
+            AND estado NOT IN ('cancelada', 'borrador')
             AND ROUND(total::numeric, 2) = ROUND($2::numeric, 2)
-            AND fecha_emision::date = COALESCE($3::date, CURRENT_DATE) LIMIT 1`,
-        [data.conversionId, data.totalEur ?? data.total ?? 0, data.fechaEmision || null]);
-      if (par.length) {
+            AND fecha_emision::date = COALESCE($3::date, CURRENT_DATE)
+          LIMIT 1`,
+        [data.conversionId, data.totalEur ?? data.total ?? 0, data.fechaEmision || null]
+      );
+      if (parecidas.length) {
+        const y = parecidas[0];
         throw new AppError(
-          `Esta venta ya tiene la factura ${par[0].codigo} por ${Number(par[0].total).toFixed(2)} € del ${par[0].fecha}. `
+          `Esta venta ya tiene la factura ${y.codigo} por ${Number(y.total).toFixed(2)} € del ${y.fecha}. `
           + 'Si de verdad son dos cobros distintos, vuelve a darle para emitirla igualmente.',
           409, 'INVOICE_LOOKS_DUPLICATE');
       }
     }
 
-    // El numero: el que elija quien emite, o el siguiente libre.
+    // El numero: el que elija quien emite, o el siguiente libre si no dice nada.
     const numero = isBorrador
       ? null
       : (data.numero != null && data.numero !== ''
@@ -806,7 +833,7 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, numero = null }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -941,6 +968,13 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     projectId: conv.project_id,
     conversionId,
     paymentId,
+    // El numero que eligio quien factura desde la cola. Si no dijo nada, va
+    // null y `create` coge el siguiente libre, como siempre.
+    numero,
+    // Esta factura viene de la cola y es de un cobro concreto: el aviso de
+    // «esta venta ya tiene una factura igual» no aplica --justo lo que se hace
+    // es facturar cada cobro por separado-- y bloquearia las cuotas.
+    permitirParecida: true,
     leadId: conv.lead_id,
     clienteNombre: nombreClienteFactura(conv),
     clienteTipo: conv.cliente_tipo || null,
@@ -1693,23 +1727,57 @@ export async function marcarEntregada(id, { entregada, userId }) {
   return rows[0] || null;
 }
 
-/** Que numero saldria ahora, sin reservarlo, y los huecos de la serie. */
+/**
+ * Que numero saldria ahora, sin reservarlo.
+ *
+ * Para que la pantalla pueda decir «el siguiente disponible es el X» antes de
+ * emitir. No toca el contador: solo mira. Si entre que se consulta y se emite
+ * alguien coge ese numero, la reserva lo detecta y avisa --por eso la
+ * comprobacion de verdad vive en `reservarNumero`, no aqui--.
+ */
 export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
   const y = ano || new Date().getFullYear();
   const { rows: [cfg] } = await query(
-    `SELECT COALESCE(e.serie, p.factura_serie_default, 'FAC') AS serie FROM projects p
-       LEFT JOIN invoice_issuers e ON e.id = $2 WHERE p.id = $1`,
-    [projectId, issuerId]);
+    // La columna es `factura_serie_default`, NO `serie_factura`. Con el nombre
+    // mal la consulta fallaba, el catch se lo tragaba y devolvia 'FAC': la
+    // pantalla decia «el siguiente disponible es 2026/0001» cuando la serie
+    // CEDIA iba por la 119. Un numero sugerido equivocado es peor que ninguno.
+    // Si no se ha elegido emisora todavia, se mira la POR DEFECTO del proyecto:
+    // es la que usaria la factura de verdad. Sin esto, la pantalla sugeria la
+    // serie generica del proyecto --«A», numero 1-- cuando esa factura iba a
+    // salir en la serie CEDIA por la 119. Un numero sugerido que no es el que
+    // va a salir engaña mas que ayuda.
+    `SELECT COALESCE(
+              (SELECT e.serie FROM invoice_issuers e WHERE e.id = $2),
+              (SELECT e2.serie FROM invoice_issuers e2
+                WHERE e2.project_id = p.id AND e2.es_default LIMIT 1),
+              (SELECT e3.serie FROM invoice_issuers e3 WHERE e3.id = p.sociedad_emisora_id),
+              p.factura_serie_default, 'FAC') AS serie
+       FROM projects p WHERE p.id = $1`,
+    [projectId, issuerId]
+  );
   const serie = cfg?.serie || 'FAC';
   const { rows: [t] } = await query(
     `SELECT GREATEST(
-       COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano=$1 AND serie=$2), 0),
-       COALESCE((SELECT MAX(numero) FROM invoices WHERE ano=$1 AND serie=$2 AND numero IS NOT NULL), 0)) AS usado`,
-    [y, serie]);
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS usado`,
+    [y, serie]
+  );
   const n = Number(t.usado) + 1;
+  // Los huecos: numeros que faltan por debajo del tope. Si alguien numero a
+  // mano saltandose uno, conviene verlo --una serie fiscal no deberia tenerlos--.
   const { rows: huecos } = await query(
     `SELECT g AS n FROM generate_series(1, $3) g
-      WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.ano=$1 AND i.serie=$2 AND i.numero=g)
-      ORDER BY g LIMIT 10`, [y, serie, Number(t.usado)]);
-  return { ano: y, serie, siguiente: n, codigo: `${y}/${String(n).padStart(4,'0')}`, huecos: huecos.map(h => Number(h.n)) };
+      WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.ano = $1 AND i.serie = $2 AND i.numero = g)
+      ORDER BY g LIMIT 10`,
+    [y, serie, Number(t.usado)]
+  );
+  return {
+    ano: y,
+    serie,
+    siguiente: n,
+    codigo: `${y}/${String(n).padStart(4, '0')}`,
+    huecos: huecos.map((h) => Number(h.n)),
+  };
 }
