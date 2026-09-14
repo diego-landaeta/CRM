@@ -1697,9 +1697,9 @@ export async function marcarEntregada(id, { entregada, userId }) {
 export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
   const y = ano || new Date().getFullYear();
   const { rows: [cfg] } = await query(
-    `SELECT COALESCE(e.serie, p.serie_factura, 'FAC') AS serie FROM projects p
+    `SELECT COALESCE(e.serie, p.factura_serie_default, 'FAC') AS serie FROM projects p
        LEFT JOIN invoice_issuers e ON e.id = $2 WHERE p.id = $1`,
-    [projectId, issuerId]).catch(() => ({ rows: [] }));
+    [projectId, issuerId]);
   const serie = cfg?.serie || 'FAC';
   const { rows: [t] } = await query(
     `SELECT GREATEST(
