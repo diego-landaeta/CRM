@@ -51,19 +51,6 @@ export default function InvoiceCreatePage() {
   );
   const esProforma = docTipo === 'proforma';
 
-  // Cual seria el siguiente numero. Se pregunta al servidor y no se calcula
-  // aqui: el contador es de la SERIE, y dos proyectos de la misma sociedad
-  // comparten numeracion.
-  useEffect(() => {
-    if (!projectId || docTipo !== 'factura') { setSugerido(null); return; }
-    let vivo = true;
-    const q = new URLSearchParams({ projectId: String(projectId) });
-    if (issuerId) q.set('issuerId', String(issuerId));
-    client.get(`/invoices/siguiente-numero?${q}`)
-      .then((r) => { if (vivo && r?.success) setSugerido(r.data); })
-      .catch(() => { if (vivo) setSugerido(null); });
-    return () => { vivo = false; };
-  }, [projectId, issuerId, docTipo]);
 
   // Que el aviso diga QUE ha pasado, no «Error» a secas.
   //
@@ -133,6 +120,20 @@ export default function InvoiceCreatePage() {
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   const [issuerId, setIssuerId] = useState<number | null>(null);
+
+  // Cual seria el siguiente numero. Se pregunta al servidor y no se calcula
+  // aqui: el contador es de la SERIE, y dos proyectos de la misma sociedad
+  // comparten numeracion.
+  useEffect(() => {
+    if (!projectId || docTipo !== 'factura') { setSugerido(null); return; }
+    let vivo = true;
+    const q = new URLSearchParams({ projectId: String(projectId) });
+    if (issuerId) q.set('issuerId', String(issuerId));
+    client.get(`/invoices/siguiente-numero?${q}`)
+      .then((r) => { if (vivo && r?.success) setSugerido(r.data); })
+      .catch(() => { if (vivo) setSugerido(null); });
+    return () => { vivo = false; };
+  }, [projectId, issuerId, docTipo]);
   const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
   const [regimenId, setRegimenId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);

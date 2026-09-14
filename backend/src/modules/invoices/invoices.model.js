@@ -1731,11 +1731,15 @@ export async function marcarEntregada(id, { entregada, userId }) {
 export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
   const y = ano || new Date().getFullYear();
   const { rows: [cfg] } = await query(
-    `SELECT COALESCE(e.serie, p.serie_factura, 'FAC') AS serie
+    // La columna es `factura_serie_default`, NO `serie_factura`. Con el nombre
+    // mal la consulta fallaba, el catch se lo tragaba y devolvia 'FAC': la
+    // pantalla decia «el siguiente disponible es 2026/0001» cuando la serie
+    // CEDIA iba por la 119. Un numero sugerido equivocado es peor que ninguno.
+    `SELECT COALESCE(e.serie, p.factura_serie_default, 'FAC') AS serie
        FROM projects p LEFT JOIN invoice_issuers e ON e.id = $2
       WHERE p.id = $1`,
     [projectId, issuerId]
-  ).catch(() => ({ rows: [] }));
+  );
   const serie = cfg?.serie || 'FAC';
   const { rows: [t] } = await query(
     `SELECT GREATEST(
