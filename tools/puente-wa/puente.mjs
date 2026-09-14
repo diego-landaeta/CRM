@@ -1048,17 +1048,14 @@ async function abrirSocket(s) {
     }).catch(() => {});
   });
 
-  // TEMPORAL — diagnostico de «favoritos» (#138). En WhatsApp normal, marcar un
-  // chat como favorito NO es una etiqueta: es el filtro de la lista. Esto
-  // enseña que evento llega de verdad al hacerlo, para saber si el ticket se
-  // puede cumplir en una cuenta que no sea Business.
-  sock.ev.on('chats.update', (chats) => {
-    if (!vigente()) return;
-    for (const c of chats || []) {
-      const claves = Object.keys(c).filter((k) => k !== 'id');
-      if (claves.length) log(`[${s.nombre}] chats.update ${c.id}: ${claves.join(', ')}`);
-    }
-  });
+  // Lo que se sabe de `chats.update`, por si vuelve a hacer falta:
+  //
+  // En una cuenta NORMAL, marcar un chat como favorito llega por aqui —con la
+  // clave `archived`, `muteEndTime` y companeras— y NO como `labels.association`.
+  // Por eso los favoritos del movil no entran en el CRM: no son etiquetas.
+  // Comprobado el 14/09/2026 con un numero real. No se escucha porque hoy el
+  // CRM no hace nada con ello; para volver a diagnosticar, basta con volver a
+  // suscribirse y sacar las claves de cada cambio por el registro.
 
   sock.ev.on('presence.update', ({ id, presences }) => {
     if (!vigente()) return;
