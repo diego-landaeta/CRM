@@ -685,8 +685,11 @@ export async function generarDeCola(req, res, next) {
     if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId, {
+      forzar: req.body?.forzar === true,
+      // El numero que haya elegido quien factura. Sin el, el siguiente libre.
+      numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+    });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }

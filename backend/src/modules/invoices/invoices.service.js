@@ -760,7 +760,7 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
 // antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
-export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false } = {}) {
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, numero = null } = {}) {
   const cola = await model.listPagosSinFactura(projectId);
   const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
   if (!pg) {
@@ -773,7 +773,7 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
       409, 'HAY_ANTERIORES');
   }
   const inv = await model.emitirFacturaDePago(
-    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar }, userId
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar, numero }, userId
   );
   // Que no diga "generada" si no se genero nada.
   //

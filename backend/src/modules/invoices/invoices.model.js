@@ -833,7 +833,7 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, numero = null }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -968,6 +968,13 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     projectId: conv.project_id,
     conversionId,
     paymentId,
+    // El numero que eligio quien factura desde la cola. Si no dijo nada, va
+    // null y `create` coge el siguiente libre, como siempre.
+    numero,
+    // Esta factura viene de la cola y es de un cobro concreto: el aviso de
+    // «esta venta ya tiene una factura igual» no aplica --justo lo que se hace
+    // es facturar cada cobro por separado-- y bloquearia las cuotas.
+    permitirParecida: true,
     leadId: conv.lead_id,
     clienteNombre: nombreClienteFactura(conv),
     clienteTipo: conv.cliente_tipo || null,
@@ -1735,9 +1742,18 @@ export async function siguienteLibre({ projectId, issuerId = null, ano = null })
     // mal la consulta fallaba, el catch se lo tragaba y devolvia 'FAC': la
     // pantalla decia «el siguiente disponible es 2026/0001» cuando la serie
     // CEDIA iba por la 119. Un numero sugerido equivocado es peor que ninguno.
-    `SELECT COALESCE(e.serie, p.factura_serie_default, 'FAC') AS serie
-       FROM projects p LEFT JOIN invoice_issuers e ON e.id = $2
-      WHERE p.id = $1`,
+    // Si no se ha elegido emisora todavia, se mira la POR DEFECTO del proyecto:
+    // es la que usaria la factura de verdad. Sin esto, la pantalla sugeria la
+    // serie generica del proyecto --«A», numero 1-- cuando esa factura iba a
+    // salir en la serie CEDIA por la 119. Un numero sugerido que no es el que
+    // va a salir engaña mas que ayuda.
+    `SELECT COALESCE(
+              (SELECT e.serie FROM invoice_issuers e WHERE e.id = $2),
+              (SELECT e2.serie FROM invoice_issuers e2
+                WHERE e2.project_id = p.id AND e2.es_default LIMIT 1),
+              (SELECT e3.serie FROM invoice_issuers e3 WHERE e3.id = p.sociedad_emisora_id),
+              p.factura_serie_default, 'FAC') AS serie
+       FROM projects p WHERE p.id = $1`,
     [projectId, issuerId]
   );
   const serie = cfg?.serie || 'FAC';

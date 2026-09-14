@@ -275,7 +275,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       }
       if (inv) {
         if (inv.estado === 'borrador' || invoiceFaltantes(inv).length > 0) { setEmitInv(inv); return; }
-        toast({ title: `✓ Factura ${inv.codigo}`, description: 'Emitida automáticamente al registrar el pago.' });
+        toast({ title: `✓ Factura ${inv.codigo}`, description: 'Esta venta ya tenía factura emitida.' });
         invoicesApi.openPdf(inv.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         finishAndClose();
         return;
@@ -415,7 +415,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           onCreated?.(res.data);
           onClose();
         } else {
-          // Staging (flujo nuevo): ofrecer Presupuesto/Factura + PDF.
+          /* Desde el freno del 14/09 la factura YA NO sale sola: el cobro se
+             queda en la cola de facturacion y alguien la emite poniendo el
+             numero. Quien registra la venta tiene que saber donde ha ido, o
+             se queda esperando una factura que nadie va a emitir.
+
+             Diego: «o hacemos que ponga: conversion creada, revisa cola de
+             factura para emitir». */
+          toast({
+            title: '✓ Conversión creada',
+            description: pagoMode !== 'none'
+              ? 'El cobro está en la cola de facturación. Entra en Facturación para emitir la factura y ponerle número.'
+              : 'Sin cobro registrado, así que no hay nada que facturar todavía.',
+          });
           setCreated(res.data);
           setDocPhase('choose');
         }
