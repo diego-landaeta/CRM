@@ -1019,6 +1019,7 @@ async function abrirSocket(s) {
   // entender dos formas y en produccion solo se probaria una.
   sock.ev.on('labels.edit', (l) => {
     if (!vigente() || !l?.id) return;
+    log(`[${s.nombre}] etiqueta ${l.deleted ? 'borrada' : 'creada/renombrada'}: ${l.id} «${l.name}»`);
     if (l.deleted) s.etiquetas.delete(String(l.id));
     else {
       s.etiquetas.set(String(l.id), {
@@ -1038,11 +1039,25 @@ async function abrirSocket(s) {
   });
 
   sock.ev.on('labels.association', ({ association, type }) => {
-    if (!vigente() || !association?.chatId || association?.labelId == null) return;
+    if (!vigente()) return;
+    log(`[${s.nombre}] etiqueta ${type}: ${association?.labelId} en ${association?.chatId}`);
+    if (!association?.chatId || association?.labelId == null) return;
     s.avisarCRM({
       event: 'labels.association',
       data: { type, chatId: association.chatId, labelId: String(association.labelId) },
     }).catch(() => {});
+  });
+
+  // TEMPORAL — diagnostico de «favoritos» (#138). En WhatsApp normal, marcar un
+  // chat como favorito NO es una etiqueta: es el filtro de la lista. Esto
+  // enseña que evento llega de verdad al hacerlo, para saber si el ticket se
+  // puede cumplir en una cuenta que no sea Business.
+  sock.ev.on('chats.update', (chats) => {
+    if (!vigente()) return;
+    for (const c of chats || []) {
+      const claves = Object.keys(c).filter((k) => k !== 'id');
+      if (claves.length) log(`[${s.nombre}] chats.update ${c.id}: ${claves.join(', ')}`);
+    }
   });
 
   sock.ev.on('presence.update', ({ id, presences }) => {

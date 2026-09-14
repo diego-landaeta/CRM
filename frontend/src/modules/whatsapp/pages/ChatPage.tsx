@@ -739,7 +739,18 @@ export default function ChatPage() {
    * que es lo que no hay que perder— en vez de desaparecer.
    */
   async function enviar(texto: string) {
-    const t = texto.replace(/<[^>]*>/g, '').trim();
+    // Llega TEXTO, no HTML.
+    //
+    // Antes se recibia el innerHTML de la caja y se le quitaban las etiquetas
+    // con una expresion. Dos motivos para no seguir asi:
+    //
+    //   · Desde que mayusculas+enter hace un salto de parrafo, ese salto es un
+    //     `<br>` — y quitarlo dejaba «primera lineasegunda linea», pegadas.
+    //   · La expresion se comia texto de verdad: «3 < 5 > 2» tiene algo que
+    //     parece una etiqueta, y se borraba el trozo de en medio.
+    //
+    // Ahora `onSend` pasa el texto con sus saltos y aqui solo se recorta.
+    const t = texto.trim();
     if (!t || !abierto) return;
 
     // Ni bloquear el teclado ni mandar tres veces lo mismo.
@@ -2123,9 +2134,31 @@ export default function ChatPage() {
                   : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
-                value={borrador}
-                onChange={(_html, texto) => setBorrador(texto)}
-                onSend={enviar} disabled={Boolean(bloqueo)} attachButton
+                /* MAYÚSCULAS + ENTER TIENE QUE HACER UN SALTO DE PÁRRAFO.
+                   Pedido: «necesito poder tocar mayus + enter y que haga un
+                   salto de párrafo sin enviar el mensaje, ahora no lo hace».
+
+                   El kit ya distingue —con Shift no envía— y el salto se
+                   perdía aquí: de los tres valores que devuelve
+                   (html, textContent, innerText) cogíamos el DEL MEDIO, y
+                   `textContent` no conserva los saltos. Como la caja está
+                   controlada, al siguiente render el <br> desaparecía: pulsabas
+                   y no pasaba nada.
+
+                   Ahora se guarda `innerText`, que sí los trae, y al pintar se
+                   vuelven a <br> — en HTML un salto de línea es un espacio, así
+                   que devolver el texto tal cual los borraría otra vez. Se
+                   escapan los signos primero: esto entra como innerHTML y una
+                   plantilla con «<» no puede romper la caja. */
+                value={borrador
+                  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                  .replace(/\n/g, '<br>')}
+                onChange={(_html, _texto, conSaltos) => setBorrador(
+                  (conSaltos ?? '').replace(/\r\n/g, '\n'))}
+                /* El kit manda cuatro cosas y la PRIMERA es el HTML. Se coge
+                   la tercera, que es el texto con los saltos de parrafo. */
+                onSend={(_html, _texto, conSaltos) => enviar(conSaltos ?? '')}
+                disabled={Boolean(bloqueo)} attachButton
                 onAttachClick={() => ficheroRef.current?.click()}
                 sendDisabled={Boolean(bloqueo)} />
             </ChatContainer>
