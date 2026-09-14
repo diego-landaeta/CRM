@@ -8,6 +8,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import Entregables from '../components/Entregables';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -385,6 +386,35 @@ export default function TutoresPage() {
     } finally { setGuardando(false); }
   }
 
+  /** Marcar lo que ha entregado de una formacion. Se guarda al pulsar, sin
+   *  boton de guardar: es una casilla, y pedir confirmacion para una casilla
+   *  sobra. */
+  async function marcarEntregado(
+    c: Colaboracion,
+    cambio: { entregoFoto?: boolean; entregoVideo?: boolean; modulosPct?: number },
+  ) {
+    // Se pinta ya y se corrige si el servidor dice que no: esperar medio segundo
+    // por una casilla se siente roto.
+    const antes = colabs;
+    setColabs((xs) => xs.map((x) => (x.id === c.id ? {
+      ...x,
+      entrego_foto: cambio.entregoFoto ?? x.entrego_foto,
+      entrego_video: cambio.entregoVideo ?? x.entrego_video,
+      modulos_pct: cambio.modulosPct ?? x.modulos_pct,
+    } : x)));
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, cambio);
+      if (!r?.success) throw new Error('no');
+    } catch (err) {
+      setColabs(antes);
+      toast({
+        title: 'No se ha podido marcar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    }
+  }
+
   /** Volver a activar una formacion desactivada, o desactivarla sin borrarla. */
   async function alternarColab(c: Colaboracion) {
     setProcesando(true);
@@ -595,6 +625,7 @@ export default function TutoresPage() {
                         <th className="py-2 px-3 font-semibold">Desde</th>
                         <th className="py-2 px-3 font-semibold">Hasta</th>
                         <th className="py-2 px-3 font-semibold">Estado</th>
+                        <th className="py-2 px-3 font-semibold">Entregado</th>
                         <th className="py-2 pl-3" />
                       </tr>
                     </thead>
@@ -618,6 +649,16 @@ export default function TutoresPage() {
                                 {c.activa ? 'fuera de fecha' : 'desactivada'}
                               </span>
                             )}
+                          </td>
+                          <td className="py-2 px-3">
+                            {/* Marcas, no archivos: aqui se apunta que llego la
+                                foto, el video o los modulos. Se lee igual en la
+                                fila del cobro de Comisiones. */}
+                            <Entregables
+                              valor={c}
+                              ocupado={procesando}
+                              onCambiar={(cambio) => marcarEntregado(c, cambio)}
+                            />
                           </td>
                           <td className="py-2 pl-3 text-right">
                             <div className="inline-flex items-center gap-3">

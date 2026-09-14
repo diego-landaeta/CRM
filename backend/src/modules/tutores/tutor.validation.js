@@ -80,6 +80,12 @@ export const editarColaboracionSchema = z.object({
   hasta: fecha.optional().nullable(),
   activa: z.boolean().optional(),
   notas: z.string().optional().nullable(),
+  // Lo que ha entregado de esa formacion. Son MARCAS, no archivos: el fichero
+  // vive donde viva y aqui solo se apunta que llego. Diego, 14/09.
+  entregoFoto: z.boolean().optional(),
+  entregoVideo: z.boolean().optional(),
+  // Los tramos son excluyentes: nadie esta al 25 y al 50 a la vez.
+  modulosPct: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(100)]).optional(),
 });
 
 export const ajustesSchema = z.object({
