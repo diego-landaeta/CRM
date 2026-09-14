@@ -173,7 +173,11 @@ export default function CommandPalette() {
     setSearching(true);
     try {
       const [leadsRes, productsRes] = await Promise.all([
-        client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(q)}&limit=5`).catch(() => ({ success: false })),
+        // `includeConverted` NO se puede quitar: sin el, /leads añade
+        // `status <> 'convertido'` y la busqueda general esconde a TODO el que
+        // ya compro --justo a quien mas se busca, para cobrar o facturar--.
+        // Diego, 14/09: busco a un cliente por nombre y por correo y no sale.
+        client.get(`/leads?projectId=${activeProject.id}&search=${encodeURIComponent(q)}&limit=5&includeConverted=1`).catch(() => ({ success: false })),
         client.get(`/products?projectId=${activeProject.id}`).catch(() => ({ success: false })),
       ]);
       setLeadResults(leadsRes.success ? (leadsRes.data || []) : []);
@@ -259,11 +263,17 @@ export default function CommandPalette() {
     }
     if (leadResults.length > 0) {
       out.push({
-        label: 'Prospectos',
+        // «Personas» y no «Prospectos»: desde hoy la lista trae tambien a los
+        // que ya compraron, y llamarlos prospectos seria mentir en la etiqueta.
+        label: 'Personas',
         items: leadResults.map((l) => ({
           type: 'lead',
           label: l.nombre,
-          sublabel: l.email || l.telefono || `#${l.id}`,
+          // Quien ya compro se dice, porque ahora si sale en la lista: sin esto
+          // un cliente y un prospecto vivo se leen igual, y no son lo mismo ni
+          // se les escribe igual.
+          sublabel: (l.email || l.telefono || `#${l.id}`)
+            + (l.status === 'convertido' ? ' · cliente' : ''),
           to: `/leads/${l.id}`,
           icon: User,
         })),
