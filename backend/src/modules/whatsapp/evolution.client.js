@@ -36,6 +36,19 @@ const WEBHOOK_PROPIO = process.env.EVOLUTION_WEBHOOK_URL || '';
  */
 export const EVENTOS_QUE_ATENDEMOS = [
   'MESSAGES_UPSERT',
+  // El HISTORIAL entero viene por aqui, y no por `MESSAGES_UPSERT` (#73).
+  //
+  // Esto es lo que hacia que «el ultimo mes» y «todo el historial» no trajeran
+  // NADA en produccion. Al sincronizar, Baileys emite `messaging-history.set` y
+  // Evolution lo reenvia como `messages.set` —comprobado en su codigo, 2.3.7,
+  // `whatsapp.baileys.service.ts`: `sendDataWebhook(Events.MESSAGES_SET, ...)`—.
+  // Sin este evento suscrito, el CRM solo recibia lo que entraba EN VIVO, asi
+  // que las tres opciones de la pantalla acababan haciendo lo mismo.
+  //
+  // En local no se notaba: el puente de Baileys manda su historial como
+  // `messages.upsert`. Es otra vez la trampa de la #63 — lo que se prueba no es
+  // lo que corre. El puente tiene que emitir `messages.set` igual que Evolution.
+  'MESSAGES_SET',
   'MESSAGES_UPDATE',
   'MESSAGES_DELETE',
   'CONTACTS_UPDATE',

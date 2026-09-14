@@ -425,6 +425,9 @@ export async function recibir(cuerpo) {
   // Borrar un mensaje. «Para mi» viaja por aqui; «para todos» llega dentro de
   // un mensaje normal y se atiende mas abajo.
   if (/messages[._]delete/i.test(evento)) return borrado(cuerpo);
+  // El historial que manda el movil al enlazar. Llega en tandas y por su propio
+  // evento, no por `messages.upsert`: ver `historial()`.
+  if (/messages[._]set/i.test(evento)) return historial(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -1193,6 +1196,87 @@ function anotarProgreso(cuerpo) {
   });
   return { progreso: pct };
 }
+
+/**
+ * El historial que manda el movil al enlazar un numero (#73).
+ *
+ * QUE ES. Al elegir «el ultimo mes» o «todo el historial», WhatsApp no manda
+ * esas conversaciones como mensajes nuevos: las vuelca en tandas por un evento
+ * aparte. Baileys lo emite como `messaging-history.set` y Evolution lo reenvia
+ * al webhook como `messages.set`, con un ARRAY de mensajes en `data` — no un
+ * mensaje suelto como en `messages.upsert`.
+ *
+ * Hasta ahora ese evento ni se pedia ni se atendia, asi que en produccion las
+ * tres opciones de la pantalla hacian lo mismo: nada del pasado. En local si
+ * parecia funcionar porque el puente de Baileys manda su historial como
+ * `messages.upsert`.
+ *
+ * POR QUE NO SE ESPERA A GUARDARLO. Evolution **se queda esperando** a que su
+ * aviso conteste antes de seguir con el siguiente: si el CRM tarda, cada aviso
+ * se come su tiempo de espera y la cola entera se para —ya paso, 109 reintentos
+ * en doce minutos y el numero mudo toda la manana—. Una tanda puede traer miles
+ * de mensajes, asi que se contesta al momento y se guardan detras, en una cola
+ * propia, de una tanda en una.
+ *
+ * El recorte del mes va donde ya estaba, mensaje a mensaje (`sobraDelHistorial`),
+ * y no hay que tocar nada mas: `no_leidos` solo sube con lo que llega de los dos
+ * ultimos minutos y `ultimo_at` nunca retrocede, asi que importar un mes viejo
+ * no llena el globo de avisos ni descoloca la lista.
+ */
+let colaDeHistorial = Promise.resolve();
+
+function historial(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+
+  // Cuanto lleva. Evolution lo manda junto a la tanda; el puente, en su propio
+  // evento. Se aceptan los dos sitios para no depender de la forma de uno.
+  const pct = Number(cuerpo?.progress ?? cuerpo?.data?.progress);
+  if (Number.isFinite(pct)) {
+    anotarProgreso({
+      instance: instancia,
+      data: { progress: pct, isLatest: cuerpo?.isLatest ?? cuerpo?.data?.isLatest },
+    });
+  }
+
+  // Dos formas, otra vez: Evolution manda el array pelado en `data` y el puente
+  // lo envuelve en `{ messages: [...] }`. Suponer una sola es el fallo que ya
+  // costo la #63 y la #99.
+  const lista = Array.isArray(cuerpo?.data) ? cuerpo.data
+    : Array.isArray(cuerpo?.data?.messages) ? cuerpo.data.messages
+    : [];
+  if (!lista.length) return { historial: 0 };
+
+  colaDeHistorial = colaDeHistorial.then(() => guardarTanda(cuerpo, lista)).catch(() => {});
+  return { historial: lista.length, encolado: true };
+}
+
+/** Guarda una tanda, uno a uno, por el mismo camino que un mensaje normal. */
+async function guardarTanda(cuerpo, lista) {
+  let guardados = 0;
+  let fuera = 0;
+  for (const m of lista) {
+    try {
+      // Se reusa el camino de siempre a proposito: el historial tiene que pasar
+      // por las mismas reglas —grupos, canales, el recorte del mes, la cita, el
+      // autor del grupo— o acabarian siendo dos formas distintas de guardar un
+      // mensaje, y una de las dos se quedaria atras.
+      const r = await recibir({ ...cuerpo, event: 'messages.upsert', type: undefined, data: m });
+      if (r?.ignorado) fuera += 1; else guardados += 1;
+    } catch (err) {
+      // Un mensaje raro no puede llevarse por delante la tanda entera.
+      fuera += 1;
+      logger.warn({ err: err.message }, 'WhatsApp: un mensaje del historial no se pudo guardar');
+    }
+  }
+  logger.info(
+    { instancia: cuerpo?.instance || cuerpo?.instanceName || null, guardados, fuera },
+    'WhatsApp: tanda de historial'
+  );
+  return { guardados, fuera };
+}
+
+/** Para las pruebas: esperar a que la cola del historial se vacie. */
+export const _historialGuardado = () => colaDeHistorial;
 
 /** El progreso de esta instancia, o null si nadie lo ha mandado. */
 export function progresoDe(instancia) {
