@@ -95,6 +95,16 @@ export interface ChatWhatsapp {
   project_id: number | null;
   /** De que proyecto es el prospecto, si lo tiene. Para decirlo en la lista. */
   proyecto_nombre?: string | null;
+  /**
+   * Las etiquetas que la gestora tiene puestas en SU WhatsApp (#128, #138).
+   *
+   * No confundir con `lead_status`, que es la «etiqueta» del chat en el CRM
+   * (#72): esa la decide el CRM y viaja con la persona. Estas viven en el movil
+   * y las decide ella. Se enseñan las dos.
+   *
+   * Lista vacia mientras la migracion 157 no este aplicada.
+   */
+  etiquetas_wa?: { nombre: string; color: string | null; waId: string }[];
   es_grupo: boolean;
   no_escribir: boolean;
   motivo_no_escribir: string | null;
@@ -493,3 +503,29 @@ export interface UsuarioWhatsapp {
  */
 export const usuariosWhatsapp = (): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
   client.get('/whatsapp/usuarios');
+
+/** Una etiqueta del WhatsApp de la gestora (#128, #138). */
+export interface EtiquetaWhatsapp {
+  id: number;
+  wa_id: string;
+  nombre: string;
+  color: string | null;
+  conversaciones: number;
+}
+
+/**
+ * Las etiquetas de esta sesion.
+ *
+ * Vacio NO es un error: las etiquetas son de WhatsApp Business, asi que una
+ * cuenta personal no tiene ninguna. La pantalla lo trata como «aqui no hay
+ * nada que enseñar» y no pinta el boton.
+ */
+export const etiquetasWhatsapp = (usuarioId?: number | null):
+  Promise<ApiResponse<EtiquetaWhatsapp[]>> =>
+  client.get(`/whatsapp/etiquetas${qs({ usuarioId })}`);
+
+/** Pone o quita una etiqueta en un chat. */
+export const etiquetarChat = (
+  conversacionId: number, waId: string, poner: boolean, usuarioId?: number | null,
+): Promise<ApiResponse<{ waId: string; puesta: boolean }>> =>
+  client.post(`/whatsapp/chats/${conversacionId}/etiqueta${qs({ usuarioId })}`, { waId, poner });

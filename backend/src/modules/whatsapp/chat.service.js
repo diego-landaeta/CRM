@@ -428,6 +428,10 @@ export async function recibir(cuerpo) {
   // El historial que manda el movil al enlazar. Llega en tandas y por su propio
   // evento, no por `messages.upsert`: ver `historial()`.
   if (/messages[._]set/i.test(evento)) return historial(cuerpo);
+  // Las etiquetas de la gestora (#128, #138). Dos avisos: la etiqueta en si, y
+  // ponerla o quitarla de un chat.
+  if (/labels?[._]edit/i.test(evento)) return etiquetaTocada(cuerpo);
+  if (/labels?[._]association/i.test(evento)) return etiquetaEnUnChat(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -1277,6 +1281,59 @@ async function guardarTanda(cuerpo, lista) {
 
 /** Para las pruebas: esperar a que la cola del historial se vacie. */
 export const _historialGuardado = () => colaDeHistorial;
+
+/**
+ * Se creo, se renombro o se borro una etiqueta en el movil (#128, #138).
+ *
+ * El aviso trae `{ id, name, color, deleted?, predefinedId? }`.
+ *
+ * ESTE nombre es el bueno. Evolution guarda en su base el nombre pelado —le
+ * quita todo lo que no sea ASCII imprimible antes de escribirlo, asi que
+ * «Presupuesto ✅» se queda en «Presupuesto » y «Sesión» en «Sesin»— pero manda
+ * el aviso ANTES de pelarlo. Por eso el CRM se queda con el de aqui y no con el
+ * de `findLabels`.
+ */
+async function etiquetaTocada(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || cuerpo?.data?.instance || null;
+  const d = cuerpo?.data || cuerpo;
+  const waId = d?.id ?? d?.labelId;
+  if (!instancia || waId == null) return { ignorado: 'aviso de etiqueta sin id' };
+
+  if (d?.deleted) {
+    await model.marcarEtiquetaBorrada(instancia, waId);
+    return { etiqueta: String(waId), borrada: true };
+  }
+  await model.guardarEtiqueta({
+    instancia,
+    waId,
+    nombre: d?.name ?? d?.nombre ?? `Etiqueta ${waId}`,
+    color: d?.color ?? null,
+  });
+  return { etiqueta: String(waId) };
+}
+
+/**
+ * Se puso o se quito una etiqueta en un chat.
+ *
+ * El aviso trae `{ instance, type: 'add'|'remove', chatId, labelId }`. `chatId`
+ * es el jid entero, que es justo lo que hace falta para encontrar la
+ * conversacion.
+ */
+async function etiquetaEnUnChat(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || cuerpo?.data?.instance || null;
+  const d = cuerpo?.data || cuerpo;
+  const jid = d?.chatId ?? d?.association?.chatId;
+  const waIdEtiqueta = d?.labelId ?? d?.association?.labelId;
+  if (!instancia || !jid || waIdEtiqueta == null) {
+    return { ignorado: 'aviso de asociacion incompleto' };
+  }
+  // El puente manda `type` y Evolution tambien, pero conviene no dar por hecho
+  // que solo hay dos valores: cualquier cosa que no sea «remove» pone, que es
+  // la equivocacion barata —ver una etiqueta de mas se corrige mirando; una de
+  // menos no se nota.
+  const poner = String(d?.type ?? d?.accion ?? 'add').toLowerCase() !== 'remove';
+  return model.asociarEtiqueta({ instancia, jid: String(jid), waIdEtiqueta, poner });
+}
 
 /** El progreso de esta instancia, o null si nadie lo ha mandado. */
 export function progresoDe(instancia) {

@@ -1206,3 +1206,179 @@ export async function corregirTexto(id, texto) {
   );
   return rows[0] || null;
 }
+
+// ── Las etiquetas de WhatsApp (#128, #138) ───────────────────────────────────
+//
+// Son las de la gestora, las que ella ya usa en su movil. NO son las del chat
+// del CRM (#72), que son el estado del prospecto: esas viajan con la persona y
+// las decide el CRM. Se enseñan las dos y ninguna pisa a la otra.
+//
+// Todo esto aguanta que la migracion 157 no este aplicada —la aprueba Diego—:
+// sin ella no hay etiquetas y no pasa nada mas. Un aviso de WhatsApp no puede
+// contestar 500 por una tabla que todavia no esta; Evolution reintentaria en
+// bucle, que es como se paro la cola una manana entera.
+
+const SIN_TABLA = '42P01';
+let avisadoSinEtiquetas = false;
+
+function noHayEtiquetas(err) {
+  if (err?.code !== SIN_TABLA) return false;
+  if (!avisadoSinEtiquetas) {
+    avisadoSinEtiquetas = true;
+    logger.warn('WhatsApp: falta la migracion 157, las etiquetas no se guardan todavia');
+  }
+  return true;
+}
+
+/**
+ * Crea o actualiza una etiqueta. Devuelve su id, o null si no se pudo.
+ *
+ * El nombre viene del aviso y por eso llega entero, con sus acentos y sus
+ * emojis. Ver `evolution.client.js · etiquetas()`.
+ */
+export async function guardarEtiqueta({ instancia, waId, nombre, color }) {
+  try {
+    const { rows } = await query(
+      `INSERT INTO wa_etiquetas (instancia, wa_id, nombre, color)
+            VALUES ($1, $2, $3, $4)
+       ON CONFLICT (instancia, wa_id) DO UPDATE
+          SET nombre = EXCLUDED.nombre,
+              color  = COALESCE(EXCLUDED.color, wa_etiquetas.color),
+              -- Volver a verla es que existe: si estaba dada por borrada y
+              -- reaparece, vuelve.
+              borrada = FALSE,
+              updated_at = NOW()
+      RETURNING id`,
+      [instancia, String(waId), String(nombre || '').slice(0, 160), color ?? null]
+    );
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    if (noHayEtiquetas(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * La etiqueta se borro en el movil.
+ *
+ * Se MARCA, no se borra: quitarla de la tabla se llevaria por delante en que
+ * conversaciones estuvo puesta, y eso es historial de como trabajo la gestora.
+ */
+export async function marcarEtiquetaBorrada(instancia, waId) {
+  try {
+    await query(
+      `UPDATE wa_etiquetas SET borrada = TRUE, updated_at = NOW()
+        WHERE instancia = $1 AND wa_id = $2`,
+      [instancia, String(waId)]
+    );
+    return true;
+  } catch (err) {
+    if (noHayEtiquetas(err)) return false;
+    throw err;
+  }
+}
+
+/**
+ * Pone o quita una etiqueta en una conversacion.
+ *
+ * Si la etiqueta todavia no se conoce se crea sin nombre: el aviso de
+ * asociacion solo trae el id, y el de la etiqueta pudo llegar antes de que
+ * existiera esta tabla o perderse. Mejor una etiqueta sin nombre —que se
+ * completa en cuanto llegue su aviso— que perder que esta puesta.
+ */
+export async function asociarEtiqueta({ instancia, jid, waIdEtiqueta, poner }) {
+  try {
+    const { rows: conv } = await query(
+      `SELECT id FROM wa_conversaciones WHERE instancia = $1 AND jid = $2`,
+      [instancia, jid]
+    );
+    // Sin conversacion no hay donde ponerla. Pasa cuando la etiqueta se pone en
+    // un chat que el CRM no tiene —por ejemplo si se eligio «empezar de cero».
+    if (!conv[0]) return { ignorado: 'esa conversacion no esta en el CRM' };
+
+    // Al QUITARLA no se crea nada: si esa etiqueta no se conoce, es que no
+    // estaba puesta y no hay nada que quitar. Creandola igual quedaria una
+    // etiqueta fantasma, con nombre de relleno y sin un solo chat detras.
+    if (!poner) {
+      const { rows } = await query(
+        `DELETE FROM wa_conversacion_etiquetas ce
+          USING wa_etiquetas e
+          WHERE ce.etiqueta_id = e.id
+            AND ce.conversacion_id = $1
+            AND e.instancia = $2 AND e.wa_id = $3
+       RETURNING ce.conversacion_id`,
+        [conv[0].id, instancia, String(waIdEtiqueta)]
+      );
+      return { conversacionId: conv[0].id, puesta: false, quitada: rows.length > 0 };
+    }
+
+    const { rows: etiq } = await query(
+      `INSERT INTO wa_etiquetas (instancia, wa_id, nombre)
+            VALUES ($1, $2, $3)
+       ON CONFLICT (instancia, wa_id) DO UPDATE SET updated_at = NOW()
+      RETURNING id`,
+      [instancia, String(waIdEtiqueta), `Etiqueta ${waIdEtiqueta}`]
+    );
+
+    await query(
+      `INSERT INTO wa_conversacion_etiquetas (conversacion_id, etiqueta_id)
+            VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [conv[0].id, etiq[0].id]
+    );
+    return { conversacionId: conv[0].id, puesta: true };
+  } catch (err) {
+    if (noHayEtiquetas(err)) return { ignorado: 'falta la migracion 157' };
+    throw err;
+  }
+}
+
+/** Las etiquetas de esta sesion, para ofrecerlas y para filtrar. */
+export async function etiquetasDe(instancia) {
+  try {
+    const { rows } = await query(
+      `SELECT e.id, e.wa_id, e.nombre, e.color,
+              COUNT(ce.conversacion_id)::int AS conversaciones
+         FROM wa_etiquetas e
+         LEFT JOIN wa_conversacion_etiquetas ce ON ce.etiqueta_id = e.id
+        WHERE e.instancia = $1 AND NOT e.borrada
+        GROUP BY e.id
+        ORDER BY e.nombre`,
+      [instancia]
+    );
+    return rows;
+  } catch (err) {
+    if (noHayEtiquetas(err)) return [];
+    throw err;
+  }
+}
+
+/**
+ * Las etiquetas de varias conversaciones de golpe.
+ *
+ * De golpe y no de una en una: la lista pinta 50 conversaciones y preguntar por
+ * cada una son 50 consultas por cada vuelta de una pantalla que se refresca
+ * sola cada cinco segundos.
+ */
+export async function etiquetasDeConversaciones(ids) {
+  if (!Array.isArray(ids) || !ids.length) return new Map();
+  try {
+    const { rows } = await query(
+      `SELECT ce.conversacion_id, e.nombre, e.color, e.wa_id
+         FROM wa_conversacion_etiquetas ce
+         JOIN wa_etiquetas e ON e.id = ce.etiqueta_id AND NOT e.borrada
+        WHERE ce.conversacion_id = ANY($1::int[])
+        ORDER BY e.nombre`,
+      [ids]
+    );
+    const porConv = new Map();
+    for (const r of rows) {
+      if (!porConv.has(r.conversacion_id)) porConv.set(r.conversacion_id, []);
+      porConv.get(r.conversacion_id).push({ nombre: r.nombre, color: r.color, waId: r.wa_id });
+    }
+    return porConv;
+  } catch (err) {
+    if (noHayEtiquetas(err)) return new Map();
+    throw err;
+  }
+}

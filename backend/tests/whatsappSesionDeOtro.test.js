@@ -37,6 +37,10 @@ vi.mock('../src/shared/config/db.js', () => ({
 
 vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   listar: vi.fn(async ({ instancia }) => [{ instancia }]),
+  // Las etiquetas de WhatsApp de esas conversaciones (#128). La lista las pide
+  // en una sola consulta para las 50 filas; aqui no se prueban, pero sin ella
+  // el controlador se cae antes de llegar a lo que SI se prueba.
+  etiquetasDeConversaciones: vi.fn(async () => new Map()),
   porId: vi.fn(), mensajes: vi.fn(), actividad: vi.fn(),
   // Queda escrito quien entra a mirar la sesion de otra persona. Lo que se
   // prueba aqui es QUIEN puede entrar; que se apunte tiene su propio fichero.

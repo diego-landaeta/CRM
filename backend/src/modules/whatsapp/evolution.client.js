@@ -55,6 +55,17 @@ export const EVENTOS_QUE_ATENDEMOS = [
   'CONNECTION_UPDATE',
   'CALL',
   'GROUPS_UPSERT',
+  // Las etiquetas de la gestora (#128, #138). Dos avisos distintos:
+  //
+  //   LABELS_EDIT        se creo, se renombro o se borro una etiqueta.
+  //   LABELS_ASSOCIATION se puso o se quito de un chat.
+  //
+  // Manda el aviso y no `findLabels`: alli el nombre llega PELADO —Evolution le
+  // quita todo lo que no sea ASCII antes de guardarlo— y ademas solo hay algo
+  // si tiene encendido `DATABASE_SAVE_DATA_LABELS`. Por el aviso llega entero y
+  // siempre. Esta escrito con detalle en `157_etiquetas_de_whatsapp.sql`.
+  'LABELS_EDIT',
+  'LABELS_ASSOCIATION',
 ];
 
 /** La instancia de WhatsApp de una persona. */
@@ -601,3 +612,65 @@ export async function editarTexto(numero, { waId, jid, mio = true }, texto, nomb
 
 /** Para las pruebas: volver a empezar sin reiniciar el proceso. */
 export const _reiniciarEdicion = () => { editarNoExiste = false; };
+
+/**
+ * Las etiquetas que tiene la gestora en su WhatsApp (#128, #138).
+ *
+ * Devuelve `[{ waId, nombre, color }]`, o lista vacia si no hay ninguna — que
+ * es lo normal en una cuenta que NO sea WhatsApp Business: las etiquetas son
+ * una funcion suya, y en una cuenta personal no existen.
+ *
+ * DOS COSAS QUE NO SE VEN Y HAY QUE SABER, las dos del codigo de Evolution 2.3.7:
+ *
+ *   · Esto lee de la base de Evolution, que solo se llena si tiene encendido
+ *     `DATABASE_SAVE_DATA_LABELS`. Apagado, devuelve vacio aunque el movil
+ *     tenga veinte etiquetas. Es el mismo tropiezo de los audios, cuando
+ *     `SAVE_DATA_NEW_MESSAGE` iba en false y «Descargar audio» contestaba
+ *     «Message not found».
+ *
+ *   · Ahi el nombre esta PELADO: al guardarlo hace
+ *     `name.replace(/[^\x20-\x7E]/g, '')`, asi que «Presupuesto ✅» se queda en
+ *     «Presupuesto » y «Sesión» en «Sesin». El aviso `labels.edit`, en cambio,
+ *     llega con el nombre entero.
+ *
+ * Por eso esto sirve para la PRIMERA carga y nada mas: manda lo que llega por
+ * el aviso. Ver `157_etiquetas_de_whatsapp.sql`.
+ */
+export async function etiquetas(nombre = INSTANCIA) {
+  const r = await pedir(`/label/findLabels/${nombre}`, { esperaMs: 10000 });
+  if (!r.ok) return [];
+  const lista = Array.isArray(r.datos) ? r.datos : (r.datos?.labels || []);
+  return lista
+    .filter((l) => l && (l.id || l.labelId))
+    .map((l) => ({
+      waId: String(l.id ?? l.labelId),
+      nombre: String(l.name ?? '').trim(),
+      color: l.color == null ? null : String(l.color),
+    }));
+}
+
+/**
+ * Poner o quitar una etiqueta a un chat, desde el CRM.
+ *
+ * `handleLabel` pide el NUMERO, no el jid, y antes comprueba contra WhatsApp
+ * que ese numero existe: con un jid entero contesta «Number not found». Por eso
+ * se manda solo la parte de delante de la arroba y sin nada que no sea cifra.
+ *
+ * Con un grupo NO funciona —no tiene numero— y por eso se para aqui en vez de
+ * mandar una peticion que va a fallar con un mensaje que no explica nada.
+ */
+export async function ponerEtiqueta(jid, waIdEtiqueta, accion = 'add', nombre = INSTANCIA) {
+  const destino = String(jid || '');
+  if (destino.endsWith('@g.us')) {
+    return { ok: false, motivo: 'A un grupo no se le pueden poner etiquetas de WhatsApp.' };
+  }
+  const numero = destino.split('@')[0].replace(/[^0-9]/g, '');
+  if (!numero) return { ok: false, motivo: 'Sin numero al que ponersela.' };
+
+  const r = await pedir(`/label/handleLabel/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { number: numero, labelId: String(waIdEtiqueta), action: accion },
+    esperaMs: 12000,
+  });
+  return { ok: Boolean(r.ok), motivo: r.ok ? null : (r.datos?.message || 'WhatsApp no la acepto.') };
+}

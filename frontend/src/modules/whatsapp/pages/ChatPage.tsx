@@ -22,6 +22,7 @@ import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
+import EtiquetasDelChat from '../components/EtiquetasDelChat';
 import type { DatosParaRellenar } from '../lib/plantilla';
 import { altoDelMarco, rellenoDeAbajo } from '../lib/altoDelMarco';
 import './chat.css';
@@ -1460,6 +1461,25 @@ export default function ChatPage() {
                           {STATUS_LABELS[c.lead_status] || c.lead_status}
                         </span>
                       )}
+                      {/* Las etiquetas que la gestora tiene puestas en SU
+                          WhatsApp (#128, #138). Son otra cosa que el estado de
+                          al lado: ese lo decide el CRM y va con la persona;
+                          estas las puso ella en el móvil. Por eso se pintan
+                          distintas y no se mezclan con la del estado.
+                          Dos como mucho: la fila tiene el ancho que tiene, y
+                          con cinco etiquetas no se leería ni el nombre. */}
+                      {(c.etiquetas_wa || []).slice(0, 2).map((e) => (
+                        <span key={e.waId} className="wa-fila-etiqueta wa-et-whatsapp"
+                          title={`Etiqueta de WhatsApp: ${e.nombre}`}>
+                          {e.nombre}
+                        </span>
+                      ))}
+                      {(c.etiquetas_wa || []).length > 2 && (
+                        <span className="wa-fila-etiqueta wa-et-whatsapp"
+                          title={(c.etiquetas_wa || []).map((e) => e.nombre).join(', ')}>
+                          +{(c.etiquetas_wa || []).length - 2}
+                        </span>
+                      )}
                       <span className="wa-fila-cuando">{cuandoDe(c.ultimo_at)}</span>
                     </div>
                     <div className="wa-fila-adelanto">
@@ -1606,6 +1626,18 @@ export default function ChatPage() {
                         paso los tres van iguales. */}
                     <Info size={17} />
                   </button>
+                  {/* Las etiquetas del WhatsApp de la gestora (#128, #138).
+                      Van aparte del desplegable de estado que hay al lado: ese
+                      es del CRM y va con la persona; estas son de su móvil.
+                      Si esa cuenta no tiene etiquetas —no es Business— el botón
+                      no se pinta, en vez de abrir una lista vacía. */}
+                  <EtiquetasDelChat
+                    conversacionId={conv.id}
+                    puestas={conv.etiquetas_wa || []}
+                    esGrupo={conv.es_grupo}
+                    deQuien={deQuien}
+                    alCambiar={() => { cargarHilo(conv.id); cargarLista(); }}
+                  />
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo cuando hay un numero de verdad al que llamar: a un
                       grupo no se puede, y de quien llega por «@lid» no tenemos

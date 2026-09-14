@@ -162,6 +162,8 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 140 | 140_tipos_de_proyecto.sql | Los tipos de proyecto que faltaban: educacion, ecommerce, servicios, inmobiliaria (#15). Sin ella el CRM no se rompe: los tipos nuevos salen como no disponibles y elegir uno contesta 409 diciendo que falta esta migracion. |
 | 141 | 141_columnas_por_entidad.sql | `client_columns` y `product_columns` en `projects`: la pestaña Columnas servia solo para prospectos (#8). Sin ella la pestaña sigue funcionando para leads y las otras dos salen deshabilitadas. |
 | 144 | 144_registro_tareas.sql | El diario de las tareas programadas, para la pantalla de registro (#111). Sin ella el registro funciona igual: la fuente «Tareas» sale tachada y la pantalla avisa de que falta esta migracion, en vez de enseñar cinco fuentes como si fueran seis. |
+| 156 | 156_usa_whatsapp.sql | La casilla «usa el WhatsApp del CRM», por persona (#128). Nace encendida para quien ya tiene conversaciones y apagada para el resto. Sin ella el CRM se queda EXACTAMENTE como hoy —sale todo el que puede por su rol— y la casilla de la ficha aparece sin poder tocarse, diciendo que falta esta migracion. |
+| 157 | 157_etiquetas_de_whatsapp.sql | Las etiquetas de WhatsApp de cada gestora y en que chats estan puestas (#128, #138). Sin ella no se guarda ninguna: la lista de chats no enseña etiquetas, el boton de la cabecera no se pinta y los avisos de WhatsApp se descartan sin error. Nada mas deja de funcionar. |
 
 > **Comprobado el 04/09/2026 contra el catalogo de las dos bases**, no contra la
 > salida de ningun comando: un `sudo` que pide contraseña devuelve un aviso sin

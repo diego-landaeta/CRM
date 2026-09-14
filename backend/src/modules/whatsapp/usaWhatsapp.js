@@ -34,18 +34,23 @@ const recordado = new Map();
  * depender de una migracion que aprueba otro.
  */
 export async function usaSuWhatsapp(userId) {
+  // La clave, SIEMPRE numero. Aqui llega del testigo de sesion y en `olvidar`
+  // del parametro de una ruta, que es texto: con `7` y `'7'` como claves
+  // distintas, apagar a alguien no se notaria hasta pasado el medio minuto y
+  // desde fuera pareceria que la casilla no guarda.
+  const clave = Number(userId);
   const ahora = Date.now();
-  const guardado = recordado.get(userId);
+  const guardado = recordado.get(clave);
   if (guardado && guardado.hasta > ahora) return guardado.usa;
 
   const { rows } = await query(
     `SELECT COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa
        FROM users u WHERE u.id = $1`,
-    [userId]
+    [clave]
   );
   // Sin fila no se inventa un permiso: si el usuario no existe, no usa nada.
   const usa = rows.length ? rows[0].usa !== false : false;
-  recordado.set(userId, { usa, hasta: ahora + VIVE_MS });
+  recordado.set(clave, { usa, hasta: ahora + VIVE_MS });
   return usa;
 }
 

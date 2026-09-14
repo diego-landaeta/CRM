@@ -441,6 +441,18 @@ function crearSesion(nombre) {
     // los contactos de una persona en la pantalla de otra.
     agenda: new Map(),   // jid -> nombre
     fotos: new Map(),    // jid -> url de la foto de perfil
+    // Las etiquetas de WhatsApp Business (#128, #138).
+    //
+    // Evolution las guarda en su base y las sirve por `/label/findLabels`. Aqui
+    // se guardan en memoria: al reconectar, WhatsApp vuelve a mandar
+    // `labels.edit` de todas en la sincronizacion del estado, asi que se
+    // repueblan solas. Persistirlas seria inventarse un almacen que el original
+    // no tiene y que aqui no hace falta.
+    //
+    // En una cuenta que NO sea Business esto se queda vacio, y es lo correcto:
+    // las etiquetas son una funcion suya. Que aqui saliera algo seria
+    // exactamente el «puente mas generoso» que la #63 prohibe.
+    etiquetas: new Map(), // waId -> { id, name, color, predefinedId }
     // Los adjuntos hay que descifrarlos con el mensaje ORIGINAL, asi que se
     // guarda hasta que el CRM lo pide. El tope es alto a proposito: al
     // emparejar llegan miles de mensajes de historial de golpe, y con un cache
@@ -931,6 +943,35 @@ async function abrirSocket(s) {
     const desde = s.modo === 'rapido' ? Date.now() - RECIENTE_MS : 0;
     let viejos = 0;
 
+    // El historial va como `messages.set`, NO como `messages.upsert`.
+    //
+    // Asi es como lo manda Evolution —reenvia `messaging-history.set` con ese
+    // nombre y un ARRAY de mensajes— y aqui iba mensaje a mensaje como si
+    // fueran nuevos. Esa diferencia es justo la que escondio el fallo del #73
+    // durante semanas: en local el historial entraba y en produccion no, porque
+    // el CRM ni pedia ni atendia `messages.set`. Ya lo atiende; el puente tiene
+    // que mandarselo igual o volvemos a probar una cosa y desplegar otra.
+    //
+    // Se manda por tandas de 25, que es el respiro que ya habia: en una sola
+    // peticion con miles de mensajes, el CRM tardaria en contestar y este
+    // puente se quedaria esperando, que es como se tumbo la conexion la otra
+    // vez.
+    const TANDA = 25;
+    let tanda = [];
+    const soltarTanda = async () => {
+      if (!tanda.length) return;
+      await s.avisarCRM({
+        event: 'messages.set',
+        // Que es historial y no algo que acaba de pasar. El CRM lo usa para
+        // decidir que adjuntos baja ya y cuales pueden esperar.
+        historial: true,
+        data: tanda,
+      });
+      metidos += tanda.length;
+      tanda = [];
+      await new Promise((r) => setTimeout(r, 300));
+    };
+
     for (const m of messages) {
       if (!m.message) continue;
       const bruto = m.key?.remoteJid;
@@ -942,39 +983,68 @@ async function abrirSocket(s) {
       // aviso, y para descifrarlo hace falta el mensaje original.
       const contenido = desenvolver(m.message);
       s.recordar({ ...m, message: contenido });
-      await s.avisarCRM({
-        event: 'messages.upsert',
-        // Que es historial y no algo que acaba de pasar. El CRM lo usa para
-        // decidir que adjuntos baja ya y cuales pueden esperar.
-        historial: true,
-        data: {
-          key: m.key,
-          // En el historial el mensaje no trae nombre: se saca de la agenda.
-          pushName: jid.endsWith('@g.us')
-            ? (s.nombreDeJid(jid) || await s.nombreDeGrupo(jid))
-            : (s.nombreDeJid(jid)
-               || (m.key?.fromMe || esUnNumero(m.pushName) ? null : m.pushName)
-               || null),
-          // La foto solo la primera vez de cada uno: pedirla en cada mensaje
-          // son cientos de llamadas de mas a WhatsApp.
-          avatar: s.fotos.has(jid) ? s.fotos.get(jid) : await s.fotoDe(jid),
-          message: contenido,
-          respondeA: aQueResponde(contenido),
-          messageTimestamp: String(m.messageTimestamp),
-        },
+      tanda.push({
+        key: m.key,
+        // En el historial el mensaje no trae nombre: se saca de la agenda.
+        pushName: jid.endsWith('@g.us')
+          ? (s.nombreDeJid(jid) || await s.nombreDeGrupo(jid))
+          : (s.nombreDeJid(jid)
+             || (m.key?.fromMe || esUnNumero(m.pushName) ? null : m.pushName)
+             || null),
+        // La foto solo la primera vez de cada uno: pedirla en cada mensaje
+        // son cientos de llamadas de mas a WhatsApp.
+        avatar: s.fotos.has(jid) ? s.fotos.get(jid) : await s.fotoDe(jid),
+        message: contenido,
+        respondeA: aQueResponde(contenido),
+        messageTimestamp: String(m.messageTimestamp),
       });
-      metidos++;
-      // Un respiro cada 25. Mandarlos todos seguidos es lo que tumbo la
-      // conexion la vez anterior.
-      if (++desdeLaPausa >= 25) {
+      if (++desdeLaPausa >= TANDA) {
         desdeLaPausa = 0;
-        await new Promise((r) => setTimeout(r, 300));
+        await soltarTanda();
       }
     }
+    await soltarTanda();
     log(`[${s.nombre}]   ${metidos} guardados${viejos ? `, ${viejos} descartados por viejos` : ''}, ${s.fallidos} fallidos`);
   });
 
   // «Escribiendo…» y «grabando audio…» del otro lado.
+  // ── Las etiquetas (#128, #138) ──────────────────────────────────────────
+  //
+  // Existen en Evolution, asi que existen aqui — y con la MISMA forma, que es
+  // donde este puente ya ha enganado dos veces (#63, #99).
+  //
+  // Baileys manda la asociacion como `{ association: {...}, type }` y Evolution
+  // la aplana a `{ chatId, labelId, type }` antes de mandarla al webhook. Se
+  // aplana igual: si aqui llegara la forma cruda, el CRM se escribiria para
+  // entender dos formas y en produccion solo se probaria una.
+  sock.ev.on('labels.edit', (l) => {
+    if (!vigente() || !l?.id) return;
+    if (l.deleted) s.etiquetas.delete(String(l.id));
+    else {
+      s.etiquetas.set(String(l.id), {
+        id: String(l.id),
+        // El nombre va ENTERO. Evolution lo pela al GUARDARLO —le quita lo que
+        // no sea ASCII— pero manda el aviso antes de pelarlo, y el CRM se queda
+        // con el del aviso. Pelarlo aqui seria mentir sobre lo que llega.
+        name: String(l.name ?? ''),
+        color: l.color ?? null,
+        predefinedId: l.predefinedId ?? null,
+      });
+    }
+    s.avisarCRM({
+      event: 'labels.edit',
+      data: { id: String(l.id), name: l.name ?? '', color: l.color ?? null, deleted: Boolean(l.deleted) },
+    }).catch(() => {});
+  });
+
+  sock.ev.on('labels.association', ({ association, type }) => {
+    if (!vigente() || !association?.chatId || association?.labelId == null) return;
+    s.avisarCRM({
+      event: 'labels.association',
+      data: { type, chatId: association.chatId, labelId: String(association.labelId) },
+    }).catch(() => {});
+  });
+
   sock.ev.on('presence.update', ({ id, presences }) => {
     if (!vigente()) return;
     for (const [dequien, p] of Object.entries(presences || {})) {
@@ -1394,6 +1464,52 @@ http.createServer(async (req, res) => {
      * —`s.nombreDeGrupo`, que lo pide y lo guarda— y la foto por la misma via
      * que la de una persona.
      */
+    /**
+     * Las etiquetas de esta sesion (#128, #138).
+     *
+     * Existe en Evolution —`/label/findLabels/{instancia}`— asi que existe
+     * aqui, y devuelve lo mismo: la lista pelada de `{ id, name, color,
+     * predefinedId }`.
+     *
+     * En una cuenta que no sea WhatsApp Business sale vacia, igual que alli.
+     */
+    if (url.startsWith('/label/findLabels/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      return json(200, [...s2.etiquetas.values()]);
+    }
+
+    /**
+     * Poner o quitar una etiqueta a un chat.
+     *
+     * Como Evolution: pide `{ number, labelId, action }` —el NUMERO, no el
+     * jid—, comprueba antes que ese numero existe en WhatsApp y contesta 404 si
+     * no. Si esto aceptara un jid, en local funcionaria y en produccion no.
+     */
+    if (url.startsWith('/label/handleLabel/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      if (s2.estado !== 'open') return json(503, { error: 'sin sesion de WhatsApp' });
+      const cuerpo = await leerCuerpo(req);
+      const limpio = String(cuerpo?.number || '').replace(/[^0-9]/g, '');
+      const etiqueta = cuerpo?.labelId == null ? null : String(cuerpo.labelId);
+      const accion = cuerpo?.action;
+      if (!limpio || !etiqueta || !['add', 'remove'].includes(accion)) {
+        return json(400, { error: 'falta number, labelId o action' });
+      }
+      let contacto = null;
+      try { [contacto] = await s2.sock.onWhatsApp(limpio) || []; } catch { contacto = null; }
+      if (!contacto?.exists) return json(404, { message: 'Number is not on WhatsApp' });
+      try {
+        if (accion === 'add') await s2.sock.addChatLabel(contacto.jid, etiqueta);
+        else await s2.sock.removeChatLabel(contacto.jid, etiqueta);
+      } catch (e) {
+        return json(400, { message: `Unable to ${accion} label to chat`, error: e.message });
+      }
+      log(`[${s2.nombre}] etiqueta ${etiqueta} ${accion === 'add' ? '+' : '-'} ${contacto.jid}`);
+      return json(200, accion === 'add'
+        ? { numberJid: contacto.jid, labelId: etiqueta, add: true }
+        : { numberJid: contacto.jid, labelId: etiqueta, remove: true });
+    }
+
     if (url.startsWith('/group/findGroupInfos/')) {
       const s2 = sesionDe(instanciaDeUrl(url.split('?')[0]));
       const jid = new URL(url, 'http://x').searchParams.get('groupJid');

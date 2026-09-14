@@ -210,7 +210,7 @@ export async function bancoNumeros(req, res, next) {
 // GET /api/whatsapp/chats?projectId=N
 export async function chats(req, res, next) {
   try {
-    res.json({ success: true, data: await model.listar({
+    const lista = await model.listar({
       instancia: await instanciaObjetivo(req),
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       limite: parseInt(req.query.limite) || 50,
@@ -219,8 +219,73 @@ export async function chats(req, res, next) {
       busca: req.query.busca || null,
       // La «etiqueta»: el estado del prospecto (#72).
       estado: req.query.estado || null,
-    })});
+    });
+
+    // Y las etiquetas de WhatsApp, las de la gestora (#128, #138).
+    //
+    // Son OTRA cosa que el estado de arriba: esas las decide el CRM y viajan
+    // con la persona; estas las puso ella en su movil. Se enseñan las dos.
+    //
+    // En una consulta para las 50, no una por fila: esta pantalla se refresca
+    // sola cada cinco segundos.
+    const etiquetas = await model.etiquetasDeConversaciones(lista.map((c) => c.id));
+    res.json({
+      success: true,
+      data: lista.map((c) => ({ ...c, etiquetas_wa: etiquetas.get(c.id) || [] })),
+    });
   } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/etiquetas — las etiquetas de esta sesion.
+ *
+ * De paso, y como mucho una vez cada cuarto de hora, se las pide a Evolution
+ * para la primera carga: las que ya existian en el movil antes de que el CRM
+ * supiera de ellas no tienen aviso que las traiga, porque el aviso solo salta
+ * cuando se TOCAN.
+ *
+ * Nunca pisa el nombre que ya haya: el de Evolution viene pelado —sin acentos
+ * ni emojis— y el del aviso viene entero.
+ */
+export async function etiquetasDeWhatsapp(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    await primeraCargaDeEtiquetas(instancia).catch(() => {});
+    res.json({ success: true, data: await model.etiquetasDe(instancia) });
+  } catch (err) { next(err); }
+}
+
+const etiquetasRevisadas = new Map();
+
+async function primeraCargaDeEtiquetas(instancia) {
+  const ultima = etiquetasRevisadas.get(instancia) || 0;
+  if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
+  etiquetasRevisadas.set(instancia, Date.now());
+  if (!evolution.configurado()) return;
+
+  const suyas = await evolution.etiquetas(instancia);
+  if (!suyas.length) return;
+
+  // Las que ya se conocen, con el nombre que tengan.
+  const conocidas = new Map(
+    (await model.etiquetasDe(instancia)).map((e) => [String(e.wa_id), e.nombre])
+  );
+  for (const e of suyas) {
+    const actual = conocidas.get(e.waId);
+    // Las conocidas NO se pisan: el nombre que hay vino del aviso y esta
+    // entero; el de aqui llega pelado por Evolution —sin acentos ni emojis—.
+    //
+    // La excepcion es el nombre de relleno. Cuando una etiqueta se ve por
+    // primera vez al PONERLA en un chat, el aviso de asociacion solo trae el
+    // id, asi que se guarda como «Etiqueta 12» a la espera de saber como se
+    // llama. Sin esta linea se quedaria asi para siempre —el aviso que trae el
+    // nombre ya paso— y en la lista de chats se leerian numeros.
+    const esDeRelleno = actual === `Etiqueta ${e.waId}`;
+    if (actual !== undefined && !esDeRelleno) continue;
+    if (!e.nombre) continue;
+    await model.guardarEtiqueta({ instancia, waId: e.waId, nombre: e.nombre, color: e.color });
+  }
+  logger.info({ instancia, traidas: suyas.length }, 'WhatsApp: etiquetas de la sesion, primera carga');
 }
 
 // GET /api/whatsapp/chats/:id
@@ -285,7 +350,14 @@ export async function chat(req, res, next) {
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
     await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
-    res.json({ success: true, data: { conversacion: { ...conv, participantes, miembros }, mensajes: msgs, escribiendo } });
+    // Las etiquetas de WhatsApp tambien al abrir el chat (#128): la cabecera
+    // las enseña y deja quitarlas, y el objeto de la lista no llega hasta aqui.
+    const susEtiquetas = (await model.etiquetasDeConversaciones([conv.id])).get(conv.id) || [];
+    res.json({ success: true, data: {
+      conversacion: { ...conv, participantes, miembros, etiquetas_wa: susEtiquetas },
+      mensajes: msgs,
+      escribiendo,
+    } });
   } catch (err) { next(err); }
 }
 
@@ -508,6 +580,36 @@ export async function noEscribir(req, res, next) {
     const conv = await miConversacion(req, parseInt(req.params.id));
     await model.noEscribir(conv.id, req.body?.motivo);
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/whatsapp/chats/:id/etiqueta — poner o quitar una etiqueta (#128).
+ *
+ * La otra mitad del ticket: «poder extraer las etiquetas de WhatsApp y nosotros
+ * poner etiquetas». Extraerlas llega por los avisos; ponerlas va por aqui.
+ *
+ * Se guarda en el CRM ADEMAS de mandarlo a WhatsApp, sin esperar al eco: quien
+ * hace el cambio es esta misma sesion, y WhatsApp no se lo reenvia a si mismo.
+ * Esperando el aviso, la etiqueta que acabas de poner tardaria en verse o no
+ * llegaria nunca.
+ *
+ * Y se manda PRIMERO a WhatsApp: si se guardara antes, un fallo alli dejaria al
+ * CRM diciendo que la etiqueta esta puesta cuando en el movil no lo esta.
+ */
+export async function etiquetarChat(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const waId = String(req.body?.waId ?? '').trim();
+    if (!waId) throw new AppError('Falta la etiqueta', 400, 'FALTA_ETIQUETA');
+    const poner = req.body?.poner !== false;
+
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.ponerEtiqueta(conv.jid, waId, poner ? 'add' : 'remove', instancia);
+    if (!r.ok) throw new AppError(r.motivo || 'WhatsApp no acepto la etiqueta', 400, 'ETIQUETA_RECHAZADA');
+
+    await model.asociarEtiqueta({ instancia, jid: conv.jid, waIdEtiqueta: waId, poner });
+    res.json({ success: true, data: { waId, puesta: poner } });
   } catch (err) { next(err); }
 }
 
