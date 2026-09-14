@@ -526,6 +526,19 @@ export async function recibir(cuerpo) {
     cuando,
   });
 
+  // Si esta conversacion acaba de nacer, puede haber etiquetas esperandola.
+  //
+  // Al enlazar, WhatsApp manda las etiquetas ANTES que los mensajes: cuando
+  // llega «la etiqueta 12 va en el chat de Marta», ese chat todavia no existe
+  // aqui. Se guardaron aparte (migracion 158) y este es el momento de ponerlas.
+  //
+  // Suelto y solo al nacer: en cada mensaje seria una consulta de mas por cada
+  // uno de los miles que entran al emparejar.
+  if (conv?.recien_creada) {
+    model.aplicarEtiquetasPendientes?.({ instancia, jid: key.remoteJid })
+      ?.catch(() => { /* ya se registra dentro */ });
+  }
+
   // La foto de perfil, UNA vez por conversacion y sin bloquear.
   //
   // Evolution la manda en `contacts.update`, pero eso solo llega cuando cambia:

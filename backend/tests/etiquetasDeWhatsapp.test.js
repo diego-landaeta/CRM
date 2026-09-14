@@ -12,8 +12,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // tal como llegan, sin mezclarlas con lo suyo.
 
 const guardarEtiqueta = vi.fn(async () => 1);
+const conversacionDe = vi.fn(async () => ({ id: 7, lead_id: null, avatar_url: null, nombre: 'Marta' }));
 const marcarEtiquetaBorrada = vi.fn(async () => true);
 const asociarEtiqueta = vi.fn(async () => ({ conversacionId: 7, puesta: true }));
+const aplicarEtiquetasPendientes = vi.fn(async () => 1);
 
 // La casilla del #128 se pregunta a la base al abrir la sesion propia: si
 // contesta vacio, el controlador niega el paso antes de llegar a la etiqueta.
@@ -24,7 +26,8 @@ vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   guardarEtiqueta: (...a) => guardarEtiqueta(...a),
   marcarEtiquetaBorrada: (...a) => marcarEtiquetaBorrada(...a),
   asociarEtiqueta: (...a) => asociarEtiqueta(...a),
-  conversacionDe: vi.fn(async () => ({ id: 7 })),
+  aplicarEtiquetasPendientes: (...a) => aplicarEtiquetasPendientes(...a),
+  conversacionDe: (...a) => conversacionDe(...a),
   guardarMensaje: vi.fn(async () => ({ id: 1, ts: new Date() })),
   actualizarAvatar: vi.fn(), actualizarEstado: vi.fn(), apuntarInteraccion: vi.fn(),
   corregirTexto: vi.fn(), datosDeGrupo: vi.fn(), hayConversaciones: vi.fn(async () => true),
@@ -149,3 +152,67 @@ describe('poner una etiqueta desde el CRM', () => {
   });
 });
 
+
+// ── Cuando la etiqueta llega antes que el chat (cuentas Business) ────────────
+//
+// Al enlazar, WhatsApp manda la sincronizacion del estado —las etiquetas y en
+// que chat esta cada una— ANTES del historial, que es lo que crea las
+// conversaciones. Con una cuenta de Business eso significa que toda la
+// clasificacion de la gestora llega antes de que exista un solo chat.
+//
+// Antes se tiraba con un «esa conversacion no esta en el CRM». Y no hay segunda
+// oportunidad: el aviso no se repite, y Evolution 2.3.7 guarda las etiquetas de
+// cada chat en su base pero NO las devuelve por ningun endpoint —`findLabels`
+// da el catalogo y `findChats` no incluye esa columna—. Lo que se tira, se
+// pierde para siempre.
+
+describe('la etiqueta que llega antes que su conversacion', () => {
+  it('no se tira: se queda esperando', async () => {
+    // `asociarEtiqueta` simulado devuelve lo que devolveria el de verdad cuando
+    // no encuentra la conversacion.
+    asociarEtiqueta.mockResolvedValueOnce({ pendiente: true, jid: '34600111222@s.whatsapp.net' });
+    const r = await servicio.recibir({
+      event: 'labels.association', instance: 'crm-u4',
+      data: { type: 'add', chatId: '34600111222@s.whatsapp.net', labelId: '31' },
+    });
+    expect(r.pendiente).toBe(true);
+    expect(r.ignorado).toBeUndefined();
+  });
+
+  it('al nacer la conversacion se miran las que esperaban', async () => {
+    // Solo al NACER, no en cada mensaje: al enlazar entran miles y una consulta
+    // de mas por cada uno se nota.
+    conversacionDe.mockResolvedValueOnce({
+      id: 7, lead_id: null, avatar_url: null, nombre: 'Marta', recien_creada: true,
+    });
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: { id: 'N1', remoteJid: '34600111222@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'hola' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(aplicarEtiquetasPendientes).toHaveBeenCalledWith(
+      expect.objectContaining({ instancia: 'crm-u4', jid: '34600111222@s.whatsapp.net' })
+    );
+  });
+
+  it('en una conversacion que YA existia no se pregunta', async () => {
+    aplicarEtiquetasPendientes.mockClear();
+    conversacionDe.mockResolvedValueOnce({
+      id: 7, lead_id: null, avatar_url: null, nombre: 'Marta', recien_creada: false,
+    });
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: { id: 'N2', remoteJid: '34600111222@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'otra' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(aplicarEtiquetasPendientes).not.toHaveBeenCalled();
+  });
+});

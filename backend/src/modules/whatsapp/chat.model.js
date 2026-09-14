@@ -143,7 +143,13 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
            ultimo_at   = GREATEST(
                            COALESCE(wa_conversaciones.ultimo_at, COALESCE($8::timestamptz, NOW())),
                            COALESCE($8::timestamptz, NOW()))
-     RETURNING *`,
+     -- xmax = 0 distingue un alta de una actualizacion en un upsert. Hace falta
+     -- para saber si esta conversacion ACABA de nacer y hay etiquetas
+     -- esperandola (migracion 158). Preguntarlo aparte seria una consulta mas
+     -- por cada mensaje que entra.
+     -- (Sin comillas invertidas aqui: esto va en una plantilla de texto de
+     --  JavaScript y cerrarian la cadena.)
+     RETURNING *, (xmax = 0) AS recien_creada`,
     [instancia, jid, telefono, nombrePush || null, avatarUrl || null,
      lead?.id || null, lead?.project_id || null, cuando || null]
   );
@@ -1334,9 +1340,14 @@ export async function asociarEtiqueta({ instancia, jid, waIdEtiqueta, poner }) {
       `SELECT id FROM wa_conversaciones WHERE instancia = $1 AND jid = $2`,
       [instancia, jid]
     );
-    // Sin conversacion no hay donde ponerla. Pasa cuando la etiqueta se pone en
-    // un chat que el CRM no tiene —por ejemplo si se eligio «empezar de cero».
-    if (!conv[0]) return { ignorado: 'esa conversacion no esta en el CRM' };
+    // Sin conversacion todavia no hay donde ponerla — PERO NO SE TIRA.
+    //
+    // Al enlazar, las etiquetas llegan antes que el historial: cuando entra «la
+    // etiqueta 12 va en el chat de Marta», ese chat aun no existe aqui. El
+    // aviso no se repite y Evolution no deja preguntar por las asociaciones, asi
+    // que descartarlo perdia la clasificacion entera de la gestora, en silencio.
+    // Se guarda y se aplica cuando su conversacion aparezca. Migracion 158.
+    if (!conv[0]) return guardarEtiquetaPendiente({ instancia, jid, waIdEtiqueta, poner });
 
     // Al QUITARLA no se crea nada: si esa etiqueta no se conoce, es que no
     // estaba puesta y no hay nada que quitar. Creandola igual quedaria una
@@ -1464,6 +1475,62 @@ export async function etiquetasDeLead(leadId, { instancias = null } = {}) {
     return rows.map((r) => ({ waId: r.wa_id, nombre: r.nombre, color: r.color, instancia: r.instancia }));
   } catch (err) {
     if (noHayEtiquetas(err)) return [];
+    throw err;
+  }
+}
+
+/**
+ * Una etiqueta que llego ANTES que su conversacion (migracion 158).
+ *
+ * No es un caso raro: al enlazar, WhatsApp manda la sincronizacion del estado
+ * —donde van las etiquetas y donde esta puesta cada una— ANTES del historial,
+ * que es lo que crea las conversaciones aqui. Con una cuenta de Business eso
+ * significa que TODA la clasificacion de la gestora llega antes de que exista un
+ * solo chat.
+ *
+ * Y no hay segunda oportunidad: el aviso no se repite, y Evolution 2.3.7 guarda
+ * las etiquetas de cada chat en su base pero no las devuelve por ningun
+ * endpoint. Si se tira, se pierde.
+ */
+async function guardarEtiquetaPendiente({ instancia, jid, waIdEtiqueta, poner }) {
+  await query(
+    `INSERT INTO wa_etiquetas_pendientes (instancia, jid, wa_id, poner)
+          VALUES ($1, $2, $3, $4)
+     ON CONFLICT (instancia, jid, wa_id) DO UPDATE
+        SET poner = EXCLUDED.poner, creada_at = NOW()`,
+    [instancia, jid, String(waIdEtiqueta), Boolean(poner)]
+  );
+  return { pendiente: true, jid, waIdEtiqueta: String(waIdEtiqueta) };
+}
+
+/**
+ * Aplica lo que estaba esperando a esta conversacion, y lo borra.
+ *
+ * Se llama SOLO cuando la conversacion acaba de nacer —`recien_creada`—, no en
+ * cada mensaje: esta pantalla mueve miles de mensajes al enlazar y una consulta
+ * de mas por cada uno se nota.
+ *
+ * Devuelve cuantas se aplicaron, para poder decirlo en el registro: una gestora
+ * que enlaza y ve sus etiquetas puestas solas no tiene por que entender por que,
+ * pero quien mire el log el dia que falten, si.
+ */
+export async function aplicarEtiquetasPendientes({ instancia, jid }) {
+  try {
+    const { rows } = await query(
+      `DELETE FROM wa_etiquetas_pendientes
+        WHERE instancia = $1 AND jid = $2
+    RETURNING wa_id, poner`,
+      [instancia, jid]
+    );
+    if (!rows.length) return 0;
+    for (const r of rows) {
+      await asociarEtiqueta({ instancia, jid, waIdEtiqueta: r.wa_id, poner: r.poner });
+    }
+    logger.info({ instancia, jid, cuantas: rows.length },
+      'WhatsApp: etiquetas que esperaban a esta conversacion, aplicadas');
+    return rows.length;
+  } catch (err) {
+    if (noHayEtiquetas(err)) return 0;
     throw err;
   }
 }
