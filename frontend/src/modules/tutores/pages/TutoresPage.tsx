@@ -9,6 +9,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import Entregables from '../components/Entregables';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -44,13 +45,20 @@ function generarContrasena() {
 
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject, projects, activeIssuerId } = useProjectContext() as {
+  const { activeProject, projects, activeIssuer, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
     activeIssuerId: number | null;
     projects: Array<{ id: number; nombre: string }>;
   };
+  // Los campus de la empresa. Dar de alta o asignar un curso necesita UNO
+  // concreto --hay que saber en cual entra y de que catalogo sale el curso--,
+  // pero eso no obliga a cambiar el selector de arriba: se elige aqui, y solo
+  // entre los suyos. Diego, 14/09: «puse empresa y tuve que entrar a un campus
+  // si o si».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
   // lee siempre: quien lleva las colaboraciones trabaja con la plantilla
   // entera, y cada fila dice de qué marca es.
@@ -58,6 +66,8 @@ export default function TutoresPage() {
   // Dar de alta a alguien o asignarle un curso SÍ necesita un proyecto
   // concreto: hay que saber en cuál se le da de alta y de qué catálogo sale el
   // curso. Eso se apaga, no se tapia la pantalla entera.
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  const projectId = proyectoFijado ?? soloCampus;
   const puedeAlta = Boolean(projectId);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
@@ -494,15 +504,30 @@ export default function TutoresPage() {
         subtitle={cargando
           ? 'cargando…'
           : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'}`
+            + (activeIssuer && !proyectoFijado ? ` de ${activeIssuer.nombre}` : '')
             + ' · cobran un porcentaje de lo que se cobra de sus formaciones'
-            + (puedeAlta ? '' : ' · elige un proyecto para dar de alta a alguien')}
+            + (puedeAlta ? '' : ' · elige un campus para dar de alta o asignar cursos')}
         actions={(
-          // Dar de alta necesita saber EN QUE proyecto: se apaga el boton y se
-          // dice por que, en vez de tapiar la pantalla entera como antes.
-          <Button onClick={abrirAlta} disabled={!puedeAlta}
-            title={puedeAlta ? undefined : 'Elige un proyecto concreto para dar de alta a alguien'}>
-            <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* El campus, dentro de la empresa. Dar de alta o asignar un curso
+                necesita uno concreto —hay que saber en cuál entra y de qué
+                catálogo sale el curso—, pero se elige AQUÍ y solo entre los
+                suyos, sin tocar el selector de arriba. */}
+            {activeIssuer && !proyectoFijado && campus.length > 0 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label={`Campus de ${activeIssuer.nombre}`}
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus (solo ver)</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
+            <Button onClick={abrirAlta} disabled={!puedeAlta}
+              title={puedeAlta ? undefined : 'Elige un campus para dar de alta a alguien'}>
+              <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
+            </Button>
+          </div>
         )}
       />
 

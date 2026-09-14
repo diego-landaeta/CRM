@@ -9,6 +9,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -52,10 +53,24 @@ function mesLegible(p: string) {
 
 export default function ComisionesTutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
+  // Los campus de la empresa elegida, para poder bajar a uno sin cambiar el
+  // selector de arriba. Diego, 14/09: «puse empresa y tuve que entrar a un
+  // campus si o si; tenemos que poder generar y filtrar por campus».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuerId, activeProject?.id]);
   const esAdmin = ['admin', 'superadmin'].includes(user?.role || '');
   const puede = esAdmin || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const projectId = elegido ?? soloCampus;
+  // Con la empresa puesta y sin campus concreto, el servidor traduce `issuerId`
+  // a sus campus. Si hay uno elegido manda el proyecto y la empresa sobra.
+  const issuerId = !projectId ? activeIssuerId : null;
 
   const [periodo, setPeriodo] = useState(mesActual());
   const [resumen, setResumen] = useState<ResumenComision[]>([]);
@@ -73,17 +88,17 @@ export default function ComisionesTutoresPage() {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
       const [r, l, a, sf] = await Promise.all([
-        tutoresApi.resumenComisiones({ periodo, projectId }),
-        tutoresApi.comisiones({ periodo, projectId }),
+        tutoresApi.resumenComisiones({ periodo, projectId, issuerId }),
+        tutoresApi.comisiones({ periodo, projectId, issuerId }),
         tutoresApi.ajustes(),
-        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId),
+        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId, issuerId),
       ]);
       setResumen(r.success ? (r.data || []) : []);
       setLineas(l.success ? (l.data || []) : []);
       setAjustes(a.success ? a.data : null);
       setSinFormacion(sf.success ? (sf.data || []) : []);
     } finally { setCargando(false); }
-  }, [periodo, projectId]);
+  }, [periodo, projectId, issuerId]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -99,7 +114,11 @@ export default function ComisionesTutoresPage() {
     try {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
-      const r = await tutoresApi.calcularComisiones({ desde: `${periodo}-01`, hasta: finDeMes, projectId });
+      // Calcular con la empresa puesta: sus campus de una vez.
+      const r = await tutoresApi.calcularComisiones({
+        desde: `${periodo}-01`, hasta: finDeMes, projectId,
+        projectIds: !projectId && activeIssuerId ? campus.map((c) => c.id) : null,
+      });
       if (!r.success) throw new Error(r.error || 'no se pudo');
       toast({
         title: r.data!.creadas > 0 ? `${r.data!.creadas} comisiones nuevas` : 'Nada nuevo que calcular',
@@ -178,10 +197,24 @@ export default function ComisionesTutoresPage() {
       <PageHeader
         title="Comisiones de tutores"
         subtitle={projectId
-          ? `${mesLegible(periodo)} · ${activeProject?.nombre || 'este proyecto'}`
+          ? `${mesLegible(periodo)} · ${elegido ? (activeProject?.nombre || 'este proyecto') : (campus.find((c) => c.id === projectId)?.nombre || 'este campus')}`
+          : activeIssuer
+          ? `${mesLegible(periodo)} · los ${campus.length} campus de ${activeIssuer.nombre}`
           : `${mesLegible(periodo)} · todos los proyectos`}
         actions={(
           <>
+            {/* El campus, dentro de la empresa. Sin esto habia que cambiar el
+                selector de arriba para mirar uno solo. */}
+            {activeIssuer && !elegido && campus.length > 1 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label="Filtrar por campus"
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
             <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
             <Button variant="outline" size="sm" onClick={calcular} disabled={trabajando}>
