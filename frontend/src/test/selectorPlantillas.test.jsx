@@ -68,7 +68,12 @@ describe('elegir una plantilla desde el chat', () => {
     montar({ alElegir, alCerrar });
     await waitFor(() => expect(screen.getByText('Primer contacto')).toBeTruthy());
     fireEvent.click(screen.getByText('Primer contacto'));
-    expect(alElegir).toHaveBeenCalledWith('Hola Marta, te escribo por Máster en Logopedia.');
+    // El primer argumento es el texto ya relleno. Detrás va la plantilla
+    // entera, que el chat necesita para saber si pide adjunto: se comprueba el
+    // texto y no la llamada exacta, que es lo que dejó esta prueba en rojo
+    // cuando se añadió el segundo argumento.
+    expect(alElegir).toHaveBeenCalled();
+    expect(alElegir.mock.calls[0][0]).toBe('Hola Marta, te escribo por Máster en Logopedia.');
     expect(alCerrar).toHaveBeenCalled();
   });
 

@@ -1978,7 +1978,17 @@ export default function ChatPage() {
                             if (!r.success) return;
                             const p = r.data.prospecto;
                             setDatosPlantilla(p
-                              ? { nombre: p.nombre, email: p.email, telefono: p.telefono, producto: p.producto }
+                              ? {
+                                nombre: p.nombre, email: p.email, telefono: p.telefono,
+                                producto: p.producto,
+                                // Los de su formación (#129). Las plazas se
+                                // cuentan AHORA, al abrir el selector: el
+                                // documento comercial dice que no se arrastre
+                                // nunca el dato del mensaje anterior.
+                                plazas: p.plazas_libres,
+                                cierre: p.fecha_cierre_convocatoria,
+                                inicio: p.fecha_inicio_texto,
+                              }
                               : { telefono: r.data.telefono, nombre: r.data.nombre });
                           })
                           .catch(() => setDatosPlantilla({}));

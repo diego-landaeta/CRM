@@ -242,6 +242,22 @@ export interface FichaProspecto {
   proyecto: string | null;
   responsable: string | null;
   producto: string | null;
+  /**
+   * Los datos de su formación, para rellenar plantillas sin salir del chat
+   * (#129).
+   *
+   * `plazas_libres` se cuenta con el mismo SQL que el catálogo y la cola del
+   * día, y viene calculada en el momento: el documento comercial dice que el
+   * número de plazas «se comprueba antes de cada envío y nunca se arrastra del
+   * mensaje anterior». Puede ser negativa —convocatoria sobrevendida— y quien
+   * la pinta de cara al cliente es el que corta en cero.
+   *
+   * Null cuando esa formación no lleva cuenta de plazas, o cuando el prospecto
+   * no tiene producto de interés.
+   */
+  plazas_libres?: number | null;
+  fecha_cierre_convocatoria?: string | null;
+  fecha_inicio_texto?: string | null;
 }
 
 export interface InteraccionProspecto {

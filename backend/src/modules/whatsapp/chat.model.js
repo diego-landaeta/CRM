@@ -1,5 +1,9 @@
 import { query } from '../../shared/config/db.js';
 import { seAceptanGrupos } from './politica.js';
+// Las plazas se cuentan en UN solo sitio, el mismo que el catalogo y la cola
+// del dia: si cada pantalla las calcula a su manera, se le acaba mandando al
+// cliente el numero de la que la gestora tuviera mas a mano.
+import { PLAZAS_JOIN, PLAZAS_COLS } from '../products/plazas.sql.js';
 import { normalizePhone, phoneCanonical } from '../../shared/utils/normalizePhone.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -652,17 +656,34 @@ export async function mensajes(conversacionId, limite = 100) {
  * de una conversacion que no existe.
  */
 export async function fichaDeConversacion(conversacionId) {
+  // Los alias cambian: `products` pasa a ser `p` y `projects` a `pj`.
+  //
+  // No es capricho. `PLAZAS_JOIN` y `PLAZAS_COLS` estan escritos contra el alias
+  // `p` de products, y son los MISMOS que usan el catalogo y la cola del dia. El
+  // documento comercial es tajante con esto: «el n.º de plazas disponibles va en
+  // todas las plantillas y se comprueba antes de cada envio». Si aqui se contara
+  // a mano, el numero que se le manda al cliente seria el de la pantalla que la
+  // gestora tuviera mas a mano.
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.notas,
             l.fecha_solicitud, l.created_at, l.reincidente, l.lead_duplicado_de,
-            p.nombre  AS proyecto,
+            pj.nombre AS proyecto,
             u.nombre  AS responsable,
-            pr.nombre AS producto
+            p.nombre  AS producto,
+            -- Lo que hace falta para rellenar una plantilla sin salir del chat
+            -- (#129). fecha_inicio_texto llego de WordPress como «marzo 2026» y
+            -- se manda tal cual: es lo que dice la web.
+            -- (Sin comillas invertidas aqui dentro: esto va en una plantilla de
+            --  texto de JavaScript y cerrarian la cadena.)
+            p.fecha_inicio_texto,
+            p.fecha_cierre_convocatoria,
+            ${PLAZAS_COLS}
        FROM wa_conversaciones c
        JOIN leads l          ON l.id = c.lead_id AND l.deleted_at IS NULL
-       LEFT JOIN projects p  ON p.id = l.project_id
+       LEFT JOIN projects pj ON pj.id = l.project_id
        LEFT JOIN users u     ON u.id = l.responsable_id
-       LEFT JOIN products pr ON pr.id = l.producto_interes_id
+       LEFT JOIN products p  ON p.id = l.producto_interes_id
+       ${PLAZAS_JOIN}
       WHERE c.id = $1`,
     [conversacionId]
   );
