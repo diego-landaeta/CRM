@@ -216,3 +216,72 @@ describe('la etiqueta que llega antes que su conversacion', () => {
     expect(aplicarEtiquetasPendientes).not.toHaveBeenCalled();
   });
 });
+
+// ── La misma persona con dos llaves: telefono y @lid ─────────────────────────
+//
+// Salio con un numero real: la gestora puso una etiqueta desde el movil y el
+// aviso llego direccionado asi
+//
+//     etiqueta add: 4 en 16699034202151@lid
+//
+// mientras esa persona estaba guardada como «584242439474@s.whatsapp.net». No
+// casaba, y la etiqueta se quedaba fuera.
+//
+// Y es peor de lo que parece: el puente traduce el @lid a telefono antes de
+// mandarlo y Evolution NO —guarda la clave tal como viene de Baileys—, asi que
+// el resultado cambiaba entre local y produccion. Probarlo en local no diria la
+// verdad, en ningun sentido.
+
+describe('la misma persona, con sus dos llaves', () => {
+  it('la conversacion aprende la otra llave del mensaje', async () => {
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: {
+          id: 'L1', remoteJid: '34600111222@s.whatsapp.net', fromMe: false,
+          remoteJidAlt: '16699034202151@lid',
+        },
+        message: { conversation: 'hola' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    expect(conversacionDe).toHaveBeenCalledWith(
+      expect.objectContaining({ otraLlave: '16699034202151@lid' })
+    );
+  });
+
+  it('tambien vale `senderPn` cuando el chat viene por @lid', async () => {
+    // El caso contrario, que es el que se dara en produccion: el mensaje llega
+    // direccionado por @lid y la clave trae el telefono.
+    conversacionDe.mockClear();
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: {
+          id: 'L2', remoteJid: '16699034202151@lid', fromMe: false,
+          senderPn: '34600111222@s.whatsapp.net',
+        },
+        message: { conversation: 'hola' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    expect(conversacionDe).toHaveBeenCalledWith(
+      expect.objectContaining({ otraLlave: '34600111222@s.whatsapp.net' })
+    );
+  });
+
+  it('sin otra llave no se inventa ninguna', async () => {
+    // Un mensaje normal no trae par, y escribir ahi un nulo pisaria el que ya
+    // se hubiera aprendido antes. Por eso el COALESCE del modelo.
+    conversacionDe.mockClear();
+    await servicio.recibir({
+      event: 'messages.upsert', instance: 'crm-u4',
+      data: {
+        key: { id: 'L3', remoteJid: '34600111222@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'hola' },
+        messageTimestamp: Math.floor(Date.now() / 1000),
+      },
+    });
+    expect(conversacionDe).toHaveBeenCalledWith(expect.objectContaining({ otraLlave: null }));
+  });
+});

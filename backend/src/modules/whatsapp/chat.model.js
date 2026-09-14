@@ -72,7 +72,7 @@ export function nombreLimpio(v) {
 }
 
 /** La conversacion de este numero, creandola si es la primera vez. */
-export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false, cuando = null }) {
+export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, mensajeMio = false, cuando = null, otraLlave = null }) {
   nombrePush = nombreLimpio(nombrePush);
 
   // EL NOMBRE DE UN MENSAJE QUE MANDAS TU ERES TU.
@@ -129,8 +129,8 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
     //
     // `GREATEST` para que no retroceda: si llega una tanda vieja despues de un
     // mensaje de hoy, el chat no se va para atras en la lista.
-    `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at, lid)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()), $9)
      ON CONFLICT (instancia, jid) DO UPDATE
        SET nombre_push = COALESCE(EXCLUDED.nombre_push, wa_conversaciones.nombre_push),
            -- La foto caduca, asi que la nueva manda; pero si viene vacia se
@@ -142,7 +142,10 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
            project_id  = COALESCE(wa_conversaciones.project_id, EXCLUDED.project_id),
            ultimo_at   = GREATEST(
                            COALESCE(wa_conversaciones.ultimo_at, COALESCE($8::timestamptz, NOW())),
-                           COALESCE($8::timestamptz, NOW()))
+                           COALESCE($8::timestamptz, NOW())),
+           -- La OTRA llave de esta persona (migracion 159). Se aprende del
+           -- primer mensaje que la traiga y no se pisa con un nulo despues.
+           lid         = COALESCE($9, wa_conversaciones.lid)
      -- xmax = 0 distingue un alta de una actualizacion en un upsert. Hace falta
      -- para saber si esta conversacion ACABA de nacer y hay etiquetas
      -- esperandola (migracion 158). Preguntarlo aparte seria una consulta mas
@@ -151,7 +154,7 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl, me
      --  JavaScript y cerrarian la cadena.)
      RETURNING *, (xmax = 0) AS recien_creada`,
     [instancia, jid, telefono, nombrePush || null, avatarUrl || null,
-     lead?.id || null, lead?.project_id || null, cuando || null]
+     lead?.id || null, lead?.project_id || null, cuando || null, otraLlave || null]
   );
   return rows[0];
 }
@@ -1336,8 +1339,16 @@ export async function marcarEtiquetaBorrada(instancia, waId) {
  */
 export async function asociarEtiqueta({ instancia, jid, waIdEtiqueta, poner }) {
   try {
+    // Por las DOS llaves (migracion 159).
+    //
+    // El aviso llega con el jid que WhatsApp tenga a mano, y esa persona puede
+    // estar guardada con el otro: en el caso real llego «16699034202151@lid»
+    // mientras el chat estaba como «584242439474@s.whatsapp.net». Buscando solo
+    // por uno, la etiqueta se queda fuera — y encima el resultado cambiaria
+    // entre local y produccion, porque el puente traduce el @lid y Evolution no.
     const { rows: conv } = await query(
-      `SELECT id FROM wa_conversaciones WHERE instancia = $1 AND jid = $2`,
+      `SELECT id FROM wa_conversaciones
+        WHERE instancia = $1 AND (jid = $2 OR lid = $2)`,
       [instancia, jid]
     );
     // Sin conversacion todavia no hay donde ponerla — PERO NO SE TIRA.

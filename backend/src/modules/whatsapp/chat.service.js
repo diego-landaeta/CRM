@@ -524,6 +524,17 @@ export async function recibir(cuerpo) {
     // CUANDO, para que la lista se ordene por la conversacion y no por cuando
     // se importo. Ver `conversacionDe`.
     cuando,
+    // LA OTRA LLAVE de esta persona, si el mensaje la trae (migracion 159).
+    //
+    // WhatsApp direcciona cada vez mas por `@lid`, un identificador que ocupa
+    // el lugar del telefono. La misma persona llega unas veces con uno y otras
+    // con el otro, y los avisos de etiquetas usan el que tengan a mano: uno
+    // llego como «16699034202151@lid» mientras su chat estaba guardado por
+    // numero, y la etiqueta se quedo fuera.
+    //
+    // El par viaja en la propia clave, asi que se aprende del primer mensaje que
+    // lo traiga y la conversacion queda localizable por las dos.
+    otraLlave: (datos?.key?.remoteJidAlt || datos?.key?.senderPn || null),
   });
 
   // Si esta conversacion acaba de nacer, puede haber etiquetas esperandola.
