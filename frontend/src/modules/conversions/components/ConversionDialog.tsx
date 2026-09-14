@@ -467,7 +467,24 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               </div>
               <div>
                 <h3 className="font-semibold text-base">Venta registrada</h3>
-                <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+                {/* EL AVISO DE LA COLA, AQUI Y EN GRANDE.
+
+                    Iba en un toast que se va solo y Diego no lo vio: «le di a
+                    convertir y no me salio en grande». Con el freno del 14/09 la
+                    factura ya NO sale sola, asi que si esto no se lee, la gestora
+                    se queda esperando una factura que nadie va a emitir. */}
+                {pagoMode !== 'none' && (
+                  <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-left dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      La factura no se emite sola
+                    </p>
+                    <p className="mt-0.5 text-[13px] leading-snug text-amber-800 dark:text-amber-300">
+                      El cobro está en la <b>cola de facturación</b>. Para emitir la factura y
+                      {' '}ponerle número, entra en <b>Finanzas → Facturación</b>.
+                    </p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground mt-3">¿Generar un documento para el cliente y descargar el PDF?</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={() => setDocPhase('proforma')}
