@@ -224,11 +224,16 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
      )
      SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
             p.clave, p.orden, p.fecha_prevista, p.contactos,
+            -- De que campus es cada fila. Con una EMPRESA elegida la cola
+            -- junta los siete campus, y sin esto no se sabe a quien se llama
+            -- de parte de quien. Lo pidio Carlos el 11/09.
+            p.project_id, pr.nombre AS proyecto,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
             (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
        FROM pendientes p
        LEFT JOIN commercial_steps s ON s.id = p.step_id
+       LEFT JOIN projects pr ON pr.id = p.project_id
        LEFT JOIN users u ON u.id = p.responsable_id
       WHERE p.pos = 1
       ORDER BY p.fecha_prevista, p.orden, p.lead_id

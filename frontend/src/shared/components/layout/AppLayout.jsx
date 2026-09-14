@@ -68,6 +68,12 @@ const CON_SOCIEDAD_OK = [
   // factura-- y las ventas sin factura por sus campus. Diego: «si elijo facturas
   // y estoy eligiendo CEDIA debe de salir, no debe de salir esto».
   /^\/finanzas\/facturas$/,
+  // El proceso comercial (#89 · #90). La cola suma los campus de la empresa —el
+  // servidor ya sabia recibir varios proyectos— y la pantalla de los pasos
+  // pregunta cual, pero solo entre los de esa empresa. Diego, 14/09: «estos
+  // procesos en empresas deben ser por empresa, no por proyecto».
+  /^\/prospectos\/cola$/,
+  /^\/prospectos\/proceso$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
