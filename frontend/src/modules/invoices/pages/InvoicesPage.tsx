@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+// Los atajos de fecha. El mismo componente para todas las pantallas con
+// rango: Diego los pidio tres veces en cuatro dias, y eso no son tres tareas.
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -352,6 +355,14 @@ export default function InvoicesPage() {
           <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         </div>
+        {/* Los atajos van DESPUES de las casillas y no en su lugar: escribir dos
+            fechas sigue siendo posible para el caso raro, y para los cinco de
+            siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
       </div>
 
       {porSociedad && (
@@ -445,6 +456,34 @@ export default function InvoicesPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* EL BUSCADOR, OTRA VEZ, AQUI.
+          Diego, 14/09, señalando este hueco: «necesito buscador de facturas por
+          lupa, numero». Y estaba ya --arriba del todo--, pero por encima de las
+          tarjetas de cifras y de la tabla de ventas sin factura: para cuando
+          bajas a la lista, que es donde se trabaja, lleva tres bloques fuera de
+          pantalla. Un buscador que hay que ir a buscar no se usa.
+
+          Es el MISMO estado que el de arriba, no otro filtro: se escriba donde
+          se escriba, los dos cuadros dicen lo mismo. */}
+      {!loading && (invoices.length > 0 || filters.search) && (
+        <div className="relative">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar en la lista por nº, cliente o NIF…"
+            aria-label="Buscar facturas"
+            className="w-full h-9 pl-8 pr-8 rounded-md border border-border bg-card text-sm" />
+          {filters.search && (
+            <button type="button" onClick={() => setFilters(f => ({ ...f, search: '' }))}
+              aria-label="Quitar la búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X size={13} weight="bold" />
+            </button>
+          )}
         </div>
       )}
 
