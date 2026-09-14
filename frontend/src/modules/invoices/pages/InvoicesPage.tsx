@@ -258,9 +258,12 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {/* El subtitulo con una empresa elegida: antes decia «Todos los
+          proyectos» --lo que vale `activeProject.nombre` cuando hay
+          sociedad-- y con CEDIA puesta eso es sencillamente falso. */}
       <PageHeader
         title="Facturas"
-        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        subtitle={`Histórico fiscal — ${activeIssuer ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus` : (activeProject?.nombre || '')}`}
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
