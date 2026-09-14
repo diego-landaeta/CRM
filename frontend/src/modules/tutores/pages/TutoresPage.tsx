@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank, MagnifyingGlass} from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -9,10 +9,6 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
-import Field from '@/shared/components/ui/Field';
-import FilaCampos from '@/shared/components/ui/FilaCampos';
-import { inputClass } from '@/shared/lib/ui';
-import { cn } from '@/shared/lib/utils';
 
 // Tutores y sus colaboraciones.
 //
@@ -92,6 +88,9 @@ export default function TutoresPage() {
   // Retirados: no salen por defecto. Se pueden enseñar porque, si no, retirar a
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
+  // Buscador de la lista. Diego: «necesito una lupa en tutores». No habia
+  // ninguno: con 19 tutores ya cuesta, y la lista crece.
+  const [busca, setBusca] = useState('');
   const [popupClave, setPopupClave] = useState(false);
   const [popupPago, setPopupPago] = useState(false);
   const [claveNueva, setClaveNueva] = useState('');
@@ -418,6 +417,22 @@ export default function TutoresPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="relative border-b border-border">
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar tutor por nombre o correo…"
+              aria-label="Buscar tutor"
+              className="w-full h-9 pl-9 pr-8 bg-transparent text-sm outline-none"
+            />
+            {busca && (
+              <button type="button" onClick={() => setBusca('')} aria-label="Quitar la búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={13} weight="bold" />
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs text-muted-foreground cursor-pointer">
             <input type="checkbox" checked={verRetirados} className="accent-primary"
               onChange={(e) => { setVerRetirados(e.target.checked); setElegido(null); }} />
@@ -429,8 +444,16 @@ export default function TutoresPage() {
                 description="Da de alta el primero para asignarle formaciones." />
             )}
             {(() => {
-              const deAqui = tutores.filter((t) => t.es_de_este_proyecto);
-              const hermanos = tutores.filter((t) => !t.es_de_este_proyecto);
+              // Sin tildes y por nombre o correo: «jose» encuentra «José».
+              const plano = (x: string) => (x || '').toLowerCase()
+                .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e').replace(/[íìï]/g, 'i')
+                .replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n');
+              const q = plano(busca.trim());
+              const visibles = q
+                ? tutores.filter((t) => plano(t.nombre || '').includes(q) || plano(t.email || '').includes(q))
+                : tutores;
+              const deAqui = visibles.filter((t) => t.es_de_este_proyecto);
+              const hermanos = visibles.filter((t) => !t.es_de_este_proyecto);
               return (
                 <>
                   {hermanos.length > 0 && deAqui.length > 0 && (
@@ -635,38 +658,39 @@ export default function TutoresPage() {
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
               <section className="space-y-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
-                {/* Cada campo con la envoltura compartida. Antes la etiqueta
-                    envolvia al campo y llevaba su propia clase escrita a mano
-                    —fondo distinto, sin anillo de foco— y el asterisco iba en
-                    `text-red-500`, un color suelto. */}
-                <FilaCampos>
-                  <Field label="Nombre y apellidos" required htmlFor="tutor-nombre" className="sm:col-span-2">
-                    <input id="tutor-nombre" name="nombre" required autoFocus className={inputClass} />
-                  </Field>
-                  <Field
-                    label="Correo"
-                    required
-                    htmlFor="tutor-email"
-                    hint="Es con lo que entra al CRM."
-                    className="sm:col-span-2"
-                  >
-                    <input id="tutor-email" name="email" type="email" required className={inputClass} />
-                  </Field>
-                  <Field label="DNI / NIF" htmlFor="tutor-dni">
-                    <input id="tutor-dni" name="dniNif" className={inputClass} />
-                  </Field>
-                  <Field label="Teléfono" htmlFor="tutor-tel">
-                    <input id="tutor-tel" name="telefono" className={inputClass} />
-                  </Field>
-                  <Field
-                    label="IBAN"
-                    htmlFor="tutor-iban"
-                    hint="Donde se le paga. Puedes dejarlo para más adelante."
-                    className="sm:col-span-2"
-                  >
-                    <input id="tutor-iban" name="iban" placeholder="ES00 0000 0000 0000 0000 0000" className={cn(inputClass, 'tabular-nums')} />
-                  </Field>
-                </FilaCampos>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-xs font-medium sm:col-span-2">
+                    Nombre y apellidos <span className="text-red-500">*</span>
+                    <input name="nombre" required autoFocus
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+                  </label>
+                  <label className="text-xs font-medium sm:col-span-2">
+                    Correo <span className="text-red-500">*</span>
+                    <input name="email" type="email" required
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
+                      Es con lo que entra al CRM.
+                    </span>
+                  </label>
+                  <label className="text-xs font-medium">
+                    DNI / NIF
+                    <input name="dniNif"
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+                  </label>
+                  <label className="text-xs font-medium">
+                    Teléfono
+                    <input name="telefono"
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+                  </label>
+                  <label className="text-xs font-medium sm:col-span-2">
+                    IBAN
+                    <input name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
+                    <span className="block text-[11px] text-muted-foreground font-normal mt-1">
+                      Donde se le paga. Puedes dejarlo para más adelante.
+                    </span>
+                  </label>
+                </div>
               </section>
 
               <section className="space-y-2 border-t border-border pt-4">
@@ -732,7 +756,7 @@ export default function TutoresPage() {
                 </p>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
-                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+                  <label className="text-[11px] text-muted-foreground min-w-0">
                     Curso
                     <div className="mt-1">
                       <BuscadorEnLista
@@ -746,13 +770,13 @@ export default function TutoresPage() {
                       />
                     </div>
                   </label>
-                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+                  <label className="text-[11px] text-muted-foreground">
                     %
                     <input type="number" step="0.5" min="0" max="100" value={nuevoPct}
                       onChange={(e) => setNuevoPct(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm tabular-nums" />
                   </label>
-                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+                  <label className="text-[11px] text-muted-foreground">
                     Lo lleva desde
                     <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
@@ -788,11 +812,7 @@ export default function TutoresPage() {
                   </p>
                 )}
 
-                {/* Se comprueba la fecha, no solo que haya ajustes: sin ella
-                    el aviso decia «no se paga nada cobrado antes del
-                    undefined». Un aviso que dice «undefined» asusta mas que no
-                    decir nada. */}
-                {ajustes?.aplica_desde && (
+                {ajustes && (
                   <p className="text-[11px] text-muted-foreground flex gap-1.5">
                     <Warning size={13} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
                     <span>
@@ -841,17 +861,17 @@ export default function TutoresPage() {
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
 
             <div className="grid grid-cols-3 gap-2">
-              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+              <label className="text-xs text-muted-foreground">
                 Porcentaje
                 <input name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
                   className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+              <label className="text-xs text-muted-foreground">
                 Desde
                 <input name="desde" type="date" defaultValue={hoy()} required
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
+              <label className="text-xs text-muted-foreground">
                 Hasta
                 <input name="hasta" type="date"
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
