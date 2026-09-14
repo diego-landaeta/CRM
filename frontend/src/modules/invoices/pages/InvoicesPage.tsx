@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+// Los atajos de fecha. El mismo componente para todas las pantallas con
+// rango: Diego los pidio tres veces en cuatro dias, y eso no son tres tareas.
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,10 +37,11 @@ const ESTADO_BADGE: Record<string, string> = {
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject, projects, switchProject } = useProjectContext() as {
+  const { activeProject, projects, switchProject, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
     switchProject: (id: number) => void;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
@@ -71,7 +75,19 @@ export default function InvoicesPage() {
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
   // sociedad entre proyectos (global), con la columna Proyecto.
-  const [filterIssuer, setFilterIssuer] = useState<string>('');
+  //
+  // Diego, 14/09: «si pongo una empresa en facturacion necesito poder verla».
+  // Y no la veia: esto arrancaba SIEMPRE vacio, asi que elegir CEDIA en la
+  // cabecera no llegaba hasta aqui y la pantalla acababa pidiendo el proyecto
+  // -1 --que no existe-- y enseñando cero facturas. El backend estaba bien
+  // desde el principio: pidiendole por sociedad devuelve las 118 de CEDIA.
+  const [filterIssuer, setFilterIssuer] = useState<string>(() => (activeIssuer ? String(activeIssuer.id) : ''));
+
+  // Y si se cambia de empresa SIN salir de la pantalla, que se entere: sin
+  // esto la cabecera diria CEDIA y la tabla seguiria en la anterior.
+  useEffect(() => {
+    if (activeIssuer) setFilterIssuer(String(activeIssuer.id));
+  }, [activeIssuer?.id]);
   // Dentro de una sociedad: filtrar por uno de sus proyectos. '' = todos.
   const [filterProject, setFilterProject] = useState<string>('');
   const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);
@@ -247,9 +263,12 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {/* El subtitulo con una empresa elegida: antes decia «Todos los
+          proyectos» --lo que vale `activeProject.nombre` cuando hay
+          sociedad-- y con CEDIA puesta eso es sencillamente falso. */}
       <PageHeader
         title="Facturas"
-        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        subtitle={`Histórico fiscal — ${activeIssuer ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus` : (activeProject?.nombre || '')}`}
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
@@ -344,6 +363,14 @@ export default function InvoicesPage() {
           <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         </div>
+        {/* Los atajos van DESPUES de las casillas y no en su lugar: escribir dos
+            fechas sigue siendo posible para el caso raro, y para los cinco de
+            siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
       </div>
 
       {porSociedad && (
@@ -437,6 +464,34 @@ export default function InvoicesPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* EL BUSCADOR, OTRA VEZ, AQUI.
+          Diego, 14/09, señalando este hueco: «necesito buscador de facturas por
+          lupa, numero». Y estaba ya --arriba del todo--, pero por encima de las
+          tarjetas de cifras y de la tabla de ventas sin factura: para cuando
+          bajas a la lista, que es donde se trabaja, lleva tres bloques fuera de
+          pantalla. Un buscador que hay que ir a buscar no se usa.
+
+          Es el MISMO estado que el de arriba, no otro filtro: se escriba donde
+          se escriba, los dos cuadros dicen lo mismo. */}
+      {!loading && (invoices.length > 0 || filters.search) && (
+        <div className="relative">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar en la lista por nº, cliente o NIF…"
+            aria-label="Buscar facturas"
+            className="w-full h-9 pl-8 pr-8 rounded-md border border-border bg-card text-sm" />
+          {filters.search && (
+            <button type="button" onClick={() => setFilters(f => ({ ...f, search: '' }))}
+              aria-label="Quitar la búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X size={13} weight="bold" />
+            </button>
+          )}
         </div>
       )}
 
