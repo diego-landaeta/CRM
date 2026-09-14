@@ -25,6 +25,7 @@ vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   porId: (...a) => porId(...a),
   etiquetasDeConversaciones: vi.fn(async () => new Map()),
   etiquetasDe: vi.fn(async () => []),
+  etiquetasDeLead: vi.fn(async () => []),
   guardarEtiqueta: vi.fn(), marcarEtiquetaBorrada: vi.fn(),
   listar: vi.fn(async () => []), mensajes: vi.fn(async () => []),
   marcarLeida: vi.fn(), apuntarMirada: vi.fn(async () => true),
@@ -44,6 +45,7 @@ vi.mock('../src/modules/whatsapp/chat.service.js', () => ({
 }));
 
 const ctrl = await import('../src/modules/whatsapp/chat.controller.js');
+const modelo = await import('../src/modules/whatsapp/chat.model.js');
 
 /** Llama al endpoint y devuelve lo que salio: respuesta o error. */
 async function etiquetar(cuerpo) {
@@ -108,5 +110,34 @@ describe('etiquetar un chat desde el CRM', () => {
     const { error } = await etiquetar({ waId: '12', poner: true });
     expect(error?.statusCode).toBe(404);
     expect(ponerEtiqueta).not.toHaveBeenCalled();
+  });
+});
+
+// ── Filtrar por etiqueta, y verlas en la ficha (#138) ────────────────────────
+
+describe('el filtro y la ficha', () => {
+  it('el filtro llega del endpoint al modelo', async () => {
+    // Si se quedara por el camino, la pantalla filtraria y la lista vendria
+    // entera: el usuario ve que «el filtro no hace nada».
+    const res = { json: vi.fn(), status: () => res };
+    await ctrl.chats(
+      { user: { userId: 4, role: 'gestor' }, query: { etiquetaWa: '12' }, body: {} },
+      res,
+      () => {},
+    );
+    expect(modelo.listar).toHaveBeenCalledWith(expect.objectContaining({ etiquetaWa: '12' }));
+  });
+
+  it('y el estado del CRM sigue siendo otro filtro distinto', async () => {
+    // «Se enseñan las dos, no se pisa ninguna» — del ticket. Se pueden combinar.
+    const res = { json: vi.fn(), status: () => res };
+    await ctrl.chats(
+      { user: { userId: 4, role: 'gestor' }, query: { etiquetaWa: '12', estado: 'en_seguimiento' }, body: {} },
+      res,
+      () => {},
+    );
+    expect(modelo.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ etiquetaWa: '12', estado: 'en_seguimiento' })
+    );
   });
 });

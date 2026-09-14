@@ -91,6 +91,16 @@ export interface Lead {
   deleted_by?: number | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
+  /**
+   * Las etiquetas que la gestora tiene puestas en SU WhatsApp (#138).
+   *
+   * No confundir con `status`, que es el estado del prospecto en el CRM: esas
+   * son de otro sitio y las decide otra persona. Se enseñan las dos.
+   *
+   * Solo llegan en la ficha (`GET /leads/:id`), no en el listado, y solo las de
+   * las sesiones que quien pregunta puede mirar.
+   */
+  etiquetas_wa?: { waId: string; nombre: string; color: string | null; instancia: string }[];
   pais?: string | null;
   // Datos fiscales (globales del cliente; se rellenan al completar una factura).
   identificacion_fiscal?: string | null;

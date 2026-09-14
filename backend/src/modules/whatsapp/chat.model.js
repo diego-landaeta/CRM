@@ -241,7 +241,7 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
  *
  * Con `busca`, el tope deja de importar: filtra Postgres sobre la tabla entera.
  */
-export async function listar({ instancia, projectId = null, limite = 50, busca = null, estado = null }) {
+export async function listar({ instancia, projectId = null, limite = 50, busca = null, estado = null, etiquetaWa = null }) {
   const params = [instancia];
   let filtro = '';
   if (projectId) { params.push(projectId); filtro = `AND (c.project_id = $${params.length} OR c.project_id IS NULL)`; }
@@ -252,6 +252,21 @@ export async function listar({ instancia, projectId = null, limite = 50, busca =
   // que se colaron mientras `groupsIgnore` no se cumplia seguirian en la lista.
   // Filtrar solo la entrada dejaria la pantalla contradiciendo al ajuste (#74).
   if (!seAceptanGrupos()) filtro += " AND c.jid NOT LIKE '%@g.us'";
+
+  // Filtrar por una etiqueta de WhatsApp (#128, #138).
+  //
+  // Va APARTE del filtro de estado y no lo sustituye: son dos cosas distintas y
+  // el ticket lo dice —«se enseñan las dos, no se pisa ninguna»—. Se pueden usar
+  // a la vez: «las de Presupuesto que ademas estan en seguimiento».
+  if (etiquetaWa) {
+    params.push(String(etiquetaWa));
+    filtro += ` AND EXISTS (
+      SELECT 1 FROM wa_conversacion_etiquetas ce
+        JOIN wa_etiquetas e ON e.id = ce.etiqueta_id AND NOT e.borrada
+       WHERE ce.conversacion_id = c.id
+         AND e.instancia = c.instancia
+         AND e.wa_id = $${params.length})`;
+  }
 
   // Filtrar por el estado del prospecto (#72, «poner etiquetas a los chats»).
   //
@@ -1406,6 +1421,49 @@ export async function etiquetasDeConversaciones(ids) {
     return porConv;
   } catch (err) {
     if (noHayEtiquetas(err)) return new Map();
+    throw err;
+  }
+}
+
+/**
+ * Las etiquetas de WhatsApp que tiene un PROSPECTO (#138).
+ *
+ * El ticket pide esto con todas las letras: «quien mira la ficha del prospecto
+ * no ve lo que la gestora ya sabe». Las etiquetas viven en la conversacion, y
+ * la ficha no sabe de conversaciones — asi que se cruzan aqui.
+ *
+ * Una misma persona puede tener conversacion con VARIAS gestoras, y las
+ * etiquetas de cada una son suyas. Por eso se acota:
+ *
+ *   · `instancias = null` — sin limite. Es lo de quien manda, que ya puede
+ *     leer esas conversaciones enteras.
+ *   · una lista — solo esas sesiones. Una gestora ve lo que ella puso, no lo
+ *     que otra piense de esa persona.
+ *
+ * Se devuelve de quien es cada una: en la ficha, «Presupuesto» puesto por otra
+ * gestora sin decir quien es una etiqueta sin dueño, y no se sabe a quien
+ * preguntarle.
+ */
+export async function etiquetasDeLead(leadId, { instancias = null } = {}) {
+  try {
+    const params = [leadId];
+    let filtro = '';
+    if (Array.isArray(instancias)) {
+      params.push(instancias);
+      filtro = `AND c.instancia = ANY($${params.length}::text[])`;
+    }
+    const { rows } = await query(
+      `SELECT DISTINCT e.wa_id, e.nombre, e.color, c.instancia
+         FROM wa_conversacion_etiquetas ce
+         JOIN wa_etiquetas e ON e.id = ce.etiqueta_id AND NOT e.borrada
+         JOIN wa_conversaciones c ON c.id = ce.conversacion_id
+        WHERE c.lead_id = $1 ${filtro}
+        ORDER BY e.nombre`,
+      params
+    );
+    return rows.map((r) => ({ waId: r.wa_id, nombre: r.nombre, color: r.color, instancia: r.instancia }));
+  } catch (err) {
+    if (noHayEtiquetas(err)) return [];
     throw err;
   }
 }

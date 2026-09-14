@@ -219,6 +219,9 @@ export async function chats(req, res, next) {
       busca: req.query.busca || null,
       // La «etiqueta»: el estado del prospecto (#72).
       estado: req.query.estado || null,
+      // Y la etiqueta de WhatsApp de verdad, la del movil (#128, #138). Son dos
+      // filtros distintos y se pueden combinar.
+      etiquetaWa: req.query.etiquetaWa || null,
     });
 
     // Y las etiquetas de WhatsApp, las de la gestora (#128, #138).

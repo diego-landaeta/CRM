@@ -351,11 +351,15 @@ export const chatApi = {
     busca?: string | null,
     /** El estado del prospecto, que es lo que hace de etiqueta (#72). */
     estado?: string | null,
+    /** Una etiqueta de WhatsApp, la del móvil de la gestora (#128, #138).
+        Se puede combinar con `estado`: son dos filtros distintos. */
+    etiquetaWa?: string | null,
   ): Promise<ApiResponse<ChatWhatsapp[]>> =>
     client.get(`/whatsapp/chats${qs({
       projectId, usuarioId,
       busca: busca || undefined,
       estado: estado || undefined,
+      etiquetaWa: etiquetaWa || undefined,
     })}`),
 
   /** Quien esta escribiendo ahora mismo en la conversacion abierta. */

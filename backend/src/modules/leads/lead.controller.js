@@ -275,7 +275,28 @@ export async function getById(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     await exigirQueSeaSuyo(req, id);
     const lead = await leadService.getById(id);
-    res.json({ success: true, data: lead });
+
+    // Las etiquetas de WhatsApp de esta persona (#138).
+    //
+    // «Quien mira la ficha del prospecto no ve lo que la gestora ya sabe» — es
+    // literal del ticket. Las etiquetas viven en la conversacion y aqui se
+    // traen cruzadas por el lead.
+    //
+    // Quien manda las ve todas; el resto, solo las de SU sesion: una misma
+    // persona puede hablar con dos gestoras, y lo que una piense de ella no es
+    // de la otra. Va suelto — que WhatsApp no este instalado, o que falte la
+    // migracion 157, no puede dejar sin ficha a nadie.
+    let etiquetasWa = [];
+    try {
+      const wa = await import('../whatsapp/chat.model.js');
+      const evolution = await import('../whatsapp/evolution.client.js');
+      const mandaEl = ['admin', 'superadmin', 'soporte'].includes(req.user.role);
+      etiquetasWa = await wa.etiquetasDeLead(id, {
+        instancias: mandaEl ? null : [evolution.instanciaDe(req.user.userId)],
+      });
+    } catch { etiquetasWa = []; }
+
+    res.json({ success: true, data: { ...lead, etiquetas_wa: etiquetasWa } });
   } catch (err) { next(err); }
 }
 

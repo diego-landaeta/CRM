@@ -6,12 +6,12 @@ import {
   MessageSeparator, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat } from '@phosphor-icons/react';
+import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat, Tag } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  chatApi, urlMedia,
-  type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
+  chatApi, urlMedia, etiquetasWhatsapp,
+  type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp, type EtiquetaWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
@@ -427,6 +427,11 @@ export default function ChatPage() {
   // «pendiente de contestar / ya vendido / no interesado»— y viaja con la
   // persona en vez de con el chat.
   const [etiqueta, setEtiqueta] = useState<string | null>(null);
+  // La etiqueta de WhatsApp por la que se filtra, y las que hay para ofrecer.
+  // Se piden una vez: cambian cuando la gestora las toca en el móvil, no cada
+  // cinco segundos, y esta pantalla ya pregunta bastante.
+  const [etiquetaWa, setEtiquetaWa] = useState<string | null>(null);
+  const [etiquetasWa, setEtiquetasWa] = useState<EtiquetaWhatsapp[]>([]);
 
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
@@ -563,7 +568,7 @@ export default function ChatPage() {
       //
       // Se vio otra vez al probar las etiquetas: seis conversaciones en la base
       // y una sola en pantalla.
-      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta);
+      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta, etiquetaWa);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
@@ -576,7 +581,7 @@ export default function ChatPage() {
     } finally {
       setCargando(false);
     }
-  }, [deQuien, buscaChats, etiqueta]);
+  }, [deQuien, buscaChats, etiqueta, etiquetaWa]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
@@ -586,6 +591,15 @@ export default function ChatPage() {
     setMensajes((antes) => (igualesPor(antes, llegan, mismoMensaje) ? antes : llegan));
     setEscribiendo(r.data.escribiendo || null);
   }, [cuantos, deQuien]);
+
+  // Las etiquetas de esta sesión, para poder filtrar por ellas. Una vez.
+  useEffect(() => {
+    let vivo = true;
+    etiquetasWhatsapp(deQuien)
+      .then((r) => { if (vivo) setEtiquetasWa(r.success ? (r.data || []) : []); })
+      .catch(() => { if (vivo) setEtiquetasWa([]); });
+    return () => { vivo = false; };
+  }, [deQuien]);
 
   useEffect(() => {
     cargarLista();
@@ -1421,11 +1435,40 @@ export default function ChatPage() {
                   {e === ETIQUETA_GRUPOS ? 'Grupos' : (STATUS_LABELS[e] || e)}
                 </button>
               ))}
-              {etiqueta && (
-                <button type="button" onClick={() => setEtiqueta(null)}
+              {(etiqueta || etiquetaWa) && (
+                <button type="button" onClick={() => { setEtiqueta(null); setEtiquetaWa(null); }}
                   className="wa-etiqueta wa-etiqueta-quitar">Quitar filtro</button>
               )}
             </div>
+
+            {/* Las etiquetas DE WHATSAPP, en su propia fila (#128, #138).
+                Van separadas y con un icono a propósito. Puestas junto a las de
+                arriba salían DOS botones «Grupos» —el filtro de grupos del CRM y
+                la etiqueta que WhatsApp trae de fábrica con ese nombre— sin nada
+                que dijera cuál es cuál. Se vio en pantalla con un número real,
+                no leyendo el código.
+
+                Solo se pinta la fila si esa cuenta tiene etiquetas: sin WhatsApp
+                Business no hay ninguna, y una fila de filtros vacía se lee como
+                una avería. */}
+            {etiquetasWa.length > 0 && (
+              <div className="wa-etiquetas wa-etiquetas-wa" role="group"
+                aria-label="Filtrar por una etiqueta de tu WhatsApp">
+                <span className="wa-etiquetas-de">De tu WhatsApp</span>
+                {etiquetasWa.map((e) => (
+                  <button
+                    key={e.wa_id}
+                    type="button"
+                    aria-pressed={etiquetaWa === e.wa_id}
+                    title={`Etiqueta de tu WhatsApp · en ${e.conversaciones} chat(s)`}
+                    onClick={() => setEtiquetaWa(etiquetaWa === e.wa_id ? null : e.wa_id)}
+                    className={`wa-etiqueta wa-et-whatsapp ${etiquetaWa === e.wa_id ? 'wa-etiqueta-puesta' : ''}`}>
+                    <Tag size={11} weight={etiquetaWa === e.wa_id ? 'fill' : 'regular'} />
+                    {e.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
             {sync?.entrando && (
               <div className="wa-sincronizando">
                 Sincronizando… {sync.conversaciones} chats · {sync.mensajes} mensajes
@@ -1503,7 +1546,30 @@ export default function ChatPage() {
                 suspender el numero. Que ella lo sepa cuesta dos lineas, y le
                 ahorra volver a reportarlo — y a nosotros, buscar un fallo que
                 no existe. */}
-            {buscaChats && !visibles.length && (
+            {/* Filtrando por una etiqueta del móvil y sin resultados.
+                Antes salía la lista en blanco y punto: la gestora no tiene por
+                qué saber si es que no hay ninguno con esa etiqueta o si el
+                filtro está roto. Se dice cuál está puesta y se ofrece quitarla.
+
+                Va ANTES que el de buscar porque puede haber las dos cosas a la
+                vez, y el motivo más probable de no encontrar nada es el filtro
+                —es la misma lección de la #72. */}
+            {etiquetaWa && !visibles.length && (
+              <div className="wa-sin-resultados">
+                <p className="font-medium text-foreground">
+                  Ninguno de tus chats tiene la etiqueta «
+                  {etiquetasWa.find((e) => e.wa_id === etiquetaWa)?.nombre || etiquetaWa}»
+                </p>
+                <p>
+                  Es una etiqueta de tu WhatsApp: si la pones desde el móvil o desde aquí, el chat
+                  aparecerá en este filtro.
+                </p>
+                <button type="button" className="wa-etiqueta wa-etiqueta-quitar"
+                  onClick={() => setEtiquetaWa(null)}>Quitar el filtro</button>
+              </div>
+            )}
+
+            {buscaChats && !etiquetaWa && !visibles.length && (
               <div className="wa-sin-resultados">
                 <p className="font-medium text-foreground">Sin resultados para «{buscaChats}»</p>
                 {/* La etiqueta puesta, LO PRIMERO y antes que nada.

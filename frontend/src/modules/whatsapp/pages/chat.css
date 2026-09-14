@@ -1484,7 +1484,15 @@ select.wa-estado-elegir {
    Con borde y sin relleno, al reves que las del estado: son de OTRO sitio —las
    puso ella en su movil, no el CRM— y si se pintaran igual, en la misma fila
    parecerian dos estados del mismo prospecto. */
+/* La fila de las etiquetas del móvil, debajo de la de estados y dicha aparte.
+   Juntas salían dos botones «Grupos» que hacían cosas distintas. */
+.wa-etiquetas-wa { padding-top: 2px; }
+.wa-etiquetas-de {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wa-apagado); align-self: center; margin-right: 2px;
+}
 .wa-et-whatsapp {
+  display: inline-flex; align-items: center; gap: 4px;
   background: transparent;
   color: var(--wa-apagado);
   border: 1px solid rgba(255,255,255,.22);
