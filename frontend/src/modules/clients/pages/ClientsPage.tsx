@@ -30,11 +30,12 @@ const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/Registe
 import type { Client } from '@/shared/types';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
+import { etiquetaProducto, ofreceMatriculas } from '@/shared/lib/etiquetas';
 
-function exportCSV(clients: Client[], filename: string): void {
+function exportCSV(clients: Client[], filename: string, etiquetaPlural: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
   const rows = [
-    ['Nombre', 'Email', 'Teléfono', 'Gestora', 'Curso / Programa', 'Cuotas totales', 'Cuotas pagadas', 'Cuotas pendientes', 'Próximo vencimiento', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
+    ['Nombre', 'Email', 'Teléfono', 'Gestora', etiquetaPlural, 'Cuotas totales', 'Cuotas pagadas', 'Cuotas pendientes', 'Próximo vencimiento', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
     ...clients.map(c => [
       c.nombre || '',
       c.email || '',
@@ -303,6 +304,11 @@ export default function ClientsPage() {
   const totalCobrado = filtered.reduce((s, c) => s + Number(c.total_pagado), 0);
   const totalPendiente = filtered.reduce((s, c) => s + Number(c.pendiente), 0);
 
+  // Como llama ESTE proyecto a lo que vende: «Formaciones» en Psiko,
+  // «Planes» en una plataforma de IA. Con varios proyectos a la vez no hay uno
+  // que valga, y entonces dice «Productos».
+  const etiqueta = etiquetaProducto(activeProject);
+
   const [upsellLead, setUpsellLead] = useState<Client | null>(null);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
 
@@ -328,7 +334,7 @@ export default function ClientsPage() {
           del contenido, sin el titulo al que acompanaba. */}
       <PageHeader
         title="Clientes"
-        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
+        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} ${totalBackend === 1 ? 'cliente' : 'clientes'}`}`}
         actions={activeProject?.id && !isAllProjects && can('clients.create') ? (
           <button
             type="button"
@@ -376,7 +382,13 @@ export default function ClientsPage() {
         />
         <AccesosClave
           accesos={[
-            { label: 'Matrículas', detail: 'Altas en cada curso', icon: GraduationCap, to: '/clientes/matriculas' },
+            // Matrículas no se ofrece si el proyecto no las tiene. Dos señales:
+            // que alguien haya apagado el módulo —lo que ya mira el menú— o que
+            // sea una plataforma de suscripción, donde no existen. Ver
+            // `ofreceMatriculas`.
+            ...(ofreceMatriculas(activeProject) ? [
+              { label: 'Matrículas', detail: `Altas en cada ${etiqueta.singular.toLowerCase()}`, icon: GraduationCap, to: '/clientes/matriculas' },
+            ] : []),
             { label: 'Por cobrar', detail: 'Cuotas pendientes', icon: Wallet, to: '/finanzas/por-cobrar' },
             { label: 'Ventas', detail: 'Registrar y consultar', icon: Receipt, to: '/finanzas/ventas' },
             { label: 'Reportes', detail: 'Numeros descargables', icon: ChartLineUp, to: '/informes' },
@@ -449,7 +461,7 @@ export default function ClientsPage() {
         />
         {filtered.length > 0 && can('clients.export') && (
           <button
-            onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
+            onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`, etiqueta.plural)}
             title="Exportar CSV"
             className="h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
           >
@@ -477,7 +489,7 @@ export default function ClientsPage() {
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                     <th className="text-left px-4 py-2.5 font-bold">Email</th>
                     <th className="text-left px-4 py-2.5 font-bold">Teléfono</th>
-                    <th className="text-left px-4 py-2.5 font-bold">Curso / Programa</th>
+                    <th className="text-left px-4 py-2.5 font-bold">{etiqueta.plural}</th>
                     <th className="text-left px-4 py-2.5 font-bold">Gestora</th>
                     <th className="text-left px-4 py-2.5 font-bold">Cuotas</th>
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
@@ -553,7 +565,7 @@ export default function ClientsPage() {
                   </div>
                   {c.cursos && c.cursos.length > 0 && (
                     <div className="text-xs text-foreground">
-                      <span className="text-muted-foreground">Curso: </span>
+                      <span className="text-muted-foreground">{etiqueta.singular}: </span>
                       {c.cursos[0]}{c.cursos.length > 1 ? ` +${c.cursos.length - 1}` : ''}
                     </div>
                   )}
@@ -584,7 +596,7 @@ export default function ClientsPage() {
         {totalBackend > PAGE_SIZE && (
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border text-xs">
             <span className="text-muted-foreground">
-              Página <strong className="text-foreground">{page}</strong> de <strong className="text-foreground">{totalPages}</strong> · {totalBackend} clientes en total
+              Página <strong className="text-foreground">{page}</strong> de <strong className="text-foreground">{totalPages}</strong> · {totalBackend} {totalBackend === 1 ? 'cliente' : 'clientes'} en total
             </span>
             <div className="flex items-center gap-1">
               <button
