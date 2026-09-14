@@ -85,6 +85,12 @@ const CON_SOCIEDAD_OK = [
   // sabe de sociedades; lo único que le faltaba era que la pantalla mandara
   // `issuerId` y que la ruta no chocara con el muro de aquí.
   /^\/finanzas\/ventas-analisis$/,
+  // El proceso comercial (#89 · #90). La cola suma los campus de la empresa —el
+  // servidor ya sabia recibir varios proyectos— y la pantalla de los pasos
+  // pregunta cual, pero solo entre los de esa empresa. Diego, 14/09: «estos
+  // procesos en empresas deben ser por empresa, no por proyecto».
+  /^\/prospectos\/cola$/,
+  /^\/prospectos\/proceso$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
