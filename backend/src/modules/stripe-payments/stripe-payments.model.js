@@ -1,3 +1,4 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
 
 export async function upsertPayment(p) {
@@ -132,9 +133,12 @@ export async function updateConversionPaid(conversionId, addAmount) {
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
 // como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
 // arriba ignoraban el rango de fechas y el resto de filtros de abajo.
-function construirFiltro({ projectId, status, linked, search, from, to, facturables }) {
-  const conds = ['sp.project_id = $1'];
-  const params = [projectId];
+function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables }) {
+  // Con una EMPRESA puesta son sus campus. Los cobros ya estan en nuestra base
+  // --los deja ahi el sincronizador--, asi que esto es leer varias filas, no
+  // hablar con varias cuentas de Stripe.
+  const conds = ['sp.project_id = ANY($1::int[])'];
+  const params = [comoLista(projectId, projectIds) || []];
   let i = 2;
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
@@ -184,8 +188,8 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
   return { where: conds.join(' AND '), params };
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
+export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -228,8 +232,8 @@ export async function listProjectsWithStripe() {
 // Los totales de la cabecera responden al MISMO filtro que el listado: si
 // arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
 // siempre las del historico completo y no cuadraban con lo que se veia debajo.
-export async function getStats({ projectId, status, linked, search, from, to, facturables }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
+export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,

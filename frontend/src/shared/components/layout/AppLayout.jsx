@@ -145,6 +145,24 @@ const CON_SOCIEDAD_OK = [
   /^\/configuracion\/atajos$/,
   /^\/configuracion\/roles$/,
   /^\/configuracion\/claves$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FINANZAS. Diego, 15/09: «catalogo y publicidad individual, pero finanzas es
+  // por empresa claramente». Y tiene sentido: el dinero se rinde por sociedad
+  // --es la que factura y la que declara--, no por campus.
+  //
+  // Las consultas de estas nueve aceptan ya la lista de campus: se hizo con el
+  // mismo `comoLista` que usan Prospectos y Facturas, para que la regla de
+  // «una empresa son sus campus» viva en un solo sitio.
+  /^\/finanzas$/,
+  /^\/finanzas\/conversiones$/,
+  /^\/finanzas\/egresos$/,
+  /^\/finanzas\/por-cobrar$/,
+  /^\/finanzas\/por-pagar$/,
+  /^\/finanzas\/comisiones$/,
+  /^\/finanzas\/pagos-stripe$/,
+  /^\/finanzas\/pendiente-facturar$/,
+  /^\/finanzas\/ventas\/\d+$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
