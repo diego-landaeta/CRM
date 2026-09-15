@@ -125,6 +125,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     freno del 14/09. El interruptor vive en la empresa emisora.
   */
   const [numeraAqui, setNumeraAqui] = useState(false);
+  // Como se registro la venta: sin ningun cobro o con el. Se mira lo que quedo
+  // guardado, no el modo del formulario, que puede haberse tocado despues.
+  const sinPagoVenta = !created || (Number(created.importe_pagado) || 0) <= 0;
   const [numero, setNumero] = useState('');
   const [sugerido, setSugerido] = useState('');
   // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
@@ -551,20 +554,38 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setDocPhase('proforma')}
-                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
-                  <FileText size={24} weight="duotone" className="text-primary" />
-                  <span className="text-sm font-semibold">Presupuesto</span>
-                  <span className="text-[10px] text-muted-foreground">Sin valor fiscal</span>
-                </button>
-                <button type="button" onClick={handleFacturaChoice}
-                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
-                  <Receipt size={24} weight="duotone" className="text-primary" />
-                  <span className="text-sm font-semibold">Factura</span>
-                  <span className="text-[10px] text-muted-foreground">Documento fiscal</span>
+              {/* EL TIPO LO DECIDE COMO SE REGISTRO LA VENTA, no quien pulsa.
+
+                  Diego, 15/09: «que al dar conversion aparezca el cuadro de
+                  dialogo, si es proforma o factura SEGUN COMO FUE REGISTRADO».
+
+                  La regla es la misma que usa el boton de Facturacion: sin ningun
+                  cobro no hay factura fiscal que emitir --se emite PROFORMA, que
+                  reserva el numero y se convierte en factura cuando entre el
+                  pago--; con cobro, factura. Antes salian los dos botones iguales
+                  y elegir mal era facil. */}
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-left">
+                <p className="text-xs text-muted-foreground">
+                  {sinPagoVenta
+                    ? <>Esta venta se registró <b>sin ningún cobro</b>, así que lo que toca es una <b>proforma</b>: reserva el número y se convierte en factura cuando entre el pago.</>
+                    : <>Esta venta se registró <b>con cobro</b>, así que lo que toca es la <b>factura</b>.</>}
+                </p>
+                <button type="button"
+                  onClick={() => (sinPagoVenta ? setDocPhase('proforma') : handleFacturaChoice())}
+                  className="mt-2.5 w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                  {sinPagoVenta ? <FileText size={16} weight="duotone" /> : <Receipt size={16} weight="duotone" />}
+                  {sinPagoVenta ? 'Emitir proforma' : 'Emitir factura'}
+                  {numeraAqui && numero ? ` nº ${numero}` : ''}
                 </button>
               </div>
+
+              {/* El otro tipo sigue estando, pero pequeño: hay casos sueltos y no
+                  es cuestion de tapiarlos. */}
+              <button type="button"
+                onClick={() => (sinPagoVenta ? handleFacturaChoice() : setDocPhase('proforma'))}
+                className="text-xs text-muted-foreground hover:underline">
+                {sinPagoVenta ? 'Necesito emitir la factura igualmente' : 'Prefiero un presupuesto (sin valor fiscal)'}
+              </button>
               <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">
                 {numeraAqui ? 'Ahora no: dejarla en la cola de facturación' : 'Cerrar'}
               </button>
