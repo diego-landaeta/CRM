@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
+import { guardarEnEnviados, hayBuzon } from './copia-en-enviados.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -149,6 +150,25 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
         await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
       cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
           estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
+
+        // Y una copia en la carpeta «Enviados» del buzon de verdad, que es lo
+        // que hace un cliente de correo despues de mandar.
+        //
+        // NO se espera a que termine ni se mira si salio bien: el correo YA se
+        // mando y eso no se deshace. Archivar la copia es lo accesorio — si
+        // falla, queda en el registro y punto.
+        if (hayBuzon()) {
+          guardarEnEnviados({
+            de: fromEmail || FROM_EMAIL,
+            deNombre: fromName || FROM_NAME,
+            para: destinatarios,
+            asunto: subject,
+            html: htmlContent,
+          }).then((ok) => {
+            if (!ok) logger.info({ to, subject }, 'Copia en Enviados: no se guardo');
+          });
+        }
+
         return { sent: true, messageId: data.messageId, intentos: intento };
       }
 
