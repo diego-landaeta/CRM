@@ -16,11 +16,14 @@ interface Props {
   defaultIvaExento?: boolean;
   defaultIvaPct?: number;
   defaultIvaIncluido?: boolean;
+  /** El numero que ya eligio quien registra la venta. Si no viene, lo pone el
+   *  contador. Diego, 15/09: en CEDIA e ICTESS se numera al convertir. */
+  numero?: number | null;
   onClose: () => void;
   onCreated: (invoiceId: number) => void;
 }
 
-export default function FiscalDataDialog({ projectId, leadId, conversionId, defaultItems, defaultNotas, docTipo = 'factura', defaultIvaExento, defaultIvaPct, defaultIvaIncluido, onClose, onCreated }: Props) {
+export default function FiscalDataDialog({ projectId, leadId, conversionId, defaultItems, defaultNotas, docTipo = 'factura', defaultIvaExento, defaultIvaPct, defaultIvaIncluido, numero, onClose, onCreated }: Props) {
   const isProforma = docTipo === 'proforma';
   const docCap = isProforma ? 'Presupuesto' : 'Factura';       // 'Presupuesto'
   const docLower = isProforma ? 'presupuesto' : 'factura';     // 'presupuesto'
@@ -117,6 +120,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
       const res = await invoicesApi.create({
         projectId, leadId, conversionId,
         issuerId: issuerId || undefined,
+        ...(numero ? { numero } : {}),
         tipo: isProforma ? 'proforma' : undefined,
         borrador: !isProforma && asDraft ? true : undefined,
         clienteNombre: nombre.trim(),

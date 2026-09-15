@@ -66,6 +66,9 @@ export interface ProjectInvoicingConfig {
   factura_pie_default: string | null;
   factura_serie_default: string;
   factura_metodo_default: string | null;
+  /** Sus gestoras pueden poner el numero al registrar la venta, sin pasar por
+   *  la cola. Por defecto NO: el freno del 14/09 sigue siendo la regla. */
+  numera_al_convertir?: boolean;
   datos_fiscales?: Record<string, unknown>;
 }
 
