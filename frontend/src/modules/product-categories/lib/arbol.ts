@@ -27,6 +27,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { casaPorTrozos } from '@/shared/lib/buscarPorTrozos';
+
 export interface CatPlana {
   id: number;
   /**
@@ -115,4 +117,29 @@ export function profundidad<T extends CatPlana>(cats: T[]): number {
     if (n > max) max = n;
   }
   return max;
+}
+
+/** Un nodo del arbol tal y como lo devuelve `/tree`: anidado, con sus hijas. */
+export interface NodoConHijas {
+  nombre: string;
+  children: NodoConHijas[];
+}
+
+/**
+ * ¿Casa esta rama con lo que se ha escrito en el filtro?
+ *
+ * Casa si casan el nombre del nodo Y SU RUTA leidos juntos, o si casa alguna de
+ * sus hijas — a los padres se les deja a la vista para poder bajar por ellos.
+ *
+ * Se busca por la rama entera porque hay dos «Adicciones» en el catalogo, una
+ * bajo «Para Profesionales» y otra bajo «Para Familias». Mirando solo el nombre
+ * salen las dos y no hay forma de saber cual es cual; con la ruta, «prof adicc»
+ * da una sola. Es la misma regla que el buscador del formulario, y a proposito:
+ * el mismo catalogo no puede buscarse de dos maneras en dos pantallas.
+ */
+export function casaLaRama<T extends NodoConHijas>(nodo: T, texto: string, ruta = ''): boolean {
+  if (!texto.trim()) return true;
+  if (casaPorTrozos(texto, nodo.nombre, ruta)) return true;
+  const rutaHija = ruta ? `${ruta} ${nodo.nombre}` : nodo.nombre;
+  return nodo.children.some((h) => casaLaRama(h as T, texto, rutaHija));
 }

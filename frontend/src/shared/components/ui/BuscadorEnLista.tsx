@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
+import { casaPorTrozos } from '@/shared/lib/buscarPorTrozos';
 
 // Elegir UNO de una lista larga, escribiendo.
 //
@@ -25,9 +26,6 @@ export interface Elegible {
   /** Lo pequeño de la derecha. Un precio, una ruta, lo que distinga. */
   nota?: string | number | null;
 }
-
-const sinAcentos = (s: string) =>
-  String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 const euros = (n: string | number | undefined) =>
   n == null ? '' : Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -67,19 +65,12 @@ export default function BuscadorEnLista({
 
   const resultados = useMemo(() => {
     const disponibles = opciones.filter((c) => !excluir.includes(c.id));
-    const t = sinAcentos(texto).trim();
-    if (!t) return disponibles.slice(0, 60);
-    const trozos = t.split(/\s+/);
+    if (!texto.trim()) return disponibles.slice(0, 60);
+    // Se busca tambien en la NOTA cuando es texto — en las categorias ahi vive
+    // la ruta, y «prof adicc» tiene que llegar a «Para Profesionales ›
+    // Adicciones». Si la nota es un importe, `casaPorTrozos` la ignora sola.
     return disponibles
-      .filter((c) => {
-        // Se busca tambien en la NOTA cuando es texto — en las categorias ahi
-        // vive la ruta, y «prof adicc» tiene que llegar a «Para Profesionales ›
-        // Adicciones». Si la nota es un importe no aporta nada y se deja fuera.
-        const donde = typeof c.nota === 'string'
-          ? sinAcentos(`${c.nombre} ${c.nota}`)
-          : sinAcentos(c.nombre);
-        return trozos.every((p) => donde.includes(p));
-      })
+      .filter((c) => casaPorTrozos(texto, c.nombre, c.nota))
       .slice(0, 60);
   }, [opciones, texto, excluir]);
 
