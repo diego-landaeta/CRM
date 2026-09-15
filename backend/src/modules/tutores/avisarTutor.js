@@ -184,6 +184,9 @@ export async function avisar({ tutorId, periodo, userId }) {
     tags: ['aviso-tutor'],
     fromEmail: REMITENTE,
     fromName: REMITENTE_NOMBRE,
+    // El correo le pide que CONTESTE con su factura: la respuesta tiene que
+    // caer en ese buzon, y no depender de a quien responda Brevo por defecto.
+    replyTo: REMITENTE,
   });
 
   if (!r?.sent) {

@@ -53,7 +53,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
  * queda anotado el intento.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, replyTo, attachment, clave = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
@@ -101,6 +101,12 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     htmlContent,
     textContent,
   };
+  // A donde contesta quien lo recibe. Brevo, si no se dice, responde al
+  // remitente — que casi siempre es lo que se quiere. Se deja poner aparte
+  // porque hay correos cuyo sentido ES la respuesta: el aviso al tutor le pide
+  // «contesta a este mismo correo con tu factura», y ahi no puede depender de
+  // que nadie cambie el remitente por un `no-reply` mas adelante.
+  if (replyTo) payload.replyTo = typeof replyTo === 'string' ? { email: replyTo } : replyTo;
   // Las etiquetas solo si las hay. Mandar la lista vacia hace que Brevo
   // conteste «400 · tags is blank» y NO envie el correo — y como casi ninguna
   // llamada pasa etiquetas, eso era todos los correos del CRM.
