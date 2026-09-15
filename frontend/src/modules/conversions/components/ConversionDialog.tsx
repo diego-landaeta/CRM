@@ -126,9 +126,6 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     freno del 14/09. El interruptor vive en la empresa emisora.
   */
   const [numeraAqui, setNumeraAqui] = useState(false);
-  // Como se registro la venta: sin ningun cobro o con el. Se mira lo que quedo
-  // guardado, no el modo del formulario, que puede haberse tocado despues.
-  const sinPagoVenta = !created || (Number(created.importe_pagado) || 0) <= 0;
   const [numero, setNumero] = useState('');
   const [sugerido, setSugerido] = useState('');
   // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
@@ -151,6 +148,33 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
+
+  /*
+    QUE DOCUMENTO TOCA, Y DE QUE. Lo decide como se registro la venta.
+
+    Diego, 15/09: «que me salga el cuadro diciendome: registrar numero de factura
+    del pago 1, o del pago completo, y asi; si es sin pago, el numero de la
+    proforma».
+
+    Son tres casos y cada uno se llama distinto, porque son cosas distintas:
+
+      sin cobro           -> PROFORMA. Reserva el numero y pasa a factura al pagar.
+      cobro por el total  -> FACTURA del pago completo.
+      cobro parcial       -> FACTURA DEL PAGO 1. Cada cuota lleva la suya despues:
+                             esa es la regla de «una factura por cada abono».
+
+    Se mira lo GUARDADO, no el modo del formulario, que puede haberse tocado.
+  */
+  const pagadoVenta = Number(created?.importe_pagado) || 0;
+  const totalVenta = Number(created?.importe_total) || 0;
+  const sinPagoVenta = !created || pagadoVenta <= 0;
+  const pagoCompleto = !sinPagoVenta && pagadoVenta >= totalVenta - 0.01;
+  const nCuotas = installments.length;
+  const queSeEmite = sinPagoVenta
+    ? 'la proforma'
+    : pagoCompleto
+      ? 'la factura del pago completo'
+      : (nCuotas > 0 ? `la factura del pago 1 (de ${nCuotas + 1})` : 'la factura del pago 1');
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -505,7 +529,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               {numeraAqui ? (
                 <div className="text-left rounded-lg border border-border bg-muted/30 p-3">
                   <label className="block text-sm">
-                    <span className="font-medium">Número de factura</span>
+                    <span className="font-medium">Número de {queSeEmite}</span>
                     <input type="number" min="1" value={numero}
                       onChange={(e) => setNumero(e.target.value)}
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums" />
@@ -543,7 +567,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 <p className="text-xs text-muted-foreground">
                   {sinPagoVenta
                     ? <>Esta venta se registró <b>sin ningún cobro</b>, así que lo que toca es una <b>proforma</b>: reserva el número y se convierte en factura cuando entre el pago.</>
-                    : <>Esta venta se registró <b>con cobro</b>, así que lo que toca es la <b>factura</b>.</>}
+                    : pagoCompleto
+                      ? <>Esta venta se registró <b>pagada entera</b> ({totalVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €), así que lo que toca es la <b>factura del pago completo</b>.</>
+                      : <>Esta venta se registró con un <b>pago parcial</b> de {pagadoVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} € de {totalVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €, así que este número es el de <b>la factura del pago 1</b>{nCuotas > 0 ? ` de ${nCuotas + 1}` : ''}. Cada cuota llevará la suya cuando se cobre.</>}
                 </p>
                 <button type="button"
                   onClick={() => (sinPagoVenta ? setDocPhase('proforma') : handleFacturaChoice())}
