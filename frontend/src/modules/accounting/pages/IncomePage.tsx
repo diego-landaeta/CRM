@@ -12,6 +12,7 @@ import { formatDate } from '@/shared/lib/format';
 // Las metas son mensuales: el mes que toque segun el filtro de fechas. Misma
 // funcion que usa SalesPage, para que las dos pantallas digan el mismo mes.
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
+import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TutorialesVentas = lazy(() => import('@/modules/sales/components/TutorialesVentas'));
@@ -31,32 +32,12 @@ const PER_PAGE = 50;
   «hoy» se convierte en mañana. Un atajo que enseña el dia equivocado por la
   noche es peor que no tenerlo, asi que la fecha se arma con los numeros locales.
 */
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/* `iso` y `lunesDe` se fueron con los atajos: ahora los calcula `RangoRapido`,
+   que es quien pinta los botones. `sumaDias` se queda porque la usa el resto de
+   la pantalla. */
 const sumaDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
-/* «Esta semana» empieza en LUNES, no en domingo: es la semana con la que se
-   trabaja aqui. getDay() da 0 para el domingo, de ahi el ajuste. */
-const lunesDe = (d) => sumaDias(d, -((d.getDay() + 6) % 7));
 
-function atajosDeFecha() {
-  const hoy = new Date();
-  const ayer = sumaDias(hoy, -1);
-  const lunes = lunesDe(hoy);
-  const lunesPasado = sumaDias(lunes, -7);
-  const primeroDeMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const finMesPasado = sumaDias(primeroDeMes, -1);
-  const primeroMesPasado = new Date(finMesPasado.getFullYear(), finMesPasado.getMonth(), 1);
-  return [
-    { id: 'hoy', texto: 'Hoy', from: iso(hoy), to: iso(hoy) },
-    { id: 'ayer', texto: 'Ayer', from: iso(ayer), to: iso(ayer) },
-    // De lunes a HOY, no a domingo: enseñar dias que aun no han pasado hace
-    // parecer que la semana va peor de lo que va.
-    { id: 'semana', texto: 'Esta semana', from: iso(lunes), to: iso(hoy) },
-    { id: 'semana_pasada', texto: 'Semana pasada', from: iso(lunesPasado), to: iso(sumaDias(lunes, -1)) },
-    { id: 'mes', texto: 'Este mes', from: iso(primeroDeMes), to: iso(hoy) },
-    { id: 'mes_pasado', texto: 'Mes pasado', from: iso(primeroMesPasado), to: iso(finMesPasado) },
-  ];
-}
 
 
 
@@ -129,12 +110,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     facturadoEnPeriodo: { n: 0, importe: 0 },
     cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [],
   });
-  const atajos = atajosDeFecha();
   // Por defecto, ESTE MES. Diego: «por defecto es este mes». Sin fechas la
   // lista era el historico entero, y la etiqueta venta/cuota solo tiene sentido
   // con un periodo: asi la pantalla abre ya con la lista mezclada y etiquetada.
-  const esteMes = atajos.find((a) => a.id === 'mes') || { from: '', to: '' };
-  const [rango, setRango] = useState({ from: esteMes.from, to: esteMes.to });
+  const [rango, setRango] = useState(rangoDe('mes'));
   // La lista de abajo con fechas puestas: ventas + cuotas facturadas, cada una
   // con su etiqueta. Sin fechas, la lista sigue siendo la de ventas.
   const [filas, setFilas] = useState<any[]>([]);
@@ -422,8 +401,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
           <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from !== esteMes.from || rango.to !== esteMes.to) && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango({ from: esteMes.from, to: esteMes.to }); }} className="text-[11px] text-primary hover:underline">
+          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from !== rangoDe('mes').from || rango.to !== rangoDe('mes').to) && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango(rangoDe('mes')); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}
@@ -432,22 +411,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               queden escondidos al final de una fila larga de filtros. */}
           <div className="basis-full flex flex-wrap items-center gap-1.5 pt-1">
             <span className="text-xs font-semibold text-muted-foreground mr-0.5">Rápido:</span>
-            {atajos.map((a) => {
-              const puesto = rango.from === a.from && rango.to === a.to;
-              return (
-                <button key={a.id} type="button"
-                  onClick={() => setRango(puesto ? { from: '', to: '' } : { from: a.from, to: a.to })}
-                  // Se dice el periodo exacto que coge: «Semana pasada» no
-                  // significa lo mismo para todo el mundo.
-                  title={`${a.from} → ${a.to}`}
-                  className={`h-7 px-2.5 rounded-md border text-xs font-medium transition-colors ${
-                    puesto
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted'}`}>
-                  {a.texto}
-                </button>
-              );
-            })}
+            {/* El componente compartido. Antes esta pantalla tenia su propia
+                copia de los seis atajos, con las mismas cuentas escritas otra
+                vez: tres copias en el CRM era lo que el ticket pedia evitar. */}
+            <RangoRapido valor={rango} alElegir={setRango} />
           </div>
         </div>
       )}
