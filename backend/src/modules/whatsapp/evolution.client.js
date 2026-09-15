@@ -63,7 +63,7 @@ export const EVENTOS_QUE_ATENDEMOS = [
   // Manda el aviso y no `findLabels`: alli el nombre llega PELADO —Evolution le
   // quita todo lo que no sea ASCII antes de guardarlo— y ademas solo hay algo
   // si tiene encendido `DATABASE_SAVE_DATA_LABELS`. Por el aviso llega entero y
-  // siempre. Esta escrito con detalle en `157_etiquetas_de_whatsapp.sql`.
+  // siempre. Esta escrito con detalle en `168_etiquetas_de_whatsapp.sql`.
   'LABELS_EDIT',
   'LABELS_ASSOCIATION',
 ];
@@ -634,7 +634,7 @@ export const _reiniciarEdicion = () => { editarNoExiste = false; };
  *     llega con el nombre entero.
  *
  * Por eso esto sirve para la PRIMERA carga y nada mas: manda lo que llega por
- * el aviso. Ver `157_etiquetas_de_whatsapp.sql`.
+ * el aviso. Ver `168_etiquetas_de_whatsapp.sql`.
  */
 export async function etiquetas(nombre = INSTANCIA) {
   const r = await pedir(`/label/findLabels/${nombre}`, { esperaMs: 10000 });

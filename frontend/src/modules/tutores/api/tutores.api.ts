@@ -233,11 +233,6 @@ export const tutoresApi = {
     tutorId: number; productId: number; pct: number; desde: string; hasta?: string | null; notas?: string;
   }) => client.post('/tutores/colaboraciones', datos) as Promise<ApiResponse<Colaboracion>>,
 
-  /** Mover una comision entre pendiente, notificada y falta_factura. Pagar y
-   *  revertir NO pasan por aqui: tienen su propia llamada porque mueven dinero. */
-  cambiarEstadoComision: (id: number, estado: string) =>
-    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<ComisionReal>>,
-
   editarColaboracion: (id: number, datos: Record<string, unknown>) =>
     client.patch(`/tutores/colaboraciones/${id}`, datos) as Promise<ApiResponse<Colaboracion>>,
 
@@ -252,7 +247,7 @@ export const tutoresApi = {
   // Mover el tramite de una comision. Solo entre las tres que no han cobrado:
   // pagar y revertir tienen su propio camino, que deja rastro de quien y por que.
   cambiarEstadoComision: (id: number, estado: 'pendiente' | 'notificada' | 'falta_factura') =>
-    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<{ id: number; estado: string }>>,
+    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<ComisionReal>>,
 
   borrarColaboracion: (id: number) =>
     client.delete(`/tutores/colaboraciones/${id}`) as Promise<ApiResponse<{ borrada: boolean; desactivada: boolean; comisiones: number }>>,

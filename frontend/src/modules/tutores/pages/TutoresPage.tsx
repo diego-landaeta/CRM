@@ -928,12 +928,12 @@ export default function TutoresPage() {
               <section className="space-y-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     Nombre y apellidos <span className="text-red-500">*</span>
                     <input name="nombre" required autoFocus
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     Correo <span className="text-red-500">*</span>
                     <input name="email" type="email" required
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
@@ -941,17 +941,17 @@ export default function TutoresPage() {
                       Es con lo que entra al CRM.
                     </span>
                   </label>
-                  <label className="text-xs font-medium">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium">
                     DNI / NIF
                     <input name="dniNif"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium">
                     Teléfono
                     <input name="telefono"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     IBAN
                     <input name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
@@ -1025,7 +1025,7 @@ export default function TutoresPage() {
                 </p>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
-                  <label className="text-[11px] text-muted-foreground min-w-0">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground min-w-0">
                     Curso
                     <div className="mt-1">
                       <BuscadorEnLista
@@ -1039,13 +1039,13 @@ export default function TutoresPage() {
                       />
                     </div>
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     %
                     <input type="number" step="0.5" min="0" max="100" value={nuevoPct}
                       onChange={(e) => setNuevoPct(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm tabular-nums" />
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     Lo lleva desde
                     <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
@@ -1137,17 +1137,17 @@ export default function TutoresPage() {
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
 
             <div className="grid grid-cols-3 gap-2">
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Porcentaje
                 <input name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
                   className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Desde
                 <input name="desde" type="date" defaultValue={hoy()} required
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Hasta
                 <input name="hasta" type="date"
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />

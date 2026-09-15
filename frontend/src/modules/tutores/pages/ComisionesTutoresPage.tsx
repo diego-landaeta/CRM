@@ -30,6 +30,9 @@ const euros = (n: number | string) =>
 
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
 
+/** Los tres que se ponen a mano. Pagada y revertida no: mueven dinero. */
+type EstadoDelTramite = 'pendiente' | 'notificada' | 'falta_factura';
+
 const ETIQUETA_ESTADO: Record<string, string> = {
   pendiente: 'Pendiente',
   notificada: 'Notificada',
@@ -187,7 +190,7 @@ export default function ComisionesTutoresPage() {
 
   /** Pendiente ⇄ Notificada ⇄ Falta factura. Nada mas: pagar y revertir van por
    *  su lado porque mueven dinero y dejan rastro de quien y cuando. */
-  async function cambiarEstado(c: ComisionReal, estado: string) {
+  async function cambiarEstado(c: ComisionReal, estado: EstadoDelTramite) {
     setCambiando(c.id);
     try {
       const r = await tutoresApi.cambiarEstadoComision(c.id, estado);
@@ -438,7 +441,7 @@ export default function ComisionesTutoresPage() {
                                   <select
                                     value={l.estado}
                                     disabled={cambiando === l.id}
-                                    onChange={(e) => cambiarEstado(l, e.target.value)}
+                                    onChange={(e) => cambiarEstado(l, e.target.value as EstadoDelTramite)}
                                     aria-label={`Estado de la comisión de ${l.alumno}`}
                                     className={`h-7 px-1.5 rounded border border-border bg-background text-xs font-semibold
                                       focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 ${

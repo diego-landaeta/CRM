@@ -537,7 +537,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                   aviso de la cola y nada mas: ese es el freno del 14/09. */}
               {numeraAqui ? (
                 <div className="text-left rounded-lg border border-border bg-muted/30 p-3">
-                  <label className="block text-sm">
+                  <label className="mb-1.5 block px-1 text-secundario">
                     <span className="font-medium">Número de {queSeEmite}</span>
                     <input type="number" min="1" value={numero}
                       onChange={(e) => setNumero(e.target.value)}
