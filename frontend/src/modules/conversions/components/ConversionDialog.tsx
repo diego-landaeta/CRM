@@ -13,10 +13,10 @@ import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
 
-// Flujo nuevo de facturación (ventana Presupuesto/Factura + auto-emisión al
-// pagar) SOLO en entornos con VITE_FACTURACION_V2=true (staging). En producción
-// la conversión se registra y cierra como siempre, sin ventana.
-const FACT_V2 = String(import.meta.env.VITE_FACTURACION_V2 || '') === 'true';
+// La ventana de documento tras registrar la venta sale SIEMPRE, en los dos
+// entornos. Estuvo detrás de `VITE_FACTURACION_V2` --solo encendido en staging--
+// y por eso en producción no se vio nunca: ni el aviso de que la factura no se
+// emite sola, ni el número al convertir. Ver el porqué en `handleSubmit`.
 
 // Construye los conceptos del documento a partir de la conversión creada.
 function buildDocItems(c: Conversion): InvoiceItem[] {
@@ -473,15 +473,24 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           }
         }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-        if (!FACT_V2) {
-          // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
-          onCreated?.(res.data);
-          onClose();
-        } else {
-          // Staging (flujo nuevo): ofrecer Presupuesto/Factura + PDF.
-          setCreated(res.data);
-          setDocPhase('choose');
-        }
+        /*
+          EL PASO DEL DOCUMENTO SALE SIEMPRE.
+
+          Estaba detras de `VITE_FACTURACION_V2`, que solo se enciende en
+          staging. O sea que en PRODUCCION esta ventana no se ha visto nunca:
+          se registraba la venta y se cerraba, con un aviso que se va solo.
+
+          Eso dejaba invisibles en produccion dos cosas que si se pidieron para
+          alli: el aviso grande de que la factura NO se emite sola y va a la
+          cola (Diego, 14/09: «le di a convertir y no me salio en grande»), y el
+          numero de factura al convertir (15/09). Diego, probando en produccion
+          con «Sin pago»: «no me salio nada, solo lo de abajo».
+
+          El interruptor se queda para lo otro que gatea --el borrador de
+          `InvoiceButton`--, que eso si sigue siendo distinto entre entornos.
+        */
+        setCreated(res.data);
+        setDocPhase('choose');
       }
     } catch (err: any) {
       toast({
