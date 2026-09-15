@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hayBuzon } from '../src/shared/services/copia-en-enviados.service.js';
+import { hayBuzon, fechaRFC } from '../src/shared/services/copia-en-enviados.service.js';
 
 /**
  * La copia en «Enviados» del buzón de verdad.
@@ -43,5 +43,23 @@ describe('el mensaje que se guardaría', () => {
 
   it('un asunto solo con ASCII no necesita codificarse', () => {
     expect(/[^\x20-\x7E]/.test('Tus comisiones de agosto')).toBe(false);
+  });
+});
+
+describe('la fecha de la copia', () => {
+  it('lleva el desfase en numeros, no «GMT»', () => {
+    // Lo que fallaba: `toUTCString()` termina en «GMT», que el estandar admite
+    // por compatible con lo viejo, pero que el webmail de Hostinger no parsea.
+    // La copia salia en «Enviados» SIN HORA, con el hueco en blanco al lado del
+    // asunto — y asi se vio en una captura.
+    const d = new Date(Date.UTC(2026, 8, 15, 16, 35, 14));
+    expect(fechaRFC(d)).toBe('Tue, 15 Sep 2026 16:35:14 +0000');
+    expect(fechaRFC(d)).not.toMatch(/GMT/);
+  });
+
+  it('es la forma que sale de los correos mandados por SMTP', () => {
+    // Los que salen por el buzon llevan `+0000`, y la copia tiene que ser el
+    // mismo correo: si no, la lista se ordena de una forma y se lee de otra.
+    expect(fechaRFC(new Date())).toMatch(/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} \+0000$/);
   });
 });

@@ -166,6 +166,40 @@ async function plantilla() {
  * funcion, y por eso se puede ver el correo exacto sin mandarlo ni sembrar
  * nada — que es como se revisa un texto que va a salir a un tercero.
  */
+/**
+ * El mismo correo, en texto plano.
+ *
+ * Un correo de verdad lleva las dos versiones. Mandar solo HTML es lo que hace
+ * un boletin, y se nota: puntua peor en los filtros, y quien lee sin formato
+ * —un movil viejo, un lector de pantalla, quien lo tiene desactivado— recibe
+ * una pagina de etiquetas.
+ *
+ * Se saca DEL HTML ya compuesto, no de la plantilla. Asi las dos versiones
+ * dicen lo mismo siempre, aunque alguien edite la plantilla desde el CRM y
+ * nadie se acuerde de tocar nada mas.
+ */
+export function comoTexto(html) {
+  const salto = String.fromCharCode(10);
+  return String(html || '')
+    // La tabla de la cuenta se lee «Concepto ... importe», que es como se dicta
+    // por telefono. Se hace ANTES de quitar etiquetas, que es cuando aun se
+    // sabe donde acababa cada celda.
+    .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, ': ')
+    .replace(/<\/tr>/gi, salto)
+    .replace(/<li[^>]*>/gi, `${salto}  - `)
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/ul|\/table)[^>]*>/gi, salto)
+    .replace(/<[^>]+>/g, '')
+    // Las entidades que de verdad salen en este correo: el euro, las comillas
+    // españolas, el menos de la retencion.
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .split(salto).map((l) => l.trim())
+    // Tres lineas en blanco seguidas son las que dejaba el HTML, no el texto.
+    .join(salto).replace(new RegExp(`${salto}{3,}`, 'g'), salto + salto)
+    .trim();
+}
+
 export function componerCorreo({ datos, subject, cuerpo }) {
   const ctx = {
     mes: datos.mes,
@@ -185,9 +219,11 @@ export function componerCorreo({ datos, subject, cuerpo }) {
     .replace('{{formaciones}}', `<ul>${datos.formaciones.map((f) => `<li>${f}</li>`).join('')}</ul>`)
     .replace('{{calculo}}', tablaDeLaCuenta(datos.cuenta));
   // El asunto sin escapar —es texto plano— y el cuerpo escapado, que es HTML.
+  const html = renderTemplate(conHtml, ctx);
   return {
     asunto: renderTemplate(subject, ctx, { escapar: false }),
-    html: renderTemplate(conHtml, ctx),
+    html,
+    texto: comoTexto(html),
   };
 }
 
@@ -209,8 +245,41 @@ export async function previsualizar({ tutorId, periodo }) {
  * revertida— y una comision avisada sigue sin pagarse: si entrara ahi,
  * desapareceria de los «Por pagar» y el tutor se quedaria sin cobrar.
  */
-export async function avisar({ tutorId, periodo, userId }) {
-  const aviso = await previsualizar({ tutorId, periodo });
+/**
+ * El texto retocado a mano, si lo hay.
+ *
+ * Se admite porque la plantilla no puede preverlo todo: un mes con una
+ * devolucion, un tutor al que hay que explicarle algo, una errata. Antes habia
+ * que salirse del CRM y escribirle desde el webmail — y entonces el envio no
+ * quedaba anotado en ningun sitio.
+ *
+ * LO QUE NO SE TOCA ES A QUIEN VA. El destinatario sale del tutor, siempre, y
+ * por eso esto no sirve para mandar un correo cualquiera a cualquiera: el unico
+ * correo que puede salir de aqui es el de este tutor.
+ */
+const MAX_HTML = 200_000;
+
+export function loRetocado({ asunto, html }) {
+  const a = typeof asunto === 'string' ? asunto.trim() : '';
+  const h = typeof html === 'string' ? html.trim() : '';
+  if (!a && !h) return null;
+  // Si se retoca, tiene que venir entero: mandar un correo con el asunto nuevo
+  // y el cuerpo viejo —o al reves— es peor que no dejar retocarlo.
+  if (!a || !h) {
+    throw new AppError('Para mandar el aviso retocado hacen falta el asunto y el cuerpo.',
+      400, 'RETOQUE_INCOMPLETO');
+  }
+  if (h.length > MAX_HTML) {
+    throw new AppError('El cuerpo del aviso es demasiado largo.', 400, 'RETOQUE_ENORME');
+  }
+  return { asunto: a, html: h, texto: comoTexto(h) };
+}
+
+export async function avisar({ tutorId, periodo, userId, asunto, html }) {
+  const compuesto = await previsualizar({ tutorId, periodo });
+  // Lo retocado pisa al compuesto, pero solo el texto: el resto del aviso
+  // —a quien, cuanto, de que formaciones— sigue saliendo de la base.
+  const aviso = { ...compuesto, ...(loRetocado({ asunto, html }) || {}) };
 
   // SIN `clave`, y es la decision de poder reenviar: `sendEmail` deduplica por
   // esa clave, asi que pasarla bloquearia el segundo envio del mes. Un tutor que
@@ -219,6 +288,7 @@ export async function avisar({ tutorId, periodo, userId }) {
     to: aviso.email,
     subject: aviso.asunto,
     htmlContent: aviso.html,
+    textContent: aviso.texto,
     tags: ['aviso-tutor'],
     fromEmail: REMITENTE,
     fromName: REMITENTE_NOMBRE,

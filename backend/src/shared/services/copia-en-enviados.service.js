@@ -53,8 +53,20 @@ async function carpetaDeEnviados(cliente) {
   return null;
 }
 
+/**
+ * La fecha como la escribe un cliente de correo.
+ *
+ * `toUTCString()` termina en «GMT», que el estandar admite pero por compatible
+ * con lo viejo. Hay lectores que no lo parsean —el webmail de Hostinger, sin ir
+ * mas lejos— y entonces la copia sale en «Enviados» SIN HORA, con el hueco en
+ * blanco al lado del asunto. Lo que entienden todos es el desfase en numeros.
+ */
+export function fechaRFC(d) {
+  return d.toUTCString().replace(/GMT$/, '+0000');
+}
+
 /** El mensaje en crudo, que es lo que IMAP guarda: cabeceras y cuerpo. */
-function comoMensaje({ de, deNombre, para, asunto, html, fecha }) {
+function comoMensaje({ de, deNombre, para, asunto, html, fecha, messageId }) {
   const destinos = Array.isArray(para) ? para.join(', ') : para;
   // El asunto puede llevar tildes y eñes, y una cabecera es ASCII: se codifica
   // en base64 con la forma que entienden todos los lectores (RFC 2047). Sin
@@ -66,7 +78,11 @@ function comoMensaje({ de, deNombre, para, asunto, html, fecha }) {
     `From: ${deNombre ? `"${deNombre}" ` : ''}<${de}>`,
     `To: ${destinos}`,
     `Subject: ${asuntoSeguro}`,
-    `Date: ${(fecha || new Date()).toUTCString()}`,
+    `Date: ${fechaRFC(fecha || new Date())}`,
+    // El MISMO identificador que llevo el correo al salir. Es lo que hace que
+    // la copia y la respuesta del tutor queden en la misma conversacion en vez
+    // de sueltas; sin el, cada lector se lo inventa y no casan.
+    ...(messageId ? [`Message-ID: ${messageId}`] : []),
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     '',
@@ -78,7 +94,7 @@ function comoMensaje({ de, deNombre, para, asunto, html, fecha }) {
  * Deja la copia. Devuelve `true` si se guardó, `false` si no — y NUNCA lanza:
  * quien llama ya ha mandado el correo y no puede deshacerlo.
  */
-export async function guardarEnEnviados({ de, deNombre, para, asunto, html, fecha } = {}) {
+export async function guardarEnEnviados({ de, deNombre, para, asunto, html, fecha, messageId } = {}) {
   if (!hayBuzon()) return false;
 
   let cliente;
@@ -98,7 +114,17 @@ export async function guardarEnEnviados({ de, deNombre, para, asunto, html, fech
 
     // `\Seen` porque ya se ha leído: es nuestro. Sin esa marca, la carpeta de
     // enviados sale con un contador de no leídos que no significa nada.
-    await cliente.append(carpeta, comoMensaje({ de, deNombre, para, asunto, html, fecha }), ['\\Seen']);
+    //
+    // Y la fecha se le da al servidor, en vez de dejar que ponga la de cuando
+    // le llegó: son cosas distintas —la copia se archiva después de mandar— y
+    // los lectores que ordenan por la del servidor la colocarían mal.
+    const cuando = fecha || new Date();
+    await cliente.append(
+      carpeta,
+      comoMensaje({ de, deNombre, para, asunto, html, fecha: cuando, messageId }),
+      ['\\Seen'],
+      cuando,
+    );
     return true;
   } catch (err) {
     logger.warn({ err: err.message, host: HOST }, 'Copia en Enviados: no se pudo guardar');
