@@ -274,24 +274,6 @@ export async function calcular(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// PATCH /api/tutores/comisiones/:id/estado
-// Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
-// sus propias puertas porque mueven dinero y dejan rastro.
-export async function cambiarEstadoComision(req, res, next) {
-  try {
-    await exigirGestion(req);
-    const estado = String(req.body?.estado || '');
-    const c = await model.cambiarEstadoComision(parseInt(req.params.id), estado);
-    if (!c) {
-      throw new AppError(
-        'Ese estado no vale aqui, o la comision ya esta pagada o revertida',
-        409, 'ESTADO_NO_PERMITIDO'
-      );
-    }
-    res.json({ success: true, data: c });
-  } catch (err) { next(err); }
-}
-
 // GET /api/tutores/comisiones?periodo=&tutorId=&estado=&projectId=
 export async function listarComisiones(req, res, next) {
   try {
@@ -544,9 +526,16 @@ export async function avisarTutor(req, res, next) {
   } catch (e) { next(e); }
 }
 
-/** PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero. */
+/**
+ * PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero.
+ *
+ * Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
+ * sus propias puertas porque mueven dinero y dejan rastro. El modelo dice que
+ * no y por que; aqui solo se comprueba QUIEN puede.
+ */
 export async function cambiarEstadoComision(req, res, next) {
   try {
+    await exigirGestion(req);
     const r = await model.cambiarEstadoComision(
       Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
     res.json({ success: true, data: r });

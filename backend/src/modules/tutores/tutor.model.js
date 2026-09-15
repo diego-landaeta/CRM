@@ -536,30 +536,6 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
 }
 
-/**
- * Mover una comision entre los estados de SEGUIMIENTO: pendiente, notificada y
- * falta_factura. Los otros dos no entran aqui a proposito:
- *
- *   `pagada` la pone `liquidar`, que ademas apunta la fecha y quien pago.
- *   `revertida` la pone `revertirComision`, que exige un motivo.
- *
- * Dejarlas pasar por aqui seria poder marcar algo como pagado sin que quede
- * rastro de quien ni cuando. Diego, 14/09.
- */
-const ESTADOS_DE_SEGUIMIENTO = ['pendiente', 'notificada', 'falta_factura'];
-
-export async function cambiarEstadoComision(id, estado) {
-  if (!ESTADOS_DE_SEGUIMIENTO.includes(estado)) return null;
-  const { rows: [c] } = await query(
-    `UPDATE tutor_commissions
-        SET estado = $2, updated_at = NOW()
-      WHERE id = $1 AND estado = ANY($3::text[])
-      RETURNING *`,
-    [id, estado, ESTADOS_DE_SEGUIMIENTO]
-  );
-  return c || null;
-}
-
 // Deshacer una liquidacion o anular una comision. Queda escrito quien y por que:
 // esto mueve dinero y no puede pasar sin dejar rastro.
 /**
