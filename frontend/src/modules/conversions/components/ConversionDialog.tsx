@@ -589,16 +589,20 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 </button>
               </div>
 
-              {/* El otro tipo sigue estando, pero pequeño: hay casos sueltos y no
-                  es cuestion de tapiarlos. */}
-              <button type="button"
-                onClick={() => (sinPagoVenta ? handleFacturaChoice() : setDocPhase('proforma'))}
-                className="text-xs text-muted-foreground hover:underline">
-                {sinPagoVenta ? 'Necesito emitir la factura igualmente' : 'Prefiero un presupuesto (sin valor fiscal)'}
-              </button>
-              <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">
-                {numeraAqui ? 'Ahora no: dejarla en la cola de facturación' : 'Cerrar'}
-              </button>
+              {/* En columna y con hueco: son dos botones en linea y sin esto
+                  salian pegados, leyendose como una sola frase. */}
+              <div className="flex flex-col items-center gap-2">
+                {/* El otro tipo sigue estando, pero pequeño: hay casos sueltos y
+                    no es cuestion de tapiarlos. */}
+                <button type="button"
+                  onClick={() => (sinPagoVenta ? handleFacturaChoice() : setDocPhase('proforma'))}
+                  className="text-xs text-muted-foreground hover:underline">
+                  {sinPagoVenta ? 'Necesito emitir la factura igualmente' : 'Prefiero un presupuesto (sin valor fiscal)'}
+                </button>
+                <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">
+                  {numeraAqui ? 'Ahora no: dejarla en la cola de facturación' : 'Cerrar'}
+                </button>
+              </div>
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -763,7 +767,17 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                       update('metodo_pago', 'fraccionado');
                     }}
                     className={`flex-1 h-9 border-x border-border ${pagoMode === 'parcial' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Parcial</button>
-                  <button type="button" onClick={() => setPagoMode('total')}
+                  <button type="button" onClick={() => {
+                      setPagoMode('total');
+                      // Venia de «Parcial», que deja el metodo en fraccionado y un
+                      // plan montado. Si no se limpia aqui, se registra una venta
+                      // pagada entera CON plan de cuotas, que es imposible.
+                      if (form.metodo_pago === 'fraccionado') {
+                        update('metodo_pago', metodoInicial);
+                        setInstallments([]);
+                        setInstallmentsDirty(false);
+                      }
+                    }}
                     className={`flex-1 h-9 ${pagoMode === 'total' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Pagó TODO</button>
                 </div>
                 {pagoMode === 'parcial' && (
@@ -824,7 +838,12 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 <Select<MetodoPago>
                   value={form.metodo_pago}
                   onChange={(v) => update('metodo_pago', v)}
-                  options={METODOS.map(m => ({ value: m.value, label: m.label }))}
+                  // Si pagó TODO no queda nada que fraccionar, asi que el metodo
+                  // «Fraccionado» ni se ofrece. Diego, 15/09: «si le doy a pago
+                  // todo no tiene sentido que me deje poner fraccionado».
+                  options={METODOS
+                    .filter(m => !(pagoMode === 'total' && m.value === 'fraccionado'))
+                    .map(m => ({ value: m.value, label: m.label }))}
                   ariaLabel="Método de pago"
                 />
               </div>
