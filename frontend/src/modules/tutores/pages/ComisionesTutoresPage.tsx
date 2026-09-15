@@ -450,10 +450,16 @@ export default function ComisionesTutoresPage() {
                 <span className="font-medium">{aviso.asunto}</span>
               </div>
 
-              {/* El correo tal cual va a salir. Enseñar un resumen y mandar otra
-                  cosa es como se manda lo que no se queria. */}
-              <div className="border border-border rounded-md p-3 text-sm bg-background"
-                dangerouslySetInnerHTML={{ __html: aviso.html }} />
+              {/* El correo tal cual va a salir, y sobre FONDO BLANCO aunque el CRM
+                  esté en oscuro: así se ve en la bandeja de quien lo recibe.
+                  Con el fondo del panel no era solo cuestión de gusto — los
+                  grises del correo, pensados para papel blanco, quedaban
+                  ilegibles sobre oscuro y media tabla no se leía. */}
+              <div
+                className="border border-border rounded-md p-4 text-sm overflow-x-auto"
+                style={{ background: '#ffffff', color: '#18181b', colorScheme: 'light' }}
+                dangerouslySetInnerHTML={{ __html: aviso.html }}
+              />
 
               {!aviso.tieneIban && (
                 <p className="text-xs flex gap-1.5 text-amber-700 dark:text-amber-400">
