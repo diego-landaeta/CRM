@@ -9,7 +9,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
-import { porQueNoPuede } from './roles.js';
+import { porQueNoPuede, porQueNoUsa } from './roles.js';
+import { usaSuWhatsapp } from './usaWhatsapp.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -54,7 +55,19 @@ async function usuarioObjetivo(req) {
   if (suyo) throw new AppError(suyo, 403, 'SIN_WHATSAPP');
 
   const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
-  if (!Number.isInteger(pedido) || pedido === propio) return propio;
+  if (!Number.isInteger(pedido) || pedido === propio) {
+    // La casilla de su ficha (#128). El rol dice si le CORRESPONDE tener
+    // WhatsApp y viaja en el testigo; esto dice si lo usa, y se pregunta a la
+    // base porque el testigo dura ocho horas y apagar a alguien tiene que
+    // notarse hoy. Se recuerda medio minuto: ver `usaWhatsapp.js`.
+    if (!await usaSuWhatsapp(propio)) {
+      throw new AppError(
+        'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+        403, 'SIN_WHATSAPP'
+      );
+    }
+    return propio;
+  }
 
   if (!['admin', 'superadmin'].includes(req.user.role)) {
     throw new AppError('Solo puedes trabajar con tu propio WhatsApp', 403, 'SOLO_EL_TUYO');
@@ -62,6 +75,11 @@ async function usuarioObjetivo(req) {
 
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.active, u.role, u.gestor_colaboraciones,
+            -- Con to_jsonb para que no reviente mientras la 156 no este
+            -- aplicada: sin la columna vale cierto y todo sigue como hoy.
+            -- (Sin comillas invertidas aqui dentro: esto va en una plantilla de
+            --  texto de JavaScript y cerrarian la cadena.)
+            COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp,
             EXISTS (
               SELECT 1 FROM user_projects a
               JOIN user_projects b ON b.project_id = a.project_id AND b.active
@@ -76,7 +94,10 @@ async function usuarioObjetivo(req) {
   // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
   // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
   // la pantalla no se la enseñara. La regla vive en `roles.js`, una sola vez.
-  const noPuede = porQueNoPuede(u);
+  //
+  // `porQueNoUsa` es el mismo candado mas la casilla de su ficha: a quien esta
+  // apagado tampoco se le entra por el numero, no solo se le quita de la lista.
+  const noPuede = porQueNoUsa(u);
   if (noPuede) throw new AppError(noPuede, 403, 'SIN_WHATSAPP');
 
   // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
@@ -131,6 +152,16 @@ async function sesionesQuePuedeMirar(req) {
   if (['admin', 'superadmin'].includes(req.user.role)) return null;
   // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
   // clientes dentro: nunca todas las lineas para cualquiera.
+  //
+  // Y si tiene la casilla apagada (#128), tampoco al suyo: apagar es dejar de
+  // usar el WhatsApp del CRM, no solo dejar de salir en una lista. Quien manda
+  // si entra, porque el banco es su herramienta de supervision.
+  if (!await usaSuWhatsapp(req.user.userId)) {
+    throw new AppError(
+      'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+      403, 'SIN_WHATSAPP'
+    );
+  }
   return [evolution.instanciaDe(req.user.userId)];
 }
 
@@ -179,7 +210,7 @@ export async function bancoNumeros(req, res, next) {
 // GET /api/whatsapp/chats?projectId=N
 export async function chats(req, res, next) {
   try {
-    res.json({ success: true, data: await model.listar({
+    const lista = await model.listar({
       instancia: await instanciaObjetivo(req),
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       limite: parseInt(req.query.limite) || 50,
@@ -188,8 +219,76 @@ export async function chats(req, res, next) {
       busca: req.query.busca || null,
       // La «etiqueta»: el estado del prospecto (#72).
       estado: req.query.estado || null,
-    })});
+      // Y la etiqueta de WhatsApp de verdad, la del movil (#128, #138). Son dos
+      // filtros distintos y se pueden combinar.
+      etiquetaWa: req.query.etiquetaWa || null,
+    });
+
+    // Y las etiquetas de WhatsApp, las de la gestora (#128, #138).
+    //
+    // Son OTRA cosa que el estado de arriba: esas las decide el CRM y viajan
+    // con la persona; estas las puso ella en su movil. Se enseñan las dos.
+    //
+    // En una consulta para las 50, no una por fila: esta pantalla se refresca
+    // sola cada cinco segundos.
+    const etiquetas = await model.etiquetasDeConversaciones(lista.map((c) => c.id));
+    res.json({
+      success: true,
+      data: lista.map((c) => ({ ...c, etiquetas_wa: etiquetas.get(c.id) || [] })),
+    });
   } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/etiquetas — las etiquetas de esta sesion.
+ *
+ * De paso, y como mucho una vez cada cuarto de hora, se las pide a Evolution
+ * para la primera carga: las que ya existian en el movil antes de que el CRM
+ * supiera de ellas no tienen aviso que las traiga, porque el aviso solo salta
+ * cuando se TOCAN.
+ *
+ * Nunca pisa el nombre que ya haya: el de Evolution viene pelado —sin acentos
+ * ni emojis— y el del aviso viene entero.
+ */
+export async function etiquetasDeWhatsapp(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    await primeraCargaDeEtiquetas(instancia).catch(() => {});
+    res.json({ success: true, data: await model.etiquetasDe(instancia) });
+  } catch (err) { next(err); }
+}
+
+const etiquetasRevisadas = new Map();
+
+async function primeraCargaDeEtiquetas(instancia) {
+  const ultima = etiquetasRevisadas.get(instancia) || 0;
+  if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
+  etiquetasRevisadas.set(instancia, Date.now());
+  if (!evolution.configurado()) return;
+
+  const suyas = await evolution.etiquetas(instancia);
+  if (!suyas.length) return;
+
+  // Las que ya se conocen, con el nombre que tengan.
+  const conocidas = new Map(
+    (await model.etiquetasDe(instancia)).map((e) => [String(e.wa_id), e.nombre])
+  );
+  for (const e of suyas) {
+    const actual = conocidas.get(e.waId);
+    // Las conocidas NO se pisan: el nombre que hay vino del aviso y esta
+    // entero; el de aqui llega pelado por Evolution —sin acentos ni emojis—.
+    //
+    // La excepcion es el nombre de relleno. Cuando una etiqueta se ve por
+    // primera vez al PONERLA en un chat, el aviso de asociacion solo trae el
+    // id, asi que se guarda como «Etiqueta 12» a la espera de saber como se
+    // llama. Sin esta linea se quedaria asi para siempre —el aviso que trae el
+    // nombre ya paso— y en la lista de chats se leerian numeros.
+    const esDeRelleno = actual === `Etiqueta ${e.waId}`;
+    if (actual !== undefined && !esDeRelleno) continue;
+    if (!e.nombre) continue;
+    await model.guardarEtiqueta({ instancia, waId: e.waId, nombre: e.nombre, color: e.color });
+  }
+  logger.info({ instancia, traidas: suyas.length }, 'WhatsApp: etiquetas de la sesion, primera carga');
 }
 
 // GET /api/whatsapp/chats/:id
@@ -254,7 +353,14 @@ export async function chat(req, res, next) {
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
     await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
-    res.json({ success: true, data: { conversacion: { ...conv, participantes, miembros }, mensajes: msgs, escribiendo } });
+    // Las etiquetas de WhatsApp tambien al abrir el chat (#128): la cabecera
+    // las enseña y deja quitarlas, y el objeto de la lista no llega hasta aqui.
+    const susEtiquetas = (await model.etiquetasDeConversaciones([conv.id])).get(conv.id) || [];
+    res.json({ success: true, data: {
+      conversacion: { ...conv, participantes, miembros, etiquetas_wa: susEtiquetas },
+      mensajes: msgs,
+      escribiendo,
+    } });
   } catch (err) { next(err); }
 }
 
@@ -477,6 +583,36 @@ export async function noEscribir(req, res, next) {
     const conv = await miConversacion(req, parseInt(req.params.id));
     await model.noEscribir(conv.id, req.body?.motivo);
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/whatsapp/chats/:id/etiqueta — poner o quitar una etiqueta (#128).
+ *
+ * La otra mitad del ticket: «poder extraer las etiquetas de WhatsApp y nosotros
+ * poner etiquetas». Extraerlas llega por los avisos; ponerlas va por aqui.
+ *
+ * Se guarda en el CRM ADEMAS de mandarlo a WhatsApp, sin esperar al eco: quien
+ * hace el cambio es esta misma sesion, y WhatsApp no se lo reenvia a si mismo.
+ * Esperando el aviso, la etiqueta que acabas de poner tardaria en verse o no
+ * llegaria nunca.
+ *
+ * Y se manda PRIMERO a WhatsApp: si se guardara antes, un fallo alli dejaria al
+ * CRM diciendo que la etiqueta esta puesta cuando en el movil no lo esta.
+ */
+export async function etiquetarChat(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const waId = String(req.body?.waId ?? '').trim();
+    if (!waId) throw new AppError('Falta la etiqueta', 400, 'FALTA_ETIQUETA');
+    const poner = req.body?.poner !== false;
+
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.ponerEtiqueta(conv.jid, waId, poner ? 'add' : 'remove', instancia);
+    if (!r.ok) throw new AppError(r.motivo || 'WhatsApp no acepto la etiqueta', 400, 'ETIQUETA_RECHAZADA');
+
+    await model.asociarEtiqueta({ instancia, jid: conv.jid, waIdEtiqueta: waId, poner });
+    res.json({ success: true, data: { waId, puesta: poner } });
   } catch (err) { next(err); }
 }
 
@@ -926,6 +1062,19 @@ export async function conexion(req, res, next) {
  */
 export async function emparejar(req, res, next) {
   try {
+    // El aviso, lo PRIMERO de todo.
+    //
+    // Estaba mas abajo y daba igual mientras resolver la instancia no costara
+    // nada. Desde el #128 si cuesta —hay que mirar la casilla en la base—, y una
+    // peticion a la que le falta la aceptacion no merece ni eso: se rechaza con
+    // lo que trae puesto. Lo fija `whatsappConsentimiento.test.js`.
+    if (req.body?.enterado !== true) {
+      throw new AppError(
+        'Hay que leer y aceptar el aviso antes de enlazar un numero',
+        400, 'FALTA_CONSENTIMIENTO'
+      );
+    }
+
     // Quien no manda solo puede enlazar el suyo: usuarioObjetivo lo impone. Un
     // administrador si puede enlazar el de una gestora —tenerla al lado con su
     // movil y hacerlo desde aqui es mas rapido que explicarselo por telefono—.
@@ -938,18 +1087,13 @@ export async function emparejar(req, res, next) {
     // recortar—, asi que los 30 dias los aplica el CRM al recibir.
     politica.apuntarModo(instancia, modo);
 
-    // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
+    // El aviso se acepta ANTES de que salga el codigo (comprobado arriba), y
+    // queda escrito.
     //
     // Sin esto la casilla de la pantalla no vale nada: bastaria con llamar al
     // endpoint a mano. Y hace falta guardarlo porque el numero es de una
     // persona — si WhatsApp se lo bloquea, tiene que poder verse que se le
     // advirtio, cuando, y con que texto.
-    if (req.body?.enterado !== true) {
-      throw new AppError(
-        'Hay que leer y aceptar el aviso antes de enlazar un numero',
-        400, 'FALTA_CONSENTIMIENTO'
-      );
-    }
     const objetivo = await usuarioObjetivo(req);
     const apuntado = await model.apuntarConsentimiento({
       userId: objetivo,
@@ -1083,8 +1227,9 @@ export async function usuarios(req, res, next) {
 
     const { rows } = await query(
       soloMio
-        ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
-             FROM users WHERE id = $1`
+        ? `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                  COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+             FROM users u WHERE u.id = $1`
         : (req.user.role === 'superadmin'
             // NO se filtra por rol aqui.
             //
@@ -1093,10 +1238,11 @@ export async function usuarios(req, res, next) {
             // que, y no salir es la peor forma de negar algo: parece un fallo.
             // Ahora salen todos y cada uno dice si puede tener WhatsApp y, si no,
             // por que. Quien decide es `roles.js`, en un solo sitio.
-            ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
-                 FROM users
-                WHERE active
-                ORDER BY (id = $1) DESC, nombre`
+            ? `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                      COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+                 FROM users u
+                WHERE u.active
+                ORDER BY (u.id = $1) DESC, u.nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
             // Tal como estaba, Postgres rechazaba la consulta entera: «for
@@ -1108,7 +1254,8 @@ export async function usuarios(req, res, next) {
             //
             // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
             // pregunta si comparte algun proyecto y se para en el primero.
-            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones
+            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
+                      COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
                  FROM users u
                 WHERE u.active
                   AND EXISTS (
@@ -1145,6 +1292,11 @@ export async function usuarios(req, res, next) {
       // Se dice quien NO puede y por que, en vez de esconderlo. La pantalla lo
       // enseña apagado con su motivo, que es lo que pide la tarea #68.
       const motivo = porQueNoPuede(u);
+      // Y aparte, si lo USA (#128). Son dos cosas: un admin puede tener derecho
+      // a WhatsApp y no usarlo —hoy son las gestoras y Daniela—, y entonces no
+      // pinta en el selector aunque su rol lo permita. La pantalla lo esconde;
+      // la API lo dice, para que no haya que adivinar por que falta alguien.
+      const usa = u.usa_whatsapp !== false;
       return {
         id: u.id, nombre: u.nombre, email: u.email, role: u.role,
         soyYo: u.id === yo,
@@ -1152,6 +1304,7 @@ export async function usuarios(req, res, next) {
         numero: est.numero || null,
         puede: motivo === null,
         motivo,
+        usa,
       };
     })});
   } catch (err) { next(err); }

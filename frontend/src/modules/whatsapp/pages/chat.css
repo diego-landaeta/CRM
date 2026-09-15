@@ -348,6 +348,79 @@
   background: var(--wa-hover); color: var(--wa-texto);
 }
 .wa-btn-prohibir:hover { color: #f15c6d; }
+
+/* ── Las etiquetas del WhatsApp de la gestora (#128, #138) ───────────────────
+ *
+ * El boton va con sus vecinos de la cabecera —mismo tamaño y mismo redondeo—
+ * porque es uno mas de esa fila. Lo que cambia es el menu, que se parece al de
+ * plantillas y no al desplegable de estado: son dos cosas distintas y no
+ * conviene que se lean como la misma.
+ */
+.wa-etiquetas-chat { position: relative; display: inline-grid; place-items: center; }
+
+.wa-btn-etiquetas {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 9999px;
+  border: 0; cursor: pointer;
+  background: transparent;
+  color: var(--wa-apagado);
+  position: relative;
+}
+.wa-btn-etiquetas:hover { background: var(--wa-hover); color: var(--wa-texto); }
+
+/* Cuantas tiene puestas, encima del icono. Sin esto hay que abrir el menu para
+   saber si este chat tiene etiqueta o no. */
+.wa-etiquetas-cuantas {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 9999px;
+  background: var(--wa-verde); color: #0b141a;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+}
+
+.wa-etiquetas-menu {
+  position: absolute; z-index: 50; top: 38px; right: 0;
+  width: 240px; max-height: 320px; overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--wa-borde);
+  background: var(--wa-cabecera);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  padding: 4px;
+}
+.wa-etiquetas-titulo {
+  padding: 6px 8px 4px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wa-apagado);
+}
+.wa-etiquetas-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 8px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--wa-texto);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.wa-etiquetas-item:hover:not(:disabled) { background: var(--wa-hover); }
+.wa-etiquetas-item:disabled { opacity: .6; cursor: default; }
+/* El tic ocupa sitio SIEMPRE, puesto o no: si apareciera y desapareciera, la
+   fila entera bailaria al marcar una etiqueta. */
+.wa-etiquetas-tic {
+  display: grid; place-items: center;
+  width: 14px; height: 14px; flex: 0 0 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  color: #0b141a;
+}
+.wa-etiquetas-item-puesta .wa-etiquetas-tic {
+  background: var(--wa-verde); border-color: var(--wa-verde);
+}
+.wa-etiquetas-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-etiquetas-pie {
+  padding: 6px 8px 4px;
+  border-top: 1px solid var(--wa-borde);
+  margin-top: 4px;
+  font-size: 11px; color: var(--wa-apagado);
+}
 .wa-btn-ayuda:hover { color: var(--wa-verde); }
 
 /* El «?» de la barra de arriba. Va con el mismo aspecto que «Ampliar» y
@@ -1406,6 +1479,28 @@ select.wa-estado-elegir {
 /* Un grupo no es un estado de prospecto: gris azulado, para que se lea como
    lo que es —una propiedad del chat— y no como una fase del embudo. */
 .wa-et-grupo          { background: rgba(148,163,184,.18); color: #cbd5e1; }
+
+/* Las etiquetas del WhatsApp de la gestora (#128, #138).
+   Con borde y sin relleno, al reves que las del estado: son de OTRO sitio —las
+   puso ella en su movil, no el CRM— y si se pintaran igual, en la misma fila
+   parecerian dos estados del mismo prospecto. */
+/* La fila de las etiquetas del móvil, debajo de la de estados y dicha aparte.
+   Juntas salían dos botones «Grupos» que hacían cosas distintas. */
+.wa-etiquetas-wa { padding-top: 2px; }
+.wa-etiquetas-de {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wa-apagado); align-self: center; margin-right: 2px;
+}
+.wa-et-whatsapp {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent;
+  color: var(--wa-apagado);
+  border: 1px solid rgba(255,255,255,.22);
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
 .wa-et-por_contactar  { background: rgba(249,115, 22,.16); color: #fdba74; }
