@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { etiquetaProducto } from '@/shared/lib/etiquetas';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -31,6 +32,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // pedia el proyecto numero MENOS UNO, que no existe: la pantalla salia vacia
   // y parecia que faltaban ventas.
   const projectIdParam = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+
+  // Como llama ESTE proyecto a lo que vende. Una plataforma de IA no filtra por
+  // «curso»: filtra por plan. (#44)
+  const etiqueta = etiquetaProducto(activeProject);
   const issuerIdParam = activeIssuerId ?? null;
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -156,13 +161,16 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           )}
           {cursos.length > 1 && (
             <>
-              <label className="text-xs font-semibold text-muted-foreground">Curso:</label>
+              <label className="text-xs font-semibold text-muted-foreground">{etiqueta.singular}:</label>
               <select
                 value={filterCurso}
                 onChange={(e) => setFilterCurso(e.target.value)}
                 className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px] max-w-[320px]"
               >
-                <option value="all">— Todos los cursos —</option>
+                {/* «Cualquier» y no «Todos los»: la etiqueta no guarda el genero, y
+                    con «Formaciones» saldria «todos los formaciones». «Cualquier»
+                    vale para los dos. */}
+                <option value="all">— Cualquier {etiqueta.singular.toLowerCase()} —</option>
                 {cursos.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </>
