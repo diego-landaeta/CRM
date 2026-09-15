@@ -106,19 +106,39 @@ export async function datosDelAviso({ tutorId, periodo }) {
   };
 }
 
-/** El HTML de la cuenta, que es lo que evita las facturas mal hechas. */
+/**
+ * La cuenta, con aspecto de factura.
+ *
+ * Es lo que evita las facturas mal hechas: el tutor copia estas cuatro lineas
+ * en la suya. Por eso se parece a una factura y no a un parrafo — se lee de un
+ * vistazo y se distingue del texto que la rodea.
+ *
+ * TODO EL ESTILO VA EN LINEA, y las separaciones con `border` de celda en vez
+ * de con clases: Gmail borra las hojas de estilo y Outlook ignora la mitad de
+ * lo que no sea una tabla. Una tabla con estilos en linea es lo unico que se ve
+ * igual en todos los lectores de correo.
+ */
 export function tablaDeLaCuenta({ base, iva, retencion, total }) {
-  const fila = (rotulo, valor, fuerte) =>
-    `<tr><td style="padding:4px 12px 4px 0">${rotulo}</td>`
-    + `<td style="padding:4px 0;text-align:right;white-space:nowrap">`
-    + `${fuerte ? `<strong>${valor}</strong>` : valor}</td></tr>`;
-  return `<table style="border-collapse:collapse;margin:8px 0">
-    ${fila('Comisión', eur(base))}
-    ${fila(`+ IVA ${IVA_PCT} %`, eur(iva))}
-    ${fila(`− retención IRPF ${RETENCION_PCT} %`, `− ${eur(retencion)}`)}
-    ${fila('Total a facturar', eur(total), true)}
+  const GRIS = '#e4e4e7';
+  const celda = 'padding:9px 14px;font-size:14px';
+  const fila = (rotulo, valor, o = {}) => `<tr${o.fondo ? ` style="background:${o.fondo}"` : ''}>`
+    + `<td style="${celda};border-top:1px solid ${GRIS};color:${o.color || '#3f3f46'}">`
+    + `${o.fuerte ? `<strong>${rotulo}</strong>` : rotulo}</td>`
+    + `<td style="${celda};border-top:1px solid ${GRIS};text-align:right;white-space:nowrap;`
+    + `font-variant-numeric:tabular-nums;color:${o.color || '#18181b'}">`
+    + `${o.fuerte ? `<strong>${valor}</strong>` : valor}</td></tr>`;
+
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0;width:100%;max-width:420px;border:1px solid ${GRIS};border-radius:6px">
+    <tr style="background:#fafafa">
+      <th align="left" style="${celda};font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#71717a;font-weight:600">Concepto</th>
+      <th align="right" style="${celda};font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#71717a;font-weight:600">Importe</th>
+    </tr>
+    ${fila('Comisión del mes', eur(base))}
+    ${fila(`IVA ${IVA_PCT} %`, `+ ${eur(iva)}`)}
+    ${fila(`Retención IRPF ${RETENCION_PCT} %`, `− ${eur(retencion)}`, { color: '#b91c1c' })}
+    ${fila('Total a facturar', eur(total), { fuerte: true, fondo: '#fafafa' })}
   </table>
-  <p style="font-size:12px;color:#666">
+  <p style="font-size:12px;color:#71717a;margin:0 0 14px;max-width:420px">
     Comisión sujeta a IVA (${IVA_PCT} %). La retención de IRPF es orientativa:
     cada profesional aplica la suya, y el ${RETENCION_PCT} % es la más común.
   </p>`;
