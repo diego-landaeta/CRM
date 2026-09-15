@@ -15,6 +15,10 @@ import { query } from '../../shared/config/db.js';
  * correos del CRM no aparecen en la bandeja de salida del webmail, porque Brevo
  * los manda EN NOMBRE de la direccion y no DESDE ella.
  *
+ * Aquello ya esta resuelto aparte: lo que sale del buzon va por su SMTP y se
+ * archiva en «Enviados». Pero alli solo esta lo de ESA direccion y solo lo que
+ * llego a salir; aqui esta todo lo que manda el CRM, frenado y fallido incluido.
+ *
  * LO RECIBIDO TODAVIA NO ESTA, y no se finge que si: hace falta decidir si
  * entra por Brevo Inbound o por IMAP contra Hostinger, y son cosas distintas.
  * La consulta ya devuelve `direccion` para que el dia que entre no haya que

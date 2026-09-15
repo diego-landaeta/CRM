@@ -17,6 +17,11 @@ import { correosApi, type CorreoEnLista, type CorreoCompleto } from '../api/corr
  * se entera. Hasta ahora el único sitio donde mirarlos era el panel de Brevo,
  * fuera del CRM, teniéndolo todo apuntado en casa.
  *
+ * Aquello ya está arreglado por otro lado —los correos que salen del buzón van
+ * por su SMTP y se archivan en «Enviados»— pero esta pantalla sigue haciendo
+ * falta: en el webmail solo está lo de ESA dirección, y aquí está todo lo que
+ * manda el CRM, incluido lo que no llegó a salir.
+ *
  * LO RECIBIDO NO ESTÁ TODAVÍA, y la pantalla lo dice en vez de disimularlo:
  * hace falta decidir si entra por Brevo Inbound o por IMAP contra Hostinger.
  */
@@ -79,7 +84,7 @@ export default function CorreosPage() {
     <div className="space-y-4">
       <PageHeader
         title="Correos"
-        subtitle="Lo que ha mandado el CRM, con su texto · no aparece en el webmail porque sale por Brevo"
+        subtitle="Lo que ha mandado el CRM, con su texto · los que salen del buzón quedan también en «Enviados»"
       />
 
       {/* Filtros */}
@@ -181,9 +186,14 @@ export default function CorreosPage() {
         )}
       </div>
 
-      {/* El correo, tal y como salió */}
+      {/* El correo, tal y como salió.
+          `!m-0` en la capa no es adorno: es hija del `space-y-4` de arriba, y
+          `space-y` le mete `margin-top: 1rem` a todo hijo que no sea el
+          primero. Con `fixed inset-0` ese margen la baja 16 px y deja una
+          franja sin cubrir arriba del todo — la barra blanca que no se
+          oscurecía. `ConfirmDialog` y `PromptDialog` ya lo llevan por esto. */}
       {abierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setAbierto(null)}>
           <div onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
