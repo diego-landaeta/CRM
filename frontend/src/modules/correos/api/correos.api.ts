@@ -4,12 +4,11 @@ import client from '@/shared/api/client';
 export interface CorreoEnLista {
   id: number;
   cuando: string;
-  /** Hoy siempre «salida». Existe desde ya para que lo recibido entre sin rehacer la pantalla. */
   direccion: 'salida' | 'entrada';
   remitente: string | null;
   destinatarios: string;
   asunto: string;
-  estado: 'enviado' | 'fallido' | 'bloqueado';
+  estado: 'enviado' | 'fallido' | 'bloqueado' | 'recibido';
   intentos: number;
   etiquetas: string[] | null;
   project_id: number | null;
@@ -32,6 +31,7 @@ export interface Bandeja {
 
 export interface Filtros {
   estado?: string | null;
+  direccion?: string | null;
   busca?: string | null;
   desde?: string | null;
   hasta?: string | null;
@@ -54,6 +54,15 @@ export const correosApi = {
 
   recuento: () =>
     client.get('/correos/recuento') as Promise<{
-      success: boolean; data: { enviado: number; fallido: number; bloqueado: number };
+      success: boolean; data: { enviado: number; fallido: number; bloqueado: number; recibido: number };
+    }>,
+
+  /**
+   * Trae del buzon lo que haya llegado. El cron ya lo hace solo; esto es para
+   * quien acaba de mandar un aviso y espera respuesta ahora.
+   */
+  sincronizar: () =>
+    client.post('/correos/sincronizar', {}) as Promise<{
+      success: boolean; data: { leidos: number; nuevos: number; motivo?: string };
     }>,
 };

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   EnvelopeSimple, MagnifyingGlass, X, ArrowClockwise, Warning, PaperPlaneTilt, Prohibit,
+  TrayArrowDown,
 } from '@phosphor-icons/react';
+import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
@@ -9,7 +11,7 @@ import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { correosApi, type CorreoEnLista, type CorreoCompleto } from '../api/correos.api';
 
 /**
- * La bandeja del CRM: lo que ha mandado, con su texto. Primera mitad del #146.
+ * La bandeja del CRM: lo que manda y lo que recibe, con su texto (#146).
  *
  * Nace de una pregunta de Ángel: por qué los correos del CRM no salen en la
  * bandeja de salida del webmail. Porque Brevo los manda EN NOMBRE de la
@@ -17,21 +19,39 @@ import { correosApi, type CorreoEnLista, type CorreoCompleto } from '../api/corr
  * se entera. Hasta ahora el único sitio donde mirarlos era el panel de Brevo,
  * fuera del CRM, teniéndolo todo apuntado en casa.
  *
- * LO RECIBIDO NO ESTÁ TODAVÍA, y la pantalla lo dice en vez de disimularlo:
- * hace falta decidir si entra por Brevo Inbound o por IMAP contra Hostinger.
+ * Aquello ya está arreglado por otro lado —los correos que salen del buzón van
+ * por su SMTP y se archivan en «Enviados»— pero esta pantalla sigue haciendo
+ * falta: en el webmail solo está lo de ESA dirección, y aquí está todo lo que
+ * manda el CRM, incluido lo que no llegó a salir.
+ *
+ * LO RECIBIDO se lee del buzón por IMAP —la misma conexión que deja la copia en
+ * «Enviados»—. Se descartó Brevo Inbound: obliga a apuntar un subdominio entero
+ * a Brevo y deja fuera el correo normal del buzón, que es justo el que se quiere
+ * ver. El CRM lo abre en SOLO LECTURA: no marca, no borra, no mueve nada.
  */
 
-const ESTADOS = [
-  { clave: '', rotulo: 'Todos', icono: EnvelopeSimple },
-  { clave: 'enviado', rotulo: 'Enviados', icono: PaperPlaneTilt },
-  { clave: 'bloqueado', rotulo: 'Frenados', icono: Prohibit },
-  { clave: 'fallido', rotulo: 'Fallidos', icono: Warning },
+/**
+ * Las pestanas. Unas filtran por ESTADO y otra por DIRECCION, y por eso cada
+ * una lleva su filtro entero en vez de una sola clave: «Recibidos» no es un
+ * estado del envio, es correo que ha entrado.
+ */
+const PESTANAS = [
+  { clave: 'todos', rotulo: 'Todos', icono: EnvelopeSimple, filtro: {} },
+  { clave: 'entrada', rotulo: 'Recibidos', icono: TrayArrowDown, filtro: { direccion: 'entrada' } },
+  { clave: 'enviado', rotulo: 'Enviados', icono: PaperPlaneTilt, filtro: { estado: 'enviado' } },
+  { clave: 'bloqueado', rotulo: 'Frenados', icono: Prohibit, filtro: { estado: 'bloqueado' } },
+  { clave: 'fallido', rotulo: 'Fallidos', icono: Warning, filtro: { estado: 'fallido' } },
 ] as const;
 
 const COLOR: Record<string, string> = {
   enviado: 'text-emerald-600 dark:text-emerald-400',
+  recibido: 'text-sky-600 dark:text-sky-400',
   bloqueado: 'text-amber-600 dark:text-amber-400',
   fallido: 'text-red-600 dark:text-red-400',
+};
+
+const ROTULO: Record<string, string> = {
+  enviado: 'enviado', recibido: 'recibido', bloqueado: 'frenado', fallido: 'falló',
 };
 
 const cuando = (iso: string) => {
@@ -44,7 +64,8 @@ export default function CorreosPage() {
   const [filas, setFilas] = useState<CorreoEnLista[]>([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
-  const [estado, setEstado] = useState('');
+  const [pestana, setPestana] = useState<string>('todos');
+  const [trayendo, setTrayendo] = useState(false);
   const [busca, setBusca] = useState('');
   const [rango, setRango] = useState({ from: '', to: '' });
   const [abierto, setAbierto] = useState<CorreoCompleto | null>(null);
@@ -53,13 +74,37 @@ export default function CorreosPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
+      const filtro = PESTANAS.find((p) => p.clave === pestana)?.filtro ?? {};
       const r = await correosApi.listar({
-        estado: estado || null, busca: busca || null,
+        ...filtro, busca: busca || null,
         desde: rango.from || null, hasta: rango.to || null,
       });
       if (r.success) { setFilas(r.data.filas); setTotal(r.data.total); }
     } finally { setCargando(false); }
-  }, [estado, busca, rango.from, rango.to]);
+  }, [pestana, busca, rango.from, rango.to]);
+
+  /**
+   * Trae del buzón lo que haya llegado. El cron ya lo hace solo cada media
+   * hora; esto es para quien acaba de mandar un aviso y está esperando.
+   */
+  async function traerDelBuzon() {
+    setTrayendo(true);
+    try {
+      const r = await correosApi.sincronizar();
+      if (r.success && r.data.motivo === 'SIN_BUZON') {
+        toast({
+          title: 'No hay buzón configurado',
+          description: 'Faltan IMAP_USER e IMAP_PASSWORD en el servidor. Lo que sale se sigue viendo igual.',
+        });
+      } else if (r.success) {
+        toast({
+          title: r.data.nuevos > 0 ? `${r.data.nuevos} correos nuevos` : 'Nada nuevo en el buzón',
+          description: `Leídos ${r.data.leidos}.`,
+        });
+      }
+      await cargar();
+    } finally { setTrayendo(false); }
+  }
 
   // Al escribir no se pide en cada tecla: se espera a que pare.
   useEffect(() => {
@@ -79,20 +124,20 @@ export default function CorreosPage() {
     <div className="space-y-4">
       <PageHeader
         title="Correos"
-        subtitle="Lo que ha mandado el CRM, con su texto · no aparece en el webmail porque sale por Brevo"
+        subtitle="Lo que manda el CRM y lo que llega al buzón, con su texto"
       />
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
-          {ESTADOS.map(({ clave, rotulo, icono: Icono }) => (
+          {PESTANAS.map(({ clave, rotulo, icono: Icono }) => (
             <button
-              key={clave || 'todos'}
+              key={clave}
               type="button"
-              aria-pressed={estado === clave}
-              onClick={() => setEstado(clave)}
+              aria-pressed={pestana === clave}
+              onClick={() => setPestana(clave)}
               className={`h-8 px-3 rounded-md border text-xs font-medium inline-flex items-center gap-1.5 transition-colors ${
-                estado === clave
+                pestana === clave
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-border bg-card text-muted-foreground hover:bg-muted/60'
               }`}
@@ -107,7 +152,7 @@ export default function CorreosPage() {
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por destinatario o asunto…"
+            placeholder="Buscar por remitente, destinatario o asunto…"
             className="flex-1 bg-transparent text-sm outline-none min-w-0"
           />
           {busca && (
@@ -120,21 +165,17 @@ export default function CorreosPage() {
 
         <RangoRapido valor={rango} alElegir={setRango} />
 
-        <Button variant="outline" size="sm" onClick={cargar} disabled={cargando} className="ml-auto">
-          <ArrowClockwise size={13} weight="bold" className="mr-1.5" />
-          {cargando ? 'Cargando…' : 'Actualizar'}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={traerDelBuzon} disabled={trayendo}>
+            <TrayArrowDown size={13} weight="bold" className="mr-1.5" />
+            {trayendo ? 'Leyendo el buzón…' : 'Traer del buzón'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={cargar} disabled={cargando}>
+            <ArrowClockwise size={13} weight="bold" className="mr-1.5" />
+            {cargando ? 'Cargando…' : 'Actualizar'}
+          </Button>
+        </div>
       </div>
-
-      {/* Lo recibido todavía no está, y se dice. */}
-      <p className="text-xs text-muted-foreground flex gap-1.5">
-        <Warning size={14} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
-        <span>
-          Aquí solo está <strong>lo que sale</strong>. Lo recibido —las respuestas de los
-          tutores, por ejemplo— llega al buzón de Hostinger y el CRM todavía no lo lee.
-          Es la otra mitad del <strong>#146</strong>.
-        </span>
-      </p>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-2.5 border-b border-border text-sm text-muted-foreground">
@@ -145,7 +186,7 @@ export default function CorreosPage() {
           <EmptyState
             icon={EnvelopeSimple}
             title={cargando ? 'Cargando…' : 'Ningún correo con esos filtros'}
-            description="Aquí aparece cada correo que el CRM manda: avisos, recordatorios, plantillas."
+            description="Aquí aparece lo que el CRM manda —avisos, recordatorios, plantillas— y lo que llega al buzón."
           />
         ) : (
           <div className="divide-y divide-border">
@@ -158,13 +199,18 @@ export default function CorreosPage() {
                 className="w-full text-left px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 hover:bg-muted/40 transition-colors"
               >
                 <span className={`text-xs font-semibold shrink-0 w-20 ${COLOR[c.estado] || ''}`}>
-                  {c.estado === 'enviado' ? 'enviado' : c.estado === 'bloqueado' ? 'frenado' : 'falló'}
+                  {ROTULO[c.estado] || c.estado}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0 w-24">
                   {cuando(c.cuando)}
                 </span>
+                {/* En lo que ENTRA el destinatario somos siempre nosotros, así
+                    que lo que hay que leer de un vistazo es QUIÉN escribe. En
+                    lo que sale, a quién. */}
                 <span className="text-sm truncate min-w-0 flex-1">
-                  <span className="font-medium">{c.destinatarios}</span>
+                  <span className="font-medium">
+                    {c.direccion === 'entrada' ? (c.remitente || '(sin remitente)') : c.destinatarios}
+                  </span>
                   <span className="text-muted-foreground"> · {c.asunto}</span>
                 </span>
                 {c.intentos > 1 && (
@@ -181,9 +227,14 @@ export default function CorreosPage() {
         )}
       </div>
 
-      {/* El correo, tal y como salió */}
+      {/* El correo, tal y como salió.
+          `!m-0` en la capa no es adorno: es hija del `space-y-4` de arriba, y
+          `space-y` le mete `margin-top: 1rem` a todo hijo que no sea el
+          primero. Con `fixed inset-0` ese margen la baja 16 px y deja una
+          franja sin cubrir arriba del todo — la barra blanca que no se
+          oscurecía. `ConfirmDialog` y `PromptDialog` ya lo llevan por esto. */}
       {abierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setAbierto(null)}>
           <div onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">

@@ -521,6 +521,10 @@ export async function avisarTutor(req, res, next) {
       tutorId: Number(req.body?.tutorId),
       periodo,
       userId: req.user?.userId,
+      // Lo retocado a mano en la pantalla, si se retoco. Solo el texto: a quien
+      // va lo sigue decidiendo el tutor, no lo que llegue en el cuerpo.
+      asunto: req.body?.asunto,
+      html: req.body?.html,
     });
     res.json({ success: true, data: r });
   } catch (e) { next(e); }

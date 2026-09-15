@@ -12,6 +12,8 @@ router.use(roleGuard('admin', 'superadmin'));
 
 router.get('/', ctrl.listar);
 router.get('/recuento', ctrl.recuento);
+// Antes de `/:id`, o «sincronizar» se leeria como el id de un correo.
+router.post('/sincronizar', ctrl.sincronizar);
 router.get('/:id', ctrl.uno);
 
 export default router;
