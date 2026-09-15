@@ -22,6 +22,9 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
     const m = /-u(\d+)$/.exec(String(inst || ''));
     return m ? parseInt(m[1], 10) : null;
   },
+  // Quien llama se busca en la agenda: el aviso de la llamada no trae nombre.
+  configurado: () => true,
+  contactoDe: async () => null,
 }));
 vi.mock('../src/modules/whatsapp/media.service.js', () => ({
   esRuido: () => false, tipoDeMensaje: () => ({ tipo: 'texto' }), textoDe: () => '',
@@ -207,14 +210,33 @@ describe('terminate', () => {
     conversacionDe.mockReset().mockResolvedValue({ id: 7, telefono: '34600000001', nombre_push: null });
   });
 
-  it('apaga el cartel sin inventarse un desenlace', async () => {
+  it('apaga el cartel y deja constancia de que la llamada existio', async () => {
     await recibir(aviso({ id: 'TERM', from: '34600000001@s.whatsapp.net', status: 'offer' }));
     expect(llamadaSonando('crm-u3')).not.toBeNull();
-    const r = await recibir(aviso({ id: 'TERM', from: '34600000001@s.whatsapp.net', status: 'terminate' }));
+    await recibir(aviso({ id: 'TERM', from: '34600000001@s.whatsapp.net', status: 'terminate' }));
     expect(llamadaSonando('crm-u3')).toBeNull();
-    // No se guarda nada: `terminate` no dice si la cogieron o no.
-    expect(guardarMensaje).not.toHaveBeenCalled();
-    expect(r.ignorado).toMatch(/terminada/);
+    // Antes no se guardaba nada, y una llamada colgada por quien llama no
+    // dejaba rastro ninguno: comprobado con una de verdad, ese es el unico
+    // aviso que llega. Ahora se apunta lo que se sabe.
+    expect(guardarMensaje).toHaveBeenCalled();
+    expect(guardarMensaje.mock.calls[0][0].texto).toMatch(/^terminada/);
+  });
+
+  it('pero NO dice como acabo, porque no se sabe', async () => {
+    // El `terminate` de Baileys sale «when accepted / rejected / timeout /
+    // caller hangs up»: es su propio comentario. Y `accept` solo se emite si
+    // descuelga ESTE aparato, no el movil.
+    await recibir(aviso({ id: 'TERM2', from: '34600000001@s.whatsapp.net', status: 'offer' }));
+    await recibir(aviso({ id: 'TERM2', from: '34600000001@s.whatsapp.net', status: 'terminate' }));
+    expect(guardarMensaje.mock.calls[0][0].texto).not.toMatch(/perdida|contestada|rechazada/);
+  });
+
+  it('el que llega detras de un desenlace ya guardado no anade otra linea', async () => {
+    await recibir(aviso({ id: 'TERM3', from: '34600000001@s.whatsapp.net', status: 'offer' }));
+    await recibir(aviso({ id: 'TERM3', from: '34600000001@s.whatsapp.net', status: 'reject' }));
+    await recibir(aviso({ id: 'TERM3', from: '34600000001@s.whatsapp.net', status: 'terminate' }));
+    expect(guardarMensaje).toHaveBeenCalledTimes(1);
+    expect(guardarMensaje.mock.calls[0][0].texto).toBe('rechazada');
   });
 });
 

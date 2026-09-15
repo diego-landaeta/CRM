@@ -7,6 +7,9 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
+import Entregables from '../components/Entregables';
+import LoQueFactura from '../components/LoQueFactura';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -27,6 +30,15 @@ const euros = (n: number | string) =>
 
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
 
+const ETIQUETA_ESTADO: Record<string, string> = {
+  pendiente: 'Pendiente',
+  notificada: 'Notificada',
+  falta_factura: 'Falta factura',
+  pagada: 'Pagada',
+  revertida: 'Revertida',
+};
+
+
 function mesActual() {
   const h = new Date();
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
@@ -41,10 +53,24 @@ function mesLegible(p: string) {
 
 export default function ComisionesTutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
+  // Los campus de la empresa elegida, para poder bajar a uno sin cambiar el
+  // selector de arriba. Diego, 14/09: «puse empresa y tuve que entrar a un
+  // campus si o si; tenemos que poder generar y filtrar por campus».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuerId, activeProject?.id]);
   const esAdmin = ['admin', 'superadmin'].includes(user?.role || '');
   const puede = esAdmin || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const projectId = elegido ?? soloCampus;
+  // Con la empresa puesta y sin campus concreto, el servidor traduce `issuerId`
+  // a sus campus. Si hay uno elegido manda el proyecto y la empresa sobra.
+  const issuerId = !projectId ? activeIssuerId : null;
 
   const [periodo, setPeriodo] = useState(mesActual());
   const [resumen, setResumen] = useState<ResumenComision[]>([]);
@@ -54,6 +80,7 @@ export default function ComisionesTutoresPage() {
   const [abierto, setAbierto] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
+  const [cambiando, setCambiando] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -61,17 +88,17 @@ export default function ComisionesTutoresPage() {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
       const [r, l, a, sf] = await Promise.all([
-        tutoresApi.resumenComisiones({ periodo, projectId }),
-        tutoresApi.comisiones({ periodo, projectId }),
+        tutoresApi.resumenComisiones({ periodo, projectId, issuerId }),
+        tutoresApi.comisiones({ periodo, projectId, issuerId }),
         tutoresApi.ajustes(),
-        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId),
+        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId, issuerId),
       ]);
       setResumen(r.success ? (r.data || []) : []);
       setLineas(l.success ? (l.data || []) : []);
       setAjustes(a.success ? a.data : null);
       setSinFormacion(sf.success ? (sf.data || []) : []);
     } finally { setCargando(false); }
-  }, [periodo, projectId]);
+  }, [periodo, projectId, issuerId]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -87,7 +114,11 @@ export default function ComisionesTutoresPage() {
     try {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
-      const r = await tutoresApi.calcularComisiones({ desde: `${periodo}-01`, hasta: finDeMes, projectId });
+      // Calcular con la empresa puesta: sus campus de una vez.
+      const r = await tutoresApi.calcularComisiones({
+        desde: `${periodo}-01`, hasta: finDeMes, projectId,
+        projectIds: !projectId && activeIssuerId ? campus.map((c) => c.id) : null,
+      });
       if (!r.success) throw new Error(r.error || 'no se pudo');
       toast({
         title: r.data!.creadas > 0 ? `${r.data!.creadas} comisiones nuevas` : 'Nada nuevo que calcular',
@@ -114,6 +145,24 @@ export default function ComisionesTutoresPage() {
     } catch (e) {
       toast({ title: 'No se ha podido marcar', description: e instanceof Error ? e.message : '', variant: 'destructive' });
     } finally { setTrabajando(false); }
+  }
+
+  /** Pendiente ⇄ Notificada ⇄ Falta factura. Nada mas: pagar y revertir van por
+   *  su lado porque mueven dinero y dejan rastro de quien y cuando. */
+  async function cambiarEstado(c: ComisionReal, estado: string) {
+    setCambiando(c.id);
+    try {
+      const r = await tutoresApi.cambiarEstadoComision(c.id, estado);
+      if (!r?.success) throw new Error('no');
+      toast({ title: `Marcada como ${(ETIQUETA_ESTADO[estado] || estado).toLowerCase()}` });
+      await cargar();
+    } catch (err) {
+      toast({
+        title: 'No se ha podido cambiar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally { setCambiando(null); }
   }
 
   async function revertir(c: ComisionReal) {
@@ -148,10 +197,24 @@ export default function ComisionesTutoresPage() {
       <PageHeader
         title="Comisiones de tutores"
         subtitle={projectId
-          ? `${mesLegible(periodo)} · ${activeProject?.nombre || 'este proyecto'}`
+          ? `${mesLegible(periodo)} · ${elegido ? (activeProject?.nombre || 'este proyecto') : (campus.find((c) => c.id === projectId)?.nombre || 'este campus')}`
+          : activeIssuer
+          ? `${mesLegible(periodo)} · los ${campus.length} campus de ${activeIssuer.nombre}`
           : `${mesLegible(periodo)} · todos los proyectos`}
         actions={(
           <>
+            {/* El campus, dentro de la empresa. Sin esto habia que cambiar el
+                selector de arriba para mirar uno solo. */}
+            {activeIssuer && !elegido && campus.length > 1 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label="Filtrar por campus"
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
             <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
             <Button variant="outline" size="sm" onClick={calcular} disabled={trabajando}>
@@ -283,6 +346,10 @@ export default function ComisionesTutoresPage() {
                             <th className="py-1.5 px-3 font-semibold text-right">Base</th>
                             <th className="py-1.5 px-3 font-semibold text-right">%</th>
                             <th className="py-1.5 px-3 font-semibold text-right">Comisión</th>
+                            {/* Lo que ha entregado de esa formacion. Diego lo
+                                pidio justo aqui: es la fila donde se pulsa
+                                «Marcar pagado». */}
+                            <th className="py-1.5 px-3 font-semibold">Entregado</th>
                             <th className="py-1.5 px-3 font-semibold">Estado</th>
                             <th className="py-1.5 pl-3" />
                           </tr>
@@ -298,14 +365,41 @@ export default function ComisionesTutoresPage() {
                               <td className="py-1.5 px-3 text-right tabular-nums">{Number(l.pct)} %</td>
                               <td className="py-1.5 px-3 text-right tabular-nums font-semibold">{euros(l.importe)}</td>
                               <td className="py-1.5 px-3">
+                                <Entregables valor={l} soloLectura />
+                              </td>
+                              <td className="py-1.5 px-3">
                                 {l.estado === 'pagada' ? (
                                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                                     pagada {soloFecha(l.fecha_liquidacion)}
                                   </span>
                                 ) : l.estado === 'revertida' ? (
                                   <span className="text-muted-foreground">revertida</span>
+                                ) : puede ? (
+                                  // Los tres estados del seguimiento, editables aqui mismo.
+                                  // Pagada y revertida NO estan en la lista: esas dos mueven
+                                  // dinero y tienen su propio boton, con su rastro.
+                                  <select
+                                    value={l.estado}
+                                    disabled={cambiando === l.id}
+                                    onChange={(e) => cambiarEstado(l, e.target.value)}
+                                    aria-label={`Estado de la comisión de ${l.alumno}`}
+                                    className={`h-7 px-1.5 rounded border border-border bg-background text-xs font-semibold
+                                      focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 ${
+                                        l.estado === 'falta_factura'
+                                          ? 'text-red-600 dark:text-red-400'
+                                          : l.estado === 'notificada'
+                                            ? 'text-sky-600 dark:text-sky-400'
+                                            : 'text-amber-600 dark:text-amber-400'
+                                      }`}
+                                  >
+                                    <option value="pendiente">Pendiente</option>
+                                    <option value="notificada">Notificada</option>
+                                    <option value="falta_factura">Falta factura</option>
+                                  </select>
                                 ) : (
-                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">pendiente</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                    {ETIQUETA_ESTADO[l.estado] || l.estado}
+                                  </span>
                                 )}
                               </td>
                               <td className="py-1.5 pl-3 text-right">
@@ -321,6 +415,18 @@ export default function ComisionesTutoresPage() {
                           ))}
                         </tbody>
                       </table>
+
+                      {/* Lo que el profesional tiene que facturar. Va debajo de
+                          sus filas y no en un informe aparte: es la cuenta que
+                          hay que mandarle, y el total del mes --no una linea--
+                          es la base. El mismo cuadro lo ve el tutor en «Mis
+                          cursos». */}
+                      <LoQueFactura
+                        className="mt-3"
+                        base={suyas
+                          .filter((x) => x.estado !== 'revertida' && x.estado !== 'pagada')
+                          .reduce((a, x) => a + Number(x.importe), 0)}
+                      />
                     </div>
                   )}
                 </div>

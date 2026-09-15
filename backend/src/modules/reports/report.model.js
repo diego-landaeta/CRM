@@ -1,11 +1,41 @@
 import { query } from '../../shared/config/db.js';
 
-// Overview por proyecto + rango fechas
-export async function overview({ projectId, from, to, asesoraId }) {
+// A que proyectos se acota un informe.
+//
+// Hasta ahora solo habia dos opciones: UN proyecto, o todos. Carlos pidio la
+// tercera —una SOCIEDAD entera, con todos sus campus— porque es como se
+// factura: una sociedad, un NIF, una serie. Mirar CEDIA por campus no cuadra
+// con como declara.
+//
+// Se resuelve con una lista en vez de con un id suelto:
+//
+//     projectIds = [7]        un proyecto           (lo de siempre)
+//     projectIds = [1,3,7,9]  una sociedad entera   (lo nuevo)
+//     projectIds = null       todos                 (lo de siempre)
+//
+// `= ANY($n::int[])` sirve para los tres casos, asi que no hay dos caminos que
+// puedan desviarse el uno del otro. El `projectId` suelto se sigue aceptando y
+// se convierte en lista de uno, para no tener que tocar a la vez las veinte
+// llamadas que ya existen.
+function comoLista(projectId, projectIds) {
+  if (Array.isArray(projectIds) && projectIds.length) return projectIds.map(Number);
+  if (projectId) return [Number(projectId)];
+  return null;
+}
+
+// «Todos los proyectos» NO incluye los de pruebas: un curso inventado
+// con tres ventas falsas metido en el total es lo contrario de lo que
+// sirve un informe. Elegido a dedo, o por su sociedad, se ve entero.
+const SIN_PRUEBAS = (col = 'project_id') =>
+  `${col} NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+
+// Overview por proyecto (o por sociedad) + rango fechas
+export async function overview({ projectId, projectIds, from, to, asesoraId }) {
   const params = [];
   let idx = 1;
-  const pFilter = projectId ? `AND project_id = $${idx++}` : '';
-  if (projectId) params.push(projectId);
+  const lista = comoLista(projectId, projectIds);
+  const pFilter = lista ? `AND project_id = ANY($${idx++}::int[])` : `AND ${SIN_PRUEBAS()}`;
+  if (lista) params.push(lista);
   const fromParam = from ? `$${idx++}` : 'NULL';
   if (from) params.push(from);
   const toParam = to ? `$${idx++}` : 'NULL';
@@ -84,8 +114,8 @@ export async function overview({ projectId, from, to, asesoraId }) {
   );
 
   // Trend mensual de ingresos cobrados (12 meses) - usa solo projectId
-  const trendParams = projectId ? [projectId] : [];
-  const trendFilter = projectId ? `AND c.project_id = $1` : '';
+  const trendParams = lista ? [lista] : [];
+  const trendFilter = lista ? `AND c.project_id = ANY($1::int[])` : `AND ${SIN_PRUEBAS('c.project_id')}`;
   const { rows: trend } = await query(
     `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
             COALESCE(SUM(importe), 0)::numeric as ingresos
@@ -95,6 +125,44 @@ export async function overview({ projectId, from, to, asesoraId }) {
        ${trendFilter}
      GROUP BY mes ORDER BY mes`,
     trendParams
+  );
+
+  // Cuanto pone cada campus (#120).
+  //
+  // Con una sociedad elegida, «145.221 EUR» no dice de donde salen. Aqui va el
+  // mismo periodo y el mismo filtro, partido por proyecto: las mismas cifras
+  // que los KPI de arriba, para que sumen y se pueda comprobar.
+  //
+  // Se sale de `projects` y no de `conversions` para que un campus SIN ventas
+  // en el periodo tambien salga, con ceros. Un campus que no aparece se lee
+  // como que no existe, y lo que pasa es que no vendio.
+  const { rows: porProyecto } = await query(
+    `SELECT p.id AS project_id, p.nombre,
+            COALESCE(l.total, 0)::int      AS leads,
+            COALESCE(cv.total, 0)::int     AS ventas,
+            COALESCE(cv.facturado, 0)::numeric AS facturado,
+            COALESCE(cv.cobrado, 0)::numeric   AS cobrado
+       FROM projects p
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total FROM leads
+          WHERE deleted_at IS NULL AND project_id = p.id
+            AND (${fromParam}::date IS NULL OR created_at >= ${fromParam}::date)
+            AND (${toParam}::date IS NULL OR created_at <= ${toParam}::date + INTERVAL '1 day')
+       ) l ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total,
+                SUM(importe_total)  AS facturado,
+                SUM(importe_pagado) AS cobrado
+           FROM conversions
+          WHERE project_id = p.id
+            AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
+            AND (${toParam}::date IS NULL OR fecha_conversion <= ${toParam}::date)
+       ) cv ON TRUE
+      WHERE ${lista ? `p.id = ANY($1::int[])` : SIN_PRUEBAS('p.id')}
+      ORDER BY cv.cobrado DESC NULLS LAST, p.nombre`,
+    // Se reusan los mismos parametros, en el mismo orden: la lista va primero
+    // cuando la hay, y luego las dos fechas.
+    params
   );
 
   // Tasa conversion = convertidos / total leads
@@ -108,7 +176,13 @@ export async function overview({ projectId, from, to, asesoraId }) {
     leads_por_gestor: byGestor,
     conversions: convKpi[0],
     top_productos: topProductos,
-    ingresos_mensual: trend,
+    // Numeros, no cadenas: ver la nota de arriba sobre el eje de la grafica.
+    ingresos_mensual: trend.map((r) => ({ mes: r.mes, ingresos: Number(r.ingresos) })),
+    por_proyecto: porProyecto.map((r) => ({
+      ...r,
+      facturado: Number(r.facturado),
+      cobrado: Number(r.cobrado),
+    })),
     tasa_conversion,
   };
 }
@@ -121,22 +195,41 @@ export async function overview({ projectId, from, to, asesoraId }) {
 // criterio que usa el panel de asesoras.
 // Se resuelve con subconsulta al lead y no con el alias `l` porque hay consultas
 // (resumenMensual, formacionesMasVendidas) que no lo tienen en el FROM.
-function columnaAsesora(projectCol) {
-  if (projectCol.startsWith('l.')) return 'l.responsable_id';
+//
+// Devuelve un PREDICADO, no una columna: con las ventas compartidas «de quien
+// es esto» ya no se responde con un solo identificador. Una venta repartida
+// entre dos gestoras es de las dos, y la vista conversion_reparto es la que
+// sabe resolverlo --una fila por venta y gestora, tenga reparto o no--.
+function filtroAsesora(projectCol, ph) {
+  // Nivel PROSPECTO: la ficha es de su gestora, y tambien de quien comparte su
+  // venta. Si no, quien puso la mitad de una venta no veria ni al cliente.
+  if (projectCol.startsWith('l.')) {
+    return `(l.responsable_id = ${ph}
+             OR EXISTS (SELECT 1 FROM conversion_reparto r
+                         WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`;
+  }
+  // Nivel VENTA. Sustituye al COALESCE(vendedora_id, responsable_id) de antes:
+  // hace lo mismo cuando la venta no esta repartida, y ademas encuentra las que
+  // si lo estan.
   const c = projectCol.startsWith('c.') ? 'c.' : '';
-  return `COALESCE(${c}vendedora_id, (SELECT responsable_id FROM leads WHERE id = ${c}lead_id))`;
+  return `EXISTS (SELECT 1 FROM conversion_reparto r
+                   WHERE r.conversion_id = ${c}id AND r.vendedora_id = ${ph})`;
 }
 
-function buildFilter({ projectId, from, to, asesoraId }, dateCol, projectCol = 'project_id') {
+function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, projectCol = 'project_id') {
   const params = [];
   const cond = [];
   let idx = 1;
-  if (projectId) { cond.push(`${projectCol} = $${idx++}`); params.push(projectId); }
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { cond.push(`${projectCol} = ANY($${idx++}::int[])`); params.push(lista); }
+  else cond.push(SIN_PRUEBAS(projectCol));
   if (from) { cond.push(`${dateCol}::date >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${dateCol}::date <= $${idx++}::date`); params.push(to); }
   // Si viene asesora, el informe se recorta a lo suyo. Lo impone el controlador
   // cuando quien pregunta es una gestora, asi que no puede pedir lo de otra.
-  if (asesoraId) { cond.push(`${columnaAsesora(projectCol)} = $${idx++}`); params.push(asesoraId); }
+  // El parametro se referencia dos veces en el caso del prospecto, pero se
+  // empuja UNA: en Postgres $1 puede repetirse dentro de la misma consulta.
+  if (asesoraId) { cond.push(filtroAsesora(projectCol, `$${idx++}`)); params.push(asesoraId); }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
@@ -146,6 +239,189 @@ function buildFilter({ projectId, from, to, asesoraId }, dateCol, projectCol = '
 // quien preguntara, y la tabla no cuadraba con la descarga.
 const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
 const ENTRY = `(COALESCE(l.fecha_solicitud, l.created_at) AT TIME ZONE '${TZ}')`;
+
+// ── SEGUIMIENTO Y TIEMPOS ───────────────────────────────────────────────────
+//
+// Dos preguntas distintas, y por eso van separadas en la respuesta:
+//
+//   LA COHORTE   de los que ENTRARON en el periodo: a cuantos se les hizo
+//                seguimiento, cuanto se tardo en tocarles y cuanto en venderles.
+//                Sigue a las MISMAS personas, asi que los porcentajes y los
+//                tiempos significan algo.
+//
+//   LA ACTIVIDAD lo que se hizo DURANTE el periodo, entrara quien entrara. Es
+//                el trabajo del mes, no el resultado de una cohorte.
+//
+// Mezclarlas es lo que hace que un panel diga «60 % contactados» y nadie sepa
+// si es de los que entraron o de los que se tocaron.
+//
+// Se usa la MEDIANA, no la media: el CRM se cargo con historico y hay leads de
+// hace un ano contactados ayer. Una sola fila asi se lleva la media al garete;
+// la mediana ni se entera.
+export async function seguimientoYTiempos({ projectId, projectIds, from, to, asesoraId }) {
+  const lista = comoLista(projectId, projectIds);
+  const par = [];
+  let i = 1;
+  const pProj = lista ? `AND l.project_id = ANY($${i++}::int[])` : `AND ${SIN_PRUEBAS('l.project_id')}`;
+  if (lista) par.push(lista);
+  const pDesde = from ? `$${i++}` : null;
+  if (from) par.push(from);
+  const pHasta = to ? `$${i++}` : null;
+  if (to) par.push(to);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+
+  const entre = (col) => [
+    pDesde ? `AND ${col} >= ${pDesde}::date` : '',
+    pHasta ? `AND ${col} <= ${pHasta}::date` : '',
+  ].join(' ');
+
+  const { rows: coh } = await query(
+    `WITH cohorte AS (
+       SELECT l.id, ${ENTRY} AS entro
+         FROM leads l
+        WHERE l.deleted_at IS NULL ${pProj} ${pAses} ${entre(`${ENTRY}::date`)}
+     ),
+     -- Una nota interna no es haber contactado a nadie: para el «tiempo hasta
+     -- el primer contacto» solo cuentan llamada, WhatsApp y correo.
+     primer AS (
+       SELECT li.lead_id, MIN(li.fecha AT TIME ZONE '${TZ}') AS primera
+         FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+        WHERE li.tipo <> 'nota' GROUP BY li.lead_id
+     ),
+     tocado AS (
+       SELECT DISTINCT li.lead_id FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+     ),
+     -- La primera venta de cada persona, sin contar mensualidades: pagar la
+     -- cuota de algo que ya compro no es convertirse otra vez.
+     venta AS (
+       SELECT cv.lead_id, MIN(cv.fecha_conversion) AS vendida
+         FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
+        WHERE cv.es_mensualidad IS NOT TRUE GROUP BY cv.lead_id
+     )
+     SELECT count(*)::int AS entraron,
+            count(t.lead_id)::int AS con_seguimiento,
+            count(p.lead_id)::int AS contactados,
+            count(v.lead_id)::int AS compraron,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY EXTRACT(EPOCH FROM (p.primera - co.entro))) AS mediana_primer_contacto_seg,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY (v.vendida - co.entro::date)) AS mediana_dias_venta
+       FROM cohorte co
+       LEFT JOIN primer p ON p.lead_id = co.id
+       LEFT JOIN tocado t ON t.lead_id = co.id
+       LEFT JOIN venta  v ON v.lead_id = co.id`,
+    par
+  );
+
+  const { rows: act } = await query(
+    `SELECT count(*)::int AS toques,
+            count(DISTINCT li.lead_id)::int AS personas,
+            count(*) FILTER (WHERE li.tipo = 'whatsapp')::int AS whatsapp,
+            count(*) FILTER (WHERE li.tipo = 'llamada')::int  AS llamada,
+            count(*) FILTER (WHERE li.tipo = 'email')::int    AS email,
+            count(*) FILTER (WHERE li.tipo = 'nota')::int     AS nota
+       FROM lead_interactions li
+       JOIN leads l ON l.id = li.lead_id
+      WHERE l.deleted_at IS NULL ${pProj} ${pAses}
+            ${entre(`(li.fecha AT TIME ZONE '${TZ}')::date`)}`,
+    par
+  );
+
+  // EL EMBUDO: cuantos llegan al seguimiento 1, al 2, al 3...
+  //
+  // Es lo que convierte «99 % con seguimiento» en algo accionable: enseña
+  // DONDE se cae la gente. Y de cada nivel, cuantos acabaron comprando y
+  // cuanto se tardo desde el toque anterior.
+  //
+  // Los niveles son ACUMULATIVOS: quien llega al 3 esta contado tambien en el
+  // 1 y en el 2, porque «llego al tercero» quiere decir que paso por los otros.
+  // Por eso la columna de compras baja sola segun se profundiza.
+  //
+  // El numero de seguimiento sale del ORDEN de los contactos, no del paso
+  // comercial: hoy el CRM no guarda a que paso corresponde cada toque. Cuando
+  // exista la agenda por persona (#89/#90) se podra atar cada contacto a su
+  // paso y esto dejara de ser una aproximacion.
+  const { rows: emb } = await query(
+    `WITH cohorte AS (
+       SELECT l.id, ${ENTRY} AS entro
+         FROM leads l
+        WHERE l.deleted_at IS NULL ${pProj} ${pAses} ${entre(`${ENTRY}::date`)}
+     ),
+     toques AS (
+       SELECT li.lead_id, (li.fecha AT TIME ZONE '${TZ}') AS cuando,
+              ROW_NUMBER() OVER (PARTITION BY li.lead_id ORDER BY li.fecha, li.id) AS n
+         FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+        WHERE li.tipo <> 'nota'
+     ),
+     compro AS (
+       SELECT DISTINCT cv.lead_id FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
+        WHERE cv.es_mensualidad IS NOT TRUE
+     ),
+     -- Cuanto se tardo desde el contacto anterior; para el primero, desde que
+     -- entro la persona.
+     hueco AS (
+       SELECT t.lead_id, t.n,
+              EXTRACT(EPOCH FROM (t.cuando - COALESCE(
+                LAG(t.cuando) OVER (PARTITION BY t.lead_id ORDER BY t.n), co.entro))) AS seg
+         FROM toques t JOIN cohorte co ON co.id = t.lead_id
+     )
+     SELECT t.n::int AS nivel,
+            count(DISTINCT t.lead_id)::int AS personas,
+            count(DISTINCT t.lead_id) FILTER (WHERE cp.lead_id IS NOT NULL)::int AS compraron,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY h.seg) AS mediana_desde_anterior_seg
+       FROM toques t
+       LEFT JOIN compro cp ON cp.lead_id = t.lead_id
+       LEFT JOIN hueco h ON h.lead_id = t.lead_id AND h.n = t.n
+      WHERE t.n <= 6
+      GROUP BY t.n ORDER BY t.n`,
+    par
+  );
+
+  const c0 = coh[0];
+  const entraron = Number(c0.entraron);
+  const pct = (n) => (entraron > 0 ? Math.round((Number(n) * 1000) / entraron) / 10 : 0);
+  return {
+    cohorte: {
+      entraron,
+      con_seguimiento: Number(c0.con_seguimiento),
+      contactados: Number(c0.contactados),
+      compraron: Number(c0.compraron),
+      pct_con_seguimiento: pct(c0.con_seguimiento),
+      pct_contactados: pct(c0.contactados),
+      pct_compraron: pct(c0.compraron),
+      // Segundos y dias, en numeros: la pantalla decide como se leen.
+      mediana_primer_contacto_seg: c0.mediana_primer_contacto_seg == null
+        ? null : Number(c0.mediana_primer_contacto_seg),
+      mediana_dias_venta: c0.mediana_dias_venta == null
+        ? null : Number(c0.mediana_dias_venta),
+      embudo: emb.map((r) => ({
+        nivel: Number(r.nivel),
+        personas: Number(r.personas),
+        compraron: Number(r.compraron),
+        pct: pct(r.personas),
+        tasa: Number(r.personas) > 0
+          ? Math.round((Number(r.compraron) * 1000) / Number(r.personas)) / 10 : 0,
+        mediana_desde_anterior_seg: r.mediana_desde_anterior_seg == null
+          ? null : Number(r.mediana_desde_anterior_seg),
+      })),
+    },
+    actividad: {
+      toques: Number(act[0].toques),
+      personas: Number(act[0].personas),
+      por_tipo: {
+        whatsapp: Number(act[0].whatsapp),
+        llamada: Number(act[0].llamada),
+        email: Number(act[0].email),
+        nota: Number(act[0].nota),
+      },
+      // Cuantas veces se toca a cada persona, de media. Aqui la media SI vale:
+      // no hay cola larga, y «2,3 toques por persona» se entiende solo.
+      toques_por_persona: Number(act[0].personas) > 0
+        ? Math.round((Number(act[0].toques) * 10) / Number(act[0].personas)) / 10 : 0,
+    },
+  };
+}
 
 // ── LA TASA DE CIERRE ───────────────────────────────────────────────────────
 //
@@ -190,8 +466,8 @@ const DIAS_PARA_MADURAR = 30;
 
 // Una fila por mes de ENTRADA + el total. No hace medias de medias: el total
 // se calcula sobre la suma, que no es lo mismo cuando los meses son desiguales.
-export async function tasaDeCierre({ projectId, from, to, asesoraId }) {
-  const f = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+export async function tasaDeCierre({ projectId, projectIds, from, to, asesoraId }) {
+  const f = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
   const { rows } = await query(
     `SELECT to_char(date_trunc('month', ${ENTRY}), 'YYYY-MM') AS mes,
             COUNT(*)::int AS leads,
@@ -229,8 +505,8 @@ export async function tasaDeCierre({ projectId, from, to, asesoraId }) {
 
 // Los dos sumandos, uno a uno, para el «¿de dónde sale?». `lado` dice cual:
 // 'cerrados' son los que compraron y 'todos' el total de entrados.
-export async function detalleTasaDeCierre({ projectId, from, to, asesoraId, lado = 'cerrados', limit = 500 }) {
-  const f = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+export async function detalleTasaDeCierre({ projectId, projectIds, from, to, asesoraId, lado = 'cerrados', limit = 500 }) {
+  const f = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
   const soloCerrados = lado === 'cerrados' ? `AND ${VENTA_CERRADA(ENTRY)}` : '';
   const where = f.where ? `${f.where} ${soloCerrados}` : (soloCerrados ? `WHERE ${soloCerrados.slice(4)}` : '');
   const { rows } = await query(
@@ -256,10 +532,11 @@ export async function detalleTasaDeCierre({ projectId, from, to, asesoraId, lado
 // - cliente con venta: fecha de conversión.
 // Filtrar todo por la fecha de entrada hacía que una importación de ventas
 // históricas pareciera generar cientos de ventas el día de la importación.
-function buildGeneralFilter({ projectId, from, to, asesoraId }) {
+function buildGeneralFilter({ projectId, projectIds, from, to, asesoraId }) {
   const params = [];
   const cond = [];
   let idx = 1;
+  const lista = comoLista(projectId, projectIds);
   // Estos dos informes son de LEADS: una fila por contacto. Se filtran por fecha
   // de ENTRADA, la misma regla que anuncia el panel, para que el numero de filas
   // sea exactamente el de "leads recibidos" y los dos cuadren.
@@ -271,10 +548,14 @@ function buildGeneralFilter({ projectId, from, to, asesoraId }) {
   // Esas ventas no se pierden: salen en los informes de ventas, que filtran por
   // fecha de venta.
   const reportDate = `${ENTRY}::date`;
-  if (projectId) { cond.push(`l.project_id = $${idx++}`); params.push(projectId); }
-  // Una gestora solo ve sus contactos: los suyos o los de sus ventas.
+  if (lista) { cond.push(`l.project_id = ANY($${idx++}::int[])`); params.push(lista); }
+  // Una gestora solo ve sus contactos: los suyos o los de sus ventas —
+  // incluidas las que atendio a medias con otra, que tambien son suyas.
   if (asesoraId) {
-    cond.push(`COALESCE(conv.vendedora_id, l.responsable_id) = $${idx++}`);
+    const ph = `$${idx++}`;
+    cond.push(`(COALESCE(conv.vendedora_id, l.responsable_id) = ${ph}
+                OR EXISTS (SELECT 1 FROM conversion_reparto r
+                            WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
     params.push(asesoraId);
   }
   if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
@@ -306,9 +587,9 @@ const PAIS = `COALESCE(NULLIF(l.pais_fiscal, ''), CASE
     ELSE NULL END)`;
 
 // 1) RESUMEN MENSUAL: prospectos entrados (por entrada) vs convertidos (por venta) por mes.
-export async function resumenMensual({ projectId, from, to, asesoraId }) {
-  const e = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
-  const c = buildFilter({ projectId, from, to, asesoraId }, 'fecha_conversion', 'project_id');
+export async function resumenMensual({ projectId, projectIds, from, to, asesoraId }) {
+  const e = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const c = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'fecha_conversion', 'project_id');
   // Reindexar params de conversiones tras los de leads
   const cSql = c.where.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + e.params.length}`);
   const { rows } = await query(
@@ -338,8 +619,8 @@ export async function resumenMensual({ projectId, from, to, asesoraId }) {
 }
 
 // 2) PROSPECTOS: por fecha de entrada, con valor ESTIMADO (precio del producto de interés).
-export async function prospectosReport({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+export async function prospectosReport({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             prod.nombre AS producto, prod.precio AS valor_estimado, prod.moneda,
@@ -357,8 +638,8 @@ export async function prospectosReport({ projectId, from, to, asesoraId }) {
 
 // 3) VENTAS: una fila por conversión, filtrada por fecha de venta.
 // Los pagos/abonos pertenecen al reporte de cobros y no deben inflar ventas.
-export async function ventasReport({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+export async function ventasReport({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT c.id AS venta_id,
             c.fecha_conversion AS fecha_venta,
@@ -390,8 +671,8 @@ export async function ventasReport({ projectId, from, to, asesoraId }) {
 }
 
 // 4) GENERAL: todos los prospectos (por entrada) con lo estimado + lo real de su venta.
-export async function generalReport({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildGeneralFilter({ projectId, from, to, asesoraId });
+export async function generalReport({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildGeneralFilter({ projectId, projectIds, from, to, asesoraId });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             ${PAIS} AS pais,
@@ -419,8 +700,8 @@ export async function generalReport({ projectId, from, to, asesoraId }) {
 }
 
 // 5) GENERAL + FACTURACIÓN: lo mismo que #4, más lo facturado (nº facturas + importe facturado).
-export async function generalFacturacionReport({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildGeneralFilter({ projectId, from, to, asesoraId });
+export async function generalFacturacionReport({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildGeneralFilter({ projectId, projectIds, from, to, asesoraId });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.status AS estado,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
@@ -457,8 +738,8 @@ export async function generalFacturacionReport({ projectId, from, to, asesoraId 
 }
 
 // 6) COBROS POR MES (cuotas): cada pago real en su mes. Cuadra con facturación.
-export async function cobrosMensuales({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
+export async function cobrosMensuales({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
   const { rows } = await query(
     `SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
             cp.fecha, l.nombre AS cliente, c.producto_contratado AS producto,
@@ -479,30 +760,36 @@ export async function cobrosMensuales({ projectId, from, to, asesoraId }) {
 // se sumaba el importe_pagado de las ventas del rango, que mete en el periodo
 // dinero cobrado en otros meses (y deja fuera lo que se cobra ahora de ventas
 // antiguas). "Sin asignar" cuando la venta no tiene vendedora ni el lead gestora.
-export async function ventasVendedora({ projectId, from, to, asesoraId }) {
-  const v = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
-  const pgo = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
+export async function ventasVendedora({ projectId, projectIds, from, to, asesoraId }) {
+  const v = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const pgo = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
   // El segundo bloque de parametros va detras del primero.
   const off = v.params.length;
   const wherePago = pgo.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
 
   const { rows } = await query(
+    // Por la vista y no por COALESCE(vendedora_id, responsable_id): una venta
+    // atendida entre dos vale MEDIA para cada una, en ventas y en dinero. Asi
+    // este informe sigue sumando el total real de la empresa en vez de contar
+    // la misma venta dos veces. SUM(peso) puede dar 3,5 — es correcto.
     `WITH ventas AS (
-       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
-              COUNT(*)::int AS ventas,
+       SELECT r.vendedora_id AS uid,
+              COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
-              COALESCE(SUM(c.importe_total), 0)::numeric AS total,
-              COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
+              COALESCE(SUM(c.importe_total * r.peso), 0)::numeric AS total,
+              COALESCE(SUM((c.importe_total - c.importe_pagado) * r.peso), 0)::numeric AS pendiente
          FROM conversions c
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${v.where}
         GROUP BY 1
      ),
      cobros AS (
-       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
-              COALESCE(SUM(cp.importe), 0)::numeric AS cobrado
+       SELECT r.vendedora_id AS uid,
+              COALESCE(SUM(cp.importe * r.peso), 0)::numeric AS cobrado
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wherePago}
         GROUP BY 1
@@ -524,11 +811,10 @@ export async function ventasVendedora({ projectId, from, to, asesoraId }) {
 }
 
 // La venta se atribuye a su vendedora; si no la tiene, al responsable del lead.
-const ASESORA = 'COALESCE(c.vendedora_id, l.responsable_id)';
 
 // DETALLE: una fila por venta, para descargar.
-export async function ventasPorAsesoraReport({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT COALESCE(u.nombre, '— sin asesora —') AS asesora,
             c.fecha_conversion AS fecha_venta,
@@ -582,7 +868,7 @@ const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
                     WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
                     ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
 
-export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
+export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraId, base }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
   // Los leads van por su FECHA DE SOLICITUD, no por cuando se metieron en el CRM:
@@ -599,9 +885,9 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
   const DC = porFactura ? FEC_COBRO : 'cp.fecha';
 
   // Los leads NO cambian nunca de base: siempre por fecha de entrada.
-  const fl = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
-  const fv = buildFilter({ projectId, from, to, asesoraId }, DV, 'c.project_id');
-  const fc = buildFilter({ projectId, from, to, asesoraId }, DC, 'c.project_id');
+  const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const fv = buildFilter({ projectId, projectIds, from, to, asesoraId }, DV, 'c.project_id');
+  const fc = buildFilter({ projectId, projectIds, from, to, asesoraId }, DC, 'c.project_id');
   const off1 = fl.params.length;
   const off2 = off1 + fv.params.length;
   let wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
@@ -637,11 +923,14 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
      ),
      ventas_mes AS (
        SELECT to_char(date_trunc('month', ${DV}), 'YYYY-MM') AS mes,
-              ${ASESORA} AS uid,
-              COUNT(*)::int AS ventas,
+              r.vendedora_id AS uid,
+              -- SUM(peso) y no COUNT(*): una venta atendida entre dos vale media
+              -- para cada una, y asi el mes sigue sumando las ventas reales.
+              COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
-              COALESCE(SUM(c.importe_total), 0) AS vendido
+              COALESCE(SUM(c.importe_total * r.peso), 0) AS vendido
          FROM conversions c
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wv}
           -- Una ficha marcada como mensualidad no es una venta nueva.
@@ -653,15 +942,16 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
      ),
      cobros_mes AS (
        SELECT to_char(date_trunc('month', ${DC}), 'YYYY-MM') AS mes,
-              ${ASESORA} AS uid,
-              COALESCE(SUM(cp.importe), 0) AS cobrado,
+              r.vendedora_id AS uid,
+              COALESCE(SUM(cp.importe * r.peso), 0) AS cobrado,
               -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no
               -- con JOIN: un mismo pago puede saldar varias y se contaria dos veces.
-              COALESCE(SUM(cp.importe) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_cuotas,
-              COUNT(*) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))))::int AS mensualidades
+              COALESCE(SUM(cp.importe * r.peso) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_venta,
+              COALESCE(SUM(cp.importe * r.peso) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_cuotas,
+              COALESCE(SUM(r.peso) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0)::float8 AS mensualidades
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wc}
         GROUP BY 1, 2
@@ -694,20 +984,23 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
             ROUND(COALESCE(cm.cobrado_cuotas, 0), 2) AS cobrado_cuotas,
             COALESCE(cm.mensualidades, 0) AS mensualidades,
             ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
-                       THEN COALESCE(vm.vendido, 0) / vm.ventas ELSE 0 END, 2) AS ticket_medio
+                       THEN COALESCE(vm.vendido, 0) / vm.ventas::numeric ELSE 0 END, 2) AS ticket_medio
        FROM todo t
        LEFT JOIN leads_mes  lm ON lm.mes = t.mes AND lm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN ventas_mes vm ON vm.mes = t.mes AND vm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN cobros_mes cm ON cm.mes = t.mes AND cm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN users u ON u.id = t.uid
-      ORDER BY t.mes DESC, cobrado DESC`,
+      -- Desempate fijo: sin el, dos asesoras con el mismo cobrado salian en
+      -- un orden u otro segun el plan que eligiera Postgres, y el mismo
+      -- informe podia bajarse dos veces con las filas cambiadas de sitio.
+      ORDER BY t.mes DESC, cobrado DESC, asesora, t.uid`,
     [...fl.params, ...fv.params, ...fc.params]
   );
   return rows;
 }
 
 // Panel de Reportes: KPIs comparados con el periodo anterior + serie temporal.
-export async function panelReportes({ projectId, from, to, asesoraId }) {
+export async function panelReportes({ projectId, projectIds, from, to, asesoraId }) {
   const desde = from || '2026-01-01';
   const hasta = to || new Date().toISOString().slice(0, 10);
   const dias = Math.max(1, Math.round((new Date(hasta) - new Date(desde)) / 86400000) + 1);
@@ -720,14 +1013,23 @@ export async function panelReportes({ projectId, from, to, asesoraId }) {
 
   // Mismo recorte por asesora que el resto de informes. El numero de parametro
   // depende de si ademas viene proyecto.
-  const iAs = projectId ? 4 : 3;
+  //
+  // El ambito puede ser un proyecto O una sociedad entera, y aqui se resuelve
+  // a lista igual que en el resto del modulo (#120). Antes solo se miraba
+  // `projectId`: con una sociedad elegida no llega ese campo sino la lista de
+  // sus campus, asi que no filtraba por NADA y el panel ensenaba todos los
+  // proyectos debajo del titulo «CEDIA · 7 campus».
+  const lista = comoLista(projectId, projectIds);
+  const iAs = lista ? 4 : 3;
   const al = asesoraId ? ` AND l.responsable_id = $${iAs}` : '';
   const ac = asesoraId
-    ? ` AND COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${iAs}`
+    // La vista resuelve titular y reparto de una vez.
+    ? ` AND EXISTS (SELECT 1 FROM conversion_reparto r
+                     WHERE r.conversion_id = c.id AND r.vendedora_id = $${iAs})`
     : '';
-  const pl = (projectId ? 'AND l.project_id = $3' : '') + al;
-  const pc = (projectId ? 'AND c.project_id = $3' : '') + ac;
-  const par = (a, b) => [a, b, ...(projectId ? [projectId] : []), ...(asesoraId ? [asesoraId] : [])];
+  const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('l.project_id')}`) + al;
+  const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('c.project_id')}`) + ac;
+  const par = (a, b) => [a, b, ...(lista ? [lista] : []), ...(asesoraId ? [asesoraId] : [])];
 
   async function bloque(d, h) {
     const { rows: le } = await query(
@@ -887,12 +1189,12 @@ const PAIS_TEL = `CASE
     ELSE '— sin prefijo — revisar'
   END`;
 
-export async function paisesMasVendidos({ projectId, from, to, asesoraId }) {
+export async function paisesMasVendidos({ projectId, projectIds, from, to, asesoraId }) {
   // Dos fechas distintas otra vez: las ventas por fecha de venta y los leads por
   // fecha de entrada. Se juntan por pais con FULL OUTER JOIN porque hay paises
   // que mandan leads y no compran, y al reves (clientes cargados sin lead).
-  const fv = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
-  const fl = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const fv = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
   const off = fv.params.length;
   const wl = fl.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
 
@@ -958,8 +1260,8 @@ const FORMACION = `COALESCE(
       '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''),
     '— sin formación —')`;
 
-export async function formacionesMasVendidas({ projectId, from, to, asesoraId }) {
-  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+export async function formacionesMasVendidas({ projectId, projectIds, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT ${FORMACION} AS formacion,
             CASE WHEN pcat.id IS NOT NULL THEN 'catálogo'
@@ -986,7 +1288,7 @@ export async function formacionesMasVendidas({ projectId, from, to, asesoraId })
 
 // Detras de cada numero del panel, las filas que lo componen. Es lo que abre el
 // popup al pulsar un importe o un contador.
-export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion, limite, base }) {
+export async function detalleMetrica({ projectId, projectIds, from, to, tipo, asesoraId, mes, pais, formacion, limite, base }) {
   // El popup se conforma con 500; una descarga quiere todas las filas.
   const TOPE = Math.min(Math.max(Number(limite) || 500, 1), 20000);
   // El mismo criterio que la tabla de la que se ha pulsado el numero. Si no, el
@@ -1003,7 +1305,8 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
   const finMes = mes ? `(DATE '${mes}-01' + INTERVAL '1 month' - INTERVAL '1 day')::date` : null;
 
   if (tipo === 'leads') {
-    if (projectId) add('l.project_id = ?', projectId);
+    { const lista = comoLista(projectId, projectIds);
+      if (lista) add('l.project_id = ANY(?::int[])', lista); }
     // 'convertidos' son los leads DE ESE PERIODO que acabaron comprando; no la
     // gente que ese mes pago una mensualidad de algo que compro antes.
     if (tipo === 'leads-convertidos') {
@@ -1014,7 +1317,17 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
     cond.push(finMes ? `${ENTRY}::date <= ${finMes}` : `${ENTRY}::date <= $${idx++}`);
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('l.responsable_id IS NULL');
-    else if (asesoraId) add('COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL ORDER BY cv.fecha_conversion LIMIT 1)) = ?', Number(asesoraId));
+    else if (asesoraId) {
+      // A mano y no con add(): el parametro se repite y add() solo sustituye el
+      // primer '?'. Es lo de antes MAS quien comparte la venta del prospecto.
+      const ph = `$${idx++}`;
+      cond.push(`(COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv
+                                               WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL
+                                               ORDER BY cv.fecha_conversion LIMIT 1)) = ${ph}
+                  OR EXISTS (SELECT 1 FROM conversion_reparto r
+                              WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
+      params.push(Number(asesoraId));
+    }
     const { rows } = await query(
       `SELECT l.id, l.nombre AS cliente, l.email, l.telefono, l.status AS estado,
               ${ENTRY}::date AS fecha,
@@ -1035,13 +1348,14 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
   // cuenta la tabla. Antes listaba los leads entrados en el mes que acabaron
   // comprando, que es otra pregunta y daba otro numero.
   if (tipo === 'ventas' || tipo === 'leads-convertidos') {
-    if (projectId) add('c.project_id = ?', projectId);
+    { const lista = comoLista(projectId, projectIds);
+      if (lista) add('c.project_id = ANY(?::int[])', lista); }
     const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
     add(`${DV} >= ?`, desde);
     cond.push(finMes ? `${DV} <= ${finMes}` : `${DV} <= $${idx++}`);
     if (!finMes) params.push(hasta);
-    if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
-    else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+    if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
+    else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
     if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
@@ -1096,13 +1410,14 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
   }
 
   // cobros y mensualidades comparten consulta; cambia el filtro.
-  if (projectId) add('c.project_id = ?', projectId);
+  { const lista = comoLista(projectId, projectIds);
+    if (lista) add('c.project_id = ANY(?::int[])', lista); }
   const DC = porFactura ? FEC_COBRO : 'cp.fecha';
   add(`${DC} >= ?`, desde);
   cond.push(finMes ? `${DC} <= ${finMes}` : `${DC} <= $${idx++}`);
   if (!finMes) params.push(hasta);
-  if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
-  else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+  if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
+  else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
   // Un cobro es "de la venta" si es el primero Y su ficha es una venta de
   // verdad: en una marcada como mensualidad no hay venta que cobrar, así que
   // todos sus cobros son cuota.
@@ -1183,7 +1498,8 @@ const ES_MENSUALIDAD = `(
 // lleva un total mas bajo sin enterarse.
 //
 // Esto lo devuelve para poder avisarle ANTES de descargar.
-export async function ventasSinFacturaEnRango({ projectId, from, to }) {
+export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to }) {
+  const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT cv.id, COALESCE(l.nombre, '—') AS cliente,
             SUM(cp.importe) AS cobrado,
@@ -1192,7 +1508,7 @@ export async function ventasSinFacturaEnRango({ projectId, from, to }) {
        FROM conversion_payments cp
        JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
-      WHERE ($1::int IS NULL OR cv.project_id = $1)
+      WHERE ($1::int[] IS NULL OR cv.project_id = ANY($1::int[]))
         AND ($2::date IS NULL OR cp.fecha >= $2::date)
         AND ($3::date IS NULL OR cp.fecha <= $3::date)
         -- La factura puede colgar de la venta o del cobro: se miran las dos.
@@ -1202,7 +1518,7 @@ export async function ventasSinFacturaEnRango({ projectId, from, to }) {
              AND (i.conversion_id = cv.id OR i.payment_id = cp.id))
       GROUP BY cv.id, l.nombre, cv.producto_contratado
       ORDER BY ultimo_cobro DESC, cobrado DESC`,
-    [projectId || null, from || null, to || null]
+    [lista, from || null, to || null]
   );
   return {
     ventas: rows.length,

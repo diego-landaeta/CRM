@@ -1380,12 +1380,71 @@ http.createServer(async (req, res) => {
     // `pushName` aqui NO es como se llama la persona a si misma: Evolution
     // mete en esa columna `contact.name`, o sea el nombre de tu agenda. Se
     // reproduce igual para que el CRM lea lo mismo en los dos sitios.
+    /**
+     * La foto de perfil de un numero.
+     *
+     * Existe en Evolution, asi que existe aqui. El puente ya se la baja solo
+     * —`s.fotoDe`— para meterla en el aviso del mensaje; esto es lo mismo pero
+     * a peticion, que es como lo pide Evolution.
+     */
+    /**
+     * El nombre y la foto de un grupo.
+     *
+     * Existe en Evolution, asi que existe aqui. El puente ya sabe el nombre
+     * —`s.nombreDeGrupo`, que lo pide y lo guarda— y la foto por la misma via
+     * que la de una persona.
+     */
+    if (url.startsWith('/group/findGroupInfos/')) {
+      const s2 = sesionDe(instanciaDeUrl(url.split('?')[0]));
+      const jid = new URL(url, 'http://x').searchParams.get('groupJid');
+      if (!jid) return json(400, { error: 'falta groupJid' });
+      const asunto = await s2.nombreDeGrupo(jid);
+      const foto = s2.fotos.has(jid) ? s2.fotos.get(jid) : await s2.fotoDe(jid);
+      return json(200, { id: jid, subject: asunto || null, pictureUrl: foto || null });
+    }
+
+    if (url.startsWith('/chat/fetchProfilePictureUrl/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      const digitos = String(cuerpo?.number || '').replace(/[^0-9]/g, '');
+      if (!digitos) return json(400, { error: 'falta el numero' });
+      const jid = `${digitos}@s.whatsapp.net`;
+      const foto = s2.fotos.has(jid) ? s2.fotos.get(jid) : await s2.fotoDe(jid);
+      return json(200, { wuid: jid, profilePictureUrl: foto || null });
+    }
+
     if (url.startsWith('/chat/findContacts/')) {
       const s2 = sesionDe(instanciaDeUrl(url));
       return json(200, [...s2.agenda.entries()].map(([jid, nombre]) => ({
         id: jid, remoteJid: jid, pushName: nombre,
         profilePicUrl: s2.fotos.get(jid) || null,
       })));
+    }
+
+    /**
+     * Los mensajes guardados de UN chat (#73).
+     *
+     * Existe en Evolution, asi que existe aqui. Un puente MENOS capaz que el
+     * original tambien miente: si esto devolviera vacio, traer el historial de
+     * un numero se probaria bien en local sin haberse probado nada.
+     *
+     * Se sirve de lo que ya hay en memoria —`s.mensajes`, hasta 20.000 por
+     * sesion— filtrando por el chat. Evolution lo saca de su base y guarda mas;
+     * aqui se guarda lo que ha pasado por el puente, que para probar sobra.
+     */
+    if (url.startsWith('/chat/findMessages/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      const jid = cuerpo?.where?.key?.remoteJid || null;
+      const tope = Math.min(1000, Number(cuerpo?.limit) || 300);
+      const suyos = [...s2.mensajes.values()]
+        .filter((m) => !jid || m?.key?.remoteJid === jid)
+        // Lo mas reciente primero, como lo devuelve Evolution.
+        .sort((a, b) => Number(b?.messageTimestamp || 0) - Number(a?.messageTimestamp || 0))
+        .slice(0, tope);
+      // Envuelto en `messages.records`, que es una de las dos formas que usa
+      // Evolution segun la version. El CRM acepta las dos.
+      return json(200, { messages: { records: suyos, total: suyos.length } });
     }
 
     // Los ajustes de la sesion. Existen en Evolution, asi que existen aqui: al
@@ -1407,6 +1466,26 @@ http.createServer(async (req, res) => {
       // cuanto entra la llamada, que es lo que hace Evolution por dentro.
       log(`ajustes de ${s2.nombre}: rejectCall=${s2.ajustes.rejectCall === true}`);
       return json(200, { settings: s2.ajustes });
+    }
+
+    // A que avisos esta suscrita la sesion.
+    //
+    // El CRM los revisa y completa los que falten — las sesiones viejas se
+    // quedaron con tres de siete y por eso en produccion no entraba ni una
+    // llamada, ni una foto de perfil, ni un borrado. Aqui el puente avisa
+    // SIEMPRE de todo, asi que estas dos rutas solo existen para que la
+    // reparacion no de 404 en local y parezca rota: un puente menos capaz que
+    // el original miente igual que uno mas generoso.
+    if (url.startsWith('/webhook/find/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      return json(200, s2.webhook || { enabled: true, url: CRM_WEBHOOK, events: [], byEvents: false });
+    }
+    if (url.startsWith('/webhook/set/')) {
+      const s2 = sesionDe(instanciaDeUrl(url));
+      const cuerpo = await leerCuerpo(req);
+      s2.webhook = cuerpo?.webhook || cuerpo;
+      log(`avisos de ${s2.nombre}: ${(s2.webhook?.events || []).length}`);
+      return json(201, { webhook: s2.webhook });
     }
 
     // Para mirar por encima como va todo, sin tocar la base.

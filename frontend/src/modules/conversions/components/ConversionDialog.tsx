@@ -5,16 +5,17 @@ import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phos
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { invoicesApi, invoiceFaltantes, type Invoice, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
+import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
 
-// Flujo nuevo de facturación (ventana Presupuesto/Factura + auto-emisión al
-// pagar) SOLO en entornos con VITE_FACTURACION_V2=true (staging). En producción
-// la conversión se registra y cierra como siempre, sin ventana.
-const FACT_V2 = String(import.meta.env.VITE_FACTURACION_V2 || '') === 'true';
+// La ventana de documento tras registrar la venta sale SIEMPRE, en los dos
+// entornos. Estuvo detrás de `VITE_FACTURACION_V2` --solo encendido en staging--
+// y por eso en producción no se vio nunca: ni el aviso de que la factura no se
+// emite sola, ni el número al convertir. Ver el porqué en `handleSubmit`.
 
 // Construye los conceptos del documento a partir de la conversión creada.
 function buildDocItems(c: Conversion): InvoiceItem[] {
@@ -113,6 +114,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   // Factura ya emitida automáticamente por el pago → diálogo de completar datos.
   const [emitInv, setEmitInv] = useState<Invoice | null>(null);
   const notifiedRef = useRef(false);
+  /*
+    Quien puede numerar aqui mismo, y el numero.
+
+    Diego, 15/09: «que salga al convertir, puedas colocar el numero de factura;
+    solo es para unos y para otros. CEDIA y ICTESS SI lo pueden hacer, porque
+    esas gestoras llevan facturacion aun».
+
+    Por defecto NO sale: la venta va a la cola y se factura desde alli, que es el
+    freno del 14/09. El interruptor vive en la empresa emisora.
+  */
+  const [numeraAqui, setNumeraAqui] = useState(false);
+  const [numero, setNumero] = useState('');
+  const [sugerido, setSugerido] = useState('');
   // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
   const finishAndClose = () => {
     if (created && !notifiedRef.current) { notifiedRef.current = true; onCreated?.(created); }
@@ -133,6 +147,33 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
+
+  /*
+    QUE DOCUMENTO TOCA, Y DE QUE. Lo decide como se registro la venta.
+
+    Diego, 15/09: «que me salga el cuadro diciendome: registrar numero de factura
+    del pago 1, o del pago completo, y asi; si es sin pago, el numero de la
+    proforma».
+
+    Son tres casos y cada uno se llama distinto, porque son cosas distintas:
+
+      sin cobro           -> PROFORMA. Reserva el numero y pasa a factura al pagar.
+      cobro por el total  -> FACTURA del pago completo.
+      cobro parcial       -> FACTURA DEL PAGO 1. Cada cuota lleva la suya despues:
+                             esa es la regla de «una factura por cada abono».
+
+    Se mira lo GUARDADO, no el modo del formulario, que puede haberse tocado.
+  */
+  const pagadoVenta = Number(created?.importe_pagado) || 0;
+  const totalVenta = Number(created?.importe_total) || 0;
+  const sinPagoVenta = !created || pagadoVenta <= 0;
+  const pagoCompleto = !sinPagoVenta && pagadoVenta >= totalVenta - 0.01;
+  const nCuotas = installments.length;
+  const queSeEmite = sinPagoVenta
+    ? 'la proforma'
+    : pagoCompleto
+      ? 'la factura del pago completo'
+      : (nCuotas > 0 ? `la factura del pago 1 (de ${nCuotas + 1})` : 'la factura del pago 1');
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -260,6 +301,23 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     }
   }, [open, lead]);
 
+  // El interruptor de la empresa y el siguiente numero libre. Se piden al llegar
+  // al paso del documento, no antes: si la venta no llega a registrarse, no se
+  // ha preguntado nada.
+  useEffect(() => {
+    if (docPhase !== 'choose' || !projectId) return;
+    invoicesApi.getConfig(projectId)
+      .then((r) => setNumeraAqui(Boolean(r?.success && r.data?.numera_al_convertir)))
+      .catch(() => setNumeraAqui(false));
+    client.get<{ siguiente: number }>(`/invoices/siguiente-numero?projectId=${projectId}`)
+      .then((r) => {
+        if (!r?.success) return;
+        setSugerido(String(r.data.siguiente));
+        setNumero(String(r.data.siguiente));
+      })
+      .catch(() => { /* se escribe a mano */ });
+  }, [docPhase, projectId]);
+
   if (!open) return null;
 
   // Elegir "Factura" en el paso post-venta: si el pago YA generó la factura
@@ -275,7 +333,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       }
       if (inv) {
         if (inv.estado === 'borrador' || invoiceFaltantes(inv).length > 0) { setEmitInv(inv); return; }
-        toast({ title: `✓ Factura ${inv.codigo}`, description: 'Emitida automáticamente al registrar el pago.' });
+        toast({ title: `✓ Factura ${inv.codigo}`, description: 'Esta venta ya tenía factura emitida.' });
         invoicesApi.openPdf(inv.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         finishAndClose();
         return;
@@ -307,6 +365,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           leadId={lead?.id ?? created.lead_id ?? 0}
           conversionId={created.id}
           docTipo={docPhase}
+          // El numero que se eligio en el paso anterior. Solo sale cuando la
+          // empresa numera al convertir; si no, va sin numero y lo pone el
+          // contador al emitir desde la cola.
+          numero={numeraAqui && numero ? Number(numero) : null}
           defaultItems={buildDocItems(created)}
           defaultNotas={created.notas_pago || undefined}
           defaultIvaExento={created.iva_exento}
@@ -410,15 +472,30 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           }
         }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-        if (!FACT_V2) {
-          // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
-          onCreated?.(res.data);
-          onClose();
-        } else {
-          // Staging (flujo nuevo): ofrecer Presupuesto/Factura + PDF.
-          setCreated(res.data);
-          setDocPhase('choose');
-        }
+        /*
+          EL PASO DEL DOCUMENTO SALE SIEMPRE.
+
+          Estaba detras de `VITE_FACTURACION_V2`, que solo se enciende en
+          staging. O sea que en PRODUCCION esta ventana no se ha visto nunca: se
+          registraba la venta y se cerraba con un aviso que se va solo.
+
+          Eso dejaba invisibles aqui dos cosas pedidas para aqui: el aviso grande
+          de que la factura NO se emite sola y va a la cola (Diego, 14/09: «le di
+          a convertir y no me salio en grande») y el numero de factura al
+          convertir (15/09). Diego, probando con «Sin pago»: «no me salio nada,
+          solo lo de abajo».
+
+          El interruptor se queda para lo otro que gatea --el borrador de
+          `InvoiceButton`--, que eso si sigue siendo distinto entre entornos.
+        */
+        toast({
+          title: '✓ Conversión creada',
+          description: pagoMode !== 'none'
+            ? 'El cobro está en la cola de facturación. Entra en Facturación para emitir la factura y ponerle número.'
+            : 'Sin cobro registrado, así que no hay nada que facturar todavía.',
+        });
+        setCreated(res.data);
+        setDocPhase('choose');
       }
     } catch (err: any) {
       toast({
@@ -455,23 +532,100 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               </div>
               <div>
                 <h3 className="font-semibold text-base">Venta registrada</h3>
-                <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+                {/* EL AVISO DE LA COLA, AQUI Y EN GRANDE.
+
+                    Iba en un toast que se va solo y Diego no lo vio: «le di a
+                    convertir y no me salio en grande». Con el freno del 14/09 la
+                    factura ya NO sale sola, asi que si esto no se lee, la gestora
+                    se queda esperando una factura que nadie va a emitir.
+
+                    No sale para quien numera aqui mismo --CEDIA e ICTESS--:
+                    esos no dependen de la cola, le ponen el numero y emiten. */}
+                {pagoMode !== 'none' && !numeraAqui && (
+                  <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-left dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      La factura no se emite sola
+                    </p>
+                    <p className="mt-0.5 text-[13px] leading-snug text-amber-800 dark:text-amber-300">
+                      El cobro está en la <b>cola de facturación</b>. Para emitir la factura y
+                      {' '}ponerle número, entra en <b>Finanzas → Facturación</b>.
+                    </p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground mt-3">
+                  {numeraAqui
+                    ? '¿Le pones ya el número de factura, o la dejas en la cola de facturación?'
+                    : '¿Generar un documento para el cliente y descargar el PDF?'}
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setDocPhase('proforma')}
-                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
-                  <FileText size={24} weight="duotone" className="text-primary" />
-                  <span className="text-sm font-semibold">Presupuesto</span>
-                  <span className="text-[10px] text-muted-foreground">Sin valor fiscal</span>
-                </button>
-                <button type="button" onClick={handleFacturaChoice}
-                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
-                  <Receipt size={24} weight="duotone" className="text-primary" />
-                  <span className="text-sm font-semibold">Factura</span>
-                  <span className="text-[10px] text-muted-foreground">Documento fiscal</span>
+
+              {/* El numero, aqui mismo, para quien lo lleva asi. El resto ve el
+                  aviso de la cola y nada mas: ese es el freno del 14/09. */}
+              {numeraAqui ? (
+                <div className="text-left rounded-lg border border-border bg-muted/30 p-3">
+                  <label className="block text-sm">
+                    <span className="font-medium">Número de {queSeEmite}</span>
+                    <input type="number" min="1" value={numero}
+                      onChange={(e) => setNumero(e.target.value)}
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums" />
+                  </label>
+                  {sugerido && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      El siguiente libre es el <b>{sugerido}</b>. Puedes poner ese u otro.
+                    </p>
+                  )}
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">
+                    ⚠ Comprueba la numeración en el Excel de facturación primero. Si hay discrepancia,
+                    contacta con soporte; y si hace falta, genera la factura manualmente y avisa.
+                  </p>
+                </div>
+              ) : null}
+
+              {/* EL TIPO LO DECIDE COMO SE REGISTRO LA VENTA, no quien pulsa.
+
+                  Diego, 15/09: «que al dar conversion aparezca el cuadro de
+                  dialogo, si es proforma o factura SEGUN COMO FUE REGISTRADO».
+
+                  La regla es la misma que usa el boton de Facturacion: sin ningun
+                  cobro no hay factura fiscal que emitir --se emite PROFORMA, que
+                  reserva el numero y se convierte en factura cuando entre el
+                  pago--; con cobro, factura. Antes salian los dos botones iguales
+                  y elegir mal era facil. */}
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-left">
+                <p className="text-xs text-muted-foreground">
+                  {sinPagoVenta
+                    ? <>Esta venta se registró <b>sin ningún cobro</b>, así que lo que toca es una <b>proforma</b>: reserva el número y se convierte en factura cuando entre el pago.</>
+                    : pagoCompleto
+                      ? <>Esta venta se registró <b>pagada entera</b> ({totalVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €), así que lo que toca es la <b>factura del pago completo</b>.</>
+                      : <>Esta venta se registró con un <b>pago parcial</b> de {pagadoVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} € de {totalVenta.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €, así que este número es el de <b>la factura del pago 1</b>{nCuotas > 0 ? ` de ${nCuotas + 1}` : ''}. Cada cuota llevará la suya cuando se cobre.</>}
+                </p>
+                <button type="button"
+                  onClick={() => (sinPagoVenta ? setDocPhase('proforma') : handleFacturaChoice())}
+                  className="mt-2.5 w-full h-10 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                  {sinPagoVenta ? <FileText size={16} weight="duotone" /> : <Receipt size={16} weight="duotone" />}
+                  {sinPagoVenta ? 'Emitir proforma' : 'Emitir factura'}
+                  {numeraAqui && numero ? ` nº ${numero}` : ''}
                 </button>
               </div>
-              <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">Ahora no</button>
+
+              {/* En columna y con hueco: son dos botones en linea y sin esto
+                  salian pegados, leyendose como una sola frase. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* El otro tipo sigue estando: hay casos sueltos y no es cuestion
+                    de tapiarlos. Con borde y fondo, que como texto subrayado no
+                    se leian como botones. */}
+                <button type="button"
+                  onClick={() => (sinPagoVenta ? handleFacturaChoice() : setDocPhase('proforma'))}
+                  className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold
+                             hover:border-primary hover:bg-muted/50 transition-colors">
+                  {sinPagoVenta ? 'Emitir factura igualmente' : 'Prefiero un presupuesto'}
+                </button>
+                <button type="button" onClick={finishAndClose}
+                  className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold
+                             hover:border-primary hover:bg-muted/50 transition-colors">
+                  {numeraAqui ? 'Ahora no: dejar en la cola' : 'Cerrar'}
+                </button>
+              </div>
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -636,7 +790,17 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                       update('metodo_pago', 'fraccionado');
                     }}
                     className={`flex-1 h-9 border-x border-border ${pagoMode === 'parcial' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Parcial</button>
-                  <button type="button" onClick={() => setPagoMode('total')}
+                  <button type="button" onClick={() => {
+                      setPagoMode('total');
+                      // Venia de «Parcial», que deja el metodo en fraccionado y un
+                      // plan montado. Si no se limpia aqui, se registra una venta
+                      // pagada entera CON plan de cuotas, que es imposible.
+                      if (form.metodo_pago === 'fraccionado') {
+                        update('metodo_pago', metodoInicial);
+                        setInstallments([]);
+                        setInstallmentsDirty(false);
+                      }
+                    }}
                     className={`flex-1 h-9 ${pagoMode === 'total' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Pagó TODO</button>
                 </div>
                 {pagoMode === 'parcial' && (
@@ -697,12 +861,20 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 <Select<MetodoPago>
                   value={form.metodo_pago}
                   onChange={(v) => update('metodo_pago', v)}
-                  options={METODOS.map(m => ({ value: m.value, label: m.label }))}
+                  // Si pagó TODO no queda nada que fraccionar, asi que el metodo
+                  // «Fraccionado» ni se ofrece. Diego, 15/09: «si le doy a pago
+                  // todo no tiene sentido que me deje poner fraccionado».
+                  options={METODOS
+                    .filter(m => !(pagoMode === 'total' && m.value === 'fraccionado'))
+                    .map(m => ({ value: m.value, label: m.label }))}
                   ariaLabel="Método de pago"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha conversion</label>
+                {/* Diego, 14/09: «en conversion la fecha de conversion seria fecha de
+                    pago». Es la fecha en la que entro el dinero, que es la que
+                    usan los informes y la que decide de que mes es la venta. */}
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Fecha de pago</label>
                 <input type="date" value={form.fecha_conversion} onChange={e => update('fecha_conversion', e.target.value)} className={inputClass} />
               </div>
             </div>

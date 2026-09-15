@@ -67,8 +67,12 @@ describe('la instancia sale del usuario, no de lo que mande el cliente', () => {
   it('la lista de chats se pide con la instancia de quien pregunta', async () => {
     query.mockResolvedValue({ rows: [] });
     await llamar(ctrl.chats, comoUsuario(9));
+    // Se busca la consulta de la lista en vez de dar por hecho que es la
+    // primera: antes de ella van las que miran si tal migracion esta aplicada,
+    // y esta prueba se caia sola cada vez que se anadia una guarda de esas.
+    const lista = query.mock.calls.find(([sql]) => /FROM wa_conversaciones c/.test(sql));
     // El primer parametro de la consulta es la instancia.
-    expect(query.mock.calls[0][1][0]).toBe(evolution.instanciaDe(9));
+    expect(lista?.[1]?.[0]).toBe(evolution.instanciaDe(9));
   });
 });
 

@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+// Los atajos de fecha. El mismo componente para todas las pantallas con
+// rango: Diego los pidio tres veces en cuatro dias, y eso no son tres tareas.
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,10 +37,11 @@ const ESTADO_BADGE: Record<string, string> = {
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject, projects, switchProject } = useProjectContext() as {
+  const { activeProject, projects, switchProject, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
     switchProject: (id: number) => void;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
@@ -65,13 +69,37 @@ export default function InvoicesPage() {
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   // Paginacion: con cientos de facturas ya no cabian todas de una tacada.
   const PER_PAGE = 50;
+
+  // Apuntar que una factura ya se le paso al cliente. Optimista: la marca
+  // cambia al momento y si el servidor dice que no, se recarga y vuelve.
+  async function marcarEntregada(inv: Invoice) {
+    const ahora = inv.sent_at ? null : new Date().toISOString();
+    setInvoices((lista) => lista.map((x) => (x.id === inv.id ? { ...x, sent_at: ahora } : x)));
+    const r = await client.patch(`/invoices/${inv.id}/entregada`, { entregada: !inv.sent_at });
+    if (!r?.success) {
+      toast({ title: 'No se pudo guardar la marca', variant: 'destructive' });
+      load();
+    }
+  }
   const [page, setPage] = useState(1);
   const [totalFacturas, setTotalFacturas] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
   // sociedad entre proyectos (global), con la columna Proyecto.
-  const [filterIssuer, setFilterIssuer] = useState<string>('');
+  //
+  // Diego, 14/09: «si pongo una empresa en facturacion necesito poder verla».
+  // Y no la veia: esto arrancaba SIEMPRE vacio, asi que elegir CEDIA en la
+  // cabecera no llegaba hasta aqui y la pantalla acababa pidiendo el proyecto
+  // -1 --que no existe-- y enseñando cero facturas. El backend estaba bien
+  // desde el principio: pidiendole por sociedad devuelve las 118 de CEDIA.
+  const [filterIssuer, setFilterIssuer] = useState<string>(() => (activeIssuer ? String(activeIssuer.id) : ''));
+
+  // Y si se cambia de empresa SIN salir de la pantalla, que se entere: sin
+  // esto la cabecera diria CEDIA y la tabla seguiria en la anterior.
+  useEffect(() => {
+    if (activeIssuer) setFilterIssuer(String(activeIssuer.id));
+  }, [activeIssuer?.id]);
   // Dentro de una sociedad: filtrar por uno de sus proyectos. '' = todos.
   const [filterProject, setFilterProject] = useState<string>('');
   const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);
@@ -115,8 +143,9 @@ export default function InvoicesPage() {
     if (!pid) return;
     setLoading(true);
     try {
-      // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
-      // (stats, emisores, ventas sin factura) sigue por proyecto activo.
+      // Modo sociedad (admin): facturas globales de esa empresa emisora. Las
+      // ventas sin factura tambien van por sociedad; los emisores y los ajustes
+      // siguen siendo por proyecto, que es como se configuran.
       const listParams = porSociedad
         ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, page, limit: PER_PAGE }
         : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
@@ -126,7 +155,12 @@ export default function InvoicesPage() {
           ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
           : invoicesApi.stats({ projectId: pid }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
-        invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+        // Con una sociedad elegida se piden las de TODOS sus campus: es la
+        // pantalla que dice que falta por facturar, y acotarla a un proyecto
+        // dejaba fuera justo lo que se estaba mirando.
+        invoicesApi.ventasSinFactura(porSociedad
+          ? { issuerId: Number(filterIssuer) }
+          : { projectId: pid }).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -241,9 +275,12 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {/* El subtitulo con una empresa elegida: antes decia «Todos los
+          proyectos» --lo que vale `activeProject.nombre` cuando hay
+          sociedad-- y con CEDIA puesta eso es sencillamente falso. */}
       <PageHeader
         title="Facturas"
-        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        subtitle={`Histórico fiscal — ${activeIssuer ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus` : (activeProject?.nombre || '')}`}
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
@@ -289,56 +326,6 @@ export default function InvoicesPage() {
             label="IVA acumulado" numericValue={Number(stats.total_iva)} format={(n) => fmt(Number(n))} />
         </div>
       )}
-
-      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
-        </div>
-        {isAdmin && sociedadesVisibles.length > 1 && (
-          <select value={filterIssuer}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              // No se cruza facturación entre sociedades: si piden otra, se avisa
-              // y se ofrece el atajo para entrar a uno de sus proyectos.
-              if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
-                const soc = sociedadesVisibles.find((s) => s.id === id);
-                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
-                return;
-              }
-              setFilterIssuer(e.target.value);
-            }}
-            title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
-            className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
-          </select>
-        )}
-        {porSociedad && sociedadProjects.length > 0 && (
-          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
-            title="Filtrar por un proyecto de esta sociedad"
-            className={`h-9 px-2 rounded-md border text-sm ${filterProject ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            <option value="">Todos los proyectos</option>
-            {sociedadProjects.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
-          </select>
-        )}
-        <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
-          className="h-9 px-2 rounded-md border border-border bg-card text-sm">
-          <option value="">Todos los estados</option>
-          <option value="emitida">Emitida</option>
-          <option value="enviada">Enviada</option>
-          <option value="pagada">Pagada</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-        <div className="flex items-center gap-1 text-xs">
-          <label className="text-muted-foreground">Desde</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-muted-foreground ml-1">Hasta</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-        </div>
-      </div>
 
       {porSociedad && (
         <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
@@ -391,13 +378,25 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {!porSociedad && !esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
+      {/* Ya no se esconde en modo sociedad: la consulta acepta los campus. */}
+      {!esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
             <span className="font-semibold text-sm">Ventas sin factura</span>
             <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
           </div>
+          {/* Diego: «las ventas sin factura y la cola de facturación son como
+              lo mismo». Se solapan y la pantalla no lo decia. No son iguales:
+              arriba van los COBROS pendientes de facturar, en orden; aqui las
+              VENTAS sin ninguna factura, incluidas las que todavia no han
+              cobrado nada. Una venta con cobro sale en las dos. */}
+          <p className="px-4 py-2 text-[11px] leading-snug text-muted-foreground border-b border-amber-200 dark:border-amber-900/40">
+            Esto son <b>ventas</b>; arriba, en la cola, van los <b>cobros</b> pendientes de facturar.
+            {' '}Una venta que ya tiene algún cobro sale en las dos:
+            {' '}<b>emítela desde la cola</b>, que es la que respeta el orden de la numeración.
+            {' '}Aquí quedan sobre todo las que aún no han cobrado nada, y por eso todavía no se pueden facturar.
+          </p>
           <div className="overflow-x-auto">
             <table className="tabla-cifras w-full text-[13px]">
               <thead className="bg-amber-100/40 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-900/40">
@@ -432,6 +431,74 @@ export default function InvoicesPage() {
           </div>
         </div>
       )}
+
+      {/* LOS FILTROS, AQUI Y NO ARRIBA.
+
+          Estaban encima de las tarjetas y de la tabla de ventas sin factura,
+          asi que al bajar a la lista --donde se trabaja-- quedaban fuera de
+          pantalla. Lo resolvi duplicando el buscador, y Diego: «hay dos
+          buscadores, hay que dejar uno». Tenia razon: dos cuadros que hacen lo
+          mismo es peor que uno lejos.
+
+          Se mueve el bloque entero --buscador, sociedad, proyecto, estado,
+          fechas y atajos-- a donde se usa: pegado a la lista que filtra. */}
+      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
+        </div>
+        {isAdmin && sociedadesVisibles.length > 1 && (
+          <select value={filterIssuer}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              // No se cruza facturación entre sociedades: si piden otra, se avisa
+              // y se ofrece el atajo para entrar a uno de sus proyectos.
+              if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
+                const soc = sociedadesVisibles.find((s) => s.id === id);
+                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                return;
+              }
+              setFilterIssuer(e.target.value);
+            }}
+            title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
+            className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+          </select>
+        )}
+        {porSociedad && sociedadProjects.length > 0 && (
+          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
+            title="Filtrar por un proyecto de esta sociedad"
+            className={`h-9 px-2 rounded-md border text-sm ${filterProject ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            <option value="">Todos los proyectos</option>
+            {sociedadProjects.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+          </select>
+        )}
+        <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
+          className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+          <option value="">Todos los estados</option>
+          <option value="emitida">Emitida</option>
+          <option value="enviada">Enviada</option>
+          <option value="pagada">Pagada</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+        <div className="flex items-center gap-1 text-xs">
+          <label className="text-muted-foreground">Desde</label>
+          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          <label className="text-muted-foreground ml-1">Hasta</label>
+          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        </div>
+        {/* Los atajos van DESPUES de las casillas y no en su lugar: escribir dos
+            fechas sigue siendo posible para el caso raro, y para los cinco de
+            siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
+      </div>
 
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
         {loading ? (
@@ -477,6 +544,67 @@ export default function InvoicesPage() {
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
                     )}
+                    {/*
+                      Venta nueva o cuota.
+
+                      Diego: «veo esos pagos y no sé cuáles son cuotas o
+                      compras». Sin esto, un día con 7 facturas y 3 ventas
+                      parece un día de 7 ventas: una venta a plazos emite una
+                      factura por cada cobro, así que en un mes cualquiera la
+                      mayoría de las filas NO son ventas de ese mes.
+
+                      La proforma no lleva etiqueta: ya dice lo que es.
+                    */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'cuota' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                          title={inv.fecha_de_la_venta ? `Cuota de una venta del ${fmtDate(inv.fecha_de_la_venta)}` : 'Cuota de una venta anterior'}>
+                          CUOTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* La misma venta partida en varias facturas. No es una
+                        venta nueva --contarla como tal daba 4 donde habia 3--
+                        ni es una cuota: es otro papel de lo mismo. */}
+                    {/* Sin cobro propio, marcada como pagada, y la venta tiene
+                        mas facturado que cobrado: el dinero de esta factura no
+                        existe. Es la 2026/0102 de Flavia Gerez: 33 segundos
+                        despues de la 0101, mismo importe, un solo cargo en
+                        Stripe. */}
+                    {inv.tipo !== 'proforma' && inv.sospecha_duplicada && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                          title="Marcada como pagada sin cobro propio, y la venta tiene más facturado que cobrado. Probablemente se emitió dos veces.">
+                          ¿REPETIDA?
+                        </span>
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          title="Otra factura de una venta ya facturada: la misma venta partida en varios papeles. No cuenta como venta nueva.">
+                          MISMA VENTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'venta' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          title="Es la factura de una venta nueva">
+                          VENTA
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">{fmtDate(inv.fecha_emision)}</td>
                   <td className="px-3 py-2">
@@ -505,6 +633,27 @@ export default function InvoicesPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}
                     </span>
+                    {/* ENTREGADA O NO. Diego, 14/09: «añadir: factura enviada o no».
+
+                        Es una MARCA, no un envio: de 206 facturas ninguna tenia
+                        `sent_at`, porque lo unico que lo rellenaba era un correo
+                        que aqui no se manda --«no enviemos NADA por correo»--.
+                        Las facturas salen por donde cada uno las mande; esto solo
+                        lleva la cuenta de cuales estan hechas. */}
+                    {inv.tipo !== 'proforma' && inv.estado !== 'borrador' && (
+                      <button
+                        type="button"
+                        onClick={() => marcarEntregada(inv)}
+                        title={inv.sent_at ? `Entregada el ${fmtDate(inv.sent_at)} — pulsa para desmarcar` : 'Marcar como entregada al cliente (no manda nada)'}
+                        className={`mt-0.5 block text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors ${
+                          inv.sent_at
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                            : 'border border-dashed border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {inv.sent_at ? '✓ entregada' : 'sin entregar'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
@@ -617,6 +766,42 @@ export default function InvoicesPage() {
           </table>
         )}
       </div>
+
+      {/* PAGINACION.
+
+          El estado `page` y el limite de 50 ya existian y viajaban a la API,
+          pero no habia NADA que dejara cambiar de pagina: se veian las 50
+          primeras y las demas no existian para el usuario. Con 205 facturas
+          eso son 155 invisibles. Diego, 14/09: «paginacion en facturacion».
+
+          Se enseña siempre el total --no solo cuando hay varias paginas--
+          porque saber cuantas facturas hay es la mitad de la pregunta. */}
+      {!loading && totalFacturas > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground tabular-nums">
+            {totalFacturas <= PER_PAGE
+              ? `${totalFacturas} ${totalFacturas === 1 ? 'factura' : 'facturas'}`
+              : `${(page - 1) * PER_PAGE + 1}–${Math.min(page * PER_PAGE, totalFacturas)} de ${totalFacturas}`}
+          </span>
+          {totalFacturas > PER_PAGE && (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={page <= 1}
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                ← Anterior
+              </button>
+              <span className="text-muted-foreground tabular-nums px-1">
+                {page} de {Math.ceil(totalFacturas / PER_PAGE)}
+              </span>
+              <button type="button" disabled={page >= Math.ceil(totalFacturas / PER_PAGE)}
+                onClick={() => setPage((n) => n + 1)}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                Siguiente →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {emittingInv && (
         <EmitirBorradorDialog

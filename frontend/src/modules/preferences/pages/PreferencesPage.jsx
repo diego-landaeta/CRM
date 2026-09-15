@@ -3,6 +3,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { Eye, Sliders } from '@phosphor-icons/react';
 import AvisosPorCorreo from '../components/AvisosPorCorreo';
+import MiVista from '../components/MiVista';
 
 export default function PreferencesPage() {
   const { activeProject } = useProjectContext();
@@ -54,11 +55,7 @@ export default function PreferencesPage() {
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <h3 className="font-bold mb-2">Items de sidebar ocultos</h3>
-        <p className="text-xs text-muted-foreground mb-3">Marca los items que NO quieres ver en tu menu lateral.</p>
-        <p className="text-sm text-muted-foreground italic">Pendiente UI drag&drop. {preferences.hidden_sidebar_items.length} ocultos.</p>
-      </div>
+      <MiVista preferences={preferences} update={update} />
 
       <div className="bg-card border border-border rounded-2xl p-5">
         <h3 className="font-bold mb-2">Filtros guardados</h3>

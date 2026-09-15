@@ -45,6 +45,7 @@ const ROUTE_TITLES = {
   '/notificaciones': 'Notificaciones',
   '/secuencias-email': 'Email seguimiento',
   '/configuracion/campos': 'Campos personalizados',
+  '/configuracion/claves': 'Claves y variables',
   '/configuracion/roles': 'Roles y Permisos',
   '/configuracion/canales': 'Canales del proyecto',
   '/configuracion/atajos': 'Atajos rápidos',
@@ -153,6 +154,7 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
 const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
 const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+const BancoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/BancoPage'));
 // La guia para quien usa el chat. docs/10-whatsapp.md esta bien para nosotros,
 // pero una gestora no entra al repositorio: lo necesita donde trabaja.
 const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
@@ -177,6 +179,9 @@ const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
+const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
+const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -184,6 +189,7 @@ const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDet
 const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
+const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -231,6 +237,10 @@ function App() {
             <Route path="pipeline" element={<LeadsPipelinePage />} />
             <Route path="audiencias" element={<AudienceExportPage />} />
           </Route>
+          {/* Antes que `:id`: React Router prioriza el tramo fijo, pero
+              tenerlos juntos evita que alguien meta otra ruta en medio. */}
+          <Route path="/prospectos/cola" element={<ColaDelDiaPage />} />
+          <Route path="/prospectos/proceso" element={<ProcesoPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 
           {/* Clientes — tabs */}
@@ -241,6 +251,7 @@ function App() {
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/prospectos/revision-duplicados" element={<DupReviewQueuePage />} />
+          <Route path="/prospectos/duplicados" element={<DuplicatesPage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
 
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />
@@ -248,6 +259,7 @@ function App() {
           <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          <Route path="/whatsapp/banco" element={<BancoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
@@ -305,6 +317,9 @@ function App() {
           <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/stripe" element={<IADashboardPage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
+          {/* Claves y variables (#80). El recorte de rol lo hace el servidor con
+              `soloRoles`; aqui solo se sirve la pantalla. */}
+          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />

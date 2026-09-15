@@ -3,6 +3,7 @@ import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 /**
  * Registra una venta — flujo orquestado:
@@ -158,15 +159,54 @@ export async function createSale(data, requestUser) {
   };
 }
 
+/*
+  El nombre del programa, limpio.
+
+  Estaba escrito tres veces en la misma consulta —en el SELECT, en el GROUP BY y
+  otra vez dentro— y era la línea más larga del fichero. Sacarlo aquí no cambia
+  lo que hace: permite preguntar por él sin repetirlo una cuarta vez.
+
+  Quita el prefijo «Producto/servicio: servicio académico,» y el «pago
+  mensualidad N», que hacían que ese texto saliera como el producto más vendido
+  y partían un mismo curso en varias filas.
+*/
+const NOMBRE_LIMPIO = `NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), '')`;
+
+const PRODUCTO = `COALESCE(p.nombre, ${NOMBRE_LIMPIO}, '— sin producto —')`;
+
+/*
+  Una ficha que NO dice qué se vendió.
+
+  Diego (#100): «en Psiko Aprende el primer puesto de Programas más vendidos es
+  "— Pendiente de registrar —" con 52 ventas y 0,00 € cobrado, por delante de
+  cursos con 28 y 22». Y tenía razón en que eso no es un programa: es la
+  ausencia de uno. Un ranking cuyo número uno es «no lo sabemos» no dice nada.
+
+  OJO CON QUÉ SE DESCARTA. Solo el hueco: la etiqueta «pendiente de registrar» y
+  la ficha sin texto ninguno. Un nombre de curso escrito a mano SÍ cuenta aunque
+  no esté atado al catálogo —«Variadores de Frecuencia y Arranques de Motores»
+  son cinco ventas de verdad—, porque ahí sí se sabe qué se vendió. Descartarlas
+  todas por no tener `producto_contratado_id` escondería ventas reales, que es
+  el error contrario y peor.
+
+  No se tiran: se cuentan aparte y la pantalla las enseña como lo que son, un
+  agujero de registro que hay que rellenar (#41).
+*/
+const SIN_ASIGNAR = `(c.producto_contratado_id IS NULL
+    AND (${NOMBRE_LIMPIO} IS NULL OR ${NOMBRE_LIMPIO} ~* 'pendiente de registrar'))`;
+
 /**
  * Top programas vendidos — agrupado por producto. Usado en dashboards (inicial + finanzas).
  * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
  *   days=null → all-time. days=30 → últimos 30 días.
+ * @returns {{ productos: Array, sinAsignar: { ventas, facturado, cobrado } }}
  */
-export async function getTopProducts({ projectId, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
+export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
   const params = [];
   const where = [];
-  if (projectId) { params.push(projectId); where.push(`c.project_id = $${params.length}`); }
+  const listaTop = comoLista(projectId, projectIds);
+  if (listaTop) { params.push(listaTop); where.push(`c.project_id = ANY($${params.length}::int[])`); }
+  else where.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { params.push(responsableId); where.push(`l.responsable_id = $${params.length}`); }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).
@@ -174,36 +214,54 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
   if (to) { params.push(to); where.push(`c.fecha_conversion <= $${params.length}::date`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const needsLeadJoin = !!responsableId;
+  const join = `FROM conversions c
+     LEFT JOIN products p ON p.id = c.producto_contratado_id
+     ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}`;
+
+  // Las fichas sin programa se cuentan aparte y ANTES del LIMIT: si se filtraran
+  // despues, quitar la fila de «pendiente de registrar» dejaria el ranking con
+  // un puesto menos de los pedidos.
+  const { rows: [hueco] } = await query(
+    `SELECT COUNT(*)::int AS ventas,
+            COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
+            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+     ${join}
+     ${whereSql}${whereSql ? ' AND' : 'WHERE'} ${SIN_ASIGNAR}`,
+    params
+  );
+
   params.push(limit);
   const { rows } = await query(
     `SELECT
        c.producto_contratado_id AS product_id,
-       -- Manda el producto del CATALOGO. Si no lo tiene, se usa el texto libre LIMPIO:
-       -- sin el prefijo "Producto/servicio: servicio academico," ni el "pago mensualidad N",
-       -- que hacian que ese texto saliera como el producto mas vendido y fragmentaban
-       -- un mismo curso en varias filas.
-       COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') AS producto,
+       -- Manda el producto del CATALOGO; si no lo tiene, el texto libre limpio.
+       ${PRODUCTO} AS producto,
        COUNT(*)::int AS ventas,
        COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
        COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
        MAX(c.fecha_conversion) AS ultima_venta
-     FROM conversions c
-     LEFT JOIN products p ON p.id = c.producto_contratado_id
-     ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}
-     ${whereSql}
-     GROUP BY COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —'), c.producto_contratado_id, p.nombre
+     ${join}
+     ${whereSql}${whereSql ? ' AND' : 'WHERE'} NOT ${SIN_ASIGNAR}
+     GROUP BY ${PRODUCTO}, c.producto_contratado_id, p.nombre
      ORDER BY ventas DESC, facturado DESC
      LIMIT $${params.length}`,
     params
   );
-  return rows.map((r) => ({
-    product_id: r.product_id,
-    producto: r.producto,
-    ventas: r.ventas,
-    facturado: Number(r.facturado),
-    cobrado: Number(r.cobrado),
-    ultima_venta: r.ultima_venta,
-  }));
+  return {
+    productos: rows.map((r) => ({
+      product_id: r.product_id,
+      producto: r.producto,
+      ventas: r.ventas,
+      facturado: Number(r.facturado),
+      cobrado: Number(r.cobrado),
+      ultima_venta: r.ultima_venta,
+    })),
+    sinAsignar: {
+      ventas: hueco.ventas,
+      facturado: Number(hueco.facturado),
+      cobrado: Number(hueco.cobrado),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -220,11 +278,13 @@ const SIN_TILDES = (expr) =>
                       'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUNcC')`;
 
 
-function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx = 1) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search }, startIdx = 1) {
   const cond = [];
   const params = [];
   let idx = startIdx;
-  if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { cond.push(`cv.project_id = ANY($${idx++}::int[])`); params.push(lista); }
+  else cond.push(SIN_PRUEBAS('cv.project_id'));
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
@@ -250,6 +310,25 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
                          FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
+// Lo que abrio la venta y lo que son cuotas posteriores del plan, por separado
+// (#100). Es la misma regla que `ES_MATRICULA` del desglose —el primer cobro
+// de la venta es la matricula, el resto son cuotas— escrita con el alias de
+// esta consulta. Que las dos cuenten igual es el motivo de repetirla y no
+// inventar otra definicion.
+//
+// Sin esto, «cobrado» juntaba dinero NUEVO con cuotas de ventas que ya estaban
+// cerradas, y no habia forma de saber cuanto se habia vendido de verdad.
+const COBRADO_MATRICULA = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND NOT EXISTS (SELECT 1 FROM conversion_payments p0
+                      WHERE p0.conversion_id = cp.conversion_id
+                        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+const COBRADO_CUOTAS = `(SELECT COALESCE(SUM(cp.importe), 0)
+    FROM conversion_payments cp WHERE cp.conversion_id = cv.id
+     AND EXISTS (SELECT 1 FROM conversion_payments p0
+                  WHERE p0.conversion_id = cp.conversion_id
+                    AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
   const { where, params } = filtrosVentas(filtros);
@@ -259,6 +338,9 @@ export async function getResumenVentas(filtros = {}) {
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
             COALESCE(SUM(cv.importe_total), 0) AS importe,
             COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
+            COALESCE(SUM(${COBRADO_MATRICULA}), 0) AS cobrado_matricula,
+            COALESCE(SUM(${COBRADO_CUOTAS}), 0) AS cobrado_cuotas,
+            COUNT(*) FILTER (WHERE ${COBRADO_CUOTAS} > 0)::int AS ventas_con_cuotas,
             COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
@@ -292,6 +374,10 @@ export async function getResumenVentas(filtros = {}) {
     asesoras: r.asesoras,
     importe: Number(r.importe),
     cobrado: Number(r.cobrado),
+    // De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan (#100).
+    cobrado_matricula: Number(r.cobrado_matricula),
+    cobrado_cuotas: Number(r.cobrado_cuotas),
+    ventas_con_cuotas: r.ventas_con_cuotas,
     pendiente: Number(r.pendiente),
     liquidadas: r.liquidadas,
     con_saldo: r.con_saldo,
@@ -432,10 +518,12 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, from = null, to = null, responsableId = null } = {}) {
+export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const pv = [];
   const wv = [];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  const listaV = comoLista(projectId, projectIds);
+  if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  else wv.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { pv.push(responsableId); wv.push(`${VENDEDORA_C} = $${pv.length}`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
@@ -453,7 +541,9 @@ export async function getDesglose({ projectId = null, from = null, to = null, re
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  const listaC = comoLista(projectId, projectIds);
+  if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  else wc.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) { pc.push(responsableId); wc.push(`${VENDEDORA_C} = $${pc.length}`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
@@ -507,7 +597,7 @@ function restarDias(fecha, dias) {
 }
 
 // Un tramo: ventas, dinero y leads agrupados por dia o por mes.
-async function tramo({ projectId, from, to, responsableId, porMes }) {
+async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes }) {
   const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
     : "to_char(%s, 'YYYY-MM-DD')";
 
@@ -515,7 +605,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   const wv = ['NOT c.es_mensualidad',
     // Una venta sin ningun cobro es una proforma que no se pago.
     'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  const listaV = comoLista(projectId, projectIds);
+  if (listaV) { pv.push(listaV); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  else wv.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
     pv.push(responsableId);
     wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pv.length}`);
@@ -534,7 +626,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  const listaC = comoLista(projectId, projectIds);
+  if (listaC) { pc.push(listaC); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  else wc.push(SIN_PRUEBAS('c.project_id'));
   if (responsableId) {
     pc.push(responsableId);
     wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pc.length}`);
@@ -552,7 +646,9 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
 
   const pl = [];
   const wl = ['l.deleted_at IS NULL'];
-  if (projectId) { pl.push(projectId); wl.push(`l.project_id = $${pl.length}`); }
+  const listaL = comoLista(projectId, projectIds);
+  if (listaL) { pl.push(listaL); wl.push(`l.project_id = ANY($${pl.length}::int[])`); }
+  else wl.push(SIN_PRUEBAS('l.project_id'));
   if (responsableId) { pl.push(responsableId); wl.push(`l.responsable_id = $${pl.length}`); }
   pl.push(from); const lFrom = pl.length;
   pl.push(to); const lTo = pl.length;
@@ -605,7 +701,7 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   };
 }
 
-export async function getSerieVentas({ projectId = null, from = null, to = null, responsableId = null } = {}) {
+export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const hoy = new Date().toISOString().slice(0, 10);
   const desde = from || `${new Date().getFullYear()}-01-01`;
   const hasta = to || hoy;
@@ -613,7 +709,7 @@ export async function getSerieVentas({ projectId = null, from = null, to = null,
   // Hasta dos meses se ve por dias; a partir de ahi, por meses.
   const porMes = dias > 62;
 
-  const actual = await tramo({ projectId, from: desde, to: hasta, responsableId, porMes });
+  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes });
 
   // El periodo justo anterior, del mismo tamaño.
   const finAnterior = restarDias(desde, 1);

@@ -96,6 +96,70 @@ export interface ChatWhatsapp {
   ultimo_texto: string | null;
   /** De que tipo fue el ultimo mensaje: si fue foto o audio no hay texto. */
   ultimo_tipo?: string | null;
+  /** Si el ultimo mensaje lo mandamos nosotros o nos lo mandaron. */
+  ultimo_direccion?: 'entrante' | 'saliente' | null;
+  /**
+   * Quien mando el ultimo mensaje, en un grupo.
+   *
+   * Null en un chat de una persona —ahi ya se sabe quien— y tambien en lo
+   * saliente: de eso se encarga `ultimo_direccion`.
+   */
+  ultimo_autor?: string | null;
+  /**
+   * Quienes escriben en el grupo, para la cabecera.
+   *
+   * Solo llega al abrir la conversacion, no en la lista. Son los nombres que
+   * sabemos —los de quien ha escrito—, no la lista de miembros: esa sale de la
+   * agenda del movil y no la tenemos.
+   */
+  participantes?: string[];
+  /**
+   * Cuantos son de verdad, preguntandoselo a WhatsApp.
+   *
+   * Hace falta porque `participantes` solo trae a quien ha ESCRITO: en un grupo
+   * recien enlazado eso ponia «Angel y tu» debajo de un grupo de doce.
+   */
+  miembros?: number | null;
+}
+
+
+/** Una fila del banco de mensajes (#101). */
+export interface MensajeDelBanco {
+  id: number;
+  ts: string;
+  direccion: 'entrante' | 'saliente';
+  tipo: string;
+  texto: string | null;
+  estado: string | null;
+  nombre_archivo: string | null;
+  con_adjunto: boolean;
+  participante_nombre: string | null;
+  conversacion_id: number;
+  telefono: string;
+  instancia: string;
+  es_grupo: boolean;
+  quien: string | null;
+  enviado_por_nombre: string | null;
+}
+
+/** El resumen por numero: un numero, todo lo suyo. */
+export interface NumeroDelBanco {
+  telefono: string;
+  es_grupo: boolean;
+  quien: string | null;
+  mensajes: number;
+  primero: string;
+  ultimo: string;
+  sesiones: number;
+}
+
+export interface FiltrosBanco {
+  texto?: string;
+  telefono?: string;
+  desde?: string;
+  hasta?: string;
+  direccion?: '' | 'entrante' | 'saliente';
+  tipo?: string;
 }
 
 export interface MensajeWhatsapp {
@@ -117,10 +181,25 @@ export interface MensajeWhatsapp {
   /** Quien escribio, SOLO en grupos (#74). Null en chats de una persona. */
   participante?: string | null;
   participante_nombre?: string | null;
+  /**
+   * Su foto, si esa persona tiene su propio chat con nosotros.
+   *
+   * Se saca de ahi en vez de guardarla por mensaje: es el mismo dato y evita
+   * una tabla nueva de participantes.
+   */
+  participante_foto?: string | null;
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;
-  estado: 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
+  /** Quien escribio el mensaje citado. Solo en grupos. */
+  citado_autor?: string | null;
+  /**
+   * `enviando` no existe en la base: es solo de la pantalla.
+   *
+   * Marca el mensaje que ya se ve pero todavia no ha vuelto del servidor. En
+   * cuanto vuelve, manda el estado de verdad.
+   */
+  estado: 'enviando' | 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
   enviado_por: number | null;
   ts: string;
 }
@@ -181,6 +260,20 @@ export interface RespuestaFicha {
 
 export const chatApi = {
   /**
+   * Cambia el estado del prospecto de una conversacion, SIN salir del chat.
+   *
+   * Es lo que pide la #72 de verdad: «que se le pueda anadir en seguimiento al
+   * chat que estoy viendo». Las etiquetas de arriba solo FILTRAN; para cambiar
+   * una habia que irse a Prospectos, buscar la ficha y volver — y volver
+   * recarga el chat entero.
+   *
+   * Va contra el endpoint que ya existe. No hay estado propio del chat: es el
+   * del prospecto, que es lo que viaja con la persona.
+   */
+  cambiarEstado: (leadId: number, status: string): Promise<ApiResponse<unknown>> =>
+    client.patch(`/leads/${leadId}/status`, { status }),
+
+  /**
    * La ficha del prospecto de una conversacion, para el popup del chat.
    *
    * `usuarioId` NO es opcional de verdad: sin el, con la sesion de otra persona
@@ -232,6 +325,47 @@ export const chatApi = {
 
   noEscribir: (id: number, motivo: string, usuarioId?: number | null): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir${qs({ usuarioId })}`, { motivo }),
+  /**
+   * Reenvia un mensaje a otro chat (#99, punto 5).
+   *
+   * `destinoId` es a donde va, y `mensajeId` de donde sale. Los dos chats
+   * tienen que ser de la misma sesion; eso lo comprueba el servidor.
+   */
+  reenviar: (destinoId: number, mensajeId: number): Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.post(`/whatsapp/chats/${destinoId}/reenviar`, { mensajeId }),
+
+  /**
+   * El banco de mensajes (#101). No es el chat: es el respaldo.
+   *
+   * Un admin lo ve entero —incluidas las sesiones que ya no existen en
+   * Evolution, que es justo para lo que sirve— y una gestora solo lo suyo. Eso
+   * lo decide el servidor, aqui no se manda de quien.
+   */
+  banco: (f: FiltrosBanco = {}, pagina = 1, limite = 50) => {
+    const q = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => { if (v) q.set(k, String(v)); });
+    q.set('pagina', String(pagina));
+    q.set('limite', String(limite));
+    return client.get(`/whatsapp/banco?${q}`) as Promise<
+      ApiResponse<MensajeDelBanco[]> & { pagination?: { total: number; page: number; limit: number; totalPages: number } }
+    >;
+  },
+
+  bancoNumeros: (f: Pick<FiltrosBanco, 'texto' | 'telefono'> = {}): Promise<ApiResponse<NumeroDelBanco[]>> => {
+    const q = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => { if (v) q.set(k, String(v)); });
+    return client.get(`/whatsapp/banco/numeros?${q}`);
+  },
+
+  /**
+   * Trae de Evolution lo que falte de ESTE chat (#73).
+   *
+   * Al enlazar solo entra el historial reciente, asi que un seguimiento de hace
+   * dos meses no esta en la base y el buscador no puede encontrarlo. Esto pide
+   * ese chat concreto, en vez de traer la cuenta entera.
+   */
+  traerHistorial: (id: number, limite = 300): Promise<ApiResponse<{ pedidos: number; metidos: number }>> =>
+    client.post(`/whatsapp/chats/${id}/historial`, { limite }),
 
   // Apunta que se ha llamado. La llamada la hace el movil, no el CRM: por esta
   // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo

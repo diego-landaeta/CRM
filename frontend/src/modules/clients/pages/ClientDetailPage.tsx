@@ -10,6 +10,7 @@ import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { conversionsApi } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -109,6 +110,7 @@ export default function ClientDetailPage() {
     navigate(destino);
   }
   const { user } = useAuth();
+  const { can } = usePermission();
   const { activeProject } = useProjectContext();
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -120,11 +122,13 @@ export default function ClientDetailPage() {
   const [mergeOpen, setMergeOpen] = useState<boolean>(false);
   const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
 
-  // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
-  // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
-  const canManage = user?.role === 'admin'
-    || user?.role === 'superadmin'
-    || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
+  // Dos condiciones, y hacen falta las dos: que el rol tenga el permiso, y que
+  // el cliente sea suyo. El permiso dice QUE puede hacer; ser el responsable
+  // dice SOBRE QUIEN. Un gestor sin `conversions.edit` no toca ni los propios.
+  const canManage = can('conversions.edit')
+    && (user?.role === 'admin'
+      || user?.role === 'superadmin'
+      || lead?.responsable_id === user?.id);
 
   // Token de request: evita que la respuesta lenta de un cliente anterior pise
   // los datos del cliente actual al navegar rápido entre fichas.

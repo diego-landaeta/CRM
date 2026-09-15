@@ -20,7 +20,8 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate } from '@/shared/lib/format';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -33,7 +34,7 @@ const DEFAULT_TO = new Date().toISOString().slice(0, 10);
 
 export default function AccountingDashboardPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useUrlFilters({ from: DEFAULT_FROM, to: DEFAULT_TO });
@@ -41,13 +42,13 @@ export default function AccountingDashboardPage() {
 
   useEffect(() => {
     const p = new URLSearchParams();
-    if (activeProject?.id) p.set('projectId', String(activeProject.id));
+    ponerAmbito(p, { activeIssuerId, activeProject });
     if (range.from) p.set('from', range.from);
     if (range.to) p.set('to', range.to);
     client.get(`/informes/ventas-vendedora?${p.toString()}`)
       .then((r) => setVend(r.success ? (r.data || []) : []))
       .catch(() => setVend([]));
-  }, [activeProject?.id, range.from, range.to]);
+  }, [activeProject?.id, activeIssuerId, range.from, range.to]);
 
   useEffect(() => {
     async function load() {
@@ -66,7 +67,7 @@ export default function AccountingDashboardPage() {
       }
     }
     load();
-  }, [activeProject?.id, range.from, range.to]);
+  }, [activeProject?.id, activeIssuerId, range.from, range.to]);
 
   if (loading) {
     return (

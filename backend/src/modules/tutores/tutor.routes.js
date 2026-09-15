@@ -28,9 +28,12 @@ router.post('/comisiones/calcular', ctrl.calcular);
 router.get('/comisiones/resumen', ctrl.resumenComisiones);
 router.get('/comisiones', ctrl.listarComisiones);
 router.post('/comisiones/liquidar', ctrl.liquidar);
+router.patch('/comisiones/:id/estado', ctrl.cambiarEstadoComision);
 router.post('/comisiones/:id/revertir', ctrl.revertirComision);
 router.get('/formaciones-sin-tutor', ctrl.formacionesSinTutor);
 router.get('/pagos-sin-formacion', ctrl.pagosSinFormacion);
+router.put('/formaciones/:productId/busqueda', ctrl.marcarBusqueda);
+router.get('/anuncios', ctrl.anunciosDeTutores);
 
 // La ficha del curso que imparte, sin poder tocarla.
 router.get('/curso/:productId', ctrl.cursoDetalle);

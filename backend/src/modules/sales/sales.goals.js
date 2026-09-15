@@ -1,6 +1,7 @@
 // Metas de venta + estadísticas por gestor.
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 function currentPeriodo() {
   // Server timezone — para CRM single-tenant es suficiente.
@@ -13,33 +14,105 @@ function currentPeriodo() {
  * Si projectId, filtra a ese proyecto.
  * Devuelve también la meta cuando existe.
  */
-export async function getGestoresStats({ projectId = null, periodo = null } = {}) {
+export async function getGestoresStats({
+  projectId = null, projectIds = null, periodo = null, from = null, to = null,
+} = {}) {
   // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
   const allTime = periodo === 'all';
   const per = allTime ? null : (periodo || currentPeriodo());
-  const params = allTime ? [] : [per];
+  // Las FECHAS mandan sobre el mes.
+  //
+  // Diego: «las ventas generales siguen mostrando mal y cuando usas los filtros
+  // se siguen mostrando mal». Con el filtro puesto en el 8 de septiembre, la
+  // lista de abajo enseñaba UNA venta y esta tabla decia que Ana llevaba tres
+  // por 1.860,50 €: estaba contando el mes entero, porque solo sabia de meses.
+  // Dos cifras que se contradicen en la misma pantalla.
+  //
+  // Las METAS siguen siendo mensuales —lo son— y por eso el mes se calcula
+  // igual: lo que cambia es que las VENTAS se cuentan del periodo que se pidio.
+  const porFechas = Boolean(from && to);
+  const params = [];
 
-  const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
-  const projectGoalFilter = projectId ? `AND (g.project_id = $${params.length} OR g.project_id IS NULL)` : '';
-  const userProjectJoin = projectId
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${params.length} AND up.active = TRUE`
+  // El ambito puede ser un proyecto O una sociedad entera. Con una sociedad
+  // elegida NO se puede dejar el filtro vacio: enseñaria las metas de todas las
+  // demas justo cuando se pidio acotar a una.
+  const lista = comoLista(projectId, projectIds);
+  const projectFilter = lista
+    ? `AND c.project_id = ANY($${params.push(lista)}::int[])`
+    // Sin proyecto elegido, «todos» no incluye el proyecto de pruebas: cinco
+    // ventas inventadas no pueden aparecer en el total de nadie.
+    : `AND ${SIN_PRUEBAS('c.project_id')}`;
+  const idxLista = lista ? params.length : null;
+  /*
+    Quien sale en la tabla: quien trabaja en alguno de esos proyectos.
+
+    CON *EXISTS* Y NO CON *JOIN*, y esto no es un detalle de estilo: un JOIN
+    devuelve UNA FILA POR CADA proyecto al que esta asignada la persona, y como
+    despues se agrupa y se suma, cada venta se contaba tantas veces como
+    proyectos tuviera. Con una sociedad de siete campus, las 2 ventas de Ana
+    salian como 14 y en la pantalla de CEDIA se veian 56 ventas y 29.988,35 EUR
+    donde habia 7 y 3.748,54.
+
+    No se notaba con UN proyecto elegido --una asignacion, una fila, sin
+    multiplicar-- y por eso ha durado tanto: solo se rompe en modo sociedad, que
+    es lo ultimo que se añadio.
+  */
+  const userProjectJoin = lista
+    ? `AND EXISTS (SELECT 1 FROM user_projects up
+                    WHERE up.user_id = u.id AND up.active = TRUE
+                      AND up.project_id = ANY($${idxLista}::int[]))`
     : '';
 
-  const dateFilter = allTime ? '' : `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1`;
+  let dateFilter = '';
+  if (porFechas) {
+    dateFilter = `AND c.fecha_conversion >= $${params.push(from)}`
+      + ` AND c.fecha_conversion <= $${params.push(to)}`;
+  } else if (!allTime) {
+    dateFilter = `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $${params.push(per)}`;
+  }
+
+  /*
+    Quien RECIBE LEADS en estos proyectos. Es la misma regla que el reparto
+    (lead.model.js): disponible, sin colaboraciones, y si es admin o superadmin
+    solo con `recibe_leads` marcado en el proyecto.
+
+    Diego: «solo los gestores que reciben leads en esos proyectos que aparezcan».
+    La tabla sacaba a todos los admins y superadmins a cero, y a quien lleva
+    colaboraciones: seis filas para dos personas que venden.
+  */
+  const RECIBE = `(u.is_available = TRUE
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = u.id AND up.active = TRUE
+                       AND ${idxLista ? `up.project_id = ANY($${idxLista}::int[])` : SIN_PRUEBAS('up.project_id')}
+                       AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
 
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
-            COUNT(c.id)::int AS ventas,
-            COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
-            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+            ${RECIBE} AS recibe_leads,
+            -- SUM(peso) y no COUNT(*): una venta repartida entre dos vale media
+            -- para cada una. Asi la suma de la tabla sigue dando el total real
+            -- de la empresa en vez de contar la misma venta dos veces.
+            COALESCE(SUM(c.peso), 0)::numeric AS ventas,
+            COUNT(*) FILTER (WHERE c.compartida)::int AS compartidas,
+            COALESCE(SUM(c.importe_total * c.peso), 0)::numeric AS facturado,
+            COALESCE(SUM(c.importe_pagado * c.peso), 0)::numeric AS cobrado
      FROM users u
-     ${userProjectJoin}
-     LEFT JOIN leads l ON l.responsable_id = u.id
-     LEFT JOIN conversions c ON c.lead_id = l.id
+     -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha, y puede ser
+     -- de DOS personas a la vez.
+     --
+     -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id: una
+     -- venta que cerro otra persona se le apuntaba a la gestora del prospecto.
+     -- Ese COALESCE estaba repetido en 39 sitios del CRM y de ahi venia que
+     -- tres pantallas dieran tres numeros distintos para la misma pregunta.
+     -- Ahora la regla vive UNA sola vez, en la vista conversion_reparto: una
+     -- fila por venta y gestora, con su peso, y SUM(peso)=1 por venta siempre.
+     LEFT JOIN conversion_reparto c ON c.vendedora_id = u.id
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
-     GROUP BY u.id, u.nombre, u.email, u.role, u.is_available
+       ${userProjectJoin}
+     GROUP BY u.id, u.nombre, u.email, u.role, u.is_available, u.gestor_colaboraciones
      ORDER BY ventas DESC, facturado DESC`,
     params
   );
@@ -48,21 +121,29 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
   let goalByUser = {};
   if (!allTime) {
     const goalsParams = [per];
+    const projectGoalFilter = lista
+      ? `AND (g.project_id = ANY($2::int[]) OR g.project_id IS NULL)` : '';
     const { rows: goals } = await query(
       `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
               su.nombre AS set_by_nombre
        FROM sales_goals g
        LEFT JOIN users su ON su.id = g.set_by_user_id
        WHERE g.periodo_yyyymm = $1 ${projectGoalFilter}`,
-      projectId ? [...goalsParams, projectId] : goalsParams
+      lista ? [...goalsParams, lista] : goalsParams
     );
     goalByUser = Object.fromEntries(goals.map((g) => [g.user_id, g]));
   }
 
   return {
     periodo: per,
+    // Lo que de verdad se ha contado, para que la pantalla no titule un mes
+    // cuando esta enseñando un dia.
+    desde: porFechas ? from : null,
+    hasta: porFechas ? to : null,
     project_id: projectId,
-    gestores: stats.map((s) => {
+    // Quien no recibe leads aqui Y no vendio en el periodo, fuera. Quien vendio
+    // se queda aunque ya no reciba: su venta es real y no se esconde.
+    gestores: stats.filter((s) => s.recibe_leads || Number(s.ventas) > 0).map((s) => {
       const g = goalByUser[s.user_id] || null;
       const ventas = Number(s.ventas);
       const facturado = Number(s.facturado);
@@ -72,7 +153,13 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
         email: s.email,
         role: s.role,
         is_available: s.is_available,
+        recibe_leads: Boolean(s.recibe_leads),
+        // Puede traer media venta (3,5) cuando alguna esta repartida. La
+        // pantalla solo enseña el decimal cuando lo hay.
         ventas,
+        // Cuantas de esas ventas comparte con otra persona. Es metrica de la
+        // gestora, no de la empresa: la venta sigue siendo una.
+        compartidas: Number(s.compartidas) || 0,
         facturado,
         cobrado: Number(s.cobrado),
         meta_ventas: g ? Number(g.meta_ventas) : null,
@@ -89,9 +176,9 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
 /**
  * Stats del gestor actual (vista personal del gestor / admin para sí mismo).
  */
-export async function getMyStats(userId, { projectId = null, periodo = null } = {}) {
+export async function getMyStats(userId, { projectId = null, projectIds = null, periodo = null } = {}) {
   const per = periodo || currentPeriodo();
-  const all = await getGestoresStats({ projectId, periodo: per });
+  const all = await getGestoresStats({ projectId, projectIds, periodo: per });
   const me = all.gestores.find((g) => g.user_id === userId);
   return me || { user_id: userId, ventas: 0, facturado: 0, cobrado: 0, meta_ventas: null, meta_facturacion: null, periodo: per };
 }

@@ -18,6 +18,9 @@ router.post('/cola/generar',          ctrl.generarDeCola);
 router.post('/cola/emitir-hasta',     ctrl.emitirColaHasta);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
+// Que numero tocaria ahora. Va ANTES de '/:id' para que «siguiente-numero» no
+// se lea como el id de una factura.
+router.get('/siguiente-numero',       ctrl.siguienteNumero);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);
 router.get('/regimenes',              ctrl.listRegimenes);
 router.get('/resolve-regimen',        ctrl.resolveRegimen);
@@ -51,6 +54,9 @@ router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor')
 // Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
 // editar_fechas_factura (admins y usuarios acotados a "solo fechas").
 router.patch('/:id/fechas',           ctrl.updateFechas);
+// Apuntar que una factura ya se le paso al cliente. NO manda correo: es una
+// marca, y las facturas salen por donde cada uno las mande.
+router.patch('/:id/entregada',        ctrl.marcarEntregada);
 // Opción B: asociar una factura existente a una venta del cliente.
 router.patch('/:id/asociar',          roleGuard('admin', 'superadmin', 'gestor'), ctrl.asociarVenta);
 router.get('/:id/pdf',                ctrl.pdf);

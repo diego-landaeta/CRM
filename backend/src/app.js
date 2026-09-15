@@ -37,6 +37,8 @@ import payrollModule from './modules/payroll/index.js';
 import woocommerceModule from './modules/woocommerce/index.js';
 import webhookTokensModule from './modules/webhook-tokens/index.js';
 import audiencesModule from './modules/audiences/index.js';
+import procesoModule from './modules/proceso/index.js';
+import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
@@ -126,6 +128,11 @@ const ALL_MODULES = [
   { name: 'auth', mod: authModule },
   { name: 'users', mod: usersModule },
   { name: 'leads', mod: leadsModule },
+  // El proceso comercial (#87). Va en el bundle `leads` y no en `comercial`
+  // porque todo lo suyo cuelga del prospecto: el paso se deriva de sus
+  // interacciones y la cola del dia es su lista. El catalogo solo lo enriquece.
+  { name: 'proceso', mod: procesoModule },
+  { name: 'convocatorias', mod: convocatoriasModule },
   { name: 'products', mod: productsModule },
   { name: 'dossiers', mod: dossiersModule },
   { name: 'conversions', mod: conversionsModule },
@@ -193,13 +200,20 @@ for (const { name, mod } of ALL_MODULES) {
   }
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
-  // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
-  // Un modulo puede responder tambien por su nombre anterior. Sirve para
-  // renombrar sin romper lo que ya apuntaba al viejo.
-  if (mod.alias) {
-    app.use(mod.alias, mod.router);
-    logger.info(`Modulo registrado (alias): ${mod.alias}`);
+  // Nombres viejos que se siguen atendiendo. Al pasar las rutas al castellano
+  // hubo pantallas pidiendo a direcciones que ya no existian; el alias evita
+  // que vuelva a pasar mientras quede algo apuntando al nombre anterior.
+  //
+  // El `concat` NO es adorno: unos modulos declaran `alias` como cadena
+  // ('/api/sales') y otros como lista (['/api/messages']). Recorrer una CADENA
+  // con for...of da sus LETRAS, y la primera es '/', asi que el router de ese
+  // modulo acababa montado en la raiz y se tragaba la API entera: el webhook de
+  // Make paso a contestar 401 y los formularios dejaron de entrar. 04/09.
+  for (const viejo of [].concat(mod.alias || [])) {
+    app.use(viejo, mod.router);
+    logger.info(`Modulo registrado (alias): ${viejo} -> ${mod.prefix}`);
   }
+  // Algunos módulos exponen además rutas públicas (sin JWT) — registrarlas aparte
   if (mod.publicMount) {
     app.use(mod.publicMount.prefix, mod.publicMount.router);
     logger.info(`Modulo registrado (public): ${mod.publicMount.prefix}`);

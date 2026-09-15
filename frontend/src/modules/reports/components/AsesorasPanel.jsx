@@ -14,7 +14,8 @@ import { useEffect, useMemo, useState } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
-import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 function fmtMoney(n) {
   // Con decimales: sin ellos los importes no cuadraban con las facturas.
@@ -31,7 +32,7 @@ function nombreMes(mes) {
 }
 
 export default function AsesorasPanel({ from, to }) {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(null);
@@ -54,7 +55,7 @@ export default function AsesorasPanel({ from, to }) {
       setCargando(true);
       try {
         const p = new URLSearchParams();
-        if (activeProject?.id) p.set('projectId', String(activeProject.id));
+        ponerAmbito(p, { activeIssuerId, activeProject });
         if (desde) p.set('from', desde);
         if (hasta) p.set('to', hasta);
         // Solo se manda cuando no es el criterio por defecto.
@@ -66,7 +67,7 @@ export default function AsesorasPanel({ from, to }) {
       } finally { if (vivo) setCargando(false); }
     })();
     return () => { vivo = false; };
-  }, [activeProject?.id, desde, hasta, base]);
+  }, [activeProject?.id, activeIssuerId, desde, hasta, base]);
 
   // Agrupado por mes, con el total del mes calculado sobre sus asesoras.
   const meses = useMemo(() => {
@@ -97,7 +98,7 @@ export default function AsesorasPanel({ from, to }) {
       consulta: {
         tipo,
         mes,
-        projectId: activeProject?.id || '',
+        ...(activeIssuerId ? { issuerId: activeIssuerId } : { projectId: activeProject?.id || '' }),
         asesoraId: asesora ? (asesora.asesora_id ?? 'sin') : '',
         // El popup cuenta con el mismo criterio que la tabla: si no, se ve 18
         // fuera y 16 dentro.

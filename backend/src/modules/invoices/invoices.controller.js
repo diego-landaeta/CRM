@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -599,8 +600,10 @@ export async function deleteTemplate(req, res, next) {
 
 export async function ventasSinFactura(req, res, next) {
   try {
-    const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    // Un proyecto O una sociedad entera: el mismo helper que Ventas y Reportes.
+    // Antes solo sabia de un proyecto y con CEDIA elegida no devolvia nada.
+    res.json({ success: true, data: await model.listVentasSinFactura(
+      await proyectosDelAmbito(req)) });
   } catch (e) { next(e); }
 }
 
@@ -682,8 +685,11 @@ export async function generarDeCola(req, res, next) {
     if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId, {
+      forzar: req.body?.forzar === true,
+      // El numero que haya elegido quien factura. Sin el, el siguiente libre.
+      numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+    });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }
@@ -699,4 +705,29 @@ export async function emitirColaHasta(req, res, next) {
     }
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }
+}
+
+/** PATCH /invoices/:id/entregada — apunta que ya se le paso al cliente. No envia. */
+export async function marcarEntregada(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Factura no valida', 400, 'BAD_ID');
+    const fila = await model.marcarEntregada(id, {
+      entregada: req.body?.entregada !== false,
+      userId: req.user?.userId,
+    });
+    if (!fila) throw new AppError('Esa factura no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: fila });
+  } catch (e) { next(e); }
+}
+
+/** GET /invoices/siguiente-numero — que numero saldria ahora, y los huecos. */
+export async function siguienteNumero(req, res, next) {
+  try {
+    const projectId = Number(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    const ano = req.query.ano ? Number(req.query.ano) : null;
+    res.json({ success: true, data: await model.siguienteLibre({ projectId, issuerId, ano }) });
+  } catch (e) { next(e); }
 }

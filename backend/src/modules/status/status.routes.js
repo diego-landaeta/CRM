@@ -21,5 +21,9 @@ router.get('/piezas', roleGuard('admin', 'superadmin'), ctrl.getPiezas);
 // Los correos que salieron y los que no. Mismo candado: aqui se ven
 // direcciones de clientes.
 router.get('/correos', roleGuard('admin', 'superadmin'), ctrl.getCorreos);
+// Como se ve cada aviso, con datos de mentira (#83). Soporte y superadmin, que
+// es lo que pide el ticket: no lleva ni un dato real, pero enseña que avisos
+// manda el CRM y a quien, y eso ya es informacion de dentro.
+router.get('/correos/vista-previa', roleGuard('soporte', 'superadmin'), ctrl.getVistaPreviaCorreos);
 
 export default router;

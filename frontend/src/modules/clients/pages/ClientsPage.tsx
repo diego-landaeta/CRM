@@ -4,6 +4,7 @@ import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -16,6 +17,7 @@ import {
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 import type { Client } from '@/shared/types';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 
 function exportCSV(clients: Client[], filename: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
@@ -158,12 +160,13 @@ function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isSuperadmin = user?.role === 'superadmin';
+  const { can } = usePermission();
   const { activeProject, projects, isAllProjects } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
   };
+  const idsDelAmbito = useIdsDelAmbito();
   // Filtros persistidos en URL para deep-linking + refresh-safe.
   // Server-side: search, resp(id), prod(id), from, to, sort. Client-side (post-fetch):
   // estado_pago (depende de cálculos local de conversiones).
@@ -236,7 +239,8 @@ export default function ClientsPage() {
     try {
       const params = new URLSearchParams();
       if (isAllProjects) {
-        params.set('projectIds', projects.map((p) => p.id).join(','));
+        // Con una empresa elegida, «todos» son sus campus y ninguno mas.
+        params.set('projectIds', idsDelAmbito.join(','));
       } else {
         params.set('projectId', String(activeProject.id));
       }
@@ -326,7 +330,7 @@ export default function ClientsPage() {
           title="Clientes"
           subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
         />
-        {activeProject?.id && !isAllProjects && (
+        {activeProject?.id && !isAllProjects && can('clients.create') && (
           <button
             type="button"
             onClick={() => setSaleOpen(true)}
@@ -382,7 +386,7 @@ export default function ClientsPage() {
           totalBackend={totalBackend}
           filteredCount={filtered.length}
         />
-        {filtered.length > 0 && (
+        {filtered.length > 0 && can('clients.export') && (
           <button
             onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
             title="Exportar CSV"
@@ -461,7 +465,7 @@ export default function ClientsPage() {
                         {c.last_interaction_at ? fmtFecha(c.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
                       </td>
                       <td className="px-4 py-3 text-right pr-3">
-                        <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
+                        <QuickActions client={c} onUpsell={can('clients.create') ? handleUpsell : undefined} onDelete={can('clients.delete') ? handleDelete : undefined} />
                       </td>
                     </tr>
                   ))}
@@ -507,7 +511,7 @@ export default function ClientsPage() {
                       {c.ultima_compra && <span className="text-muted-foreground">Compra: <span className="text-foreground">{formatRelative(c.ultima_compra)}</span></span>}
                       {c.last_interaction_at && <span className="text-muted-foreground">Contacto: <span className="text-foreground">{fmtFecha(c.last_interaction_at)}</span></span>}
                     </div>
-                    <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
+                    <QuickActions client={c} onUpsell={can('clients.create') ? handleUpsell : undefined} onDelete={can('clients.delete') ? handleDelete : undefined} />
                   </div>
                 </div>
               ))}

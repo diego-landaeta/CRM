@@ -5,7 +5,9 @@ import { AppError } from '../../shared/utils/AppError.js';
 import {
   altaTutorSchema, perfilSchema, colaboracionSchema,
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
+  busquedaDeTutorSchema,
 } from './tutor.validation.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 // Quien manda aqui.
 //
@@ -42,7 +44,9 @@ export async function listar(req, res, next) {
   try {
     await exigirGestion(req);
     res.json({ success: true, data: await model.listar({
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      // Un proyecto, una sociedad entera o todos: lo resuelve el mismo helper
+      // que usan Reportes y Ventas, para que las tres digan lo mismo.
+      ...(await proyectosDelAmbito(req)),
       activos: req.query.activos !== '0',
     })});
   } catch (err) { next(err); }
@@ -104,6 +108,9 @@ export async function guardarPerfil(req, res, next) {
     if (d.email) correo = await userService.cambiarCorreo(id, d.email, {
       reenviarEnlace: d.reenviarEnlace === true,
     });
+
+    // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
+    if (d.nombre) await model.renombrarTutor(id, d.nombre);
 
     const perfil = await model.guardarPerfil(id, d);
     res.json({ success: true, data: { ...perfil, correo } });
@@ -241,7 +248,8 @@ export async function simulacion(req, res, next) {
       //
       // El tutor no filtra: el ve sus cursos, esten donde esten. Lo suyo es
       // suyo aunque esté repartido entre dos marcas.
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Un tutor no acota por proyecto: ve las suyas, esten donde esten.
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -259,8 +267,27 @@ export async function calcular(req, res, next) {
       desde: d.desde || null,
       hasta: d.hasta || null,
       projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
     });
     res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+// PATCH /api/tutores/comisiones/:id/estado
+// Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
+// sus propias puertas porque mueven dinero y dejan rastro.
+export async function cambiarEstadoComision(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const estado = String(req.body?.estado || '');
+    const c = await model.cambiarEstadoComision(parseInt(req.params.id), estado);
+    if (!c) {
+      throw new AppError(
+        'Ese estado no vale aqui, o la comision ya esta pagada o revertida',
+        409, 'ESTADO_NO_PERMITIDO'
+      );
+    }
+    res.json({ success: true, data: c });
   } catch (err) { next(err); }
 }
 
@@ -274,7 +301,8 @@ export async function listarComisiones(req, res, next) {
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      estado: ['pendiente', 'pagada', 'revertida'].includes(req.query.estado) ? req.query.estado : null,
+      estado: ['pendiente', 'notificada', 'falta_factura', 'pagada', 'revertida'].includes(req.query.estado)
+        ? req.query.estado : null,
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }
@@ -288,7 +316,9 @@ export async function resumenComisiones(req, res, next) {
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Con una EMPRESA elegida son SUS campus, no «todos». Diego, 14/09:
+      // «puse empresa y tuve que entrar a un campus si o si».
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -334,8 +364,43 @@ export async function revertirComision(req, res, next) {
 export async function formacionesSinTutor(req, res, next) {
   try {
     await exigirGestion(req);
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
-    res.json({ success: true, data: await model.formacionesSinTutor({ projectId }) });
+    res.json({ success: true, data: await model.formacionesSinTutor(
+      await proyectosDelAmbito(req)) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/tutores/formaciones/:productId/busqueda
+//
+// «Se busca tutor para esta formacion», y con que anuncio de Meta si lo hay.
+// Lo pidio Diego como columna META en «Formaciones sin tutor»: el CRM tiene la
+// publicidad sincronizada pero NADIE ha dicho nunca que anuncio va con que
+// formacion, asi que esto es lo unico que puede saberlo.
+export async function marcarBusqueda(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isInteger(productId)) throw new AppError('Formacion no valida', 400, 'VALIDATION_ERROR');
+    const d = valida(busquedaDeTutorSchema, req.body || {});
+    const b = await model.marcarBusquedaDeTutor({
+      productId,
+      buscando: d.buscando,
+      adsetId: d.adsetId || null,
+      campaignId: d.campaignId || null,
+      nota: d.nota || null,
+      userId: req.user.userId,
+    });
+    if (!b) throw new AppError('Esa formacion no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: b });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/anuncios?projectId=
+// Los anuncios de Meta que se pueden enganchar a una formacion.
+export async function anunciosDeTutores(req, res, next) {
+  try {
+    await exigirGestion(req);
+    res.json({ success: true, data: await model.anunciosDeTutores(
+      await proyectosDelAmbito(req)) });
   } catch (err) { next(err); }
 }
 
@@ -349,7 +414,7 @@ export async function pagosSinFormacion(req, res, next) {
     res.json({ success: true, data: await model.pagosSinFormacion({
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : hoy.slice(0, 8) + '01',
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy,
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }

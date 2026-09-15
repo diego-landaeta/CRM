@@ -12,9 +12,10 @@
 // seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Warning, ArrowRight, MagnifyingGlass } from '@phosphor-icons/react';
+import { GraduationCap, Warning, ArrowRight, MagnifyingGlass, PencilSimple } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { tutoresApi, type FormacionSinTutor } from '../api/tutores.api';
+import { tutoresApi, type AnuncioMeta, type FormacionSinTutor } from '../api/tutores.api';
+import DialogoBusquedaTutor from '../components/DialogoBusquedaTutor';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
@@ -25,6 +26,69 @@ const euros = (n: unknown) =>
 const fecha = (d: unknown) =>
   d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
+/**
+ * La columna META: si se está buscando tutor para esta formación y con qué
+ * anuncio.
+ *
+ * Diego: «necesito la columna de META para saber qué tiene publicidad — eso es
+ * publicidad para buscar tutores de los que falten».
+ *
+ * Cinco respuestas distintas, y ninguna es «vacío»: un hueco en blanco no
+ * distingue «no se busca» de «nadie lo ha mirado todavía», que es justo lo que
+ * esta columna viene a resolver.
+ */
+function Meta({ f }: { f: FormacionSinTutor }) {
+  const base = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap';
+
+  // El anuncio se apuntó y en Meta ya no está: archivado o borrado allí. Se
+  // avisa, porque para el CRM «tiene anuncio» y la realidad es que no gasta.
+  if (f.anuncio_desaparecido) {
+    return (
+      <span className={`${base} bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300`}
+        title="Se apuntó un anuncio y ya no está en Meta: archivado o borrado allí">
+        ya no está en Meta
+      </span>
+    );
+  }
+
+  if (f.anuncio_estado) {
+    const activo = f.anuncio_estado === 'ACTIVE';
+    return (
+      <span className="inline-flex flex-col items-start gap-0.5">
+        <span className={`${base} ${activo
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+          : 'bg-muted text-muted-foreground'}`}
+          title={f.anuncio_nombre || ''}>
+          {activo ? 'anuncio activo' : 'anuncio pausado'}
+        </span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">
+          {euros(f.anuncio_gasto)}{f.anuncio_leads ? ` · ${f.anuncio_leads} leads` : ''}
+        </span>
+      </span>
+    );
+  }
+
+  if (f.buscando) {
+    // «buscando» a secas y no «buscando, sin anuncio».
+    //
+    // Diego: «no únicamente sin anuncios, luego lo estaremos vinculando por
+    // anuncio». Y tiene razón: que todavía no haya anuncio enganchado no es un
+    // defecto de la búsqueda, es el estado normal al empezar. Poniéndolo en el
+    // titular parecía que faltaba algo por arreglar cuando lo que falta es
+    // tiempo. Lo de si hay anuncio se dice al lado, en gris y sin alarma.
+    return (
+      <span className="inline-flex flex-col items-start gap-0.5">
+        <span className={`${base} bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300`}>
+          buscando
+        </span>
+        <span className="text-[11px] text-muted-foreground">sin anuncio aún</span>
+      </span>
+    );
+  }
+
+  return <span className="text-xs text-muted-foreground">no se busca</span>;
+}
+
 export default function FormacionesSinTutorPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
@@ -33,6 +97,14 @@ export default function FormacionesSinTutorPage() {
   const [filas, setFilas] = useState<FormacionSinTutor[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busca, setBusca] = useState('');
+
+  // La búsqueda de tutor: qué formación se está editando y los anuncios de Meta
+  // para elegir. Los anuncios se piden al abrir el diálogo y no al cargar la
+  // pantalla: son cientos y casi nadie los mira.
+  const [editando, setEditando] = useState<FormacionSinTutor | null>(null);
+  const [anuncios, setAnuncios] = useState<AnuncioMeta[]>([]);
+  const [cargandoAnuncios, setCargandoAnuncios] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -46,6 +118,40 @@ export default function FormacionesSinTutorPage() {
   }, [projectId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const abrirBusqueda = useCallback(async (f: FormacionSinTutor) => {
+    setEditando(f);
+    // Una vez por sesión: la lista de Meta no cambia mientras se decide.
+    if (anuncios.length) return;
+    setCargandoAnuncios(true);
+    try {
+      const r = await tutoresApi.anunciosDeTutores(projectId);
+      setAnuncios(r.success ? (r.data || []) : []);
+    } catch {
+      // Que no haya anuncios NO impide marcar que se busca tutor: el diálogo lo
+      // dice y sigue funcionando.
+      setAnuncios([]);
+    } finally { setCargandoAnuncios(false); }
+  }, [anuncios.length, projectId]);
+
+  const guardarBusqueda = useCallback(async (
+    d: { buscando: boolean; adsetId: string | null; nota: string | null }
+  ) => {
+    if (!editando) return;
+    setGuardando(true);
+    try {
+      const r = await tutoresApi.marcarBusquedaTutor(editando.id, d);
+      if (!r.success) throw new Error(r.error || 'No se pudo guardar');
+      setEditando(null);
+      await cargar();
+      toast({
+        title: d.buscando ? 'Se busca tutor' : 'Ya no se busca tutor',
+        description: editando.nombre,
+      });
+    } catch (e) {
+      toast({ title: 'No se pudo guardar', description: (e as Error).message, variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }, [editando, cargar]);
 
   const vistas = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -111,6 +217,9 @@ export default function FormacionesSinTutorPage() {
                   <th className="text-right font-medium px-4 py-2">Cobros</th>
                   <th className="text-right font-medium px-4 py-2">Cobrado</th>
                   <th className="text-left font-medium px-4 py-2 hidden lg:table-cell">Último</th>
+                  {/* Se llama META porque es como lo llama quien la pidió, pero
+                      dice más que Meta: también cuando se busca sin anuncio. */}
+                  <th className="text-left font-medium px-4 py-2">META</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -136,6 +245,19 @@ export default function FormacionesSinTutorPage() {
                     <td className="px-4 py-2.5 text-muted-foreground hidden lg:table-cell whitespace-nowrap">
                       {fecha(f.ultimo_cobro)}
                     </td>
+                    <td className="px-4 py-2.5">
+                      {/* Toda la celda abre el diálogo: el estado y el sitio
+                          donde se cambia son la misma cosa. */}
+                      {/* Se pulsaba la celda entera, pero nada decia que fuera
+                          pulsable: parecia texto. Ahora es un boton con su
+                          borde y su lapiz, que es lo que pidio Diego. */}
+                      <button type="button" onClick={() => abrirBusqueda(f)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-muted hover:border-foreground/30 transition-colors"
+                        title="Decir si se busca tutor y con qué anuncio">
+                        <Meta f={f} />
+                        <PencilSimple size={12} weight="bold" className="text-muted-foreground shrink-0" />
+                      </button>
+                    </td>
                     <td className="px-4 py-2.5 text-right">
                       {/* Lleva a Tutores, que es donde se asigna. La formación va
                           en la dirección para no tener que buscarla otra vez. */}
@@ -152,6 +274,17 @@ export default function FormacionesSinTutorPage() {
           </div>
         )}
       </div>
+
+      {editando && (
+        <DialogoBusquedaTutor
+          formacion={editando}
+          anuncios={anuncios}
+          cargandoAnuncios={cargandoAnuncios}
+          guardando={guardando}
+          onGuardar={guardarBusqueda}
+          onCerrar={() => setEditando(null)}
+        />
+      )}
     </div>
   );
 }

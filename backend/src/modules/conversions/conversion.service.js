@@ -128,6 +128,30 @@ export async function create(data, userId) {
 // - Con paymentInfo {paymentId, importe} → factura por ese abono.
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
+  /*
+    FRENADO A PROPOSITO. Ya no emite nada: el cobro se queda en la cola de
+    facturacion y alguien la emite a mano, poniendo el numero.
+
+    Diego, 14/09: «necesitamos meter mas freno, que sea todo manual alli, pase
+    a cola y se ponga con numero de factura».
+
+    POR QUE. Habia TRES caminos que emitian solos --registrar un cobro, marcar
+    cobrada una cuota, y crear la venta con un primer pago-- y los tres
+    entraban por aqui. Ademas la factura quedaba a nombre de quien registro el
+    cobro, asi que en pantalla no habia forma de saber que habia salido sola.
+
+    Eso produjo la 2026/0102: a las 14:14:07 entro el cobro de Stripe y el CRM
+    emitio la 0101 solo; 33 segundos despues la gestora emitio la 0102 a mano
+    sin ver la primera. Un cobro, dos facturas.
+
+    La funcion se deja viva --no se borran las tres llamadas-- para que quede
+    escrito por que no hace nada y no la reviva alguien sin leer esto.
+  */
+  logger.info({ conversionId, userId, paymentId: paymentInfo?.paymentId },
+    'cobro a la cola de facturacion: la emision es manual (freno del 14/09)');
+  return;
+
+  /* eslint-disable no-unreachable */
   (async () => {
     // El cobro se asocia siempre, pero la factura espera a que la facturacion
     // este al dia hasta esa fecha. Si no, la numeracion se adelantaria a quien
@@ -176,6 +200,7 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
         'auto-factura por pago');
     }
   })().catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)'));
+  /* eslint-enable no-unreachable */
 }
 
 export async function getById(id) {

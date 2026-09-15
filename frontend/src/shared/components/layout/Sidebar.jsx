@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import {
+  ListChecks, useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  CalendarCheck,
   SquaresFour,
   Users,
   Package,
@@ -49,9 +51,10 @@ import {
   Wallet,
   HandCoins,
   GitMerge,
+  CopySimple,
   WhatsappLogo,
   ChatText,
-  UsersThree, QrCode, Warning } from '@phosphor-icons/react';
+  UsersThree, QrCode, Warning, Key } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -85,7 +88,28 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { label: 'Dashboard', to: '/', icon: SquaresFour },
-      { label: 'Prospectos', to: '/prospectos', icon: Users, module: 'leads' },
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista y la cola del
+      // dia son el mismo sitio. La cola describe por donde va cada prospecto,
+      // asi que colgarla de aqui dice de que va sin tener que explicarlo.
+      //
+      // `defaultOpen` porque esta es la pantalla del dia: si el grupo arrancara
+      // cerrado, la gestora pagaria un clic de mas cada manana.
+      {
+        label: 'Prospectos',
+        icon: Users,
+        module: 'leads',
+        defaultOpen: true,
+        children: [
+          // `end` porque si no, estando en la cola o en el proceso este
+          // tambien se marcaria activo: el resaltado diria que estas en dos
+          // sitios a la vez.
+          { label: 'Lista de prospectos', to: '/prospectos', icon: Users, end: true },
+          { label: 'La cola del día', to: '/prospectos/cola', icon: CalendarCheck },
+          // El proceso, al lado de la cola: es lo que la cola aplica. Leerlo
+          // lo puede hacer cualquiera; editarlo, solo admin.
+          { label: 'Proceso comercial', to: '/prospectos/proceso', icon: ListChecks },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -102,6 +126,11 @@ const NAV_SECTIONS = [
           // de quien lo acepto (tarea #45).
           { label: 'Chat', to: '/whatsapp/chat', icon: ChatText },
           { label: 'Plantillas', to: '/whatsapp/plantillas', icon: ChatText },
+          // El banco de mensajes (#101). Va aqui y no dentro del chat porque no
+          // es el chat: uno sirve para conversar y este para buscar, auditar y
+          // llevarse una copia. El servidor recorta lo que ve cada cual — un
+          // admin lo ve entero, una gestora solo su numero.
+          { label: 'Banco de mensajes', to: '/whatsapp/banco', icon: ChatText },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
@@ -193,6 +222,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Clientes', to: '/clientes', icon: UserCheck, module: 'clients' },
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
+      { label: 'Buscar duplicados', to: '/prospectos/duplicados', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Matrículas', to: '/clientes/matriculas', icon: GraduationCap, module: 'matriculas' },
     ],
   },
@@ -205,6 +235,10 @@ const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { label: 'Mis preferencias', to: '/preferencias', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { label: 'Soporte', to: '/soporte', icon: Headset },
+      // Claves y variables (#80). Los mismos roles que exige el servidor con
+      // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
+      // no ofrecerlo.
+      { label: 'Claves y variables', to: '/configuracion/claves', icon: Key, roles: ['superadmin', 'soporte'] },
       { label: 'Status', to: '/status', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', icon: BookOpen },
     ],
@@ -257,7 +291,16 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to);
   }
 
   // soporte ve todo (rol generico tipo dev)
@@ -280,7 +323,7 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   return true;
 }
 
-function NavGroup({ icon: Icon, label, children, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
+function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, projectType, soloColab, permisos, labelOverrides, onNavigate, collapsed, onExpandSidebar }) {
   const visible = children
     .filter((c) => canSeeItem(c, role, modules, projectType, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: !isBetaAllowed(c.to) }));
@@ -288,7 +331,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
   const hasActiveChild = visible.some((c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/')));
   // En BETA: si TODO el grupo está coming-soon lo mantenemos visible (deshabilitado)
   const allComingSoon = visible.length > 0 && visible.every((c) => c.comingSoon);
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega a una pantalla de dentro desde fuera (un enlace, la barra de
   // direcciones), el grupo se abre solo: si no, el apartado marcado como activo
   // quedaria escondido. Cerrarlo a mano se respeta.
@@ -344,7 +387,7 @@ function NavGroup({ icon: Icon, label, children, role, modules, projectType, sol
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.to === '/accounting'}
+                end={child.end ?? child.to === '/accounting'}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -663,7 +706,7 @@ function ProjectAvatar({ project, size = 'md' }) {
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { activeProject, switchProject, projects } = useProjectContext();
+  const { activeProject, switchProject, projects, activeIssuer, switchIssuer } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const [configOpen, setConfigOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -983,26 +1026,43 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           </label>
         )}
         <div className={cn('flex items-center', collapsed ? 'flex-col gap-1.5' : 'gap-2')}>
-          <div className={cn('relative', collapsed ? 'w-full' : 'flex-1')} ref={pickerRef}>
+          <div className={cn('relative', collapsed ? 'w-full' : 'min-w-0 flex-1')} ref={pickerRef}>
             <button
               type="button"
               ref={pickerBtnRef}
               onClick={() => setPickerOpen((v) => !v)}
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
-              aria-label="Selector de proyecto"
-              title={collapsed ? activeProject?.nombre : undefined}
+              aria-label={`Selector de proyecto. Ahora: ${activeIssuer
+                ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+                : (activeProject?.nombre || 'sin elegir')}`}
+              title={activeIssuer
+                ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+                : (collapsed ? activeProject?.nombre : undefined)}
               className={cn(
                 'rounded-lg border border-border text-sm font-semibold bg-secondary text-foreground outline-none cursor-pointer flex items-center focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all',
                 collapsed
                   ? 'w-full h-10 justify-center'
-                  : 'w-full h-9 pl-1 pr-8 gap-2'
+                  : 'w-full min-w-0 min-h-9 py-1 pl-1 pr-8 gap-2'
               )}
             >
               <ProjectAvatar project={activeProject} size="sm" />
               {!collapsed && (
                 <>
-                  <span className="flex-1 truncate text-left">{activeProject?.nombre || 'Selecciona proyecto'}</span>
+                  {/* La cuenta va DEBAJO, no al lado. En la misma linea le
+                      quitaba el ancho al nombre y «CEDIA Investigacion y
+                      Desarrollo» se quedaba en «CEDIA Investigacion y Desarroll…»,
+                      que es justo lo que hay que poder leer. */}
+                  <span className="min-w-0 flex-1 text-left leading-tight">
+                    <span className="block truncate">
+                      {activeIssuer ? activeIssuer.nombre : (activeProject?.nombre || 'Selecciona proyecto')}
+                    </span>
+                    {activeIssuer && (
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-300">
+                        {activeIssuer.campus.length} campus
+                      </span>
+                    )}
+                  </span>
                   <CaretDown size={12} weight="bold" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </>
               )}
@@ -1037,14 +1097,21 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                       if (sA !== sB) return sA.localeCompare(sB, 'es');
                       return (a.id || 0) - (b.id || 0);
                     });
+                    // Para poder decir «CEDIA · 6 campus» sin recontar en
+                    // cada encabezado.
+                    const campusPorSociedad = projects.reduce((cuenta, p) => {
+                      const id = p.sociedad_emisora_id;
+                      if (id) cuenta[id] = (cuenta[id] || 0) + 1;
+                      return cuenta;
+                    }, {});
                     const allEntry = projects.length > 1 ? (
-                      <li key="__all__" role="option" aria-selected={activeProject?.id === -1}>
+                      <li key="__all__" role="option" aria-selected={!activeIssuer && activeProject?.id === -1}>
                         <button
                           type="button"
                           onClick={() => { switchProject(-1); setPickerOpen(false); }}
                           className={cn(
                             'w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left hover:bg-secondary transition-colors border-b border-border',
-                            activeProject?.id === -1 && 'bg-secondary font-semibold'
+                            !activeIssuer && activeProject?.id === -1 && 'bg-secondary font-semibold'
                           )}
                         >
                           <ProjectAvatar project={{ isAll: true }} size="sm" />
@@ -1055,16 +1122,41 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                     ) : null;
                     let lastSoc = undefined;
                     const items = sorted.map((p) => {
-                      const isActive = p.id === activeProject?.id;
+                      const isActive = !activeIssuer && p.id === activeProject?.id;
                       const soc = p.sociedad_nombre || null;
                       const showHeader = soc !== lastSoc;
                       lastSoc = soc;
                       return (
                         <div key={p.id}>
                           {showHeader && (
-                            <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
-                              {soc || 'Sin sociedad'}
-                            </div>
+                            // Los encabezados eran letra muerta: se leian y no
+                            // se podian pulsar (#120). Al elegir uno se pide esa
+                            // sociedad entera —sus campus sumados—, que es lo que
+                            // Carlos mira. «Sin sociedad» no agrupa nada, asi que
+                            // ese sigue siendo un titulo y no un boton.
+                            soc && p.sociedad_emisora_id ? (
+                              <li role="option" aria-selected={activeIssuer?.id === Number(p.sociedad_emisora_id)}>
+                                <button
+                                  type="button"
+                                  onClick={() => { switchIssuer(Number(p.sociedad_emisora_id)); setPickerOpen(false); }}
+                                  className={cn(
+                                    'w-full flex items-center gap-2 px-2 pt-2 pb-0.5 text-left hover:bg-secondary transition-colors',
+                                    activeIssuer?.id === Number(p.sociedad_emisora_id) && 'bg-secondary'
+                                  )}
+                                >
+                                  <span title={soc} className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60">
+                                    {soc}
+                                  </span>
+                                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {campusPorSociedad[p.sociedad_emisora_id] || 0} campus
+                                  </span>
+                                </button>
+                              </li>
+                            ) : (
+                              <div className="px-2 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 select-none">
+                                {soc || 'Sin sociedad'}
+                              </div>
+                            )
                           )}
                           <li role="option" aria-selected={isActive}>
                             <button
