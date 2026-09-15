@@ -45,17 +45,21 @@ const TRAMOS: Tramo[] = [
   { clave: 'semana', rotulo: 'Esta semana', icono: CalendarCheck, campo: 'esta_semana' },
 ];
 
-export default function ParaHoyYManana({ projectId }: { projectId?: number | null }) {
+// `projectIds` es la lista de campus cuando hay una EMPRESA puesta: la cola
+// del proceso ya sabia recibir varios, lo que faltaba era pasarselos.
+export default function ParaHoyYManana(
+  { projectId, projectIds = null }: { projectId?: number | null; projectIds?: string | null },
+) {
   const navigate = useNavigate();
   const [resumen, setResumen] = useState<ResumenCola | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    traerResumen({ projectId })
+    traerResumen({ projectId, projectIds })
       .then((r) => { if (vivo) setResumen(r); })
       .catch(() => { if (vivo) setResumen(null); });
     return () => { vivo = false; };
-  }, [projectId]);
+  }, [projectId, projectIds]);
 
   if (!resumen) return null;
 

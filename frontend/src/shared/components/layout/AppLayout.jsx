@@ -106,6 +106,13 @@ const CON_SOCIEDAD_OK = [
   /^\/mis-cursos$/,
   // La bandeja del CRM (#146). Tampoco mira el proyecto: el servidor acota sola.
   /^\/correos$/,
+  // El Dashboard. Diego, 15/09: «es por empresa, eso lo sabes».
+  //
+  // Por dentro ya lo era: `useDashboard` reparte por los campus del ambito y
+  // los suma, y elegir una empresa deja el proyecto en «Todos» justo para eso.
+  // Lo unico que pasaba es que el muro se levantaba antes de que la pantalla
+  // llegara a pedir nada.
+  /^\/$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
