@@ -232,8 +232,15 @@ export const tutoresApi = {
   previoDelAviso: (tutorId: number, periodo: string) =>
     client.get(`/tutores/comisiones/aviso?tutorId=${tutorId}&periodo=${periodo}`) as Promise<ApiResponse<AvisoAlTutor>>,
 
-  avisarTutor: (tutorId: number, periodo: string) =>
-    client.post('/tutores/comisiones/avisar', { tutorId, periodo }) as Promise<ApiResponse<{ enviado: boolean; a: string; total: number }>>,
+  /**
+   * Manda el aviso. `retoque` solo si se edito a mano en la pantalla — y lleva
+   * los dos campos o ninguno, que el backend rechaza medio retoque.
+   *
+   * A QUIEN va NO se manda: sale del tutor, en el servidor. Por eso esto no
+   * sirve para mandar un correo cualquiera a cualquiera.
+   */
+  avisarTutor: (tutorId: number, periodo: string, retoque?: { asunto: string; html: string }) =>
+    client.post('/tutores/comisiones/avisar', { tutorId, periodo, ...(retoque || {}) }) as Promise<ApiResponse<{ enviado: boolean; a: string; total: number }>>,
 
   // Mover el tramite de una comision. Solo entre las tres que no han cobrado:
   // pagar y revertir tienen su propio camino, que deja rastro de quien y por que.
