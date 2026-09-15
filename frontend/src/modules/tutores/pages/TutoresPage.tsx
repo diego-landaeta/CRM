@@ -554,6 +554,17 @@ export default function TutoresPage() {
                   <p className="text-xs text-muted-foreground truncate">
                     {elegido.email}{elegido.dni_nif ? ` · ${elegido.dni_nif}` : ''}
                   </p>
+                  {/* El aviso de la lista dice el problema; este lleva a la
+                      solucion. Antes «sin IBAN · no se le puede pagar» salia en
+                      45 de 45 y desde ahi no habia forma de llegar a Datos de
+                      pago: habia que saber que ese boton era el sitio. */}
+                  {elegido.active !== false && !elegido.iban && (
+                    <button type="button" onClick={() => setPopupPago(true)}
+                      className="mt-1 text-[11px] font-semibold text-destructive hover:underline inline-flex items-center gap-1">
+                      <Bank size={12} weight="bold" />
+                      Sin IBAN · poner el suyo para poder pagarle
+                    </button>
+                  )}
                 </div>
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                   {elegido.active === false ? (
