@@ -1,4 +1,5 @@
 import * as model from './report.model.js';
+import { resumenDelDia } from './resumenDelDia.js';
 import { query } from '../../shared/config/db.js';
 
 // A que proyectos se acota el informe.
@@ -184,4 +185,23 @@ export async function avisoSinFactura(req, res, next) {
       projectId: r.projectId, projectIds: r.projectIds, from: r.from, to: r.to,
     })});
   } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/reports/resumen-del-dia — «ayer y hoy», con datos (#130).
+ *
+ * El recorte lo hace `asesoraDelInforme`, igual que el resto de informes: una
+ * gestora ve lo suyo aunque pida lo de otra, y quien manda ve todo o lo de una
+ * en concreto con `?asesoraId=`.
+ */
+export async function resumenDia(req, res, next) {
+  try {
+    const ids = String(req.query.projectIds || req.query.projectId || '')
+      .split(',').map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
+    const datos = await resumenDelDia({
+      projectIds: ids.length ? ids : null,
+      asesoraId: asesoraDelInforme(req),
+    });
+    res.json({ success: true, data: datos });
+  } catch (e) { next(e); }
 }

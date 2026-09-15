@@ -5,6 +5,22 @@ import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 
+/**
+ * ¿El CIF del emisor es el marcador que sembro la migracion 102?
+ *
+ * Aquella dejo las tres sociedades con «PENDIENTE-CIF-CEDIA» y sus hermanas
+ * escritas a mano, para rellenarlas despues. Nadie las relleno, y el PDF imprime
+ * `NIF: <lo que haya>` sin preguntar: cada factura emitida bajo una de esas
+ * sociedades salio con un CIF que no existe, encima de un documento fiscal.
+ *
+ * Se mira por el prefijo y no por la lista de las tres: el dia que alguien
+ * siembre una cuarta sociedad con la misma costumbre, esto la coge sola.
+ */
+export function nifSinRellenar(nif) {
+  return /^PENDIENTE-CIF-/i.test(String(nif || '').trim());
+}
+
+
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
   const { rows } = await exec(
@@ -220,6 +236,28 @@ export async function create(data, userId) {
           + 'Si de verdad son dos cobros distintos, vuelve a darle para emitirla igualmente.',
           409, 'INVOICE_LOOKS_DUPLICATE');
       }
+    }
+
+    /*
+      Y ANTES DE NUMERAR: que el emisor tenga un CIF de verdad.
+
+      Va aqui y no mas abajo a proposito. Numerar quema un correlativo fiscal, y
+      quemarlo en una factura que se va a rechazar deja un hueco en la serie que
+      luego hay que explicar.
+
+      Se bloquea del todo, y esta vez sin escapatoria —a diferencia del aviso de
+      duplicados, donde hay casos legitimos—: un CIF que no existe no tiene caso
+      legitimo. Sale en el PDF, se le manda a un cliente, y no hay forma de
+      recogerlo. Es mas barato no emitirla.
+
+      Un borrador y una proforma si pasan: no son documentos fiscales y sirven
+      justo para preparar lo que falta.
+    */
+    if (!isBorrador && data.tipo !== 'proforma' && nifSinRellenar(iss?.nif)) {
+      throw new AppError(
+        `${iss?.razon_social || 'Esta sociedad'} no tiene el CIF puesto: figura como «${iss.nif}». `
+        + 'Se rellena en Facturacion › Emisores. Emitir asi imprimiria ese texto en el PDF como si fuera el NIF.',
+        409, 'EMISOR_SIN_CIF');
     }
 
     // El numero: el que elija quien emite, o el siguiente libre si no dice nada.

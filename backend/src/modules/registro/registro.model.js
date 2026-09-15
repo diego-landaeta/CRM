@@ -55,6 +55,7 @@ export const FUENTES = {
   usuario:    { titulo: 'Usuarios',     tabla: 'user_activity_log',       sistema: false },
   tarea:      { titulo: 'Tareas',       tabla: 'registro_tareas',         sistema: true },
   webhook:    { titulo: 'Webhooks',     tabla: 'make_webhook_deliveries', sistema: true },
+  correo:     { titulo: 'Correos',      tabla: 'email_envios',            sistema: true },
   error:      { titulo: 'Errores',      tabla: 'status_errors',           sistema: true },
 };
 
@@ -339,6 +340,59 @@ async function deWebhooks(filtros, limite) {
   }));
 }
 
+/**
+ * Cada correo que ha salido del CRM.
+ *
+ * `email_envios` existe desde la 127 y lo escribe TODO envio, pero no se
+ * enseñaba en ninguna parte. Angel lo pregunto de la forma mas util posible:
+ * «¿por que los correos enviados no aparecen en mi bandeja de salida?».
+ *
+ * No aparecen porque Brevo manda EN NOMBRE de la direccion, no DESDE ella: el
+ * correo no pasa por el buzon y su carpeta de enviados no se entera. Es lo
+ * normal con un servicio transaccional. Pero entonces el unico sitio donde
+ * mirar era el panel de Brevo, fuera del CRM — y el CRM lo tenia apuntado.
+ *
+ * Los correos BLOQUEADOS salen tambien, y son los que mas falta hacen: en
+ * `/testeo` el freno para todo lo que no este en la lista blanca, y sin esta
+ * fila lo unico que se ve es que no llego nada.
+ */
+async function deCorreos(filtros, limite) {
+  const params = [];
+  const donde = condiciones({ fechaCol: 'e.created_at', usuarioCol: null }, filtros, params);
+  if (donde === null) return [];
+  params.push(limite);
+  const { rows } = await query(
+    `SELECT e.id, e.created_at AS cuando, e.destinatarios, e.asunto,
+            e.estado, e.intentos, e.error, e.project_id, e.etiquetas
+       FROM email_envios e
+       ${donde}
+      ORDER BY e.created_at DESC
+      LIMIT $${params.length}`,
+    params
+  );
+  const COMO_SE_DICE = { enviado: 'Enviado', fallido: 'NO salio', bloqueado: 'Frenado' };
+  return rows.map((r) => ({
+    fuente: 'correo',
+    id: `em-${r.id}`,
+    cuando: r.cuando,
+    usuario_id: null,
+    usuario: null,
+    project_id: r.project_id,
+    accion: `correo.${r.estado}`,
+    resumen: `${COMO_SE_DICE[r.estado] || r.estado} a ${r.destinatarios} · «${r.asunto}»`
+      + (r.intentos > 1 ? ` · ${r.intentos} intentos` : '')
+      + (r.error ? ` · ${r.error}` : ''),
+    entidad: 'correo',
+    entidad_id: null,
+    entidad_nombre: r.destinatarios,
+    enlace: null,
+    ok: r.estado === 'enviado',
+    // El cuerpo NO se guarda ni se enseña: lleva datos de la persona y esto es
+    // una lista. Lo que hace falta aqui es si salio y a quien.
+    detalle: r.error ? { error: r.error } : null,
+  }));
+}
+
 /** Los errores que devolvio la API. */
 async function deErrores(filtros, limite) {
   const params = [];
@@ -376,7 +430,7 @@ async function deErrores(filtros, limite) {
 
 const LECTORES = {
   ficha: deFichas, documento: deDocumentos, usuario: deUsuarios,
-  tarea: deTareas, webhook: deWebhooks, error: deErrores,
+  tarea: deTareas, webhook: deWebhooks, correo: deCorreos, error: deErrores,
 };
 
 /**

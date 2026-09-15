@@ -1,5 +1,23 @@
 import bcrypt from 'bcrypt';
 import { query, getClient } from '../../shared/config/db.js';
+import { AppError } from '../../shared/utils/AppError.js';
+
+/**
+ * Lo que todavia se le debe a un tutor.
+ *
+ * Se dice por lo que NO es, y a proposito. Los estados que significan «sigue sin
+ * cobrar» son ya tres —`pendiente`, `notificada`, `falta_factura`— y el dia que
+ * se añada un cuarto, esto lo cuenta solo. Listandolos, habria que acordarse de
+ * venir aqui, y no se acuerda nadie: avisar a un tutor lo sacaria de «Por
+ * pagar» y la pantalla diria que no se le debe nada.
+ *
+ * Pagada y revertida son las dos unicas que sacan el dinero de la cuenta.
+ */
+export const SE_LE_DEBE = "estado NOT IN ('pagada', 'revertida')";
+
+/** Los estados por los que se puede filtrar y a los que se puede cambiar. */
+export const ESTADOS_COMISION = ['pendiente', 'notificada', 'falta_factura', 'pagada', 'revertida'];
+
 
 // Tutores y colaboraciones.
 //
@@ -469,7 +487,11 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0) AS pendiente,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
-            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion,
+            -- Cuando se le mando el correo de «Avisar tutor». Va aparte del
+            -- estado a proposito: avisar no es cobrar, y una comision avisada
+            -- sigue contando en «pendiente».
+            MAX(tc.avisado_at) AS avisado_at
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        -- El IBAN y el correo viajan con el resumen: pagar a un profesor
@@ -501,9 +523,10 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
             fecha_liquidacion = CURRENT_DATE,
             liquidada_por = $1,
             updated_at = NOW()
-      -- Se paga lo que se debe, tambien si ya se le habia avisado o si faltaba
-      -- su factura: una revertida no, y una ya pagada tampoco dos veces.
-      WHERE estado IN ('pendiente', 'notificada', 'falta_factura')
+      -- Se paga lo que se debe, tambien si ya se le habia avisado o si
+      -- faltaba su factura. Se dice por descarte a proposito: asi un
+      -- estado nuevo entra solo, sin tener que acordarse de esta linea.
+      WHERE estado NOT IN ('pagada', 'revertida')
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
@@ -539,6 +562,39 @@ export async function cambiarEstadoComision(id, estado) {
 
 // Deshacer una liquidacion o anular una comision. Queda escrito quien y por que:
 // esto mueve dinero y no puede pasar sin dejar rastro.
+/**
+ * Mover una comision de estado a mano. Diego, 14/09: «ahi que pone pendiente
+ * deben aparecer los siguientes estados: Pendiente, Notificada, Falta Factura».
+ *
+ * Solo entre esas tres. Pagar y revertir NO pasan por aqui y es a proposito:
+ * cada una tiene su camino —`liquidarComisiones` deja fecha y quien liquido,
+ * `revertirComision` pide motivo— y dejarlas caer en un cambio de estado suelto
+ * perderia ese rastro. Es dinero: quien lo movio y por que tiene que quedar.
+ *
+ * Y una que ya esta pagada no vuelve: eso seria deshacer un pago escribiendo en
+ * una casilla.
+ */
+export async function cambiarEstadoComision(id, estado, userId) {
+  const PERMITIDOS = ['pendiente', 'notificada', 'falta_factura'];
+  if (!PERMITIDOS.includes(estado)) {
+    throw new AppError(
+      `«${estado}» no se pone a mano. Para cobrar esta «Marcar pagado», y para deshacer, revertir.`,
+      400, 'ESTADO_NO_PERMITIDO');
+  }
+  const { rows } = await query(
+    `UPDATE tutor_commissions
+        SET estado = $2, updated_at = NOW()
+      WHERE id = $1 AND estado NOT IN ('pagada', 'revertida')
+      RETURNING id, estado, periodo, tutor_id`,
+    [id, estado]);
+  if (!rows[0]) {
+    throw new AppError(
+      'Esa comision ya esta pagada o revertida: su estado no se cambia desde aqui.',
+      409, 'COMISION_CERRADA');
+  }
+  return rows[0];
+}
+
 export async function revertirComision(id, { userId, motivo }) {
   const { rows: [c] } = await query(
     `UPDATE tutor_commissions
@@ -906,7 +962,7 @@ export async function retirarTutor(tutorId) {
         WHERE tutor_id = $1 AND activa`, [tutorId]);
     const { rows: [pend] } = await client.query(
       `SELECT COALESCE(SUM(importe), 0) AS pendiente
-         FROM tutor_commissions WHERE tutor_id = $1 AND estado = 'pendiente'`, [tutorId]);
+         FROM tutor_commissions WHERE tutor_id = $1 AND estado NOT IN ('pagada', 'revertida')`, [tutorId]);
     await client.query('COMMIT');
     return { ...t, cursosCerrados: rowCount, pendienteDePagar: Number(pend.pendiente) };
   } catch (e) {

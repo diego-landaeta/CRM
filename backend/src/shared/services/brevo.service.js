@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
+import { guardarEnEnviados, hayBuzon } from './copia-en-enviados.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -53,7 +54,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
  * queda anotado el intento.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, replyTo, attachment, clave = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
@@ -76,6 +77,9 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     await registrar({
       clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
       estado: 'bloqueado', intentos: 0, error: porque,
+      // Tambien el bloqueado: saber QUE se iba a mandar es justo lo que hace
+      // falta cuando el freno para algo y no se entiende por que.
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
     });
     return { sent: false, reason: 'FRENO_DE_PRUEBAS', motivo: freno.motivo, detalle: porque };
   }
@@ -90,6 +94,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
       estado: 'fallido', intentos: 0, error: 'NO_API_KEY' });
     return { sent: false, reason: 'NO_API_KEY' };
   }
@@ -101,6 +106,12 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     htmlContent,
     textContent,
   };
+  // A donde contesta quien lo recibe. Brevo, si no se dice, responde al
+  // remitente — que casi siempre es lo que se quiere. Se deja poner aparte
+  // porque hay correos cuyo sentido ES la respuesta: el aviso al tutor le pide
+  // «contesta a este mismo correo con tu factura», y ahi no puede depender de
+  // que nadie cambie el remitente por un `no-reply` mas adelante.
+  if (replyTo) payload.replyTo = typeof replyTo === 'string' ? { email: replyTo } : replyTo;
   // Las etiquetas solo si las hay. Mandar la lista vacia hace que Brevo
   // conteste «400 · tags is blank» y NO envie el correo — y como casi ninguna
   // llamada pasa etiquetas, eso era todos los correos del CRM.
@@ -137,7 +148,27 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
         const data = await res.json();
         logger.info({ messageId: data.messageId, to, subject, intento }, 'Brevo email enviado');
         await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
           estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
+
+        // Y una copia en la carpeta «Enviados» del buzon de verdad, que es lo
+        // que hace un cliente de correo despues de mandar.
+        //
+        // NO se espera a que termine ni se mira si salio bien: el correo YA se
+        // mando y eso no se deshace. Archivar la copia es lo accesorio — si
+        // falla, queda en el registro y punto.
+        if (hayBuzon()) {
+          guardarEnEnviados({
+            de: fromEmail || FROM_EMAIL,
+            deNombre: fromName || FROM_NAME,
+            para: destinatarios,
+            asunto: subject,
+            html: htmlContent,
+          }).then((ok) => {
+            if (!ok) logger.info({ to, subject }, 'Copia en Enviados: no se guardo');
+          });
+        }
+
         return { sent: true, messageId: data.messageId, intentos: intento };
       }
 
@@ -156,6 +187,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 
   // Que no salio ya no se queda solo en el log: queda escrito.
   await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
     estado: 'fallido', intentos: hechos, error: `${ultimoFallo.reason} · ${ultimoFallo.details ?? ''}` });
   return { sent: false, ...ultimoFallo, intentos: hechos };
 }

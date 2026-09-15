@@ -35,7 +35,7 @@ const filas = {
 /** Que tablas dice `information_schema` que existen. */
 let tablasQueExisten = [
   'lead_audit_log', 'document_audit_log', 'user_activity_log',
-  'registro_tareas', 'make_webhook_deliveries', 'status_errors',
+  'registro_tareas', 'make_webhook_deliveries', 'email_envios', 'status_errors',
 ];
 
 /** Fuentes que revientan al leerse, para probar que no se llevan la pantalla. */
@@ -73,7 +73,7 @@ beforeEach(() => {
   rotas = new Set();
   tablasQueExisten = [
     'lead_audit_log', 'document_audit_log', 'user_activity_log',
-    'registro_tareas', 'make_webhook_deliveries', 'status_errors',
+    'registro_tareas', 'make_webhook_deliveries', 'email_envios', 'status_errors',
   ];
   modelo.olvidarTablas();
   filas.lead_audit_log = [{

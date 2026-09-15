@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy } from '@phosphor-icons/react';
+import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy, PaperPlaneTilt, X } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -12,7 +12,7 @@ import LoQueFactura from '../components/LoQueFactura';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import {
   tutoresApi,
-  type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
+  type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion, type AvisoAlTutor,
 } from '../api/tutores.api';
 
 // Lo que hay que pagarle a cada tutor este mes, y el botón de darlo por pagado.
@@ -73,6 +73,10 @@ export default function ComisionesTutoresPage() {
   const issuerId = !projectId ? activeIssuerId : null;
 
   const [periodo, setPeriodo] = useState(mesActual());
+  // «Avisar tutor»: primero se mira lo que sale, y solo entonces se manda.
+  const [aviso, setAviso] = useState<AvisoAlTutor | null>(null);
+  const [preparando, setPreparando] = useState<number | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const [resumen, setResumen] = useState<ResumenComision[]>([]);
   const [lineas, setLineas] = useState<ComisionReal[]>([]);
   const [sinFormacion, setSinFormacion] = useState<PagoSinFormacion[]>([]);
@@ -131,6 +135,40 @@ export default function ComisionesTutoresPage() {
       toast({ title: 'No se ha podido calcular', description: e instanceof Error ? e.message : '', variant: 'destructive' });
     } finally { setTrabajando(false); }
   }
+
+  /**
+   * Prepara el aviso y lo enseña. No manda nada.
+   *
+   * Un correo que sale mal no se puede recoger, y este lleva una cifra por la
+   * que el tutor va a facturar: se mira antes.
+   */
+  async function verElAviso(r: ResumenComision) {
+    setPreparando(r.tutor_id);
+    try {
+      const res = await tutoresApi.previoDelAviso(r.tutor_id, r.periodo);
+      if (!res.success || !res.data) throw new Error(res.error || 'no se pudo preparar');
+      setAviso(res.data);
+    } catch (err) {
+      toast({ title: 'No se puede avisar todavía', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    } finally { setPreparando(null); }
+  }
+
+  async function mandarElAviso() {
+    if (!aviso) return;
+    setEnviando(true);
+    try {
+      const res = await tutoresApi.avisarTutor(aviso.tutorId, aviso.periodo);
+      if (!res.success) throw new Error(res.error || 'no se pudo enviar');
+      toast({ title: `Avisado ${aviso.nombre}`, description: `Correo enviado a ${aviso.email}.` });
+      setAviso(null);
+      cargar();
+    } catch (err) {
+      // El motivo se enseña entero: «no se pudo enviar» a secas manda a mirar
+      // el sitio equivocado, y el de Brevo suele ser el remitente sin verificar.
+      toast({ title: 'No se ha enviado', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    } finally { setEnviando(false); }
+  }
+
 
   async function pagar(r: ResumenComision) {
     setTrabajando(true);
@@ -327,6 +365,25 @@ export default function ComisionesTutoresPage() {
                         <CheckCircle size={14} weight="bold" className="mr-1.5" /> Marcar pagado
                       </Button>
                     )}
+
+                    {/* «Avisar tutor». Va junto a pagar y no dentro del
+                        desplegable: es la otra cosa que se hace con una fila. */}
+                    {esAdmin && Number(r.pendiente) > 0 && (
+                      <Button size="sm" variant="outline" disabled={preparando === r.tutor_id}
+                        title={r.tutor_email ? `Escribir a ${r.tutor_email}` : 'Este tutor no tiene correo en su ficha'}
+                        onClick={() => verElAviso(r)}>
+                        <PaperPlaneTilt size={14} weight="bold" className="mr-1.5" />
+                        {preparando === r.tutor_id ? 'Preparando…' : 'Avisar tutor'}
+                      </Button>
+                    )}
+
+                    {/* Que ya se le aviso se dice al lado, no en el estado del
+                        dinero: sigue debiendosele hasta que se le pague. */}
+                    {r.avisado_at && (
+                      <span className="text-xs text-muted-foreground shrink-0" title={r.avisado_at}>
+                        avisado el {soloFecha(r.avisado_at)}
+                      </span>
+                    )}
                     {Number(r.pendiente) === 0 && r.ultima_liquidacion && (
                       <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                         pagado el {soloFecha(r.ultima_liquidacion)}
@@ -435,6 +492,64 @@ export default function ComisionesTutoresPage() {
           </div>
         )}
       </div>
+
+      {/* La vista previa. Existe porque un correo no se recoge, y este lleva la
+          cifra por la que el tutor va a facturar. */}
+      {aviso && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !enviando && setAviso(null)}>
+          <div onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3 p-4 border-b border-border">
+              <div className="min-w-0">
+                <h2 className="font-bold truncate">Avisar a {aviso.nombre}</h2>
+                <p className="text-xs text-muted-foreground truncate">
+                  {aviso.email} · {aviso.mes}
+                </p>
+              </div>
+              <button type="button" onClick={() => setAviso(null)} disabled={enviando}
+                className="text-muted-foreground hover:text-foreground shrink-0">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="text-xs">
+                <span className="text-muted-foreground">Asunto: </span>
+                <span className="font-medium">{aviso.asunto}</span>
+              </div>
+
+              {/* El correo tal cual va a salir, y sobre FONDO BLANCO aunque el CRM
+                  esté en oscuro: así se ve en la bandeja de quien lo recibe.
+                  Con el fondo del panel no era solo cuestión de gusto — los
+                  grises del correo, pensados para papel blanco, quedaban
+                  ilegibles sobre oscuro y media tabla no se leía. */}
+              <div
+                className="border border-border rounded-md p-4 text-sm overflow-x-auto"
+                style={{ background: '#ffffff', color: '#18181b', colorScheme: 'light' }}
+                dangerouslySetInnerHTML={{ __html: aviso.html }}
+              />
+
+              {!aviso.tieneIban && (
+                <p className="text-xs flex gap-1.5 text-amber-700 dark:text-amber-400">
+                  <Warning size={14} weight="fill" className="shrink-0 mt-0.5" />
+                  <span>No tenemos su IBAN. El correo se lo pide — cuando conteste, hay que meterlo en su ficha.</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setAviso(null)} disabled={enviando}>
+                Cancelar
+              </Button>
+              <Button size="sm" onClick={mandarElAviso} disabled={enviando}>
+                <PaperPlaneTilt size={14} weight="bold" className="mr-1.5" />
+                {enviando ? 'Enviando…' : `Enviar a ${aviso.email}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

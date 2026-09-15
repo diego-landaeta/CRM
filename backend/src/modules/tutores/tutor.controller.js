@@ -1,4 +1,5 @@
 import * as model from './tutor.model.js';
+import { previsualizar, avisar } from './avisarTutor.js';
 import * as userService from '../users/user.service.js';
 import * as dossierService from '../dossiers/dossier.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -301,8 +302,7 @@ export async function listarComisiones(req, res, next) {
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      estado: ['pendiente', 'notificada', 'falta_factura', 'pagada', 'revertida'].includes(req.query.estado)
-        ? req.query.estado : null,
+      estado: model.ESTADOS_COMISION.includes(req.query.estado) ? req.query.estado : null,
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }
@@ -507,4 +507,48 @@ export async function reactivarTutor(req, res, next) {
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
+}
+
+/** El periodo que llega por la URL, o nada. Siempre «AAAA-MM». */
+function periodoDe(req) {
+  const p = String(req.query.periodo || req.body?.periodo || '');
+  return /^\d{4}-\d{2}$/.test(p) ? p : null;
+}
+
+/**
+ * GET /api/tutores/comisiones/aviso — lo que se le va a mandar, sin mandarlo.
+ *
+ * Existe separado del envio porque un correo no se manda a ciegas: la pantalla
+ * enseña el texto, el total y la cuenta, y solo entonces aparece el boton.
+ */
+export async function previoDelAviso(req, res, next) {
+  try {
+    const periodo = periodoDe(req);
+    if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    const datos = await previsualizar({ tutorId: Number(req.query.tutorId), periodo });
+    res.json({ success: true, data: datos });
+  } catch (e) { next(e); }
+}
+
+/** POST /api/tutores/comisiones/avisar — lo manda y anota cuando y quien. */
+export async function avisarTutor(req, res, next) {
+  try {
+    const periodo = periodoDe(req);
+    if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    const r = await avisar({
+      tutorId: Number(req.body?.tutorId),
+      periodo,
+      userId: req.user?.userId,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
+}
+
+/** PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero. */
+export async function cambiarEstadoComision(req, res, next) {
+  try {
+    const r = await model.cambiarEstadoComision(
+      Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
 }

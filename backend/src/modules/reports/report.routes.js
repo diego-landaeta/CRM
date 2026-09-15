@@ -33,4 +33,8 @@ router.get('/aviso-sin-factura', ctrl.avisoSinFactura);
 router.get('/tasa-cierre', ctrl.tasaCierre);
 router.get('/tasa-cierre/detalle', ctrl.tasaCierreDetalle);
 
+// «Ayer y hoy» del dashboard (#130). Sin roleGuard a proposito: una gestora
+// entra y ve lo suyo, que es el caso principal de esta pantalla.
+router.get('/resumen-del-dia', ctrl.resumenDia);
+
 export default router;
