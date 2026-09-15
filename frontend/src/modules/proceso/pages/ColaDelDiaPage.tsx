@@ -12,6 +12,7 @@
   o saltarse un paso, y eso se hace desde la ficha de la persona.
 */
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise,
 } from '@phosphor-icons/react';
@@ -69,7 +70,24 @@ export default function ColaDelDiaPage() {
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
   // Qué tramo se está mirando. Por defecto todo lo que ya toca —atrasado y hoy—,
   // que es con lo que se abre el día.
-  const [tramo, setTramo] = useState<'pendiente' | 'atrasados' | 'hoy' | 'manana' | 'semana'>('pendiente');
+  //
+  // Vive en la DIRECCIÓN y no en el estado del componente (#130). Guardado
+  // dentro, el dashboard puede decir «mañana tienes 12» y el enlace te deja en
+  // la lista entera, buscándolos — que es exactamente lo que el #132 dio por
+  // inútil: «un aviso que te deja buscándolos no sirve de nada». Con el tramo
+  // en la URL, el enlace deja la cola ya puesta, y además se puede compartir y
+  // sobrevive a recargar.
+  const [params, setParams] = useSearchParams();
+  const TRAMOS = ['pendiente', 'atrasados', 'hoy', 'manana', 'semana'] as const;
+  type Tramo = typeof TRAMOS[number];
+  const pedido = params.get('tramo') as Tramo | null;
+  const tramo: Tramo = pedido && TRAMOS.includes(pedido) ? pedido : 'pendiente';
+  const setTramo = (t: Tramo) => {
+    const p = new URLSearchParams(params);
+    // «pendiente» es el estado de partida: no ensucia la direccion.
+    if (t === 'pendiente') p.delete('tramo'); else p.set('tramo', t);
+    setParams(p, { replace: true });
+  };
 
   const proyecto = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 

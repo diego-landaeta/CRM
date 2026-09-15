@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import ResumenDeAyerYHoy from '@/shared/components/dashboard/ResumenDeAyerYHoy';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
@@ -204,6 +205,10 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
       />
+
+      {/* Lo que toca, de la cola del proceso (#130). Va ANTES del resumen: lo
+          primero de la mañana es que hay que hacer, no que paso ayer. */}
+      <ParaHoyYManana projectId={activeProject?.id && activeProject.id !== -1 ? activeProject.id : null} />
 
       {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
       <ResumenDeAyerYHoy projectIds={idsDelAmbito} />
