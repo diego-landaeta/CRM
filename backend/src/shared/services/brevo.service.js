@@ -76,6 +76,9 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     await registrar({
       clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
       estado: 'bloqueado', intentos: 0, error: porque,
+      // Tambien el bloqueado: saber QUE se iba a mandar es justo lo que hace
+      // falta cuando el freno para algo y no se entiende por que.
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
     });
     return { sent: false, reason: 'FRENO_DE_PRUEBAS', motivo: freno.motivo, detalle: porque };
   }
@@ -90,6 +93,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
       estado: 'fallido', intentos: 0, error: 'NO_API_KEY' });
     return { sent: false, reason: 'NO_API_KEY' };
   }
@@ -143,6 +147,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
         const data = await res.json();
         logger.info({ messageId: data.messageId, to, subject, intento }, 'Brevo email enviado');
         await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
           estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
         return { sent: true, messageId: data.messageId, intentos: intento };
       }
@@ -162,6 +167,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 
   // Que no salio ya no se queda solo en el log: queda escrito.
   await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente: fromEmail || FROM_EMAIL,
     estado: 'fallido', intentos: hechos, error: `${ultimoFallo.reason} · ${ultimoFallo.details ?? ''}` });
   return { sent: false, ...ultimoFallo, intentos: hechos };
 }

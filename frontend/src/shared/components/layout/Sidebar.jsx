@@ -59,8 +59,7 @@ import {
   // Los de los encabezados de seccion (#105). Ninguno repite el de una
   // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
   // que una de sus filas, deja de ordenar y pasa a confundir.
-  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice,
-} from '@phosphor-icons/react';
+  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -281,6 +280,9 @@ const NAV_SECTIONS = [
       // los compañeros, y ofrecerlo a quien la API va a negar es peor que no
       // ofrecerlo.
       { label: 'Registro', to: '/registro', detail: 'Todo lo que ha pasado', icon: ClipboardText, roles: ['superadmin', 'admin'] },
+      // Los correos que salen del CRM (#146). Mismos roles que el Registro, y
+      // aqui pesa mas: esto enseña el TEXTO de correos a personas.
+      { label: 'Correos', to: '/correos', detail: 'Lo que ha mandado el CRM', icon: EnvelopeSimple, roles: ['superadmin', 'admin'] },
       { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],
