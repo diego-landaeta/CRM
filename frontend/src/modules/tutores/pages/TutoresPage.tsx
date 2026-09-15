@@ -8,6 +8,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import { lasQueYaRigen, laQueDuerme } from '../lib/colaboraciones';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -351,15 +352,53 @@ export default function TutoresPage() {
     } finally { setGuardando(false); }
   }
 
+  /**
+   * Volver a poner en vigor una formacion que se desactivo.
+   *
+   * Es lo contrario de «Quitar», y la diferencia importa: quitar borra la fila
+   * y con ella el rastro de por que se le pago a ese tutor lo que se le pago.
+   */
+  async function reactivarColaboracion(c: Colaboracion) {
+    setGuardando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, { activa: true });
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      toast({ title: 'Formación reactivada', description: `${c.formacion || 'La formación'} vuelve a estar vigente.` });
+      if (elegido) cargarColabs(elegido);
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se ha podido reactivar', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+
   async function altaColaboracion(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!elegido) return;
     const f = new FormData(e.currentTarget);
+    const productId = Number(f.get('productId'));
     setGuardando(true);
     try {
+      // Si esa formacion ya la tuvo y esta desactivada, esto es REACTIVARLA.
+      // Crear otra fila dejaria dos colaboraciones del mismo tutor con el mismo
+      // curso, y entonces «cuanto se le debe» tendria dos respuestas.
+      const dormida = laQueDuerme(colabs, productId);
+      if (dormida) {
+        const r = await tutoresApi.editarColaboracion(dormida.id, {
+          activa: true,
+          pct: Number(f.get('pct')),
+          desde: String(f.get('desde')),
+          hasta: String(f.get('hasta') || '') || null,
+        });
+        if (!r.success) throw new Error(r.error || 'no se pudo');
+        toast({ title: 'Formación reactivada', description: 'Ya la tenía, y vuelve a estar vigente.' });
+        setPopupColab(false);
+        cargarColabs(elegido);
+        cargar();
+        return;
+      }
       const r = await tutoresApi.crearColaboracion({
         tutorId: elegido.id,
-        productId: Number(f.get('productId')),
+        productId,
         pct: Number(f.get('pct')),
         desde: String(f.get('desde')),
         hasta: String(f.get('hasta') || '') || null,
@@ -555,6 +594,20 @@ export default function TutoresPage() {
                             )}
                           </td>
                           <td className="py-2 pl-3 text-right">
+                            {/* Una desactivada por error no tenia salida: la unica
+                                accion era «Quitar», que borra el historico de por
+                                que se le pago lo que se le pago. El endpoint para
+                                reactivarla existia desde el principio —`activa` ya
+                                estaba en `editarColaboracionSchema`—; lo que
+                                faltaba era el boton. */}
+                            {!c.activa && (
+                              <button type="button" onClick={() => reactivarColaboracion(c)}
+                                disabled={guardando}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
+                                <ArrowsClockwise size={13} weight="bold" />
+                                Reactivar
+                              </button>
+                            )}
                             <button type="button" onClick={() => quitar(c)}
                               className={`text-xs font-semibold inline-flex items-center gap-1 ${
                                 borrando === c.id ? 'text-red-600' : 'text-muted-foreground hover:text-foreground'
@@ -847,7 +900,13 @@ export default function TutoresPage() {
               </button>
             </div>
 
-            {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir. */}
+            {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir.
+                Y `excluir` solo esconde las que YA rigen. Antes las escondia todas,
+                y una formacion desactivada por error quedaba sin salida: no salia
+                aqui para volver a añadirla, y en su fila solo habia «Quitar» —que
+                se lleva por delante el historico—. El mensaje ademas mentia: decia
+                «ningun curso con ese nombre» mientras la tabla de al lado lo
+                estaba enseñando. */}
             <BuscadorEnLista
               opciones={formaciones.map((f) => ({ ...f, nota: f.precio }))}
               comoDinero
@@ -855,7 +914,7 @@ export default function TutoresPage() {
               sinResultados="Ningún curso con «{texto}». Prueba con una palabra suelta." 
               valor={cursoColab}
               onElegir={setCursoColab}
-              excluir={colabs.map((c) => c.product_id)}
+              excluir={lasQueYaRigen(colabs)}
               autoFocus
             />
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
