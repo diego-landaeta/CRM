@@ -107,7 +107,7 @@ export async function datosDelAviso({ tutorId, periodo }) {
 }
 
 /** El HTML de la cuenta, que es lo que evita las facturas mal hechas. */
-function tablaDeLaCuenta({ base, iva, retencion, total }) {
+export function tablaDeLaCuenta({ base, iva, retencion, total }) {
   const fila = (rotulo, valor, fuerte) =>
     `<tr><td style="padding:4px 12px 4px 0">${rotulo}</td>`
     + `<td style="padding:4px 0;text-align:right;white-space:nowrap">`
@@ -141,22 +141,36 @@ async function plantilla() {
 }
 
 /** Lo que se va a mandar, ya con los huecos rellenos. */
-export async function previsualizar({ tutorId, periodo }) {
-  const datos = await datosDelAviso({ tutorId, periodo });
-  const { subject, body_html: cuerpo } = await plantilla();
+/**
+ * Rellena la plantilla con los datos de un tutor. Sin base y sin red: es una
+ * funcion, y por eso se puede ver el correo exacto sin mandarlo ni sembrar
+ * nada — que es como se revisa un texto que va a salir a un tercero.
+ */
+export function componerCorreo({ datos, subject, cuerpo }) {
   const ctx = {
     mes: datos.mes,
     total: eur(datos.pendiente),
     tutor: { nombre: datos.nombre, email: datos.email },
   };
-  // `formaciones` y `calculo` son HTML a proposito, y por eso se ponen DESPUES
-  // de `renderTemplate`: esa funcion escapa los valores —bien hecho, que un
-  // nombre con `<` no rompa el correo— y una lista y una tabla dejarian de
-  // serlo.
-  const html = renderTemplate(cuerpo, ctx)
+  // `formaciones` y `calculo` son HTML a proposito —una lista y una tabla— y por
+  // eso NO pasan por `renderTemplate`, que escapa los valores. Bien hecho por su
+  // parte: un nombre con `<` no puede romper el correo.
+  //
+  // Y se ponen ANTES, no despues. Despues no funcionaba: `renderTemplate`
+  // sustituye TODO lo que tenga la forma `{{algo}}`, y lo que no encuentra en su
+  // contexto lo deja VACIO. Asi que se llevaba por delante los dos huecos y el
+  // correo salia pidiendo la factura sin decir de que formaciones ni cuanto.
+  // Al ponerlos antes, lo inyectado no lleva llaves y le pasa por delante.
+  const conHtml = cuerpo
     .replace('{{formaciones}}', `<ul>${datos.formaciones.map((f) => `<li>${f}</li>`).join('')}</ul>`)
     .replace('{{calculo}}', tablaDeLaCuenta(datos.cuenta));
-  return { ...datos, asunto: renderTemplate(subject, ctx), html };
+  return { asunto: renderTemplate(subject, ctx), html: renderTemplate(conHtml, ctx) };
+}
+
+export async function previsualizar({ tutorId, periodo }) {
+  const datos = await datosDelAviso({ tutorId, periodo });
+  const { subject, body_html: cuerpo } = await plantilla();
+  return { ...datos, ...componerCorreo({ datos, subject, cuerpo }) };
 }
 
 /**
