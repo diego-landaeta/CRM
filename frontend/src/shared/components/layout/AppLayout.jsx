@@ -91,6 +91,21 @@ const CON_SOCIEDAD_OK = [
   // procesos en empresas deben ser por empresa, no por proyecto».
   /^\/prospectos\/cola$/,
   /^\/prospectos\/proceso$/,
+  // Tutores, los cuatro. Diego, 15/09: «no me deja elegir la empresa ni los
+  // proyectos y no puedo seguir con testeo».
+  //
+  // Las pantallas ya estaban hechas --mandan `issuerId` y traen su selector de
+  // campus-- y el servidor ya lo traducia con `proyectosDelAmbito`. Lo unico
+  // que faltaba era esta lista: el muro se levantaba ANTES de que la pantalla
+  // llegara a pintarse, asi que el trabajo de por-empresa no se veia nunca.
+  /^\/tutores$/,
+  /^\/tutores\/comisiones$/,
+  /^\/tutores\/sin-tutor$/,
+  // «Mis cursos» es lo del propio tutor: no filtra por proyecto NI por empresa,
+  // asi que pedirle que elija un campus no significaba nada.
+  /^\/mis-cursos$/,
+  // La bandeja del CRM (#146). Tampoco mira el proyecto: el servidor acota sola.
+  /^\/correos$/,
 ];
 
 function rutaAceptaSociedad(pathname) {

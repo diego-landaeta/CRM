@@ -91,8 +91,14 @@ function Meta({ f }: { f: FormacionSinTutor }) {
 
 export default function FormacionesSinTutorPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Con una empresa puesta y sin campus concreto, el servidor traduce
+  // `issuerId` a sus campus. Si hay proyecto, la empresa sobra.
+  const issuerId = !projectId ? (activeIssuerId ?? null) : null;
 
   const [filas, setFilas] = useState<FormacionSinTutor[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -109,13 +115,15 @@ export default function FormacionesSinTutorPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await tutoresApi.formacionesSinTutor(projectId);
+      const r = await tutoresApi.formacionesSinTutor(projectId, issuerId);
       setFilas(r.success ? (r.data || []) : []);
       if (!r.success) toast({ title: 'No se pudo cargar', description: r.error || '', variant: 'destructive' });
     } catch (e) {
       toast({ title: 'No se pudo cargar', description: (e as Error).message, variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [projectId]);
+    // `issuerId` va en las dependencias: sin el, cambiar de empresa en la
+    // cabecera no recargaba y se quedaba la lista de la anterior.
+  }, [projectId, issuerId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

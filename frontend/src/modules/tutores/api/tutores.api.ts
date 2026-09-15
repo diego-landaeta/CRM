@@ -297,9 +297,10 @@ export const tutoresApi = {
     client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
 
   // Las que ya venden y no tienen a quien pagarle.
-  formacionesSinTutor: (projectId?: number | null) =>
+  formacionesSinTutor: (projectId?: number | null, issuerId?: number | null) =>
     client.get('/tutores/formaciones-sin-tutor'
-      + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
+      + (projectId ? `?projectId=${projectId}`
+        : (issuerId ? `?issuerId=${issuerId}` : ''))) as Promise<ApiResponse<FormacionSinTutor[]>>,
 
   /** «Se busca tutor para esta formación», y con qué anuncio si lo hay. */
   marcarBusquedaTutor: (productId: number, datos: {
