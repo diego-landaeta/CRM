@@ -1,4 +1,5 @@
 import * as conversionService from './conversion.service.js';
+import * as conversionModel from './conversion.model.js';
 import * as installmentsModel from './installments.model.js';
 import {
   createConversionSchema,
@@ -7,6 +8,7 @@ import {
   listConversionsSchema,
 } from './conversion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 export async function create(req, res, next) {
   try {
@@ -21,7 +23,9 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const filters = { ...parsed.data };
+    // Un proyecto, una sociedad entera o todos. Se resuelve aqui y el modelo
+    // recibe ya la lista, igual que en Reportes.
+    const filters = { ...parsed.data, ...(await proyectosDelAmbito(req)) };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
     if (req.user.role === 'gestor') {
       filters.responsableId = req.user.userId;
@@ -33,6 +37,53 @@ export async function list(req, res, next) {
       totales: result.totales,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/cuotas?from=&to=&projectId=
+//
+// Las cuotas cobradas en ese periodo, una por una y con su factura. Un total sin
+// desglose no se puede comprobar, y sobre todo no dice QUE FALTA POR FACTURAR:
+// un cobro sin factura es dinero cobrado sin declarar.
+export async function cuotas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+
+    const data = await conversionModel.cuotasDelPeriodo({
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/filas?from=&to=&projectId=&issuerId=&page=&limit=
+//
+// La lista de Ventas con fechas: ventas del periodo + cuotas facturadas del
+// periodo, cada fila etiquetada. Es lo que se ve abajo cuando hay filtro.
+export async function filas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const r = await conversionModel.filasDelPeriodo({
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
+      producto: req.query.producto ? String(req.query.producto) : null, page, limit,
+    });
+    res.json({ success: true, data: r.filas,
+      pagination: { total: r.total, page, limit, totalPages: Math.max(1, Math.ceil(r.total / limit)) } });
   } catch (err) { next(err); }
 }
 
@@ -223,10 +274,10 @@ export async function unpayInstallment(req, res, next) {
 
 export async function listProductos(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     if (req.user.role === 'gestor') responsableId = req.user.userId;
-    const data = await conversionService.listProductos({ projectId, responsableId });
+    const data = await conversionService.listProductos({ projectId, projectIds, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

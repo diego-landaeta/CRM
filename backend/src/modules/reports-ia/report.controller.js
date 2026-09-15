@@ -169,7 +169,7 @@ export async function generate(req, res, next) {
         facturacionTotal: data.conversiones.facturado,
         fuentesDatos: ['CRM'],
       },
-      generated_by: req.user.id,
+      generated_by: req.user.userId,
     });
     res.status(201).json({ success: true, data: { ...saved, warning } });
   } catch (err) { next(err); }

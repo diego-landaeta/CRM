@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { GlobeHemisphereWest, ListChecks, FileCsv } from '@phosphor-icons/react';
-import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const fmtMoney = (n) => new Intl.NumberFormat('es-ES', {
   style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -42,7 +43,7 @@ const VISTAS = {
 };
 
 export default function RankingsPanel({ from, to }) {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
   const [vista, setVista] = useState('paises');
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -56,7 +57,7 @@ export default function RankingsPanel({ from, to }) {
       setCargando(true);
       try {
         const p = new URLSearchParams();
-        if (activeProject?.id) p.set('projectId', String(activeProject.id));
+        ponerAmbito(p, { activeIssuerId, activeProject });
         if (from) p.set('from', from);
         if (to) p.set('to', to);
         const r = await client.get(`${conf.endpoint}?${p.toString()}`);
@@ -66,7 +67,7 @@ export default function RankingsPanel({ from, to }) {
       } finally { if (vivo) setCargando(false); }
     })();
     return () => { vivo = false; };
-  }, [activeProject?.id, from, to, conf.endpoint]);
+  }, [activeProject?.id, activeIssuerId, from, to, conf.endpoint]);
 
   const visibles = useMemo(() => {
     const t = busca.trim().toLowerCase();
@@ -167,7 +168,7 @@ export default function RankingsPanel({ from, to }) {
                   onClick={() => setDetalle({
                     consulta: {
                       tipo: 'ventas',
-                      projectId: activeProject?.id || '',
+                      ...(activeIssuerId ? { issuerId: activeIssuerId } : { projectId: activeProject?.id || '' }),
                       from, to,
                       [conf.clave]: f[conf.clave],
                     },

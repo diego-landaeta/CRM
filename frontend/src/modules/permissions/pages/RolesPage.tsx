@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { ShieldCheck, Plus, Lock, Warning, CheckCircle, Circle } from '@phosphor-icons/react';
+import PestanaVista from '../components/PestanaVista';
 import {
   FIXED_ROLES,
   PERMISSION_RESOURCES,
@@ -9,7 +10,7 @@ import {
 } from '@/shared/hooks/usePermission';
 import type { UserRole } from '@/shared/types';
 import * as api from '../api/permissions.api';
-import type { CustomRole } from '../api/permissions.api';
+import type { CustomRole, SystemDefaults } from '../api/permissions.api';
 import { toast } from '@/shared/hooks/useToast';
 
 type RoleColor = 'rose' | 'violet' | 'sky' | 'emerald' | 'amber';
@@ -20,6 +21,18 @@ const COLOR_BG: Record<RoleColor, string> = {
   sky:     'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
   emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   amber:   'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+};
+
+// Las cuatro acciones que llevan columna propia; el resto van a «Otros».
+// Es el vocabulario del backend: `view`/`edit`, no `read`/`update`.
+const COLUMNAS = ['view', 'create', 'edit', 'delete'];
+
+// Nombre en castellano de cada accion. Cubre tambien las que no llevan columna
+// (`export`, `assign`, `upload`…) porque en movil se listan igual.
+const ACCION_ES: Record<string, string> = {
+  view: 'Ver', create: 'Crear', edit: 'Editar', delete: 'Eliminar',
+  export: 'Exportar', assign: 'Asignar', bulk_action: 'En bloque',
+  upload: 'Subir', sync: 'Sincronizar',
 };
 
 interface RoleEntry {
@@ -35,6 +48,18 @@ export default function RolesPage() {
   const [selectedRole, setSelectedRole] = useState<string>('superadmin');
   const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
   const [customRolesAvailable, setCustomRolesAvailable] = useState<boolean | null>(null);
+  const [pestana, setPestana] = useState<'permisos' | 'vista'>('permisos');
+  const [defaults, setDefaults] = useState<SystemDefaults | null>(null);
+
+  // El catalogo del backend: recursos, acciones, widgets y elementos del menu.
+  // Se pide una vez, no por rol.
+  useEffect(() => {
+    let cancelado = false;
+    api.getSystemDefaults()
+      .then((d) => { if (!cancelado) setDefaults(d); })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, []);
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -56,7 +81,7 @@ export default function RolesPage() {
 
   const allRoles: RoleEntry[] = [
     ...FIXED_ROLES.map((r): RoleEntry => ({ key: r.key, label: r.label, desc: r.desc, color: r.color })),
-    ...customRoles.map((r): RoleEntry => ({ key: `custom:${r.id}`, label: r.nombre, custom: r, color: 'amber', desc: r.descripcion || '' })),
+    ...customRoles.map((r): RoleEntry => ({ key: `custom:${r.id}`, label: r.label, custom: r, color: 'amber', desc: r.description || '' })),
   ];
   const role = allRoles.find((r) => r.key === selectedRole);
 
@@ -64,6 +89,8 @@ export default function RolesPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Roles y Permisos"
+        backTo="/configuracion"
+        backLabel="Configuración"
         subtitle="Define qué puede hacer cada usuario según su rol"
         actions={
           <button
@@ -137,8 +164,8 @@ export default function RolesPage() {
                       <ShieldCheck size={16} weight="bold" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm">{cr.nombre}</p>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">{cr.descripcion || 'Hereda de ' + (cr.base_role || '—')}</p>
+                      <p className="font-semibold text-sm">{cr.label}</p>
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">{cr.description || 'Hereda de ' + (cr.base_role || '—')}</p>
                     </div>
                   </button>
                 );
@@ -163,13 +190,38 @@ export default function RolesPage() {
                 )}
               </header>
 
+              <nav className="flex items-center gap-1 -mt-1">
+                {([['permisos', 'Permisos'], ['vista', 'Vista']] as const).map(([id, texto]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPestana(id)}
+                    className={`h-8 px-3 rounded-lg text-sm font-semibold transition-colors ${
+                      pestana === id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {texto}
+                  </button>
+                ))}
+              </nav>
+
+              {pestana === 'vista' ? (
+                <PestanaVista
+                  roleKey={role.key}
+                  esFijo={!role.custom}
+                  customId={role.custom?.id}
+                  defaults={defaults}
+                />
+              ) : (
+              <>
+
               {/* Desktop table */}
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 pr-4 text-xs font-bold uppercase text-muted-foreground">Recurso</th>
-                      <th className="text-center py-2 px-2 text-xs font-bold uppercase text-muted-foreground">Leer</th>
+                      <th className="text-center py-2 px-2 text-xs font-bold uppercase text-muted-foreground">Ver</th>
                       <th className="text-center py-2 px-2 text-xs font-bold uppercase text-muted-foreground">Crear</th>
                       <th className="text-center py-2 px-2 text-xs font-bold uppercase text-muted-foreground">Editar</th>
                       <th className="text-center py-2 px-2 text-xs font-bold uppercase text-muted-foreground">Eliminar</th>
@@ -181,11 +233,11 @@ export default function RolesPage() {
                       const perms = ROLE_DEFAULT_PERMISSIONS[role.key as UserRole] || {};
                       const all = perms['*'] === true;
                       const has = (a: string): boolean => all || perms[`${res.key}.${a}`] === true;
-                      const others = res.actions.filter((a) => !['read', 'create', 'update', 'delete'].includes(a));
+                      const others = res.actions.filter((a) => !COLUMNAS.includes(a));
                       return (
                         <tr key={res.key} className="border-b border-border last:border-0">
                           <td className="py-2 pr-4 font-medium">{res.label}</td>
-                          {['read', 'create', 'update', 'delete'].map((a) => (
+                          {COLUMNAS.map((a) => (
                             <td key={a} className="py-2 px-2 text-center">
                               {res.actions.includes(a) ? (
                                 has(a) ? (
@@ -218,13 +270,12 @@ export default function RolesPage() {
                   const perms = ROLE_DEFAULT_PERMISSIONS[role.key as UserRole] || {};
                   const all = perms['*'] === true;
                   const has = (a: string): boolean => all || perms[`${res.key}.${a}`] === true;
-                  const others = res.actions.filter((a) => !['read', 'create', 'update', 'delete'].includes(a));
-                  const actionLabels: Record<string, string> = { read: 'Leer', create: 'Crear', update: 'Editar', delete: 'Eliminar' };
+                  const others = res.actions.filter((a) => !COLUMNAS.includes(a));
                   return (
                     <div key={res.key} className="bg-muted/30 border border-border rounded-lg p-3">
                       <p className="text-sm font-semibold mb-2">{res.label}</p>
                       <div className="grid grid-cols-2 gap-y-1 gap-x-3 text-[11px]">
-                        {['read', 'create', 'update', 'delete'].map((a) => (
+                        {COLUMNAS.map((a) => (
                           <div key={a} className="flex items-center gap-1.5">
                             {res.actions.includes(a) ? (
                               has(a) ? (
@@ -235,7 +286,7 @@ export default function RolesPage() {
                             ) : (
                               <span className="text-muted-foreground/30 w-3.5 text-center">—</span>
                             )}
-                            <span className="text-muted-foreground">{actionLabels[a]}</span>
+                            <span className="text-muted-foreground">{ACCION_ES[a] || a}</span>
                           </div>
                         ))}
                       </div>
@@ -254,9 +305,11 @@ export default function RolesPage() {
               </div>
 
               <p className="text-[11px] text-muted-foreground italic pt-2">
-                Los permisos de los 4 roles fijos están codificados en `ROLE_DEFAULT_PERMISSIONS` y no se pueden modificar.
-                Para crear roles con permisos custom espera CRM-228.
+                Los permisos de los cuatro roles del sistema viven en el backend y no se tocan desde aqui.
+                Esta tabla es el espejo de lo que manda, y una prueba se encarga de que no se desvie.
               </p>
+              </>
+              )}
             </>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-12">Selecciona un rol para ver su matriz de permisos.</p>

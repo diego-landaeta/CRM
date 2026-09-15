@@ -2,6 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 // Mocks de dependencias externas (deben declararse antes del import del componente).
+// El componente empezo a usar `useAuth` —entro con el commit de «bugs A+B+C de
+// Dayana/Ana»— y la prueba se quedo montandolo sin proveedor. Reventaba con
+// «useAuth must be used within AuthProvider», y ademas el error se escapaba y
+// ensuciaba la salida de los OTROS ficheros cuando corrian juntos: por eso
+// parecia que ExportDialog y ConversionDialog fallaban por lo mismo, y no era
+// asi. Tarea #70.
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 3, nombre: 'Angel M.', email: 'angel@empresa.com', role: 'admin' },
+    logout: vi.fn(),
+  }),
+}));
+
 vi.mock('@/contexts/ProjectContext', () => ({
   useProjectContext: () => ({ activeProject: { id: 1, nombre: 'Test Project', producto_label: 'Producto' } }),
 }));

@@ -10,9 +10,16 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
+import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+
+// react-hook-form no siempre devuelve un string en `.message`: con campos que
+// son una unión o que pasan por `preprocess` puede venir el objeto de error
+// entero, y `Field` espera texto. Se saca aquí en vez de forzar el tipo.
+const textoError = (e: any): string | undefined =>
+  (typeof e?.message === 'string' ? e.message : undefined);
 
 function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -55,6 +62,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
     defaultValues: {
       nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
       horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+      plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
       presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
       para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
       metodologia_texto: '', faqs_texto: '', profesores_texto: '',
@@ -90,6 +98,11 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
         num_modulos: product.num_modulos != null ? String(product.num_modulos) : '',
         modalidad: product.modalidad || '',
         fecha_inicio_texto: product.fecha_inicio_texto || '',
+        plazas_totales: product.plazas_totales != null ? String(product.plazas_totales) : '',
+        plazas_ocupadas_previas: product.plazas_ocupadas_previas ? String(product.plazas_ocupadas_previas) : '',
+        // Llega como fecha completa; el <input type="date"> solo entiende AAAA-MM-DD.
+        fecha_cierre_convocatoria: product.fecha_cierre_convocatoria
+          ? String(product.fecha_cierre_convocatoria).slice(0, 10) : '',
         presentacion_texto: product.presentacion_texto || '',
         objetivos_texto: product.objetivos_texto || '',
         beneficios_texto: product.beneficios_texto || '',
@@ -103,6 +116,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
       } : {
         nombre: '', descripcion: '', precio: '', moneda: 'EUR', stripe_link: '', sku: '', duracion: '', url_info: '',
         horas: '', num_modulos: '', modalidad: '', fecha_inicio_texto: '',
+        plazas_totales: '', plazas_ocupadas_previas: '', fecha_cierre_convocatoria: '',
         presentacion_texto: '', objetivos_texto: '', beneficios_texto: '', dirigido_a_texto: '',
         para_que_te_prepara_texto: '', por_que_estudiar_texto: '', modulos_texto: '',
         metodologia_texto: '', faqs_texto: '', profesores_texto: '',
@@ -288,14 +302,27 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
               <Tag size={12} /> Categorización
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Select<string>
-                value={categoriaSel}
-                onChange={(v) => { setCategoriaSel(v); setSubcategoriaSel(''); }}
-                options={[
-                  { value: '', label: 'Sin categoría' },
-                  ...allCategoriesWithPath.map(c => ({ value: String(c.id), label: c.label })),
-                ]}
-                ariaLabel="Categoría"
+              {/* Se escribe, no se scrollea (#2).
+                  Aqui habia un desplegable con TODAS las categorias y su ruta
+                  entera concatenada: «Cursos › Para Profesionales › Adicciones
+                  y Conductas Compulsivas», cincuenta y pico lineas, sin forma
+                  de buscar. Encontrar una era bajar a ojo.
+                  Es el mismo buscador que ya resolvia esto con los 787 cursos
+                  de ISEIE: sin acentos y por trozos sueltos, asi que «adicc» o
+                  «prof adicc» llegan igual. */}
+              <BuscadorEnLista
+                opciones={allCategoriesWithPath.map((c: any) => ({
+                  id: c.id,
+                  nombre: c.nombre,
+                  // La ruta va en la nota: el nombre suelto se repite entre
+                  // ramas —hay varias «Adicciones»— y sin ella no se sabe cual
+                  // es. Pero el nombre manda, que es lo que se busca.
+                  nota: c.label === c.nombre ? null : c.label.replace(` › ${c.nombre}`, ''),
+                }))}
+                valor={categoriaSel ? Number(categoriaSel) : null}
+                onElegir={(id) => { setCategoriaSel(id ? String(id) : ''); setSubcategoriaSel(''); }}
+                placeholder="Escribe para buscar una categoría…"
+                sinResultados="Ninguna categoría con «{texto}»."
               />
               <Select<string>
                 value={subcategoriaSel}
@@ -437,6 +464,36 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                 <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
               </Field>
             </div>
+          </div>
+
+          {/* === Convocatoria: plazas y cierre (#86) === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <div className="text-[11px] font-bold uppercase text-muted-foreground">
+              Convocatoria <span className="font-normal normal-case opacity-70">(las plazas salen en las plantillas del proceso comercial)</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <Field label="Plazas de la convocatoria" error={textoError(errors.plazas_totales)}>
+                <input {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={smallInput} />
+              </Field>
+              <Field label="Ya ocupadas antes del CRM" error={textoError(errors.plazas_ocupadas_previas)}>
+                <input {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={smallInput} />
+              </Field>
+              <Field label="Cierre de convocatoria" error={textoError(errors.fecha_cierre_convocatoria)}>
+                <input {...register('fecha_cierre_convocatoria')} type="date" className={smallInput} />
+              </Field>
+            </div>
+            {/* Las ocupadas y las libres no se teclean: las cuenta el servidor desde
+                las ventas. Se enseñan aquí para que se vea el efecto de lo de arriba. */}
+            {product && product.plazas_totales != null && (
+              <div className="text-[11px] text-muted-foreground">
+                Ahora mismo: <strong className="text-foreground">{product.plazas_ocupadas}</strong> ocupadas
+                {' · '}
+                <strong className={Number(product.plazas_libres) <= 0 ? 'text-destructive' : 'text-foreground'}>
+                  {product.plazas_libres}
+                </strong>{' '}libres de {product.plazas_totales}.
+                {' '}Las ocupadas se cuentan de las ventas, no se escriben.
+              </div>
+            )}
           </div>
 
           {/* === Secciones extraídas (texto) === */}

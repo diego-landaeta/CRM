@@ -217,7 +217,7 @@ export default function ExpensesPage() {
         <>
           {/* Desktop table */}
           <div className="hidden lg:block bg-card border border-border rounded-lg overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                 <tr>
                   <th className="text-left px-5 py-2.5 font-bold">Fecha</th>

@@ -1,6 +1,7 @@
 // Ventas: resumen consolidado, por asesora y por cliente. Comparten filtros
 // (proyecto activo, rango de fechas y busqueda) para que los tres cuadren entre si.
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -116,6 +117,9 @@ export default function SalesAnalysisPage() {
 
       {/* Filtros comunes a las tres vistas */}
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+        {/* Los mismos atajos que en Facturacion: un solo componente para que no
+            acaben comportandose distinto en cada pantalla. */}
+        <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
         <label className="text-xs font-semibold text-muted-foreground">Desde</label>
         <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
@@ -215,7 +219,7 @@ export default function SalesAnalysisPage() {
         asesoras.length === 0 ? <EmptyState icon={UsersThree} title="Sin ventas" description="No hay ventas en este filtro." /> : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Asesora</th>
@@ -253,7 +257,7 @@ export default function SalesAnalysisPage() {
         clientes.length === 0 ? <EmptyState icon={User} title="Sin clientes" description="No hay ventas en este filtro." /> : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabla-cifras w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>

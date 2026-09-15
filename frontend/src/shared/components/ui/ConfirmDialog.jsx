@@ -1,12 +1,18 @@
 import Portal from './portal';
 import { X, WarningCircle, Question, Info, CheckCircle } from '@phosphor-icons/react';
 
+// Primera primitiva sobre los tokens de estado (F2 · capa 1). Antes cada tono
+// llevaba su color escrito y su variante `dark:` aparte; ahora una clase sirve
+// para los dos temas, porque el token ya sabe cuál es en cada uno.
+//
+// Es el patrón que se replica en el resto de primitivas: nada de `emerald-50` +
+// `dark:emerald-950/30`, sino `bg-success-soft` + `text-success-soft-foreground`.
 const TONE_STYLES = {
-  default: { icon: Question, iconBg: 'bg-primary/10 text-primary', confirmBg: 'bg-primary hover:bg-primary/90' },
-  destructive: { icon: WarningCircle, iconBg: 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400', confirmBg: 'bg-red-600 hover:bg-red-700' },
-  warning: { icon: WarningCircle, iconBg: 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400', confirmBg: 'bg-amber-600 hover:bg-amber-700' },
-  success: { icon: CheckCircle, iconBg: 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400', confirmBg: 'bg-emerald-600 hover:bg-emerald-700' },
-  info: { icon: Info, iconBg: 'bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400', confirmBg: 'bg-blue-600 hover:bg-blue-700' },
+  default: { icon: Question, iconBg: 'bg-primary/10 text-primary', confirmBg: 'bg-primary text-primary-foreground hover:bg-primary/90' },
+  destructive: { icon: WarningCircle, iconBg: 'bg-destructive-soft text-destructive-soft-foreground', confirmBg: 'bg-destructive text-destructive-foreground hover:bg-destructive/90' },
+  warning: { icon: WarningCircle, iconBg: 'bg-warning-soft text-warning-soft-foreground', confirmBg: 'bg-warning text-warning-foreground hover:bg-warning/90' },
+  success: { icon: CheckCircle, iconBg: 'bg-success-soft text-success-soft-foreground', confirmBg: 'bg-success text-success-foreground hover:bg-success/90' },
+  info: { icon: Info, iconBg: 'bg-info-soft text-info-soft-foreground', confirmBg: 'bg-info text-info-foreground hover:bg-info/90' },
 };
 
 /**
@@ -57,7 +63,7 @@ export default function ConfirmDialog({
               {cancelLabel}
             </button>
             <button onClick={onConfirm} disabled={loading}
-              className={`inline-flex items-center h-9 px-4 rounded-md text-white text-sm font-semibold disabled:opacity-50 ${style.confirmBg}`}>
+              className={`inline-flex items-center h-9 px-4 rounded-md text-sm font-semibold disabled:opacity-50 ${style.confirmBg}`}>
               {loading ? 'Procesando…' : confirmLabel}
             </button>
           </div>

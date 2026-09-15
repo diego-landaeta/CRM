@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/shared/hooks/useToast';
 
 const DEFAULT = {
   hidden_sidebar_items: [],
@@ -39,12 +40,20 @@ export function usePreferences(projectId) {
 
   const update = useCallback(async (changes) => {
     if (!user?.id) return;
-    const next = { ...preferences, ...changes };
-    setPreferences(next);
+    const antes = preferences;
+    setPreferences({ ...preferences, ...changes });
     try {
       await client.patch(`/users/${user.id}/views`, { ...changes, projectId: projectId || null });
     } catch (err) {
+      // Se pintaba el cambio y se tragaba el fallo: quedaba en pantalla algo
+      // que no se habia guardado, y al recargar volvia atras sin explicacion.
+      setPreferences(antes);
       setError(err);
+      toast({
+        title: 'No se pudo guardar',
+        description: err?.response?.data?.error || 'Lo dejamos como estaba.',
+        variant: 'destructive',
+      });
     }
   }, [user?.id, preferences, projectId]);
 

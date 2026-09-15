@@ -81,7 +81,7 @@ function BlockPreview({ b }: { b: TemplateBlock }) {
     case 'coletilla': return <div style={{ ...style, fontStyle: 'italic' }} className="border border-dashed border-amber-300 bg-amber-50/50 rounded px-1">Operación exenta de IVA conforme al art. 20.Uno.9º… <span className="not-italic text-amber-600">(coletilla legal según el régimen)</span></div>;
     case 'items': return (
       <div style={style}>
-        <table className="w-full border-collapse" style={{ fontSize: b.fontSize || 11 }}>
+        <table className="tabla-cifras w-full border-collapse" style={{ fontSize: b.fontSize || 11 }}>
           <thead><tr className="border-b border-slate-400 text-left">
             <th className="py-0.5">{b.cols?.desc || 'Descripción'}</th><th className="text-center">{b.cols?.cant || 'Cant.'}</th><th className="text-right">{b.cols?.precio || 'Precio'}</th><th className="text-right">{b.cols?.total || 'Total'}</th>
           </tr></thead>

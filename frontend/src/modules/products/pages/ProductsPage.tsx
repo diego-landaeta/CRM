@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../hooks/useProducts';
 import { useProject } from '@/shared/hooks/useProject';
+import usePermission from '@/shared/hooks/usePermission';
 import ProductFormDialog from '../components/ProductFormDialog';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -94,6 +95,7 @@ function TreeNode({
 
 export default function ProductsPage() {
   const navigate = useNavigate();
+  const { can } = usePermission();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject } = useProject();
   const projectId = activeProject?.id;
@@ -254,6 +256,7 @@ export default function ProductsPage() {
         subtitle={`Catálogo — ${activeProject.nombre} · ${filteredProducts.length} de ${products.length}${selectedCat ? ` en "${selectedCat.nombre}"` : ''}`}
         actions={
           <div className="flex items-center gap-2">
+            {can('woocommerce.sync') && (
             <button
               onClick={handleSyncWc}
               disabled={syncStarting || syncStatus?.status === 'running'}
@@ -265,6 +268,7 @@ export default function ProductsPage() {
                 {syncStatus?.status === 'running' ? 'Sincronizando…' : 'Sincronizar WC'}
               </span>
             </button>
+            )}
             <button
               onClick={() => setSidebarOpen((o) => !o)}
               className="flex items-center gap-2 h-9 px-3 rounded-md border bg-card text-sm hover:bg-muted"
@@ -272,12 +276,14 @@ export default function ProductsPage() {
               <Funnel size={16} weight={sidebarOpen ? 'fill' : 'regular'} />
               <span className="hidden sm:inline">{sidebarOpen ? 'Ocultar filtros' : 'Filtros'}</span>
             </button>
+            {can('products.create') && (
             <button
               onClick={openCreate}
               className="flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
             >
               <Plus size={16} weight="bold" /> <span className="hidden sm:inline">Nuevo Producto</span>
             </button>
+            )}
           </div>
         }
       />
@@ -414,14 +420,14 @@ export default function ProductsPage() {
                 >
                   Limpiar filtros
                 </button>
-              ) : (
+              ) : can('products.create') ? (
                 <button
                   onClick={openCreate}
                   className="flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
                 >
                   <Plus size={16} weight="bold" /> Crear primer producto
                 </button>
-              )}
+              ) : null}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -465,14 +471,20 @@ export default function ProductsPage() {
                     )}
                   </div>
 
+                  {(can('products.edit') || can('products.delete')) && (
                   <div className="flex gap-2 mt-3 pt-3 border-t">
+                    {can('products.edit') && (
                     <button onClick={() => openEdit(product)} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-md border bg-card text-[13px] font-medium hover:bg-muted">
                       <PencilSimple size={14} /> Editar
                     </button>
+                    )}
+                    {can('products.delete') && (
                     <button onClick={() => setDeleteTarget(product)} title="Desactivar" className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border text-[13px] font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40">
                       <Trash size={14} />
                     </button>
+                    )}
                   </div>
+                  )}
                 </div>
               ))}
             </div>

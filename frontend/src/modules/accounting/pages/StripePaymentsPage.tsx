@@ -207,7 +207,7 @@ export default function StripePaymentsPage() {
             </p>
           </div>
         ) : (
-          <table className="w-full text-[13px]">
+          <table className="tabla-cifras w-full text-[13px]">
             <thead className="bg-muted/50 border-y">
               <tr>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>

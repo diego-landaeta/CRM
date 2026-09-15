@@ -66,6 +66,9 @@ export interface ProjectInvoicingConfig {
   factura_pie_default: string | null;
   factura_serie_default: string;
   factura_metodo_default: string | null;
+  /** Sus gestoras pueden poner el numero al registrar la venta, sin pasar por
+   *  la cola. Por defecto NO: el freno del 14/09 sigue siendo la regla. */
+  numera_al_convertir?: boolean;
   datos_fiscales?: Record<string, unknown>;
 }
 
@@ -109,6 +112,14 @@ export interface Invoice {
   tipo?: 'normal' | 'rectificativa' | 'proforma';
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
+  /** Qué es la factura: la de una venta nueva, una cuota de una venta anterior,
+   *  o una suelta que no cuelga de ninguna venta. */
+  clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
+  /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
+  fecha_de_la_venta?: string | null;
+  /** Sin cobro propio, marcada como pagada, y la venta tiene más facturado que
+   *  cobrado: el dinero de esta factura no existe. */
+  sospecha_duplicada?: boolean;
   motivo_rectificacion?: string | null;
   // Vista por sociedad
   project_id?: number | null;
@@ -210,7 +221,12 @@ export const invoicesApi = {
     if (params.issuerId) qs.set('issuerId', String(params.issuerId));
     return client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?${qs}`);
   },
-  ventasSinFactura: (projectId: number) => client.get<VentaSinFactura[]>(`/invoices/ventas-sin-factura?projectId=${projectId}`),
+  ventasSinFactura: (scope: { projectId?: number | null; issuerId?: number | null }) =>
+    client.get<VentaSinFactura[]>('/invoices/ventas-sin-factura?'
+      + new URLSearchParams(
+          scope.issuerId ? { issuerId: String(scope.issuerId) }
+            : scope.projectId ? { projectId: String(scope.projectId) } : {}
+        ).toString()),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
@@ -222,11 +238,14 @@ export const invoicesApi = {
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
   // Abre el PDF descargandolo CON el token (una navegacion normal de pestana NO
   // manda el header Authorization -> daria 401). Lo abre como blob URL.
-  /** vista='gestor' → copia con el importe NETO liquidado por Stripe (no la del alumno). */
-  openPdf: async (id: number, preliminar = false, vista?: 'gestor'): Promise<void> => {
+  /** vista='gestor' → copia con el importe NETO liquidado por Stripe (no la del alumno).
+   *  enEuros → la misma factura totalizada en euros, no en su divisa. */
+  openPdf: async (id: number, preliminar = false, vista?: 'gestor', enEuros = false): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const qs = preliminar ? '?preliminar=1' : (vista === 'gestor' ? '?vista=gestor' : '');
+    const qs = preliminar ? '?preliminar=1'
+      : vista === 'gestor' ? '?vista=gestor'
+      : enEuros ? '?moneda=eur' : '';
     const res = await fetch(`${base}/api/invoices/${id}/pdf${qs}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',

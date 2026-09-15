@@ -7,13 +7,15 @@ export const TEST_USER = {
 
 /** Hace login y deja la app en /crm/ */
 export async function login(page, user = TEST_USER) {
-  await page.goto('/login');
+  await page.goto('/crm/login');
   await page.waitForLoadState('networkidle');
   // Esperar a que el form este renderizado (Suspense lazy load)
   await page.getByPlaceholder('nombre@empresa.com').waitFor({ timeout: 10_000 });
   await page.getByPlaceholder('nombre@empresa.com').fill(user.email);
-  await page.getByPlaceholder('Tu contrasena').fill(user.password);
-  await page.getByRole('button', { name: /iniciar sesion/i }).click();
+  await page.getByPlaceholder('Tu contraseña').fill(user.password);
+  // Con tilde: el boton dice «Iniciar sesión». Sin ella no coincide y el test
+  // se quedaba treinta segundos esperando a pulsar algo que no existe.
+  await page.getByRole('button', { name: /iniciar sesi[oó]n/i }).click();
   await page.waitForURL(/\/crm\/?$/, { timeout: 10_000 });
 }
 

@@ -1,5 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
+import { yaSeEnvio, registrar } from './email-log.service.js';
+import { dejaPasar, porQueSeParo } from './email-freno.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -22,10 +24,73 @@ async function getApiKey(projectId = null) {
   return envKey;
 }
 
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment }) {
+// Cuantas veces se intenta y cuanto se espera entre intentos. Tres intentos con
+// esperas de 1 s y 3 s cubren el caso normal —un corte de red, un 502 de paso—
+// sin dejar colgada la peticion que lo llamo.
+const INTENTOS = 3;
+const ESPERAS_MS = [1000, 3000];
+
+// Un 4xx no se reintenta: significa que el correo esta mal (direccion invalida,
+// remitente sin verificar, plantilla rota). Reintentarlo es perder el tiempo y
+// gastar cuota. Solo se reintenta lo que puede arreglarse solo: 5xx, 429 y los
+// fallos de red.
+const merecePenaReintentar = (estado) => estado === null || estado === 429 || estado >= 500;
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Manda un correo por Brevo.
+ *
+ * Un parametro opcional que no existia antes:
+ *   · clave  — de idempotencia. Si ya salio un correo con esa clave, NO se manda
+ *              otro. Es lo que evita lo del vigilante del catalogo, que mando el
+ *              mismo aviso cinco veces en una tarde porque cada reinicio del
+ *              proceso lo disparaba de nuevo.
+ *
+ * Es el UNICO parametro nuevo: el «de donde sale» ya lo dicen las `tags` que
+ * todos los llamadores pasan ya, y se guardan tal cual.
+ *
+ * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
+ * queda anotado el intento.
+ */
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+  // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
+  // con varios correos separados por comas (los avisos a administradores).
+  const destinatarios = Array.isArray(to)
+    ? to.map((d) => d?.email || d).filter(Boolean).join(',')
+    : (to?.email || to || '');
+
+  // EL FRENO, antes que nada.
+  //
+  // Fuera de produccion no sale ni un correo a un cliente real. Va lo primero a
+  // proposito: comprobar la clave o pedir la API key antes seria trabajo para
+  // algo que no se va a mandar, y sobre todo, cualquier cosa que se añada
+  // despues nace ya frenada sin que nadie se acuerde.
+  const freno = dejaPasar(destinatarios);
+  if (!freno.pasa) {
+    const porque = porQueSeParo(freno.motivo, freno.bloqueados);
+    logger.warn({ to: destinatarios, subject, motivo: freno.motivo }, `Brevo: ${porque}`);
+    // Se anota como `bloqueado`, NO como `fallido`: no es que Brevo lo
+    // rechazara, es que aqui se decidio no mandarlo. Confundirlos haria que el
+    // registro de fallos pareciera roto en cada entorno de pruebas.
+    await registrar({
+      clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      estado: 'bloqueado', intentos: 0, error: porque,
+    });
+    return { sent: false, reason: 'FRENO_DE_PRUEBAS', motivo: freno.motivo, detalle: porque };
+  }
+
+  // Si ya salio, no se vuelve a mandar.
+  if (await yaSeEnvio(clave)) {
+    logger.info({ clave, to: destinatarios, subject }, 'Brevo: ya se envio antes, no se repite');
+    return { sent: false, reason: 'YA_ENVIADO', repetido: true };
+  }
+
   const apiKey = await getApiKey(projectId);
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
+    await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      estado: 'fallido', intentos: 0, error: 'NO_API_KEY' });
     return { sent: false, reason: 'NO_API_KEY' };
   }
 
@@ -48,30 +113,51 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     payload.attachment = attachment;
   }
 
-  try {
-    const res = await fetch(`${BREVO_API_URL}/smtp/email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': apiKey,
-        'accept': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+  let ultimoFallo = { reason: 'DESCONOCIDO', details: null };
+  // Los intentos que se hicieron DE VERDAD, no el tope. Un 4xx corta a la
+  // primera, y anotar un 3 ahi haria creer que Brevo estuvo fallando.
+  let hechos = 0;
 
-    if (!res.ok) {
+  for (let intento = 1; intento <= INTENTOS; intento++) {
+    hechos = intento;
+    let estadoHttp = null;
+    try {
+      const res = await fetch(`${BREVO_API_URL}/smtp/email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+          'accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      estadoHttp = res.status;
+
+      if (res.ok) {
+        const data = await res.json();
+        logger.info({ messageId: data.messageId, to, subject, intento }, 'Brevo email enviado');
+        await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+          estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
+        return { sent: true, messageId: data.messageId, intentos: intento };
+      }
+
       const err = await res.text();
-      logger.error({ status: res.status, err, to, subject }, 'Brevo error');
-      return { sent: false, reason: `HTTP_${res.status}`, details: err };
+      ultimoFallo = { reason: `HTTP_${res.status}`, details: err };
+      logger.error({ status: res.status, err, to, subject, intento }, 'Brevo error');
+    } catch (err) {
+      ultimoFallo = { reason: 'FETCH_ERROR', details: err.message };
+      logger.error({ err: err.message, to, subject, intento }, 'Brevo fetch error');
     }
 
-    const data = await res.json();
-    logger.info({ messageId: data.messageId, to, subject }, 'Brevo email enviado');
-    return { sent: true, messageId: data.messageId };
-  } catch (err) {
-    logger.error({ err: err.message, to, subject }, 'Brevo fetch error');
-    return { sent: false, reason: 'FETCH_ERROR', details: err.message };
+    // Un fallo permanente no mejora esperando: se corta aqui.
+    if (!merecePenaReintentar(estadoHttp)) break;
+    if (intento < INTENTOS) await esperar(ESPERAS_MS[intento - 1] ?? 3000);
   }
+
+  // Que no salio ya no se queda solo en el log: queda escrito.
+  await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+    estado: 'fallido', intentos: hechos, error: `${ultimoFallo.reason} · ${ultimoFallo.details ?? ''}` });
+  return { sent: false, ...ultimoFallo, intentos: hechos };
 }
 
 // ============================================================

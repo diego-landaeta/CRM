@@ -376,7 +376,7 @@ export default function InvoicingConfigPage() {
           {sequences.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">Aún no se ha emitido ninguna factura en este proyecto.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead className="bg-muted/50 border-y">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs text-muted-foreground">Año</th>

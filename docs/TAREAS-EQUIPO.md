@@ -108,6 +108,85 @@ cosas, el otro cómo se ven.
 
 ---
 
+## El aspecto que buscamos: SuiteDash y Zoho CRM
+
+**No es «que quede bonito». Hay una referencia concreta y está en el repo.**
+
+La maqueta que hizo Diego vive en `frontend/src/modules/suitedash-preview/` —1.347
+lineas— y se puede abrir en **https://360crm.tech/testeo2/suite-dash**. Eso es el
+patron a seguir, no una inspiracion vaga.
+
+Lo que hay que mirar de ella:
+
+- **Tarjetas planas con borde suave**, no cajas con sombra fuerte: 38 usos de
+  `rounded-md`, `shadow-sm`, y bordes de un solo tono.
+- **Bloques con titulo y subtitulo**: «Salud comercial · Estados y canales de los
+  contactos visibles». Cada bloque dice que es y para que sirve.
+- **Iconos en todo**, nunca emojis, y del mismo grosor.
+- **Cifras grandes arriba** —contactos, valor de la cartera, seguimientos
+  vencidos, automatizaciones— y el detalle debajo.
+- **Menu lateral con dos lineas por entrada**: el nombre y, mas pequeño, que hay
+  dentro. «Prospectos · Listado, pipeline y audiencias».
+- **Accesos clave** a la derecha, para no obligar a volver al menu.
+
+De **Zoho CRM** se toma la densidad: mucha informacion por pantalla sin que
+parezca apretada.
+
+### Lo que NO es
+
+No es un tema oscuro con degradados, ni tarjetas flotando con sombras grandes, ni
+colores de marca por todas partes. Es **formal y limpio**: se entiende de un
+vistazo y no cansa despues de ocho horas.
+
+`docs/COMPARATIVA-SUITEDASH.md` tiene el analisis de que cogemos de ellos y que
+no. La maqueta es el como; ese documento es el que.
+
+## Todo funciona en `/testeo` antes de pasar a produccion
+
+**Regla de Diego, 24/08/2026. Sin excepcion.**
+
+Produccion no es donde se prueba. Si algo no se ha visto funcionar en `/testeo`,
+no sube — da igual quien lo haya hecho ni lo pequeño que parezca.
+
+Esto vale tambien para nosotros: hoy se han subido arreglos directamente a
+produccion porque estaban rotas pantallas enteras, y aun asi cada uno se comprobo
+antes en pruebas. Ese es el orden.
+
+## Una tarea no está hecha hasta que se ve
+
+**Regla de Diego, 24/08/2026. No es una preferencia.**
+
+Da igual cuántas líneas tenga el PR: si al abrir `/testeo` no se aprecia la
+diferencia, la tarea **no está terminada**. Ni «a medias», ni «el cimiento está
+puesto»: no está.
+
+Esto salió de un caso concreto. Se entregaron cuatro PRs, 118 ficheros y más de
+3.900 líneas, y al abrir el CRM la respuesta fue: *«lo veo casi todo igual»*.
+Y era cierto — el trabajo estaba en tokens, tipografía y una pestaña de
+Configuración. Todo correcto, todo invisible.
+
+### Qué se entrega con cada tarea
+
+1. **Dónde mirarlo**: el enlace exacto de `/testeo`, no «en Configuración».
+2. **Qué se ve distinto**, en una frase que pueda comprobar quien no escribió el
+   código.
+3. **Una captura de antes y otra de después.** Si no se distinguen, la tarea
+   sigue abierta.
+
+### Por qué, y no es capricho
+
+Quien revisa no lee el código: **abre el CRM**. Si la diferencia no se ve, no se
+puede aprobar, ni corregir, ni saber si vamos bien. Un cimiento invisible puede
+ser necesario —los tokens lo eran— pero entonces **va dentro de la tarea que sí
+se ve**, no como entrega propia.
+
+### La trampa que hay que evitar
+
+Un PR puede decir `Closes #33` sin haber hecho la #33. Pasó: la tarea del marco
+—menú, cabecera, selector de proyecto— se dio por cerrada en un PR que no toca
+`Sidebar.jsx`, `AppLayout.jsx` ni `Navbar.jsx`. **Antes de cerrar una tarea, se
+comprueba en pantalla.**
+
 ## Decisiones que ya se tomaron
 
 Están aquí para no volver a discutirlas cada vez que alguien las encuentra en el
@@ -134,25 +213,34 @@ cerrar y asignar lo hace él. Es acuerdo, no candado: GitHub no sabe separar
 
 ## A1 · Terminar WhatsApp
 
-Hoy la gestora tiene un botón en la lista de prospectos que abre WhatsApp, y ya.
-Las plantillas **viven en el navegador de cada una**: nadie más las ve y nadie
-puede revisarlas. En ISEIE hay además dos versiones incompatibles entre sí.
+**Hecho** *(21/08/2026, rama `feat/angel`)*. Se deja escrito qué era y en qué
+quedó, porque lo de arriba describía un estado que ya no existe.
 
-**Terminado cuando:**
-- Las plantillas están en base de datos, compartidas por proyecto, y se pueden
-  crear y editar desde el panel. *(La migración 122 ya está escrita, sin aplicar
-  — la aplica Diego.)*
-- El botón existe también **en la ficha abierta** del prospecto y en Clientes, no
-  solo en el listado.
-- Al pulsarlo **queda registrada la interacción**. Hoy se hace un POST que si
-  falla no dice nada: WhatsApp se abre igual y no queda rastro. Si falla, se
-  avisa en pantalla.
-- El teléfono se arma con las reglas del backend (`phoneCanonical`), que ya sabe
-  lo del `1` de México y el `9` de Argentina. Hoy el frontal quita todo lo que no
-  sea número y un `0034…` genera un enlace roto.
+- [x] **Plantillas en base de datos**, compartidas por proyecto, con ámbito
+      `compartida` / `personal` — una personal no la ve nadie más, ni un
+      administrador. Se crean y editan en `/whatsapp/plantillas`; el listado de
+      prospectos solo lee, para que no haya dos sitios donde editar lo mismo.
+      **Sigue haciendo falta aplicar la migración 122** (tarea #21, la aplica
+      Diego). Sin ella no hay plantillas, pero nada revienta: se devuelve lista
+      vacía y al intentar crear una se dice que falta un paso de instalación.
+- [x] **El botón, también en la ficha abierta** del prospecto y en Clientes.
+- [x] **La interacción queda registrada, y si falla se dice.** Antes el `catch`
+      estaba vacío con el comentario «silent fail, el link igual abre» — y eso
+      es justo lo que hacía que no se notara: la gestora hablaba con la persona
+      creyendo que quedaba apuntado y en la ficha no había nada.
+- [x] **El teléfono, con el criterio del backend.** Había **tres** `cleanPhone`
+      copiados que no coincidían entre sí, y el helper bueno (`telefono.ts`) no
+      lo usaba nadie. Con el viejo, un `0034…` y un `600123456.0` de Excel
+      pasaban el filtro: se enseñaba el botón, se pulsaba, y el chat no abría.
+      Ahora queda un solo criterio, con sus tests.
 
-**No entra aquí:** el navegador remoto de WhatsApp dentro del CRM. Eso necesita
-servidor propio y coste mensual; es otra decisión.
+**Lo de ISEIE no entra aquí:** es el otro repositorio. En este no hay dos
+implementaciones que unificar.
+
+**No entra aquí tampoco:** el navegador remoto de WhatsApp dentro del CRM. Eso
+necesita servidor propio y coste mensual; es otra decisión. *(El `ChannelPanel`
+que lo intentaba ya no existe, así que los pendientes G y M de
+`backend/PENDIENTE-BACK.md` se quedaron sin objeto.)*
 
 ## A2 · Página de estado del sistema
 
