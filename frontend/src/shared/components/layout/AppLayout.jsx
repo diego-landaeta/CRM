@@ -68,6 +68,15 @@ const CON_SOCIEDAD_OK = [
   // factura-- y las ventas sin factura por sus campus. Diego: «si elijo facturas
   // y estoy eligiendo CEDIA debe de salir, no debe de salir esto».
   /^\/finanzas\/facturas$/,
+  // Prospectos, su kanban y Clientes. La pantalla y el servidor YA saben sumar
+  // varios campus --mandan `projectIds` y el modelo los recibe--: lo unico que
+  // faltaba era que el muro les dejara pasar. Diego, 15/09: «en prospectos si
+  // elijo empresas deben de salir».
+  /^\/prospectos$/,
+  /^\/prospectos\/pipeline$/,
+  /^\/prospectos\/\d+$/,
+  /^\/clientes$/,
+  /^\/clientes\/\d+$/,
   // El proceso comercial (#89 · #90). La cola suma los campus de la empresa —el
   // servidor ya sabia recibir varios proyectos— y la pantalla de los pasos
   // pregunta cual, pero solo entre los de esa empresa. Diego, 14/09: «estos
