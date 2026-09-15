@@ -27,6 +27,14 @@ const euros = (n: number | string) =>
 
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
 
+/** Los tres estados que se ponen a mano, con el rotulo que pidio Diego. */
+type EstadoDelTramite = 'pendiente' | 'notificada' | 'falta_factura';
+const ESTADOS_DEL_TRAMITE: [EstadoDelTramite, string][] = [
+  ['pendiente', 'Pendiente'],
+  ['notificada', 'Notificada'],
+  ['falta_factura', 'Falta factura'],
+];
+
 function mesActual() {
   const h = new Date();
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
@@ -51,6 +59,7 @@ export default function ComisionesTutoresPage() {
   const [aviso, setAviso] = useState<AvisoAlTutor | null>(null);
   const [preparando, setPreparando] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [moviendo, setMoviendo] = useState<number | null>(null);
   const [resumen, setResumen] = useState<ResumenComision[]>([]);
   const [lineas, setLineas] = useState<ComisionReal[]>([]);
   const [sinFormacion, setSinFormacion] = useState<PagoSinFormacion[]>([]);
@@ -136,6 +145,21 @@ export default function ComisionesTutoresPage() {
       // el sitio equivocado, y el de Brevo suele ser el remitente sin verificar.
       toast({ title: 'No se ha enviado', description: err instanceof Error ? err.message : '', variant: 'destructive' });
     } finally { setEnviando(false); }
+  }
+
+  /**
+   * Mueve el tramite de una linea. No mueve el dinero: las tres siguen contando
+   * como que se le debe, asi que «Por pagar» no cambia al marcar «notificada».
+   */
+  async function moverEstado(l: ComisionReal, estado: EstadoDelTramite) {
+    setMoviendo(l.id);
+    try {
+      const r = await tutoresApi.cambiarEstadoComision(l.id, estado);
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se ha podido cambiar', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    } finally { setMoviendo(null); }
   }
 
   async function pagar(r: ResumenComision) {
@@ -361,7 +385,21 @@ export default function ComisionesTutoresPage() {
                                 ) : l.estado === 'revertida' ? (
                                   <span className="text-muted-foreground">revertida</span>
                                 ) : (
-                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">pendiente</span>
+                                  /* Las tres que todavia no han cobrado se eligen aqui.
+                                     Pagada y revertida no estan en la lista a proposito:
+                                     cada una tiene su boton y deja rastro de quien y
+                                     cuando. Cobrar no es cambiar una casilla. */
+                                  <select
+                                    value={l.estado}
+                                    disabled={!esAdmin || moviendo === l.id}
+                                    onChange={(e) => moverEstado(l, e.target.value as EstadoDelTramite)}
+                                    aria-label={`Estado de la comisión de ${l.formacion}`}
+                                    className="text-xs font-semibold bg-transparent border border-border rounded px-1.5 py-0.5 text-amber-600 dark:text-amber-400 disabled:opacity-60"
+                                  >
+                                    {ESTADOS_DEL_TRAMITE.map(([valor, rotulo]) => (
+                                      <option key={valor} value={valor}>{rotulo}</option>
+                                    ))}
+                                  </select>
                                 )}
                               </td>
                               <td className="py-1.5 pl-3 text-right">

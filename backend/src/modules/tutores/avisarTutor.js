@@ -215,10 +215,18 @@ export async function avisar({ tutorId, periodo, userId }) {
     throw new AppError(porque, 502, r?.reason || 'NO_ENVIADO');
   }
 
+  // Queda «notificada», que es lo que pidio Diego, y ademas se anota CUANDO.
+  //
+  // Puede hacerse porque `notificada` sigue contando como que se le debe —lo
+  // que se debe es lo que no esta pagada ni revertida—, asi que avisar a un
+  // tutor ya no lo saca de «Por pagar». Antes de la 163 habria sido justo eso.
+  //
+  // El estado dice POR DONDE VA; `avisado_at`, CUANDO fue. No sobra ninguno: si
+  // alguien lo mueve a «falta factura» a mano, la fecha del aviso se conserva.
   await query(
     `UPDATE tutor_commissions
-        SET avisado_at = NOW(), avisado_por = $3
-      WHERE tutor_id = $1 AND periodo = $2 AND estado = 'pendiente'`,
+        SET estado = 'notificada', avisado_at = NOW(), avisado_por = $3
+      WHERE tutor_id = $1 AND periodo = $2 AND estado NOT IN ('pagada', 'revertida')`,
     [tutorId, periodo, userId || null],
   );
 

@@ -80,7 +80,9 @@ export interface AjustesTutores {
 export interface ComisionReal {
   id: number;
   periodo: string;
-  estado: 'pendiente' | 'pagada' | 'revertida';
+  /** Los tres primeros significan que SIGUE SIN COBRAR: dicen por donde va el
+   *  tramite, no donde esta el dinero. */
+  estado: 'pendiente' | 'notificada' | 'falta_factura' | 'pagada' | 'revertida';
   base_calculo: string;
   pct: string;
   importe: string;
@@ -232,6 +234,11 @@ export const tutoresApi = {
 
   avisarTutor: (tutorId: number, periodo: string) =>
     client.post('/tutores/comisiones/avisar', { tutorId, periodo }) as Promise<ApiResponse<{ enviado: boolean; a: string; total: number }>>,
+
+  // Mover el tramite de una comision. Solo entre las tres que no han cobrado:
+  // pagar y revertir tienen su propio camino, que deja rastro de quien y por que.
+  cambiarEstadoComision: (id: number, estado: 'pendiente' | 'notificada' | 'falta_factura') =>
+    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<{ id: number; estado: string }>>,
 
   borrarColaboracion: (id: number) =>
     client.delete(`/tutores/colaboraciones/${id}`) as Promise<ApiResponse<{ borrada: boolean; desactivada: boolean; comisiones: number }>>,

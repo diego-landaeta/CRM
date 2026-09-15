@@ -280,7 +280,7 @@ export async function listarComisiones(req, res, next) {
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      estado: ['pendiente', 'pagada', 'revertida'].includes(req.query.estado) ? req.query.estado : null,
+      estado: model.ESTADOS_COMISION.includes(req.query.estado) ? req.query.estado : null,
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }
@@ -516,6 +516,15 @@ export async function avisarTutor(req, res, next) {
       periodo,
       userId: req.user?.userId,
     });
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
+}
+
+/** PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero. */
+export async function cambiarEstadoComision(req, res, next) {
+  try {
+    const r = await model.cambiarEstadoComision(
+      Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
     res.json({ success: true, data: r });
   } catch (e) { next(e); }
 }
