@@ -1,6 +1,6 @@
 # Estado y pendientes
 
-Al 4 de septiembre de 2026. Los diagramas se dibujan solos en GitHub.
+Al 15 de septiembre de 2026. Los diagramas se dibujan solos en GitHub.
 
 Dos CRMs con **paridad absoluta**: lo que se hace en uno se hace en el otro,
 salvo la marca y las rutas.
@@ -10,6 +10,65 @@ salvo la marca y las rutas.
 | Producción | `360crm.tech/crm/` | `crm.iseie.com` |
 | Pruebas | `360crm.tech/testeo/` | `crm.iseie.com/staging/` |
 | Proyectos | 9 | 1 |
+
+---
+
+## Dónde nos quedamos · 15 de septiembre
+
+**Todo lo que Ángel y Fabián hicieron el 14 y el 15 está en `/testeo`.** Vivía en
+tres ramas sueltas y no estaba ni en pruebas ni en producción: treinta y nueve
+commits que nadie podía ver.
+
+Lo que hay que mirar allí:
+
+- **WhatsApp**, las seis tareas (#128, #138, #73, #129). Quién lo usa se decide
+  por persona y no por rol; las etiquetas de la gestora se traen, se ponen, se
+  ven en la ficha del prospecto y filtran; mayúsculas+enter hace salto de línea
+  y el mensaje sale entero; «el último mes» ya trae historial.
+- **Tutores y comisiones** (#145, #130): «Avisar tutor» con la cuenta hecha,
+  los estados Pendiente · Notificada · Falta factura, editar el porcentaje y las
+  fechas sin quitar la formación, y reactivar una desactivada por error.
+- **Facturación**: los datos fiscales de CEDIA e ICTESS, y no se emite una
+  factura con un CIF que no existe.
+- **Correo**: la bandeja del CRM con lo que ha mandado y su texto (#146), copia
+  en «Enviados», y las 18 plantillas del proceso comercial rellenando sus huecos.
+- **Clientes y Ventas** llaman a lo que se vende por su nombre (#44).
+
+### Lo que chocó, y cómo quedó
+
+Ángel y Diego escribieron **lo mismo dos veces** el mismo día, de la misma frase:
+los estados de la comisión del tutor. Las dos migraciones hacen lo mismo y las
+dos usan `DROP ... IF EXISTS`, así que conviven. Pero `cambiarEstadoComision`
+quedó **declarada dos veces** en el modelo y en el controlador, y eso dejaba el
+módulo de tutores sin cargar: se quedó la versión que explica por qué no se
+puede, con el `exigirGestion` que a la otra le faltaba.
+
+Los números **156, 157 y 158** estaban cogidos por los dos. Los de Diego ya
+corren en las cuatro bases, así que los de WhatsApp se movieron a **167-170**.
+
+### El freno de los correos a tutores
+
+Hay **cuatro** caminos al buzón de un tutor, no dos:
+
+| | dónde | estado |
+|---|---|---|
+| darle de alta | `users/user.service.js` | parado |
+| cambiarle el correo | `users/user.service.js` | parado |
+| «Avisar tutor», el mensual | `tutores/avisarTutor.js` | parado |
+| el cron «Hoy te han comprado» | `jobs/avisoTutorScheduler.js` | parado, y sin arrancar en `app.js` |
+
+La constante vive en **`shared/config/frenoTutores.js`** y la leen los cuatro.
+El día que se levante, se levanta una vez —y antes hay que arreglar el enlace
+de contraseña de Brevo, que sigue roto—.
+
+En ISEIE no existen ni `avisarTutor` ni ese cron: allí basta con el freno que ya
+tiene `user.service.js`.
+
+### Lo que NO está en testeo
+
+Los treinta y nueve commits son **solo de MultiCRM**. Ángel tiene un commit en
+ISEIE (7 de septiembre) y Fabián ninguno, así que la paridad de todo esto está
+sin hacer y es un trabajo aparte.
 
 ---
 
