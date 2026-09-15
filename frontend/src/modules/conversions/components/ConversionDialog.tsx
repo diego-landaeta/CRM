@@ -12,10 +12,10 @@ import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
 
-// Flujo nuevo de facturación (ventana Presupuesto/Factura + auto-emisión al
-// pagar) SOLO en entornos con VITE_FACTURACION_V2=true (staging). En producción
-// la conversión se registra y cierra como siempre, sin ventana.
-const FACT_V2 = String(import.meta.env.VITE_FACTURACION_V2 || '') === 'true';
+// La ventana de documento tras registrar la venta sale SIEMPRE, en los dos
+// entornos. Estuvo detrás de `VITE_FACTURACION_V2` --solo encendido en staging--
+// y por eso en producción no se vio nunca: ni el aviso de que la factura no se
+// emite sola, ni el número al convertir. Ver el porqué en `handleSubmit`.
 
 // Construye los conceptos del documento a partir de la conversión creada.
 function buildDocItems(c: Conversion): InvoiceItem[] {
@@ -472,27 +472,30 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           }
         }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-        if (!FACT_V2) {
-          // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
-          onCreated?.(res.data);
-          onClose();
-        } else {
-          /* Desde el freno del 14/09 la factura YA NO sale sola: el cobro se
-             queda en la cola de facturacion y alguien la emite poniendo el
-             numero. Quien registra la venta tiene que saber donde ha ido, o
-             se queda esperando una factura que nadie va a emitir.
+        /*
+          EL PASO DEL DOCUMENTO SALE SIEMPRE.
 
-             Diego: «o hacemos que ponga: conversion creada, revisa cola de
-             factura para emitir». */
-          toast({
-            title: '✓ Conversión creada',
-            description: pagoMode !== 'none'
-              ? 'El cobro está en la cola de facturación. Entra en Facturación para emitir la factura y ponerle número.'
-              : 'Sin cobro registrado, así que no hay nada que facturar todavía.',
-          });
-          setCreated(res.data);
-          setDocPhase('choose');
-        }
+          Estaba detras de `VITE_FACTURACION_V2`, que solo se enciende en
+          staging. O sea que en PRODUCCION esta ventana no se ha visto nunca: se
+          registraba la venta y se cerraba con un aviso que se va solo.
+
+          Eso dejaba invisibles aqui dos cosas pedidas para aqui: el aviso grande
+          de que la factura NO se emite sola y va a la cola (Diego, 14/09: «le di
+          a convertir y no me salio en grande») y el numero de factura al
+          convertir (15/09). Diego, probando con «Sin pago»: «no me salio nada,
+          solo lo de abajo».
+
+          El interruptor se queda para lo otro que gatea --el borrador de
+          `InvoiceButton`--, que eso si sigue siendo distinto entre entornos.
+        */
+        toast({
+          title: '✓ Conversión creada',
+          description: pagoMode !== 'none'
+            ? 'El cobro está en la cola de facturación. Entra en Facturación para emitir la factura y ponerle número.'
+            : 'Sin cobro registrado, así que no hay nada que facturar todavía.',
+        });
+        setCreated(res.data);
+        setDocPhase('choose');
       }
     } catch (err: any) {
       toast({
