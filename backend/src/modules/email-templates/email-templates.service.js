@@ -47,14 +47,28 @@ export function renderTemplate(template, ctx) {
 }
 
 // CRUD basico
+/**
+ * Las plantillas que puede ver y editar un proyecto: las SUYAS y las de la casa.
+ *
+ * `project_id IS NULL` significa «comun a todos», y hasta ahora no salia en
+ * ninguna parte: `WHERE t.project_id = $1` nunca casa con NULL, asi que una
+ * plantilla comun quedaba invisible eligieras el proyecto que eligieras.
+ *
+ * Lo noto el aviso mensual al tutor, que es comun a proposito —un tutor cobra de
+ * varios proyectos y el correo es uno solo—: se creo «editable desde el CRM» y
+ * no habia forma de abrirla. Editable que no se puede abrir es no editable.
+ *
+ * Las comunes van PRIMERO: son pocas y son las que alguien busca cuando entra
+ * aqui a cambiar un texto que sale en todo el CRM.
+ */
 export async function listByProject(projectId, { includeInactive = false } = {}) {
-  const sql = includeInactive
-    ? `SELECT t.*, u.nombre AS created_by_nombre
-       FROM email_templates t LEFT JOIN users u ON u.id = t.created_by
-       WHERE t.project_id = $1 ORDER BY t.created_at DESC`
-    : `SELECT t.*, u.nombre AS created_by_nombre
-       FROM email_templates t LEFT JOIN users u ON u.id = t.created_by
-       WHERE t.project_id = $1 AND t.active = true ORDER BY t.created_at DESC`;
+  const sql = `SELECT t.*, u.nombre AS created_by_nombre,
+                      (t.project_id IS NULL) AS es_comun
+                 FROM email_templates t
+                 LEFT JOIN users u ON u.id = t.created_by
+                WHERE (t.project_id = $1 OR t.project_id IS NULL)
+                  ${includeInactive ? '' : 'AND t.active = true'}
+                ORDER BY es_comun DESC, t.created_at DESC`;
   const { rows } = await query(sql, [projectId]);
   return rows;
 }
