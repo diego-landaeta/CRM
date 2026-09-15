@@ -22,6 +22,21 @@ export interface Tutor {
   es_de_este_proyecto: boolean;
 }
 
+/** Lo que se le va a mandar al tutor, antes de mandarlo. */
+export interface AvisoAlTutor {
+  tutorId: number;
+  nombre: string;
+  email: string;
+  tieneIban: boolean;
+  periodo: string;
+  mes: string;
+  pendiente: number;
+  formaciones: string[];
+  cuenta: { base: number; iva: number; retencion: number; total: number };
+  asunto: string;
+  html: string;
+}
+
 export interface Colaboracion {
   id: number;
   tutor_id: number;
@@ -95,6 +110,9 @@ export interface ResumenComision {
   /** Para poder pagarle sin ir a buscar su ficha. */
   tutor_email: string | null;
   tutor_iban: string | null;
+  /** Cuando se le mando el correo de «Avisar tutor». No es un estado del
+   *  dinero: una comision avisada sigue contando en `pendiente`. */
+  avisado_at: string | null;
 }
 
 export interface FormacionSinTutor {
@@ -206,6 +224,14 @@ export const tutoresApi = {
 
   editarColaboracion: (id: number, datos: Record<string, unknown>) =>
     client.patch(`/tutores/colaboraciones/${id}`, datos) as Promise<ApiResponse<Colaboracion>>,
+
+  // «Avisar tutor» (#145 / nota del 14/09). La vista previa y el envio van
+  // separados: nadie deberia mandar un correo sin ver antes lo que sale.
+  previoDelAviso: (tutorId: number, periodo: string) =>
+    client.get(`/tutores/comisiones/aviso?tutorId=${tutorId}&periodo=${periodo}`) as Promise<ApiResponse<AvisoAlTutor>>,
+
+  avisarTutor: (tutorId: number, periodo: string) =>
+    client.post('/tutores/comisiones/avisar', { tutorId, periodo }) as Promise<ApiResponse<{ enviado: boolean; a: string; total: number }>>,
 
   borrarColaboracion: (id: number) =>
     client.delete(`/tutores/colaboraciones/${id}`) as Promise<ApiResponse<{ borrada: boolean; desactivada: boolean; comisiones: number }>>,
