@@ -642,20 +642,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               )}
             </p>
           )}
-          {false && (
-            <p className="text-xs text-sky-800 dark:text-sky-300 mt-1 leading-relaxed">
-              Del dinero que entró en estas fechas,{' '}
-              <strong>{fmt(totales.cobrosDelPeriodo.matricula.importe)}</strong> son de ventas
-              nuevas y <strong>{fmt(totales.cobrosDelPeriodo.cuotas.importe)}</strong> son{' '}
-              {totales.cobrosDelPeriodo.cuotas.n} {totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}{' '}
-              de ventas anteriores.{' '}
-              <button type="button" onClick={abrirCuotas}
-                className="font-semibold underline hover:no-underline">
-                {verCuotas ? 'Ocultar el detalle' : 'Ver cuáles son'}
-              </button>
-            </p>
-          )}
-
           {verCuotas && (
             <div className="mt-2 rounded-md border border-sky-200 dark:border-sky-900 bg-card overflow-x-auto">
               {cargandoCuotas ? (
