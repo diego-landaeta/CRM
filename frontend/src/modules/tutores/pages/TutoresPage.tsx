@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank, MagnifyingGlass} from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, Bank, MagnifyingGlass, PencilSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -67,6 +67,9 @@ export default function TutoresPage() {
   const [cargando, setCargando] = useState(true);
   const [popupAlta, setPopupAlta] = useState(false);
   const [popupColab, setPopupColab] = useState(false);
+  // Que fila se esta editando, y con que valores mientras se teclea.
+  const [editando, setEditando] = useState<number | null>(null);
+  const [edicion, setEdicion] = useState({ pct: '', desde: '', hasta: '' });
   const [cursoColab, setCursoColab] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState<number | null>(null);
@@ -358,6 +361,31 @@ export default function TutoresPage() {
    * Es lo contrario de «Quitar», y la diferencia importa: quitar borra la fila
    * y con ella el rastro de por que se le pago a ese tutor lo que se le pago.
    */
+  /**
+   * Editar una formacion ya asignada: el porcentaje y las fechas.
+   *
+   * Hasta ahora, para cambiar un 10 % habia que QUITAR la formacion y volver a
+   * añadirla — y quitarla borra el historico de por que se le pago al tutor lo
+   * que se le pago. El endpoint para editarla existia desde el principio
+   * (`editarColaboracionSchema` acepta pct, desde y hasta); faltaba la pantalla.
+   */
+  async function guardarColaboracion(c: Colaboracion) {
+    setGuardando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, {
+        pct: Number(edicion.pct),
+        desde: edicion.desde,
+        // Vaciar «hasta» significa «en adelante», no «no lo cambies».
+        hasta: edicion.hasta || null,
+      });
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      setEditando(null);
+      if (elegido) cargarColabs(elegido);
+    } catch (err) {
+      toast({ title: 'No se ha podido guardar', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+
   async function reactivarColaboracion(c: Colaboracion) {
     setGuardando(true);
     try {
@@ -577,11 +605,36 @@ export default function TutoresPage() {
                         <tr key={c.id}>
                           <td className="py-2 pr-3">{c.formacion}</td>
                           <td className="py-2 px-3 text-muted-foreground">{c.proyecto}</td>
-                          <td className="py-2 px-3 text-right tabular-nums font-semibold">{Number(c.pct)} %</td>
-                          <td className="py-2 px-3 tabular-nums">{soloFecha(c.vigente_desde)}</td>
-                          <td className="py-2 px-3 tabular-nums text-muted-foreground">
-                            {soloFecha(c.vigente_hasta) || 'en adelante'}
-                          </td>
+                          {editando === c.id ? (
+                            <>
+                              <td className="py-2 px-3 text-right">
+                                <input type="number" step="0.5" min="0" max="100" value={edicion.pct}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, pct: e.target.value }))}
+                                  aria-label="Porcentaje"
+                                  className="w-16 h-8 px-2 rounded border border-border bg-background text-sm text-right tabular-nums" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input type="date" value={edicion.desde}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, desde: e.target.value }))}
+                                  aria-label="Desde"
+                                  className="h-8 px-1.5 rounded border border-border bg-background text-sm" />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input type="date" value={edicion.hasta}
+                                  onChange={(e) => setEdicion((v) => ({ ...v, hasta: e.target.value }))}
+                                  aria-label="Hasta (vacío = en adelante)"
+                                  className="h-8 px-1.5 rounded border border-border bg-background text-sm" />
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2 px-3 text-right tabular-nums font-semibold">{Number(c.pct)} %</td>
+                              <td className="py-2 px-3 tabular-nums">{soloFecha(c.vigente_desde)}</td>
+                              <td className="py-2 px-3 tabular-nums text-muted-foreground">
+                                {soloFecha(c.vigente_hasta) || 'en adelante'}
+                              </td>
+                            </>
+                          )}
                           <td className="py-2 px-3">
                             {c.rige_hoy ? (
                               <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
@@ -600,7 +653,36 @@ export default function TutoresPage() {
                                 reactivarla existia desde el principio —`activa` ya
                                 estaba en `editarColaboracionSchema`—; lo que
                                 faltaba era el boton. */}
-                            {!c.activa && (
+                            {editando === c.id ? (
+                              <>
+                                <button type="button" onClick={() => guardarColaboracion(c)} disabled={guardando}
+                                  className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-primary hover:underline">
+                                  Guardar
+                                </button>
+                                <button type="button" onClick={() => setEditando(null)} disabled={guardando}
+                                  className="text-xs text-muted-foreground hover:text-foreground mr-3">
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              /* Editar el porcentaje y las fechas SIN quitar la
+                                 formacion: quitarla borra el historico de por
+                                 que se le pago lo que se le pago. */
+                              <button type="button"
+                                onClick={() => {
+                                  setEditando(c.id);
+                                  setEdicion({
+                                    pct: String(Number(c.pct)),
+                                    desde: soloFecha(c.vigente_desde) || '',
+                                    hasta: soloFecha(c.vigente_hasta) || '',
+                                  });
+                                }}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-muted-foreground hover:text-foreground">
+                                <PencilSimple size={13} weight="bold" />
+                                Editar
+                              </button>
+                            )}
+                            {!c.activa && editando !== c.id && (
                               <button type="button" onClick={() => reactivarColaboracion(c)}
                                 disabled={guardando}
                                 className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
