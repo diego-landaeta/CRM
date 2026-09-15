@@ -191,7 +191,10 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       {choiceOpen && (
         <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+          {/* `text-left` a proposito: este cuadro se pinta DENTRO de la celda de
+              la tabla, que es `text-right`, y el alineado se hereda por el DOM
+              aunque el modal flote encima. Se veia todo pegado a la derecha. */}
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5 text-left" onClick={e => e.stopPropagation()}>
             {sinPago ? (
               <>
                 <h3 className="font-semibold text-base mb-1">¿Emitir una proforma?</h3>

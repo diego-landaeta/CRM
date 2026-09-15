@@ -6,6 +6,7 @@ import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phos
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { invoicesApi, invoiceFaltantes, type Invoice, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
+import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
@@ -114,6 +115,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   // Factura ya emitida automáticamente por el pago → diálogo de completar datos.
   const [emitInv, setEmitInv] = useState<Invoice | null>(null);
   const notifiedRef = useRef(false);
+  /*
+    Quien puede numerar aqui mismo, y el numero.
+
+    Diego, 15/09: «que salga al convertir, puedas colocar el numero de factura;
+    solo es para unos y para otros. CEDIA y ICTESS SI lo pueden hacer, porque
+    esas gestoras llevan facturacion aun».
+
+    Por defecto NO sale: la venta va a la cola y se factura desde alli, que es el
+    freno del 14/09. El interruptor vive en la empresa emisora.
+  */
+  const [numeraAqui, setNumeraAqui] = useState(false);
+  const [numero, setNumero] = useState('');
+  const [sugerido, setSugerido] = useState('');
   // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
   const finishAndClose = () => {
     if (created && !notifiedRef.current) { notifiedRef.current = true; onCreated?.(created); }
@@ -261,6 +275,23 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     }
   }, [open, lead]);
 
+  // El interruptor de la empresa y el siguiente numero libre. Se piden al llegar
+  // al paso del documento, no antes: si la venta no llega a registrarse, no se
+  // ha preguntado nada.
+  useEffect(() => {
+    if (docPhase !== 'choose' || !projectId) return;
+    invoicesApi.getConfig(projectId)
+      .then((r) => setNumeraAqui(Boolean(r?.success && r.data?.numera_al_convertir)))
+      .catch(() => setNumeraAqui(false));
+    client.get<{ siguiente: number }>(`/invoices/siguiente-numero?projectId=${projectId}`)
+      .then((r) => {
+        if (!r?.success) return;
+        setSugerido(String(r.data.siguiente));
+        setNumero(String(r.data.siguiente));
+      })
+      .catch(() => { /* se escribe a mano */ });
+  }, [docPhase, projectId]);
+
   if (!open) return null;
 
   // Elegir "Factura" en el paso post-venta: si el pago YA generó la factura
@@ -308,6 +339,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           leadId={lead?.id ?? created.lead_id ?? 0}
           conversionId={created.id}
           docTipo={docPhase}
+          // El numero que se eligio en el paso anterior. Solo sale cuando la
+          // empresa numera al convertir; si no, va sin numero y lo pone el
+          // contador al emitir desde la cola.
+          numero={numeraAqui && numero ? Number(numero) : null}
           defaultItems={buildDocItems(created)}
           defaultNotas={created.notas_pago || undefined}
           defaultIvaExento={created.iva_exento}
@@ -455,8 +490,42 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               </div>
               <div>
                 <h3 className="font-semibold text-base">Venta registrada</h3>
-                <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {numeraAqui
+                    ? '¿Le pones ya el número de factura, o la mandas a la cola de facturación?'
+                    : 'Ya está en la cola de facturación. La factura se emite desde allí, a mano.'}
+                </p>
               </div>
+
+              {/* El numero, aqui mismo, para quien lo lleva asi. El resto ve el
+                  aviso de la cola y nada mas: ese es el freno del 14/09. */}
+              {numeraAqui ? (
+                <div className="text-left rounded-lg border border-border bg-muted/30 p-3">
+                  <label className="block text-sm">
+                    <span className="font-medium">Número de factura</span>
+                    <input type="number" min="1" value={numero}
+                      onChange={(e) => setNumero(e.target.value)}
+                      className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums" />
+                  </label>
+                  {sugerido && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      El siguiente libre es el <b>{sugerido}</b>. Puedes poner ese u otro.
+                    </p>
+                  )}
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">
+                    ⚠ Comprueba la numeración en el Excel de facturación primero. Si hay discrepancia,
+                    contacta con soporte; y si hace falta, genera la factura manualmente y avisa.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-left rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3">
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    <b>La factura no se emite sola.</b> El cobro entra en la <b>cola de facturación</b> y
+                    alguien la emite desde <b>Finanzas › Facturación</b>, poniendo el número a mano.
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={() => setDocPhase('proforma')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
@@ -471,7 +540,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                   <span className="text-[10px] text-muted-foreground">Documento fiscal</span>
                 </button>
               </div>
-              <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">Ahora no</button>
+              <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">
+                {numeraAqui ? 'Ahora no: dejarla en la cola de facturación' : 'Cerrar'}
+              </button>
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-3">

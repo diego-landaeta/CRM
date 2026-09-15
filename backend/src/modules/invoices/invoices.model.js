@@ -1527,9 +1527,15 @@ export async function getProjectInvoicerData(projectId) {
   // solo aporta nombre/defaults del proyecto. No se referencia datos_fiscales
   // porque esa columna no existe en todas las instancias.
   const { rows } = await query(
-    `SELECT id, nombre, slug, logo_url,
-            factura_pie_default, factura_serie_default, factura_metodo_default
-     FROM projects WHERE id = $1`,
+    `SELECT p.id, p.nombre, p.slug, p.logo_url,
+            p.factura_pie_default, p.factura_serie_default, p.factura_metodo_default,
+            -- Si las gestoras de esa empresa pueden numerar al registrar la venta,
+            -- en vez de mandarla a la cola. Va en la empresa: CEDIA lleva siete
+            -- campus y en los siete decide la misma gente.
+            COALESCE(e.numera_al_convertir, false) AS numera_al_convertir
+     FROM projects p
+     LEFT JOIN invoice_issuers e ON e.id = p.sociedad_emisora_id
+    WHERE p.id = $1`,
     [projectId]
   );
   return rows[0] || null;
