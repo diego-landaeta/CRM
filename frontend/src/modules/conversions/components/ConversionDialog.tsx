@@ -591,16 +591,20 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
               {/* En columna y con hueco: son dos botones en linea y sin esto
                   salian pegados, leyendose como una sola frase. */}
-              <div className="flex flex-col items-center gap-2">
-                {/* El otro tipo sigue estando, pero pequeño: hay casos sueltos y
-                    no es cuestion de tapiarlos. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* El otro tipo sigue estando: hay casos sueltos y no es cuestion
+                    de tapiarlos. Con borde y fondo, que como texto subrayado no
+                    se leian como botones. */}
                 <button type="button"
                   onClick={() => (sinPagoVenta ? handleFacturaChoice() : setDocPhase('proforma'))}
-                  className="text-xs text-muted-foreground hover:underline">
-                  {sinPagoVenta ? 'Necesito emitir la factura igualmente' : 'Prefiero un presupuesto (sin valor fiscal)'}
+                  className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold
+                             hover:border-primary hover:bg-muted/50 transition-colors">
+                  {sinPagoVenta ? 'Emitir factura igualmente' : 'Prefiero un presupuesto'}
                 </button>
-                <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">
-                  {numeraAqui ? 'Ahora no: dejarla en la cola de facturación' : 'Cerrar'}
+                <button type="button" onClick={finishAndClose}
+                  className="h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold
+                             hover:border-primary hover:bg-muted/50 transition-colors">
+                  {numeraAqui ? 'Ahora no: dejar en la cola' : 'Cerrar'}
                 </button>
               </div>
             </div>
