@@ -164,7 +164,11 @@ export function componerCorreo({ datos, subject, cuerpo }) {
   const conHtml = cuerpo
     .replace('{{formaciones}}', `<ul>${datos.formaciones.map((f) => `<li>${f}</li>`).join('')}</ul>`)
     .replace('{{calculo}}', tablaDeLaCuenta(datos.cuenta));
-  return { asunto: renderTemplate(subject, ctx), html: renderTemplate(conHtml, ctx) };
+  // El asunto sin escapar —es texto plano— y el cuerpo escapado, que es HTML.
+  return {
+    asunto: renderTemplate(subject, ctx, { escapar: false }),
+    html: renderTemplate(conHtml, ctx),
+  };
 }
 
 export async function previsualizar({ tutorId, periodo }) {
