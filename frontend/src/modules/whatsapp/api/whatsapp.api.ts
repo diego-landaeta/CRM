@@ -431,8 +431,8 @@ export const chatApi = {
     client.post('/whatsapp/chats', { telefono, usuarioId }),
 
   // Prospectos con telefono, para elegir a quien escribir.
-  buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
-    client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
+  buscarProspectos: (projectId: number | null, texto: string, projectIds: string | null = null): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
+    client.get(`/leads${qs({ projectId, projectIds, search: texto || undefined, limit: 15 })}`),
 
   // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
   sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number; progreso: number | null }>> =>

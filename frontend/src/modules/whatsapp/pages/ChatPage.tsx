@@ -373,12 +373,20 @@ const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesa
 const ETIQUETA_GRUPOS = 'grupos';
 
 export default function ChatPage() {
-  const { activeProject } = useProjectContext() as {
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
+    activeIssuer: { nombre?: string; campus: Array<{ id: number }> } | null;
+    activeIssuerId: number | null;
   };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Para el hueco {proyecto} de las plantillas.
-  const nombreProyecto = activeProject?.nombre ?? null;
+  // Con una EMPRESA puesta no hay UN proyecto, hay sus campus. Lo que sabe
+  // recibir una lista --buscar prospectos, las plantillas-- la recibe; el
+  // chat en si es de la gestora, no del proyecto, y le da igual.
+  const campusIds = (activeIssuer?.campus || []).map((c) => c.id);
+  const ambitoCsv = !projectId && campusIds.length ? campusIds.join(',') : null;
+  const hayAmbito = !!projectId || !!ambitoCsv;
+  const nombreProyecto = activeIssuer?.nombre ?? activeProject?.nombre ?? null;
 
   // De quien es el WhatsApp que se esta viendo. Una gestora solo tiene el suyo
   // y el selector ni aparece; quien manda puede abrir el de otra persona.
@@ -703,11 +711,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (!nuevoAbierto) return undefined;
     const t = setTimeout(async () => {
-      const r = await chatApi.buscarProspectos(projectId, busca);
+      const r = await chatApi.buscarProspectos(projectId, busca, ambitoCsv);
       if (r.success) setCandidatos((r.data || []).filter((l) => l.telefono));
     }, 300);
     return () => clearTimeout(t);
-  }, [nuevoAbierto, busca, projectId]);
+  }, [nuevoAbierto, busca, projectId, ambitoCsv]);
 
   function fallo(e: unknown) {
     // Aqui contestan los frenos: ritmo, «no me escribas» y sin consentimiento.
@@ -2073,7 +2081,7 @@ export default function ChatPage() {
                 {/* Las plantillas, AQUI. Estaban solo en su pantalla, asi que
                     habia que salir del chat, copiar a mano y volver — con lo
                     cual no ahorraban nada. */}
-                {!bloqueo && projectId && (
+                {!bloqueo && hayAmbito && (
                   <button type="button" className="wa-btn-plantillas"
                     aria-label="Usar una plantilla"
                     title="Usar una plantilla"
@@ -2109,7 +2117,7 @@ export default function ChatPage() {
                 )}
               </InputToolbox>
 
-              {plantillasAbiertas && projectId && (
+              {plantillasAbiertas && hayAmbito && (
                 <SelectorPlantillas
                   projectId={projectId}
                   datos={datosPlantilla}

@@ -113,6 +113,38 @@ const CON_SOCIEDAD_OK = [
   // Lo unico que pasaba es que el muro se levantaba antes de que la pantalla
   // llegara a pedir nada.
   /^\/$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WhatsApp. El chat es de la GESTORA, no del proyecto: sus conversaciones son
+  // las mismas con CEDIA puesta o con uno de sus campus. Lo unico que miraba el
+  // proyecto era buscar un prospecto para empezar una conversacion y la lista
+  // de plantillas, y las dos aceptan ya los campus de la empresa.
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/plantillas$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Las que NO MIRAN el proyecto para nada. Estaban detras del muro por no
+  // estar en la lista, no porque el muro dijera algo de ellas: pedirle a
+  // alguien que elija un campus para ver su propio perfil no significa nada.
+  /^\/perfil$/,
+  /^\/preferencias$/,
+  /^\/notificaciones$/,
+  /^\/manual$/,
+  /^\/soporte$/,
+  /^\/status$/,
+  /^\/registro$/,
+  /^\/mensajes$/,
+  /^\/chat-ia$/,
+  /^\/documentos$/,
+  /^\/solicitudes-cambio$/,
+  /^\/solicitudes-cambio\/\d+$/,
+  /^\/configuracion\/atajos$/,
+  /^\/configuracion\/roles$/,
+  /^\/configuracion\/claves$/,
 ];
 
 function rutaAceptaSociedad(pathname) {
