@@ -128,3 +128,38 @@ export async function logActivity(userId, action, details, ipAddress) {
     [userId, action, details ? JSON.stringify(details) : null, ipAddress]
   );
 }
+
+/**
+ * El usuario de ese correo, si lo hay y sigue de alta (#37).
+ *
+ * Solo lo que hace falta para mandarle el enlace. Una baja no recupera
+ * contraseña: se le cerro la puerta a proposito y esto seria una rendija.
+ */
+export async function findActiveUserByEmail(email) {
+  const { rows } = await query(
+    `SELECT id, email, nombre
+     FROM users
+     WHERE LOWER(email) = LOWER($1) AND active = true`,
+    [email]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Deja puesto el token del enlace de recuperacion (#37).
+ *
+ * Es la MISMA pareja de columnas que usa la invitacion del alta, y eso es
+ * deliberado: son el mismo camino —un enlace de un solo uso que lleva a
+ * `/set-password`— y tener dos juegos de columnas para lo mismo acaba con dos
+ * caducidades distintas y una de las dos sin revisar.
+ *
+ * Al usarse, `updatePassword` las pone a NULL, asi que el enlace muere solo.
+ */
+export async function setRecoveryToken(userId, tokenHash, expires) {
+  await query(
+    `UPDATE users
+     SET set_password_token = $2, set_password_expires = $3, updated_at = NOW()
+     WHERE id = $1`,
+    [userId, tokenHash, expires]
+  );
+}

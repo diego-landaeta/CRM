@@ -314,3 +314,43 @@ export async function sendTestEmail(apiKey, toEmail) {
 }
 
 export { sendEmail };
+
+/**
+ * El correo de «he olvidado la contraseña» (#37).
+ *
+ * Lleva al MISMO sitio que el del alta —`/set-password?token=`—, porque es el
+ * mismo camino. Lo que cambia es el texto: a quien recupera no se le da la
+ * bienvenida, y sobre todo se le dice que hacer si NO ha sido el, que es la
+ * unica señal que tiene alguien de que le estan intentando entrar.
+ */
+export async function sendPasswordResetEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const subject = 'Recuperar tu contrasena del CRM';
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <div style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); padding: 32px; border-radius: 12px; color: white; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px;">Recuperar contrasena</h1>
+      </div>
+      <div style="background: white; padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+        <p>Hola <strong>${nombre}</strong>,</p>
+        <p>Has pedido recuperar tu contrasena del CRM. Pon una nueva desde aqui:</p>
+        <p style="text-align: center; margin: 32px 0;">
+          <a href="${link}" style="background: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Poner una contrasena nueva</a>
+        </p>
+        <p style="font-size: 13px; color: #6b7280;">O copia este enlace en tu navegador:<br><code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; word-break: break-all;">${link}</code></p>
+        <p style="font-size: 13px; color: #6b7280;">Expira en 24 horas y solo sirve una vez.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+        <p style="font-size: 12px; color: #9ca3af;"><strong>Si no has sido tu</strong>, ignora este correo: tu contrasena sigue como estaba y el enlace caduca solo. Si se repite, avisa a quien administra el CRM.</p>
+      </div>
+    </body></html>`;
+  const textContent = `Hola ${nombre},\n\nHas pedido recuperar tu contrasena del CRM. Pon una nueva aqui:\n${link}\n\nExpira en 24 horas y solo sirve una vez.\n\nSi no has sido tu, ignora este correo: tu contrasena sigue como estaba.`;
+
+  return await sendEmail({
+    to: [{ email, name: nombre }],
+    subject,
+    htmlContent,
+    textContent,
+    tags: ['password-reset', 'crm'],
+  });
+}

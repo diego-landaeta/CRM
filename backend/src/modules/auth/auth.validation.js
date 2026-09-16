@@ -17,3 +17,14 @@ export const setPasswordSchema = z.object({
   message: 'Las contrasenas no coinciden',
   path: ['confirmPassword'],
 });
+
+/**
+ * Lo unico que se pide para recuperar: el correo (#37).
+ *
+ * Que el formato sea invalido SI se contesta con un 400 — eso no delata a
+ * nadie, porque «pepe@» no es la direccion de ningun empleado. Lo que no se
+ * puede contestar distinto es un correo bien formado que no existe.
+ */
+export const olvidoSchema = z.object({
+  email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
+});
