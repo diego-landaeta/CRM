@@ -633,3 +633,21 @@ para WordPress.
 Mientras tanto, esa parte pasa a llamarse **«WordPress / WooCommerce»**, que es
 lo que de verdad hace.
 
+
+## Para mañana · main de los dos CRM
+
+**PR #147 (MultiCRM) y #72 (ISEIE).** Los dos hacen lo mismo: que `main` vuelva a
+describir lo que corre en producción. `main` de MultiCRM lleva parado desde el
+20/08 y el de ISEIE desde el 06/08, mientras producción recibía despliegues
+sueltos por SSH. Es la tarea #24.
+
+**No tocan ningún servidor.** Solo mueven la rama: el árbol de `main` pasa a ser
+el de `prod/solo-hoy`, que es exactamente lo que ya está desplegado. Comprobado
+antes de abrirlos — `git diff main prod/solo-hoy` daba cero ficheros.
+
+Lo único que cambia es qué ves al abrir `main` en GitHub. Diego los mira mañana
+y los fusiona.
+
+**Ojo con una cosa:** se abrieron antes de subir WhatsApp a producción. Ese
+despliegue ya está en `prod/solo-hoy`, así que al fusionarlos entra también
+WhatsApp — que es lo correcto, pero conviene saberlo.
