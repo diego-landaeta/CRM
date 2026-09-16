@@ -233,7 +233,7 @@ export default function LeadDetailPage() {
           <LeadInfoCard lead={lead} onUpdate={updateLead}
             onLlamada={(nota) => addInteraction('llamada', nota)}
             onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
-          <AgendaDelProspecto leadId={lead.id} />
+          <AgendaDelProspecto leadId={lead.id} estadoDelLead={lead.estado} />
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard

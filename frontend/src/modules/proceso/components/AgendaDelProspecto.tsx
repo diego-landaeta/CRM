@@ -1,31 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Circle, WarningCircle, CaretRight, ListChecks } from '@phosphor-icons/react';
-import { traerPasosDeLead, type PasoDeLead } from '../api/agenda.api';
+import {
+  CheckCircle, Circle, WarningCircle, CaretRight, ListChecks, SkipForward, CalendarPlus,
+} from '@phosphor-icons/react';
+import type { LeadStatus } from '@/shared/types';
+import { traerPasosDeLead, ajustarPaso, replanificar, type PasoDeLead } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import { siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeHechos, fechaLocal } from '../lib/agenda';
 
 /**
- * El proceso comercial de ESTA persona, en su ficha.
- *
- * Diego: «en los prospectos también debería salir: próximos pasos».
+ * El proceso comercial de ESTA persona, en su ficha (#89).
  *
  * La cola del día responde «¿a quién le toca hoy?». Esto responde la otra
  * pregunta, la que se hace al abrir una ficha: «¿por dónde voy con esta
  * persona, y qué le toca ahora?». Hasta ahora había que acordarse, o mirar la
  * cola y buscarla.
  *
- * Se marca UN paso como «el siguiente» —el primero pendiente— y no varios: si
- * alguien lleva tres sin hacer, lo que necesita es que le llamen una vez, no
- * tres avisos.
+ * UN PASO NO SE MARCA A MANO. Se cierra solo cuando se registra un contacto:
+ * el contacto n.º N cierra el paso n.º N, y eso lo hace el servidor. Aquí no
+ * hay ningún botón de «hecho», y no es un olvido. Lo que sí se puede es
+ * aplazarlo o saltárselo, que son decisiones de la gestora y no dependen de
+ * ningún dato.
  */
 
 function fecha(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+  return fechaLocal(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
-export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
+/** Los aplazamientos que se usan de verdad. Para otra fecha está el calendario
+    del paso, pero el 90 % de las veces es «hoy no, mañana». */
+const APLAZOS = [
+  { dias: 1, texto: 'Mañana' },
+  { dias: 3, texto: 'En 3 días' },
+  { dias: 7, texto: 'En una semana' },
+];
+
+export default function AgendaDelProspecto({
+  leadId,
+  estadoDelLead,
+}: {
+  leadId: number;
+  /** Para saber si merece la pena ofrecerle una agenda a quien no la tiene. */
+  estadoDelLead?: LeadStatus | string | null;
+}) {
   const [pasos, setPasos] = useState<PasoDeLead[] | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [ocupado, setOcupado] = useState(false);
+  const [fallo, setFallo] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    try {
+      setPasos(await traerPasosDeLead(leadId));
+    } catch {
+      setPasos([]);
+    }
+  }, [leadId]);
 
   useEffect(() => {
     let vivo = true;
@@ -36,20 +65,62 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
     return () => { vivo = false; };
   }, [leadId]);
 
+  // Después de tocar un paso se vuelve a pedir la lista entera en vez de
+  // apañarla aquí: aplazar el paso 2 puede correr los que vienen detrás, y eso
+  // lo decide el servidor.
+  const conRecarga = async (accion: () => Promise<unknown>, queFallo: string) => {
+    setOcupado(true);
+    setFallo(null);
+    try {
+      await accion();
+      await cargar();
+    } catch (e: unknown) {
+      const codigo = (e as { status?: number })?.status;
+      setFallo(codigo === 403 ? 'No tienes permiso para cambiar este paso.' : queFallo);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   if (cargando) return null;
 
-  // Sin pasos planificados la tarjeta no aparece: un prospecto que ya compró, o
-  // uno anterior al proceso, no tiene agenda y una tarjeta vacía solo estorba.
-  if (!pasos || pasos.length === 0) return null;
+  // Sin agenda hay dos casos distintos y solo uno merece tarjeta. A quien ya
+  // compró o dijo que no, su proceso se le terminó. Al que entró antes de que
+  // esto existiera —solo se cargaron los últimos 30 días— se le ofrece
+  // rellenarla, porque si no, no hay forma de meterlo en la cola del día.
+  if (!pasos || pasos.length === 0) {
+    if (!sePuedePlanificar(estadoDelLead)) return null;
+    return (
+      <section aria-label="Proceso comercial" className="bg-card border border-border rounded-xl p-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <ListChecks size={16} weight="duotone" className="text-primary" />
+          Proceso comercial
+        </h3>
+        <p className="mt-2 text-[12px] text-muted-foreground">
+          Este prospecto no tiene el proceso planificado. Entró antes de que el CRM lo llevara.
+        </p>
+        {fallo && <p className="mt-2 text-[11px] text-destructive">{fallo}</p>}
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => conRecarga(() => replanificar(leadId), 'No se ha podido planificar.')}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <CalendarPlus size={13} weight="regular" />
+          {ocupado ? 'Planificando…' : 'Planificar el proceso'}
+        </button>
+      </section>
+    );
+  }
 
-  const siguiente = pasos.find((p) => !p.hecho && p.estado === 'pendiente') || null;
-  const hechos = pasos.filter((p) => p.hecho).length;
+  const siguiente = siguientePaso(pasos);
+  const hechos = cuentaDeHechos(pasos);
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
+    <section aria-label="Proceso comercial" className="bg-card border border-border rounded-xl p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <ListChecks size={16} weight="duotone" className="text-blue-600" />
+          <ListChecks size={16} weight="duotone" className="text-primary" />
           Proceso comercial
         </h3>
         <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -61,8 +132,8 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
         <div className={
           'mb-3 rounded-lg border p-2.5 '
           + (siguiente.vencido
-            ? 'border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/30'
-            : 'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30')
+            ? 'border-destructive/30 bg-destructive-soft'
+            : 'border-info/30 bg-info-soft')
         }>
           <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
             Ahora le toca
@@ -97,13 +168,45 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
               recuerda, porque el documento pide comprobarlo antes de CADA
               envio y no arrastrar el del mensaje anterior. */}
           {siguiente.avisa_plazas && (
-            <p className="mt-1.5 rounded bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            <p className="mt-1.5 rounded bg-warning-soft px-2 py-1 text-[11px] font-medium text-warning-soft-foreground">
               Comprueba cuántas plazas quedan antes de enviar. No las lleva el CRM.
             </p>
           )}
           {siguiente.nota_del_paso && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{siguiente.nota_del_paso}</p>
           )}
+
+          {/* Aplazar y saltar. No hay «marcar como hecho» a proposito: el paso
+              lo cierra el contacto que se registre, no un boton. */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
+            {APLAZOS.map((a) => (
+              <button
+                key={a.dias}
+                type="button"
+                disabled={ocupado}
+                onClick={() => conRecarga(
+                  () => ajustarPaso(siguiente.id, { fecha_prevista: fechaAplazada(a.dias) }),
+                  'No se ha podido aplazar.',
+                )}
+                className="rounded border border-border bg-card px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {a.texto}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => conRecarga(
+                () => ajustarPaso(siguiente.id, { estado: 'saltado' }),
+                'No se ha podido saltar el paso.',
+              )}
+              className="ml-auto inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              title="Este paso no aplica con esta persona"
+            >
+              <SkipForward size={11} weight="regular" /> Saltar
+            </button>
+          </div>
+          {fallo && <p className="mt-1.5 text-[11px] text-destructive">{fallo}</p>}
         </div>
       ) : (
         <p className="mb-3 text-[11px] text-muted-foreground">
@@ -114,21 +217,26 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
       {/* Los demás, para ver por dónde va sin salir de la ficha. */}
       <ol className="space-y-1.5">
         {pasos.map((p) => {
+          const tono = tonoDelPaso(p);
           const esSiguiente = siguiente?.id === p.id;
           return (
             <li key={p.id} className="flex items-start gap-2 text-[12px]">
               <span className="mt-0.5 flex-shrink-0">
-                {p.hecho
-                  ? <CheckCircle size={14} weight="fill" className="text-emerald-600" />
-                  : p.vencido
-                    ? <WarningCircle size={14} weight="fill" className="text-red-500" />
+                {tono === 'hecho'
+                  ? <CheckCircle size={14} weight="fill" className="text-success" />
+                  : tono === 'vencido'
+                    ? <WarningCircle size={14} weight="fill" className="text-destructive" />
                     : <Circle size={14} className="text-muted-foreground/40" />}
               </span>
-              <span className={`min-w-0 flex-1 truncate ${p.hecho ? 'text-muted-foreground line-through' : esSiguiente ? 'font-semibold' : ''}`}>
+              <span className={`min-w-0 flex-1 truncate ${
+                tono === 'hecho' || tono === 'saltado'
+                  ? 'text-muted-foreground line-through'
+                  : esSiguiente ? 'font-semibold' : 'text-muted-foreground'
+              }`}>
                 {p.nombre || p.clave}
               </span>
               <span className="flex-shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                {p.estado === 'saltado' ? 'saltado' : fecha(p.fecha_prevista)}
+                {tono === 'saltado' ? 'saltado' : tono === 'hecho' ? 'hecho' : fecha(p.fecha_prevista)}
               </span>
             </li>
           );
@@ -141,6 +249,6 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
       >
         Ver la cola del día <CaretRight size={10} weight="bold" />
       </Link>
-    </div>
+    </section>
   );
 }
