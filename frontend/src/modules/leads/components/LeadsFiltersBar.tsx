@@ -13,11 +13,12 @@ import { cssDeEstado } from '../lib/estadoTono';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Funnel, MagnifyingGlass, X, CaretDown, Lightning, WarningCircle,
+  Funnel, X, CaretDown, Lightning, WarningCircle,
 } from '@phosphor-icons/react';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import DateRangeFilter from './DateRangeFilter';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
+import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 
 const STATUS_LABELS: Record<string, string> = {
   nuevo: 'Nuevo',
@@ -51,12 +52,6 @@ const QUICK_LABELS: Record<string, string> = {
   'sin-revisar': 'Por validar',
 };
 
-const SORT_LABELS: Record<string, string> = {
-  recent: '🕒 Fecha — cronológico (default)',
-  recent_value: '📅 Día · más valor dentro del día',
-  urgency: '⚡ Urgencia (valor × frescura)',
-  value: '💰 Más valor primero',
-};
 
 interface Props {
   activeProject: { id?: number | null; nombre?: string };
@@ -83,6 +78,15 @@ interface Props {
   leadsCount: number;
   filteredCount: number;
   onAssignPending: () => Promise<void> | void;
+  /* Lo que antes vivía en una SEGUNDA barra, encima de esta.
+     Diego, repaso del 15/09 por la noche: «Hay dos filtros donde debería haber
+     uno. El que ya existía está completo; lo que se pedía era mejorar su
+     interfaz, no añadir otro al lado». Así que el buscador, los tres
+     desplegables de siempre y el botón de actualizar entran AQUÍ, y la pantalla
+     pinta una sola barra. */
+  onActualizar?: () => void;
+  actualizando?: boolean;
+  nuevos?: number;
 }
 
 export default function LeadsFiltersBar(props: Props) {
@@ -96,6 +100,7 @@ export default function LeadsFiltersBar(props: Props) {
     sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
     filterDup, setFilterDup, filterReincidente, setFilterReincidente,
     stats, leadsCount, filteredCount, onAssignPending,
+    onActualizar, actualizando, nuevos,
   } = props;
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -204,9 +209,96 @@ export default function LeadsFiltersBar(props: Props) {
     && activeProject?.id && activeProject.id > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 relative">
-      {/* Botón Filtros con popover */}
-      <div className="relative" ref={popoverRef}>
+    <BarraFiltros
+      busqueda={search}
+      onBusqueda={setSearch}
+      placeholder="Buscar por nombre, email o teléfono"
+      desplegables={[
+        {
+          nombre: 'Estado',
+          valor: filterEstado,
+          onChange: setFilterEstado,
+          opciones: [
+            { value: '', label: 'Todos los estados' },
+            ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+          ],
+        },
+        {
+          nombre: 'Origen',
+          valor: filterOrigen,
+          onChange: setFilterOrigen,
+          opciones: [
+            { value: '', label: 'Todos los orígenes' },
+            ...Object.entries(ORIGEN_LABELS).map(([value, label]) => ({ value, label })),
+          ],
+        },
+        {
+          nombre: 'Orden',
+          valor: sortMode,
+          onChange: (v) => setSortMode(v as 'value' | 'recent' | 'urgency' | 'recent_value'),
+          opciones: [
+            { value: 'recent', label: 'Más recientes' },
+            { value: 'urgency', label: 'Por urgencia' },
+            { value: 'value', label: 'Mayor valor' },
+            { value: 'recent_value', label: 'Reciente + valor' },
+          ],
+        },
+      ]}
+      hayFiltros={activePills.length > 0}
+      onLimpiar={clearAll}
+      onActualizar={onActualizar}
+      actualizando={actualizando}
+      nuevos={nuevos}
+      activos={(activePills.length > 0 || showAssignBtn) ? (
+        <>
+          {/* Pildoras de filtros activos */}
+          {activePills.map((pill) => (
+            <span
+              key={pill.key}
+              className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
+            >
+              {pill.label}
+              <button
+                onClick={pill.onClear}
+                aria-label={`Quitar filtro ${pill.label}`}
+                className="ml-0.5 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-primary/20"
+              >
+                <X size={10} weight="bold" />
+              </button>
+            </span>
+          ))}
+
+          {/* Asignar pendientes (cuando aplica) */}
+          {showAssignBtn && (
+            <button
+              onClick={onAssignPending}
+              className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
+              title="Aplica round-robin a todos los prospectos sin responsable"
+            >
+              <WarningCircle size={13} weight="fill" />
+              Asignar pendientes
+              {(stats?.sin_asignar ?? 0) > 0 && (
+                <span className="bg-white text-warning text-[10px] font-black px-1.5 py-0.5 rounded">
+                  {stats?.sin_asignar}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Indicador inline de "filtrados de cargados" cuando hay filtros */}
+          {activePills.length > 0 && (
+            <span className={`inline-flex items-center gap-1 text-[11px] text-muted-foreground ${showAssignBtn ? '' : 'ml-auto'}`}>
+              <Lightning size={11} weight="fill" className="text-primary" />
+              <strong className="text-foreground">{filteredCount}</strong> filtrados
+            </span>
+          )}
+        </>
+      ) : null}
+      extra={
+        /* Lo que no cabe en la fila: gestor, programa, proyecto, fechas,
+           duplicados, reincidentes y el orden fino. Detrás del botón, que es
+           donde estaba — pero ahora el botón vive DENTRO de la misma barra. */
+        <div className="relative" ref={popoverRef}>
         <button
           onClick={() => setOpen(!open)}
           aria-expanded={open}
@@ -422,50 +514,9 @@ export default function LeadsFiltersBar(props: Props) {
           </div>,
           document.body,
         )}
-      </div>
-
-      {/* Pildoras de filtros activos */}
-      {activePills.map((pill) => (
-        <span
-          key={pill.key}
-          className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
-        >
-          {pill.label}
-          <button
-            onClick={pill.onClear}
-            aria-label={`Quitar filtro ${pill.label}`}
-            className="ml-0.5 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-primary/20"
-          >
-            <X size={10} weight="bold" />
-          </button>
-        </span>
-      ))}
-
-      {/* Asignar pendientes (cuando aplica) */}
-      {showAssignBtn && (
-        <button
-          onClick={onAssignPending}
-          className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
-          title="Aplica round-robin a todos los prospectos sin responsable"
-        >
-          <WarningCircle size={13} weight="fill" />
-          Asignar pendientes
-          {(stats?.sin_asignar ?? 0) > 0 && (
-            <span className="bg-white text-warning text-[10px] font-black px-1.5 py-0.5 rounded">
-              {stats?.sin_asignar}
-            </span>
-          )}
-        </button>
-      )}
-
-      {/* Indicador inline de "filtrados de cargados" cuando hay filtros */}
-      {activePills.length > 0 && (
-        <span className={`inline-flex items-center gap-1 text-[11px] text-muted-foreground ${showAssignBtn ? '' : 'ml-auto'}`}>
-          <Lightning size={11} weight="fill" className="text-primary" />
-          <strong className="text-foreground">{filteredCount}</strong> filtrados
-        </span>
-      )}
-    </div>
+        </div>
+      }
+    />
   );
 }
 

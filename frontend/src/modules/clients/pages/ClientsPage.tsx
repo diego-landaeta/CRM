@@ -16,7 +16,6 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import ClientsFiltersBar, { ESTADO_PAGO_LABELS, SORT_LABELS } from '../components/ClientsFiltersBar';
-import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 import CifrasClientes from '../components/CifrasClientes';
 import SaludDeCobro from '../components/SaludDeCobro';
 import ProximosCobros from '../components/ProximosCobros';
@@ -404,51 +403,6 @@ export default function ClientsPage() {
       {/* Barra de filtros FUERA del card de la tabla: el card lleva overflow-hidden
           (para recortar las esquinas de la tabla) y eso recortaba el popover de
           "Filtros". Va como fila propia encima del card, igual que en Prospectos. */}
-      {/* Los filtros que mas se usan, a la vista y en una fila, como en
-          Prospectos. Estaban TODOS detras del boton «Filtros»: para saber si
-          habia algo puesto habia que abrirlo, y un filtro que no se ve es un
-          filtro que se queda puesto sin querer — y entonces la pantalla ensena
-          menos de lo que hay sin decirlo.
-
-          Programa y fechas siguen detras del boton: no caben en una fila y no
-          se tocan a diario. */}
-      <BarraFiltros
-        busqueda={search}
-        onBusqueda={setSearch}
-        placeholder="Buscar por nombre, email o teléfono"
-        desplegables={[
-          ...(user?.role === 'gestor' ? [] : [{
-            nombre: 'Gestora',
-            valor: filterResp,
-            onChange: setFilterResp,
-            opciones: [
-              { value: '', label: 'Todas las gestoras' },
-              { value: 'unassigned', label: 'Sin asignar' },
-              ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
-            ],
-          }]),
-          {
-            nombre: 'Estado de pago',
-            valor: filterEstadoPago,
-            onChange: setFilterEstadoPago,
-            opciones: [
-              { value: '', label: 'Todos los pagos' },
-              ...Object.entries(ESTADO_PAGO_LABELS).map(([value, label]) => ({ value, label })),
-            ],
-          },
-          {
-            nombre: 'Orden',
-            valor: sortBy,
-            onChange: setSortBy,
-            opciones: Object.entries(SORT_LABELS).map(([value, label]) => ({ value, label })),
-          },
-        ]}
-        hayFiltros={hasActiveFilters}
-        onLimpiar={clearAllFilters}
-        onActualizar={() => setReloadKey((k) => k + 1)}
-        actualizando={loading}
-      />
-
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar
           user={user}
@@ -462,6 +416,8 @@ export default function ClientsPage() {
           gestores={gestores}
           productos={productos}
           totalBackend={totalBackend}
+          actualizando={loading}
+          onActualizar={() => setReloadKey((k) => k + 1)}
           filteredCount={filtered.length}
         />
         {filtered.length > 0 && can('clients.export') && (
