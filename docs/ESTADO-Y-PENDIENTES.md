@@ -1495,3 +1495,51 @@ que va a cambiar varias veces antes de quedarse quieta.
 
 *Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
 la vista previa y el editor de la plantilla).*
+
+---
+
+## 16 de septiembre · el día en que `main` volvió a decir la verdad
+
+**Las dos ramas `main` describen otra vez lo que corre en producción**, en los
+dos CRM, con cero ficheros de diferencia. Llevaban paradas desde el 20 de agosto
+(MultiCRM) y el 6 (ISEIE) mientras producción recibía despliegues por SSH. Era
+la tarea #24, abierta desde agosto.
+
+**De veinte peticiones de cambio abiertas a ninguna.** Dos fusionadas —las de
+`main`— y dieciséis cerradas porque su contenido ya estaba dentro, comprobado
+con un merge de prueba cada una antes de tocarlas. Las ramas se quedan en el
+remoto; lo que siga pendiente vive en su issue.
+
+**WhatsApp de ISEIE al 100 % de MultiCRM.** El módulo llevaba meses divergiendo,
+no solo septiembre: el controlador iba por 1.060 líneas contra 1.441 y el chat
+por 1.719 contra 2.369. Se trajo entero —40 ficheros hoy idénticos—, más cuatro
+migraciones renumeradas a su serie (159-162), el banco de mensajes con su ruta y
+su menú, y el módulo de exportación, que allí era un esbozo con un `TODO`.
+
+**Y una factura que no se podía emitir.** Sin régimen fiscal, la pantalla manda
+`leyendaIva: null` y el validador solo admitía texto: «Expected string, received
+null». Pasaba con Solvenic emitiendo en ICTESS, que no cae en ningún régimen.
+Una palabra —`.nullable()`— en los dos CRM.
+
+### Lo que se rompió, para que quede escrito
+
+Al portar WhatsApp medí las dependencias mirando **solo los imports hacia
+`shared/`** y se me escapó uno entre módulos: `chat.model.js` importa
+`products/plazas.sql.js`. El fichero estaba en el repo de ISEIE pero nunca se
+había desplegado a su servidor, así que la API no arrancó y **producción estuvo
+caída dos minutos**. La próxima vez: `grep` de TODOS los `from '../`.
+
+De paso salió que **la base de staging de ISEIE iba 21 tablas por detrás** de la
+suya de producción — nunca se le aplicó la cadena de WhatsApp desde la 128, de
+agosto. Se le aplicaron las nueve que faltaban.
+
+### Lo que sigue esperando
+
+- El **repaso de Diego del 15** en `TAREAS-EQUIPO.md`: once puntos sin tocar.
+  Los dos más gordos, los filtros duplicados en Prospectos y Clientes, e
+  Informes peor que producción.
+- **Nadie tiene `usa_whatsapp` encendido en ISEIE.** El día que vayan a usarlo,
+  el selector saldrá vacío hasta que se encienda a las gestoras.
+- El **precio del curso 654 de ISEIE**: a 340, y Adriana dice 410.
+- El **enlace de contraseña de Brevo** sigue roto y `facturacion@cediaidsl.com`
+  sin verificar. Hoy no bloquean nada porque los correos a tutores están parados.
