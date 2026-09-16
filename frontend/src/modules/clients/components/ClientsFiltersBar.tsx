@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Funnel, MagnifyingGlass, X, CaretDown } from '@phosphor-icons/react';
+import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 
 interface Gestor { id: number; nombre: string }
 interface Producto { id: number; nombre: string }
@@ -28,6 +29,10 @@ interface Props {
   gestores: Gestor[];
   productos: Producto[];
   totalBackend: number;
+  /* Lo que antes pintaba una SEGUNDA barra encima de esta. Diego, repaso del
+     15/09 por la noche: «El mismo duplicado de filtros que en Prospectos». */
+  onActualizar?: () => void;
+  actualizando?: boolean;
   filteredCount: number;
 }
 
@@ -51,7 +56,7 @@ export default function ClientsFiltersBar(props: Props) {
     user, search, setSearch, filterResp, setFilterResp,
     filterProducto, setFilterProducto, filterEstadoPago, setFilterEstadoPago,
     dateFrom, setDateFrom, dateTo, setDateTo, sortBy, setSortBy,
-    gestores, productos, totalBackend, filteredCount,
+    gestores, productos, totalBackend, filteredCount, onActualizar, actualizando,
   } = props;
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
@@ -91,10 +96,65 @@ export default function ClientsFiltersBar(props: Props) {
     setDateTo('');
   }
 
+  // Los tres que se usan a diario, a la vista. Los otros dos —programa y
+  // fechas— se quedan detrás del botón: no caben en una fila.
+  const desplegables = [
+    ...(user?.role === 'gestor' ? [] : [{
+      nombre: 'Gestora',
+      valor: filterResp,
+      onChange: setFilterResp,
+      opciones: [
+        { value: '', label: 'Todas las gestoras' },
+        { value: 'unassigned', label: 'Sin asignar' },
+        ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
+      ],
+    }]),
+    {
+      nombre: 'Estado de pago',
+      valor: filterEstadoPago,
+      onChange: setFilterEstadoPago,
+      opciones: [
+        { value: '', label: 'Todos los pagos' },
+        ...Object.entries(ESTADO_PAGO_LABELS).map(([value, label]) => ({ value, label })),
+      ],
+    },
+    {
+      nombre: 'Orden',
+      valor: sortBy,
+      onChange: setSortBy,
+      opciones: Object.entries(SORT_LABELS).map(([value, label]) => ({ value, label })),
+    },
+  ];
+
   return (
-    <div className="flex flex-wrap items-center gap-2 relative">
-      {/* Botón Filtros */}
-      <div className="relative" ref={popoverRef}>
+    <BarraFiltros
+      busqueda={search}
+      onBusqueda={setSearch}
+      placeholder="Buscar por nombre, email o teléfono"
+      desplegables={desplegables}
+      hayFiltros={activePills.length > 0}
+      onLimpiar={clearAll}
+      onActualizar={onActualizar}
+      actualizando={actualizando}
+      activos={activePills.length > 0 ? (
+        <>
+          {activePills.map((pill) => (
+            <span key={pill.key}
+              className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+              {pill.label}
+              <button onClick={pill.onClear} aria-label={`Quitar filtro ${pill.label}`}
+                className="ml-0.5 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-primary/20">
+                <X size={10} weight="bold" />
+              </button>
+            </span>
+          ))}
+        </>
+      ) : null}
+      extra={
+        /* Lo que no cabe en la fila —programa y fechas— sigue detrás del botón.
+           El botón, eso sí, vive DENTRO de la misma barra: Diego marcó el 15/09
+           que había «dos filtros donde debería haber uno». */
+        <div className="relative" ref={popoverRef}>
         <button
           onClick={() => setOpen(!open)}
           aria-expanded={open}
@@ -206,20 +266,9 @@ export default function ClientsFiltersBar(props: Props) {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Pildoras activas */}
-      {activePills.map((pill) => (
-        <span key={pill.key}
-          className="inline-flex items-center gap-1 h-9 pl-2.5 pr-1.5 rounded-md bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-          {pill.label}
-          <button onClick={pill.onClear} aria-label={`Quitar filtro ${pill.label}`}
-            className="ml-0.5 w-5 h-5 inline-flex items-center justify-center rounded hover:bg-primary/20">
-            <X size={10} weight="bold" />
-          </button>
-        </span>
-      ))}
-    </div>
+        </div>
+      }
+    />
   );
 }
 

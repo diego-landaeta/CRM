@@ -2,7 +2,6 @@ import SaludComercial from '../components/SaludComercial';
 import CifrasProspectos from '../components/CifrasProspectos';
 import SiguientesAcciones from '../components/SiguientesAcciones';
 import AccesosClave from '@/shared/components/ui/AccesosClave';
-import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -53,9 +52,9 @@ const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
-import StatusBadge, { STATUS_LABELS, STATUS_KEYS } from '@/shared/components/ui/StatusBadge';
+import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import QuickStatusChange from '../components/QuickStatusChange';
-import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadge';
+import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
 import DateRangeFilter from '../components/DateRangeFilter';
@@ -706,6 +705,7 @@ export default function LeadsPage() {
           organizarse el dia le hace falta. */}
       <BloquePlegable
         clave="prospectos-resumen"
+        abiertoPorDefecto={false}
         titulo="Resumen del dia"
         resumen={
           quickCounts.urgent > 0
@@ -735,68 +735,7 @@ export default function LeadsPage() {
       </section>
       </BloquePlegable>
 
-      {/* Los cuatro filtros que más se usan, a la vista y en una fila, como la
-          maqueta. Estaban TODOS dentro del desplegable «Filtros»: para saber si
-          había algo puesto había que abrirlo, y un filtro que no se ve es un
-          filtro que se queda puesto sin querer — y entonces la pantalla enseña
-          menos de lo que hay sin decirlo.
-
-          Los otros siete (proyecto, gestora, programa, fechas, duplicados,
-          reincidentes y el orden fino) siguen detrás del botón: no caben en una
-          fila y no se usan a diario. */}
-      <BarraFiltros
-        busqueda={search}
-        onBusqueda={setSearch}
-        placeholder="Buscar por nombre, email o teléfono"
-        desplegables={[
-          {
-            nombre: 'Estado',
-            valor: filterEstado,
-            onChange: setFilterEstadoSafe,
-            opciones: [
-              { value: '', label: 'Todos los estados' },
-              ...STATUS_KEYS.map((k) => ({ value: k, label: STATUS_LABELS[k] || k })),
-            ],
-          },
-          {
-            nombre: 'Origen',
-            valor: filterOrigen,
-            onChange: setFilterOrigen,
-            opciones: [
-              { value: '', label: 'Todos los orígenes' },
-              ...Object.entries(CHANNEL_LABELS).map(([value, label]) => ({ value, label: String(label) })),
-            ],
-          },
-          {
-            nombre: 'Orden',
-            valor: sortMode,
-            onChange: (v) => setSortMode(v as 'value' | 'recent' | 'urgency' | 'recent_value'),
-            opciones: [
-              { value: 'recent', label: 'Más recientes' },
-              { value: 'urgency', label: 'Por urgencia' },
-              { value: 'value', label: 'Mayor valor' },
-              { value: 'recent_value', label: 'Reciente + valor' },
-            ],
-          },
-        ]}
-        hayFiltros={!!(search || filterEstado || filterOrigen || filterResponsable || filterProducto || dateFrom || dateTo || filterDup || filterReincidente || quickFilter)}
-        onLimpiar={() => {
-          setSearch('');
-          setFilterEstado('');
-          setFilterOrigen('');
-          setFilterResponsable('');
-          setFilterProducto('');
-          setDateRange('', '');
-          setFilterDup(false);
-          setFilterReincidente(false);
-          setQuickFilter('');
-        }}
-        nuevos={newCount}
-        onActualizar={() => { setNewCount(0); refetch(); }}
-        actualizando={loading}
-      />
-
-      {/* Lo que no cabe arriba: el resto de filtros, las píldoras de lo que está
+            {/* Lo que no cabe arriba: el resto de filtros, las píldoras de lo que está
           puesto ahora mismo, y «Asignar pendientes». */}
       <LeadsFiltersBar
         activeProject={activeProject}
@@ -822,6 +761,9 @@ export default function LeadsPage() {
         stats={stats}
         leadsCount={leads.length}
         filteredCount={filteredLeads.length}
+        nuevos={newCount}
+        actualizando={loading}
+        onActualizar={() => { setNewCount(0); refetch(); }}
         onAssignPending={async () => {
           if (!activeProject?.id || activeProject.id < 0) return;
           try {
