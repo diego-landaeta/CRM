@@ -207,6 +207,21 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
   const listaTop = comoLista(projectId, projectIds);
   if (listaTop) { params.push(listaTop); where.push(`c.project_id = ANY($${params.length}::int[])`); }
   else where.push(SIN_PRUEBAS('c.project_id'));
+  // UNA CUOTA NO ES UNA VENTA (#100).
+  //
+  // Esto contaba las mensualidades como ventas nuevas, asi que un curso con un
+  // alumno pagando a plazos subia un puesto cada mes sin haber vendido nada. Y
+  // el importe tambien: el «facturado» del ranking sumaba la cuota encima del
+  // precio del curso, que ya estaba contado entero al venderlo.
+  //
+  // Medido en la base local: «Master Neuroeducacion» salia con 2 ventas y
+  // 2.650 € cuando la venta era una sola, de 2.500 €, y los 150 restantes eran
+  // una cuota de esa misma venta.
+  //
+  // El resto del modulo ya lo excluia —`filtrosVentas` pone `NOT
+  // cv.es_mensualidad`— asi que el ranking decia una cosa y el recuento de
+  // ventas de al lado otra.
+  where.push('NOT c.es_mensualidad');
   if (responsableId) { params.push(responsableId); where.push(`l.responsable_id = $${params.length}`); }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).

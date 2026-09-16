@@ -1,6 +1,6 @@
 import PageHeader from '@/shared/components/ui/PageHeader';
-import { lazy, Suspense, useState, useEffect } from 'react';
-import { Plus, Receipt, UsersThree } from '@phosphor-icons/react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { Plus, Receipt, UsersThree, Buildings } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
@@ -16,10 +16,16 @@ const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
+/** El id con el que el CRM representa «todos los proyectos» (lo pone el
+ *  selector del menú; aquí se reutiliza para poder activarlo desde Ventas). */
+const ALL_PROJECTS_ID = -1;
+
 export default function SalesPage() {
-  const { activeProject, activeIssuerId } = useProjectContext() as {
+  const { activeProject, activeIssuerId, switchProject, projects } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
     activeIssuerId: number | null;
+    switchProject: (id: number) => void;
+    projects: Array<{ id: number; nombre?: string }>;
   };
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -28,7 +34,20 @@ export default function SalesPage() {
   // para que agregue cross-proyecto. Si NO hay proyecto activo, ni siquiera el
   // header está listo todavía.
   const hasActiveCtx = !!activeProject?.id;
-  const allProjects = activeProject?.id === -1;
+  const allProjects = activeProject?.id === ALL_PROJECTS_ID;
+
+  // A dónde se vuelve al apagar «todos los proyectos».
+  //
+  // Se recuerda el último proyecto real en el que se estuvo, porque salir del
+  // modo agregado y aterrizar en otro proyecto distinto del que se venía es
+  // desorientador — y sobre todo porque desde el agregado no se puede
+  // registrar una venta, así que apagarlo suele ser para volver a trabajar
+  // donde se estaba.
+  const ultimoReal = useRef<number | null>(null);
+  useEffect(() => {
+    if (activeProject?.id && !allProjects) ultimoReal.current = activeProject.id;
+  }, [activeProject?.id, allProjects]);
+  const volverA = ultimoReal.current ?? projects.find((p) => p.id !== ALL_PROJECTS_ID)?.id ?? ALL_PROJECTS_ID;
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
   // Con una sociedad elegida, Ventas enseña sus campus sumados —igual que
   // Reportes—, en vez del muro de «elige un proyecto». El servidor traduce el
@@ -61,6 +80,32 @@ export default function SalesPage() {
           : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
         actions={(
           <>
+          {/* El interruptor de «todos los proyectos» (#100).
+              La vista agregada YA existía, pero solo se activaba desde el
+              selector de proyecto del menú lateral: había que salir de Ventas
+              para verla y nada en la pantalla lo sugería. Es la misma acción
+              —`switchProject(-1)`, que es lo que hace el selector—, puesta
+              donde se echa en falta. Solo para quien manda: una gestora no
+              cruza proyectos. */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => switchProject(allProjects ? volverA : ALL_PROJECTS_ID)}
+              aria-pressed={allProjects}
+              title={allProjects
+                ? 'Volver a un proyecto para poder registrar ventas'
+                : 'Sumar todos los proyectos en una sola vista'}
+              className={
+                'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                + (allProjects
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+              }
+            >
+              <Buildings size={14} weight="bold" />
+              <span className="hidden sm:inline">Todos los proyectos</span>
+            </button>
+          )}
           {isAdmin && !allProjects && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />

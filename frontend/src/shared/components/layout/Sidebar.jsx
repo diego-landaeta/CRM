@@ -223,6 +223,26 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
+      // HAY TRES PANTALLAS DE VENTAS Y ESTA ERA LA UNICA SIN PUERTA (#100).
+      //
+      //   /finanzas/ventas           IncomePage con otro titulo — «Ventas» e
+      //                              «Ingresos» son EL MISMO componente, solo
+      //                              cambia el `title`.
+      //   /finanzas/ventas-analisis  SalesAnalysisPage, de Fabian (#136).
+      //   /ventas                    esta. Seis componentes —resumen,
+      //                              evolucion, desglose, paises, clientes y
+      //                              cursos vendidos— que no veia NADIE.
+      //
+      // Se construyo el 04/08 bajo un commit llamado «refactor(ventas): una
+      // pantalla de ventas y nada mas», pero el menu apuntaba a la otra desde
+      // el 16/07 y no se repunto nunca: `git log -S "to: '/ventas'"` sobre
+      // este fichero no devuelve ni un commit.
+      //
+      // Se enlaza para que deje de estar escondida, con nombre propio porque
+      // «Ventas» y «Analisis de ventas» ya estan cogidos. DONDE va —y si las
+      // tres se fusionan, que es el plan aprobado y sin ejecutar del #43— lo
+      // decide Diego; esto solo abre la puerta.
+      { label: 'Panel de ventas', to: '/ventas', detail: 'Resumen, evolución y desglose', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
       { label: 'Ingresos', to: '/finanzas/ingresos', detail: 'Entradas de dinero', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
       { label: 'Conversiones', to: '/finanzas/conversiones', detail: 'Los que compraron', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
       { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
