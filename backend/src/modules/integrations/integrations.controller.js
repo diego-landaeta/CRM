@@ -3,6 +3,7 @@ import * as model from './integrations.model.js';
 import { encrypt, decrypt, maskSecret } from '../../shared/utils/crypto.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { urlDeStripe } from '../../shared/config/stripeApi.js';
 
 const SUPPORTED = ['stripe', 'brevo'];
 
@@ -169,7 +170,7 @@ export async function remove(req, res, next) {
 
 async function testStripe(apiKey) {
   // /v1/balance es read-only y siempre disponible. Devuelve 401 si la key es mala.
-  const r = await fetch('https://api.stripe.com/v1/balance', {
+  const r = await fetch(urlDeStripe('/v1/balance'), {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   if (r.ok) {

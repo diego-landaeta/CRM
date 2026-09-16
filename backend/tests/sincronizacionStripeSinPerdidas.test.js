@@ -164,3 +164,40 @@ describe('cuando se corta por el tope de páginas', () => {
     expect(ultimoEstado().last_full_sync_at).toBeNull();
   });
 });
+
+describe('el histórico absoluto', () => {
+  it('por defecto NO se pide nada anterior al corte', async () => {
+    // La regla que el #44 llama «la que no se negocia»: lo anterior al alta ya
+    // se facturó fuera. 576 cobros en esa situación.
+    model.fechaDeCorte.mockResolvedValue('2026-09-10');
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [], has_more: false }) });
+
+    await syncStripePayments(7);
+
+    const url = new URL(global.fetch.mock.calls[0][0]);
+    const desde = Number(url.searchParams.get('created[gte]'));
+    expect(desde).toBe(Math.floor(new Date('2026-09-10').getTime() / 1000));
+  });
+
+  it('con `desdeElPrincipio` se pide TODO, sin fecha de inicio', async () => {
+    // Ángel: «el contenido de stripe sí que debe estar al día, saca el
+    // completo, el histórico absoluto». Tener el dato y poder facturarlo pasan
+    // a ser dos cosas distintas.
+    model.fechaDeCorte.mockResolvedValue('2026-09-10');
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [], has_more: false }) });
+
+    await syncStripePayments(7, { desdeElPrincipio: true });
+
+    const url = new URL(global.fetch.mock.calls[0][0]);
+    expect(url.searchParams.get('created[gte]')).toBeNull();
+  });
+
+  it('el corte se sigue consultando: no se olvida, se ignora a propósito', async () => {
+    // Si dejara de consultarse, el día que alguien quite el `desdeElPrincipio`
+    // no habría forma de saber si el corte sigue vivo.
+    model.fechaDeCorte.mockResolvedValue('2026-09-10');
+    global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [], has_more: false }) });
+    await syncStripePayments(7, { desdeElPrincipio: true });
+    expect(model.fechaDeCorte).toHaveBeenCalledWith(7);
+  });
+});
