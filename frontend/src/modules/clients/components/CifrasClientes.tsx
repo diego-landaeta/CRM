@@ -18,8 +18,10 @@ import { Cifra, FilaDeCifras } from '@/shared/components/ui/Cifra';
  */
 
 function euros(n: number): string {
+  // Con centimos: facturado, cobrado y pendiente tienen que cuadrar al centimo.
   return new Intl.NumberFormat('es-ES', {
-    style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n || 0);
 }
 

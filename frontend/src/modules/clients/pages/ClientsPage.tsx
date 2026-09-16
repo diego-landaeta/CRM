@@ -69,7 +69,11 @@ const ConversionDialog = lazy(() => import('@/modules/conversions/components/Con
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
 function fmt(n: number | string): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  // Con centimos: es lo facturado y lo pendiente de cada cliente.
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
 }
 
 // El plan de cuotas de un vistazo: cuántas hay, cuántas se han cobrado y
