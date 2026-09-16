@@ -247,7 +247,44 @@ function deQuienEs(charge, filtro) {
   return String(marca) === filtro.valor ? 'mio' : 'ajeno';
 }
 
-export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
+/**
+ * UN FALLO TIENE QUE QUEDAR APUNTADO, NO SOLO EN EL LOG.
+ *
+ * `stripe_sync_state.last_error` existia desde el principio y NADIE LO ESCRIBIA
+ * NUNCA: la unica linea que lo tocaba lo ponia a null al terminar bien. O sea
+ * que un proyecto cuya clave ha caducado falla cada cinco minutos y por fuera
+ * se ve igual que uno sano — el panel de Estado lee justo ese campo para decir
+ * si Stripe va (`piezas.service.js`), y decia que si.
+ *
+ * Importa mas ahora que los proyectos IA se conectan por access token y sin
+ * webhook: la unica via por la que entra el dinero es este cron, y los tokens
+ * de este tipo CADUCAN. El dia que venza, sin esto, la sincronizacion se para
+ * y no se entera nadie hasta que alguien eche en falta cobros.
+ *
+ * `last_sync_at` NO se toca al fallar, a proposito: tiene que seguir diciendo
+ * cuando fue la ultima vez que salio bien, que es la pregunta de verdad.
+ */
+async function apuntaElFallo(projectId, err) {
+  try {
+    await model.upsertSyncState(projectId, {
+      last_error: String(err?.message || err).slice(0, 500),
+    });
+  } catch (e) {
+    // Si ni siquiera se puede apuntar, al menos que se vea el porque.
+    logger.error({ projectId, err: e.message }, 'Stripe sync: no se pudo apuntar el fallo');
+  }
+}
+
+export async function syncStripePayments(projectId, opciones = {}) {
+  try {
+    return await sincroniza(projectId, opciones);
+  } catch (err) {
+    await apuntaElFallo(projectId, err);
+    throw err;
+  }
+}
+
+async function sincroniza(projectId, { fullHistory = false, retryPending = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
 
@@ -294,6 +331,12 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
   let startingAfter = null;
   let pages = 0;
   const MAX_PAGES = 200;
+  // ¿Se llego al final de la lista, o se corto por el tope de paginas?
+  //
+  // Empieza en FALSE y solo se pone a true al salir por «ya no hay mas». Salir
+  // por el `while` --agotado el tope-- lo deja en false, que es exactamente el
+  // caso que no puede mover la marca de agua.
+  let completo = false;
 
   while (pages < MAX_PAGES) {
     const params = { limit: 100, 'expand[]': 'data.balance_transaction' };
@@ -301,7 +344,9 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     if (startingAfter) params.starting_after = startingAfter;
 
     const data = await stripeGet(apiKey, '/v1/charges', params);
-    if (!data.data?.length) break;
+    // Lista vacia: no hay nada nuevo que traer. Eso tambien es haber llegado
+    // al final.
+    if (!data.data?.length) { completo = true; break; }
 
     for (const ch of data.data) {
       try {
@@ -341,11 +386,28 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
         logger.warn({ chargeId: ch.id, err: e.message }, 'Charge sync failed - continua');
       }
     }
-    if (!data.has_more) break;
+    if (!data.has_more) { completo = true; break; }
     startingAfter = data.data[data.data.length - 1].id;
     pages++;
   }
 
+
+  // SE CORTO POR EL TOPE DE PAGINAS: la marca de agua NO se mueve.
+  //
+  // Stripe devuelve los cargos del mas nuevo al mas viejo. Al parar en la
+  // pagina 200 se han visto los 20.000 mas recientes y NO los anteriores; si la
+  // marca de agua avanzara al mas nuevo de todos, la siguiente vuelta empezaria
+  // por delante y esos cobros mas viejos no se pedirian jamas. Se quedaria un
+  // agujero permanente y en silencio, que es justo lo que no puede pasar cuando
+  // el cron es la unica via por la que entra el dinero.
+  //
+  // Dejandola quieta, la siguiente vuelta vuelve a pedir desde el mismo sitio y
+  // sigue bajando. Se tarda mas y no se pierde nada.
+  if (pages >= MAX_PAGES && !completo) {
+    logger.warn({ projectId, pages },
+      'Stripe sync: cortado por el tope de paginas. La marca de agua no se mueve: ' +
+      'quedan cobros mas antiguos por traer y la siguiente vuelta sigue por ahi.');
+  }
 
   // Segunda pasada: los cargos que ya estaban importados y siguen sin asociar.
   // Stripe solo devuelve los cargos nuevos, asi que sin esto un cobro cuya
@@ -393,10 +455,13 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     lastCreated = Math.min(lastCreated || primeroSinMarcar, primeroSinMarcar - 1);
   }
 
+  const avanzaLaMarca = completo;
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
-    last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
-    last_synced_until: lastCreated ? new Date(lastCreated * 1000).toISOString() : (state?.last_synced_until || null),
+    last_full_sync_at: (fullHistory && completo) ? new Date().toISOString() : (state?.last_full_sync_at || null),
+    last_synced_until: (avanzaLaMarca && lastCreated)
+      ? new Date(lastCreated * 1000).toISOString()
+      : (state?.last_synced_until || null),
     total_imported: (state?.total_imported || 0) + imported,
     last_error: null,
   });
@@ -409,8 +474,8 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
       'Stripe: cobros de mas de un dia SIN marca de plataforma. O son de otra que no marca, ' +
       'o el estampado del webhook de la nuestra no esta funcionando.');
   }
-  logger.info({ projectId, imported, ajenos, sinMarcar, sinMarcarViejos, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, ajenos, sinMarcar, sinMarcarViejos, disputes: disputesFound, pages, reasociados };
+  logger.info({ projectId, imported, ajenos, sinMarcar, sinMarcarViejos, disputesFound, pages, reasociados, completo }, 'Stripe sync OK');
+  return { imported, ajenos, sinMarcar, sinMarcarViejos, disputes: disputesFound, pages, reasociados, completo };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {

@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import CorteDeFacturacion from '../components/CorteDeFacturacion';
 import ProyectosIAConectados from '../components/ProyectosIAConectados';
+import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -367,6 +368,11 @@ function StripeCard({ projectId }: { projectId: number }) {
         </details>
 
         <TestStatus data={data} />
+
+        {/* Como va el cron. «Probar conexion» dice que la clave sirve AHORA;
+            esto dice si los cobros estan entrando de verdad, que es otra
+            pregunta y la que importa cuando no hay webhook. */}
+        <EstadoDeLaSincronizacion projectId={projectId} />
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           <button onClick={save} disabled={saving}

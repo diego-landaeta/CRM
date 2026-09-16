@@ -306,7 +306,12 @@ export async function escalonesDelCorte(projectId) {
     [projectId]
   );
   const r = rows[0];
-  if (!r) return null;
+  // OJO: una consulta de subselects SIEMPRE devuelve una fila, aunque el
+  // proyecto no exista — saldria con los tres escalones a null, que la pantalla
+  // pinta como «este proyecto no tiene suelo de facturacion», en rojo. Eso es
+  // otra cosa: no es que falte el suelo, es que no hay proyecto. `nombre` es
+  // NOT NULL, asi que sirve para distinguirlo.
+  if (!r || r.proyecto == null) return null;
   const corte = r.corte_mano || r.primera_factura || r.alta_proyecto || null;
   const manda = r.corte_mano ? 'corte_mano' : r.primera_factura ? 'primera_factura'
     : r.alta_proyecto ? 'alta_proyecto' : null;
