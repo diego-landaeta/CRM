@@ -3,6 +3,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import CorteDeFacturacion from '../components/CorteDeFacturacion';
+import ProyectosIAConectados from '../components/ProyectosIAConectados';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -99,9 +100,14 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
+      {/* La lista de proyectos IA va FUERA del `pid`: sirve precisamente
+          cuando todavia no se ha elegido ninguno, para saber por cual empezar.
+          Se pinta sola solo si hay proyectos IA. */}
+      <ProyectosIAConectados />
+
       {!pid ? (
         <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground">
-          Selecciona un proyecto en el sidebar para configurar sus integraciones.
+          Selecciona un proyecto en el sidebar —o pulsa «Configurar» arriba— para configurar sus integraciones.
         </div>
       ) : (
         <div className="space-y-5">
