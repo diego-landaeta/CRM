@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Warning, Sun, CalendarBlank, CalendarCheck } from '@phosphor-icons/react';
 import { traerResumen, type ResumenCola } from '@/modules/proceso/api/agenda.api';
+import { GESTORA_EN_URL } from '@/modules/proceso/lib/cola';
 
 /**
  * «Para hoy / para mañana» (#130, parte 2).
@@ -45,17 +46,26 @@ const TRAMOS: Tramo[] = [
   { clave: 'semana', rotulo: 'Esta semana', icono: CalendarCheck, campo: 'esta_semana' },
 ];
 
-export default function ParaHoyYManana({ projectId }: { projectId?: number | null }) {
+export default function ParaHoyYManana({
+  projectId,
+  gestoraId = null,
+}: {
+  projectId?: number | null;
+  /** Solo lo manda quien puede filtrar (#130). Para una gestora el servidor
+      devuelve lo suyo aunque llegue el id de otra, asi que esto no recorta:
+      elige DE QUIEN es la cola que se esta mirando. */
+  gestoraId?: number | null;
+}) {
   const navigate = useNavigate();
   const [resumen, setResumen] = useState<ResumenCola | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    traerResumen({ projectId })
+    traerResumen({ projectId, gestoraId })
       .then((r) => { if (vivo) setResumen(r); })
       .catch(() => { if (vivo) setResumen(null); });
     return () => { vivo = false; };
-  }, [projectId]);
+  }, [projectId, gestoraId]);
 
   if (!resumen) return null;
 
@@ -78,7 +88,10 @@ export default function ParaHoyYManana({ projectId }: { projectId?: number | nul
             <button
               key={clave}
               type="button"
-              onClick={() => navigate(`/prospectos/cola?tramo=${clave}`)}
+              onClick={() => navigate(
+                `/prospectos/cola?tramo=${clave}`
+                + (gestoraId ? `&${GESTORA_EN_URL}=${gestoraId}` : ''),
+              )}
               aria-label={`${rotulo}: ${n}. Abrir la cola en este tramo`}
               className={`rounded-md p-3 border text-left transition-colors ${
                 urge && n > 0

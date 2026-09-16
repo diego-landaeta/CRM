@@ -56,9 +56,23 @@ export function normalizeStats(raw) {
   };
 }
 
-export function useDashboard() {
+/**
+ * Los numeros del dashboard.
+ *
+ * `gestoraId` es el punto 1 del #130: quien manda puede mirar el dashboard de
+ * una gestora concreta. Viaja como `responsableId`, que es el nombre que usan
+ * los tres endpoints de leads.
+ *
+ * Para una gestora el parametro no existe y tampoco haria nada: el controlador
+ * pisa `responsableId` con su propio id (`lead.controller.js`, en el listado y
+ * en los stats). Lo de aqui elige a quien mirar; el recorte es del servidor.
+ */
+export function useDashboard(gestoraId = null) {
   const { activeProject, projects, isAllProjects } = useProjectContext();
   const pid = activeProject?.id;
+  // Se cuelga de cada URL, o cadena vacia. Asi las plantillas de abajo no se
+  // llenan de ternarios y una llamada sin gestora queda igual que antes.
+  const deLaGestora = gestoraId ? `&responsableId=${gestoraId}` : '';
   // Con una empresa elegida, «todos» son sus campus y ninguno mas.
   const idsDelAmbito = useIdsDelAmbito();
   const allProjectsKey = isAllProjects ? idsDelAmbito.join(',') : '';
@@ -81,9 +95,9 @@ export function useDashboard() {
       setError(null);
       try {
         const ids = idsDelAmbito;
-        const statsPromises = ids.map((id) => client.get(`/leads/stats?projectId=${id}`).catch(() => ({ success: false })));
-        const todayPromises = ids.map((id) => client.get(`/leads/today?projectId=${id}`).catch(() => ({ success: false })));
-        const leadsRes = await client.get(`/leads?projectIds=${ids.join(',')}&limit=10&page=1`).catch(() => ({ success: false }));
+        const statsPromises = ids.map((id) => client.get(`/leads/stats?projectId=${id}${deLaGestora}`).catch(() => ({ success: false })));
+        const todayPromises = ids.map((id) => client.get(`/leads/today?projectId=${id}${deLaGestora}`).catch(() => ({ success: false })));
+        const leadsRes = await client.get(`/leads?projectIds=${ids.join(',')}&limit=10&page=1${deLaGestora}`).catch(() => ({ success: false }));
 
         const statsResults = await Promise.all(statsPromises);
         const todayResults = await Promise.all(todayPromises);
@@ -120,9 +134,9 @@ export function useDashboard() {
     setError(null);
     try {
       const [statsRes, leadsRes, todayRes] = await Promise.all([
-        client.get(`/leads/stats?projectId=${pid}`),
-        client.get(`/leads?projectId=${pid}&limit=5&page=1`),
-        client.get(`/leads/today?projectId=${pid}`).catch(() => ({ success: false })),
+        client.get(`/leads/stats?projectId=${pid}${deLaGestora}`),
+        client.get(`/leads?projectId=${pid}&limit=5&page=1${deLaGestora}`),
+        client.get(`/leads/today?projectId=${pid}${deLaGestora}`).catch(() => ({ success: false })),
       ]);
 
       if (statsRes.success) setStats(normalizeStats(statsRes.data));
@@ -133,7 +147,7 @@ export function useDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [pid, isAllProjects, allProjectsKey]);
+  }, [pid, isAllProjects, allProjectsKey, deLaGestora]);
 
   useEffect(() => {
     fetchDashboard();

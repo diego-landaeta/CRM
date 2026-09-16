@@ -23,7 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
-import { contarPorPaso, trasSacar } from '../lib/cola';
+import { contarPorPaso, trasSacar, gestoraDeLaDireccion, GESTORA_EN_URL } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -66,7 +66,6 @@ export default function ColaDelDiaPage() {
   const [cola, setCola] = useState<PasoEnCola[]>([]);
   const [resumen, setResumen] = useState<ResumenCola | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [gestoraId, setGestoraId] = useState<number | null>(null);
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
   // Qué tramo se está mirando. Por defecto todo lo que ya toca —atrasado y hoy—,
   // que es con lo que se abre el día.
@@ -86,6 +85,19 @@ export default function ColaDelDiaPage() {
     const p = new URLSearchParams(params);
     // «pendiente» es el estado de partida: no ensucia la direccion.
     if (t === 'pendiente') p.delete('tramo'); else p.set('tramo', t);
+    setParams(p, { replace: true });
+  };
+
+  // Igual que el tramo, la gestora vive en la DIRECCIÓN (#130). El dashboard de
+  // un admin se puede estar mirando el día de Laura, y su enlace «Para hoy»
+  // tiene que dejar la cola puesta en el día de Laura y no en el del equipo: si
+  // no, el número que se pulsa y la lista que se abre dicen cosas distintas.
+  //
+  // Sale gratis lo de siempre: se puede compartir y sobrevive a recargar.
+  const gestoraId = gestoraDeLaDireccion(params, esAdmin);
+  const setGestoraId = (id: number | null) => {
+    const p = new URLSearchParams(params);
+    if (id) p.set(GESTORA_EN_URL, String(id)); else p.delete(GESTORA_EN_URL);
     setParams(p, { replace: true });
   };
 

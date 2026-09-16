@@ -282,9 +282,22 @@ export async function getById(req, res, next) {
 export async function today(req, res, next) {
   try {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // De quien es el dia que se pide. Misma regla que el resto del modulo y que
+    // `asesoraDelInforme()` en los informes: una gestora recibe el suyo aunque
+    // escriba el id de otra, y quien manda ve el del equipo o el de una sola.
+    //
+    // Hacia falta para el #130: sin esto, un admin que filtra el dashboard por
+    // Laura veia los numeros de Laura en todos los bloques menos en «Tu dia de
+    // hoy», que le seguia enseñando sus propios recordatorios.
+    const pedida = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+    const deQuien = req.user.role === 'gestor'
+      ? req.user.userId
+      : (pedida && !isNaN(pedida) ? pedida : null);
     const data = await leadService.getTodaySummary({
-      userId: req.user.userId,
-      role: req.user.role,
+      userId: deQuien,
+      // El modelo recorta cuando `role === 'gestor'`. Con una gestora pedida por
+      // un admin hay que recortar igual, asi que se le dice que si.
+      role: deQuien ? 'gestor' : req.user.role,
       projectId: projectId && !isNaN(projectId) ? projectId : null,
     });
     res.json({ success: true, data });

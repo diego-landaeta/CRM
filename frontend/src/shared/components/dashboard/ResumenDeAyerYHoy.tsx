@@ -23,18 +23,26 @@ const FILAS: { clave: keyof Omit<DiaDelResumen, 'dia'>; rotulo: string; duele?: 
   { clave: 'sin_tocar', rotulo: 'Sin tocar', duele: true },
 ];
 
-export default function ResumenDeAyerYHoy({ projectIds }: { projectIds: number[] }) {
+export default function ResumenDeAyerYHoy({
+  projectIds,
+  asesoraId = null,
+}: {
+  projectIds: number[];
+  /** De quien son los numeros. Solo lo manda quien puede filtrar (#130); el
+      recorte sigue siendo del servidor, aqui solo se elige a quien mirar. */
+  asesoraId?: number | null;
+}) {
   const [dias, setDias] = useState<DiaDelResumen[] | null>(null);
   const [fallo, setFallo] = useState(false);
 
   useEffect(() => {
     let vivo = true;
     setFallo(false);
-    getResumenDelDia(projectIds)
+    getResumenDelDia(projectIds, asesoraId)
       .then((d) => { if (vivo) setDias(d); })
       .catch(() => { if (vivo) setFallo(true); });
     return () => { vivo = false; };
-  }, [projectIds?.join(',')]);
+  }, [projectIds?.join(','), asesoraId]);
 
   // Callado si falla: es un bloque de apoyo, y tumbar el dashboard entero por
   // no poder contar los leads de ayer seria peor que no enseñarlos.

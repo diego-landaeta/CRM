@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
+import { useGestoras } from '@/shared/hooks/useGestoras';
+import { useAuth } from '@/contexts/AuthContext';
+import SelectorDeGestora from '@/shared/components/ui/SelectorDeGestora';
 import ResumenDeAyerYHoy from '@/shared/components/dashboard/ResumenDeAyerYHoy';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
@@ -137,10 +140,24 @@ function SaasMonitor({ projectId }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext();
-  const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
+  const { user } = useAuth();
+  // Los tres dashboards del #130 no son tres pantallas: es la misma, y lo que
+  // cambia es de quien son los numeros y quien puede elegirlo.
+  //
+  //   gestora      lo suyo. El servidor no le deja pedir otra cosa.
+  //   admin        el equipo, o una gestora, y por proyecto.
+  //   superadmin   igual, y ademas cruzando proyectos y sociedades, que es lo
+  //                que ya hace el selector de ambito de la cabecera.
+  const esGestora = user?.role === 'gestor';
+  const proyectoId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const [gestoraId, setGestoraId] = useState(null);
+  const { gestoras } = useGestoras(proyectoId);
+
+  const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard(gestoraId);
   // Los mismos proyectos que mira el resto del dashboard (#130).
   const idsDelAmbito = useIdsDelAmbito();
   const [drawerLeadId, setDrawerLeadId] = useState(null);
+  const nombreGestora = gestoras.find((g) => g.id === gestoraId)?.nombre || null;
 
   if (loading) {
     return (
@@ -203,22 +220,34 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
+        subtitle={
+          nombreGestora
+            ? `${todayDate} - ${activeProject?.nombre || 'Sin proyecto'} - ${nombreGestora}`
+            : `${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`
+        }
+        actions={(
+          <SelectorDeGestora valor={gestoraId} alCambiar={setGestoraId} gestoras={gestoras} />
+        )}
       />
 
       {/* Lo que toca, de la cola del proceso (#130). Va ANTES del resumen: lo
           primero de la mañana es que hay que hacer, no que paso ayer. */}
-      <ParaHoyYManana projectId={activeProject?.id && activeProject.id !== -1 ? activeProject.id : null} />
+      <ParaHoyYManana projectId={proyectoId} gestoraId={gestoraId} />
 
       {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
-      <ResumenDeAyerYHoy projectIds={idsDelAmbito} />
+      <ResumenDeAyerYHoy projectIds={idsDelAmbito} asesoraId={gestoraId} />
 
       {/* SECCION HOY */}
       {today && (
         <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="font-semibold text-base">Tu dia de hoy</h2>
+              {/* Con una gestora elegida esto ya no es «tu» dia: son sus
+                  recordatorios y sus leads. Dejar el rotulo puesto hacia que un
+                  admin leyera como propios unos numeros que no lo son. */}
+              <h2 className="font-semibold text-base">
+                {nombreGestora ? `El dia de ${nombreGestora}` : 'Tu dia de hoy'}
+              </h2>
               <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del dia</p>
             </div>
           </div>
@@ -445,7 +474,11 @@ export default function DashboardPage() {
                     <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                     <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
                     <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
+                    {/* Una gestora solo recibe los suyos: la columna diria su
+                        nombre en las cinco filas. Ocupa sitio y no informa. */}
+                    {!esGestora && (
+                      <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -459,7 +492,9 @@ export default function DashboardPage() {
                       <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
                       <td className="px-5 py-3"><ChannelBadge channel={lead.origen} /></td>
                       <td className="px-5 py-3"><StatusBadge status={lead.estado} showIcon /></td>
-                      <td className="px-5 py-3 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
+                      {!esGestora && (
+                        <td className="px-5 py-3 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -478,7 +513,9 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <StatusBadge status={lead.estado} />
                     <ChannelBadge channel={lead.origen} />
-                    <span className="text-[12px] text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</span>
+                    {!esGestora && (
+                      <span className="text-[12px] text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</span>
+                    )}
                   </div>
                 </div>
               ))}

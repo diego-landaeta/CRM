@@ -70,3 +70,30 @@ export function trasSacar(total: number, indice: number): number | null {
   if (quedan <= 0) return null;
   return Math.min(indice, quedan - 1);
 }
+
+/**
+ * El nombre del parametro con el que viaja la gestora (#130).
+ *
+ * Vive aqui porque lo ESCRIBE el dashboard —el enlace de «Lo que toca»— y lo
+ * LEE esta pantalla. Con la cadena suelta en los dos sitios, cambiar uno deja
+ * el otro mirando un parametro que ya no llega: el enlace seguiria funcionando
+ * y abriria la cola del equipo entero, sin error y sin aviso.
+ */
+export const GESTORA_EN_URL = 'gestora';
+
+/**
+ * De quien es la cola que pide la direccion.
+ *
+ * `null` es «todo el equipo». A quien no puede filtrar se le devuelve `null`
+ * aunque escriba el parametro a mano: no es la defensa —esa la hace el
+ * servidor, que para una gestora contesta lo suyo pida lo que pida— sino que
+ * la pantalla no se quede diciendo «Laura» en un titulo mientras enseña otra
+ * cosa.
+ */
+export function gestoraDeLaDireccion(
+  params: URLSearchParams,
+  puedeFiltrar: boolean,
+): number | null {
+  if (!puedeFiltrar) return null;
+  return Number(params.get(GESTORA_EN_URL)) || null;
+}
