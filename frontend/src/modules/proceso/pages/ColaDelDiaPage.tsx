@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise, Buildings,
+  CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise, Buildings, ListChecks,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -27,6 +27,7 @@ import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { contarPorPaso, trasSacar } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
 import { toast } from '@/shared/hooks/useToast';
+import { tramosDeSalud, fraseDeSalud, totalDeLaCola } from '../lib/salud';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
 function cuando(fecha: string, retraso: number) {
@@ -81,7 +82,7 @@ export default function ColaDelDiaPage() {
   // en la URL, el enlace deja la cola ya puesta, y además se puede compartir y
   // sobrevive a recargar.
   const [params, setParams] = useSearchParams();
-  const TRAMOS = ['pendiente', 'atrasados', 'hoy', 'manana', 'semana'] as const;
+  const TRAMOS = ['pendiente', 'atrasados', 'hoy', 'manana', 'semana', 'todo'] as const;
   type Tramo = typeof TRAMOS[number];
   const pedido = params.get('tramo') as Tramo | null;
   const tramo: Tramo = pedido && TRAMOS.includes(pedido) ? pedido : 'pendiente';
@@ -162,7 +163,13 @@ export default function ColaDelDiaPage() {
     if (tramo === 'atrasados') return cola.filter((x) => x.dias_de_retraso > 0);
     if (tramo === 'hoy') return cola.filter((x) => x.dias_de_retraso === 0);
     if (tramo === 'manana') return cola.filter((x) => x.dias_de_retraso === -1);
-    return cola;
+    if (tramo === 'todo') return cola;
+    // «pendiente» es el arranque, y arranca en LO QUE YA TOCA: lo atrasado y
+    // lo de hoy. Antes enseñaba la cola entera —incluida la semana que viene—
+    // aunque el comentario dijera otra cosa, y eso es lo que Diego marcó el
+    // 15/09: «faltan los pasos de hoy: qué hay que hacer hoy». Lo de más
+    // adelante sigue a un clic, en «Esta semana» y en «Todo».
+    return cola.filter((x) => x.dias_de_retraso >= 0);
   }, [cola, tramo]);
 
   // Las cuentas por paso se sacan de lo que hay en el tramo, no de la cola
@@ -260,14 +267,62 @@ export default function ColaDelDiaPage() {
         ) : null}
       />
 
+      {/* CÓMO VA EL DÍA. Diego, 15/09: «no hay gráficas de cómo va, ni la
+          salud». Cuatro números sueltos obligan a compararlos de cabeza; la
+          barra dice en medio segundo si el día está bajo control. No inventa
+          ninguna cifra: son los mismos cuatro del resumen, puestos juntos. */}
+      {resumen && totalDeLaCola(resumen) > 0 && (
+        <section aria-label="Cómo va la cola" className="rounded-lg border border-border bg-card p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className={`text-normal font-semibold ${fraseDeSalud(resumen).alerta ? 'text-destructive' : 'text-success'}`}>
+              {fraseDeSalud(resumen).texto}
+            </p>
+            <p className="text-secundario text-muted-foreground tabular-nums">
+              {totalDeLaCola(resumen)} en la cola
+            </p>
+          </div>
+
+          <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            {tramosDeSalud(resumen).filter((t) => t.valor > 0).map((t) => (
+              <div
+                key={t.clave}
+                style={{ width: `${t.porcentaje}%` }}
+                className={{
+                  destructive: 'bg-destructive',
+                  warning: 'bg-warning',
+                  info: 'bg-info',
+                  muted: 'bg-muted-foreground/30',
+                }[t.tono]}
+              />
+            ))}
+          </div>
+
+          {/* La leyenda lleva las cifras: la barra sola no se puede leer, y una
+              barra que hay que adivinar es peor que una lista. */}
+          <ul className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {tramosDeSalud(resumen).filter((t) => t.valor > 0).map((t) => (
+              <li key={t.clave} className="inline-flex items-center gap-1.5 text-secundario text-muted-foreground">
+                <span className={`h-2 w-2 rounded-full ${{
+                  destructive: 'bg-destructive',
+                  warning: 'bg-warning',
+                  info: 'bg-info',
+                  muted: 'bg-muted-foreground/30',
+                }[t.tono]}`} />
+                <span className="tabular-nums font-medium text-foreground">{t.valor}</span> {t.etiqueta}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {resumen && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <Contador icon={Warning} etiqueta="Atrasados" valor={resumen.atrasados}
-            tono="text-red-600 dark:text-red-400"
+            tono="text-destructive"
             activo={tramo === 'atrasados'}
             onClick={() => setTramo(tramo === 'atrasados' ? 'pendiente' : 'atrasados')} />
           <Contador icon={CalendarCheck} etiqueta="Para hoy" valor={resumen.hoy}
-            tono="text-emerald-600 dark:text-emerald-400"
+            tono="text-success"
             activo={tramo === 'hoy'}
             onClick={() => setTramo(tramo === 'hoy' ? 'pendiente' : 'hoy')} />
           <Contador icon={ArrowRight} etiqueta="Para mañana" valor={resumen.manana}
@@ -278,6 +333,12 @@ export default function ColaDelDiaPage() {
             tono="text-muted-foreground"
             activo={tramo === 'semana'}
             onClick={() => setTramo(tramo === 'semana' ? 'pendiente' : 'semana')} />
+          {/* La cola entera. Existe porque el arranque ya no la enseña: abre en
+              lo que toca hoy, y lo de más adelante se pide. */}
+          <Contador icon={ListChecks} etiqueta="Toda la cola" valor={totalDeLaCola(resumen)}
+            tono="text-muted-foreground"
+            activo={tramo === 'todo'}
+            onClick={() => setTramo(tramo === 'todo' ? 'pendiente' : 'todo')} />
         </div>
       )}
 
@@ -312,7 +373,7 @@ export default function ColaDelDiaPage() {
               onClick={() => setPaso(paso === g.clave ? null : g.clave)}
               aria-pressed={paso === g.clave}
               title={g.nombre}
-              // «Seg. 2» a secas se repite en cada fila de la lista y no dice
+              // «Paso 2» a secas se repite en cada fila de la lista y no dice
               // de qué paso habla. Leído tiene que bastar por sí solo.
               aria-label={`Ver solo ${g.nombre}: ${g.cuantos}${g.atrasados > 0 ? `, ${g.atrasados} con retraso` : ''}`}
               className={
@@ -320,12 +381,12 @@ export default function ColaDelDiaPage() {
                 + (paso === g.clave ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')
               }
             >
-              <span>Seg. {g.orden}</span>
+              <span>Paso {g.orden}</span>
               <span className="tabular-nums opacity-70">{g.cuantos}</span>
               {/* Cuántos de ese paso llegan tarde. Un «14» a secas no dice si
                   ese grupo urge o simplemente es grande. */}
               {g.atrasados > 0 && (
-                <span className="rounded bg-red-100 px-1 text-[10px] font-bold tabular-nums text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                <span className="rounded bg-destructive-soft px-1 text-[10px] font-bold tabular-nums text-destructive-soft-foreground">
                   {g.atrasados} tarde
                 </span>
               )}
@@ -363,7 +424,7 @@ export default function ColaDelDiaPage() {
                 className={
                   'w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 '
                   + 'focus:outline-none focus:ring-2 focus:ring-primary/40 '
-                  + (c.urgente ? 'border-l-4 border-l-red-500 border-border' : 'border-border')
+                  + (c.urgente ? 'border-l-4 border-l-destructive border-border' : 'border-border')
                 }
               >
                 <div className="flex items-start gap-3">
@@ -371,21 +432,34 @@ export default function ColaDelDiaPage() {
                       seguimiento numero 2, y debajo cuantos lleva hechos.
                       Diego: «esto no se entiende de los pasos · falta poner la
                       cantidad de seguimiento que es». */}
-                  <span className="mt-0.5 flex shrink-0 flex-col items-center justify-center rounded-md bg-muted px-2 py-1 text-muted-foreground">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Seg.</span>
+                  <span className="mt-0.5 flex w-[4.5rem] shrink-0 flex-col items-center justify-center rounded-md bg-muted px-1.5 py-1 text-muted-foreground">
+                    <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Paso</span>
                     <span className="text-sm font-bold tabular-nums leading-tight">{p.orden}</span>
                   </span>
 
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span className="font-semibold truncate">{p.lead_nombre || 'Sin nombre'}</span>
-                      <span className="text-xs text-muted-foreground">
-                        Seguimiento {p.orden} · {p.paso_nombre || p.clave}
+                      {/* El paso, en pastilla y no en gris pegado al nombre.
+                          Diego, 15/09: «no se distingue qué paso es». Con
+                          veinte filas iguales, un texto secundario del mismo
+                          tamaño que el resto no se lee: se salta. */}
+                      <span className="rounded bg-info-soft px-1.5 py-0.5 text-[11px] font-medium text-info-soft-foreground">
+                        {p.paso_nombre || p.clave}
                       </span>
+                      {/* De qué campus es. Va JUNTO AL NOMBRE y no en la
+                          esquina gris de la derecha: cuando la lista mezcla
+                          campus, de cuál es forma parte de quién es. Diego:
+                          «no se distingue de qué proyecto es cada fila». */}
+                      {mezcla && p.proyecto && (
+                        <span className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          <Buildings size={10} /> {p.proyecto}
+                        </span>
+                      )}
                       <span className={
                         'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide '
                         + (c.urgente
-                          ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                          ? 'bg-destructive-soft text-destructive-soft-foreground'
                           : 'bg-muted text-muted-foreground')
                       }>
                         {c.texto}
@@ -425,7 +499,7 @@ export default function ColaDelDiaPage() {
                             mirarlas igual. */}
                         {p.avisa_plazas && (
                           <span
-                            className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                            className="rounded bg-warning-soft px-1.5 py-0.5 font-medium text-warning-soft-foreground"
                             title="Este mensaje dice cuántas plazas quedan. El número no lo lleva el CRM: compruébalo antes de enviar y no copies el del mensaje anterior."
                           >
                             comprueba las plazas
@@ -442,11 +516,6 @@ export default function ColaDelDiaPage() {
                   </div>
 
                   <div className="shrink-0 text-right text-[11px] text-muted-foreground">
-                    {/* De que campus es. Solo cuando la lista mezcla varios:
-                        con un proyecto elegido lo dice ya la cabecera. */}
-                    {mezcla && p.proyecto && (
-                      <div className="inline-flex items-center gap-1"><Buildings size={11} />{p.proyecto}</div>
-                    )}
                     {esAdmin && !gestoraId && p.gestora && (
                       <div className="inline-flex items-center gap-1"><User size={11} />{p.gestora}</div>
                     )}
