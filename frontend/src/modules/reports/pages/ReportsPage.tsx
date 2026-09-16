@@ -16,6 +16,7 @@ import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import PanelResumen from '@/shared/components/PanelResumen';
+import TasaDeCierre from '../components/TasaDeCierre';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import ReportesDisponibles from '@/shared/components/ReportesDisponibles';
 
@@ -394,10 +395,28 @@ export default function ReportsPage() {
       {tab === 'ia' && isIaProject && <ReportsIAView project={activeProject} />}
 
       {tab === 'crm' && <>
+      {/* La tasa de cierre, primer bloque (#39). Va la primera porque es la
+          pregunta que se hace al abrir Reportes, y porque lleva su propio
+          «¿de dónde sale?»: el número se puede comprobar sin salir de aquí. */}
+      <TasaDeCierre
+        activeProject={proyectoEfectivo}
+        activeIssuerId={issuerEfectivo}
+        from={range.from}
+        to={range.to}
+      />
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
-        <KpiCard icon={TrendUp} label="Tasa conversión" value={`${data.tasa_conversion}%`} tone="success" />
+        {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
+            que es OTRA cuenta: los leads en estado «convertido», un campo que
+            se pone a mano. Al lado de la tasa de cierre daban dos porcentajes
+            distintos de lo que el lector entiende como lo mismo, y el #39 lo
+            señala como la razón de que no se crea ninguno de los dos.
+            Se queda uno solo, el verificado, y aquí va el dato que faltaba:
+            cuántos están marcados como convertidos —que es un recuento, no un
+            porcentaje, y no compite con nada—. */}
+        <KpiCard icon={TrendUp} label="Marcados convertidos" value={data.leads.convertido} tone="success" />
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>

@@ -292,12 +292,30 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
      tocado AS (
        SELECT DISTINCT li.lead_id FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
      ),
-     -- La primera venta de cada persona, sin contar mensualidades: pagar la
-     -- cuota de algo que ya compro no es convertirse otra vez.
+     -- La primera venta de cada persona, con LA MISMA regla que la tasa de
+     -- cierre (#39). Son las tres condiciones de VENTA_CERRADA
+     -- (sin comillas invertidas: esto vive dentro de una plantilla de JS y una
+     -- sola la cierra a media consulta):
+     --
+     --   sin mensualidades  pagar la cuota de algo ya comprado no es
+     --                      convertirse otra vez;
+     --   con algun cobro    una conversion sin un euro cobrado es una
+     --                      intencion, no una venta;
+     --   posterior a entrar una carga de clientes viejos —metidos con fecha
+     --                      de hoy y venta de enero— parecia que compraban
+     --                      nada mas llegar.
+     --
+     -- Faltaban las dos ultimas, y por eso este panel decia «compraron 3 de
+     -- 20» justo debajo de una tasa de cierre que decia «2 de 20». Dos cuentas
+     -- de lo mismo, en la misma pantalla, con numeros distintos: es lo que el
+     -- #39 da como razon de que no se crea ninguno de los dos.
      venta AS (
        SELECT cv.lead_id, MIN(cv.fecha_conversion) AS vendida
          FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
-        WHERE cv.es_mensualidad IS NOT TRUE GROUP BY cv.lead_id
+        WHERE cv.es_mensualidad IS NOT TRUE
+          AND cv.fecha_conversion >= co.entro::date
+          AND EXISTS (SELECT 1 FROM conversion_payments p WHERE p.conversion_id = cv.id)
+        GROUP BY cv.lead_id
      )
      SELECT count(*)::int AS entraron,
             count(t.lead_id)::int AS con_seguimiento,
@@ -354,9 +372,15 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
          FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
         WHERE li.tipo <> 'nota'
      ),
+     -- Misma regla que arriba y que la tasa de cierre (#39): sin
+     -- mensualidades, con algun cobro y posterior a la entrada. Si el embudo
+     -- contara distinto, la columna «compraron» de cada escalon no sumaria lo
+     -- que dice el bloque de arriba y la tabla se leeria como rota.
      compro AS (
        SELECT DISTINCT cv.lead_id FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
         WHERE cv.es_mensualidad IS NOT TRUE
+          AND cv.fecha_conversion >= co.entro::date
+          AND EXISTS (SELECT 1 FROM conversion_payments p WHERE p.conversion_id = cv.id)
      ),
      -- Cuanto se tardo desde el contacto anterior; para el primero, desde que
      -- entro la persona.
