@@ -487,6 +487,32 @@ export async function findByConversion(conversionId) {
   return rows[0] || null;
 }
 
+/*
+  LA MISMA SOCIEDAD, AUNQUE SEAN DOS FILAS.
+
+  Dos emisores pueden ser la misma empresa a efectos fiscales: mismo NIF y misma
+  serie, y por tanto UN SOLO correlativo. En MultiCRM son el 9 y el 11 --los dos
+  «Ictess Ingenieria e Innovacion SL», NIF B25951955, serie ICTESS; el 11 lleva
+  el alias «Solvenic»--. `invoice_sequences` tiene UNA sola fila para los dos y
+  la numeracion va seguida entre ellos: …62, 63 de Solvenic, 64… 78, 79 de
+  Solvenic, 80.
+
+  Filtrar por `issuer_id` a secas partia ese correlativo en dos listas y dejaba
+  huecos en ambas: la 2026/0079 no salia por ningun lado y parecia perdida
+  --Diego, 16/09: «ponla en la facturacion que no se ve»--. Un correlativo
+  fiscal se lee entero o no se lee.
+
+  Se filtra por la IDENTIDAD FISCAL, no por la fila. Sin NIF no se agrupa nada:
+  cae al emisor exacto, que es el comportamiento de antes.
+*/
+const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
+    SELECT e.id
+      FROM invoice_issuers e, invoice_issuers base
+     WHERE base.id = ${marcador}
+       AND (e.id = base.id
+            OR (base.nif IS NOT NULL AND e.nif = base.nif
+                AND e.serie IS NOT DISTINCT FROM base.serie)))`;
+
 // Listado de facturas. Ámbito:
 //  - por PROYECTO (projectId): el flujo normal.
 //  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
@@ -496,7 +522,7 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   const conds = [];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
   // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
@@ -562,7 +588,7 @@ export async function getStats({ projectId, issuerId } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`issuer_id = $${idx++}`);  params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
   const { rows } = await query(
     `SELECT
