@@ -6,7 +6,9 @@ import usePermission from '@/shared/hooks/usePermission';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
-import { GraduationCap, Eye, PlugsConnected } from '@phosphor-icons/react';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { useGestoras } from '@/shared/hooks/useGestoras';
+import { GraduationCap, Eye, PlugsConnected, DownloadSimple, X } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import WebhooksTab from '../components/WebhooksTab';
@@ -34,19 +36,43 @@ export default function MatriculasPage() {
   const [data, setData] = useState([]);
   const [stats, setStats] = useState<{ total: number; pendientes: number; validadas: number; rechazadas: number }>({ total: 0, pendientes: 0, validadas: 0, rechazadas: 0 });
   const [loading, setLoading] = useState(true);
-  const [filterEstado, setFilterEstado] = useState('');
-  const [search, setSearch] = useState('');
   const [detail, setDetail] = useState(null);
   const [rechazoTarget, setRechazoTarget] = useState(null);
+
+  // Los filtros viven en la DIRECCIÓN, como en Prospectos (#40). Así se
+  // comparten por chat y sobreviven a recargar, que era medio ticket: hoy
+  // vivían en el estado del componente y se perdían al pulsar «atrás».
+  const [filtros, setFiltros] = useUrlFilters({
+    q: '', estado: '', resp: '', prod: '', from: '', to: '', sort: 'recent',
+  });
+  const { q: search, estado: filterEstado, resp: filterResp, prod: filterProd,
+    from: desde, to: hasta, sort: orden } = filtros as Record<string, string>;
+
+  const proyectoId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const { gestoras } = useGestoras(proyectoId);
+  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
+
+  /** Los mismos filtros que la pantalla, en forma de query. Lo usan la carga
+   *  y la exportación — que es como se garantiza que se descargue lo que se
+   *  está viendo y no otra cosa. */
+  const queryDeLosFiltros = useCallback((extra: Record<string, string> = {}) => {
+    const p = new URLSearchParams({ projectId: String(activeProject?.id ?? '') });
+    if (search) p.set('search', search);
+    if (filterEstado) p.set('estado', filterEstado);
+    if (filterResp) p.set('responsableId', filterResp);
+    if (filterProd) p.set('productoId', filterProd);
+    if (desde) p.set('from', desde);
+    if (hasta) p.set('to', hasta);
+    if (orden) p.set('sort', orden);
+    for (const [k, v] of Object.entries(extra)) p.set(k, v);
+    return p;
+  }, [activeProject?.id, search, filterEstado, filterResp, filterProd, desde, hasta, orden]);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ projectId: activeProject.id });
-      if (filterEstado) params.set('estado', filterEstado);
-      if (search) params.set('search', search);
-      const res = await client.get(`/matriculas?${params}`);
+      const res = await client.get(`/matriculas?${queryDeLosFiltros()}`);
       if (res.success) {
         setData(res.data || []);
         const s = (res.stats || {}) as Partial<typeof stats>;
@@ -55,7 +81,61 @@ export default function MatriculasPage() {
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally { setLoading(false); }
-  }, [activeProject?.id, filterEstado, search]);
+  }, [activeProject?.id, queryDeLosFiltros]);
+
+  const hayFiltro = Boolean(search || filterEstado || filterResp || filterProd || desde || hasta)
+    || orden !== 'recent';
+
+  /**
+   * Descarga lo FILTRADO, no la página visible (#40).
+   *
+   * Vuelve a pedirlo al servidor con los mismos filtros y `limit` alto, en vez
+   * de volcar el array que hay en pantalla. La lista viene paginada de 50: con
+   * un volcado de lo visible, un filtro que devuelve 300 matrículas exporta 50
+   * y el fichero parece completo. Nadie cuenta las filas de un CSV.
+   */
+  const exportarCSV = useCallback(async () => {
+    try {
+      const res = await client.get(`/matriculas?${queryDeLosFiltros({ limit: '5000' })}`);
+      const filas = res?.success ? (res.data || []) : [];
+      if (!filas.length) { toast({ title: 'No hay nada que exportar' }); return; }
+
+      const cabecera = ['Nombre', 'Email', 'Telefono', 'DNI', 'Estado', 'Producto', 'Importe', 'Gestora', 'Alta'];
+      const cuerpo = filas.map((m: any) => [
+        m.lead_nombre || '', m.lead_email || '', m.lead_telefono || '', m.dni || '',
+        ESTADO_LABEL[m.estado] || m.estado || '',
+        m.producto_contratado || '', m.importe_total ?? '',
+        m.responsable_nombre || '', (m.created_at || '').slice(0, 10),
+      ]);
+      const csv = [cabecera, ...cuerpo]
+        .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      // El BOM va delante o Excel se come los acentos: «Matrícula» sale
+      // «MatrÃ­cula» y el fichero se devuelve diciendo que está roto.
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `matriculas-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: `${filas.length} matrículas exportadas` });
+    } catch (err: any) {
+      toast({ title: 'No se ha podido exportar', description: err?.message, variant: 'destructive' });
+    }
+  }, [queryDeLosFiltros, activeProject?.nombre]);
+
+  // El catálogo, para el filtro por producto. Solo una vez por proyecto.
+  useEffect(() => {
+    if (!proyectoId) { setProductos([]); return; }
+    let vivo = true;
+    client.get(`/products?projectId=${proyectoId}&limit=200`)
+      .then((r: any) => {
+        if (!vivo || !r?.success) return;
+        setProductos((r.data || []).map((p: any) => ({ id: p.id, nombre: p.nombre })));
+      })
+      .catch(() => { /* sin catálogo el filtro no se pinta y lo demás sigue */ });
+    return () => { vivo = false; };
+  }, [proyectoId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -118,18 +198,18 @@ export default function MatriculasPage() {
         ))}
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <input
           type="search"
           placeholder="Buscar nombre/email/DNI..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => setFiltros({ q: e.target.value })}
           aria-label="Buscar matrículas"
           className="flex-1 min-w-[200px] h-9 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
         />
         <Select<string>
           value={filterEstado}
-          onChange={setFilterEstado}
+          onChange={(v) => setFiltros({ estado: v })}
           options={[
             { value: '', label: 'Todos los estados' },
             { value: 'solicitud_admision', label: 'Solicitud admisión' },
@@ -141,6 +221,73 @@ export default function MatriculasPage() {
           ariaLabel="Filtrar por estado"
           className="w-48"
         />
+        {/* Solo para quien puede filtrar por gestora. A una gestora no se le
+            ofrece: el servidor le devuelve lo suyo pida lo que pida, así que
+            el desplegable sería un botón que no hace nada. */}
+        {gestoras.length > 0 && (
+          <Select<string>
+            value={filterResp}
+            onChange={(v) => setFiltros({ resp: v })}
+            options={[
+              { value: '', label: 'Todas las gestoras' },
+              ...gestoras.map(g => ({ value: String(g.id), label: g.nombre })),
+            ]}
+            ariaLabel="Filtrar por gestora"
+            className="w-44"
+          />
+        )}
+        {productos.length > 0 && (
+          <Select<string>
+            value={filterProd}
+            onChange={(v) => setFiltros({ prod: v })}
+            options={[
+              { value: '', label: 'Todos los productos' },
+              ...productos.map(p => ({ value: String(p.id), label: p.nombre })),
+            ]}
+            ariaLabel="Filtrar por producto"
+            className="w-52"
+          />
+        )}
+        <input
+          type="date" value={desde} onChange={e => setFiltros({ from: e.target.value })}
+          aria-label="Matrículas desde"
+          className="h-9 px-2 rounded-lg border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+        />
+        <input
+          type="date" value={hasta} onChange={e => setFiltros({ to: e.target.value })}
+          aria-label="Matrículas hasta"
+          className="h-9 px-2 rounded-lg border border-border bg-card text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+        />
+        <Select<string>
+          value={orden}
+          onChange={(v) => setFiltros({ sort: v })}
+          options={[
+            { value: 'recent', label: 'Más recientes' },
+            { value: 'oldest', label: 'Más antiguas' },
+            { value: 'nombre', label: 'Por nombre' },
+            { value: 'estado', label: 'Por estado' },
+            { value: 'importe', label: 'Por importe' },
+          ]}
+          ariaLabel="Ordenar"
+          className="w-40"
+        />
+        {hayFiltro && (
+          <button
+            type="button" onClick={() => setFiltros.reset()}
+            className="h-9 px-3 rounded-lg border border-border bg-card text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <X size={13} weight="bold" /> Quitar filtros
+          </button>
+        )}
+        {data.length > 0 && (
+          <button
+            type="button" onClick={exportarCSV}
+            title="Exportar lo filtrado"
+            className="h-9 px-3 rounded-lg border border-border bg-card text-sm font-semibold inline-flex items-center gap-1.5 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <DownloadSimple size={14} weight="bold" /> CSV
+          </button>
+        )}
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden">

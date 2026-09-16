@@ -4,26 +4,71 @@ import { createSchema, updateSchema, setEstadoSchema } from './matricula.validat
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 
+/**
+ * ¿Esta matricula es de quien la pide?
+ *
+ * Una gestora solo alcanza las de SUS prospectos. Igual que en los leads
+ * (`exigirQueSeaSuyo`, #109), y aqui importa mas: la matricula lleva DNI,
+ * titulo y firma escaneados. Bastaba con probar numeros en la direccion.
+ *
+ * La matricula no tiene dueño propio: se pregunta por el del lead, que es la
+ * misma columna por la que filtra y recorta el listado.
+ *
+ * Devuelve la matricula ya cargada para no consultarla dos veces.
+ */
+async function exigirQueSeaSuya(req, id) {
+  const m = await model.findById(id);
+  if (!m) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
+  if (req.user?.role === 'gestor' && m.responsable_id !== req.user.userId) {
+    throw new AppError('Esa matricula es de otra gestora', 403, 'NO_ES_TUYA');
+  }
+  return m;
+}
+
 export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    // DE QUIEN SON LAS MATRICULAS QUE SE DEVUELVEN.
+    //
+    // Este listado no recortaba por rol: una gestora pedia `/api/matriculas` y
+    // recibia las de TODO el proyecto, con nombre, correo, telefono y DNI de
+    // gente que no lleva ella. Es la misma puerta que se cerro en el #109 para
+    // los leads, y aqui pesa mas porque la matricula arrastra documentos de
+    // identidad.
+    //
+    // Se descubrio al montar el filtro por gestora del #40: sin este recorte,
+    // el filtro nuevo seria el buscador que faltaba para leer las ajenas.
+    //
+    // Misma regla que el resto del CRM: una gestora recibe lo suyo pida lo que
+    // pida, y quien manda ve todo o el de una sola.
+    const pedida = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+    const responsableId = req.user.role === 'gestor'
+      ? req.user.userId
+      : (pedida && !isNaN(pedida) ? pedida : null);
+
+    const productoId = req.query.productoId ? parseInt(req.query.productoId) : null;
+
     const data = await model.findAll({
       projectId,
       estado: req.query.estado,
       search: req.query.search,
+      responsableId,
+      productoId: productoId && !isNaN(productoId) ? productoId : null,
+      from: req.query.from || null,
+      to: req.query.to || null,
+      sort: req.query.sort || 'recent',
       page: parseInt(req.query.page) || 1,
       limit: parseInt(req.query.limit) || 50,
     });
-    const stats = await model.getStats(projectId);
+    const stats = await model.getStats(projectId, responsableId);
     res.json({ success: true, data: data.matriculas, pagination: { total: data.total, page: data.page, limit: data.limit, totalPages: data.totalPages }, stats });
   } catch (err) { next(err); }
 }
 
 export async function getById(req, res, next) {
   try {
-    const m = await model.findById(parseInt(req.params.id));
-    if (!m) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
+    const m = await exigirQueSeaSuya(req, parseInt(req.params.id));
     res.json({ success: true, data: m });
   } catch (err) { next(err); }
 }
@@ -45,6 +90,7 @@ export async function update(req, res, next) {
   try {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    await exigirQueSeaSuya(req, parseInt(req.params.id));
     const updated = await model.update(parseInt(req.params.id), parsed.data);
     if (!updated) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: updated });
@@ -83,8 +129,9 @@ export async function uploadDoc(req, res, next) {
     const tipo = req.params.tipo;
     if (!TIPOS_DOC.includes(tipo)) throw new AppError('Tipo invalido', 400, 'INVALID_TYPE');
     if (!req.file) throw new AppError('Archivo requerido', 400, 'FILE_REQUIRED');
-    const m = await model.findById(parseInt(req.params.id));
-    if (!m) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
+    // Subir el DNI de un prospecto ajeno es tan malo como leerlo: deja un
+    // documento de identidad colgando de una ficha que no es suya.
+    const m = await exigirQueSeaSuya(req, parseInt(req.params.id));
     const ext = (req.file.originalname.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
     const keyMap = { dni: 'dni_doc_key', titulo: 'titulo_doc_key', firma: 'firma_key' };
     const urlMap = { dni: 'dni_doc_url', titulo: 'titulo_doc_url', firma: 'firma_url' };
