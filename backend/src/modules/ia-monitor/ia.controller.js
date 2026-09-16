@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { getDecryptedValue } from '../credentials/credentials.model.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as gastoIA from '../../shared/services/gastoIA.service.js';
+import { urlDeStripe } from '../../shared/config/stripeApi.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -20,7 +21,7 @@ async function fetchStripeMetrics(apiKey) {
   // Subscripciones activas (max 100, paginar)
   let active = []; let starting_after = null; let page = 0;
   while (page++ < 5) {
-    const url = new URL('https://api.stripe.com/v1/subscriptions');
+    const url = new URL(urlDeStripe('/v1/subscriptions'));
     url.searchParams.set('status', 'active');
     url.searchParams.set('limit', '100');
     url.searchParams.set('expand[]', 'data.items');
@@ -51,14 +52,14 @@ async function fetchStripeMetrics(apiKey) {
   // New / cancelled del mes
   const now = new Date();
   const monthStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000);
-  const newSubsRes = await fetch(`https://api.stripe.com/v1/subscriptions?created[gte]=${monthStart}&limit=100`, { headers });
+  const newSubsRes = await fetch(`${urlDeStripe('/v1/subscriptions')}?created[gte]=${monthStart}&limit=100`, { headers });
   const newSubsJ = newSubsRes.ok ? await newSubsRes.json() : { data: [] };
   const newSubs = (newSubsJ.data || []).length;
-  const cancelledRes = await fetch(`https://api.stripe.com/v1/subscriptions?status=canceled&canceled_at[gte]=${monthStart}&limit=100`, { headers });
+  const cancelledRes = await fetch(`${urlDeStripe('/v1/subscriptions')}?status=canceled&canceled_at[gte]=${monthStart}&limit=100`, { headers });
   const cancelledJ = cancelledRes.ok ? await cancelledRes.json() : { data: [] };
   const cancelledSubs = (cancelledJ.data || []).length;
   // Failed payments (charges del mes con status failed)
-  const failedRes = await fetch(`https://api.stripe.com/v1/charges?created[gte]=${monthStart}&limit=100`, { headers });
+  const failedRes = await fetch(`${urlDeStripe('/v1/charges')}?created[gte]=${monthStart}&limit=100`, { headers });
   const failedJ = failedRes.ok ? await failedRes.json() : { data: [] };
   const failedPayments = (failedJ.data || []).filter(c => c.status === 'failed').length;
   // Churn = cancelled / active mes anterior (aproximado: usar active actual)

@@ -58,8 +58,13 @@ export async function sync(req, res, next) {
   try {
     const pid = projectId(req);
     const fullHistory = req.body?.fullHistory === true || req.query?.fullHistory === 'true';
+    // El historico ABSOLUTO: se salta el corte para TRAER, no para facturar.
+    // Solo si se pide explicitamente; ni el cron ni el boton normal lo mandan.
+    const desdeElPrincipio = req.body?.desdeElPrincipio === true || req.query?.desdeElPrincipio === 'true';
     // Sincronizar a mano reintenta ademas los cargos que quedaron sin asociar.
-    const result = await service.syncStripePayments(pid, { fullHistory, retryPending: true });
+    const result = await service.syncStripePayments(pid, {
+      fullHistory: fullHistory || desdeElPrincipio, desdeElPrincipio, retryPending: true,
+    });
     res.json({ success: true, data: result });
   } catch (e) {
     logger.error({ e: e.message }, 'sync stripe failed');

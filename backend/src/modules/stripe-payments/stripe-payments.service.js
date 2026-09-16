@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
@@ -30,7 +31,8 @@ export async function getWebhookSecret(projectId) {
 }
 
 async function stripeGet(apiKey, path, params = {}) {
-  const url = new URL(`https://api.stripe.com${path}`);
+  // La direccion sale de `stripeApi.js`: en produccion es Stripe y nada mas.
+  const url = new URL(urlDeStripe(path));
   for (const [k, v] of Object.entries(params)) if (v != null) url.searchParams.set(k, String(v));
   const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!r.ok) throw new Error(`Stripe ${path} HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
@@ -284,7 +286,7 @@ export async function syncStripePayments(projectId, opciones = {}) {
   }
 }
 
-async function sincroniza(projectId, { fullHistory = false, retryPending = false } = {}) {
+async function sincroniza(projectId, { fullHistory = false, retryPending = false, desdeElPrincipio = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
 
@@ -309,8 +311,36 @@ async function sincroniza(projectId, { fullHistory = false, retryPending = false
   // Se aplica tambien con `fullHistory`, que ahora significa «todo desde el
   // alta». La salida de emergencia sigue siendo la de siempre y esta escrita en
   // el modelo: mover `al_dia_hasta` hacia atras.
+  /*
+    EL HISTORICO ABSOLUTO, CUANDO ALGUIEN LO PIDE A PROPOSITO.
+
+    Angel: «el contenido de stripe si que debe estar al dia, saca el completo,
+    el historico absoluto».
+
+    El corte sigue existiendo y sigue mandando en LO FACTURABLE, que es lo que
+    el ticket llama «la regla que no se negocia»: hay 576 cobros anteriores al
+    alta de su proyecto que ya se facturaron fuera, y cada uno que alguien
+    asocie emite una factura repetida.
+
+    Lo que cambia es que TENER el dato y PODER FACTURARLO dejan de ser la misma
+    cosa. Se trae todo —asi el CRM cuadra con lo que dice Stripe, que es la
+    ultima casilla del #44— y lo anterior al corte entra marcado y fuera del
+    filtro de facturables.
+
+    Las pantallas de dinero no se mueven por esto: Ventas y Facturacion leen
+    `stripe_payments` cruzando por `conversion_payment_id`, o sea solo los
+    cobros YA asociados a una venta. Un cargo viejo sin asociar no suma en
+    ningun sitio.
+
+    No es la opcion por defecto ni la del cron: hay que pedirla.
+  */
   const corte = await model.fechaDeCorte(projectId);
-  if (corte) {
+  if (corte && desdeElPrincipio) {
+    logger.warn({ projectId, corte },
+      'Stripe sync: historico ABSOLUTO pedido a mano. Se ignora el corte para TRAER; ' +
+      'lo anterior sigue sin ser facturable.');
+  }
+  if (corte && !desdeElPrincipio) {
     const desdeElAlta = Math.floor(new Date(corte).getTime() / 1000);
     // El mayor de los dos: si ya se sincronizo hasta ayer, no se vuelve a pedir
     // desde el alta.

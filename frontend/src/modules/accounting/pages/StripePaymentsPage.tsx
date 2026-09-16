@@ -50,6 +50,9 @@ type Stats = {
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
+/** Un parrafo en blanco dentro de un `confirm`. */
+const BLANCO = '\n\n';
+
 export default function StripePaymentsPage() {
   const { user } = useAuth();
   // Asociar a mano mueve dinero y emite factura: solo admin y superadmin.
@@ -91,11 +94,36 @@ export default function StripePaymentsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function syncNow(fullHistory = false) {
+  /*
+    EL CORTE, PARA MARCAR LAS FILAS.
+
+    Con el histórico absoluto traído, en esta tabla conviven cobros que se
+    pueden facturar y cobros que YA se facturaron fuera del CRM. Los segundos
+    siguen fuera del filtro de facturables —ahí no cambia nada—, pero aquí se
+    ven, y a un clic de «ASOCIAR». Sin decirlo, la tabla los presenta igual que
+    a los demás.
+  */
+  const [corte, setCorte] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pid) return;
+    let vivo = true;
+    client.get<{ corte: string | null }>(`/stripe-payments/corte?projectId=${pid}`)
+      .then((r) => { if (vivo) setCorte(r?.data?.corte || null); })
+      .catch(() => { if (vivo) setCorte(null); });
+    return () => { vivo = false; };
+  }, [pid]);
+  const esAnteriorAlCorte = (fecha: string | number | null) => {
+    if (!corte || !fecha) return false;
+    const d = typeof fecha === 'number' ? new Date(fecha * 1000) : new Date(fecha);
+    return d < new Date(`${String(corte).slice(0, 10)}T00:00:00`);
+  };
+
+  async function syncNow(fullHistory = false, desdeElPrincipio = false) {
     if (!pid) return;
     setSyncing(true);
     try {
-      const res = await client.post<{ imported: number; pages: number }>(`/stripe-payments/sync`, { projectId: pid, fullHistory });
+      const res = await client.post<{ imported: number; pages: number }>(
+        `/stripe-payments/sync`, { projectId: pid, fullHistory, desdeElPrincipio });
       if (res.success) {
         toast({ title: '✓ Sincronizado', description: `${res.data?.imported} pagos importados (${res.data?.pages} páginas)` });
         await load();
@@ -124,9 +152,31 @@ export default function StripePaymentsPage() {
               <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
             <button onClick={() => syncNow(true)} disabled={syncing}
-              title="Trae TODO el histórico desde Stripe (puede tardar varios minutos)"
+              title="Trae todo desde el alta del proyecto (puede tardar varios minutos)"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
-              <ArrowCounterClockwise size={14} weight="bold" /> Importar histórico completo
+              <ArrowCounterClockwise size={14} weight="bold" /> Importar desde el alta
+            </button>
+            {/* EL HISTÓRICO ABSOLUTO, APARTE Y CON AVISO.
+
+                Trae también lo anterior al corte. Sirve para que el CRM cuadre
+                con lo que dice Stripe —la última casilla del #44— y no cambia
+                lo facturable: lo de antes del corte sigue fuera de ese filtro
+                y en la tabla sale marcado. Pero es la vez que más datos entran
+                de golpe, así que se pregunta. */}
+            <button
+              onClick={() => {
+                if (!confirm(
+                  'Se traerá TODO el histórico de la cuenta de Stripe, incluido lo anterior '
+                  + 'a la fecha de alta del proyecto.' + BLANCO
+                  + 'Eso no cambia lo facturable: lo anterior al corte seguirá fuera de ese '
+                  + 'filtro y saldrá marcado en la tabla. Sirve para que el CRM cuadre con Stripe.' + BLANCO
+                  + '¿Seguir?')) return;
+                syncNow(true, true);
+              }}
+              disabled={syncing}
+              title="Incluye lo anterior a la fecha de alta. No lo hace facturable."
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-400 dark:border-amber-800 bg-card text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">
+              <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
             </button>
           </div>
         )}
@@ -225,7 +275,17 @@ export default function StripePaymentsPage() {
                     !p.conversion_id && p.status === 'succeeded'
                       ? 'bg-red-50/70 dark:bg-red-950/20 border-l-2 border-l-red-500'
                       : ''}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {fmtDate(p.stripe_created_at)}
+                    {esAnteriorAlCorte(p.stripe_created_at) && (
+                      <span
+                        className="block text-[10px] font-bold text-amber-700 dark:text-amber-400"
+                        title="Anterior a la fecha desde la que este proyecto factura. Ya se facturó fuera del CRM: asociarlo emitiría una factura repetida."
+                      >
+                        ANTES DEL CORTE · no facturable
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="font-medium">{p.customer_name || '—'}</div>
                     <div className="text-xs text-muted-foreground">{p.customer_email || '—'}</div>
