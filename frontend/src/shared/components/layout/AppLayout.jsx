@@ -83,6 +83,19 @@ const CON_SOCIEDAD_OK = [
   // procesos en empresas deben ser por empresa, no por proyecto».
   /^\/prospectos\/cola$/,
   /^\/prospectos\/proceso$/,
+  // WhatsApp (#128, #138). El chat es de la GESTORA, no del proyecto: sus
+  // conversaciones son las mismas con una empresa puesta que con uno de sus
+  // campus. Lo unico que miraba el proyecto --buscar un prospecto para empezar
+  // y la lista de plantillas-- pasa a mirar la empresa entera.
+  //
+  // Sin esto, WhatsApp llegaria a produccion tapado por el muro justo para
+  // quien tiene una sociedad elegida, que es como trabaja Diego.
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/plantillas$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
 ];
 
 function rutaAceptaSociedad(pathname) {

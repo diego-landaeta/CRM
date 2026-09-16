@@ -238,6 +238,26 @@ async function permitirEnvio(conversacionId) {
  * En los dos casos hay que mandar el jid ENTERO y dejar que el otro lado lo
  * resuelva. Solo se pelan las cifras cuando de verdad es un telefono.
  */
+/**
+ * La OTRA llave de esta persona, si el mensaje la trae (migracion 159).
+ *
+ * WhatsApp direcciona cada vez mas por `@lid`, un identificador que ocupa el
+ * lugar del telefono sin revelarlo, y la misma persona llega unas veces con uno
+ * y otras con el otro. Los avisos de etiquetas usan el que tengan a mano, asi
+ * que sin el par no hay forma de saber en que chat va la etiqueta.
+ *
+ * Se descarta lo que no aporte: si la otra llave es la MISMA que el jid, no es
+ * un par — es el mismo dato dos veces, y guardarlo solo sirve para creer que ya
+ * se sabe algo que no se sabe. Paso de verdad: el puente traducia el @lid y
+ * dejaba el telefono en los dos campos.
+ */
+function otraLlaveDe(key) {
+  const suya = String(key?.remoteJid || '');
+  const otra = key?.remoteJidAlt || key?.senderPn || null;
+  if (!otra || String(otra) === suya) return null;
+  return String(otra);
+}
+
 const numeroDe = (conv) => {
   const jid = String(conv.jid);
   if (jid.endsWith('@g.us') || jid.endsWith('@lid')) return jid;
@@ -425,6 +445,13 @@ export async function recibir(cuerpo) {
   // Borrar un mensaje. «Para mi» viaja por aqui; «para todos» llega dentro de
   // un mensaje normal y se atiende mas abajo.
   if (/messages[._]delete/i.test(evento)) return borrado(cuerpo);
+  // El historial que manda el movil al enlazar. Llega en tandas y por su propio
+  // evento, no por `messages.upsert`: ver `historial()`.
+  if (/messages[._]set/i.test(evento)) return historial(cuerpo);
+  // Las etiquetas de la gestora (#128, #138). Dos avisos: la etiqueta en si, y
+  // ponerla o quitarla de un chat.
+  if (/labels?[._]edit/i.test(evento)) return etiquetaTocada(cuerpo);
+  if (/labels?[._]association/i.test(evento)) return etiquetaEnUnChat(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -473,6 +500,34 @@ export async function recibir(cuerpo) {
     logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
     return { ignorado: 'sin instancia' };
   }
+  // CUANDO se dijo esto. Se calcula aqui arriba y no mas abajo porque de ello
+  // dependen las dos cosas que vienen: si el mensaje entra, y con que fecha se
+  // queda su conversacion. `messageTimestamp` viene en segundos.
+  const cuando = datos?.messageTimestamp
+    ? new Date(Number(datos.messageTimestamp) * 1000)
+    : new Date();
+
+  // «El ultimo mes» tiene que ser un mes (#73), y se decide ANTES DE CREAR NADA.
+  //
+  // Estaba treinta lineas mas abajo, despues de `conversacionDe`, y el propio
+  // comentario decia que iba antes: descartar el mensaje despues de crear la
+  // conversacion deja un chat VACIO en la lista, que es peor que no tenerlo.
+  //
+  // En local no se notaba porque el puente ya recorta antes de mandar. Con
+  // Evolution no: manda el historial entero y lo recorta el CRM, asi que
+  // enlazar «el ultimo mes» un numero con dos años de conversaciones iba a
+  // crear cientos de chats vacios. Es otra vez lo de siempre — lo que se prueba
+  // no es lo que corre.
+  //
+  // Solo salta con el modo «rapido» apuntado y una fecha de hace mas de 30
+  // dias, y un mensaje en vivo nunca cumple lo segundo.
+  if (politica.sobraDelHistorial(instancia, cuando)) {
+    return { ignorado: 'mas viejo que el mes que se pidio' };
+  }
+
+  // La otra llave de esta persona, si el mensaje la trae. Ver `otraLlaveDe`.
+  const otraLlave = otraLlaveDe(key);
+
   // En un grupo, `pushName` es QUIEN ESCRIBIO, no el grupo.
   //
   // Usarlo como nombre de la conversacion hacia que «Psiko Aprende General»
@@ -489,7 +544,48 @@ export async function recibir(cuerpo) {
     // En lo que mandamos nosotros, `pushName` somos NOSOTROS. Se dice aqui y la
     // regla se aplica dentro, que es donde no se puede olvidar.
     mensajeMio: Boolean(key.fromMe),
+    // CUANDO, para que la lista se ordene por la conversacion y no por cuando
+    // se importo. Ver `conversacionDe`.
+    cuando,
+    // LA OTRA LLAVE de esta persona, si el mensaje la trae (migracion 159).
+    //
+    // WhatsApp direcciona cada vez mas por `@lid`, un identificador que ocupa
+    // el lugar del telefono. La misma persona llega unas veces con uno y otras
+    // con el otro, y los avisos de etiquetas usan el que tengan a mano: uno
+    // llego como «16699034202151@lid» mientras su chat estaba guardado por
+    // numero, y la etiqueta se quedo fuera.
+    //
+    // El par viaja en la propia clave, asi que se aprende del primer mensaje que
+    // lo traiga y la conversacion queda localizable por las dos.
+    otraLlave,
   });
+
+  // Si esta conversacion acaba de nacer, puede haber etiquetas esperandola.
+  //
+  // Al enlazar, WhatsApp manda las etiquetas ANTES que los mensajes: cuando
+  // llega «la etiqueta 12 va en el chat de Marta», ese chat todavia no existe
+  // aqui. Se guardaron aparte (migracion 158) y este es el momento de ponerlas.
+  //
+  // Suelto y solo al nacer: en cada mensaje seria una consulta de mas por cada
+  // uno de los miles que entran al emparejar.
+  //
+  // Se mira en DOS momentos, y hacen falta los dos:
+  //
+  //   · cuando la conversacion NACE, con su jid;
+  //   · y cuando APRENDE su otra llave, con esa. Este segundo faltaba y se vio
+  //     enseguida: la etiqueta llego direccionada por `@lid`, el chat de esa
+  //     persona ya existia —solo se actualizaba— y la etiqueta se quedaba en la
+  //     cola para siempre aunque el par ya se supiera.
+  //
+  // La cola se vacia con un DELETE ... RETURNING, asi que cuando no hay nada
+  // esperando esto es una consulta por indice que no devuelve filas.
+  const llaves = [];
+  if (conv?.recien_creada) llaves.push(key.remoteJid);
+  if (otraLlave) llaves.push(otraLlave);
+  for (const llave of llaves) {
+    model.aplicarEtiquetasPendientes?.({ instancia, jid: llave })
+      ?.catch(() => { /* ya se registra dentro */ });
+  }
 
   // La foto de perfil, UNA vez por conversacion y sin bloquear.
   //
@@ -557,23 +653,6 @@ export async function recibir(cuerpo) {
   // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
   // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
   // failed». El webhook tiene que contestar rapido y soltar.
-  // messageTimestamp viene en segundos.
-  const cuando = datos?.messageTimestamp
-    ? new Date(Number(datos.messageTimestamp) * 1000)
-    : new Date();
-
-  // «El ultimo mes» tiene que ser un mes (#73).
-  //
-  // El recorte vivia solo en el puente de Baileys, asi que en produccion no
-  // existia. Se hace ANTES de crear nada: descartarlo despues de guardar la
-  // conversacion dejaria chats vacios en la lista, que es peor que no tenerlos.
-  //
-  // Solo puede saltar con el modo «rapido» apuntado y una fecha de hace mas de
-  // 30 dias, y un mensaje en vivo nunca cumple lo segundo.
-  if (politica.sobraDelHistorial(instancia, cuando)) {
-    return { ignorado: 'mas viejo que el mes que se pidio' };
-  }
-
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,
@@ -1192,6 +1271,147 @@ function anotarProgreso(cuerpo) {
     cuando: Date.now(),
   });
   return { progreso: pct };
+}
+
+/**
+ * El historial que manda el movil al enlazar un numero (#73).
+ *
+ * QUE ES. Al elegir «el ultimo mes» o «todo el historial», WhatsApp no manda
+ * esas conversaciones como mensajes nuevos: las vuelca en tandas por un evento
+ * aparte. Baileys lo emite como `messaging-history.set` y Evolution lo reenvia
+ * al webhook como `messages.set`, con un ARRAY de mensajes en `data` — no un
+ * mensaje suelto como en `messages.upsert`.
+ *
+ * Hasta ahora ese evento ni se pedia ni se atendia, asi que en produccion las
+ * tres opciones de la pantalla hacian lo mismo: nada del pasado. En local si
+ * parecia funcionar porque el puente de Baileys manda su historial como
+ * `messages.upsert`.
+ *
+ * POR QUE NO SE ESPERA A GUARDARLO. Evolution **se queda esperando** a que su
+ * aviso conteste antes de seguir con el siguiente: si el CRM tarda, cada aviso
+ * se come su tiempo de espera y la cola entera se para —ya paso, 109 reintentos
+ * en doce minutos y el numero mudo toda la manana—. Una tanda puede traer miles
+ * de mensajes, asi que se contesta al momento y se guardan detras, en una cola
+ * propia, de una tanda en una.
+ *
+ * El recorte del mes va donde ya estaba, mensaje a mensaje (`sobraDelHistorial`),
+ * y no hay que tocar nada mas: `no_leidos` solo sube con lo que llega de los dos
+ * ultimos minutos y `ultimo_at` nunca retrocede, asi que importar un mes viejo
+ * no llena el globo de avisos ni descoloca la lista.
+ */
+let colaDeHistorial = Promise.resolve();
+
+function historial(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+
+  // Cuanto lleva. Evolution lo manda junto a la tanda; el puente, en su propio
+  // evento. Se aceptan los dos sitios para no depender de la forma de uno.
+  const pct = Number(cuerpo?.progress ?? cuerpo?.data?.progress);
+  if (Number.isFinite(pct)) {
+    anotarProgreso({
+      instance: instancia,
+      data: { progress: pct, isLatest: cuerpo?.isLatest ?? cuerpo?.data?.isLatest },
+    });
+  }
+
+  // Dos formas, otra vez: Evolution manda el array pelado en `data` y el puente
+  // lo envuelve en `{ messages: [...] }`. Suponer una sola es el fallo que ya
+  // costo la #63 y la #99.
+  const lista = Array.isArray(cuerpo?.data) ? cuerpo.data
+    : Array.isArray(cuerpo?.data?.messages) ? cuerpo.data.messages
+    : [];
+  if (!lista.length) return { historial: 0 };
+
+  colaDeHistorial = colaDeHistorial.then(() => guardarTanda(cuerpo, lista)).catch(() => {});
+  return { historial: lista.length, encolado: true };
+}
+
+/** Guarda una tanda, uno a uno, por el mismo camino que un mensaje normal. */
+async function guardarTanda(cuerpo, lista) {
+  let guardados = 0;
+  let fuera = 0;
+  for (const m of lista) {
+    try {
+      // Se reusa el camino de siempre a proposito: el historial tiene que pasar
+      // por las mismas reglas —grupos, canales, el recorte del mes, la cita, el
+      // autor del grupo— o acabarian siendo dos formas distintas de guardar un
+      // mensaje, y una de las dos se quedaria atras.
+      const r = await recibir({ ...cuerpo, event: 'messages.upsert', type: undefined, data: m });
+      if (r?.ignorado) fuera += 1; else guardados += 1;
+    } catch (err) {
+      // Un mensaje raro no puede llevarse por delante la tanda entera.
+      fuera += 1;
+      logger.warn({ err: err.message }, 'WhatsApp: un mensaje del historial no se pudo guardar');
+    }
+  }
+  logger.info(
+    { instancia: cuerpo?.instance || cuerpo?.instanceName || null, guardados, fuera },
+    'WhatsApp: tanda de historial'
+  );
+  return { guardados, fuera };
+}
+
+/** Para las pruebas: esperar a que la cola del historial se vacie. */
+export const _historialGuardado = () => colaDeHistorial;
+
+/**
+ * Se creo, se renombro o se borro una etiqueta en el movil (#128, #138).
+ *
+ * El aviso trae `{ id, name, color, deleted?, predefinedId? }`.
+ *
+ * ESTE nombre es el bueno. Evolution guarda en su base el nombre pelado —le
+ * quita todo lo que no sea ASCII imprimible antes de escribirlo, asi que
+ * «Presupuesto ✅» se queda en «Presupuesto » y «Sesión» en «Sesin»— pero manda
+ * el aviso ANTES de pelarlo. Por eso el CRM se queda con el de aqui y no con el
+ * de `findLabels`.
+ */
+async function etiquetaTocada(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || cuerpo?.data?.instance || null;
+  const d = cuerpo?.data || cuerpo;
+  const waId = d?.id ?? d?.labelId;
+  if (!instancia || waId == null) return { ignorado: 'aviso de etiqueta sin id' };
+
+  if (d?.deleted) {
+    await model.marcarEtiquetaBorrada(instancia, waId);
+    return { etiqueta: String(waId), borrada: true };
+  }
+  await model.guardarEtiqueta({
+    instancia,
+    waId,
+    nombre: d?.name ?? d?.nombre ?? `Etiqueta ${waId}`,
+    color: d?.color ?? null,
+  });
+  return { etiqueta: String(waId) };
+}
+
+/**
+ * Se puso o se quito una etiqueta en un chat.
+ *
+ * El aviso trae `{ instance, type: 'add'|'remove', chatId, labelId }`. `chatId`
+ * es el jid entero, que es justo lo que hace falta para encontrar la
+ * conversacion.
+ */
+async function etiquetaEnUnChat(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || cuerpo?.data?.instance || null;
+  const d = cuerpo?.data || cuerpo;
+  // Sin el numero de dispositivo.
+  //
+  // WhatsApp direcciona a veces con el aparato dentro —«34722134659:0@s.whats
+  // app.net», donde el «:0» es desde que telefono se hablo— y las
+  // conversaciones se guardan sin el. Con el sufijo no casan y la etiqueta se
+  // queda esperando a un chat que no existira nunca. Se vio en vivo, traduciendo
+  // el @lid de una etiqueta puesta desde el movil.
+  const jid = String(d?.chatId ?? d?.association?.chatId ?? '').replace(/:\d+(?=@)/, '') || null;
+  const waIdEtiqueta = d?.labelId ?? d?.association?.labelId;
+  if (!instancia || !jid || waIdEtiqueta == null) {
+    return { ignorado: 'aviso de asociacion incompleto' };
+  }
+  // El puente manda `type` y Evolution tambien, pero conviene no dar por hecho
+  // que solo hay dos valores: cualquier cosa que no sea «remove» pone, que es
+  // la equivocacion barata —ver una etiqueta de mas se corrige mirando; una de
+  // menos no se nota.
+  const poner = String(d?.type ?? d?.accion ?? 'add').toLowerCase() !== 'remove';
+  return model.asociarEtiqueta({ instancia, jid: String(jid), waIdEtiqueta, poner });
 }
 
 /** El progreso de esta instancia, o null si nadie lo ha mandado. */
