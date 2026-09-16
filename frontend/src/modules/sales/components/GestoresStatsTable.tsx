@@ -63,6 +63,23 @@ function currentPeriodo() {
 
 export default function GestoresStatsTable({ projectId, issuerId = null, className = '', canEdit = true, periodo: periodoProp, from = null, to = null }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
+
+  // NADIE TIENE META (#100, punto 5).
+  //
+  // El ticket: «los seis gestores salen "sin meta" y a 0,00 €. Si no se van a
+  // usar, el bloque ocupa media pantalla para no decir nada».
+  //
+  // Con cero metas puestas, las columnas «/ Meta» y el «sin meta» de cada fila
+  // son ruido repetido seis veces que tapa lo que si son datos: lo vendido y
+  // lo cobrado. Se esconden hasta que alguien ponga la primera, y entonces
+  // vuelven solas — quien las pone sigue teniendo el lapiz de cada fila.
+  //
+  // Cargarlas de una vez, que es la otra mitad del punto, no se hace aqui:
+  // eso es una pantalla nueva y hay que decidir antes si se van a usar.
+  const sinNingunaMeta = rows.length > 0 && rows.every(
+    (r) => (r.meta_ventas == null || r.meta_ventas === 0)
+        && (r.meta_facturacion == null || r.meta_facturacion === 0),
+  );
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editVentas, setEditVentas] = useState('');
@@ -143,8 +160,8 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
             <thead className="text-[11px] text-muted-foreground border-b border-border">
               <tr>
                 <th className="text-left py-2 font-medium">Gestor</th>
-                <th className="text-right py-2 font-medium">Ventas / Meta</th>
-                <th className="text-right py-2 font-medium">Facturado / Meta</th>
+                <th className="text-right py-2 font-medium">{sinNingunaMeta ? 'Ventas' : 'Ventas / Meta'}</th>
+                <th className="text-right py-2 font-medium">{sinNingunaMeta ? 'Facturado' : 'Facturado / Meta'}</th>
                 <th className="text-right py-2 font-medium">Cobrado</th>
                 {canEdit && <th className="w-10"></th>}
               </tr>
@@ -170,7 +187,7 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                       ) : (
                         <>
                           <span className="font-semibold">{nVentas(r.ventas)}</span>
-                          <span className="text-muted-foreground"> / {r.meta_ventas ?? '—'}</span>
+                          {!sinNingunaMeta && <span className="text-muted-foreground"> / {r.meta_ventas ?? '—'}</span>}
                           {/* Por que sale un 2,5: la venta compartida vale media
                               para cada una, y asi la suma de la tabla sigue
                               siendo el total real de la empresa. */}
@@ -197,7 +214,9 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                       ) : (
                         <>
                           <span className="font-semibold">{fmt(r.facturado)}</span>
-                          <span className="text-muted-foreground text-xs block">{r.meta_facturacion != null ? `meta ${fmt(r.meta_facturacion)}` : 'sin meta'}</span>
+                          {!sinNingunaMeta && (
+                            <span className="text-muted-foreground text-xs block">{r.meta_facturacion != null ? `meta ${fmt(r.meta_facturacion)}` : 'sin meta'}</span>
+                          )}
                           {r.meta_facturacion != null && r.meta_facturacion > 0 && (
                             <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden ml-auto" style={{ maxWidth: 100 }}>
                               <div className={`h-full ${pctF >= 100 ? 'bg-emerald-500' : pctF >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctF}%` }} />
