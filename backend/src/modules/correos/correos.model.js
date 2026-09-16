@@ -43,8 +43,9 @@ export async function listar({ estado = null, direccion = null, busca = null, de
 
   if (ESTADOS.includes(estado)) { par.push(estado); cond.push(`estado = $${par.length}`); }
   if (DIRECCIONES.includes(direccion)) { par.push(direccion); cond.push(`direccion = $${par.length}`); }
-  if (busca) {
-    par.push(`%${busca}%`);
+  const termino = typeof busca === 'string' ? busca.trim() : '';
+  if (termino) {
+    par.push(`%${termino}%`);
     // Tambien por REMITENTE: en lo que entra, el destinatario somos siempre
     // nosotros, asi que buscar solo por ahi no encontraria a nadie.
     cond.push(`(destinatarios ILIKE $${par.length} OR asunto ILIKE $${par.length}`
