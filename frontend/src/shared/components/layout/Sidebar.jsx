@@ -962,13 +962,25 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
 
   useEffect(() => {
     if (!activeProject?.id) return;
+    // CON «TODOS LOS PROYECTOS», EL -1 NO ES UN PROYECTO.
+    //
+    // Es el id con el que el CRM representa la vista agregada, y /leads
+    // contesta 400 —«Number must be greater than 0»—, así que el globo se
+    // quedaba con el número del proyecto anterior: un aviso que ya no
+    // describía nada. Ahí se piden los proyectos de verdad, que es lo que el
+    // endpoint sí entiende.
+    const todos = activeProject.id === -1;
+    const reales = projects.filter((p) => p.id > 0).map((p) => p.id);
+    // Sin proyectos que pedir no hay globo, y la petición sería otro 400.
+    if (todos && reales.length === 0) { setNewLeadsBadge(0); return; }
+    const ambito = todos ? `projectIds=${reales.join(',')}` : `projectId=${activeProject.id}`;
     let cancelled = false;
     let interval = null;
 
     async function fetchBadge() {
       if (typeof document !== 'undefined' && document.hidden) return;
       try {
-        const res = await client.get(`/leads?projectId=${activeProject.id}&status=nuevo&limit=1`);
+        const res = await client.get(`/leads?${ambito}&status=nuevo&limit=1`);
         if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
       } catch {}
     }
@@ -997,7 +1009,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         document.removeEventListener('visibilitychange', onVisibilityChange);
       }
     };
-  }, [activeProject?.id]);
+  }, [activeProject?.id, projects]);
 
   // Badge de reportes de spam pendientes — solo superadmin
   useEffect(() => {
