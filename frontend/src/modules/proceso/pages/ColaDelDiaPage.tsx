@@ -26,7 +26,7 @@ import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../a
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { contarPorPaso, trasSacar } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
-import { fechaLocal } from '../lib/agenda';
+import { soloFecha } from '@/shared/lib/fechas';
 import { toast } from '@/shared/hooks/useToast';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
@@ -34,9 +34,9 @@ function cuando(fecha: string, retraso: number) {
   if (retraso > 0) return { texto: retraso === 1 ? 'ayer' : `hace ${retraso} días`, urgente: true };
   if (retraso === 0) return { texto: 'hoy', urgente: false };
   if (retraso === -1) return { texto: 'mañana', urgente: false };
-  const d = fechaLocal(fecha);
+  const d = soloFecha(fecha);
   return {
-    texto: d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }),
+    texto: d?.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }) ?? '',
     urgente: false,
   };
 }

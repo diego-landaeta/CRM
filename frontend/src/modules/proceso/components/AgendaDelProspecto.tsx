@@ -4,9 +4,10 @@ import {
   CheckCircle, Circle, WarningCircle, CaretRight, ListChecks, SkipForward, CalendarPlus,
 } from '@phosphor-icons/react';
 import type { LeadStatus } from '@/shared/types';
+import { soloFecha } from '@/shared/lib/fechas';
 import { traerPasosDeLead, ajustarPaso, replanificar, type PasoDeLead } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
-import { siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeHechos, fechaLocal } from '../lib/agenda';
+import { siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeHechos } from '../lib/agenda';
 
 /**
  * El proceso comercial de ESTA persona, en su ficha (#89).
@@ -24,7 +25,7 @@ import { siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeH
  */
 
 function fecha(d: string) {
-  return fechaLocal(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+  return soloFecha(d)?.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) ?? '';
 }
 
 /** Los aplazamientos que se usan de verdad. Para otra fecha está el calendario

@@ -75,21 +75,6 @@ export function fechaAplazada(dias: number, hoy: Date = new Date()): string {
   return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
-/**
- * Una fecha del servidor (`2026-09-16`) leída como el día que es aquí.
- *
- * `new Date('2026-09-16')` es medianoche UTC, y al pintarla en un huso al
- * oeste sale el día ANTERIOR: en Caracas ese paso aparecía como «15 sept».
- * Con la hora pegada detrás se lee como fecha local y el día no se mueve.
- *
- * Está aquí y no en cada pantalla porque la cola del día ya lo hacía bien y la
- * ficha no: la misma fecha salía con dos días distintos según por dónde se
- * mirara, que es justo lo que el proceso no puede permitirse.
- */
-export function fechaLocal(iso: string): Date {
-  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso);
-}
-
 /** Cuántos pasos quedan cerrados, para el «3 de 5» de la cabecera. */
 export function cuentaDeHechos(pasos: PasoDeLead[] | null | undefined): number {
   return (pasos || []).filter((p) => p.hecho).length;

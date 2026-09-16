@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeHechos, fechaLocal,
+  siguientePaso, tonoDelPaso, sePuedePlanificar, fechaAplazada, cuentaDeHechos,
 } from '@/modules/proceso/lib/agenda';
+import { soloFecha } from '@/shared/lib/fechas';
 
 /*
   La agenda del proceso en la ficha del prospecto (#89).
@@ -94,24 +95,27 @@ describe('a qué fecha se aplaza', () => {
   });
 });
 
+// `soloFecha` es de `shared/lib/fechas` y no de este módulo. Se prueba aquí
+// porque es donde salió el fallo: la ficha la pintaba con `new Date(iso)` a
+// secas y el paso de hoy aparecía fechado ayer.
 describe('qué día es una fecha del servidor', () => {
   it('es el mismo día, esté el navegador en el huso que esté', () => {
     // Con `new Date(\'2026-09-16\')` esto daba el 15 en Caracas: la fecha se
     // lee como medianoche UTC y al pintarla en un huso al oeste retrocede.
-    const d = fechaLocal('2026-09-16');
+    const d = soloFecha('2026-09-16');
     expect(d.getFullYear()).toBe(2026);
     expect(d.getMonth()).toBe(8);
     expect(d.getDate()).toBe(16);
   });
 
   it('un primero de mes no se convierte en el último del anterior', () => {
-    expect(fechaLocal('2026-01-01').getDate()).toBe(1);
-    expect(fechaLocal('2026-01-01').getMonth()).toBe(0);
-    expect(fechaLocal('2026-01-01').getFullYear()).toBe(2026);
+    expect(soloFecha('2026-01-01').getDate()).toBe(1);
+    expect(soloFecha('2026-01-01').getMonth()).toBe(0);
+    expect(soloFecha('2026-01-01').getFullYear()).toBe(2026);
   });
 
   it('si viene con hora, se respeta tal cual', () => {
-    const d = fechaLocal('2026-09-16T15:30:00');
+    const d = soloFecha('2026-09-16T15:30:00');
     expect(d.getDate()).toBe(16);
     expect(d.getHours()).toBe(15);
   });
