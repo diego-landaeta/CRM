@@ -48,6 +48,7 @@ const QUICK_LABELS: Record<string, string> = {
   week: '7 días',
   'no-reminder': 'Sin programar',
   'no-contact': 'Sin contacto',
+  'sin-revisar': 'Por validar',
 };
 
 const SORT_LABELS: Record<string, string> = {
@@ -67,6 +68,7 @@ interface Props {
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
   filterEstado: string; setFilterEstado: (v: string) => void;
+  filterSeguimiento: string; setFilterSeguimiento: (v: string) => void;
   filterOrigen: string; setFilterOrigen: (v: string) => void;
   filterResponsable: string; setFilterResponsable: (v: string) => void;
   filterProducto: string; setFilterProducto: (v: string) => void;
@@ -74,7 +76,7 @@ interface Props {
   sortMode: string; setSortMode: (v: 'value' | 'recent' | 'urgency' | 'recent_value') => void;
   sortDir: 'asc' | 'desc'; setSortDir: (d: 'asc' | 'desc') => void;
   quickFilter: string; setQuickFilter: (v: string) => void;
-  quickCounts: { overdue: number; today: number; tomorrow: number; week: number; noReminder: number; noContact: number; urgent: number };
+  quickCounts: { overdue: number; today: number; tomorrow: number; week: number; noReminder: number; noContact: number; urgent: number; sinRevisar?: number | null };
   filterDup: boolean; setFilterDup: (v: boolean) => void;
   filterReincidente: boolean; setFilterReincidente: (v: boolean) => void;
   stats: Record<string, number> | null | undefined;
@@ -88,6 +90,7 @@ export default function LeadsFiltersBar(props: Props) {
     activeProject, projects, selectedProjectIds, setSelectedProjectIds,
     gestores, products, user,
     search, setSearch, filterEstado, setFilterEstado,
+    filterSeguimiento, setFilterSeguimiento,
     filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
     sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
@@ -163,6 +166,11 @@ export default function LeadsFiltersBar(props: Props) {
   const activePills: Array<{ key: string; label: string; onClear: () => void }> = [];
   if (search.trim()) activePills.push({ key: 'search', label: `🔎 "${search.slice(0, 20)}${search.length > 20 ? '…' : ''}"`, onClear: () => setSearch('') });
   if (filterEstado) activePills.push({ key: 'estado', label: STATUS_LABELS[filterEstado] || filterEstado, onClear: () => setFilterEstado('') });
+  if (filterSeguimiento) activePills.push({
+    key: 'seg',
+    label: filterSeguimiento === '5' ? 'Seguimiento 5 o más' : `Seguimiento ${filterSeguimiento}`,
+    onClear: () => setFilterSeguimiento(''),
+  });
   if (filterOrigen) activePills.push({ key: 'origen', label: ORIGEN_LABELS[filterOrigen] || filterOrigen, onClear: () => setFilterOrigen('') });
   if (filterResponsable) {
     const label = filterResponsable === 'unassigned'
@@ -226,46 +234,42 @@ export default function LeadsFiltersBar(props: Props) {
           >
             <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}
-              <Section title="Búsqueda">
-                <div className="relative">
-                  <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Nombre, email o teléfono…"
-                    className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </Section>
+              {/* Aqui habia otro buscador, otro «Estado» y otro «Orden». Los
+                  tres estan en la fila de arriba, a la vista (#125): tenerlos
+                  dos veces obliga a mirar en dos sitios para saber que hay
+                  puesto, y a acordarse de limpiarlos en los dos.
+
+                  Detras del boton se queda lo que NO cabe en la fila: gestor,
+                  programa, proyecto, fechas, direccion y lo de admin. */}
 
               {/* Filtros principales */}
               <Section title="Filtros principales">
-                <Row label="Estado">
-                  <select
-                    value={filterEstado}
-                    onChange={(e) => setFilterEstado(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
-                  >
-                    <option value="">Todos los estados</option>
-                    {/* "Convertido" NO se filtra aquí: los convertidos se ven en
-                        Clientes/Ventas, no en Prospectos. */}
-                    {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'convertido').map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </Row>
-                <Row label="Canal">
-                  <SearchableSelect
-                    value={filterOrigen}
-                    onChange={(v) => setFilterOrigen(v)}
-                    options={Object.entries(ORIGEN_LABELS).map(([value, label]) => ({ value, label }))}
-                    placeholder="Buscar canal…"
-                    allLabel="Todos los canales"
-                    ariaLabel="Canal"
-                    maxWidth="100%"
-                  />
-                </Row>
+                {/* El «Estado» y el «Canal» que habia aqui se han ido a la fila
+                    de arriba (#125): tenerlos dos veces obliga a mirar en dos
+                    sitios para saber que hay puesto.
+
+                    ESTO NO ES UN DUPLICADO Y POR ESO SE QUEDA. El «por que
+                    seguimiento va» no esta arriba ni en ningun otro sitio, y
+                    cuelga del estado «En seguimiento» porque solo ahi significa
+                    algo: preguntar por el seguimiento 3 de un «no interesado» no
+                    dice nada. Diego: «seria seguimiento 1, 2, y eso en el estado
+                    de seguimiento, como un submenu». */}
+                {filterEstado === 'en_seguimiento' && (
+                  <Row label="Por qué seguimiento va">
+                    <select
+                      value={filterSeguimiento}
+                      onChange={(e) => setFilterSeguimiento(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    >
+                      <option value="">Cualquiera</option>
+                      <option value="1">Seguimiento 1 — un contacto</option>
+                      <option value="2">Seguimiento 2 — dos contactos</option>
+                      <option value="3">Seguimiento 3</option>
+                      <option value="4">Seguimiento 4</option>
+                      <option value="5">Seguimiento 5 o más</option>
+                    </select>
+                  </Row>
+                )}
                 {isAdmin && (
                   <Row label="Gestor">
                     <SearchableSelect
@@ -312,17 +316,6 @@ export default function LeadsFiltersBar(props: Props) {
                 <Row label="Fechas">
                   <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => setDateRange(f, t)} />
                 </Row>
-                <Row label="Orden">
-                  <select
-                    value={sortMode}
-                    onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
-                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
-                  >
-                    {Object.entries(SORT_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                </Row>
                 {/* Dirección del orden cronológico: descendente (más reciente
                     primero, default) o ascendente (más antiguo primero). */}
                 <Row label="Dirección">
@@ -357,9 +350,19 @@ export default function LeadsFiltersBar(props: Props) {
                     label="Sin programar" count={quickCounts.noReminder} tone="default" />
                   <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
                     label="Sin contacto" count={quickCounts.noContact} tone="default" />
+                  {/* El repaso de fin de mes (#132). Solo aparece si se puede
+                      marcar de verdad: un filtro que lleva a una lista donde no
+                      se puede hacer nada es peor que no tenerlo. */}
+                  {quickCounts.sinRevisar != null && (
+                    <QuickChip active={quickFilter === 'sin-revisar'} onClick={() => setQuickFilter('sin-revisar')}
+                      label="Por validar" count={quickCounts.sinRevisar} tone="default" />
+                  )}
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1.5 px-0.5">
-                  Se aplican sobre los resultados ya cargados. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
+                  {/* Decia «se aplican sobre los resultados ya cargados», y desde
+                      el #132 eso es falso: los resuelve el servidor sobre TODA la
+                      base, no sobre la pagina. */}
+                  Se aplican sobre toda la base, no sobre la página que ves. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
                 </p>
                 {(quickFilter === 'urgent' || quickFilter === 'no-contact') && filterEstado && (
                   <div className="mt-1.5 text-[11px] rounded-md border border-warning/30 bg-warning-soft text-warning px-2.5 py-1.5">

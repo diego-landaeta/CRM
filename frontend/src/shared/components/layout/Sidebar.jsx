@@ -59,8 +59,7 @@ import {
   // Los de los encabezados de seccion (#105). Ninguno repite el de una
   // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
   // que una de sus filas, deja de ordenar y pasa a confundir.
-  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice,
-} from '@phosphor-icons/react';
+  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -281,11 +280,54 @@ const NAV_SECTIONS = [
       // los compañeros, y ofrecerlo a quien la API va a negar es peor que no
       // ofrecerlo.
       { label: 'Registro', to: '/registro', detail: 'Todo lo que ha pasado', icon: ClipboardText, roles: ['superadmin', 'admin'] },
+      // Los correos que salen del CRM (#146). Mismos roles que el Registro, y
+      // aqui pesa mas: esto enseña el TEXTO de correos a personas.
+      { label: 'Correos', to: '/correos', detail: 'Lo que ha mandado el CRM', icon: EnvelopeSimple, roles: ['superadmin', 'admin'] },
       { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],
   },
 ];
+
+/**
+ * Cuál de las entradas está encendida. Gana la más concreta (#131).
+ *
+ * `NavLink` sin `end` enciende una entrada en cualquier ruta que cuelgue de la
+ * suya. Como `/captacion` es la de Formularios y Conectores vive en
+ * `/captacion/conectores`, al abrir Conectores el menú marcaba **Formularios**.
+ * Pasaba igual en todo el Catálogo: estando en WooCommerce —`/productos/
+ * woocommerce`— se encendía «Productos».
+ *
+ * Y no es un detalle de pintura: el #131 va de que cinco entradas parecidas no
+ * se distinguen. Que el menú señale la equivocada es la misma confusión, pero
+ * afirmada por el propio CRM.
+ *
+ * No vale con exigir coincidencia exacta: la ficha de un producto vive en
+ * `/productos/123`, no está en el menú, y ahí «Productos» SÍ tiene que
+ * encenderse. La regla es la de siempre en un menú: coincide la que encaja, y
+ * si encajan varias, gana la más larga.
+ */
+const RUTAS_DEL_MENU = NAV_SECTIONS.flatMap((s) =>
+  s.items.flatMap((it) => [it.to, ...(it.children || []).map((c) => c.to)]),
+).filter(Boolean);
+
+const encaja = (camino, ruta) => camino === ruta || camino.startsWith(`${ruta}/`);
+
+/**
+ * ¿Hay en el menú otra entrada más concreta que también encaje aquí?
+ *
+ * Se le pasa a `NavLink` como `end`, en vez de decidir el encendido por fuera:
+ * así el `aria-current="page"` que pone el router coincide con lo que se ve.
+ * Pintar una cosa y anunciar otra es peor que no pintar nada.
+ */
+export function hayRutaMasConcreta(camino, ruta, rutas = RUTAS_DEL_MENU) {
+  // «Más concreta QUE ESTA» solo significa algo si esta encaja. Sin esta línea
+  // devolvía true para una entrada que no pinta nada en la ruta actual: da
+  // igual para el `end` —esa entrada no se enciende de ninguna manera— pero
+  // hace que la función mienta, y alguien la va a leer para otra cosa.
+  if (!ruta || !encaja(camino, ruta)) return false;
+  return rutas.some((otra) => otra.length > ruta.length && encaja(camino, otra));
+}
 
 // CRM-217: catálogo de labels personalizables del sidebar para el editor de
 // "Etiquetas sidebar" en ProjectSettingsDialog. Cada label original sirve de
@@ -429,7 +471,11 @@ function NavGroup({ icon: Icon, label, children, defaultOpen, role, modules, pro
               <NavLink
                 key={child.to}
                 to={child.to}
-                end={child.end ?? child.to === '/accounting'}
+                // El `end` explicito del menu manda —lo lleva «Lista de
+                // prospectos»—; donde no lo hay, se deduce. Ver
+                // `hayRutaMasConcreta`: es lo que impedia que Conectores se
+                // encendiera al abrirlo.
+                end={child.end ?? (child.to === '/accounting' || hayRutaMasConcreta(location.pathname, child.to))}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
@@ -518,6 +564,20 @@ function ExternalPanelItem({ panel, collapsed, onClick }) {
   );
 }
 
+/**
+ * Los subtitulos del menu, de momento solo en /testeo.
+ *
+ * Diego, 14/09: «cambiaste todo de las interfaces, eso se queda en testeo».
+ * Tenia razon: el despliegue de hoy metio 13 subtitulos nuevos en produccion
+ * sin que nadie los hubiera aprobado, y el menu es lo primero que ve todo el
+ * equipo cada mañana. Un cambio asi se enseña antes, no se cuela dentro de un
+ * despliegue que iba de facturacion.
+ *
+ * No se BORRAN --son de Fabian y estan bien--: se quedan visibles en testeo
+ * hasta que Diego los vea y diga. Quitar la bandera es una linea.
+ */
+const MOSTRAR_SUBTITULOS = import.meta.env.MODE !== 'production';
+
 function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, onClick, collapsed, featured }) {
   const displayLabel = applyLabel(label, labelOverrides);
   const location = useLocation();
@@ -589,7 +649,7 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
             {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
                 de una pantalla no dice si es la que buscas —«Captacion» puede
                 ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
-            {detail && (
+            {MOSTRAR_SUBTITULOS && detail && (
               <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
             )}
           </span>
@@ -605,7 +665,9 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      // Exacta solo cuando otra entrada del menú cubre esta ruta mejor. Ver
+      // `hayRutaMasConcreta`: es lo que impedía que Conectores se encendiera.
+      end={to === '/' || hayRutaMasConcreta(location.pathname, to)}
       onClick={onClick}
       title={collapsed ? displayLabel : undefined}
       aria-label={collapsed ? displayLabel : undefined}
@@ -647,7 +709,7 @@ function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverrides, o
             {/* Que hay dentro, en pequeño. Es lo que pide la maqueta: el nombre
                 de una pantalla no dice si es la que buscas —«Captacion» puede
                 ser cuatro cosas—, y la segunda linea lo resuelve sin abrir. */}
-            {detail && (
+            {MOSTRAR_SUBTITULOS && detail && (
               <span className="block truncate text-[11px] leading-tight opacity-70">{detail}</span>
             )}
           </span>

@@ -107,17 +107,15 @@ CREATE INDEX IF NOT EXISTS idx_ofrecimientos_resultado
   ON convocatoria_ofrecimientos (fecha_resultado)
   WHERE resultado = 'pendiente';
 
--- CETLAT, sembrada en cada proyecto. Es la que existe hoy y la que nombra el
--- paso 4 del proceso comercial; los topes vienen de su propia nota.
-INSERT INTO convocatorias (project_id, nombre, descripcion, tope_nueva, tope_habilitada, nota_interna)
-SELECT p.id, 'Convocatoria CETLAT',
-       'Beca CETLAT. Se ofrece en el paso 4 del proceso, como último recurso.',
-       40, 70,
-       'Interno, no se comparte: formación nueva máx. 40 %; formación ya habilitada hasta 70 %, reservado para quien casi no ha respondido.'
-  FROM projects p
- WHERE NOT EXISTS (
-   SELECT 1 FROM convocatorias c WHERE c.project_id = p.id AND c.nombre = 'Convocatoria CETLAT'
- );
+-- AQUI NO SE SIEMBRA NINGUNA CONVOCATORIA.
+--
+-- CETLAT es de ISEIE. Diego: «el paso 4 no sería por CETLAT, solo para ISEIE;
+-- para MultiCRM se mantiene el paso como un descuento». Sembrarla aquí ponía
+-- una beca que nadie ofrece en las nueve marcas, y el paso 4 de este CRM se
+-- llama «Descuento de última oportunidad» justo por eso.
+--
+-- La tabla se queda: el día que haya una convocatoria de verdad se crea desde
+-- la pantalla, con sus topes y sus fechas.
 
 -- Permisos (#71): las tablas nuevas nacen siendo de `postgres` porque la
 -- migración corre como postgres. Se comprueba SIEMPRE con el usuario del CRM.

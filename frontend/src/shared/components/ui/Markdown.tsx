@@ -7,9 +7,10 @@ import remarkGfm from 'remark-gfm';
  * ─────────────────────────────────────────────────────────────────────────────
  * POR QUE NO VALEN LAS CLASES `prose-*`
  *
- * Estaban puestas en dos sitios —el reporte mensual con IA y el chat— y NO
- * HACEN NADA: `@tailwindcss/typography` no está instalado en este proyecto, así
- * que `prose`, `prose-invert` y compañía son nombres de clase que no existen.
+ * El chat las llevaba puestas y NO HACEN NADA: `@tailwindcss/typography` no está
+ * instalado, así que `prose`, `prose-sm` y `prose-invert` son nombres de clase
+ * que no existen. (Siguen puestas, igual de inertes, en `EmailTemplatesPage` y
+ * en `LeadEmailsCard`; ahí pintan HTML, no markdown, y no es cosa de esto.)
  *
  * No es un detalle estético. Con el reset de Tailwind por medio, el resultado
  * era:
@@ -22,8 +23,17 @@ import remarkGfm from 'remark-gfm';
  * Y una respuesta de IA sobre datos del CRM es casi siempre una tabla. Es el
  * caso principal, no el raro.
  *
- * Así que aquí va cada etiqueta con sus clases, que además es lo que permite
- * que use los colores del tema —claro y oscuro— en vez de los del plugin.
+ * QUE PASA CON `.markdown-body`
+ *
+ * En `index.css` hay un `.markdown-body` que sí existe y sí pinta markdown, y
+ * es lo que usa el reporte mensual. No se toca: funciona. Esto vive aparte
+ * porque hace dos cosas que aquel no puede —la tabla dentro de su propio
+ * scroll, y respetar la alineación que manda GFM en vez de forzar
+ * `text-align: left`— y porque un componente se puede pasar por props.
+ *
+ * Si algún día conviene unificarlos, se unifican. Hoy duplicar veinte líneas de
+ * estilo cuesta menos que reestilar una pantalla de producción que nadie pidió
+ * tocar.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 

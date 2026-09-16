@@ -20,7 +20,7 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
-import { formatDate } from '@/shared/lib/format';
+import { formatDate } from '@/shared/lib/format';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 function fmt(n) {

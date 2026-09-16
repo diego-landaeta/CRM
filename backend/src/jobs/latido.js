@@ -32,7 +32,7 @@ const ARRANQUE = Date.now();
  * El latido de arriba contesta «¿esto va?», y para eso la memoria del proceso
  * basta. El registro contesta otra cosa: «¿que paso el martes a las tres?». Eso
  * no se puede contestar con algo que se vacia en cada despliegue, asi que la
- * vuelta tambien se apunta en `registro_tareas` (migracion 142).
+ * vuelta tambien se apunta en `registro_tareas` (migracion 144).
  *
  * Se ficha en el MISMO envoltorio, por lo mismo que el latido: una tarea no
  * puede dejar de aparecer en el registro porque aparecer no es cosa suya.
@@ -54,7 +54,7 @@ async function tablaLista() {
     );
     hayTabla = rows.length > 0;
     if (!hayTabla) {
-      logger.warn('Registro de tareas: falta la migracion 142, las vueltas no se guardan');
+      logger.warn('Registro de tareas: falta la migracion 144, las vueltas no se guardan');
     }
   } catch {
     hayTabla = false;

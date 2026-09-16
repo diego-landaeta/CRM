@@ -1,10 +1,12 @@
 import * as model from './tutor.model.js';
+import { previsualizar, avisar } from './avisarTutor.js';
 import * as userService from '../users/user.service.js';
 import * as dossierService from '../dossiers/dossier.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
   altaTutorSchema, perfilSchema, colaboracionSchema,
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
+  busquedaDeTutorSchema,
 } from './tutor.validation.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
@@ -107,6 +109,9 @@ export async function guardarPerfil(req, res, next) {
     if (d.email) correo = await userService.cambiarCorreo(id, d.email, {
       reenviarEnlace: d.reenviarEnlace === true,
     });
+
+    // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
+    if (d.nombre) await model.renombrarTutor(id, d.nombre);
 
     const perfil = await model.guardarPerfil(id, d);
     res.json({ success: true, data: { ...perfil, correo } });
@@ -263,6 +268,7 @@ export async function calcular(req, res, next) {
       desde: d.desde || null,
       hasta: d.hasta || null,
       projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -278,7 +284,7 @@ export async function listarComisiones(req, res, next) {
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      estado: ['pendiente', 'pagada', 'revertida'].includes(req.query.estado) ? req.query.estado : null,
+      estado: model.ESTADOS_COMISION.includes(req.query.estado) ? req.query.estado : null,
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }
@@ -292,7 +298,9 @@ export async function resumenComisiones(req, res, next) {
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Con una EMPRESA elegida son SUS campus, no «todos». Diego, 14/09:
+      // «puse empresa y tuve que entrar a un campus si o si».
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -343,6 +351,41 @@ export async function formacionesSinTutor(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// PUT /api/tutores/formaciones/:productId/busqueda
+//
+// «Se busca tutor para esta formacion», y con que anuncio de Meta si lo hay.
+// Lo pidio Diego como columna META en «Formaciones sin tutor»: el CRM tiene la
+// publicidad sincronizada pero NADIE ha dicho nunca que anuncio va con que
+// formacion, asi que esto es lo unico que puede saberlo.
+export async function marcarBusqueda(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isInteger(productId)) throw new AppError('Formacion no valida', 400, 'VALIDATION_ERROR');
+    const d = valida(busquedaDeTutorSchema, req.body || {});
+    const b = await model.marcarBusquedaDeTutor({
+      productId,
+      buscando: d.buscando,
+      adsetId: d.adsetId || null,
+      campaignId: d.campaignId || null,
+      nota: d.nota || null,
+      userId: req.user.userId,
+    });
+    if (!b) throw new AppError('Esa formacion no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: b });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/anuncios?projectId=
+// Los anuncios de Meta que se pueden enganchar a una formacion.
+export async function anunciosDeTutores(req, res, next) {
+  try {
+    await exigirGestion(req);
+    res.json({ success: true, data: await model.anunciosDeTutores(
+      await proyectosDelAmbito(req)) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/tutores/pagos-sin-formacion?desde=&hasta=
 // El dinero que no se puede atribuir a ningun tutor porque su venta no dice de
 // que formacion es. Se enseña en vez de esconderse.
@@ -353,7 +396,7 @@ export async function pagosSinFormacion(req, res, next) {
     res.json({ success: true, data: await model.pagosSinFormacion({
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : hoy.slice(0, 8) + '01',
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy,
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -446,4 +489,59 @@ export async function reactivarTutor(req, res, next) {
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
+}
+
+/** El periodo que llega por la URL, o nada. Siempre «AAAA-MM». */
+function periodoDe(req) {
+  const p = String(req.query.periodo || req.body?.periodo || '');
+  return /^\d{4}-\d{2}$/.test(p) ? p : null;
+}
+
+/**
+ * GET /api/tutores/comisiones/aviso — lo que se le va a mandar, sin mandarlo.
+ *
+ * Existe separado del envio porque un correo no se manda a ciegas: la pantalla
+ * enseña el texto, el total y la cuenta, y solo entonces aparece el boton.
+ */
+export async function previoDelAviso(req, res, next) {
+  try {
+    const periodo = periodoDe(req);
+    if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    const datos = await previsualizar({ tutorId: Number(req.query.tutorId), periodo });
+    res.json({ success: true, data: datos });
+  } catch (e) { next(e); }
+}
+
+/** POST /api/tutores/comisiones/avisar — lo manda y anota cuando y quien. */
+export async function avisarTutor(req, res, next) {
+  try {
+    const periodo = periodoDe(req);
+    if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    const r = await avisar({
+      tutorId: Number(req.body?.tutorId),
+      periodo,
+      userId: req.user?.userId,
+      // Lo retocado a mano en la pantalla, si se retoco. Solo el texto: a quien
+      // va lo sigue decidiendo el tutor, no lo que llegue en el cuerpo.
+      asunto: req.body?.asunto,
+      html: req.body?.html,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
+}
+
+/**
+ * PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero.
+ *
+ * Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
+ * sus propias puertas porque mueven dinero y dejan rastro. El modelo dice que
+ * no y por que; aqui solo se comprueba QUIEN puede.
+ */
+export async function cambiarEstadoComision(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const r = await model.cambiarEstadoComision(
+      Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
 }

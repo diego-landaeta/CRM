@@ -21,10 +21,34 @@ const FAKE_PROJECTS = [
   { id: 4, nombre: 'ICTESS', slug: 'ictess', type: 'multi' },
 ];
 
+
+/**
+ * El proyecto que pide la direccion, si la persona lo tiene (#132).
+ *
+ * Los enlaces del resumen de mañana llevan `?projectId=N&qf=...`, y el numero
+ * del correo se calcula PARA ESE proyecto. Sin esto, el enlace abriria el
+ * listado con el proyecto que estuviera activo de antes: el correo diria «7» y
+ * la pantalla enseñaria otra cosa, que es lo que el ticket prohibe.
+ *
+ * Se lee de `window.location` y no del router porque esto corre por encima de
+ * el. Y se comprueba contra los proyectos de la persona: un id en la barra de
+ * direcciones no da acceso a nada — solo elige entre lo que ya tiene.
+ */
+function proyectoDeLaUrl(proyectos) {
+  try {
+    const pedido = Number(new URLSearchParams(window.location.search).get('projectId'));
+    if (!Number.isInteger(pedido) || pedido <= 0) return null;
+    return proyectos?.find((p) => p.id === pedido)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
   const [projects, setProjects] = useState(BYPASS ? FAKE_PROJECTS : []);
-  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
+  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECTS[0].id : null);
+
   // Null salvo que se haya elegido una sociedad entera (#120).
   const [activeIssuerId, setActiveIssuerId] = useState(() => {
     const guardada = localStorage.getItem(CLAVE_SOCIEDAD);
@@ -68,7 +92,11 @@ export function AuthProvider({ children }) {
             const validProjectId = savedNum === ALL_PROJECTS_ID
               ? ALL_PROJECTS_ID
               : meRes.data.projects?.find((p) => p.id === savedNum)?.id;
-            setActiveProjectId(validProjectId || meRes.data.projects?.[0]?.id || null);
+            // La direccion manda sobre lo guardado: si vienes de un enlace del
+            // correo, tiene que abrirse el proyecto de ese enlace (#132).
+            const deLaUrl = proyectoDeLaUrl(meRes.data.projects);
+            setActiveProjectId(deLaUrl || validProjectId || meRes.data.projects?.[0]?.id || null);
+            if (deLaUrl) localStorage.setItem('crm_active_project_id', String(deLaUrl));
           }
         }
       } catch {
@@ -106,7 +134,8 @@ export function AuthProvider({ children }) {
 
     // Usar proyecto activo del login o el primero disponible
     const savedProjectId = localStorage.getItem('crm_active_project_id');
-    const projectId = userProjects?.find((p) => p.id === Number(savedProjectId))?.id
+    const projectId = proyectoDeLaUrl(userProjects)
+      || userProjects?.find((p) => p.id === Number(savedProjectId))?.id
       || apiProjectId
       || userProjects?.[0]?.id
       || null;
@@ -153,7 +182,9 @@ export function AuthProvider({ children }) {
    * 310 sitios que leen `activeProject.id` y meterles ahi el id de una sociedad
    * seria mandar un numero de sociedad donde se espera uno de proyecto.
    *
-   * Quien entiende de sociedades —hoy solo Reportes— lee `activeIssuerId`.
+   * Quien entiende de sociedades lee `activeIssuerId`. Ya no es solo
+   * Reportes: prospectos, clientes, el pipeline y el dashboard tambien
+   * acotan por empresa (via useIdsDelAmbito).
    */
   const switchIssuer = useCallback((issuerId) => {
     const tiene = projects.some((p) => Number(p.sociedad_emisora_id) === Number(issuerId));

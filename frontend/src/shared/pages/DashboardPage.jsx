@@ -2,6 +2,9 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
+import ResumenDeAyerYHoy from '@/shared/components/dashboard/ResumenDeAyerYHoy';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
@@ -133,8 +136,14 @@ function SaasMonitor({ projectId }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext();
   const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
+  // Los mismos proyectos que mira el resto del dashboard (#130).
+  const idsDelAmbito = useIdsDelAmbito();
+  // El proyecto de verdad, o nada. `-1` es el pseudo-proyecto «Todos» y
+  // mandarlo como identificador devolvia cero en todas las tarjetas.
+  const proyectoReal = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const campusCsv = !proyectoReal && idsDelAmbito.length ? idsDelAmbito.join(',') : null;
   const [drawerLeadId, setDrawerLeadId] = useState(null);
 
   if (loading) {
@@ -198,8 +207,17 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
+        subtitle={`${todayDate} - ${activeIssuer
+          ? `${activeIssuer.nombre} (${activeIssuer.campus.length} campus)`
+          : (activeProject?.nombre || 'Sin proyecto')}`}
       />
+
+      {/* Lo que toca, de la cola del proceso (#130). Va ANTES del resumen: lo
+          primero de la mañana es que hay que hacer, no que paso ayer. */}
+      <ParaHoyYManana projectId={proyectoReal} projectIds={campusCsv} />
+
+      {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
+      <ResumenDeAyerYHoy projectIds={idsDelAmbito} />
 
       {/* SECCION HOY */}
       {today && (
@@ -383,10 +401,10 @@ export default function DashboardPage() {
       {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
-          <CursosVendidosCard projectId={activeProject?.id} />
+          <CursosVendidosCard projectId={proyectoReal} issuerId={activeIssuerId} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
+          <TopProductsCard projectId={proyectoReal} issuerId={activeIssuerId} days={null} limit={5} />
         </Suspense>
       </div>
 

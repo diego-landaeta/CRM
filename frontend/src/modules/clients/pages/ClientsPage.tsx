@@ -4,6 +4,7 @@ import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 // Estas dos vivían aquí dentro, copiadas de las de prospectos pero sin la
 // lectura de fechas sin hora: `new Date('2026-12-01')` se interpreta en UTC y
@@ -62,6 +63,7 @@ function exportCSV(clients: Client[], filename: string, etiquetaPlural: string):
   URL.revokeObjectURL(url);
 }
 import { toast } from '@/shared/hooks/useToast';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
@@ -153,11 +155,13 @@ export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
+  const idsDelAmbito = useIdsDelAmbito();
   // Filtros persistidos en URL para deep-linking + refresh-safe.
   // Server-side: search, resp(id), prod(id), from, to, sort. Client-side (post-fetch):
   // estado_pago (depende de cálculos local de conversiones).
@@ -230,7 +234,8 @@ export default function ClientsPage() {
     try {
       const params = new URLSearchParams();
       if (isAllProjects) {
-        params.set('projectIds', projects.map((p) => p.id).join(','));
+        // Con una empresa elegida, «todos» son sus campus y ninguno mas.
+        params.set('projectIds', idsDelAmbito.join(','));
       } else {
         params.set('projectId', String(activeProject.id));
       }
@@ -334,7 +339,7 @@ export default function ClientsPage() {
           del contenido, sin el titulo al que acompanaba. */}
       <PageHeader
         title="Clientes"
-        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} ${totalBackend === 1 ? 'cliente' : 'clientes'}`}`}
+        subtitle={`Prospectos convertidos en ${activeIssuer ? `${activeIssuer.nombre} (${activeIssuer.campus.length} campus)` : (activeProject?.nombre || 'todos los proyectos')} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} ${totalBackend === 1 ? 'cliente' : 'clientes'}`}`}
         actions={activeProject?.id && !isAllProjects && can('clients.create') ? (
           <button
             type="button"

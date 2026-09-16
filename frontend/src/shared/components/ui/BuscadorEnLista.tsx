@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
+import { casaPorTrozos } from '@/shared/lib/buscarPorTrozos';
 
 // Elegir UNO de una lista larga, escribiendo.
 //
@@ -26,9 +27,6 @@ export interface Elegible {
   nota?: string | number | null;
 }
 
-const sinAcentos = (s: string) =>
-  String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-
 const euros = (n: string | number | undefined) =>
   n == null ? '' : Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -37,6 +35,11 @@ export default function BuscadorEnLista({
   placeholder = 'Escribe para buscar…',
   comoDinero = false,
   sinResultados = 'Nada con «{texto}». Prueba con una palabra suelta.',
+  // Lo que se dice cuando lo buscado SI existe pero esta excluido —porque ya
+  // esta elegido, o ya lo tiene asignado—. Antes se decia «no hay ninguno», que
+  // es mentira y manda a probar sinonimos de algo que la pantalla esta
+  // enseñando. Diego, 14/09, con un curso desactivado de Tatiana delante.
+  yaEstaFuera = '«{nombre}» ya está en la lista, por eso no sale aquí.',
 }: {
   opciones: Elegible[];
   valor: number | null;
@@ -47,6 +50,7 @@ export default function BuscadorEnLista({
   /** La nota es un importe y se formatea como tal. */
   comoDinero?: boolean;
   sinResultados?: string;
+  yaEstaFuera?: string;
 }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
@@ -65,23 +69,23 @@ export default function BuscadorEnLista({
     return () => document.removeEventListener('mousedown', fuera);
   }, []);
 
-  const resultados = useMemo(() => {
-    const disponibles = opciones.filter((c) => !excluir.includes(c.id));
-    const t = sinAcentos(texto).trim();
-    if (!t) return disponibles.slice(0, 60);
-    const trozos = t.split(/\s+/);
-    return disponibles
-      .filter((c) => {
-        // Se busca tambien en la NOTA cuando es texto — en las categorias ahi
-        // vive la ruta, y «prof adicc» tiene que llegar a «Para Profesionales ›
-        // Adicciones». Si la nota es un importe no aporta nada y se deja fuera.
-        const donde = typeof c.nota === 'string'
-          ? sinAcentos(`${c.nombre} ${c.nota}`)
-          : sinAcentos(c.nombre);
-        return trozos.every((p) => donde.includes(p));
-      })
-      .slice(0, 60);
-  }, [opciones, texto, excluir]);
+  // La busqueda, suelta de la lista: se usa dos veces --sobre lo disponible y
+  // sobre lo excluido-- y repetirla era como se colaba la diferencia. El como
+  // se compara es de `casaPorTrozos`, compartido con el resto de buscadores.
+  const casa = useMemo(() => (c: Elegible) => casaPorTrozos(texto, c.nombre, c.nota), [texto]);
+
+  const resultados = useMemo(
+    () => opciones.filter((c) => !excluir.includes(c.id)).filter(casa).slice(0, 60),
+    [opciones, excluir, casa],
+  );
+
+  // Lo que casa pero esta fuera. Es lo que hay que decir cuando no queda nada
+  // que enseñar: el problema no es el nombre, es que ya lo tiene.
+  const excluidoQueCasa = useMemo(
+    () => (resultados.length ? null
+      : opciones.filter((c) => excluir.includes(c.id)).find(casa) || null),
+    [opciones, excluir, casa, resultados.length],
+  );
 
   useEffect(() => { setResaltado(0); }, [texto]);
 
@@ -138,7 +142,9 @@ export default function BuscadorEnLista({
         <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-card border border-border rounded-md shadow-lg">
           {resultados.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-muted-foreground">
-              {sinResultados.replace('{texto}', texto)}
+              {excluidoQueCasa
+                ? yaEstaFuera.replace('{nombre}', excluidoQueCasa.nombre).replace('{texto}', texto)
+                : sinResultados.replace('{texto}', texto)}
             </p>
           ) : (
             <>

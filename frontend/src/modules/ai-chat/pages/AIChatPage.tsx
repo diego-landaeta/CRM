@@ -48,7 +48,7 @@ function Gasto({ g }: { g: { instalado: boolean; tope: number; gastado: number |
   if (!g.instalado) {
     return (
       <span
-        title="Falta aplicar la migración 143: las llamadas no se están contando y no hay tope."
+        title="Falta aplicar la migración 145: las llamadas no se están contando y no hay tope."
         className="inline-flex items-center gap-1.5 rounded-md border border-amber-200/70 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-2.5 h-8 text-[11px] font-bold text-amber-700 dark:text-amber-400"
       >
         <WarningCircle size={13} weight="fill" /> Sin tope instalado

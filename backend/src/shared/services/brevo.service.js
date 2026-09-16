@@ -2,6 +2,8 @@ import { logger } from '../utils/logger.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
+import { guardarEnEnviados, hayBuzon } from './copia-en-enviados.service.js';
+import { mandarDesdeBuzon, saleDelBuzon } from './correo-buzon.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -39,7 +41,26 @@ const merecePenaReintentar = (estado) => estado === null || estado === 429 || es
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Manda un correo por Brevo.
+ * La copia en la carpeta «Enviados» del buzon, que es lo que hace un cliente de
+ * correo despues de mandar. Hace falta salga por donde salga: **SMTP tampoco
+ * guarda en Enviados**, eso lo hace siempre el cliente con un APPEND.
+ *
+ * NO se espera a que termine ni se mira si salio bien: el correo YA se mando y
+ * eso no se deshace. Archivar la copia es lo accesorio — si falla, queda en el
+ * registro y punto.
+ */
+function dejarCopiaEnEnviados({ de, deNombre, para, asunto, html, messageId }) {
+  if (!hayBuzon()) return;
+  guardarEnEnviados({ de, deNombre, para, asunto, html, messageId })
+    .then((ok) => { if (!ok) logger.info({ para, asunto }, 'Copia en Enviados: no se guardo'); });
+}
+
+/**
+ * Manda un correo. Es la unica puerta de salida del CRM.
+ *
+ * Sale por el buzon propio si va firmado por su direccion, y por Brevo en todo
+ * lo demas. Quien llama no elige ni se entera: pasa el remitente que le toca y
+ * el tubo se decide aqui.
  *
  * Un parametro opcional que no existia antes:
  *   · clave  — de idempotencia. Si ya salio un correo con esa clave, NO se manda
@@ -53,12 +74,13 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
  * queda anotado el intento.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, replyTo, attachment, clave = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
     ? to.map((d) => d?.email || d).filter(Boolean).join(',')
     : (to?.email || to || '');
+  const remitente = fromEmail || FROM_EMAIL;
 
   // EL FRENO, antes que nada.
   //
@@ -76,6 +98,9 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     await registrar({
       clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
       estado: 'bloqueado', intentos: 0, error: porque,
+      // Tambien el bloqueado: saber QUE se iba a mandar es justo lo que hace
+      // falta cuando el freno para algo y no se entiende por que.
+      cuerpoHtml: htmlContent, remitente,
     });
     return { sent: false, reason: 'FRENO_DE_PRUEBAS', motivo: freno.motivo, detalle: porque };
   }
@@ -86,21 +111,59 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     return { sent: false, reason: 'YA_ENVIADO', repetido: true };
   }
 
+  // ¿SALE POR EL BUZON PROPIO?
+  //
+  // Va aqui, despues del freno y de la idempotencia y antes de Brevo, porque lo
+  // de arriba vale para cualquier correo del CRM salga por donde salga: que no
+  // se escape uno en pruebas, y que no salga dos veces. Cambiar el tubo no puede
+  // saltarse ninguna de las dos.
+  //
+  // Lo que se gana: sin `List-Unsubscribe`, sin `Feedback-ID`, sin enlaces
+  // reescritos — las cabeceras que hacen que Gmail lo archive en Promociones.
+  // Ver `correo-buzon.service.js`, que lo cuenta con las cabeceras delante.
+  if (saleDelBuzon(remitente)) {
+    const r = await mandarDesdeBuzon({
+      to, subject, htmlContent, textContent,
+      fromName: fromName || FROM_NAME, replyTo, attachment,
+    });
+    if (r.sent) {
+      logger.info({ messageId: r.messageId, to: destinatarios, subject }, 'Correo enviado por el buzon');
+      await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+        cuerpoHtml: htmlContent, remitente, estado: 'enviado', intentos: 1, brevoMsgId: r.messageId });
+      dejarCopiaEnEnviados({
+        de: remitente, deNombre: fromName || FROM_NAME,
+        para: destinatarios, asunto: subject, html: htmlContent,
+        messageId: r.messageId,
+      });
+      return { sent: true, messageId: r.messageId, intentos: 1, via: 'buzon' };
+    }
+    // Si el buzon no esta —Hostinger caido, contraseña cambiada— se sigue por
+    // Brevo. Llegar a Promociones es un fastidio; no llegar es un problema.
+    logger.warn({ motivo: r.reason, to: destinatarios, subject }, 'Buzon: no salio, se intenta por Brevo');
+  }
+
   const apiKey = await getApiKey(projectId);
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
       estado: 'fallido', intentos: 0, error: 'NO_API_KEY' });
     return { sent: false, reason: 'NO_API_KEY' };
   }
 
   const payload = {
-    sender: { email: fromEmail || FROM_EMAIL, name: fromName || FROM_NAME },
+    sender: { email: remitente, name: fromName || FROM_NAME },
     to: Array.isArray(to) ? to : [{ email: to.email || to, name: to.name }],
     subject,
     htmlContent,
     textContent,
   };
+  // A donde contesta quien lo recibe. Brevo, si no se dice, responde al
+  // remitente — que casi siempre es lo que se quiere. Se deja poner aparte
+  // porque hay correos cuyo sentido ES la respuesta: el aviso al tutor le pide
+  // «contesta a este mismo correo con tu factura», y ahi no puede depender de
+  // que nadie cambie el remitente por un `no-reply` mas adelante.
+  if (replyTo) payload.replyTo = typeof replyTo === 'string' ? { email: replyTo } : replyTo;
   // Las etiquetas solo si las hay. Mandar la lista vacia hace que Brevo
   // conteste «400 · tags is blank» y NO envie el correo — y como casi ninguna
   // llamada pasa etiquetas, eso era todos los correos del CRM.
@@ -137,8 +200,16 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
         const data = await res.json();
         logger.info({ messageId: data.messageId, to, subject, intento }, 'Brevo email enviado');
         await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
           estado: 'enviado', intentos: intento, brevoMsgId: data.messageId });
-        return { sent: true, messageId: data.messageId, intentos: intento };
+
+        dejarCopiaEnEnviados({
+          de: remitente, deNombre: fromName || FROM_NAME,
+          para: destinatarios, asunto: subject, html: htmlContent,
+          messageId: data.messageId,
+        });
+
+        return { sent: true, messageId: data.messageId, intentos: intento, via: 'brevo' };
       }
 
       const err = await res.text();
@@ -156,6 +227,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 
   // Que no salio ya no se queda solo en el log: queda escrito.
   await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,
+      cuerpoHtml: htmlContent, remitente,
     estado: 'fallido', intentos: hechos, error: `${ultimoFallo.reason} · ${ultimoFallo.details ?? ''}` });
   return { sent: false, ...ultimoFallo, intentos: hechos };
 }

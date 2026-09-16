@@ -113,7 +113,7 @@ export function topeMensual() {
 
 // ─── ¿esta puesta la tabla? ──────────────────────────────────────────────────
 //
-// La migracion 143 se prepara aqui y se aplica en el servidor. Entre las dos
+// La migracion 145 se prepara aqui y se aplica en el servidor. Entre las dos
 // cosas hay una ventana, y en esa ventana el chat tiene que seguir funcionando
 // igual que hoy. Asi que si no esta la tabla: se avisa y se deja pasar.
 //
@@ -150,7 +150,7 @@ export async function hayTabla() {
   if (!tablaPuesta && !yaAvisadoDeQueFalta) {
     yaAvisadoDeQueFalta = true;
     logger.warn(
-      'Gasto IA: falta la migracion 143. Las llamadas a IA NO tienen tope y no se estan apuntando.'
+      'Gasto IA: falta la migracion 145. Las llamadas a IA NO tienen tope y no se estan apuntando.'
     );
   }
   return tablaPuesta;
@@ -192,7 +192,7 @@ export async function estado() {
       llamadas: 0,
       inciertas: 0,
       fallosAlApuntar,
-      aviso: 'El tope no esta instalado: falta aplicar la migracion 143. Las llamadas no se estan contando.',
+      aviso: 'El tope no esta instalado: falta aplicar la migracion 145. Las llamadas no se estan contando.',
     };
   }
 

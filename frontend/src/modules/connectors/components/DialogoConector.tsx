@@ -1,6 +1,10 @@
 import { useState } from 'react';
-import { X, Warning, CheckCircle } from '@phosphor-icons/react';
+import { X, Warning } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import Field from '@/shared/components/ui/Field';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import {
   conectoresApi, TIPOS, DESTINOS, CAMPOS_POR_TIPO,
@@ -19,6 +23,24 @@ import {
  * Rellenarlos obligaria a traer el secreto entero al navegador solo por abrir un
  * dialogo, que es justo lo que se quito.
  */
+
+/**
+ * Lo que hay que advertir al elegir el tipo (#131).
+ *
+ * Dos de los cinco tipos —los de WooCommerce— hacen algo que ya tiene su propia
+ * pantalla en Catálogo, y esa hace más: sincroniza sola cada X minutos y saca el
+ * temario de la ficha del curso. Un conector no. Elegir aquí uno de esos sin
+ * saberlo es montar la mitad de algo que ya existe entero.
+ *
+ * No se quitan de la lista: el servidor los admite y siguen siendo útiles para
+ * una tienda que no es la del proyecto. Pero se dice.
+ */
+function avisoDelTipo(tipo: TipoConector): string | undefined {
+  if (tipo === 'woocommerce_products' || tipo === 'woocommerce_orders') {
+    return 'La tienda del proyecto ya tiene su pantalla en Catálogo → WooCommerce, y esa además sincroniza sola. Esto es para una tienda distinta.';
+  }
+  return undefined;
+}
 
 interface Props {
   /** `null` = alta. Un conector = cambio. */
@@ -97,55 +119,77 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
             </button>
           </div>
 
-          <div className="p-5 space-y-4">
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground">Nombre</span>
-              <input value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)}
+          {/* `space-y-3`, que es lo que usan los demas dialogos ya convertidos
+              —FiscalDataDialog, LeadFormDialog—. La gracia del #106 es que se
+              parezcan, asi que el espaciado se copia en vez de elegirse. */}
+          <div className="p-5 space-y-3">
+            <Field label="Nombre" required hint="Para reconocerlo en la lista." htmlFor="conector-nombre">
+              <input
+                id="conector-nombre"
+                value={etiqueta}
+                onChange={(e) => setEtiqueta(e.target.value)}
                 placeholder="Tienda de Psiko Aprende"
-                className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background" />
-              <span className="text-[11px] text-muted-foreground">Para reconocerlo en la lista.</span>
-            </label>
+                className={inputClass}
+              />
+            </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">De dónde trae</span>
-                <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoConector)}
-                  disabled={!esAlta}
-                  title={esAlta ? undefined : 'El tipo no se cambia: crea otro conector'}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background disabled:opacity-60">
-                  {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Dónde acaba</span>
-                <select value={destino} onChange={(e) => setDestino(e.target.value as DestinoConector)}
-                  className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background">
-                  {DESTINOS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-                </select>
-              </label>
-            </div>
+            {/* Estos dos NO van en una FilaCampos, aunque emparejen bien.
+                «WooCommerce · productos» no cabe en media anchura de este
+                diálogo y sale «WooCommerce · product…», que es justo donde está
+                la diferencia con «· pedidos». Una fila que corta la palabra que
+                distingue las opciones no ayuda: mejor a lo ancho. */}
+            <Field
+              label="De dónde trae"
+              disabled={!esAlta}
+              hint={esAlta ? avisoDelTipo(tipo) : 'El tipo no se cambia: si necesitas otro, crea otro conector.'}
+            >
+              <Select
+                value={tipo}
+                onChange={cambiarTipo}
+                options={TIPOS.map((t) => ({ value: t.id as TipoConector, label: t.label }))}
+                disabled={!esAlta}
+                ariaLabel="De dónde trae"
+              />
+            </Field>
+            <Field label="Dónde acaba" hint="A qué parte del CRM van los datos.">
+              <Select
+                value={destino}
+                onChange={setDestino}
+                options={DESTINOS.map((d) => ({ value: d.id as DestinoConector, label: d.label }))}
+                ariaLabel="Dónde acaba"
+              />
+            </Field>
 
-            <div className="space-y-3 pt-1">
+            <div className="space-y-3">
               {definicion.map((c) => (
-                <label key={c.clave} className="block">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {c.label}{c.requerido && ' *'}
-                  </span>
+                <Field
+                  key={c.clave}
+                  label={c.label}
+                  required={c.requerido}
+                  htmlFor={`conector-${c.clave}`}
+                  // Un secreto ya guardado manda sobre la ayuda: es lo único que
+                  // hay que saber en ese momento —que dejarlo vacío no lo borra—.
+                  hint={c.secreto && yaGuardado[c.clave]
+                    ? 'Ya hay uno guardado. Déjalo vacío para no cambiarlo.'
+                    : c.ayuda}
+                >
                   <input
+                    id={`conector-${c.clave}`}
                     type={c.secreto ? 'password' : 'text'}
                     value={campos[c.clave] ?? ''}
                     onChange={(e) => setCampos((p) => ({ ...p, [c.clave]: e.target.value }))}
-                    placeholder={c.secreto && yaGuardado[c.clave] ? '•••••••• guardado' : (c.ayuda || '')}
+                    // La ayuda va debajo, en el Field, y no tambien aqui: antes
+                    // salia dos veces —«https://mitienda.com» de marcador y otra
+                    // vez de pista— y leer lo mismo dos veces hace dudar de si
+                    // dicen cosas distintas. El marcador se guarda para lo unico
+                    // que la pista no puede decir: que ya hay un secreto puesto.
+                    placeholder={c.secreto && yaGuardado[c.clave] ? '•••••••• guardado' : ''}
                     autoComplete="off"
-                    className="mt-1 w-full text-sm px-3 py-2 rounded-md border border-border bg-background font-mono" />
-                  {c.secreto && yaGuardado[c.clave] ? (
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 mt-0.5">
-                      <CheckCircle size={11} weight="fill" /> Ya hay uno guardado. Déjalo vacío para no cambiarlo.
-                    </span>
-                  ) : c.ayuda ? (
-                    <span className="text-[11px] text-muted-foreground">{c.ayuda}</span>
-                  ) : null}
-                </label>
+                    // Una dirección o una clave se leen carácter a carácter: un
+                    // ck_ de un c k _ mal copiado no se ve en tipografía normal.
+                    className={cn(inputClass, 'font-mono')}
+                  />
+                </Field>
               ))}
             </div>
 

@@ -108,7 +108,18 @@ export default function EmailTemplatesPage() {
             <article key={t.id} className={`bg-card border border-border rounded-xl p-4 ${!t.active ? 'opacity-60' : ''}`}>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-sm truncate">{t.name}</h3>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{t.name}</h3>
+                    {/* Una plantilla comun sale en TODOS los proyectos. Sin
+                        decirlo, alguien cambia aqui un texto de toda la casa
+                        creyendo que toca solo el suyo. */}
+                    {t.project_id === null && (
+                      <span title="Común a todos los proyectos"
+                        className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                        De la casa
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[12px] text-muted-foreground truncate">{t.subject}</p>
                 </div>
                 {!t.active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Inactiva</span>}

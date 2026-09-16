@@ -2,6 +2,7 @@ import { fondoDeEstado, puntoDeEstado, haloDeEstado, cssDeEstado } from '../lib/
 import { avatarColorFor } from '@/shared/lib/ui';
 import { useState, useEffect, useCallback, lazy, Suspense, type DragEvent } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
@@ -10,6 +11,7 @@ import { Plus, User, DotsSixVertical, Users, CalendarBlank } from '@phosphor-ico
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import type { Lead, LeadStatus } from '@/shared/types';
+import { idsDelAmbito } from '@/shared/lib/ambitoInforme';
 
 const LeadDrawer = lazy(() => import('../components/LeadDrawer'));
 
@@ -153,11 +155,13 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
 }
 
 export default function LeadsPipelinePage() {
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
+  const { activeProject, projects, isAllProjects, activeIssuer } = useProjectContext() as {
     activeProject: { id?: number | null; isAll?: boolean };
     projects: Array<{ id: number }>;
     isAllProjects: boolean;
+    activeIssuer: { id: number; nombre: string; campus: Array<{ id: number }> } | null;
   };
+  const idsDelAmbito = useIdsDelAmbito();
   const pid = activeProject?.id;
 
   const [allLeads, setAllLeads] = useState<PipelineLead[]>([]);
@@ -180,7 +184,8 @@ export default function LeadsPipelinePage() {
     setLoading(true);
     try {
       const qs = isAllProjects
-        ? `projectIds=${projects.map((p) => p.id).join(',')}&limit=200&includeConverted=1`
+        // Con una empresa elegida, «todos» son sus campus y ninguno mas.
+        ? `projectIds=${idsDelAmbito.join(',')}&limit=200&includeConverted=1`
         : `projectId=${pid}&limit=200&includeConverted=1`;
       const res = await client.get<PipelineLead[]>(`/leads?${qs}`);
       if (res.success) {

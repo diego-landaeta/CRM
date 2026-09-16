@@ -42,6 +42,14 @@ interface Props {
   hayFiltros?: boolean;
   onActualizar?: () => void;
   actualizando?: boolean;
+  /**
+   * Cuantos han entrado desde la ultima vez, si la pantalla lo sabe.
+   *
+   * Antes esto vivia en un boton «Refrescar» aparte, arriba: dos botones de
+   * recargar en la misma pantalla, que es lo que Diego marco (#125). El aviso
+   * no se pierde —es lo unico que aquel hacia de mas—, se muda aqui.
+   */
+  nuevos?: number;
   /** Píldoras de lo que está filtrado ahora mismo, debajo de la fila. */
   activos?: ReactNode;
   className?: string;
@@ -59,6 +67,7 @@ export default function BarraFiltros({
   hayFiltros = false,
   onActualizar,
   actualizando = false,
+  nuevos = 0,
   activos = null,
   className,
 }: Props) {
@@ -118,10 +127,16 @@ export default function BarraFiltros({
               <button
                 type="button"
                 onClick={onActualizar}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-normal font-semibold text-primary-foreground hover:bg-primary/90"
+                aria-label={nuevos > 0 ? `Actualizar. Han entrado ${nuevos}` : 'Actualizar'}
+                className="relative inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-normal font-semibold text-primary-foreground hover:bg-primary/90"
               >
                 <ArrowClockwise size={15} weight="bold" className={actualizando ? 'animate-spin' : undefined} />
                 Actualizar
+                {nuevos > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-success px-1 text-[10px] font-bold text-success-foreground">
+                    {nuevos > 9 ? '9+' : nuevos}
+                  </span>
+                )}
               </button>
             )}
           </div>

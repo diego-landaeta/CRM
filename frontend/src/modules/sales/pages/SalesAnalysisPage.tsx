@@ -1,9 +1,11 @@
 // Ventas: resumen consolidado, por asesora y por cliente. Comparten filtros
 // (proyecto activo, rango de fechas y busqueda) para que los tres cuadren entre si.
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -54,7 +56,11 @@ const TABS = [
 
 export default function SalesAnalysisPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext() as { activeProject?: { id?: number; nombre?: string } };
+  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext() as {
+    activeProject?: { id?: number; nombre?: string };
+    activeIssuerId: number | null;
+    activeIssuer: { nombre?: string; campus?: Array<unknown> } | null;
+  };
   const [tab, setTab] = useState<'resumen' | 'asesora' | 'cliente'>('resumen');
   const [rango, setRango] = useState({ from: '', to: '' });
   const [search, setSearch] = useState('');
@@ -66,8 +72,18 @@ export default function SalesAnalysisPage() {
   const [page, setPage] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
 
-  const params: Record<string, string | number> = {};
-  if (activeProject?.id) params.projectId = activeProject.id;
+  // EL AMBITO SALE DEL HELPER COMPARTIDO, no se arma aqui (#136): con una
+  // sociedad elegida se manda `issuerId` y el servidor lo traduce a sus campus
+  // con `proyectosDelAmbito`. Resolverlo aqui es lo que Diego pide no hacer, y
+  // ademas se perderia lo que esa funcion protege: una sociedad SIN campus
+  // devuelve `[-1]` y la pantalla sale vacia, que es la respuesta honesta.
+  // Calculado a mano, un filtro que se queda vacio ensena TODAS las sociedades.
+  const params: Record<string, string | number> = { ...ambitoComoObjeto({ activeIssuerId, activeProject }) };
+
+  // De qué son las cifras que se están mirando, dicho igual que en Reportes.
+  const ambito = activeIssuer
+    ? `${activeIssuer.nombre || 'La sociedad'} · ${activeIssuer.campus?.length ?? 0} campus`
+    : (activeProject?.nombre || 'Todos los proyectos');
   if (rango.from) params.from = rango.from;
   if (rango.to) params.to = rango.to;
   if (buscado) params.search = buscado;
@@ -111,11 +127,18 @@ export default function SalesAnalysisPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Análisis de ventas"
-        subtitle={activeProject?.nombre || 'Todos los proyectos'}
+        // CON UNA SOCIEDAD, EL NOMBRE ES EL DE LA SOCIEDAD (#136). Decia el
+        // del campus activo mientras sumaba los siete: cifras de una cosa con
+        // el nombre de otra, que se leen como buenas y es peor que no
+        // enseñarlas. Mismo texto que Reportes, para que se reconozca.
+        subtitle={ambito}
       />
 
       {/* Filtros comunes a las tres vistas */}
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+        {/* Los mismos atajos que en Facturacion: un solo componente para que no
+            acaben comportandose distinto en cada pantalla. */}
+        <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
         <label className="text-xs font-semibold text-muted-foreground">Desde</label>
         <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />

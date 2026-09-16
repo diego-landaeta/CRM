@@ -53,16 +53,117 @@ function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
-// Con una sociedad elegida (#120), Reportes SI funciona: pide sus campus
-// sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
-// concreto, asi que se comportan igual que con «todos los proyectos» — que es
-// lo que ya sabian hacer.
-// Las pantallas de CIFRAS aceptan una sociedad: sumar varios campus
-// significa algo. Las de configuracion no entran aqui a proposito —un
-// webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
-// CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
-// correcta, no un fallo.
-const CON_SOCIEDAD_OK = [/^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/];
+// Las pantallas que SI saben acotar a una sociedad (#120, #103, Ventas).
+//
+// Sumar varios campus tiene que significar algo para que la pantalla entre
+// aqui. Reportes y Ventas lo piden con `issuerId`; Prospectos y Clientes con
+// la lista de ids de sus campus, que es lo que `/leads` ya sabia recibir.
+//
+// El resto NO estan aqui a proposito, y son dos casos distintos:
+//
+//   Las de CIFRAS que aun no saben sumar campus enseñarian los datos de todos
+//   los proyectos bajo la etiqueta «CEDIA» —cifras de una cosa con el nombre
+//   de otra—, que es peor que no enseñarlas: se leen como buenas.
+//
+//   Las de CONFIGURACION no entran nunca: un webhook o un formulario se montan
+//   PARA UN PROYECTO, y «el webhook de CEDIA» no existe. Ahi el muro de «elige
+//   un proyecto» es la respuesta correcta, no un fallo.
+const CON_SOCIEDAD_OK = [
+  /^\/informes$/,
+  /^\/ventas$/,
+  /^\/finanzas\/ventas$/,
+  /^\/prospectos$/,
+  /^\/prospectos\/pipeline$/,
+  /^\/prospectos\/\d+$/,
+  /^\/clientes$/,
+  /^\/clientes\/\d+$/,
+  // Facturas es la pantalla que Diego pone de ejemplo: sabia filtrar por
+  // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
+  // campus» justo a la unica que no lo necesitaba.
+  /^\/finanzas\/facturas$/,
+  // Análisis de ventas (#136). Su servidor es el mismo módulo `sales` que ya
+  // sabe de sociedades; lo único que le faltaba era que la pantalla mandara
+  // `issuerId` y que la ruta no chocara con el muro de aquí.
+  /^\/finanzas\/ventas-analisis$/,
+  // El proceso comercial (#89 · #90). La cola suma los campus de la empresa —el
+  // servidor ya sabia recibir varios proyectos— y la pantalla de los pasos
+  // pregunta cual, pero solo entre los de esa empresa. Diego, 14/09: «estos
+  // procesos en empresas deben ser por empresa, no por proyecto».
+  /^\/prospectos\/cola$/,
+  /^\/prospectos\/proceso$/,
+  // Tutores, los cuatro. Diego, 15/09: «no me deja elegir la empresa ni los
+  // proyectos y no puedo seguir con testeo».
+  //
+  // Las pantallas ya estaban hechas --mandan `issuerId` y traen su selector de
+  // campus-- y el servidor ya lo traducia con `proyectosDelAmbito`. Lo unico
+  // que faltaba era esta lista: el muro se levantaba ANTES de que la pantalla
+  // llegara a pintarse, asi que el trabajo de por-empresa no se veia nunca.
+  /^\/tutores$/,
+  /^\/tutores\/comisiones$/,
+  /^\/tutores\/sin-tutor$/,
+  // «Mis cursos» es lo del propio tutor: no filtra por proyecto NI por empresa,
+  // asi que pedirle que elija un campus no significaba nada.
+  /^\/mis-cursos$/,
+  // La bandeja del CRM (#146). Tampoco mira el proyecto: el servidor acota sola.
+  /^\/correos$/,
+  // El Dashboard. Diego, 15/09: «es por empresa, eso lo sabes».
+  //
+  // Por dentro ya lo era: `useDashboard` reparte por los campus del ambito y
+  // los suma, y elegir una empresa deja el proyecto en «Todos» justo para eso.
+  // Lo unico que pasaba es que el muro se levantaba antes de que la pantalla
+  // llegara a pedir nada.
+  /^\/$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WhatsApp. El chat es de la GESTORA, no del proyecto: sus conversaciones son
+  // las mismas con CEDIA puesta o con uno de sus campus. Lo unico que miraba el
+  // proyecto era buscar un prospecto para empezar una conversacion y la lista
+  // de plantillas, y las dos aceptan ya los campus de la empresa.
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/plantillas$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Las que NO MIRAN el proyecto para nada. Estaban detras del muro por no
+  // estar en la lista, no porque el muro dijera algo de ellas: pedirle a
+  // alguien que elija un campus para ver su propio perfil no significa nada.
+  /^\/perfil$/,
+  /^\/preferencias$/,
+  /^\/notificaciones$/,
+  /^\/manual$/,
+  /^\/soporte$/,
+  /^\/status$/,
+  /^\/registro$/,
+  /^\/mensajes$/,
+  /^\/chat-ia$/,
+  /^\/documentos$/,
+  /^\/solicitudes-cambio$/,
+  /^\/solicitudes-cambio\/\d+$/,
+  /^\/configuracion\/atajos$/,
+  /^\/configuracion\/roles$/,
+  /^\/configuracion\/claves$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FINANZAS. Diego, 15/09: «catalogo y publicidad individual, pero finanzas es
+  // por empresa claramente». Y tiene sentido: el dinero se rinde por sociedad
+  // --es la que factura y la que declara--, no por campus.
+  //
+  // Las consultas de estas nueve aceptan ya la lista de campus: se hizo con el
+  // mismo `comoLista` que usan Prospectos y Facturas, para que la regla de
+  // «una empresa son sus campus» viva en un solo sitio.
+  /^\/finanzas$/,
+  /^\/finanzas\/conversiones$/,
+  /^\/finanzas\/egresos$/,
+  /^\/finanzas\/por-cobrar$/,
+  /^\/finanzas\/por-pagar$/,
+  /^\/finanzas\/comisiones$/,
+  /^\/finanzas\/pagos-stripe$/,
+  /^\/finanzas\/pendiente-facturar$/,
+  /^\/finanzas\/ventas\/\d+$/,
+];
 
 function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
@@ -70,12 +171,22 @@ function rutaAceptaSociedad(pathname) {
 
 function AllProjectsGuard({ pathname, children }) {
   const { isAllProjects, activeIssuer } = useProjectContext();
-  if (activeIssuer && rutaAceptaSociedad(pathname)) return children;
+  if (activeIssuer) {
+    if (rutaAceptaSociedad(pathname)) return children;
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <NeedsProjectBanner sociedad={activeIssuer.nombre} />
+      </div>
+    );
+  }
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }
   return children;
 }
+
+import Topbar from './Topbar';
+import { CabeceraProvider } from './CabeceraContext';
 
 const FloatingDock = lazy(() => import('./FloatingDock'));
 const ShortcutsFAB = lazy(() => import('./ShortcutsFAB'));
@@ -216,6 +327,7 @@ export default function AppLayout() {
   }, [navigate, pathname]);
 
   return (
+    <CabeceraProvider>
     <div className="min-h-screen bg-background">
       {/* Skip-to-content (a11y) — visible solo con foco por teclado */}
       <a
@@ -224,18 +336,6 @@ export default function AppLayout() {
       >
         Saltar al contenido
       </a>
-
-      {/* Mobile topbar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-30">
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Abrir menu"
-          className="p-2 rounded-md hover:bg-muted transition-colors"
-        >
-          <List size={22} weight="bold" />
-        </button>
-        <span className="ml-3 font-semibold text-sm">MultiCRM</span>
-      </div>
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -260,16 +360,27 @@ export default function AppLayout() {
       </div>
 
       {/* Main content - Suspense interno para que el sidebar no se desmonte al lazy-cargar paginas */}
-      <main
-        id="main-content"
-        role="main"
-        aria-label="Contenido principal"
-        tabIndex={-1}
-        className={cn(
-          'p-4 pt-[72px] lg:p-6 lg:pt-6 xl:p-8 transition-[margin] duration-200 focus:outline-none',
-          collapsed ? 'lg:ml-16' : 'lg:ml-64'
-        )}
-      >
+      {/*
+        La cabecera, por fin montada.
+
+        Estaba escrita --Topbar, CabeceraContext y el hueco que rellena
+        `PageHeader`-- pero no la pintaba nadie, y en el menu lateral YA se
+        habia quitado el selector de proyecto contando con ella (#79, punto 2).
+        Resultado en /testeo: no habia forma de cambiar de empresa. Diego,
+        15/09: «no puedo elegir las sociedades como en produccion».
+
+        Va dentro del margen del menu y es `sticky`, asi que al bajar por una
+        tabla larga sigues sabiendo donde estas y en que marca.
+      */}
+      <div className={cn('transition-[margin] duration-200', collapsed ? 'lg:ml-16' : 'lg:ml-64')}>
+        <Topbar onAbrirMenu={() => setMobileOpen(true)} />
+        <main
+          id="main-content"
+          role="main"
+          aria-label="Contenido principal"
+          tabIndex={-1}
+          className="p-4 lg:p-6 xl:p-8 focus:outline-none"
+        >
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -281,8 +392,9 @@ export default function AppLayout() {
               <Outlet />
             </AllProjectsGuard>
           </div>
-        </Suspense>
-      </main>
+          </Suspense>
+        </main>
+      </div>
 
       <Toaster />
       <CommandPalette />
@@ -313,5 +425,6 @@ export default function AppLayout() {
         <AvisoDeMensaje />
       </Suspense>
     </div>
+    </CabeceraProvider>
   );
 }

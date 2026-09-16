@@ -1,6 +1,7 @@
 
 import Field from '@/shared/components/ui/Field';
-import { inputClass } from '@/shared/lib/ui';import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { inputClass } from '@/shared/lib/ui';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { leadSchema, ORIGEN_OPTIONS, PAIS_OPTIONS, type LeadFormData } from '../validation/lead.schema';
@@ -346,15 +347,21 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     `min-w-0` en el segundo hace falta: sin el, un elemento flex
                     no baja de su contenido y vuelve a desbordar. */}
                 <div className="flex gap-2 items-start">
+                  {/* El desplegable del CRM, no el del sistema. Era el unico
+                      control del formulario con la flecha del navegador, al
+                      lado de «Origen» y «Pais» que llevan la del CRM: un solo
+                      campo distinto en un formulario se ve enseguida (#125). */}
                   <div className="w-40 flex-none">
-                    <select
+                    <Select<ModoContacto>
                       value={modoContacto}
-                      onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
-                      className={inputClass}>
-                      <option value="numero">Número</option>
-                      <option value="usuario">Usuario de WhatsApp</option>
-                      <option value="ambos">Ambos</option>
-                    </select>
+                      onChange={(v) => setModoContacto(v)}
+                      ariaLabel="Qué tienes de WhatsApp"
+                      options={[
+                        { value: 'numero', label: 'Número' },
+                        { value: 'usuario', label: 'Usuario de WhatsApp' },
+                        { value: 'ambos', label: 'Ambos' },
+                      ]}
+                    />
                   </div>
                   {modoContacto !== 'numero' && (
                     <div className="flex-1 min-w-0">

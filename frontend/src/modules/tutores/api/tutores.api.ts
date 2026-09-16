@@ -22,6 +22,21 @@ export interface Tutor {
   es_de_este_proyecto: boolean;
 }
 
+/** Lo que se le va a mandar al tutor, antes de mandarlo. */
+export interface AvisoAlTutor {
+  tutorId: number;
+  nombre: string;
+  email: string;
+  tieneIban: boolean;
+  periodo: string;
+  mes: string;
+  pendiente: number;
+  formaciones: string[];
+  cuenta: { base: number; iva: number; retencion: number; total: number };
+  asunto: string;
+  html: string;
+}
+
 export interface Colaboracion {
   id: number;
   tutor_id: number;
@@ -38,6 +53,11 @@ export interface Colaboracion {
   proyecto: string;
   /** Marcada activa Y con las fechas de hoy dentro. Son dos cosas distintas. */
   rige_hoy: boolean;
+  /** Lo que ha entregado de esta formacion. Marcas, no archivos. */
+  entrego_foto: boolean;
+  entrego_video: boolean;
+  /** 0, 25, 50 o 100. */
+  modulos_pct: number;
 }
 
 export interface LineaSimulacion {
@@ -65,7 +85,9 @@ export interface AjustesTutores {
 export interface ComisionReal {
   id: number;
   periodo: string;
-  estado: 'pendiente' | 'pagada' | 'revertida';
+  /** Los tres primeros significan que SIGUE SIN COBRAR: dicen por donde va el
+   *  tramite, no donde esta el dinero. */
+  estado: 'pendiente' | 'notificada' | 'falta_factura' | 'pagada' | 'revertida';
   base_calculo: string;
   pct: string;
   importe: string;
@@ -80,6 +102,10 @@ export interface ComisionReal {
   cobro: string | null;
   alumno: string;
   liquidada_por_nombre: string | null;
+  /** Lo entregado de esa formacion, para no pagar a ciegas. */
+  entrego_foto?: boolean | null;
+  entrego_video?: boolean | null;
+  modulos_pct?: number | null;
 }
 
 export interface ResumenComision {
@@ -95,6 +121,9 @@ export interface ResumenComision {
   /** Para poder pagarle sin ir a buscar su ficha. */
   tutor_email: string | null;
   tutor_iban: string | null;
+  /** Cuando se le mando el correo de «Avisar tutor». No es un estado del
+   *  dinero: una comision avisada sigue contando en `pendiente`. */
+  avisado_at: string | null;
 }
 
 export interface FormacionSinTutor {
@@ -109,6 +138,34 @@ export interface FormacionSinTutor {
   cobrado: string;
   primer_cobro: string | null;
   ultimo_cobro: string | null;
+  /* Si se está buscando tutor, y con qué anuncio de Meta. Lo marca una persona:
+     Meta no sabe a qué formación del catálogo apunta cada conjunto de anuncios. */
+  buscando: boolean;
+  busqueda_nota: string | null;
+  busqueda_desde: string | null;
+  anuncio_id: string | null;
+  anuncio_nombre: string | null;
+  /** Tal cual lo dice Meta: ACTIVE, PAUSED… */
+  anuncio_estado: string | null;
+  anuncio_gasto: string | null;
+  anuncio_leads: number | null;
+  /** Se apuntó un anuncio y en Meta ya no está. */
+  anuncio_desaparecido: boolean;
+}
+
+/** Un conjunto de anuncios de Meta, para engancharlo a una formación. */
+export interface AnuncioMeta {
+  adset_id: string;
+  nombre: string;
+  status: string | null;
+  total_spend: string | null;
+  total_leads: number | null;
+  project_id: number;
+  campaign_id: string;
+  campana: string;
+  campana_estado: string | null;
+  /** Se llama como si buscara tutores. Solo ordena la lista, no decide nada. */
+  parece_de_tutores: boolean;
 }
 
 export interface PagoSinFormacion {
@@ -179,6 +236,26 @@ export const tutoresApi = {
   editarColaboracion: (id: number, datos: Record<string, unknown>) =>
     client.patch(`/tutores/colaboraciones/${id}`, datos) as Promise<ApiResponse<Colaboracion>>,
 
+  // «Avisar tutor» (#145 / nota del 14/09). La vista previa y el envio van
+  // separados: nadie deberia mandar un correo sin ver antes lo que sale.
+  previoDelAviso: (tutorId: number, periodo: string) =>
+    client.get(`/tutores/comisiones/aviso?tutorId=${tutorId}&periodo=${periodo}`) as Promise<ApiResponse<AvisoAlTutor>>,
+
+  /**
+   * Manda el aviso. `retoque` solo si se edito a mano en la pantalla — y lleva
+   * los dos campos o ninguno, que el backend rechaza medio retoque.
+   *
+   * A QUIEN va NO se manda: sale del tutor, en el servidor. Por eso esto no
+   * sirve para mandar un correo cualquiera a cualquiera.
+   */
+  avisarTutor: (tutorId: number, periodo: string, retoque?: { asunto: string; html: string }) =>
+    client.post('/tutores/comisiones/avisar', { tutorId, periodo, ...(retoque || {}) }) as Promise<ApiResponse<{ enviado: boolean; a: string; total: number }>>,
+
+  // Mover el tramite de una comision. Solo entre las tres que no han cobrado:
+  // pagar y revertir tienen su propio camino, que deja rastro de quien y por que.
+  cambiarEstadoComision: (id: number, estado: 'pendiente' | 'notificada' | 'falta_factura') =>
+    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<ComisionReal>>,
+
   borrarColaboracion: (id: number) =>
     client.delete(`/tutores/colaboraciones/${id}`) as Promise<ApiResponse<{ borrada: boolean; desactivada: boolean; comisiones: number }>>,
 
@@ -192,17 +269,29 @@ export const tutoresApi = {
       + `${tutorId ? `&tutorId=${tutorId}` : ''}${projectId ? `&projectId=${projectId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
 
   /** Crea las comisiones que falten. Pulsarlo dos veces no duplica nada. */
-  calcularComisiones: (datos: { desde?: string | null; hasta?: string | null; projectId?: number | null }) =>
+  calcularComisiones: (datos: {
+    desde?: string | null; hasta?: string | null; projectId?: number | null;
+    /** Los campus de la empresa, para calcularlos todos de una vez. */
+    projectIds?: number[] | null;
+  }) =>
     client.post('/tutores/comisiones/calcular', datos) as Promise<ApiResponse<{
       creadas: number; importe: number; tutores: number; periodos: string[];
     }>>,
 
-  comisiones: (q: { periodo?: string | null; tutorId?: number | null; estado?: string | null; projectId?: number | null }) =>
+  comisiones: (q: {
+    periodo?: string | null; tutorId?: number | null; estado?: string | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ComisionReal[]>>,
 
-  resumenComisiones: (q: { periodo?: string | null; tutorId?: number | null; projectId?: number | null }) =>
+  // `issuerId` manda sobre `projectId`: el servidor lo traduce a los campus
+  // de esa empresa, igual que en Ventas y en Reportes.
+  resumenComisiones: (q: {
+    periodo?: string | null; tutorId?: number | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones/resumen?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ResumenComision[]>>,
@@ -215,13 +304,27 @@ export const tutoresApi = {
     client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
 
   // Las que ya venden y no tienen a quien pagarle.
-  formacionesSinTutor: (projectId?: number | null) =>
+  formacionesSinTutor: (projectId?: number | null, issuerId?: number | null) =>
     client.get('/tutores/formaciones-sin-tutor'
-      + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
+      + (projectId ? `?projectId=${projectId}`
+        : (issuerId ? `?issuerId=${issuerId}` : ''))) as Promise<ApiResponse<FormacionSinTutor[]>>,
 
-  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
+  /** «Se busca tutor para esta formación», y con qué anuncio si lo hay. */
+  marcarBusquedaTutor: (productId: number, datos: {
+    buscando: boolean; adsetId?: string | null; campaignId?: string | null; nota?: string | null;
+  }) => client.put(`/tutores/formaciones/${productId}/busqueda`, datos) as Promise<ApiResponse<{
+    id: number; product_id: number; buscando: boolean; adset_id: string | null;
+  }>>,
+
+  /** Los anuncios de Meta del ámbito, para elegir uno. */
+  anunciosDeTutores: (projectId?: number | null) =>
+    client.get('/tutores/anuncios' + (projectId ? `?projectId=${projectId}` : '')) as
+      Promise<ApiResponse<AnuncioMeta[]>>,
+
+  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null, issuerId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
-      + (projectId ? `&projectId=${projectId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
+      + (projectId ? `&projectId=${projectId}` : '')
+      + (issuerId ? `&issuerId=${issuerId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
 
   /** La ficha del curso que imparte. El servidor comprueba que sea suyo. */
   curso: (productId: number) =>

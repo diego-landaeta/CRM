@@ -52,6 +52,7 @@ import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
+import correosModule from './modules/correos/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -67,6 +68,7 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
+import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -172,6 +174,7 @@ const ALL_MODULES = [
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  { name: 'correos', mod: correosModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
@@ -307,6 +310,7 @@ if (process.env.NODE_ENV !== 'test') {
     startLeadSinTocarScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
+  startCorreoEntranteScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }

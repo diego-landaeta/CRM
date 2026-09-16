@@ -48,7 +48,12 @@ export default function NotificationsBell({ collapsed = false, className = '' })
         if (isAdminLike && activeProject?.id) {
           [todayRes, leadsRes] = await Promise.all([
             client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
-            client.get(`/leads`, { params: { projectId: activeProject.id, status: 'nuevo', limit: 3 } }).catch(() => ({ success: false, data: [] })),
+            // 'por_contactar' y no 'nuevo': la migracion 076 cambio el DEFAULT de la
+            // columna. Buscando 'nuevo' este bloque solo encontraba fichas de antes
+            // de junio, y se llamaba «nuevos prospectos».
+            //
+            // El fallo esta en los dos CRMs, pero el numero no: alli es la 075.
+            client.get(`/leads`, { params: { projectId: activeProject.id, status: 'por_contactar', limit: 3 } }).catch(() => ({ success: false, data: [] })),
           ]);
         }
         if (cancelled) return;
@@ -57,15 +62,19 @@ export default function NotificationsBell({ collapsed = false, className = '' })
         // 1) Notifs reales (lead_reminder, lead_assigned, etc) — prioridad alta
         const notifs = Array.isArray(notifsRes?.data) ? notifsRes.data : [];
         for (const n of notifs.slice(0, 10)) {
+          // `sin_leer` y no `is_read`: la fila puede ser un grupo de seis, y
+          // la ultima estar leida con cinco sin leer detras (#111).
+          const sinLeer = (n.sin_leer ?? (n.is_read ? 0 : 1)) > 0;
           list.push({
-            id: `notif-${n.id}`,
+            id: `notif-${n.grupo || n.id}`,
             notifId: n.id,
-            kind: n.is_read ? 'info' : (n.type === 'lead_deleted' ? 'urgent' : 'info'),
-            title: n.title,
+            grupo: n.grupo || `id:${n.id}`,
+            kind: !sinLeer ? 'info' : (n.type === 'lead_deleted' ? 'urgent' : 'info'),
+            title: n.veces > 1 ? `${n.title} ×${n.veces}` : n.title,
             body: n.message || '',
             href: n.link_path || null,
             when: n.created_at,
-            isRead: n.is_read,
+            isRead: !sinLeer,
           });
         }
 
@@ -115,8 +124,8 @@ export default function NotificationsBell({ collapsed = false, className = '' })
   }, [canSee, isAdminLike, activeProject?.id]);
 
   async function handleItemClick(item) {
-    if (item.notifId && !item.isRead) {
-      client.patch(`/notifications/${item.notifId}/read`).catch(() => {});
+    if (item.grupo && !item.isRead) {
+      client.patch('/notifications/read-group', { grupo: item.grupo }).catch(() => {});
     }
     setOpen(false);
     if (item.href) navigate(item.href);
@@ -168,7 +177,10 @@ export default function NotificationsBell({ collapsed = false, className = '' })
 
   if (!canSee) return null;
 
-  const unread = items.length;
+  // Solo lo que sigue sin atender. Antes era `items.length`, o sea que
+  // contaba tambien lo ya leido: el globo nunca bajaba y por eso acababa
+  // ignorandose (#111).
+  const unread = items.filter((it) => (it.notifId ? !it.isRead : true)).length;
   const Icon = unread > 0 ? BellRinging : Bell;
 
   return (

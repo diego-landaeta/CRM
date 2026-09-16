@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -133,6 +134,16 @@ function exportReportCSV(data, project, range, panel, seguimiento) {
     sections.push(sep(['Contactos', 'Personas', 'Por persona', 'WhatsApp', 'Llamadas', 'Correos', 'Notas']));
     const t = ac.por_tipo || {};
     sections.push(sep([ac.toques, ac.personas, ac.toques_por_persona, t.whatsapp, t.llamada, t.email, t.nota]));
+    // Escrito contra voz (#128). Va en su propia fila y no en la de arriba: no
+    // son toques, son mensajes, y sumarlos con las llamadas seria mezclar dos
+    // unidades en la misma linea.
+    const vs = ac.whatsapp_saliente;
+    if (vs) {
+      sections.push('');
+      sections.push(sep(['De lo que sale por WhatsApp']));
+      sections.push(sep(['Escrito', 'De voz', '% de voz', 'Con archivo']));
+      sections.push(sep([vs.escrito, vs.voz, vs.pct_voz, vs.adjunto]));
+    }
     sections.push('');
   }
 
@@ -154,6 +165,7 @@ function exportReportCSV(data, project, range, panel, seguimiento) {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
 import { ponerAmbito, sociedadSinCampus } from '@/shared/lib/ambitoInforme';
+import DesglosePorCampus from '../components/DesglosePorCampus';
 import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 
 function fmt(n) {
@@ -207,6 +219,7 @@ export default function ReportsPage() {
   // que es media pantalla.
   const [panelResumen, setPanelResumen] = useState(null);
   const [panelSeguimiento, setPanelSeguimiento] = useState(null);
+
 
   useEffect(() => {
     async function load() {
@@ -319,6 +332,7 @@ export default function ReportsPage() {
                   </button>
                 ))}
               </div>
+              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}
@@ -492,6 +506,18 @@ export default function ReportsPage() {
 
       {/* El mismo panel de resumen que el CRM hermano: KPIs comparados con el
           periodo anterior y la grafica con selector de serie. */}
+      {/* De donde vienen las cifras de la sociedad: el reparto por campus
+          (#125). Sin esto, «120.409 €» es un numero del que no se puede hacer
+          nada. */}
+      {campusDeLaSociedad.length > 0 && (
+        <DesglosePorCampus
+          campus={campusDeLaSociedad}
+          from={range.from}
+          to={range.to}
+          cobradoDeLaSociedad={Number(data?.conversions?.cobrado) || null}
+        />
+      )}
+
       <PanelResumen
         projectId={activeProject?.id}
         issuerId={issuerEfectivo}

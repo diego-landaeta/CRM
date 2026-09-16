@@ -3,7 +3,8 @@ import type { ApiResponse } from '@/shared/types';
 
 export interface EmailTemplate {
   id: number;
-  project_id: number;
+  /** NULL = comun a todos los proyectos, no de uno solo. */
+  project_id: number | null;
   name: string;
   subject: string;
   body_html: string;

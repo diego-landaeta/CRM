@@ -189,6 +189,20 @@ describe('ConversionDialog — submit', () => {
       metodo_pago: 'tarjeta',
     });
 
+    // Desde el 15/09 el cuadro NO se cierra al registrar: se queda en el paso
+    // del documento --proforma o factura-- porque esa ventana estaba detras de
+    // `VITE_FACTURACION_V2` y en produccion no se habia visto nunca.
+    //
+    // Asi que avisar al padre y cerrar ya no pasa en el submit: pasa cuando se
+    // sale de ese paso, por «Cerrar», por la X, por el fondo o con Esc.
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    const cerrar = [...container.querySelectorAll('button')]
+      .find((b) => /Cerrar|Ahora no/.test(b.textContent || ''));
+    expect(cerrar, 'el paso del documento tiene que ofrecer una salida').toBeTruthy();
+    fireEvent.click(cerrar);
+
     expect(onCreated).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });

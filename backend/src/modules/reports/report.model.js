@@ -195,10 +195,25 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
 // criterio que usa el panel de asesoras.
 // Se resuelve con subconsulta al lead y no con el alias `l` porque hay consultas
 // (resumenMensual, formacionesMasVendidas) que no lo tienen en el FROM.
-function columnaAsesora(projectCol) {
-  if (projectCol.startsWith('l.')) return 'l.responsable_id';
+//
+// Devuelve un PREDICADO, no una columna: con las ventas compartidas «de quien
+// es esto» ya no se responde con un solo identificador. Una venta repartida
+// entre dos gestoras es de las dos, y la vista conversion_reparto es la que
+// sabe resolverlo --una fila por venta y gestora, tenga reparto o no--.
+function filtroAsesora(projectCol, ph) {
+  // Nivel PROSPECTO: la ficha es de su gestora, y tambien de quien comparte su
+  // venta. Si no, quien puso la mitad de una venta no veria ni al cliente.
+  if (projectCol.startsWith('l.')) {
+    return `(l.responsable_id = ${ph}
+             OR EXISTS (SELECT 1 FROM conversion_reparto r
+                         WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`;
+  }
+  // Nivel VENTA. Sustituye al COALESCE(vendedora_id, responsable_id) de antes:
+  // hace lo mismo cuando la venta no esta repartida, y ademas encuentra las que
+  // si lo estan.
   const c = projectCol.startsWith('c.') ? 'c.' : '';
-  return `COALESCE(${c}vendedora_id, (SELECT responsable_id FROM leads WHERE id = ${c}lead_id))`;
+  return `EXISTS (SELECT 1 FROM conversion_reparto r
+                   WHERE r.conversion_id = ${c}id AND r.vendedora_id = ${ph})`;
 }
 
 function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, projectCol = 'project_id') {
@@ -212,7 +227,9 @@ function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, pr
   if (to) { cond.push(`${dateCol}::date <= $${idx++}::date`); params.push(to); }
   // Si viene asesora, el informe se recorta a lo suyo. Lo impone el controlador
   // cuando quien pregunta es una gestora, asi que no puede pedir lo de otra.
-  if (asesoraId) { cond.push(`${columnaAsesora(projectCol)} = $${idx++}`); params.push(asesoraId); }
+  // El parametro se referencia dos veces en el caso del prospecto, pero se
+  // empuja UNA: en Postgres $1 puede repetirse dentro de la misma consulta.
+  if (asesoraId) { cond.push(filtroAsesora(projectCol, `$${idx++}`)); params.push(asesoraId); }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
@@ -311,6 +328,42 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
     par
   );
 
+  // ESCRITO CONTRA VOZ (#128).
+  //
+  // Diego: «en los canales de ventas hay que diferenciar cuanto es escrito, por
+  // voz en el caso de WhatsApp, si envian audios o no». Y no es curiosidad: el
+  // documento comercial dice que el saludo del dia 1 «funciona mejor en nota de
+  // voz, sube mucho la tasa de respuesta». Hasta ahora eso se repetia de oidas
+  // porque no habia forma de contarlo.
+  //
+  // Sale de `wa_mensajes`, no de `lead_interactions`: la interaccion apunta que
+  // hubo un WhatsApp, pero no de que tipo. El dato ya estaba guardado.
+  //
+  // Solo lo SALIENTE. Lo que se mide es lo que hace la gestora, no lo que le
+  // mandan: contar los audios que recibe diria que trabaja mas quien tiene
+  // clientes habladores.
+  //
+  // `sticker` no cuenta como escrito ni como voz — no es un mensaje comercial —
+  // y las fotos y documentos van a su propia columna: mandar el dossier no es
+  // «escribir», y meterlo en el mismo saco desdibujaria justo lo que se compara.
+  const { rows: vozTexto } = await query(
+    `SELECT count(*) FILTER (WHERE m.tipo = 'texto')::int    AS escrito,
+            count(*) FILTER (WHERE m.tipo = 'audio')::int    AS voz,
+            count(*) FILTER (WHERE m.tipo IN ('imagen', 'video', 'documento'))::int AS adjunto
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       JOIN leads l ON l.id = c.lead_id
+      WHERE m.direccion = 'saliente'
+        AND l.deleted_at IS NULL ${pProj} ${pAses}
+            ${entre(`(m.ts AT TIME ZONE '${TZ}')::date`)}`,
+    par
+  ).catch((err) => {
+    // Sin las tablas de WhatsApp —un CRM donde no se ha instalado— el informe
+    // entero no puede caerse por una fila de mas.
+    if (err.code !== '42P01') throw err;
+    return { rows: [{ escrito: 0, voz: 0, adjunto: 0 }] };
+  });
+
   // EL EMBUDO: cuantos llegan al seguimiento 1, al 2, al 3...
   //
   // Es lo que convierte «99 % con seguimiento» en algo accionable: enseña
@@ -402,6 +455,19 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
       // no hay cola larga, y «2,3 toques por persona» se entiende solo.
       toques_por_persona: Number(act[0].personas) > 0
         ? Math.round((Number(act[0].toques) * 10) / Number(act[0].personas)) / 10 : 0,
+      // Lo que sale por WhatsApp, separado (#128). El porcentaje se calcula
+      // sobre escrito + voz y no sobre el total: un dossier mandado no compite
+      // con una nota de voz, y meterlo en el divisor haria bajar el numero por
+      // trabajar bien.
+      whatsapp_saliente: {
+        escrito: Number(vozTexto[0].escrito),
+        voz: Number(vozTexto[0].voz),
+        adjunto: Number(vozTexto[0].adjunto),
+        pct_voz: (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz)) > 0
+          ? Math.round((Number(vozTexto[0].voz) * 1000)
+              / (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz))) / 10
+          : 0,
+      },
     },
   };
 }
@@ -532,9 +598,13 @@ function buildGeneralFilter({ projectId, projectIds, from, to, asesoraId }) {
   // fecha de venta.
   const reportDate = `${ENTRY}::date`;
   if (lista) { cond.push(`l.project_id = ANY($${idx++}::int[])`); params.push(lista); }
-  // Una gestora solo ve sus contactos: los suyos o los de sus ventas.
+  // Una gestora solo ve sus contactos: los suyos o los de sus ventas —
+  // incluidas las que atendio a medias con otra, que tambien son suyas.
   if (asesoraId) {
-    cond.push(`COALESCE(conv.vendedora_id, l.responsable_id) = $${idx++}`);
+    const ph = `$${idx++}`;
+    cond.push(`(COALESCE(conv.vendedora_id, l.responsable_id) = ${ph}
+                OR EXISTS (SELECT 1 FROM conversion_reparto r
+                            WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
     params.push(asesoraId);
   }
   if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
@@ -747,22 +817,28 @@ export async function ventasVendedora({ projectId, projectIds, from, to, asesora
   const wherePago = pgo.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
 
   const { rows } = await query(
+    // Por la vista y no por COALESCE(vendedora_id, responsable_id): una venta
+    // atendida entre dos vale MEDIA para cada una, en ventas y en dinero. Asi
+    // este informe sigue sumando el total real de la empresa en vez de contar
+    // la misma venta dos veces. SUM(peso) puede dar 3,5 — es correcto.
     `WITH ventas AS (
-       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
-              COUNT(*)::int AS ventas,
+       SELECT r.vendedora_id AS uid,
+              COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
-              COALESCE(SUM(c.importe_total), 0)::numeric AS total,
-              COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
+              COALESCE(SUM(c.importe_total * r.peso), 0)::numeric AS total,
+              COALESCE(SUM((c.importe_total - c.importe_pagado) * r.peso), 0)::numeric AS pendiente
          FROM conversions c
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${v.where}
         GROUP BY 1
      ),
      cobros AS (
-       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
-              COALESCE(SUM(cp.importe), 0)::numeric AS cobrado
+       SELECT r.vendedora_id AS uid,
+              COALESCE(SUM(cp.importe * r.peso), 0)::numeric AS cobrado
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wherePago}
         GROUP BY 1
@@ -784,7 +860,6 @@ export async function ventasVendedora({ projectId, projectIds, from, to, asesora
 }
 
 // La venta se atribuye a su vendedora; si no la tiene, al responsable del lead.
-const ASESORA = 'COALESCE(c.vendedora_id, l.responsable_id)';
 
 // DETALLE: una fila por venta, para descargar.
 export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, asesoraId }) {
@@ -897,11 +972,14 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
      ),
      ventas_mes AS (
        SELECT to_char(date_trunc('month', ${DV}), 'YYYY-MM') AS mes,
-              ${ASESORA} AS uid,
-              COUNT(*)::int AS ventas,
+              r.vendedora_id AS uid,
+              -- SUM(peso) y no COUNT(*): una venta atendida entre dos vale media
+              -- para cada una, y asi el mes sigue sumando las ventas reales.
+              COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
-              COALESCE(SUM(c.importe_total), 0) AS vendido
+              COALESCE(SUM(c.importe_total * r.peso), 0) AS vendido
          FROM conversions c
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wv}
           -- Una ficha marcada como mensualidad no es una venta nueva.
@@ -913,15 +991,16 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
      ),
      cobros_mes AS (
        SELECT to_char(date_trunc('month', ${DC}), 'YYYY-MM') AS mes,
-              ${ASESORA} AS uid,
-              COALESCE(SUM(cp.importe), 0) AS cobrado,
+              r.vendedora_id AS uid,
+              COALESCE(SUM(cp.importe * r.peso), 0) AS cobrado,
               -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no
               -- con JOIN: un mismo pago puede saldar varias y se contaria dos veces.
-              COALESCE(SUM(cp.importe) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_cuotas,
-              COUNT(*) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))))::int AS mensualidades
+              COALESCE(SUM(cp.importe * r.peso) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_venta,
+              COALESCE(SUM(cp.importe * r.peso) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_cuotas,
+              COALESCE(SUM(r.peso) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0)::float8 AS mensualidades
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
+         JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wc}
         GROUP BY 1, 2
@@ -954,13 +1033,16 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
             ROUND(COALESCE(cm.cobrado_cuotas, 0), 2) AS cobrado_cuotas,
             COALESCE(cm.mensualidades, 0) AS mensualidades,
             ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
-                       THEN COALESCE(vm.vendido, 0) / vm.ventas ELSE 0 END, 2) AS ticket_medio
+                       THEN COALESCE(vm.vendido, 0) / vm.ventas::numeric ELSE 0 END, 2) AS ticket_medio
        FROM todo t
        LEFT JOIN leads_mes  lm ON lm.mes = t.mes AND lm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN ventas_mes vm ON vm.mes = t.mes AND vm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN cobros_mes cm ON cm.mes = t.mes AND cm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN users u ON u.id = t.uid
-      ORDER BY t.mes DESC, cobrado DESC`,
+      -- Desempate fijo: sin el, dos asesoras con el mismo cobrado salian en
+      -- un orden u otro segun el plan que eligiera Postgres, y el mismo
+      -- informe podia bajarse dos veces con las filas cambiadas de sitio.
+      ORDER BY t.mes DESC, cobrado DESC, asesora, t.uid`,
     [...fl.params, ...fv.params, ...fc.params]
   );
   return rows;
@@ -990,7 +1072,9 @@ export async function panelReportes({ projectId, projectIds, from, to, asesoraId
   const iAs = lista ? 4 : 3;
   const al = asesoraId ? ` AND l.responsable_id = $${iAs}` : '';
   const ac = asesoraId
-    ? ` AND COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${iAs}`
+    // La vista resuelve titular y reparto de una vez.
+    ? ` AND EXISTS (SELECT 1 FROM conversion_reparto r
+                     WHERE r.conversion_id = c.id AND r.vendedora_id = $${iAs})`
     : '';
   const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('l.project_id')}`) + al;
   const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('c.project_id')}`) + ac;
@@ -1282,7 +1366,17 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     cond.push(finMes ? `${ENTRY}::date <= ${finMes}` : `${ENTRY}::date <= $${idx++}`);
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('l.responsable_id IS NULL');
-    else if (asesoraId) add('COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL ORDER BY cv.fecha_conversion LIMIT 1)) = ?', Number(asesoraId));
+    else if (asesoraId) {
+      // A mano y no con add(): el parametro se repite y add() solo sustituye el
+      // primer '?'. Es lo de antes MAS quien comparte la venta del prospecto.
+      const ph = `$${idx++}`;
+      cond.push(`(COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv
+                                               WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL
+                                               ORDER BY cv.fecha_conversion LIMIT 1)) = ${ph}
+                  OR EXISTS (SELECT 1 FROM conversion_reparto r
+                              WHERE r.lead_id = l.id AND r.vendedora_id = ${ph} AND r.compartida))`);
+      params.push(Number(asesoraId));
+    }
     const { rows } = await query(
       `SELECT l.id, l.nombre AS cliente, l.email, l.telefono, l.status AS estado,
               ${ENTRY}::date AS fecha,
@@ -1309,8 +1403,8 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     add(`${DV} >= ?`, desde);
     cond.push(finMes ? `${DV} <= ${finMes}` : `${DV} <= $${idx++}`);
     if (!finMes) params.push(hasta);
-    if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
-    else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+    if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
+    else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
     if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
@@ -1371,8 +1465,8 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
   add(`${DC} >= ?`, desde);
   cond.push(finMes ? `${DC} <= ${finMes}` : `${DC} <= $${idx++}`);
   if (!finMes) params.push(hasta);
-  if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
-  else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+  if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
+  else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
   // Un cobro es "de la venta" si es el primero Y su ficha es una venta de
   // verdad: en una marcada como mensualidad no hay venta que cobrar, así que
   // todos sus cobros son cuota.

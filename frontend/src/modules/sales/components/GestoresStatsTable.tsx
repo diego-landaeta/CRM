@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Users, PencilSimple, X, Check } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { formatDate } from '@/shared/lib/format';
 
 interface GestorRow {
   user_id: number;
@@ -9,9 +10,14 @@ interface GestorRow {
   email: string;
   role: string;
   is_available: boolean;
+  /** Puede traer media venta (3,5) cuando alguna esta repartida con otra gestora. */
   ventas: number;
+  /** Cuantas de esas ventas comparte con alguien. Metrica suya, no de la empresa. */
+  compartidas?: number;
   facturado: number;
   cobrado: number;
+  /** Recibe leads en el ambito: si sale sin esto es porque vendio en el periodo. */
+  recibe_leads?: boolean;
   meta_ventas: number | null;
   meta_facturacion: number | null;
   meta_set_by?: string | null;
@@ -27,10 +33,27 @@ interface Props {
   canEdit?: boolean;
   /** Mes (YYYY-MM) que manda desde la pantalla. */
   periodo?: string;
+  /** Las fechas del filtro de la pantalla. Mandan sobre el mes. */
+  from?: string | null;
+  to?: string | null;
 }
 
 function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+}
+
+/**
+ * El numero de ventas, con decimal SOLO cuando lo hay.
+ *
+ * Una venta repartida entre dos vale media para cada una, asi que aqui pueden
+ * salir 3,5. Pero quien no comparte nada sigue viendo un 3 limpio: enseñar
+ * «3,0» a todo el mundo por si acaso ensucia la columna entera.
+ */
+function nVentas(n: number) {
+  const v = Number(n) || 0;
+  return Number.isInteger(v)
+    ? String(v)
+    : v.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
 function currentPeriodo() {
@@ -38,7 +61,7 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function GestoresStatsTable({ projectId, issuerId = null, className = '', canEdit = true, periodo: periodoProp }: Props) {
+export default function GestoresStatsTable({ projectId, issuerId = null, className = '', canEdit = true, periodo: periodoProp, from = null, to = null }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -56,13 +79,17 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
     // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
     // backend y salia todo a cero aunque arriba se estuviera mirando el año.
     if (periodo) params.periodo = periodo;
+    // Las fechas van SIEMPRE que las haya: sin ellas la tabla contaba el mes
+    // entero aunque arriba se estuviera mirando un solo dia, y las dos cifras
+    // de la misma pantalla se contradecian.
+    if (from && to) { params.from = from; params.to = to; }
     client.get<{ gestores: GestorRow[] }>('/ventas/gestores-stats', { params })
       .then((r) => { setRows(r?.data?.gestores || []); })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, issuerId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, issuerId, periodo, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(row: GestorRow) {
     setEditingId(row.user_id);
@@ -96,7 +123,11 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Users size={16} weight="duotone" className="text-blue-600" />
-          Equipo de ventas — {periodo === 'all' ? 'histórico' : periodo}
+          {/* El titulo dice lo que de verdad se esta contando. Decia el mes
+              siempre, y con el filtro en un dia eso era mentira. */}
+          Equipo de ventas — {from && to
+            ? (from === to ? formatDate(from) : `${formatDate(from)} a ${formatDate(to)}`)
+            : periodo === 'all' ? 'histórico' : periodo}
         </h3>
         <span className="text-[11px] text-muted-foreground">{rows.length} {rows.length === 1 ? 'gestor' : 'gestores'}</span>
       </div>
@@ -129,7 +160,7 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                       <p className="font-medium text-[13px] truncate" title={r.email}>{r.nombre}</p>
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                         <span className="capitalize">{r.role}</span>
-                        {!r.is_available && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">No recibe leads</span>}
+                        {r.recibe_leads === false && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">No recibe leads</span>}
                       </p>
                     </td>
                     <td className="py-2.5 text-right tabular-nums">
@@ -138,8 +169,19 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                           className="w-20 h-8 px-2 rounded border border-border bg-card text-right text-sm" />
                       ) : (
                         <>
-                          <span className="font-semibold">{r.ventas}</span>
+                          <span className="font-semibold">{nVentas(r.ventas)}</span>
                           <span className="text-muted-foreground"> / {r.meta_ventas ?? '—'}</span>
+                          {/* Por que sale un 2,5: la venta compartida vale media
+                              para cada una, y asi la suma de la tabla sigue
+                              siendo el total real de la empresa. */}
+                          {!!r.compartidas && (
+                            <span
+                              className="text-[11px] text-violet-700 dark:text-violet-300 block"
+                              title="Ventas atendidas a medias con otra gestora. Cada una suma su parte."
+                            >
+                              {r.compartidas === 1 ? '1 compartida' : `${r.compartidas} compartidas`}
+                            </span>
+                          )}
                           {r.meta_ventas != null && r.meta_ventas > 0 && (
                             <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden ml-auto" style={{ maxWidth: 100 }}>
                               <div className={`h-full ${pctV >= 100 ? 'bg-emerald-500' : pctV >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctV}%` }} />

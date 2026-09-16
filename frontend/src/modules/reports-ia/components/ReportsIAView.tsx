@@ -7,7 +7,8 @@ import {
 } from '@phosphor-icons/react';
 import { useReportsIA } from '../hooks/useReportsIA';
 import { exportReportPdf } from '../api/reports-ia.api';
-import Markdown from '@/shared/components/ui/Markdown';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Project {
   id: string | number;
@@ -181,7 +182,7 @@ export default function ReportsIAView({ project, showGenerateButton = true }: Re
               </div>
               <div className="p-4 lg:p-6 overflow-x-auto">
                 <article className="markdown-body">
-                  <Markdown>{reportsIA.selected.content}</Markdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportsIA.selected.content}</ReactMarkdown>
                 </article>
               </div>
             </>

@@ -1,4 +1,5 @@
 import * as model from './accounting.model.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import {
   createExpenseSchema,
   updateExpenseSchema,
@@ -34,12 +35,12 @@ export async function createExpense(req, res, next) {
 // El gestor solo ve las suyas (se fuerza su responsableId).
 export async function receivable(req, res, next) {
   try {
-    const projectId = req.query.projectId ? Number(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? Number(req.query.responsableId) : null;
     if (req.user.role === 'gestor') responsableId = req.user.userId; // seguridad
     const from = req.query.from || null;
     const to = req.query.to || null;
-    const data = await model.getReceivable({ projectId, responsableId, from, to });
+    const data = await model.getReceivable({ projectId, projectIds, responsableId, from, to });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
@@ -48,7 +49,7 @@ export async function listExpenses(req, res, next) {
   try {
     const parsed = listExpensesSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const result = await model.listExpenses(parsed.data);
+    const result = await model.listExpenses({ ...parsed.data, ...(await proyectosDelAmbito(req)) });
     res.json({
       success: true,
       data: result.expenses,

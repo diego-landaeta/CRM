@@ -21,6 +21,15 @@ export type PasoEnCola = {
   fecha_prevista: string;
   dias_de_retraso: number;
   contactos: number;
+  /** La formación por la que preguntó. Las plazas NO vienen: no las lleva el
+      CRM, se miran en el sistema de admisiones. Solo viene la marca de que
+      este paso las menciona y hay que ir a comprobarlas. */
+  producto: string | null;
+  producto_precio: string | number | null;
+  avisa_plazas: boolean;
+  /** El campus. Solo importa cuando se mira una empresa entera. */
+  project_id: number;
+  proyecto: string | null;
 };
 
 export type ResumenCola = {
@@ -44,6 +53,8 @@ export type PasoDeLead = {
   hecho: boolean;
   vencido: boolean;
   dias_de_retraso: number;
+  /** Su mensaje dice cuántas plazas quedan: hay que comprobarlo fuera. */
+  avisa_plazas: boolean;
 };
 
 function conAmbito(params: Record<string, string | number | undefined | null>) {
@@ -58,14 +69,14 @@ function conAmbito(params: Record<string, string | number | undefined | null>) {
 }
 
 export async function traerCola(opciones: {
-  projectId?: number | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
 }): Promise<PasoEnCola[]> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
   return r?.success ? r.data : [];
 }
 
 export async function traerResumen(opciones: {
-  projectId?: number | null; gestoraId?: number | null;
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
 }): Promise<ResumenCola | null> {
   const r = await client.get(`/proceso/cola/resumen?${conAmbito(opciones)}`);
   return r?.success ? r.data : null;

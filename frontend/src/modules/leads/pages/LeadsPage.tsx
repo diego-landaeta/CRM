@@ -74,6 +74,7 @@ import {
   formatRelative,
   formatFecha,
 } from '../lib/leadFormat';
+import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 // El panel de «proximo gestor» se retiro: predecia con el round-robin del CRM
 // y quien reparte es Make. Se cambio por el de abajo, que enseña lo que ha
 // pasado en vez de lo que va a pasar. El componente viejo sigue en el repo.
@@ -144,6 +145,7 @@ export default function LeadsPage() {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
+    filterSeguimiento, setFilterSeguimiento,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
@@ -237,7 +239,7 @@ export default function LeadsPage() {
       const todos = await fetchAllForExport({ projectIds, ignoreFilters });
       if (exportReqRef.current !== myReq) return; // llegó una petición más nueva → descartar
       // Los filtros rápidos son client-side: solo aplican en modo 'filtros'.
-      setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
+      setExportRows(todos);
     } catch (err) {
       if (exportReqRef.current === myReq) toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
     } finally { if (exportReqRef.current === myReq) setExportLoading(false); }
@@ -313,87 +315,62 @@ export default function LeadsPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Filtros rapidos client-side (sobre los leads ya cargados)
-  // Parser de DATE: viene como "2026-06-11" o "2026-06-11T00:00:00.000Z". JS con
-  // new Date(str) lo interpreta como UTC midnight, que desde TZ negativas
-  // (Caracas/México) cae en el día anterior LOCAL. Extraemos YYYY-MM-DD y
-  // construimos como fecha local 00:00 para comparar día con día.
-  function parseLocalDateOnly(dateStr: string | null | undefined): Date | null {
-    if (!dateStr) return null;
-    const s = String(dateStr).slice(0, 10);
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return null;
-    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-  }
 
-  // Filtros rápidos (client-side). Extraído a función para poder aplicarlo
-  // también al export, que trae TODAS las filas del backend (no solo la página).
-  function aplicarQuickFilter(lista) {
-    if (!quickFilter) return lista;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return lista.filter(l => {
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }
+  // El filtro rapido ya no se aplica aqui: lo hace el servidor, y el export
+  // pide con `qf` puesto. Habia una copia entera de la logica en este sitio;
+  // dos definiciones de lo mismo acaban diciendo cosas distintas (#132).
 
-  const filteredLeads = useMemo(() => {
-    if (!quickFilter) return leads;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return leads.filter(l => {
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }, [leads, quickFilter]);
+  // La lista YA viene filtrada del servidor (#132).
+  //
+  // Aqui habia un `useMemo` que filtraba `leads` —una pagina de 20 de `total`—
+  // asi que «mañana» enseñaba los de mañana QUE CAYERAN en esa pagina. Con 300
+  // prospectos y doce para mañana podian salir dos.
+  //
+  // Se queda el nombre para no tocar los quince sitios que lo usan.
+  const filteredLeads = leads;
 
-  const quickCounts = useMemo(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
-    leads.forEach(l => {
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (next && next < today) overdue++;
-      if (next && next.getTime() === today.getTime()) todayCount++;
-      if (next && next.getTime() === tomorrow.getTime()) tomorrowCount++;
-      if (next && next >= today && next <= inWeek) weekCount++;
-      if (!next) noReminder++;
-      if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
-    });
-    return { overdue, today: todayCount, tomorrow: tomorrowCount, week: weekCount, noReminder, noContact, urgent: overdue + todayCount + noContact };
-  }, [leads]);
+  // Los contadores de las pestañas, del servidor (#132).
+  //
+  // Se contaban sobre la pagina, igual que el filtro, asi que la pestaña decia
+  // «3» y en la base habia doce. Y `urgent` era `overdue + today + noContact`,
+  // que suma DOS VECES a quien esta vencido y ademas sin contactar; el servidor
+  // lo resuelve con un OR, que es lo que significa «urgente».
+  const [quickCounts, setQuickCounts] = useState({
+    overdue: 0, today: 0, tomorrow: 0, week: 0, noReminder: 0, noContact: 0, urgent: 0,
+    // `null` mientras no exista la migracion 147: la pestaña «Por validar» no
+    // se pinta, en vez de enseñar un 0 que parece «ya lo tienes todo hecho».
+    sinRevisar: null as number | null,
+  });
+  useEffect(() => {
+    const pidParam = activeProject?.id && activeProject.id > 0 ? `?projectId=${activeProject.id}` : '';
+    client.get(`/leads/quick-counts${pidParam}`)
+      .then((res) => {
+        if (!res.success) return;
+        const d = res.data || {};
+        setQuickCounts((prev) => ({
+          ...prev,
+          overdue: d.overdue || 0, today: d.today || 0, tomorrow: d.tomorrow || 0,
+          week: d.week || 0, noReminder: d.no_reminder || 0, noContact: d.no_contact || 0,
+          urgent: d.urgent || 0,
+          sinRevisar: prev.sinRevisar,
+        }));
+      })
+      .catch(() => { /* las pestañas se quedan a cero, la lista sigue */ });
+
+    // El repaso de fin de mes va aparte: depende de una tabla que puede no
+    // estar, y no puede tumbar los otros siete contadores si falta.
+    client.get(`/leads/revision${pidParam}`)
+      .then((res) => {
+        const d = res?.data;
+        setQuickCounts((prev) => ({
+          ...prev,
+          sinRevisar: d?.disponible ? (d.pendientes || 0) : null,
+        }));
+      })
+      .catch(() => { /* sin repaso: la pestaña no aparece */ });
+    // `leads` en las dependencias a proposito: al cambiar de estado un prospecto
+    // los numeros tienen que moverse, y esa es la señal de que algo cambio.
+  }, [activeProject?.id, leads]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin).
   // Con un proyecto concreto activo, solo los gestores de ESE proyecto;
@@ -633,24 +610,10 @@ export default function LeadsPage() {
       {/* Barra de herramientas de la pantalla. El titulo ya no vive aqui: esta
           arriba, en la cabecera del marco, igual que en todas las demas. */}
       <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => { setNewCount(0); refetch(); }}
-            title="Refrescar lista de prospectos"
-            aria-label="Refrescar"
-            className={`relative h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border text-xs sm:text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ${
-              newCount > 0
-                ? 'border-success/30 bg-success-soft text-success animate-pulse'
-                : 'border-border bg-card hover:bg-muted'
-            }`}
-          >
-            <ArrowsClockwise size={14} weight="bold" className={loading ? 'animate-spin' : undefined} />
-            <span className="hidden md:inline">Refrescar</span>
-            {newCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-success-foreground text-[10px] font-bold flex items-center justify-center">
-                {newCount > 9 ? '9+' : newCount}
-              </span>
-            )}
-          </button>
+          {/* Aqui habia un «Refrescar». Hacia lo mismo que el «Actualizar» de
+              la fila de filtros —dos botones de recargar en la misma pantalla,
+              #125— y lo unico que aportaba de mas, el aviso de cuantos han
+              entrado, se ha mudado alli. */}
           {/* Aqui habia un «Lista / Kanban» y un «Audiencias» que llevaban a
               las mismas tres pantallas que las pestanas de arriba. Dos sitios
               para lo mismo, uno encima del otro. */}
@@ -666,22 +629,13 @@ export default function LeadsPage() {
               <span className="hidden md:inline">{exportLoading ? 'Preparando…' : 'Exportar'}</span>
             </button>
           )}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/informes')}
-              title="Ir a Reportes (descargables)"
-              aria-label="Reportes"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <ChartLineUp size={14} weight="bold" />
-              <span className="hidden md:inline">Reportes</span>
-            </button>
-          )}
+          {/* Y aqui un «Reportes», que llevaba al mismo sitio que el acceso
+              «Reportes» del bloque de arriba. Se queda el del bloque. */}
           <button
             onClick={() => setWasapiOpen(true)}
             title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
             aria-label="Wasapi"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-success/30 bg-success-soft text-success text-xs sm:text-sm font-medium hover:bg-success-soft transition-colors focus:outline-none focus:ring-2 focus:ring-success/40"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <WhatsappLogo size={14} weight="bold" />
             <span className="hidden md:inline">Wasapi</span>
@@ -746,6 +700,19 @@ export default function LeadsPage() {
         onFiltroRapido={(clave) => setQuickFilter(clave || '')}
       />
 
+      {/* Plegable y con memoria (#125): «esta super bien, pero que se pueda
+          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
+          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
+          organizarse el dia le hace falta. */}
+      <BloquePlegable
+        clave="prospectos-resumen"
+        titulo="Resumen del dia"
+        resumen={
+          quickCounts.urgent > 0
+            ? `${quickCounts.urgent} piden atención`
+            : 'Nada urgente'
+        }
+      >
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
         <SaludComercial
           stats={stats}
@@ -766,6 +733,7 @@ export default function LeadsPage() {
           ]}
         />
       </section>
+      </BloquePlegable>
 
       {/* Los cuatro filtros que más se usan, a la vista y en una fila, como la
           maqueta. Estaban TODOS dentro del desplegable «Filtros»: para saber si
@@ -823,6 +791,7 @@ export default function LeadsPage() {
           setFilterReincidente(false);
           setQuickFilter('');
         }}
+        nuevos={newCount}
         onActualizar={() => { setNewCount(0); refetch(); }}
         actualizando={loading}
       />
@@ -839,6 +808,7 @@ export default function LeadsPage() {
         user={user}
         search={search} setSearch={setSearch}
         filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+        filterSeguimiento={filterSeguimiento} setFilterSeguimiento={setFilterSeguimiento}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
