@@ -31,6 +31,11 @@ vi.mock('@/modules/reports/api/resumenDelDia.api', () => ({
   getResumenDelDia: (...a) => getResumenDelDia(...a),
 }));
 
+const contarSinLeer = vi.fn();
+vi.mock('@/modules/notificaciones/api/avisos.api', () => ({
+  contarSinLeer: (...a) => contarSinLeer(...a),
+}));
+
 const navigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 
@@ -49,6 +54,8 @@ beforeEach(() => {
     { id: 14, nombre: 'Baja', active: false },
   ] });
   traerResumen.mockResolvedValue({ atrasados: 0, hoy: 6, manana: 0, esta_semana: 0 });
+  contarSinLeer.mockReset();
+  contarSinLeer.mockResolvedValue({ accion: 0, aviso: 0 });
   getResumenDelDia.mockResolvedValue([
     { dia: 'ayer', leads: 1, contactados: 1, ventas: 0, sin_tocar: 0 },
     { dia: 'hoy', leads: 2, contactados: 1, ventas: 1, sin_tocar: 0 },
@@ -200,5 +207,54 @@ describe('el viaje de vuelta: la cola lee lo que el dashboard escribe', () => {
     const url = navigate.mock.calls[0][0];
     const params = new URLSearchParams(url.split('?')[1]);
     expect(gestoraDeLaDireccion(params, true)).toBe(12);
+  });
+});
+
+
+describe('los avisos de la campana, en «lo que toca» (#130 punto 2)', () => {
+  it('salen cuando hay alguno que pide algo', async () => {
+    contarSinLeer.mockResolvedValue({ accion: 3, aviso: 12 });
+    render(<ParaHoyYManana projectId={1} />);
+    expect(await screen.findByText(/avisos te esperan/)).toBeInTheDocument();
+    // Solo los de ACCION. Los 12 de «aviso» cuentan lo que ha pasado, y este
+    // bloque es lo que hay que HACER: meterlos aqui lo llenaria de ruido.
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.queryByText('12')).toBeNull();
+  });
+
+  it('en singular cuando es uno', async () => {
+    contarSinLeer.mockResolvedValue({ accion: 1, aviso: 0 });
+    render(<ParaHoyYManana projectId={1} />);
+    expect(await screen.findByText(/aviso te espera$/)).toBeInTheDocument();
+  });
+
+  it('sin avisos no se pinta la fila', async () => {
+    render(<ParaHoyYManana projectId={1} />);
+    await screen.findByLabelText(/Para hoy: 6/);
+    expect(screen.queryByText(/te esperan?$/)).toBeNull();
+  });
+
+  it('NO se suman a los tramos: son cuentas distintas', async () => {
+    // La cola son los pasos del proceso; la campana son fichas asignadas, sin
+    // tocar y recordatorios. Sumarlas seria una segunda contabilidad.
+    contarSinLeer.mockResolvedValue({ accion: 3, aviso: 0 });
+    render(<ParaHoyYManana projectId={1} />);
+    // «Para hoy» sigue diciendo 6, no 9.
+    expect(await screen.findByLabelText(/Para hoy: 6/)).toBeInTheDocument();
+  });
+
+  it('con la cola a cero pero avisos pendientes, el bloque SI se pinta', async () => {
+    // Antes bastaba con que los cuatro tramos fueran cero para esconderlo. Con
+    // avisos por atender, esconderlo seria perderlos.
+    traerResumen.mockResolvedValue({ atrasados: 0, hoy: 0, manana: 0, esta_semana: 0 });
+    contarSinLeer.mockResolvedValue({ accion: 2, aviso: 0 });
+    render(<ParaHoyYManana projectId={1} />);
+    expect(await screen.findByText(/avisos te esperan/)).toBeInTheDocument();
+  });
+
+  it('si la campana falla, el bloque sigue pintando la cola', async () => {
+    contarSinLeer.mockRejectedValue(new Error('caida'));
+    render(<ParaHoyYManana projectId={1} />);
+    expect(await screen.findByLabelText(/Para hoy: 6/)).toBeInTheDocument();
   });
 });

@@ -78,3 +78,21 @@ export async function guardarPreferencias(apagados: string[]): Promise<{ ok: boo
     return { ok: false, error: err?.data?.error || err?.message || 'No se pudo guardar.' };
   }
 }
+
+/**
+ * Cuántos avisos sin leer, separados como los separa el #111.
+ *
+ *   accion — pide que alguien haga algo: una ficha asignada, una sin tocar,
+ *            un recordatorio. Es lo que marca el globo de la campana.
+ *   aviso  — solo cuenta lo que ha pasado.
+ *
+ * Lo usa «Lo que toca» del dashboard (#130, punto 2): ahí solo interesa
+ * `accion`, porque el bloque es lo que hay que HACER, no lo que hay que saber.
+ */
+export async function contarSinLeer(): Promise<{ accion: number; aviso: number }> {
+  const res = await client.get<{ total: number; accion: number; aviso: number }>(
+    '/notifications/unread-count',
+  ).catch(() => ({ success: false, data: null }));
+  const d = res.success ? res.data : null;
+  return { accion: Number(d?.accion) || 0, aviso: Number(d?.aviso) || 0 };
+}

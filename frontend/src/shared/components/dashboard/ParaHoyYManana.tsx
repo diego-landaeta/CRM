@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Warning, Sun, CalendarBlank, CalendarCheck } from '@phosphor-icons/react';
+import { Warning, Sun, CalendarBlank, CalendarCheck, Bell } from '@phosphor-icons/react';
 import { traerResumen, type ResumenCola } from '@/modules/proceso/api/agenda.api';
 import { GESTORA_EN_URL } from '@/modules/proceso/lib/cola';
+import { contarSinLeer } from '@/modules/notificaciones/api/avisos.api';
 
 /**
  * «Para hoy / para mañana» (#130, parte 2).
@@ -58,6 +59,7 @@ export default function ParaHoyYManana({
 }) {
   const navigate = useNavigate();
   const [resumen, setResumen] = useState<ResumenCola | null>(null);
+  const [porAtender, setPorAtender] = useState(0);
 
   useEffect(() => {
     let vivo = true;
@@ -67,11 +69,24 @@ export default function ParaHoyYManana({
     return () => { vivo = false; };
   }, [projectId, gestoraId]);
 
+  // Los avisos de la campana que PIDEN ALGO (#130, punto 2 · #111).
+  //
+  // Son de quien mira, no del proyecto ni de la gestora filtrada: la campana
+  // es personal. Por eso se piden aparte y no se rehacen al cambiar el filtro
+  // — un admin mirando el dia de Laura sigue teniendo SUS avisos pendientes.
+  useEffect(() => {
+    let vivo = true;
+    contarSinLeer()
+      .then((c) => { if (vivo) setPorAtender(c.accion); })
+      .catch(() => { if (vivo) setPorAtender(0); });
+    return () => { vivo = false; };
+  }, []);
+
   if (!resumen) return null;
 
-  // Si no hay nada pendiente en ningun tramo, el bloque sobra: un dashboard
-  // lleno de ceros entrena a no mirarlo.
-  const algo = TRAMOS.some((t) => Number(resumen[t.campo] ?? 0) > 0);
+  // Si no hay nada pendiente en ningun tramo NI avisos por atender, el bloque
+  // sobra: un dashboard lleno de ceros entrena a no mirarlo.
+  const algo = TRAMOS.some((t) => Number(resumen[t.campo] ?? 0) > 0) || porAtender > 0;
   if (!algo) return null;
 
   return (
@@ -114,6 +129,34 @@ export default function ParaHoyYManana({
           );
         })}
       </div>
+
+      {/* LOS AVISOS DE LA CAMPANA QUE PIDEN ALGO (#130, punto 2).
+          El ticket pide que esto salga de «los recordatorios, los seguimientos
+          programados y los avisos de la campana que tu mismo acabas de montar
+          en el #111». Los dos primeros son la cola de arriba; esto es el
+          tercero.
+
+          VAN APARTE, NO SUMADOS. La cola son los pasos del proceso comercial;
+          la campana son fichas asignadas, fichas sin tocar y recordatorios.
+          Meterlos en el mismo numero seria una segunda contabilidad de cosas
+          distintas, y el dia que discreparan no se sabria cual mira mal.
+
+          Y son de QUIEN MIRA: la campana es personal, asi que no cambia al
+          filtrar por una gestora. */}
+      {porAtender > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/notificaciones')}
+          className="mt-2 w-full rounded-md border border-border p-2.5 text-left hover:bg-muted/50 transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <Bell size={14} className="text-muted-foreground shrink-0" />
+          <span className="text-sm">
+            <strong className="tabular-nums">{porAtender}</strong>
+            {porAtender === 1 ? ' aviso te espera' : ' avisos te esperan'}
+          </span>
+          <span className="ml-auto text-xs text-muted-foreground">Ver</span>
+        </button>
+      )}
     </div>
   );
 }
