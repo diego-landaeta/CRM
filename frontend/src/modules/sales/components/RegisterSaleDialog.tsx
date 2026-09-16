@@ -53,6 +53,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
   const [metodo, setMetodo] = useState('transferencia');
   const [fecha, setFecha] = useState(today);
   const [notas, setNotas] = useState('');
+  // Esta ficha es una CUOTA de una venta anterior, no una venta nueva (#100).
+  const [esCuota, setEsCuota] = useState(false);
 
   // Pagos fraccionados (cuotas). Se activan al seleccionar metodo='fraccionado'.
   // Por defecto generamos N cuotas mensuales desde la fecha de pago, distribuyendo
@@ -73,7 +75,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     setDireccionFiscal('');
     setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
-    setFecha(today); setNotas('');
+    setFecha(today); setNotas(''); setEsCuota(false);
   }, [open, today]);
 
   // Productos del proyecto
@@ -213,6 +215,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         metodo_pago: metodo,
         fecha_pago: fecha,
         notas: notas.trim() || null,
+        es_mensualidad: esCuota,
       };
       if (metodo === 'fraccionado' && installments.length >= 2) {
         body.installments = installments.map(it => ({
@@ -513,6 +516,33 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                   placeholder="Comentarios sobre la venta…"
                   className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none" />
               </div>
+
+              {/* NO ES UNA VENTA NUEVA (#100).
+
+                  Hasta ahora no habia forma de decirlo. La columna
+                  `es_mensualidad` existia y una veintena de consultas la
+                  filtraban --el ranking, el recuento, las plazas, los
+                  informes--, pero nadie la ponia nunca a true: estaba a
+                  false en las 491 fichas y esos filtros no filtraban nada.
+
+                  Va desmarcada, y esa es la respuesta correcta casi
+                  siempre: lo normal es apuntar la cuota como un cobro mas
+                  de la venta original, y entonces el CRM ya la reconoce
+                  sola --el primer cobro de una venta es la matricula, el
+                  resto son cuotas--. Esto es para cuando se registra como
+                  ficha aparte: ahi el unico cobro de la ficha ES el
+                  primero, y sin la marca cuenta como venta nueva. */}
+              <label className="flex items-start gap-2.5 p-3 rounded-md border border-border bg-muted/20 cursor-pointer">
+                <input type="checkbox" checked={esCuota} onChange={(e) => setEsCuota(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
+                <span className="text-sm">
+                  Es una cuota de una venta anterior
+                  <span className="block text-[11px] text-muted-foreground mt-0.5">
+                    No contara como venta nueva: ni en el recuento, ni en el ranking de programas.
+                    El dinero si entra, como cuota cobrada.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 

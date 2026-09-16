@@ -35,6 +35,7 @@ export async function create(data) {
       descuento_tipo,    // 'none' | 'pct' | 'monto'
       descuento_valor,   // % o monto fijo
       subtotal_bruto,    // precio base antes de descuento/IVA (modo simple)
+      es_mensualidad,    // esta ficha es una CUOTA de una venta anterior (#100)
     } = data;
 
     const ivaPctVal = Number(iva_pct ?? 21);
@@ -108,14 +109,20 @@ export async function create(data) {
         (lead_id, project_id, producto_contratado, producto_contratado_id, importe_total, importe_pagado,
          metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
          iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe,
-         subtotal_bruto, descuento_tipo, descuento_valor, descuento_importe)
+         subtotal_bruto, descuento_tipo, descuento_valor, descuento_importe,
+         es_mensualidad)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
-               $11, $12, $13, $14, $15, $16, $17, $18, $19)
+               $11, $12, $13, $14, $15, $16, $17, $18, $19,
+               $20)
        RETURNING *`,
       [lead_id, project_id, producto_contratado, producto_contratado_id || null,
        finalImporte, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
        isExento ? 0 : ivaPctVal, isIncluido, isExento, base, ivaImp,
-       Number(subtotalBruto.toFixed(2)), descTipo, descVal, descImporte]
+       Number(subtotalBruto.toFixed(2)), descTipo, descVal, descImporte,
+       // Por defecto NO: quien no dice nada esta registrando una venta. El
+       // `=== true` evita que un 'false' de un formulario mal serializado o un
+       // string vacio marquen como cuota una venta de verdad.
+       es_mensualidad === true]
     );
     const conversion = convRows[0];
 
@@ -551,6 +558,8 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
             c.importe_total, c.importe_pagado,
             (c.importe_total - c.importe_pagado) AS importe_pendiente,
+            -- Para que la lista pueda decir cuales no son ventas nuevas (#100).
+            c.es_mensualidad,
             c.fecha_compromiso_pago, c.metodo_pago,
             c.fecha_conversion, c.created_at,
             l.nombre as lead_nombre, l.email as lead_email,
@@ -672,7 +681,13 @@ export async function filasDelPeriodo({
 
   const { rows } = await query(
     `WITH ventas AS (
-       SELECT 'venta'::text AS tipo, c.id AS venta_id, c.id AS clave_id, NULL::int AS factura_id,
+       -- UNA FICHA MARCADA COMO CUOTA NO SE LISTA COMO VENTA (#100).
+       --
+       -- La regla del primer cobro no la alcanza: el unico cobro de esta ficha
+       -- ES el primero de esta ficha, asi que sin la marca saldria de «venta»
+       -- y el mes contaria una venta nueva que no existe.
+       SELECT (CASE WHEN c.es_mensualidad THEN 'cuota' ELSE 'venta' END)::text AS tipo,
+              c.id AS venta_id, c.id AS clave_id, NULL::int AS factura_id,
               c.fecha_conversion AS fecha, c.fecha_conversion AS fecha_de_la_venta,
               c.lead_id, l.nombre::text AS cliente, c.producto_contratado::text AS producto,
               c.importe_total AS total, c.importe_pagado AS pagado,
@@ -720,7 +735,11 @@ export async function filasDelPeriodo({
 }
 
 export async function update(id, fields) {
-  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago'];
+  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago',
+    // Reclasificar una ficha ya creada: las que se registraron como venta
+    // antes de que esto se pudiera marcar se arreglan aqui, sin borrarlas y
+    // rehacerlas --que es como se pierden sus cobros y sus facturas--.
+    'es_mensualidad'];
   const sets = [];
   const params = [];
   let idx = 1;

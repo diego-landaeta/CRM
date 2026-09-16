@@ -112,6 +112,10 @@ export async function createSale(data, requestUser) {
       fecha_conversion: data.fecha_pago,
       fecha_compromiso_pago: importePagado < data.importe_total ? data.fecha_pago : null,
       notas_pago: data.notas || null,
+      // Si quien la registra dice que es una cuota, se guarda marcada: es el
+      // unico momento en que se sabe. Despues, desde los datos, una ficha con
+      // un solo cobro es indistinguible de una venta al contado.
+      es_mensualidad: data.es_mensualidad === true,
     },
     requestUser?.userId || null
   );

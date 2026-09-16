@@ -24,6 +24,14 @@ export const createSaleSchema = z.object({
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
   notas: z.string().max(2000).optional().nullable(),
+  /*
+    Esta ficha es una CUOTA de una venta anterior, no una venta nueva (#100).
+
+    Solo hace falta cuando la cuota se registra como ficha aparte. Si se apunta
+    como un cobro mas de la venta original --que es lo normal-- la regla del
+    primer cobro ya la reconoce sola.
+  */
+  es_mensualidad: z.boolean().optional(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),

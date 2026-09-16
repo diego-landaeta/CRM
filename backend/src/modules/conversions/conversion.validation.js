@@ -30,6 +30,22 @@ export const createConversionSchema = z.object({
   descuento_tipo: z.enum(['none', 'pct', 'monto']).optional(),
   descuento_valor: z.number().min(0).optional(),
   subtotal_bruto: z.number().min(0).optional(),
+  /*
+    Esta ficha NO es una venta nueva: es una cuota de una venta anterior (#100).
+
+    La columna existe desde el principio y hay una veintena de consultas que la
+    filtran --el ranking, el recuento de ventas, las plazas, los informes--,
+    pero hasta ahora NADIE PODIA MARCARLA: no habia forma de ponerla a true
+    desde ningun sitio, asi que estaba a false en las 491 fichas y todos esos
+    filtros no filtraban nada.
+
+    Importa cuando la cuota se registra como ficha aparte. Si se apunta como un
+    cobro mas de la venta original, la regla del primer cobro
+    --`ES_MATRICULA`-- ya la reconoce sola y esto no hace falta. Pero una ficha
+    nueva SI cuenta como venta, porque su unico cobro es el primero de esa
+    ficha, y ahi solo lo sabe quien la esta creando.
+  */
+  es_mensualidad: z.boolean().optional(),
 }).refine((d) => d.importe_pagado <= d.importe_total + 0.01, {
   message: 'importe_pagado no puede ser mayor que importe_total',
   path: ['importe_pagado'],
@@ -43,6 +59,9 @@ export const updateConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
+  // Tambien al editar: una ficha mal clasificada se arregla sin borrarla y
+  // volver a crearla, que es como se pierden los cobros y las facturas.
+  es_mensualidad: z.boolean().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 
 export const createPaymentSchema = z.object({

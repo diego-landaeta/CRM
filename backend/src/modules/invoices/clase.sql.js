@@ -16,6 +16,13 @@
 */
 export const CLASE_FACTURA = `CASE
   WHEN i.conversion_id IS NULL THEN 'suelta'
+  -- La ficha esta marcada como cuota de una venta anterior (#100). Va primero
+  -- porque manda sobre todo lo demas: sin esto su factura seria 'venta' --su
+  -- cobro es el primero de SU ficha-- y Facturacion contaria una venta nueva
+  -- que Ventas ya no cuenta. Que las dos digan lo mismo es para lo que existe
+  -- este fichero.
+  WHEN EXISTS (SELECT 1 FROM conversions cm
+                WHERE cm.id = i.conversion_id AND cm.es_mensualidad) THEN 'cuota'
   WHEN i.payment_id IS NULL AND EXISTS (
     SELECT 1 FROM invoices x
      WHERE x.conversion_id = i.conversion_id

@@ -220,7 +220,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         estado: f.tipo === 'venta' ? estadoDe(f.total, f.pagado) : (Number(f.pagado) > 0 ? 'pagado' : 'pendiente'),
       }))
     : items.map((r: any) => ({
-        clave: `venta-${r.id}`, tipo: 'venta', fecha: r.fecha_conversion || r.fecha_compra, fecha_de_la_venta: r.fecha_conversion,
+        // Sin fechas la lista viene de /conversions, y ahi el tipo no lo
+        // calcula el servidor: hay que mirar la marca. Escribirlo fijo a
+        // 'venta' hacia que una ficha marcada como cuota se listara como
+        // venta nueva en cuanto se quitaba el filtro de fechas (#100).
+        clave: `venta-${r.id}`, tipo: r.es_mensualidad ? 'cuota' : 'venta', fecha: r.fecha_conversion || r.fecha_compra, fecha_de_la_venta: r.fecha_conversion,
         lead_id: r.lead_id, venta_id: r.id, cliente: r.lead_nombre, producto: r.producto_contratado,
         total: r.importe_total, pagado: r.importe_pagado, factura: null, factura_no_requerida: false,
         compartida: false,
