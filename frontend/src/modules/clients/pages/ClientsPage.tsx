@@ -54,7 +54,11 @@ const ConversionDialog = lazy(() => import('@/modules/conversions/components/Con
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
 function fmt(n: number | string): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  // Con centimos: es lo facturado y lo pendiente de cada cliente.
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
 }
 
 function formatRelative(dateStr: string | null | undefined, { future = false }: { future?: boolean } = {}): string | null {
@@ -250,7 +254,9 @@ export default function ClientsPage() {
       params.set('conConversion', 'true');
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      // Recortado antes de mandarlo: el nombre pegado desde WhatsApp trae
+      // espacios y el backend buscaba "% Javier%", que no casa con nadie.
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterResp === 'unassigned') params.set('unassigned', 'true');
       else if (filterResp) params.set('responsableId', filterResp);
       if (filterProducto) params.set('productId', filterProducto);
