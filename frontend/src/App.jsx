@@ -119,6 +119,7 @@ const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQue
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
+const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/ConvocatoriasPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -185,6 +186,7 @@ function App() {
               «cola» o «proceso» acaben leyendose como el id de un prospecto. */}
           <Route path="/prospectos/cola" element={<ColaDelDiaPage />} />
           <Route path="/prospectos/proceso" element={<ProcesoPage />} />
+          <Route path="/prospectos/convocatorias" element={<ConvocatoriasPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 
           {/* Clientes — tabs */}
