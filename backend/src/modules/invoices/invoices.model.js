@@ -1708,6 +1708,32 @@ export async function listProformasPendientes(projectId) {
   return rows;
 }
 
+/*
+  UNA FACTURA SIN PAGO VINCULADO TAMBIEN CUENTA.
+
+  La cola miraba solo `i.payment_id = cp.id`. Pero una factura puede existir por
+  ese mismo dinero y tener el `payment_id` a NULL: pasa cuando se emite DESDE LA
+  VENTA en vez de desde la cola --`crearDesdeConversion` guarda la venta, no el
+  cobro--. El cobro seguia entonces en la cola con su boton de «Generar
+  factura», invitando a emitir una segunda por lo mismo.
+
+  Diego, 16/09: «en cola de facturacion esta INNOVACION VERDE INVER, SL
+  UNIPERSONAL, y ya se genero su factura» --la 2026/0080, 859,10, con
+  conversion_id puesto y payment_id nulo--.
+
+  Es la MISMA condicion con la que `emitirFacturaDePago` engancha una factura
+  huerfana a su cobro: misma venta, sin pago vinculado y por el mismo importe.
+  Si el CRM la considera suya para engancharla, la cola tiene que considerarla
+  suya para no volver a pedirla.
+*/
+const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
+        SELECT 1 FROM invoices h
+         WHERE h.conversion_id = cp.conversion_id
+           AND h.payment_id IS NULL
+           AND h.tipo = 'normal'
+           AND h.estado <> 'cancelada'
+           AND ABS(h.total - cp.importe) < 0.01)`;
+
 // Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran
 // dentro del corte; sin hasta, todos los que no tienen factura.
 export async function listPagosSinFactura(projectId, hasta = null) {
@@ -1742,6 +1768,7 @@ export async function listPagosSinFactura(projectId, hasta = null) {
         ${yaHecho}
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+        ${FACTURA_HUERFANA_LO_CUBRE}
       ORDER BY cp.fecha ASC, cp.id ASC`,
     params
   );
@@ -1767,6 +1794,7 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
                    FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)
           AND NOT EXISTS (SELECT 1 FROM invoices i
                            WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+          ${FACTURA_HUERFANA_LO_CUBRE}
      ) AS hay`,
     [projectId, fecha, paymentId || 0]
   );
