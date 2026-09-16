@@ -1,0 +1,35 @@
+import { Router } from 'express';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { uploadDoc } from '../../shared/middleware/upload.js';
+import * as ctrl from './soporte.controller.js';
+
+const router = Router();
+
+// TODO detras de la sesion, sin excepciones — incluidos los adjuntos.
+//
+// En Matriculas la ruta de documentos se dejo fuera de `verifyToken` «porque
+// la URL ya es no-guessable», y la URL resulto ser un entero correlativo: hoy
+// se descargan DNI escaneados sin credencial. Aqui no hay ninguna ruta por
+// encima de esta linea, y no debe haberla.
+router.use(verifyToken);
+
+// Cualquiera con sesion puede abrir un ticket y ver LOS SUYOS. El recorte por
+// autor lo hace el controlador segun el rol.
+router.get('/', ctrl.listar);
+router.post('/', ctrl.crear);
+
+// LAS RUTAS DE PALABRA FIJA VAN ANTES QUE `/:id`.
+//
+// Express toma la primera que encaja, asi que con `/:id` por delante una
+// peticion a `/tiempos` o a `/adjuntos/5` se leeria como el ticket con id
+// «tiempos» o «adjuntos» — y el fallo no es un 404 limpio, es un NaN que
+// llega a la consulta.
+router.get('/tiempos', ctrl.tiempos);
+router.get('/adjuntos/:adjuntoId', ctrl.descargarAdjunto);
+
+router.get('/:id', ctrl.porId);
+router.post('/:id/mensajes', ctrl.responder);
+router.patch('/:id/estado', ctrl.cambiarEstado);
+router.post('/:id/adjuntos', uploadDoc, ctrl.subirAdjunto);
+
+export default router;
