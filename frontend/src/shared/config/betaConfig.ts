@@ -34,6 +34,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/secuencias-email',         // Email de seguimiento
   '/documentos',              // Documentos comerciales
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
+  '/soporte',                // Soporte: ya tiene backend (#38)
   '/notificaciones',         // Sistema básico
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias

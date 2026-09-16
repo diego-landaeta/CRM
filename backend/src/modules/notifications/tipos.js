@@ -68,6 +68,10 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Recordatorio', agrupa: false,
     descripcion: 'Un recordatorio que pusiste ha vencido',
   },
+  ticket_nuevo: {
+    clase: ACCION, etiqueta: 'Ticket de soporte', agrupa: false,
+    descripcion: 'Alguien del equipo ha reportado una averia o pedido algo',
+  },
   dup_review_pending: {
     clase: ACCION, etiqueta: 'Duplicados por revisar', agrupa: true,
     descripcion: 'Hay fichas esperando en la cola de revisión',

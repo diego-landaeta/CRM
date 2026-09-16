@@ -39,6 +39,10 @@ vi.mock('../src/shared/services/brevo.service.js', () => ({
   sendTicketNuevoEmail: (...a) => enviado(...a),
   sendEmail: vi.fn(), sendWelcomeUserEmail: vi.fn(), sendPasswordResetEmail: vi.fn(),
 }));
+const avisado = vi.fn(async () => {});
+vi.mock('../src/modules/notifications/notifications.service.js', () => ({
+  notifyAdmins: (...a) => avisado(...a),
+}));
 vi.mock('../src/shared/services/localStorage.service.js', () => ({
   saveLocal: vi.fn(), getLocal: vi.fn(async () => ({ buffer: Buffer.from('x') })), deleteLocal: vi.fn(),
 }));
@@ -70,6 +74,8 @@ const DE_LAURA = { id: '1', autorId: 4, title: 'No carga el chat' };
 beforeEach(() => {
   for (const f of Object.values(modelo)) f.mockClear?.();
   enviado.mockClear();
+  avisado.mockClear();
+  avisado.mockResolvedValue(undefined);
   modelo.listar.mockResolvedValue({ tickets: [], total: 0, page: 1, limit: 50, totalPages: 0 });
   modelo.porId.mockResolvedValue(DE_LAURA);
   modelo.mensajesDe.mockResolvedValue([]);
@@ -173,7 +179,9 @@ describe('los adjuntos — la puerta que en Matrículas quedó abierta', () => {
 });
 
 describe('abrir un ticket', () => {
-  it('se guarda y se avisa por correo', async () => {
+  it('se guarda y AVISA POR LA CAMPANA', async () => {
+    // No por correo: no hay buzón de soporte —«nosotros somos el soporte»— y
+    // mandarlo a una dirección inventada sería darlo por hecho sin que llegue.
     modelo.crear.mockResolvedValue({ id: '7', title: 'Algo' });
     const { res, error } = await llamar(ctrl.crear, {
       user: LAURA, body: { title: 'El chat no carga' },
@@ -181,7 +189,17 @@ describe('abrir un ticket', () => {
     expect(error).toBeNull();
     expect(res.codigo).toBe(201);
     expect(modelo.crear).toHaveBeenCalledWith(expect.objectContaining({ abiertoPor: 4 }));
-    expect(enviado).toHaveBeenCalled();
+    expect(avisado).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'ticket_nuevo', link_path: '/soporte',
+    }));
+  });
+
+  it('si la campana falla, el ticket queda guardado igual', async () => {
+    modelo.crear.mockResolvedValue({ id: '7', title: 'Algo' });
+    avisado.mockRejectedValue(new Error('sin base'));
+    const { res, error } = await llamar(ctrl.crear, { user: LAURA, body: { title: 'No carga nada' } });
+    expect(error).toBeNull();
+    expect(res.codigo).toBe(201);
   });
 
   it('si el correo falla, el ticket queda guardado igual', async () => {

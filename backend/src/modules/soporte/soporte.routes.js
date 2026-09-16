@@ -31,5 +31,6 @@ router.get('/:id', ctrl.porId);
 router.post('/:id/mensajes', ctrl.responder);
 router.patch('/:id/estado', ctrl.cambiarEstado);
 router.post('/:id/adjuntos', uploadDoc, ctrl.subirAdjunto);
+router.delete('/:id', ctrl.borrar);
 
 export default router;
