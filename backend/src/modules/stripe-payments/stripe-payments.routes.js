@@ -12,6 +12,9 @@ router.use(verifyToken);
 router.get('/', ctrl.list);
 router.get('/stats', ctrl.stats);
 router.post('/sync', ctrl.sync);
+// Antes de `/:id`: con el comodin por delante, `/corte` se leeria como el
+// cargo con id «corte» y llegaria un NaN a la consulta.
+router.get('/corte', ctrl.corte);
 router.get('/:id', ctrl.getOne);
 
 // Asociar o desasociar a mano y decidir disputas: solo admin y superadmin.

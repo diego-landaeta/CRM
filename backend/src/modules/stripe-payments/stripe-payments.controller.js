@@ -39,6 +39,21 @@ export async function stats(req, res, next) {
   } catch (e) { next(e); }
 }
 
+/**
+ * De que fecha para adelante se factura, y por que (GET /corte).
+ *
+ * Existe para poder enseñarlo en la pantalla donde se pega la clave, ANTES de
+ * guardarla: guardar la clave es lo que arranca el sondeo. Hasta ahora este
+ * dato solo se podia mirar con un SELECT a mano.
+ */
+export async function corte(req, res, next) {
+  try {
+    const data = await model.escalonesDelCorte(projectId(req));
+    if (!data) throw new AppError('Proyecto no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data });
+  } catch (e) { next(e); }
+}
+
 export async function sync(req, res, next) {
   try {
     const pid = projectId(req);

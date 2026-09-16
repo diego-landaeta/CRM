@@ -280,6 +280,47 @@ export async function fechaDeCorte(projectId) {
   return rows[0]?.corte || null;
 }
 
+/**
+ * Los TRES ESCALONES del corte, por separado y con cual manda.
+ *
+ * `fechaDeCorte` devuelve el resultado; esto devuelve el porque. Hace falta
+ * para poder enseñarlo ANTES de guardar la clave de un proyecto, que es el
+ * momento en que importa: en cuanto hay clave, el sondeo empieza a traer
+ * cobros por su cuenta cada cinco minutos, y si el suelo esta mal se importa
+ * el historico entero. Hay 576 cobros anteriores al alta de su proyecto; cada
+ * uno que se asocie crea una factura de algo que ya se facturo fuera.
+ *
+ * Se consultan los tres aunque solo mande uno: quien lo mira necesita ver que
+ * el que manda es el que cree, no solo el resultado.
+ */
+export async function escalonesDelCorte(projectId) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1) AS corte_mano,
+       (SELECT MIN(f.fecha_emision) FROM invoices f
+         WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = $1)
+           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL) AS primera_factura,
+       (SELECT pr3.created_at::date FROM projects pr3 WHERE pr3.id = $1) AS alta_proyecto,
+       (SELECT pr4.nombre FROM projects pr4 WHERE pr4.id = $1) AS proyecto,
+       (SELECT pr5.sociedad_emisora_id FROM projects pr5 WHERE pr5.id = $1) AS sociedad_emisora_id`,
+    [projectId]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  const corte = r.corte_mano || r.primera_factura || r.alta_proyecto || null;
+  const manda = r.corte_mano ? 'corte_mano' : r.primera_factura ? 'primera_factura'
+    : r.alta_proyecto ? 'alta_proyecto' : null;
+  return {
+    proyecto: r.proyecto,
+    sociedadEmisoraId: r.sociedad_emisora_id,
+    corteMano: r.corte_mano,
+    primeraFactura: r.primera_factura,
+    altaProyecto: r.alta_proyecto,
+    corte,
+    manda,
+  };
+}
+
 export async function getSyncState(projectId) {
   const { rows } = await query(`SELECT * FROM stripe_sync_state WHERE project_id=$1`, [projectId]);
   return rows[0] || null;
