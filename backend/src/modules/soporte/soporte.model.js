@@ -224,3 +224,16 @@ export async function tiempos({ projectId = null } = {}) {
     medianaCierreSeg: r.mediana_cierre_seg === null ? null : Math.round(Number(r.mediana_cierre_seg)),
   };
 }
+
+/**
+ * Borrar un ticket.
+ *
+ * Los mensajes y adjuntos caen en cascada por la migracion. Lo que NO se borra
+ * del disco son los ficheros: se quedan huerfanos a proposito, porque perder
+ * una captura por un clic es peor que ocupar unos kilobytes. Hay un
+ * `documentOrphanScheduler` que ya barre ese tipo de restos.
+ */
+export async function borrar(id) {
+  const { rowCount } = await query('DELETE FROM tickets WHERE id = $1', [id]);
+  return rowCount > 0;
+}

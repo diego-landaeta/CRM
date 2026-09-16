@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { sendTicketNuevoEmail } from '../../shared/services/brevo.service.js';
+import { notifyAdmins } from '../notifications/notifications.service.js';
 
 /** Quien administra ve todos los tickets; el resto, los suyos. */
 function administra(req) {
@@ -69,15 +70,38 @@ export async function crear(req, res, next) {
     const d = parsear(crearTicketSchema, req.body);
     const t = await model.crear({ ...d, abiertoPor: req.user.userId });
 
-    // El aviso va SIN esperar: abrir un ticket no puede tardar lo que tarde
-    // Brevo, y si el correo falla el ticket ya esta guardado — que es lo que
-    // de verdad importaba. Antes de esto no se guardaba en ningun sitio.
+    // EL AVISO VA POR LA CAMPANA, NO POR CORREO.
+    //
+    // Angel: «no hay correo de soporte para el CRM, nosotros somos el
+    // soporte». Con eso, mandar un correo a una direccion inventada seria dar
+    // el aviso por hecho sin que llegue a nadie — y ya hay un sitio donde el
+    // equipo mira todos los dias.
+    //
+    // Entra como ACCION, asi que cuenta para el globo y sale en «lo que toca»
+    // del dashboard. Es exactamente lo que es: algo que alguien tiene que
+    // atender.
+    notifyAdmins({
+      type: 'ticket_nuevo',
+      title: t.title,
+      message: `${req.user?.nombre || 'Alguien del equipo'} ha abierto un ticket`,
+      link_path: '/soporte',
+      metadata: { ticketId: t.id, kind: t.kind, severity: t.severity, url: t.url },
+      triggered_by_user_id: req.user.userId,
+    }).catch((e) => logger.error({ err: e.message, ticketId: t.id }, 'Aviso de ticket: error'));
+
+    // Y ADEMAS por correo, SOLO si alguien ha puesto `SOPORTE_EMAIL`. Vacia
+    // —que es el caso hoy— no manda nada y no falla. Se deja montado porque el
+    // dia que haya un buzon de soporte es una linea de `.env`, no un cambio.
+    //
+    // Va sin esperar: abrir un ticket no puede tardar lo que tarde Brevo, y si
+    // el correo falla el ticket ya esta guardado — que es lo que de verdad
+    // importaba, porque antes no se guardaba en ningun sitio.
     sendTicketNuevoEmail({ ticket: t, autor: req.user })
       .then((r) => {
-        if (r?.sent) logger.info({ ticketId: t.id }, 'Aviso de ticket enviado');
-        else logger.warn({ ticketId: t.id, reason: r?.reason }, 'Aviso de ticket NO enviado');
+        if (r?.sent) logger.info({ ticketId: t.id }, 'Correo de ticket enviado');
+        else logger.debug({ ticketId: t.id, reason: r?.reason }, 'Correo de ticket no enviado');
       })
-      .catch((e) => logger.error({ err: e.message, ticketId: t.id }, 'Aviso de ticket: error'));
+      .catch((e) => logger.error({ err: e.message, ticketId: t.id }, 'Correo de ticket: error'));
 
     res.status(201).json({ success: true, data: t });
   } catch (err) { next(err); }
@@ -147,6 +171,21 @@ export async function descargarAdjunto(req, res, next) {
     res.setHeader('Content-Type', a.mime || 'application/octet-stream');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(a.nombre)}"`);
     res.send(buffer);
+  } catch (err) { next(err); }
+}
+
+/**
+ * Borrar. Solo quien lo abrio o quien administra.
+ *
+ * `exigirAcceso` ya aplica esa regla, asi que no se repite aqui: una segunda
+ * comprobacion escrita a mano es una que se olvida de actualizar.
+ */
+export async function borrar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    await exigirAcceso(req, id);
+    await model.borrar(id);
+    res.json({ success: true, data: { id } });
   } catch (err) { next(err); }
 }
 
