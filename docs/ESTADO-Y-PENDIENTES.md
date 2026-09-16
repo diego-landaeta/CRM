@@ -70,6 +70,60 @@ Los treinta y nueve commits son **solo de MultiCRM**. Ángel tiene un commit en
 ISEIE (7 de septiembre) y Fabián ninguno, así que la paridad de todo esto está
 sin hacer y es un trabajo aparte.
 
+### La tarde del 15: el CRM pasa a entender de empresas
+
+Lo de arriba se escribió a media tarde. Lo que entró después es de otra cosa, y
+es la más grande del día: **con una sociedad puesta, el CRM deja de pedir un
+campus**.
+
+**El selector no existía.** En el menú lateral lo habían quitado dejando escrito
+que «ahora vive solo en la cabecera» (#79), pero esa cabecera —`Topbar`,
+`CabeceraContext` y el hueco que rellena `PageHeader`— **nunca se montó**. Media
+reforma: quitado de un sitio y no puesto en el otro. En `/testeo` no había forma
+de cambiar de empresa, y el aviso mandaba a «elegir un campus desde el selector
+de la cabecera» que no estaba. Montada.
+
+**Qué pasa a sumar campus** (`CON_SOCIEDAD_OK` en `AppLayout.jsx`):
+
+| Zona | Estado |
+|---|---|
+| Prospectos, Clientes, cola, proceso | ya lo hacían |
+| Tutores, Comisiones, Sin tutor, Mis cursos | el muro los tapaba; las pantallas ya estaban hechas |
+| Dashboard | igual: `useDashboard` ya repartía por campus |
+| WhatsApp (chat, plantillas, banco, conexión) | el chat es de la gestora; plantillas y búsqueda pasan a la empresa |
+| Correos | lo acota el servidor |
+| **Finanzas entero** | caja, conversiones, egresos, por cobrar, por pagar, comisiones, Stripe, pendiente de facturar |
+| Perfil, avisos, manual, soporte, registro… | no miran el proyecto: no tenía sentido pedirles un campus |
+
+**Catálogo y Publicidad se quedan por proyecto**, y la configuración de un
+proyecto —webhooks, Make, campos, canales, plantillas de correo, secuencias— no
+entra nunca: «el webhook de CEDIA» no existe.
+
+La regla vive en `comoLista` (modelo) y `proyectosDelAmbito` (controlador), más
+`useIdsDelAmbito` / `ambitoComoObjeto` en la pantalla. No se reescribe por
+pantalla: si cada una se la monta, acaban dando cifras distintas para la misma
+pregunta.
+
+**El selector de sesiones de WhatsApp, también.** Un superadmin veía a todo el
+mundo tuviera CEDIA puesta o ICTESS. Ahora: CEDIA 5 personas, ICTESS 3, Lateral
+Thinking 2. Uno mismo no se cae nunca de la lista.
+
+Dos excepciones dentro de Finanzas: **Nóminas** sigue pidiendo un campus —un
+periodo se genera para un proyecto— y en **Pagos de Stripe** el estado de la
+sincronización se calla con la empresa puesta, porque es de una sola cuenta.
+
+### Lo que queda bloqueado, y por quién
+
+- **Testeo no tiene ni una conversación de WhatsApp.** Cero chats, cero
+  mensajes, ningún móvil enlazado nunca. El selector ya funciona y filtra, pero
+  al elegir a alguien no hay nada detrás. Hace falta enlazar un QR de verdad, o
+  sembrar datos de prueba —guion listo, pendiente de permiso—.
+- **El #128 en producción apagaría a 31 de 34 usuarios.** La migración enciende
+  solo a quien ya tiene conversaciones, y por el nombre de instancia eso son
+  tres personas. Hay que encender admins y gestoras en el mismo despliegue.
+- **El precio del curso 654 de ISEIE** (Ecografía Urológica y POCUS) sigue a 340
+  y Adriana dice que son 410. Su venta 643 ya quedó a 410.
+
 ---
 
 ## Dónde nos quedamos · 4 de septiembre
