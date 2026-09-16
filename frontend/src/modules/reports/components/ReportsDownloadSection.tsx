@@ -347,8 +347,8 @@ export default function ReportsDownloadSection({ projectId, issuerId, projectNam
 
       {/* Vista previa del reporte (primeras filas) con descarga desde el modal. */}
       {preview && (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 !m-0 z-[85] flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 h-12 border-b border-border">
               <div className="min-w-0">
@@ -389,7 +389,7 @@ export default function ReportsDownloadSection({ projectId, issuerId, projectNam
         </div>
       )}
       {aviso && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => { setAviso(null); setPendiente(null); }}>
           <div onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-lg p-5 space-y-3">

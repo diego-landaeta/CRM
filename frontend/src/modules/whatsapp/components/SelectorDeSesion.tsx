@@ -70,7 +70,7 @@ export default function SelectorDeSesion({
       {abierto && (
         <>
           {/* Cerrar al pulsar fuera, que es lo que hace todo el mundo. */}
-          <div className="fixed inset-0 z-40" onClick={() => setAbierto(false)} />
+          <div className="fixed inset-0 !m-0 z-40" onClick={() => setAbierto(false)} />
           <div className="absolute z-50 mt-1 w-72 max-h-80 overflow-y-auto rounded-md border border-border bg-card shadow-lg">
             <p className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border">
               {enlazadas} de {conDerecho.length} tienen su número enlazado

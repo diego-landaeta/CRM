@@ -316,7 +316,7 @@ function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }: FieldEd
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl border border-border shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="font-extrabold">{isEdit ? 'Editar campo' : 'Nuevo campo'}</h3>

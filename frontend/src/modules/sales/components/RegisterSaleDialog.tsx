@@ -251,8 +251,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-lg flex flex-col max-h-[90vh]">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
             <div className="w-9 h-9 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">

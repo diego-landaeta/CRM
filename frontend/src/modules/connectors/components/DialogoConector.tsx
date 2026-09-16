@@ -105,7 +105,7 @@ export default function DialogoConector({ conector, projectId, onCerrar, onGuard
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60" onClick={onCerrar}>
+      <div className="fixed inset-0 !m-0 z-50 grid place-items-center p-4 bg-black/60" onClick={onCerrar}>
         <div
           role="dialog" aria-modal="true" aria-label={esAlta ? 'Nuevo conector' : 'Editar conector'}
           className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-md border border-border bg-card shadow-sm"

@@ -350,7 +350,7 @@ function EditCounterDialog({ row, value, onChange, saving, onCancel, onSave }: E
   const goingDown = Number.isFinite(v) && row.next != null && v < row.next;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onCancel}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onCancel}>
       <div
         role="dialog"
         aria-modal="true"

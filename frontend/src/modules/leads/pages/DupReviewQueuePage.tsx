@@ -221,8 +221,8 @@ export default function DupReviewQueuePage() {
 
       {/* Dialog rechazar */}
       {rejectFor && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setRejectFor(null)} />
+        <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center p-4">
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={() => setRejectFor(null)} />
           <div className="relative bg-card rounded-lg border border-border w-full max-w-md p-5 space-y-3">
             <h3 className="font-semibold">Descartar lead #{rejectFor.lead_id}</h3>
             <p className="text-xs text-muted-foreground">El prospecto se marcará como eliminado (soft-delete). Si es un error puedes restaurarlo después desde Papelera.</p>

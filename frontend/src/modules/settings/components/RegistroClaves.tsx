@@ -45,7 +45,7 @@ export default function RegistroClaves({ onCerrar }: { onCerrar: () => void }) {
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 !m-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
         onClick={onCerrar}
       >
         <div

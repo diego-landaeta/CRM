@@ -75,7 +75,7 @@ export default function TicketsLauncher() {
 
       {open && (
         <>
-          <div aria-hidden="true" onClick={() => setOpen(false)} className="fixed inset-0 bg-black/20 backdrop-blur-[1px] z-40 animate-in fade-in duration-150 lg:hidden" />
+          <div aria-hidden="true" onClick={() => setOpen(false)} className="fixed inset-0 !m-0 bg-black/20 backdrop-blur-[1px] z-40 animate-in fade-in duration-150 lg:hidden" />
           <aside
             role="dialog"
             aria-label="Panel de tickets"

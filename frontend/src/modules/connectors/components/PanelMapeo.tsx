@@ -116,7 +116,7 @@ export default function PanelMapeo({ conector, onCerrar, onCambiado }: Props) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60" onClick={onCerrar}>
+      <div className="fixed inset-0 !m-0 z-50 grid place-items-center p-4 bg-black/60" onClick={onCerrar}>
         <div
           role="dialog" aria-modal="true" aria-label="Probar y mapear"
           className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-md border border-border bg-card shadow-sm"

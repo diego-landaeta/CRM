@@ -164,7 +164,7 @@ export default function EmailTemplatesPage() {
       )}
 
       {previewHtml && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPreviewHtml(null)}>
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPreviewHtml(null)}>
           <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <div>
@@ -214,7 +214,7 @@ function TemplateEditorDialog({ template, variables, onClose, onSave }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <h3 className="font-semibold text-sm">{template ? `Editar plantilla — ${template.name}` : 'Nueva plantilla'}</h3>

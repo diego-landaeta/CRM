@@ -61,7 +61,7 @@ export default function AuditDrawer({ doc, projectId, onClose }: AuditDrawerProp
   }, [doc.id, projectId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <aside
         role="dialog"
         aria-modal="true"

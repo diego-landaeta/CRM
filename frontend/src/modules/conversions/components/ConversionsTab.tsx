@@ -430,7 +430,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       {/* Dialog eliminar conversión con motivo obligatorio para auditoría */}
       {pendingConversion !== null && (
         <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center p-4" onClick={() => setPendingConversion(null)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h4 className="font-semibold text-base mb-1">Eliminar compra</h4>
             <p className="text-xs text-muted-foreground mb-4">

@@ -102,7 +102,7 @@ export default function ShortcutsFAB() {
           type="button"
           aria-label="Cerrar atajos"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-[55] bg-black/20 animate-in fade-in duration-150"
+          className="fixed inset-0 !m-0 z-[55] bg-black/20 animate-in fade-in duration-150"
         />
       )}
 

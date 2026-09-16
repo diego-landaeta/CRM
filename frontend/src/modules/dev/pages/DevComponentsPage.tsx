@@ -296,7 +296,7 @@ export default function DevComponentsPage() {
 
         {demoModalOpen && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 !m-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
             onClick={() => setDemoModalOpen(false)}
           >
             <div

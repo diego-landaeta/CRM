@@ -724,7 +724,7 @@ export default function TutoresPage() {
           El alta era el unico sitio donde se podian meter, asi que quien no los
           puso entonces no podia ponerlos nunca. */}
       {popupPago && elegido && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setPopupPago(false)}>
           <form onSubmit={guardarPago} onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md">
@@ -784,7 +784,7 @@ export default function TutoresPage() {
 
       {/* Alta de tutor */}
       {popupAlta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupAlta(false)}>
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupAlta(false)}>
           <form onSubmit={altaTutor} onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
@@ -983,7 +983,7 @@ export default function TutoresPage() {
 
       {/* Añadir formación */}
       {popupColab && elegido && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupColab(false)}>
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupColab(false)}>
           <form onSubmit={altaColaboracion} onClick={(e) => e.stopPropagation()}
             className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -1046,7 +1046,7 @@ export default function TutoresPage() {
       )}
 
       {popupClave && elegido && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 !m-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setPopupClave(false)}>
           <div className="bg-card border border-border rounded-lg w-full max-w-sm p-4 space-y-3"
             onClick={(e) => e.stopPropagation()}>
@@ -1085,7 +1085,7 @@ export default function TutoresPage() {
       )}
 
       {popupRetiro && elegido && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 !m-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setPopupRetiro(false)}>
           <div className="bg-card border border-border rounded-lg w-full max-w-sm p-4 space-y-3"
             onClick={(e) => e.stopPropagation()}>

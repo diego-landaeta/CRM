@@ -433,7 +433,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
       {/* Mini-modal cobro de cuota: importe + fecha (no se asume hoy) */}
       {payingInst && (
         <div className="fixed inset-0 !m-0 z-[90] flex items-center justify-center p-4" onClick={() => setPayingInst(null)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-lg border border-border w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
             <h4 className="font-semibold text-base mb-1">
               {payMode === 'edit' ? 'Editar pago' : 'Cobrar cuota'} #{payingInst.numero}

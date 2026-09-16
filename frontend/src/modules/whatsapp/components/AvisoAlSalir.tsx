@@ -109,7 +109,7 @@ export default function AvisoAlSalir({ activo }: { activo: boolean }) {
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/50"
+        className="fixed inset-0 !m-0 z-[65] flex items-center justify-center p-4 bg-black/50"
         onClick={() => setDestino(null)}
         role="presentation"
       >

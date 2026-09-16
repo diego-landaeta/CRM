@@ -269,7 +269,7 @@ export default function AppLayout() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40">
+        <div className="lg:hidden fixed inset-0 !m-0 z-40">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <div className="relative w-60 h-full">
             <Sidebar onNavigate={() => setMobileOpen(false)} />

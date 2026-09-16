@@ -794,8 +794,8 @@ export default function InvoicesPage() {
 
       {/* ¿Qué PDF? Solo se pregunta en cobros por Stripe. */}
       {descargarInv && (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setDescargarInv(null)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 !m-0 z-[85] flex items-center justify-center p-4" onClick={() => setDescargarInv(null)}>
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-base mb-1">Descargar {descargarInv.codigo}</h3>
             <p className="text-xs text-muted-foreground mb-4">Este cobro entró por Stripe: elige qué versión necesitas.</p>
@@ -824,8 +824,8 @@ export default function InvoicesPage() {
 
       {/* Confirmación de borrado de factura (libera el número). */}
       {deletingInv && (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => !deleting && setDeletingInv(null)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 !m-0 z-[85] flex items-center justify-center p-4" onClick={() => !deleting && setDeletingInv(null)}>
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-red-600"><Trash size={18} weight="bold" /> Eliminar factura</h3>
             <p className="text-sm text-muted-foreground mb-4">
@@ -857,7 +857,7 @@ export default function InvoicesPage() {
       {/* Aviso: la facturación NO se cruza entre sociedades. Para ver otra hay que
           entrar a uno de sus proyectos — con atajo directo para cambiar. */}
       {socPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSocPrompt(null)}>
+        <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSocPrompt(null)}>
           <div className="bg-card border border-border rounded-lg shadow-xl max-w-md w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-base">Entra a un proyecto de {socPrompt.nombre}</h3>
             <p className="text-sm text-muted-foreground">

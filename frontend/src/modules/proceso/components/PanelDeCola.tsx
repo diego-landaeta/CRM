@@ -69,7 +69,7 @@ export default function PanelDeCola({
       role="dialog"
       aria-modal="true"
       aria-label={`${fila.lead_nombre || 'Sin nombre'}, ${posicion} de ${total}`}
-      className="fixed inset-0 z-[70] flex items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 !m-0 z-[70] flex items-center justify-center p-0 sm:p-4"
     >
       <div className="absolute inset-0 bg-black/50" onClick={onCerrar} aria-hidden="true" />
 

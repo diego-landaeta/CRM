@@ -35,7 +35,7 @@ export default function NewConversationDialog({ open, currentUserId, onSelect, o
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl shadow-lg w-full max-w-sm mx-4"
         onClick={e => e.stopPropagation()}

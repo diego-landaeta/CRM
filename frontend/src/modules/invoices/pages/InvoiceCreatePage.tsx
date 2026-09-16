@@ -848,8 +848,8 @@ export default function InvoiceCreatePage() {
 
       {/* Aviso: se va a emitir sin asociar a una venta. */}
       {avisoVenta && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setAvisoVenta(false)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 !m-0 z-[90] flex items-center justify-center p-4" onClick={() => setAvisoVenta(false)}>
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-base mb-1">Este documento no está asociado a ninguna venta</h3>
             {leadConvs.length > 0 ? (

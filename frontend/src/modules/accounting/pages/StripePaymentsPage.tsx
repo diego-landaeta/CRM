@@ -366,7 +366,7 @@ function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border flex items-start gap-3">
           <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
@@ -520,7 +520,7 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
   const num = (v: number | string | null) => Number(v || 0);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border">
           <h3 className="font-semibold">{sel ? '¿A qué venta se asocia?' : 'Asociar pago a un cliente o prospecto'}</h3>

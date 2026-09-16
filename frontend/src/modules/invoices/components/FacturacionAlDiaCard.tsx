@@ -141,7 +141,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
 
   const cuadroNumero = pidiendoNumero && (
 
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 !m-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
 
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl">
 

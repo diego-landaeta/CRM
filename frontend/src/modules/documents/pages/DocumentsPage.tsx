@@ -79,7 +79,7 @@ function PreviewModal({ doc, onClose }: PreviewModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="doc-preview-title" className="bg-card rounded-xl border border-border shadow-2xl flex flex-col w-full max-w-5xl max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0">

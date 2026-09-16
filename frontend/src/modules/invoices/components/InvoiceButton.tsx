@@ -164,8 +164,8 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
 
       {/* Confirmación: proforma sin pago o factura cuando ya existe un cobro. */}
       {choiceOpen && (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 !m-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
+          <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
           <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
             {sinPago ? (
               <>

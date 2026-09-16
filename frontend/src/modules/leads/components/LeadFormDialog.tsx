@@ -480,7 +480,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
       </div>
 
       {pendingDup && (
-        <div role="dialog" aria-label="Prospecto duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div role="dialog" aria-label="Prospecto duplicado detectado" className="fixed inset-0 !m-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPendingDup(null)} />
           <div className="relative bg-card border border-border rounded-xl shadow-dialog w-full max-w-md p-6 space-y-4">
             <div>

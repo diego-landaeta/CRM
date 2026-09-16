@@ -30,7 +30,7 @@ export default function EditarFechasDialog({ invoice, onClose, onSaved }: { invo
   }
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 !m-0 z-[80] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border">
           <h3 className="font-semibold text-base">Editar fechas — Factura Nº {invoice.codigo || ''}</h3>
