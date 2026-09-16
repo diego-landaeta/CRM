@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Plus, Trash, Download, Eye, Certificate as CertificateIcon, CaretDown } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { documentsApi, type CrmDocument } from '../api/documents.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { getAccessToken } from '@/shared/api/client';
+import client, { getAccessToken } from '@/shared/api/client';
 import PreviewModal from './PreviewModal';
 import { downloadDoc } from '../lib/downloadDoc';
 import NaturalDatePicker from './NaturalDatePicker';
+import ProductLineCombobox from './ProductLineCombobox';
+import { modulosDelTemario, horasDelProducto } from '../lib/temario';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -62,9 +64,78 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'modulos' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'modulos' });
 
   const [touched, setTouched] = useState(false);
+
+  // EL CATÁLOGO, PARA NO TECLEAR EL TEMARIO A MANO (#43).
+  //
+  // «Usar los textos ya importados de los productos —módulos, profesores,
+  // horas— para el PDF». Hoy se escribe el curso, las horas y CADA MÓDULO uno
+  // por uno, mientras el catálogo ya lo tiene todo raspado de la web.
+  const [productos, setProductos] = useState<any[]>([]);
+  const [rellenado, setRellenado] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeProject?.id || activeProject.id === -1) { setProductos([]); return; }
+    let vivo = true;
+    client.get(`/products?projectId=${activeProject.id}&limit=300`)
+      .then((r: any) => { if (vivo && r?.success) setProductos(r.data || []); })
+      .catch(() => { /* sin catálogo se escribe a mano, como hasta hoy */ });
+    return () => { vivo = false; };
+  }, [activeProject?.id]);
+
+  /**
+   * Al elegir un producto, PROPONER sus datos. No decidir.
+   *
+   * El temario viene raspado de una web, así que el corte en módulos puede
+   * salir torcido en algún curso. Por eso esto rellena los campos EDITABLES y
+   * avisa de lo que ha puesto: quien emite el certificado lo ve antes de
+   * generarlo. Un parser silencioso acabaría imprimiendo basura en un
+   * documento que se le entrega a un alumno.
+   *
+   * Lo que ya estuviera escrito NO se pisa: si alguien ha corregido el nombre
+   * del curso a mano, elegir el producto no se lo borra.
+   */
+  async function rellenarDesde(p: any) {
+    const puesto: string[] = [];
+
+    if (p?.nombre && !watch('curso_nombre')?.trim()) {
+      setValue('curso_nombre', p.nombre);
+      puesto.push('el nombre');
+    }
+
+    const horas = horasDelProducto(p?.horas, p?.duracion);
+    if (horas && !watch('horas_total')?.trim()) {
+      setValue('horas_total', horas);
+      puesto.push(`${horas} horas`);
+    }
+
+    // EL TEMARIO HAY QUE PEDIRLO APARTE.
+    //
+    // El listado de productos NO lo trae: `modulos_texto` admite 80 000
+    // caracteres y devolverlo por cada producto engordaría una lista que se
+    // pide en cada apertura del formulario. Aquí se pide UNO, y solo cuando
+    // alguien elige — que es una acción explícita y no se repite.
+    let ficha = p;
+    if (!p?.modulos_texto && p?.id && activeProject?.id) {
+      const r: any = await client
+        .get(`/products/${p.id}?projectId=${activeProject.id}`)
+        .catch(() => null);
+      if (r?.success && r.data) ficha = { ...p, ...r.data };
+    }
+
+    const modulos = modulosDelTemario(ficha?.modulos_texto);
+    const hayEscritos = (watch('modulos') || []).some((m: any) => m?.nombre?.trim());
+    if (modulos.length && !hayEscritos) {
+      replace(modulos.map((nombre) => ({ nombre })));
+      puesto.push(`${modulos.length} módulos`);
+    }
+
+    setRellenado(puesto.length
+      ? `Del catálogo: ${puesto.join(', ')}. Revísalo antes de generar.`
+      : 'Ese producto no tiene temario ni horas en el catálogo — se escriben a mano.');
+  }
 
   function getMissingFields(values: CertificateFormValues): string[] {
     const missing: string[] = [];
@@ -175,6 +246,26 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
       {/* Curso */}
       <div className="bg-card border border-border rounded-lg p-5">
         <h3 className="font-semibold text-sm mb-4">Datos del curso</h3>
+
+        {/* Traer el curso del catálogo en vez de teclearlo (#43). Solo se
+            ofrece si hay catálogo; si no, todo sigue como estaba. */}
+        {productos.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Traer del catálogo <span className="text-muted-foreground/70">(opcional)</span>
+            </label>
+            <ProductLineCombobox
+              value=""
+              onChange={() => {}}
+              onSelectProduct={rellenarDesde}
+              products={productos}
+              placeholder="Busca el curso y se rellenan horas y temario…"
+            />
+            {rellenado && (
+              <p role="status" className="text-[11px] text-muted-foreground mt-1.5">{rellenado}</p>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="text-xs text-muted-foreground mb-1 block">Nombre del diplomado/curso <span className="text-red-500">*</span></label>
