@@ -46,8 +46,10 @@ const qs = (params: Params): string => {
 };
 
 export const whatsappApi = {
-  plantillas: (projectId: number): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
-    client.get(`/whatsapp/templates${qs({ projectId })}`),
+  // Con una EMPRESA puesta no hay UN proyecto: se manda `issuerId` y el
+  // servidor lo traduce a sus campus. Una gestora de CEDIA atiende los siete.
+  plantillas: (projectId: number | null, issuerId: number | null = null): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
+    client.get(`/whatsapp/templates${qs({ projectId, issuerId })}`),
 
   crearPlantilla: (data: {
     projectId: number; label: string; body: string; ambito: 'compartida' | 'personal';
@@ -505,8 +507,10 @@ export interface UsuarioWhatsapp {
  * La pantalla no decide nada: pregunta y pinta. Si el servidor devuelve una
  * sola persona —el caso de una gestora— el selector ni se enseña.
  */
-export const usuariosWhatsapp = (): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
-  client.get('/whatsapp/usuarios');
+export const usuariosWhatsapp = (
+  ambito: { projectId?: number | null; issuerId?: number | null } = {},
+): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
+  client.get(`/whatsapp/usuarios${qs(ambito)}`);
 
 /** Una etiqueta del WhatsApp de la gestora (#128, #138). */
 export interface EtiquetaWhatsapp {

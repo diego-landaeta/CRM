@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { CaretDown, Check, WhatsappLogo } from '@phosphor-icons/react';
 import { usuariosWhatsapp, type UsuarioWhatsapp } from '../api/whatsapp.api';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 
 // ¿De quién es el WhatsApp que estoy viendo?
 //
@@ -26,16 +28,23 @@ export default function SelectorDeSesion({
   onCambiar: (s: SesionElegida) => void;
   compacto?: boolean;
 }) {
+  // El selector es de la EMPRESA puesta arriba: con CEDIA no pinta la gente de
+  // ICTESS. Diego, 15/09: «el whatsapp es por empresa, no puedo tener de varias
+  // alli». Quien lo acota de verdad es el servidor; aqui solo se le dice cual.
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number | null } | null; activeIssuerId: number | null;
+  };
   const [gente, setGente] = useState<UsuarioWhatsapp[]>([]);
   const [abierto, setAbierto] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    usuariosWhatsapp()
+    setCargando(true);
+    usuariosWhatsapp(ambitoComoObjeto({ activeIssuerId, activeProject }))
       .then((r) => setGente(r.success ? (r.data || []) : []))
       .catch(() => setGente([]))
       .finally(() => setCargando(false));
-  }, []);
+  }, [activeProject?.id, activeIssuerId]);
 
   // Quien no lo usa no se pinta (#128): Diego pidio que el panel fuera «solo
   // gestoras y Daniela», y una lista con quince nombres apagados no es un panel.

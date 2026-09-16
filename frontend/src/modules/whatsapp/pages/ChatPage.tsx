@@ -2120,6 +2120,7 @@ export default function ChatPage() {
               {plantillasAbiertas && hayAmbito && (
                 <SelectorPlantillas
                   projectId={projectId}
+                  issuerId={activeIssuerId}
                   datos={datosPlantilla}
                   nombreProyecto={nombreProyecto}
                   alElegir={(texto, plantilla) => {

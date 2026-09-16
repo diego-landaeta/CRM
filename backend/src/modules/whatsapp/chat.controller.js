@@ -11,6 +11,7 @@ import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 import { porQueNoPuede, porQueNoUsa } from './roles.js';
 import { usaSuWhatsapp } from './usaWhatsapp.js';
+import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -1225,6 +1226,27 @@ export async function usuarios(req, res, next) {
     const yo = req.user.userId;
     const soloMio = !['admin', 'superadmin'].includes(req.user.role);
 
+    // El selector se acota a la EMPRESA elegida. Diego, 15/09: «el whatsapp es
+    // por empresa, no puedo tener de varias alli».
+    //
+    // Hasta ahora un superadmin veia a TODO el mundo, tuviera CEDIA puesta o
+    // ICTESS: mezclaba en un mismo desplegable gente que no comparte ni
+    // sociedad. Con una empresa puesta salen solo los suyos --los de sus
+    // campus--; sin nada puesto, como antes.
+    //
+    // Uno mismo NO se cae nunca de la lista, aunque no este asignado a esos
+    // campus: quedarse sin «Mi WhatsApp» al cambiar de empresa seria perder el
+    // acceso al propio chat.
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    const campus = comoLista(projectId, projectIds);
+    const deLaEmpresa = campus
+      ? `AND (u.id = $1 OR EXISTS (
+             SELECT 1 FROM user_projects up
+              WHERE up.user_id = u.id AND up.active
+                AND up.project_id = ANY($2::int[])))`
+      : '';
+    const par = campus ? [yo, campus] : [yo];
+
     const { rows } = await query(
       soloMio
         ? `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones,
@@ -1242,6 +1264,7 @@ export async function usuarios(req, res, next) {
                       COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
                  FROM users u
                 WHERE u.active
+                  ${deLaEmpresa}
                 ORDER BY (u.id = $1) DESC, u.nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
@@ -1264,8 +1287,11 @@ export async function usuarios(req, res, next) {
                                           AND a.active AND a.user_id = $1
                      WHERE b.user_id = u.id AND b.active
                   )
+                  ${deLaEmpresa}
                 ORDER BY (u.id = $1) DESC, u.nombre`),
-      [yo]);
+      // La rama de «solo yo» usa un solo parametro: pasarle dos lo rechaza
+      // Postgres con «bind message supplies 2 parameters».
+      soloMio ? [yo] : par);
 
     // El estado de cada sesion se pregunta UNA vez a Evolution y se reparte:
     // preguntar una por una son diez llamadas para pintar un desplegable.

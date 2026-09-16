@@ -68,9 +68,15 @@ const GRUPOS: { clave: string; titulo: string; desc: string; casa: (l: string) =
 
 export default function PlantillasWhatsappPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Se LEEN las de toda la empresa; para CREAR una sigue haciendo falta un
+  // campus, porque la plantilla se guarda en un proyecto concreto.
+  const issuerId = !projectId ? (activeIssuerId ?? null) : null;
 
   const [lista, setLista] = useState<PlantillaWhatsapp[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -87,14 +93,14 @@ export default function PlantillasWhatsappPage() {
   const [copiada, setCopiada] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId && !issuerId) return;
     setCargando(true);
     try {
-      const r = await whatsappApi.plantillas(projectId);
+      const r = await whatsappApi.plantillas(projectId, issuerId);
       setLista(r.success ? (r.data || []) : []);
       setBorrador({});
     } finally { setCargando(false); }
-  }, [projectId]);
+  }, [projectId, issuerId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
