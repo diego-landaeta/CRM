@@ -19,6 +19,22 @@ vi.mock('../src/shared/config/db.js', () => ({ query: (...a) => query(...a) }));
 
 const evolution = await import('../src/modules/whatsapp/evolution.client.js');
 const ctrl = await import('../src/modules/whatsapp/chat.controller.js');
+const { olvidarTodo } = await import('../src/modules/whatsapp/usaWhatsapp.js');
+
+/**
+ * Responde a la consulta de la casilla del #128 y deja pasar el resto.
+ *
+ * Hace falta porque esas consultas van ANTES que las de la prueba: encadenar
+ * `mockResolvedValueOnce` por orden se rompe cada vez que se añade una guarda,
+ * que es justo lo que paso al meter esta. Se responde por lo que PIDE la
+ * consulta, no por el turno que ocupa.
+ */
+function conLaCasillaEncendida(responder) {
+  query.mockImplementation(async (sql, params) => {
+    if (sql.includes('usa_whatsapp')) return { rows: [{ usa: true }] };
+    return responder(sql, params);
+  });
+}
 
 /** Un `res` de mentira que apunta lo que le mandan. */
 function fingirRes() {
@@ -65,15 +81,22 @@ describe('la instancia sale del usuario, no de lo que mande el cliente', () => {
   });
 
   it('la lista de chats se pide con la instancia de quien pregunta', async () => {
-    query.mockResolvedValue({ rows: [] });
+    olvidarTodo();
+    conLaCasillaEncendida(async () => ({ rows: [] }));
     await llamar(ctrl.chats, comoUsuario(9));
+    // Se busca la consulta de la lista en vez de dar por hecho que es la
+    // primera: antes de ella van las que miran si tal migracion esta aplicada,
+    // y esta prueba se caia sola cada vez que se anadia una guarda de esas.
+    const lista = query.mock.calls.find(([sql]) => /FROM wa_conversaciones c/.test(sql));
     // El primer parametro de la consulta es la instancia.
-    expect(query.mock.calls[0][1][0]).toBe(evolution.instanciaDe(9));
+    expect(lista?.[1]?.[0]).toBe(evolution.instanciaDe(9));
   });
 });
 
 describe('no se puede abrir la conversacion de otro', () => {
-  beforeEach(() => { query.mockReset(); });
+  // La casilla se recuerda medio minuto: se olvida entre pruebas para que cada
+  // una empiece limpia.
+  beforeEach(() => { query.mockReset(); olvidarTodo(); });
 
   // porId() devuelve la conversacion con su instancia; es lo unico que hace
   // falta simular para estos casos.
@@ -82,23 +105,26 @@ describe('no se puede abrir la conversacion de otro', () => {
   });
 
   it('deja abrir la propia', async () => {
-    query.mockResolvedValueOnce(conversacionDe(evolution.instanciaDe(4)))  // porId
-         .mockResolvedValueOnce({ rows: [] })                              // mensajes
-         .mockResolvedValue({ rows: [] });                                 // marcarLeida
+    let vuelta = 0;
+    conLaCasillaEncendida(async () => {
+      // porId primero; lo que venga detras —mensajes, marcarLeida— vacio.
+      vuelta += 1;
+      return vuelta === 1 ? conversacionDe(evolution.instanciaDe(4)) : { rows: [] };
+    });
     const { res, error } = await llamar(ctrl.chat, comoUsuario(4, { params: { id: '55' } }));
     expect(error).toBeNull();
     expect(res.cuerpo?.success).toBe(true);
   });
 
   it('no deja abrir la de otro, aunque se acierte el numero', async () => {
-    query.mockResolvedValue(conversacionDe(evolution.instanciaDe(4)));
+    conLaCasillaEncendida(async () => conversacionDe(evolution.instanciaDe(4)));
     const { error } = await llamar(ctrl.chat, comoUsuario(5, { params: { id: '55' } }));
     expect(error?.statusCode).toBe(404);
   });
 
   it('dice «no encontrada» y no «no tienes permiso»', async () => {
     // Un 403 confirmaria que ese chat existe. Con un 404 no se filtra nada.
-    query.mockResolvedValue(conversacionDe(evolution.instanciaDe(4)));
+    conLaCasillaEncendida(async () => conversacionDe(evolution.instanciaDe(4)));
     const { error } = await llamar(ctrl.chat, comoUsuario(5, { params: { id: '55' } }));
     expect(error.statusCode).toBe(404);
     expect(error.message).toMatch(/no encontrada/i);

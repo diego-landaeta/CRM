@@ -16,7 +16,10 @@ const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
@@ -26,6 +29,10 @@ export default function SalesPage() {
   const hasActiveCtx = !!activeProject?.id;
   const allProjects = activeProject?.id === -1;
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
+  // Con una sociedad elegida, Ventas enseña sus campus sumados —igual que
+  // Reportes—, en vez del muro de «elige un proyecto». El servidor traduce el
+  // `issuerId` a la lista de proyectos y las consultas no se enteran.
+  const issuerIdParam = activeIssuerId ?? null;
 
   // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
   // suyo y en la misma vista convivían cuatro criterios distintos, así que los
@@ -99,11 +106,11 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
-            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            <ResumenVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
           </Suspense>
 
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
+            <CursosVendidosCard projectId={projectIdParam} issuerId={issuerIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -111,7 +118,7 @@ export default function SalesPage() {
                 ventas propias y la tarjeta le salia siempre a cero. */}
             {!isAdmin && (
               <Suspense fallback={null}>
-                <MyGoalCard projectId={projectIdParam} periodo={mes} />
+                <MyGoalCard projectId={projectIdParam} issuerId={issuerIdParam} periodo={mes} />
               </Suspense>
             )}
           </div>
@@ -120,31 +127,31 @@ export default function SalesPage() {
               también la gestora: el servidor le devuelve solo lo suyo. */}
           {!allProjects && (
             <Suspense fallback={null}>
-              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <EvolucionVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <DesgloseVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <VentasPorPais projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <ClientesVentas projectId={projectIdParam} issuerId={issuerIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 
           {isAdmin && (
             <Suspense fallback={null}>
-              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} periodo={mes} />
+              <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam} canEdit={!allProjects} periodo={mes} />
             </Suspense>
           )}
 

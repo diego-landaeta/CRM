@@ -8,7 +8,8 @@
 // Ojo con las tres fechas, que no son la misma: los leads cuentan por su fecha
 // de entrada, las ventas por su fecha de venta y los cobros por su fecha de
 // cobro. Por eso una asesora puede cobrar en julio algo que vendió en mayo.
-import client from '@/shared/api/client';
+import client from '@/shared/api/client';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
 const cab = (t) => ({ value: t, fontWeight: 'bold' });
 const num = (v) => ({ value: v == null ? null : Number(v), type: Number });
@@ -26,9 +27,9 @@ const ETIQUETAS = {
   tasa: 'Tasa de conversión (%)',
 };
 
-export async function descargarReportePrincipal({ projectId, projectName, from, to }) {
+export async function descargarReportePrincipal({ projectId, issuerId, projectName, from, to }) {
   const q = new URLSearchParams();
-  if (projectId) q.set('projectId', String(projectId));
+  ponerAmbito(q, { activeIssuerId: issuerId, activeProject: { id: projectId } });
   if (from) q.set('from', from);
   if (to) q.set('to', to);
   const qs = q.toString();

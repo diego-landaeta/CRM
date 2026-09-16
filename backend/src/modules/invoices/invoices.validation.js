@@ -9,6 +9,11 @@ const itemSchema = z.object({
 export const createInvoiceSchema = z.object({
   projectId: z.number().int().positive(),
   conversionId: z.number().int().positive().optional(),
+  // El numero lo puede poner quien emite (Diego, 14/09). Si no llega, se coge
+  // el siguiente libre. `permitirParecida` es el «emitir igualmente» cuando el
+  // CRM avisa de que esa venta ya tiene una factura igual ese dia.
+  numero: z.coerce.number().int().positive().optional().nullable(),
+  permitirParecida: z.coerce.boolean().optional(),
   leadId: z.number().int().positive().optional(),
   // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
   tipo: z.enum(['normal', 'proforma']).optional(),
@@ -41,7 +46,12 @@ export const createInvoiceSchema = z.object({
   ivaPct: z.number().min(0).max(100).optional(),
   ivaIncluido: z.boolean().optional(),
   notas: z.string().optional(),
-  leyendaIva: z.string().optional(),
+  // Admite NULL a proposito: la pantalla manda `regimenSel?.coletilla || null`,
+  // y cuando la venta no cae en ningun regimen fiscal --Solvenic emitiendo en
+  // ICTESS, por ejemplo-- no hay coletilla que poner. Con solo `.optional()`
+  // eso reventaba con «Expected string, received null» y no se podia emitir la
+  // factura. El modelo ya guardaba `data.leyendaIva || null` sin problema.
+  leyendaIva: z.string().optional().nullable(),
   metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),

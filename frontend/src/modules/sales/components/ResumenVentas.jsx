@@ -26,15 +26,19 @@ function Cifra({ icon: Icon, etiqueta, valor, pie }) {
   );
 }
 
-export default function ResumenVentas({ projectId, from, to, responsableId = null }) {
+export default function ResumenVentas({ projectId, issuerId = null, from, to, responsableId = null }) {
   const [d, setD] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    if (!projectId) return undefined;
+    // Con una sociedad elegida tambien hay ambito: no se puede salir por
+    // la puerta de «no hay proyecto».
+    if (!projectId && !issuerId) return undefined;
     let vivo = true;
     setCargando(true);
-    const p = new URLSearchParams({ projectId: String(projectId) });
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    if (issuerId) p.set('issuerId', String(issuerId));
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
@@ -43,7 +47,7 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
       .catch(() => { if (vivo) setD(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, issuerId, from, to, responsableId]);
 
   if (cargando || !d) {
     return (
@@ -65,8 +69,16 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
       {/* Cobrado DE ESAS VENTAS, aunque el pago entrara despues del periodo.
           La tarta de abajo cuenta otra cosa: el dinero que entro EN el periodo,
           venga de una venta de ahora o de una de hace meses. */}
+      {/* De lo cobrado, cuanto abrio la venta y cuanto son cuotas del plan
+          (#100). Mezclado no habia forma de saber que es dinero NUEVO y que es
+          una cuota de algo vendido hace meses, que es justo lo que hay que
+          mirar para saber como va el mes.
+          Solo se dice cuando hay cuotas: si no las hay, el pie util es cuantas
+          ventas estan saldadas. */}
       <Cifra icon={CheckCircle} etiqueta="Cobrado de esas ventas" valor={eur(d.cobrado)}
-        pie={`${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
+        pie={d.cobrado_cuotas > 0
+          ? `${eur(d.cobrado_matricula)} de la venta · ${eur(d.cobrado_cuotas)} en cuotas`
+          : `${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
       <Cifra icon={Clock} etiqueta="Pendiente" valor={eur(d.pendiente)}
         pie={`${num(d.con_saldo)} con saldo`} />
       <Cifra icon={ChartBar} etiqueta="Cuotas" valor={`${num(cuotas.cobradas)} / ${num(cuotas.total)}`}

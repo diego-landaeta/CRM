@@ -15,6 +15,18 @@ const ALL_PROJECTS_OK = [
   /^\/$/,                          // Dashboard
   // Prospectos (rutas reales en espanol — los regex viejos /leads no se usaban)
   /^\/prospectos$/,                // Lista de prospectos
+  /^\/prospectos\/cola$/,          // La cola del dia — el servidor acota por gestora
+  // Ventas: la consulta ya sabe hacerlo sin proyecto —cada fila dice de cual
+  // es— y el muro tapaba una vista que funcionaba.
+  /^\/finanzas\/ventas$/,
+  /^\/ventas$/,
+  // Tutores: las tres consultas ya aceptan «sin proyecto» y devuelven el
+  // nombre del proyecto en cada fila, asi que la vista general se lee sola.
+  // Quien lleva las colaboraciones trabaja con los profesores de todas las
+  // marcas a la vez: obligarle a elegir una por una era pedirle nueve vueltas.
+  /^\/tutores$/,
+  /^\/tutores\/sin-tutor$/,
+  /^\/tutores\/comisiones$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto
@@ -41,8 +53,67 @@ function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
+// Con una sociedad elegida (#120), Reportes SI funciona: pide sus campus
+// sumados con `issuerId`. El resto de pantallas sigue necesitando un proyecto
+// concreto, asi que se comportan igual que con «todos los proyectos» — que es
+// lo que ya sabian hacer.
+// Las pantallas de CIFRAS aceptan una sociedad: sumar varios campus
+// significa algo. Las de configuracion no entran aqui a proposito —un
+// webhook o un formulario se montan PARA UN PROYECTO, y «el webhook de
+// CEDIA» no existe—: ahi el muro de «elige un proyecto» es la respuesta
+// correcta, no un fallo.
+const CON_SOCIEDAD_OK = [
+  /^\/informes$/, /^\/ventas$/, /^\/finanzas\/ventas$/,
+  // Facturacion: el listado ya filtra por `issuer_id` --la sociedad que emite la
+  // factura-- y las ventas sin factura por sus campus. Diego: «si elijo facturas
+  // y estoy eligiendo CEDIA debe de salir, no debe de salir esto».
+  /^\/finanzas\/facturas$/,
+  // Prospectos, su kanban y Clientes. La pantalla y el servidor YA saben sumar
+  // varios campus --mandan `projectIds` y el modelo los recibe--: lo unico que
+  // faltaba era que el muro les dejara pasar. Diego, 15/09: «en prospectos si
+  // elijo empresas deben de salir».
+  /^\/prospectos$/,
+  /^\/prospectos\/pipeline$/,
+  /^\/prospectos\/\d+$/,
+  /^\/clientes$/,
+  /^\/clientes\/\d+$/,
+  // El proceso comercial (#89 · #90). La cola suma los campus de la empresa —el
+  // servidor ya sabia recibir varios proyectos— y la pantalla de los pasos
+  // pregunta cual, pero solo entre los de esa empresa. Diego, 14/09: «estos
+  // procesos en empresas deben ser por empresa, no por proyecto».
+  /^\/prospectos\/cola$/,
+  /^\/prospectos\/proceso$/,
+  // WhatsApp (#128, #138). El chat es de la GESTORA, no del proyecto: sus
+  // conversaciones son las mismas con una empresa puesta que con uno de sus
+  // campus. Lo unico que miraba el proyecto --buscar un prospecto para empezar
+  // y la lista de plantillas-- pasa a mirar la empresa entera.
+  //
+  // Sin esto, WhatsApp llegaria a produccion tapado por el muro justo para
+  // quien tiene una sociedad elegida, que es como trabaja Diego.
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/plantillas$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
+];
+
+function rutaAceptaSociedad(pathname) {
+  return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
+}
+
 function AllProjectsGuard({ pathname, children }) {
-  const { isAllProjects } = useProjectContext();
+  const { isAllProjects, activeIssuer } = useProjectContext();
+  if (activeIssuer) {
+    if (rutaAceptaSociedad(pathname)) return children;
+    // El aviso decia «tienes activa la vista Todos los proyectos» con CEDIA
+    // puesta. No era verdad, y mandaba a tocar el selector equivocado.
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <NeedsProjectBanner sociedad={activeIssuer.nombre} />
+      </div>
+    );
+  }
   if (isAllProjects && !pathAllowsAll(pathname)) {
     return <div className="p-6 max-w-2xl mx-auto"><NeedsProjectBanner /></div>;
   }
@@ -55,6 +126,13 @@ const PWAInstallPrompt = lazy(() => import('./PWAInstallPrompt'));
 const PWAUpdatePrompt = lazy(() => import('./PWAUpdatePrompt'));
 const KeyboardShortcutsModal = lazy(() => import('./KeyboardShortcutsModal'));
 const OfflineBanner = lazy(() => import('./OfflineBanner'));
+// Avisa de una llamada de WhatsApp desde cualquier pantalla del CRM. Va aqui
+// y no en el modulo de WhatsApp a proposito: la llamada se pierde justo
+// cuando la gestora esta en otra parte y el movil no lo tiene delante.
+const AvisoDeLlamada = lazy(() => import('./AvisoDeLlamada'));
+// Avisa de un mensaje entrante desde cualquier pantalla. Antes de esto el CRM
+// no avisaba de nada cuando entraba un WhatsApp.
+const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -272,6 +350,10 @@ export default function AppLayout() {
       </Suspense>
       <Suspense fallback={null}>
         <OfflineBanner />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AvisoDeLlamada />
+        <AvisoDeMensaje />
       </Suspense>
     </div>
   );

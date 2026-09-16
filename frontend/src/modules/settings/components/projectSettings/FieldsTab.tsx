@@ -147,8 +147,8 @@ export default function FieldsTab({ project, onSaved }) {
               <div key={bf.key} className="flex items-center justify-between px-4 py-2.5 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold">{bf.label}</span>
-                  <span className="font-mono text-[10px] text-muted-foreground">{bf.key}</span>
-                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
+                  <span className="font-mono text-secundario text-muted-foreground">{bf.key}</span>
+                  {bf.alwaysRequired && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">SIEMPRE REQ</span>}
                 </div>
                 <div className="flex items-center gap-4">
                   <label className={`flex items-center gap-1.5 text-xs ${bf.key === 'nombre' || bf.key === 'email' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -177,7 +177,7 @@ export default function FieldsTab({ project, onSaved }) {
       {view === 'editor' ? (
         <>
           <form onSubmit={handleAdd} className="p-4 bg-muted/30 rounded-md border border-border">
-            <p className="text-[11px] font-medium text-muted-foreground mb-3">Nuevo campo</p>
+            <p className="text-secundario font-medium text-muted-foreground mb-3">Nuevo campo</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input value={newField.field_key} onChange={e => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} placeholder="clave_snake_case" className={smallInput + ' font-mono text-xs'} required />
               <input value={newField.label} onChange={e => setNewField({ ...newField, label: e.target.value })} placeholder="Etiqueta visible" className={smallInput} required />
@@ -238,13 +238,13 @@ export default function FieldsTab({ project, onSaved }) {
                         <>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{f.label}</span>
-                            <span className="font-mono text-[10px] text-muted-foreground">{f.field_key}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
-                            {f.required && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600">REQ</span>}
-                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
+                            <span className="font-mono text-secundario text-muted-foreground">{f.field_key}</span>
+                            <span className="px-1.5 py-0.5 rounded text-secundario font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
+                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-red-50 text-red-600">REQ</span>}
+                            {f.grupo && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-amber-50 text-amber-700">{f.grupo}</span>}
                           </div>
                           {Array.isArray(f.options) && f.options.length > 0 && (
-                            <p className="text-[11px] text-muted-foreground mt-1 truncate">Opciones: {f.options.join(', ')}</p>
+                            <p className="text-secundario text-muted-foreground mt-1 truncate">Opciones: {f.options.join(', ')}</p>
                           )}
                         </>
                       )}
@@ -275,7 +275,7 @@ export default function FieldsTab({ project, onSaved }) {
             <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed border-border rounded-md">Sin campos</div>
           ) : Object.entries(groups).map(([grupo, items]) => (
             <div key={grupo} className="bg-muted/20 rounded-md p-4 border border-border">
-              <p className="text-[11px] font-medium text-muted-foreground mb-3">{grupo}</p>
+              <p className="text-secundario font-medium text-muted-foreground mb-3">{grupo}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {items.map(f => (
                   <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>

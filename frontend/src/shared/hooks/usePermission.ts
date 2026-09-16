@@ -17,46 +17,116 @@ export interface FixedRole {
   color: 'rose' | 'violet' | 'sky' | 'emerald';
 }
 
-// Permisos por rol fijo del sistema. Cuando CRM-228 (backend custom_roles)
-// este desplegado, `user.permissions` vendra del backend y sobreescribira
-// estos defaults. Mientras tanto, esta tabla cubre los 4 roles base.
+// Permisos por rol fijo del sistema.
+//
+// Son el RESPALDO: si el backend manda los suyos —y los manda— ganan ellos.
+// Esta tabla cubre los 4 roles base para el rato entre que se entra y llega
+// `/auth/me`, y para el caso de que esa llamada falle.
 export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
   superadmin: { '*': true },
-  soporte:    { '*': true },
   admin: {
-    'leads.read': true,    'leads.create': true,    'leads.update': true,    'leads.delete': true,    'leads.export': true,    'leads.reassign': true,
-    'clients.read': true,  'clients.create': true,  'clients.update': true,  'clients.delete': true,
-    'products.read': true, 'products.create': true, 'products.update': true, 'products.delete': true,
-    'conversions.read': true, 'conversions.create': true, 'conversions.update': true, 'conversions.delete': true,
-    'matriculas.read': true,  'matriculas.create': true,  'matriculas.update': true,
-    'reports.read': true,
-    'users.read': true,    'users.create': true,    'users.update': true,    'users.delete': true,
-    'settings.read': true, 'settings.update': true,
-    'projects.read': true, 'projects.update': true,
-    'campaigns.read': true,
-    'accounting.read': true, 'accounting.update': true,
+    'leads.view': true,         'leads.create': true,       'leads.edit': true,         'leads.delete': true,       'leads.export': true,       'leads.assign': true,       'leads.bulk_action': true,
+    'conversions.view': true,    'conversions.create': true,  'conversions.edit': true,    'conversions.delete': true,
+    'products.view': true,    'products.create': true,  'products.edit': true,    'products.delete': true,
+    'clients.view': true,    'clients.create': true,  'clients.edit': true,    'clients.delete': true,  'clients.export': true,
+    'dossiers.view': true,    'dossiers.upload': true,  'dossiers.delete': true,
+    'commissions.view': true,    'commissions.create': true,  'commissions.edit': true,    'commissions.delete': true,
+    'matriculas.view': true,    'matriculas.create': true,  'matriculas.edit': true,    'matriculas.delete': true,
+    'accounting.view': true,    'accounting.create': true,  'accounting.edit': true,    'accounting.delete': true,
+    'accounts_payable.view': true,    'accounts_payable.create': true,  'accounts_payable.edit': true,    'accounts_payable.delete': true,
+    'payroll.view': true,    'payroll.create': true,  'payroll.edit': true,    'payroll.delete': true,
+    'reports.view': true,    'reports.export': true,
+    'ia.view': true,
+    'woocommerce.view': true,  'woocommerce.sync': true,
+    'webhooks.view': true,    'webhooks.create': true,  'webhooks.edit': true,    'webhooks.delete': true,
+    'forms.view': true,    'forms.create': true,  'forms.edit': true,    'forms.delete': true,
+    'email_sequences.view': true,    'email_sequences.create': true,  'email_sequences.edit': true,    'email_sequences.delete': true,
+    'users.view': false,    'users.create': false,  'users.edit': false,    'users.delete': false,
+    'settings.view': true,  'settings.edit': true,
+    'field_defs.view': true,  'field_defs.edit': true,
+    'channels.view': true,  'channels.edit': true,
+    'roles.view': true,   'roles.edit': false,
   },
   gestor: {
-    'leads.read': true,    'leads.create': true,    'leads.update': true,
-    'clients.read': true,
-    'products.read': true,
-    'conversions.read': true, 'conversions.create': true,
-    'matriculas.read': true,
-    'reports.read': true,
+    'leads.view': true,          'leads.create': true,        'leads.edit': true,          'leads.delete': false,       'leads.export': false,       'leads.assign': false,       'leads.bulk_action': false,
+    'conversions.view': true,     'conversions.create': true,   'conversions.edit': true,     'conversions.delete': false,
+    'products.view': true,     'products.create': false,  'products.edit': false,    'products.delete': false,
+    'clients.view': true,     'clients.create': true,   'clients.edit': true,     'clients.delete': false,  'clients.export': false,
+    'dossiers.view': true,     'dossiers.upload': false,  'dossiers.delete': false,
+    'commissions.view': true,     'commissions.create': false,  'commissions.edit': false,    'commissions.delete': false,
+    'matriculas.view': true,     'matriculas.create': true,   'matriculas.edit': true,     'matriculas.delete': false,
+    'accounting.view': false,    'accounting.create': false,  'accounting.edit': false,    'accounting.delete': false,
+    'accounts_payable.view': false,    'accounts_payable.create': false,  'accounts_payable.edit': false,    'accounts_payable.delete': false,
+    'payroll.view': false,    'payroll.create': true,   'payroll.edit': false,    'payroll.delete': false,
+    'reports.view': false,    'reports.export': false,
+    'ia.view': false,
+    'woocommerce.view': false,  'woocommerce.sync': false,
+    'webhooks.view': false,    'webhooks.create': false,  'webhooks.edit': false,    'webhooks.delete': false,
+    'forms.view': false,    'forms.create': false,  'forms.edit': false,    'forms.delete': false,
+    'email_sequences.view': false,    'email_sequences.create': false,  'email_sequences.edit': false,    'email_sequences.delete': false,
+    'users.view': false,    'users.create': false,  'users.edit': false,    'users.delete': false,
+    'settings.view': false,  'settings.edit': false,
+    'field_defs.view': false,  'field_defs.edit': false,
+    'channels.view': true,   'channels.edit': false,
+    'roles.view': false,  'roles.edit': false,
   },
+  // Soporte NO es acceso total: el backend lo define como mirar y poco mas.
+  // Antes `can()` lo saltaba con un `return true` y veia todos los botones.
+  soporte: {
+    'leads.view': true,          'leads.create': true,        'leads.edit': true,          'leads.delete': false,       'leads.export': false,       'leads.assign': false,       'leads.bulk_action': false,
+    'conversions.view': true,     'conversions.create': false,  'conversions.edit': false,    'conversions.delete': false,
+    'products.view': true,     'products.create': false,  'products.edit': false,    'products.delete': false,
+    'clients.view': true,     'clients.create': false,  'clients.edit': false,    'clients.delete': false,  'clients.export': false,
+    'dossiers.view': true,     'dossiers.upload': false,  'dossiers.delete': false,
+    'commissions.view': false,    'commissions.create': false,  'commissions.edit': false,    'commissions.delete': false,
+    'matriculas.view': true,     'matriculas.create': false,  'matriculas.edit': false,    'matriculas.delete': false,
+    'accounting.view': false,    'accounting.create': false,  'accounting.edit': false,    'accounting.delete': false,
+    'accounts_payable.view': false,    'accounts_payable.create': false,  'accounts_payable.edit': false,    'accounts_payable.delete': false,
+    'payroll.view': false,    'payroll.create': false,  'payroll.edit': false,    'payroll.delete': false,
+    'reports.view': true,     'reports.export': false,
+    'ia.view': true,
+    'woocommerce.view': false,  'woocommerce.sync': false,
+    'webhooks.view': true,     'webhooks.create': false,  'webhooks.edit': false,    'webhooks.delete': false,
+    'forms.view': true,     'forms.create': false,  'forms.edit': false,    'forms.delete': false,
+    'email_sequences.view': false,    'email_sequences.create': false,  'email_sequences.edit': false,    'email_sequences.delete': false,
+    'users.view': false,    'users.create': false,  'users.edit': false,    'users.delete': false,
+    'settings.view': false,  'settings.edit': false,
+    'field_defs.view': false,  'field_defs.edit': false,
+    'channels.view': true,   'channels.edit': false,
+    'roles.view': false,  'roles.edit': false,
+  },
+  // Un tutor no tiene permisos de gestion: entra a lo suyo —sus cursos y sus
+  // comisiones— y el menu ya se lo recorta enumerando lo que puede ver. Vacio
+  // y explicito: sin esta entrada el tipo no cuadraba y `can()` devolvia falso
+  // para todo por accidente en vez de por decision.
+  tutor: {},
 };
 
+// Espejo de ALL_RESOURCES del backend. La pantalla de Roles pinta las casillas
+// desde aqui, asi que si esto se desvia se guardan en la base claves que ningun
+// guardia mira. `permisosEspejo.test.js` compara las dos listas.
 export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
-  { key: 'leads',       label: 'Prospectos',  actions: ['read', 'create', 'update', 'delete', 'export', 'reassign'] },
-  { key: 'clients',     label: 'Clientes',    actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'products',    label: 'Productos',   actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'conversions', label: 'Conversiones', actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'matriculas',  label: 'Matrículas',  actions: ['read', 'create', 'update'] },
-  { key: 'reports',     label: 'Reportes',    actions: ['read'] },
-  { key: 'users',       label: 'Usuarios',    actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'settings',    label: 'Configuración', actions: ['read', 'update'] },
-  { key: 'campaigns',   label: 'Campañas',    actions: ['read'] },
-  { key: 'accounting',  label: 'Contabilidad', actions: ['read', 'update'] },
+  { key: 'leads',            label: 'Prospectos',           actions: ['view', 'create', 'edit', 'delete', 'export', 'assign', 'bulk_action'] },
+  { key: 'conversions',      label: 'Conversiones',         actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'products',         label: 'Productos',            actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'clients',          label: 'Clientes',             actions: ['view', 'create', 'edit', 'delete', 'export'] },
+  { key: 'dossiers',         label: 'Dosieres',             actions: ['view', 'upload', 'delete'] },
+  { key: 'commissions',      label: 'Comisiones',           actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'matriculas',       label: 'Matrículas',           actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'accounting',       label: 'Contabilidad',         actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'accounts_payable', label: 'Cuentas por pagar',    actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'payroll',          label: 'Nóminas',              actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'reports',          label: 'Informes',             actions: ['view', 'export'] },
+  { key: 'ia',               label: 'IA',                   actions: ['view'] },
+  { key: 'woocommerce',      label: 'WooCommerce',          actions: ['view', 'sync'] },
+  { key: 'webhooks',         label: 'Webhooks',             actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'forms',            label: 'Formularios',          actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'email_sequences',  label: 'Secuencias de correo', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'users',            label: 'Usuarios',             actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'settings',         label: 'Configuración',        actions: ['view', 'edit'] },
+  { key: 'field_defs',       label: 'Campos',               actions: ['view', 'edit'] },
+  { key: 'channels',         label: 'Canales',              actions: ['view', 'edit'] },
+  { key: 'roles',            label: 'Roles',                actions: ['view', 'edit'] },
 ];
 
 export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
@@ -75,15 +145,21 @@ export interface UsePermissionResult {
 }
 
 export default function usePermission(): UsePermissionResult {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
 
   function can(permission: PermissionKey): boolean {
     if (!user) return false;
-    // bypass para roles privilegiados
-    if (user.role === 'superadmin' || user.role === 'soporte') return true;
-    // override desde el backend (cuando CRM-228 exista)
-    if (user.permissions && Object.keys(user.permissions).length > 0) {
-      return user.permissions[permission] === true || user.permissions['*'] === true;
+    // Solo el superadmin lo puede todo. Soporte NO: el backend le da un mapa
+    // restrictivo y saltarselo aqui le pintaba botones que su rol no permite.
+    if (user.role === 'superadmin') return true;
+    // Los del backend, que mandan sobre la tabla de abajo.
+    //
+    // Se leian de `user.permissions` y ahi no estan: `/auth/me` los devuelve AL
+    // LADO del usuario, no dentro. O sea que esta rama no se cumplia nunca y
+    // todo el mundo caia en los defaults — los roles a medida no pintaban nada
+    // aunque el backend llevara tiempo calculandolos.
+    if (permissions && Object.keys(permissions).length > 0) {
+      return permissions[permission] === true || permissions['*'] === true;
     }
     // fallback: defaults por rol
     const defaults = ROLE_DEFAULT_PERMISSIONS[user.role as UserRole] || {};

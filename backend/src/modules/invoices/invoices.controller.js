@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -237,6 +238,28 @@ export async function corregir(req, res, next) {
       }
     }
     delete d.exento; delete d.totalEur;
+
+    // Un ABONO se guarda siempre en negativo, venga como venga.
+    //
+    // Quien corrige una rectificativa teclea importes en positivo —es lo natural,
+    // y es lo que se ve en el papel— pero el dato tiene que seguir restando en
+    // los informes. Se fuerza aqui y no en la pantalla: asi da igual desde donde
+    // llegue la correccion, el signo nunca depende de que el cliente acierte.
+    const actual = await model.findById(id);
+    if (actual?.tipo === 'rectificativa') {
+      const neg = (n) => -Math.abs(Number(n || 0));
+      if (Array.isArray(d.items)) {
+        d.items = d.items.map((it) => ({
+          ...it,
+          precio_unitario: neg(it.precio_unitario ?? it.precio ?? 0),
+          ...(it.subtotal != null ? { subtotal: neg(it.subtotal) } : {}),
+        }));
+      }
+      for (const k of ['baseImponible', 'ivaImporte', 'total', 'totalDivisa']) {
+        if (d[k] != null) d[k] = neg(d[k]);
+      }
+    }
+
     const inv = await model.updateBorrador(id, d, { soloBorrador: false });
     res.json({ success: true, data: inv });
   } catch (e) {
@@ -312,18 +335,23 @@ export async function pdf(req, res, next) {
     // por el importe NETO liquidado (bruto menos la comisión de Stripe). La factura
     // del alumno siempre va por el bruto. Solo aplica a facturas normales.
     const vistaGestor = req.query.vista === 'gestor' && inv.tipo !== 'proforma' && inv.tipo !== 'rectificativa';
+    // ?moneda=eur → la misma factura totalizada EN EUROS. Una factura en divisa
+    // sale por defecto en su moneda con el euro entre parentesis debajo; esta es
+    // la version para quien la necesita en euros de arriba abajo.
+    const enEuros = String(req.query.moneda || '').toLowerCase() === 'eur'
+      && String(inv.moneda || 'EUR').toUpperCase() !== 'EUR';
     let bytes;
     // El preliminar y la copia de gestión nunca usan el PDF cacheado (definitivo).
-    if (inv.pdf_path && !preliminar && !vistaGestor) {
+    if (inv.pdf_path && !preliminar && !vistaGestor && !enEuros) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
     }
     if (!bytes) {
-      const gen = await service.generatePDF(id, { preliminar, vistaGestor });
+      const gen = await service.generatePDF(id, { preliminar, vistaGestor, enEuros });
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
     // Borrador: no tiene código fiscal todavía.
-    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
+    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (enEuros ? 'EUR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
     res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }
@@ -572,8 +600,10 @@ export async function deleteTemplate(req, res, next) {
 
 export async function ventasSinFactura(req, res, next) {
   try {
-    const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    // Un proyecto O una sociedad entera: el mismo helper que Ventas y Reportes.
+    // Antes solo sabia de un proyecto y con CEDIA elegida no devolvia nada.
+    res.json({ success: true, data: await model.listVentasSinFactura(
+      await proyectosDelAmbito(req)) });
   } catch (e) { next(e); }
 }
 
@@ -655,8 +685,11 @@ export async function generarDeCola(req, res, next) {
     if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
-    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId, {
+      forzar: req.body?.forzar === true,
+      // El numero que haya elegido quien factura. Sin el, el siguiente libre.
+      numero: req.body?.numero != null && req.body?.numero !== '' ? Number(req.body.numero) : null,
+    });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }
@@ -672,4 +705,29 @@ export async function emitirColaHasta(req, res, next) {
     }
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }
+}
+
+/** PATCH /invoices/:id/entregada — apunta que ya se le paso al cliente. No envia. */
+export async function marcarEntregada(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Factura no valida', 400, 'BAD_ID');
+    const fila = await model.marcarEntregada(id, {
+      entregada: req.body?.entregada !== false,
+      userId: req.user?.userId,
+    });
+    if (!fila) throw new AppError('Esa factura no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: fila });
+  } catch (e) { next(e); }
+}
+
+/** GET /invoices/siguiente-numero — que numero saldria ahora, y los huecos. */
+export async function siguienteNumero(req, res, next) {
+  try {
+    const projectId = Number(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    const ano = req.query.ano ? Number(req.query.ano) : null;
+    res.json({ success: true, data: await model.siguienteLibre({ projectId, issuerId, ano }) });
+  } catch (e) { next(e); }
 }

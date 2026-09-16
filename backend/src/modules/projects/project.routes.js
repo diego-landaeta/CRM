@@ -14,6 +14,10 @@ router.use(verifyToken);
 // Atajos — catálogo (cualquier autenticado)
 router.get('/shortcuts/catalog', shortcutsCtrl.getCatalog);
 
+// Los tipos de proyecto (#15). ANTES de `/:id`, o Express lo tomaria por un id
+// y contestaria «ID invalido».
+router.get('/types', ctrl.types);
+
 // Sociedades emisoras (para el selector al crear/editar proyecto). Antes de '/:id'.
 router.get('/sociedades', ctrl.listSociedades);
 router.post('/sociedades', roleGuard('superadmin'), ctrl.createSociedad);

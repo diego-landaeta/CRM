@@ -10,7 +10,16 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? 'github' : [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:5173/crm',
+    // El origen A SECAS, sin el /crm.
+    //
+    // Estaba puesto como `http://localhost:5173/crm` y los tests hacen
+    // `goto('/login')`. Una ruta que empieza por barra reemplaza el camino
+    // entero, asi que se pedia `/login` — y Vite sirve el CRM bajo `/crm/`, o
+    // sea 404. Los tres tests que ya habia llevaban cayendo por eso.
+    //
+    // Con el origen solo, las rutas de los tests llevan `/crm/...` y significan
+    // lo que parece que significan.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

@@ -89,20 +89,40 @@ describe('CoursesPendingPage (CRM-142)', () => {
     });
   });
 
-  it('hace fallback al endpoint general si la query con filtro falla', async () => {
-    mockClient.get
-      .mockRejectedValueOnce(new Error('404 — endpoint con filtro no soportado'))
-      .mockResolvedValueOnce({
-        success: true,
-        data: [{ id: 1, nombre: 'Curso X', estado_creacion: 'pendiente_crear' }],
-      });
+  // Antes, este test fijaba un «fallback»: primero pedir un endpoint con filtro
+  // y, si fallaba, caer al general. Los dos caminos apuntaban a
+  // `/products/{id_del_proyecto}`, que es el detalle de UN producto — el
+  // middleware projectAccess busca `projectId` y ahí el parámetro se llama
+  // `id`, así que respondía «projectId requerido» y la pantalla no cargó nunca.
+  // El test pasaba porque el cliente iba mockeado y nadie comprobaba la ruta.
+  //
+  // Ahora se comprueba justo eso: la dirección que se pide.
+  it('pide la lista del proyecto, no el detalle de un producto', async () => {
+    mockClient.get.mockResolvedValue({
+      success: true,
+      data: [{ id: 1, nombre: 'Curso X', estado_creacion: 'pendiente_crear' }],
+    });
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Curso X')).toBeInTheDocument();
     });
-    // 1ª llamada con filtro, 2ª sin
-    expect(mockClient.get).toHaveBeenCalledTimes(2);
-    expect(mockClient.get.mock.calls[0][0]).toContain('estado_creacion=pendiente_crear');
-    expect(mockClient.get.mock.calls[1][0]).not.toContain('estado_creacion');
+
+    expect(mockClient.get).toHaveBeenCalledTimes(1);
+    const [ruta, opciones] = mockClient.get.mock.calls[0];
+    expect(ruta).toBe('/products');
+    expect(opciones?.params?.projectId).toBe(1);
+    // Si vuelve a colarse el id en la ruta, el backend contesta 400.
+    expect(ruta).not.toMatch(/\/products\/\d/);
+  });
+
+  it('el filtro por estado se hace en cliente: el listado no lo soporta', async () => {
+    // `GET /products` solo acepta categoryId e includeInactive.
+    mockClient.get.mockResolvedValue({ success: true, data: [] });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/Sin cursos pendientes/i)).toBeInTheDocument();
+    });
+    const [, opciones] = mockClient.get.mock.calls[0];
+    expect(opciones?.params?.estado_creacion).toBeUndefined();
   });
 });

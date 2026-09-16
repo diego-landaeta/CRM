@@ -15,7 +15,21 @@ vi.mock('../src/shared/config/db.js', () => ({
       const objetivo = params[1];
       if (objetivo === 99) return { rows: [] };                                  // no existe
       if (objetivo === 98) return { rows: [{ id: 98, active: false }] };          // desactivada
-      return { rows: [{ id: objetivo, nombre: 'Dayana', active: true, comparten: objetivo !== 77 }] };
+      // `role` hace falta desde que se comprueba quien puede tener WhatsApp
+      // (tarea #68): sin el, el guardia lo toma por un rol desconocido y lo
+      // rechaza. El 76 es un tutor, para probar justo eso.
+      return { rows: [{
+        id: objetivo,
+        nombre: 'Dayana',
+        active: true,
+        role: objetivo === 76 ? 'tutor' : 'gestor',
+        gestor_colaboraciones: false,
+        comparten: objetivo !== 77,
+      }] };
+    }
+    // La casilla «usa el WhatsApp del CRM» (#128). El 95 la tiene apagada.
+    if (sql.includes('usa_whatsapp')) {
+      return { rows: [{ usa: params[0] !== 95 }] };
     }
     return { rows: [] };
   }),
@@ -23,7 +37,14 @@ vi.mock('../src/shared/config/db.js', () => ({
 
 vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   listar: vi.fn(async ({ instancia }) => [{ instancia }]),
+  // Las etiquetas de WhatsApp de esas conversaciones (#128). La lista las pide
+  // en una sola consulta para las 50 filas; aqui no se prueban, pero sin ella
+  // el controlador se cae antes de llegar a lo que SI se prueba.
+  etiquetasDeConversaciones: vi.fn(async () => new Map()),
   porId: vi.fn(), mensajes: vi.fn(), actividad: vi.fn(),
+  // Queda escrito quien entra a mirar la sesion de otra persona. Lo que se
+  // prueba aqui es QUIEN puede entrar; que se apunte tiene su propio fichero.
+  apuntarMirada: vi.fn(async () => true),
 }));
 vi.mock('../src/modules/whatsapp/chat.service.js', () => ({}));
 vi.mock('../src/modules/whatsapp/media.service.js', () => ({}));
@@ -35,6 +56,8 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
 }));
 
 const { chats, usuarios } = await import('../src/modules/whatsapp/chat.controller.js');
+const { olvidarTodo } = await import('../src/modules/whatsapp/usaWhatsapp.js');
+const modelo = await import('../src/modules/whatsapp/chat.model.js');
 
 function pedir(user, query = {}) {
   const req = { user, query, body: {} };
@@ -43,7 +66,9 @@ function pedir(user, query = {}) {
   return { req, res, next };
 }
 
-beforeEach(() => { consultas.length = 0; });
+// La casilla se recuerda medio minuto entre peticiones, asi que entre prueba y
+// prueba hay que olvidarla: si no, la segunda leeria la respuesta de la primera.
+beforeEach(() => { consultas.length = 0; olvidarTodo(); });
 
 describe('de quien es la sesion que se abre', () => {
   it('sin pedir nada, cada uno ve la suya', async () => {
@@ -62,11 +87,36 @@ describe('de quien es la sesion que se abre', () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 
-  it('pedir la suya por su propio identificador vale, y no consulta la base', async () => {
-    const { req, res, next } = pedir({ userId: 7, role: 'gestor' }, { usuarioId: '7' });
+  it('pedir la suya por su propio identificador vale, y la base se toca UNA vez', async () => {
+    // Antes esto exigia CERO consultas, y era la propiedad correcta: el rol
+    // viaja en el testigo de sesion y con eso bastaba.
+    //
+    // Desde el #128 hace falta un dato mas —si tiene encendida la casilla— y ese
+    // no puede ir en el testigo, que dura ocho horas: apagar a alguien tiene que
+    // notarse hoy, no manana. Lo que se sigue exigiendo es lo que motivaba la
+    // prueba: que el chat, que pregunta cada tres segundos, NO se traiga una
+    // consulta por vuelta. Se recuerda medio minuto (`usaWhatsapp.js`).
+    for (let i = 0; i < 3; i++) {
+      const { req, res, next } = pedir({ userId: 7, role: 'gestor' }, { usuarioId: '7' });
+      await chats(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+    }
+    expect(consultas.length).toBe(1);
+    expect(consultas[0].sql).toContain('usa_whatsapp');
+  });
+
+  it('con la casilla apagada no se abre ni la suya', async () => {
+    // Apagar no es solo dejar de salir en la lista: es dejar de usarlo. Si solo
+    // se escondiera, la gestora seguiria trabajando por una pantalla que quien
+    // manda cree cerrada.
+    const { req, res, next } = pedir({ userId: 95, role: 'gestor' });
     await chats(req, res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(consultas.length).toBe(0);
+    const err = next.mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SIN_WHATSAPP');
+    // Y se dice donde se enciende, que es lo unico accionable.
+    expect(err.message).toMatch(/ficha de usuario/i);
+    expect(res.json).not.toHaveBeenCalled();
   });
 
   it('un superadmin abre la de cualquiera', async () => {
@@ -74,6 +124,26 @@ describe('de quien es la sesion que se abre', () => {
     await chats(req, res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.json.mock.calls[0][0].data[0].instancia).toBe('crm-u7');
+  });
+
+  it('la de un TUTOR no se abre, ni siendo superadmin', async () => {
+    // No es que no salga en la lista: es que tampoco se puede entrar acertando
+    // el identificador. La regla vive en `roles.js` y se aplica en el guardia
+    // central, no en cada endpoint.
+    const { req, res, next } = pedir({ userId: 1, role: 'superadmin' }, { usuarioId: '76' });
+    await chats(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(next.mock.calls[0][0].code).toBe('SIN_WHATSAPP');
+  });
+
+  it('quien no puede tener WhatsApp tampoco abre LA SUYA', async () => {
+    // El hueco que casi se queda: la sesion propia se devolvia antes de
+    // comprobar nada, asi que un tutor entraba a la suya sin salir en ninguna
+    // lista.
+    const { req, res, next } = pedir({ userId: 5, role: 'tutor' }, {});
+    await chats(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(next.mock.calls[0][0].code).toBe('SIN_WHATSAPP');
   });
 
   it('un admin abre la de quien comparte proyecto con el', async () => {
@@ -87,6 +157,27 @@ describe('de quien es la sesion que se abre', () => {
     const { req, res, next } = pedir({ userId: 9, role: 'admin' }, { usuarioId: '77' });
     await chats(req, res, next);
     expect(next.mock.calls[0][0].code).toBe('FUERA_DE_TUS_PROYECTOS');
+  });
+
+  it('un intento RECHAZADO no queda como que entro a mirar', async () => {
+    // Se apunta DESPUES de comprobar los permisos, no antes. Si no, en el
+    // registro saldria «entro a ver a Fulana» de alguien a quien se le nego el
+    // paso — y eso es peor que no tener registro: acusa de algo que no paso.
+    modelo.apuntarMirada.mockClear();
+    const { req, res, next } = pedir({ userId: 9, role: 'admin' }, { usuarioId: '77' });
+    await chats(req, res, next);
+    expect(next.mock.calls[0][0].code).toBe('FUERA_DE_TUS_PROYECTOS');
+    expect(modelo.apuntarMirada).not.toHaveBeenCalled();
+  });
+
+  it('pero una mirada permitida SI queda', async () => {
+    modelo.apuntarMirada.mockClear();
+    const { req, res, next } = pedir({ userId: 1, role: 'superadmin' }, { usuarioId: '7' });
+    await chats(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(modelo.apuntarMirada).toHaveBeenCalledWith(
+      expect.objectContaining({ quienMira: 1, aQuien: 7 }),
+    );
   });
 
   it('ni la de alguien que no existe o esta desactivado', async () => {
@@ -109,14 +200,14 @@ describe('a quien se puede elegir en el panel', () => {
   it('a una gestora solo se le ofrece ella misma', async () => {
     const { req, res, next } = pedir({ userId: 7, role: 'gestor' });
     await usuarios(req, res, next);
-    expect(consultas[0].sql).toContain('WHERE id = $1');
+    expect(consultas[0].sql).toContain('WHERE u.id = $1');
   });
 
   it('a un superadmin, todo el equipo', async () => {
     const { req, res, next } = pedir({ userId: 1, role: 'superadmin' });
     await usuarios(req, res, next);
     expect(consultas[0].sql).toContain('gestor_colaboraciones');
-    expect(consultas[0].sql).not.toContain('WHERE id = $1');
+    expect(consultas[0].sql).not.toContain('WHERE u.id = $1');
   });
 
   it('a un admin, solo los de sus proyectos', async () => {

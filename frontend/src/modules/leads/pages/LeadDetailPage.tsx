@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLeadDetail } from '../hooks/useLeads';
 import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { ArrowClockwise, CurrencyEur, WarningCircle } from '@phosphor-icons/react';
@@ -65,6 +66,7 @@ export default function LeadDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermission();
   const {
     lead, timeline, interacciones, reminders, utms, loading, error, refetch,
     updateStatus, addInteraction, addReminder, completeReminder, reassign, updateLead,
@@ -226,7 +228,9 @@ export default function LeadDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          <LeadInfoCard lead={lead} onUpdate={updateLead}
+            onLlamada={(nota) => addInteraction('llamada', nota)}
+            onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard
@@ -246,7 +250,7 @@ export default function LeadDetailPage() {
             <ConversionsTab
               lead={lead}
               projectId={lead.project_id}
-              canManage={user?.role === 'admin' || user?.role === 'superadmin' || lead.responsable_id === user?.id}
+              canManage={can('conversions.edit') && (user?.role === 'admin' || user?.role === 'superadmin' || lead.responsable_id === user?.id)}
             />
           </div>
           <LeadRemindersCard

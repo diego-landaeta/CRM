@@ -10,9 +10,11 @@ interface Gestor {
 interface Props {
   count: number;
   onClear: () => void;
-  onChangeStatus: (status: string) => void;
-  onReassign: (gestorId: number) => void;
-  onExport: () => void;
+  // Opcionales a proposito: sin el permiso correspondiente la pagina no pasa
+  // el manejador, y aqui la accion entera desaparece de la barra.
+  onChangeStatus?: (status: string) => void;
+  onReassign?: (gestorId: number) => void;
+  onExport?: () => void;
   gestores: Gestor[];
   isAdmin: boolean;
   loading?: boolean;
@@ -37,6 +39,7 @@ export default function BulkActionBar({
 
       <div className="flex items-center gap-1 flex-wrap">
         {/* Cambiar estado */}
+        {onChangeStatus && (
         <div className="relative">
           <button
             onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
@@ -56,9 +59,10 @@ export default function BulkActionBar({
             </div>
           )}
         </div>
+        )}
 
-        {/* Reasignar (solo admin) */}
-        {isAdmin && gestores.length > 0 && (
+        {/* Reasignar: hace falta el permiso `leads.assign` */}
+        {onReassign && isAdmin && gestores.length > 0 && (
           <div className="relative">
             <button
               onClick={() => setOpenMenu(openMenu === 'reassign' ? null : 'reassign')}
@@ -81,6 +85,7 @@ export default function BulkActionBar({
         )}
 
         {/* Exportar CSV */}
+        {onExport && (
         <button
           onClick={onExport}
           disabled={loading}
@@ -88,6 +93,7 @@ export default function BulkActionBar({
         >
           <Export size={14} weight="regular" /> Exportar CSV
         </button>
+        )}
       </div>
 
       <div className="h-5 w-px bg-border" />

@@ -66,6 +66,7 @@ interface Props {
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
   filterEstado: string; setFilterEstado: (v: string) => void;
+  filterSeguimiento: string; setFilterSeguimiento: (v: string) => void;
   filterOrigen: string; setFilterOrigen: (v: string) => void;
   filterResponsable: string; setFilterResponsable: (v: string) => void;
   filterProducto: string; setFilterProducto: (v: string) => void;
@@ -87,6 +88,7 @@ export default function LeadsFiltersBar(props: Props) {
     activeProject, projects, selectedProjectIds, setSelectedProjectIds,
     gestores, products, user,
     search, setSearch, filterEstado, setFilterEstado,
+    filterSeguimiento, setFilterSeguimiento,
     filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
     sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
@@ -162,6 +164,11 @@ export default function LeadsFiltersBar(props: Props) {
   const activePills: Array<{ key: string; label: string; onClear: () => void }> = [];
   if (search.trim()) activePills.push({ key: 'search', label: `🔎 "${search.slice(0, 20)}${search.length > 20 ? '…' : ''}"`, onClear: () => setSearch('') });
   if (filterEstado) activePills.push({ key: 'estado', label: STATUS_LABELS[filterEstado] || filterEstado, onClear: () => setFilterEstado('') });
+  if (filterSeguimiento) activePills.push({
+    key: 'seg',
+    label: filterSeguimiento === '5' ? 'Seguimiento 5 o más' : `Seguimiento ${filterSeguimiento}`,
+    onClear: () => setFilterSeguimiento(''),
+  });
   if (filterOrigen) activePills.push({ key: 'origen', label: ORIGEN_LABELS[filterOrigen] || filterOrigen, onClear: () => setFilterOrigen('') });
   if (filterResponsable) {
     const label = filterResponsable === 'unassigned'
@@ -254,6 +261,27 @@ export default function LeadsFiltersBar(props: Props) {
                     ))}
                   </select>
                 </Row>
+                {/* POR QUE SEGUIMIENTO VA. Cuelga del estado «En seguimiento»
+                    porque ahi es donde significa algo: preguntar por el
+                    seguimiento 3 de alguien «no interesado» no dice nada.
+                    Diego: «sería seguimiento 1, 2, y eso en el estado de
+                    seguimiento, como un submenú». */}
+                {filterEstado === 'en_seguimiento' && (
+                  <Row label="Por qué seguimiento va">
+                    <select
+                      value={filterSeguimiento}
+                      onChange={(e) => setFilterSeguimiento(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    >
+                      <option value="">Cualquiera</option>
+                      <option value="1">Seguimiento 1 — un contacto</option>
+                      <option value="2">Seguimiento 2 — dos contactos</option>
+                      <option value="3">Seguimiento 3</option>
+                      <option value="4">Seguimiento 4</option>
+                      <option value="5">Seguimiento 5 o más</option>
+                    </select>
+                  </Row>
+                )}
                 <Row label="Canal">
                   <SearchableSelect
                     value={filterOrigen}
