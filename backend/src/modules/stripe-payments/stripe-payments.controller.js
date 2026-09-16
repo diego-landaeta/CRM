@@ -15,10 +15,11 @@ export async function list(req, res, next) {
   try {
     const ambito = await proyectosDelAmbito(req);
     if (!ambito.projectId && !ambito.projectIds) projectId(req); // sigue exigiendo ambito
-    const { status, linked, search, from, to, page, limit, facturables } = req.query;
+    const { status, linked, search, from, to, page, limit, facturables, sinEquivalente } = req.query;
     const data = await model.listPayments({
       ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
+      sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
       page: Number(page) || 1,
       limit: Math.min(Number(limit) || 50, 200),
     });
@@ -30,12 +31,13 @@ export async function stats(req, res, next) {
   try {
     const ambito = await proyectosDelAmbito(req);
     const pid = ambito.projectId || (ambito.projectIds ? null : projectId(req));
-    const { status, linked, search, from, to, facturables } = req.query;
+    const { status, linked, search, from, to, facturables, sinEquivalente } = req.query;
     // Los mismos filtros que el listado: si no, la cabecera cuenta una cosa y la
     // tabla de debajo otra.
     const s = await model.getStats({
       ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
+      sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
     });
     // El estado de la sincronizacion es de UNA cuenta de Stripe: con la
     // empresa entera no hay una sola, asi que no se dice ninguna.

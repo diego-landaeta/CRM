@@ -133,7 +133,7 @@ export async function updateConversionPaid(conversionId, addAmount) {
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
 // como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
 // arriba ignoraban el rango de fechas y el resto de filtros de abajo.
-function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables }) {
+function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
   // Con una EMPRESA puesta son sus campus. Los cobros ya estan en nuestra base
   // --los deja ahi el sincronizador--, asi que esto es leer varias filas, no
   // hablar con varias cuentas de Stripe.
@@ -143,6 +143,28 @@ function construirFiltro({ projectId, projectIds = null, status, linked, search,
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
   if (linked === 'no')  conds.push('sp.conversion_id IS NULL');
+  // sinEquivalente=1 → ademas de no estar enlazado, que NO haya ya un cobro
+  // apuntado a mano por ese mismo dinero.
+  //
+  // Que un cargo no este enlazado casi nunca significa que falte el dinero: la
+  // gestora ya lo registro en su venta y lo unico que no cuadra es el correo o
+  // la razon social con la que pago el cliente. Diego, 16/09: «recuerda que
+  // Stripe pasa a cola de facturacion en automatico, igual que las proformas»
+  // --y por eso el mismo importe salia dos veces, en la cola como Manual y aqui
+  // como «sin asociar»: los 859,10 de Innovacion Verde Inver--.
+  //
+  // Es la MISMA regla que ya usaba el vigilante (`vigilanteCatalogoScheduler`),
+  // que de 106 cargos sueltos avisaba solo de los 18 reales. La pantalla se
+  // habia quedado con el criterio tonto.
+  //
+  // En «Pagos Stripe» NO se aplica: ahi se entra precisamente a enlazarlos.
+  if (sinEquivalente) {
+    conds.push(`NOT EXISTS (
+      SELECT 1 FROM conversion_payments cp
+       WHERE ABS(cp.importe - sp.amount) < 0.01
+         AND cp.fecha BETWEEN sp.stripe_created_at::date - 3
+                          AND sp.stripe_created_at::date + 3)`);
+  }
   // facturables=1 → solo cobros que REALMENTE tocaría facturar: los posteriores a
   // la primera factura emitida por la sociedad del proyecto. Si esa sociedad aún
   // no factura (o empezó después), no se marca nada. Se deriva del dato, así que
@@ -190,8 +212,8 @@ function construirFiltro({ projectId, projectIds = null, status, linked, search,
   return { where: conds.join(' AND '), params };
 }
 
-export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
-  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables });
+export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -234,8 +256,8 @@ export async function listProjectsWithStripe() {
 // Los totales de la cabecera responden al MISMO filtro que el listado: si
 // arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
 // siempre las del historico completo y no cuadraban con lo que se veia debajo.
-export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables }) {
-  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables });
+export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,
