@@ -620,7 +620,7 @@ export default function ReportsPage() {
                         <tr key={g.gestor} className="border-b border-border last:border-0">
                           <td className="px-4 py-3 font-semibold">{g.gestor}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{g.total}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{g.convertidos}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-success">{g.convertidos}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{tasa}%</td>
                         </tr>
                       );
@@ -643,7 +643,7 @@ export default function ReportsPage() {
                         </div>
                         <div>
                           <p className="text-muted-foreground text-[10px]">Convertidos</p>
-                          <p className="tabular-nums font-semibold text-green-600 dark:text-green-400">{g.convertidos}</p>
+                          <p className="tabular-nums font-semibold text-success">{g.convertidos}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-[10px]">Tasa</p>
@@ -683,7 +683,7 @@ export default function ReportsPage() {
                       <td className="px-4 py-3 font-semibold">{p.producto}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{p.ventas}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmt(p.total)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{fmt(p.cobrado)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-success">{fmt(p.cobrado)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -705,7 +705,7 @@ export default function ReportsPage() {
                     </div>
                     <div>
                       <p className="text-muted-foreground text-[10px]">Cobrado</p>
-                      <p className="tabular-nums font-semibold text-green-600 dark:text-green-400">{fmt(p.cobrado)}</p>
+                      <p className="tabular-nums font-semibold text-success">{fmt(p.cobrado)}</p>
                     </div>
                   </div>
                 </div>
