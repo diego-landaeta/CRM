@@ -53,6 +53,7 @@ import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
 import correosModule from './modules/correos/index.js';
+import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
@@ -175,6 +176,7 @@ const ALL_MODULES = [
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
   { name: 'correos', mod: correosModule },
+  { name: 'soporte', mod: soporteModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
