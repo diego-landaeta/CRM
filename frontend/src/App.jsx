@@ -110,6 +110,7 @@ const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetail
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const VentasSinFormacionPage = lazy(() => import('./modules/sales/pages/VentasSinFormacionPage'));
 const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
@@ -246,6 +247,7 @@ function App() {
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
             <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
+            <Route path="ventas-sin-formacion" element={<VentasSinFormacionPage />} />
             <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             {/* «Ingresos» y «Ventas» eran el mismo componente con otro titulo

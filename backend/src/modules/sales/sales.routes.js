@@ -14,6 +14,9 @@ router.post('/', roleGuard('gestor', 'admin', 'superadmin'), salesController.cre
 // pedirlos por API aunque la pantalla se los escondiera.
 router.get('/resumen', roleGuard('admin', 'superadmin'), salesController.resumenVentas);
 router.get('/por-asesora', roleGuard('admin', 'superadmin'), salesController.ventasPorAsesora);
+// Las ventas sin formacion del catalogo (#41). Solo admin: es la lista de lo
+// que no cuadra del proyecto entero, con nombre y correo de cada alumno.
+router.get('/sin-formacion', roleGuard('admin', 'superadmin'), salesController.sinFormacion);
 // Sin roleGuard: filtrosDeQuery ya recorta a la gestora a sus propios clientes.
 router.get('/por-cliente', salesController.ventasPorCliente);
 // Este se queda abierto: lo pinta el dashboard de todos los roles.
