@@ -55,7 +55,11 @@ const TABS = [
 
 export default function SalesAnalysisPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext() as { activeProject?: { id?: number; nombre?: string } };
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
+    activeProject?: { id?: number; nombre?: string };
+    activeIssuer?: { nombre?: string; campus?: unknown[] } | null;
+    activeIssuerId?: number | null;
+  };
   const [tab, setTab] = useState<'resumen' | 'asesora' | 'cliente'>('resumen');
   const [rango, setRango] = useState({ from: '', to: '' });
   const [search, setSearch] = useState('');
@@ -68,7 +72,12 @@ export default function SalesAnalysisPage() {
   const [totalClientes, setTotalClientes] = useState(0);
 
   const params: Record<string, string | number> = {};
-  if (activeProject?.id) params.projectId = activeProject.id;
+  // Con una EMPRESA puesta, `activeProject.id` vale -1 —el pseudo-proyecto de
+  // «todos»— y mandarlo como campus deja la pantalla a cero. Se manda el campus
+  // solo si es uno de verdad; si no, la sociedad, que el servidor ya traduce a
+  // sus campus con `proyectosDelAmbito`.
+  if (activeProject?.id && activeProject.id !== -1) params.projectId = activeProject.id;
+  if (activeIssuerId) params.issuerId = activeIssuerId;
   if (rango.from) params.from = rango.from;
   if (rango.to) params.to = rango.to;
   if (buscado) params.search = buscado;
@@ -112,7 +121,9 @@ export default function SalesAnalysisPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Análisis de ventas"
-        subtitle={activeProject?.nombre || 'Todos los proyectos'}
+        subtitle={activeIssuer
+          ? `${activeIssuer.nombre} · ${activeIssuer.campus?.length ?? 0} campus`
+          : (activeProject?.nombre || 'Todos los proyectos')}
       />
 
       {/* Filtros comunes a las tres vistas */}

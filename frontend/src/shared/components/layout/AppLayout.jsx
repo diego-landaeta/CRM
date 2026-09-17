@@ -93,6 +93,41 @@ const CON_SOCIEDAD_OK = [
   // pasaba es que el muro se levantaba antes de que la pantalla llegara a
   // pintarse, asi que ese trabajo no se veia nunca.
   /^\/$/,
+  // Tutores y Mis cursos. Diego, 15/09: «no me deja elegir la empresa ni los
+  // proyectos». Las dos pantallas YA mandan `issuerId` y el servidor ya lo
+  // traduce con `proyectosDelAmbito`; faltaba esta lista. «Sin tutor» se queda
+  // fuera a proposito: guarda el -1 pero todavia no manda la empresa, asi que
+  // abrirle el muro le dejaria la pantalla vacia.
+  /^\/tutores$/,
+  /^\/tutores\/comisiones$/,
+  /^\/mis-cursos$/,
+  /*
+    Y lo que no es de ningun proyecto.
+
+    Tu perfil es tuyo y el manual es el manual: con una empresa puesta salia el
+    aviso de «elige un campus» para ir a mirar tus notificaciones. El muro esta
+    para que una pantalla no ensene cifras de un ambito que no sabe sumar; estas
+    no ensenan cifras de nada.
+  */
+  /^\/perfil$/,
+  /^\/preferencias$/,
+  /^\/notificaciones$/,
+  /^\/manual$/,
+  /^\/soporte$/,
+  /^\/status$/,
+  /^\/registro$/,
+  /^\/mensajes$/,
+  /^\/chat-ia$/,
+  /^\/documentos$/,
+  /^\/solicitudes-cambio$/,
+  /^\/solicitudes-cambio\/\d+$/,
+  /^\/configuracion\/atajos$/,
+  /^\/configuracion\/roles$/,
+  /^\/configuracion\/claves$/,
+  // Analisis de ventas (#136). El servidor es el mismo modulo `sales` que ya
+  // sabe de sociedades; lo unico que faltaba era que la pantalla mandara
+  // `issuerId` y que la ruta no chocara con el muro de aqui.
+  /^\/finanzas\/ventas-analisis$/,
   // WhatsApp (#128, #138). El chat es de la GESTORA, no del proyecto: sus
   // conversaciones son las mismas con una empresa puesta que con uno de sus
   // campus. Lo unico que miraba el proyecto --buscar un prospecto para empezar
