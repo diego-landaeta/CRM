@@ -1,6 +1,6 @@
 # Estado y pendientes
 
-Al 4 de septiembre de 2026. Los diagramas se dibujan solos en GitHub.
+Al 15 de septiembre de 2026. Los diagramas se dibujan solos en GitHub.
 
 Dos CRMs con **paridad absoluta**: lo que se hace en uno se hace en el otro,
 salvo la marca y las rutas.
@@ -10,6 +10,119 @@ salvo la marca y las rutas.
 | Producción | `360crm.tech/crm/` | `crm.iseie.com` |
 | Pruebas | `360crm.tech/testeo/` | `crm.iseie.com/staging/` |
 | Proyectos | 9 | 1 |
+
+---
+
+## Dónde nos quedamos · 15 de septiembre
+
+**Todo lo que Ángel y Fabián hicieron el 14 y el 15 está en `/testeo`.** Vivía en
+tres ramas sueltas y no estaba ni en pruebas ni en producción: treinta y nueve
+commits que nadie podía ver.
+
+Lo que hay que mirar allí:
+
+- **WhatsApp**, las seis tareas (#128, #138, #73, #129). Quién lo usa se decide
+  por persona y no por rol; las etiquetas de la gestora se traen, se ponen, se
+  ven en la ficha del prospecto y filtran; mayúsculas+enter hace salto de línea
+  y el mensaje sale entero; «el último mes» ya trae historial.
+- **Tutores y comisiones** (#145, #130): «Avisar tutor» con la cuenta hecha,
+  los estados Pendiente · Notificada · Falta factura, editar el porcentaje y las
+  fechas sin quitar la formación, y reactivar una desactivada por error.
+- **Facturación**: los datos fiscales de CEDIA e ICTESS, y no se emite una
+  factura con un CIF que no existe.
+- **Correo**: la bandeja del CRM con lo que ha mandado y su texto (#146), copia
+  en «Enviados», y las 18 plantillas del proceso comercial rellenando sus huecos.
+- **Clientes y Ventas** llaman a lo que se vende por su nombre (#44).
+
+### Lo que chocó, y cómo quedó
+
+Ángel y Diego escribieron **lo mismo dos veces** el mismo día, de la misma frase:
+los estados de la comisión del tutor. Las dos migraciones hacen lo mismo y las
+dos usan `DROP ... IF EXISTS`, así que conviven. Pero `cambiarEstadoComision`
+quedó **declarada dos veces** en el modelo y en el controlador, y eso dejaba el
+módulo de tutores sin cargar: se quedó la versión que explica por qué no se
+puede, con el `exigirGestion` que a la otra le faltaba.
+
+Los números **156, 157 y 158** estaban cogidos por los dos. Los de Diego ya
+corren en las cuatro bases, así que los de WhatsApp se movieron a **167-170**.
+
+### El freno de los correos a tutores
+
+Hay **cuatro** caminos al buzón de un tutor, no dos:
+
+| | dónde | estado |
+|---|---|---|
+| darle de alta | `users/user.service.js` | parado |
+| cambiarle el correo | `users/user.service.js` | parado |
+| «Avisar tutor», el mensual | `tutores/avisarTutor.js` | parado |
+| el cron «Hoy te han comprado» | `jobs/avisoTutorScheduler.js` | parado, y sin arrancar en `app.js` |
+
+La constante vive en **`shared/config/frenoTutores.js`** y la leen los cuatro.
+El día que se levante, se levanta una vez —y antes hay que arreglar el enlace
+de contraseña de Brevo, que sigue roto—.
+
+En ISEIE no existen ni `avisarTutor` ni ese cron: allí basta con el freno que ya
+tiene `user.service.js`.
+
+### Lo que NO está en testeo
+
+Los treinta y nueve commits son **solo de MultiCRM**. Ángel tiene un commit en
+ISEIE (7 de septiembre) y Fabián ninguno, así que la paridad de todo esto está
+sin hacer y es un trabajo aparte.
+
+### La tarde del 15: el CRM pasa a entender de empresas
+
+Lo de arriba se escribió a media tarde. Lo que entró después es de otra cosa, y
+es la más grande del día: **con una sociedad puesta, el CRM deja de pedir un
+campus**.
+
+**El selector no existía.** En el menú lateral lo habían quitado dejando escrito
+que «ahora vive solo en la cabecera» (#79), pero esa cabecera —`Topbar`,
+`CabeceraContext` y el hueco que rellena `PageHeader`— **nunca se montó**. Media
+reforma: quitado de un sitio y no puesto en el otro. En `/testeo` no había forma
+de cambiar de empresa, y el aviso mandaba a «elegir un campus desde el selector
+de la cabecera» que no estaba. Montada.
+
+**Qué pasa a sumar campus** (`CON_SOCIEDAD_OK` en `AppLayout.jsx`):
+
+| Zona | Estado |
+|---|---|
+| Prospectos, Clientes, cola, proceso | ya lo hacían |
+| Tutores, Comisiones, Sin tutor, Mis cursos | el muro los tapaba; las pantallas ya estaban hechas |
+| Dashboard | igual: `useDashboard` ya repartía por campus |
+| WhatsApp (chat, plantillas, banco, conexión) | el chat es de la gestora; plantillas y búsqueda pasan a la empresa |
+| Correos | lo acota el servidor |
+| **Finanzas entero** | caja, conversiones, egresos, por cobrar, por pagar, comisiones, Stripe, pendiente de facturar |
+| Perfil, avisos, manual, soporte, registro… | no miran el proyecto: no tenía sentido pedirles un campus |
+
+**Catálogo y Publicidad se quedan por proyecto**, y la configuración de un
+proyecto —webhooks, Make, campos, canales, plantillas de correo, secuencias— no
+entra nunca: «el webhook de CEDIA» no existe.
+
+La regla vive en `comoLista` (modelo) y `proyectosDelAmbito` (controlador), más
+`useIdsDelAmbito` / `ambitoComoObjeto` en la pantalla. No se reescribe por
+pantalla: si cada una se la monta, acaban dando cifras distintas para la misma
+pregunta.
+
+**El selector de sesiones de WhatsApp, también.** Un superadmin veía a todo el
+mundo tuviera CEDIA puesta o ICTESS. Ahora: CEDIA 5 personas, ICTESS 3, Lateral
+Thinking 2. Uno mismo no se cae nunca de la lista.
+
+Dos excepciones dentro de Finanzas: **Nóminas** sigue pidiendo un campus —un
+periodo se genera para un proyecto— y en **Pagos de Stripe** el estado de la
+sincronización se calla con la empresa puesta, porque es de una sola cuenta.
+
+### Lo que queda bloqueado, y por quién
+
+- **Testeo no tiene ni una conversación de WhatsApp.** Cero chats, cero
+  mensajes, ningún móvil enlazado nunca. El selector ya funciona y filtra, pero
+  al elegir a alguien no hay nada detrás. Hace falta enlazar un QR de verdad, o
+  sembrar datos de prueba —guion listo, pendiente de permiso—.
+- **El #128 en producción apagaría a 31 de 34 usuarios.** La migración enciende
+  solo a quien ya tiene conversaciones, y por el nombre de instancia eso son
+  tres personas. Hay que encender admins y gestoras en el mismo despliegue.
+- **El precio del curso 654 de ISEIE** (Ecografía Urológica y POCUS) sigue a 340
+  y Adriana dice que son 410. Su venta 643 ya quedó a 410.
 
 ---
 
@@ -646,56 +759,82 @@ Para volver a generarlo, `scratchpad/actualizar_estado.py`.
 
 ---
 
-## El proceso comercial, por empresa y no solo por proyecto
+## La cola del día necesita filtros de verdad
 
-Anotado el **14/09/2026**. Diego, con CEDIA elegida en producción:
+Anotado el **14/09/2026**. Diego, con CEDIA puesta y **101 atrasados** delante:
+«poner mejores filtros en este apartado».
+
+Lo que hay hoy, y nada más: **campus**, **gestora** y los cuatro contadores de
+arriba (atrasados / hoy / mañana / esta semana), que hacen de filtro de fecha.
+Con 129 personas en la semana y 101 arrastradas, eso no alcanza para repartir el
+día: todo lo que se ve en la captura —paso, formación, canal, cuánto lleva
+esperando— está en la fila y **no se puede filtrar por ello**.
+
+Lo que pediría la pantalla, por orden de lo que más se nota:
+
+| Filtro | Por qué |
+|---|---|
+| **Cuánto lleva atrasado** | «más de 30 días» es otra conversación que «de ayer». En la captura hay gente de hace 33 días mezclada con la de hoy |
+| **Formación / producto** | el dato ya viaja en la fila; los del mismo curso llevan el mismo mensaje |
+| **Paso** | existe como botonera («Por paso») pero no se combina bien con lo demás |
+| **Canal** | quien va a hacer llamadas quiere solo las de llamada |
+| **Buscar por nombre** | para volver a alguien concreto sin bajar 129 filas |
+| **Ordenar** | hoy es fecha y paso, fijo. Debería poder ser por antigüedad o por formación |
+
+Y una decisión de fondo: **con 101 atrasados el problema no es solo filtrar**.
+Conviene decidir qué se hace con lo que lleva más de un mes sin tocar —cerrarlo,
+aparcarlo o repartirlo—, porque un filtro más bonito sobre una cola que nadie
+puede vaciar sigue siendo una cola que nadie puede vaciar.
+
+*Sin asignar. Solo frontend: el servidor ya devuelve todos esos campos.*
+
+---
+
+## El proceso comercial, por empresa y no solo por proyecto — HECHO
+
+Anotado y resuelto el **14/09/2026**. Diego, con CEDIA elegida en producción:
 
 > «Estos procesos en empresas deben ser por empresa, no por proyecto, que tengan
 > filtros. Si tengo que seleccionar un proyecto, tiene que ser por proyecto y por
 > empresa; que al indicar eso, sea "selecciona una empresa".»
 
-### Qué pasa hoy
+### Qué pasaba
 
-Con **CEDIA (7 campus)** puesta en el selector, `/prospectos/proceso` no enseña
-nada: sale el muro de *«Selecciona un proyecto — tienes activa la vista Todos
-los proyectos»*. Con un proyecto suelto (ISEIH) la cola funciona: 22 atrasados,
-1 para hoy, 3 para mañana, 27 esta semana.
+Con **CEDIA (7 campus)** puesta, `/prospectos/proceso` y `/prospectos/cola` no
+enseñaban nada: salía el muro de *«Selecciona un proyecto»*. El módulo sabía
+mandar **un** `projectId` y nada más, aunque el servidor —`colaDelDia`— ya
+recibía una lista.
 
-Comprobado en el código, no supuesto:
+### Qué se hizo
+
+1. **Las dos rutas aceptan empresa** (`CON_SOCIEDAD_OK`).
+2. **La cola suma los campus de la empresa**: el controlador lee `projectIds` y
+   la pantalla le pasa `useProyectosDelAmbito()`. Comprobado contra la base de
+   producción: **107 personas** en la cola de CEDIA, repartidas en Psiko Aprende
+   59, ISEIH 21, Fono Aprende 15, ISAEG 10, ISECD 1, ISEF 1.
+3. **Filtro de campus dentro de la empresa**, al lado del de gestora, sin tocar
+   el selector de arriba. Acotado a ISEIH: 21.
+4. **Cada fila dice de qué campus es** (lo pidió Carlos el 11/09).
+5. **Los pasos** siguen siendo de un proyecto —cada campus lleva los suyos—,
+   pero ya no echan a nadie: se elige cuál **entre los de esa empresa**.
+6. **El aviso ya no miente**: con una empresa puesta nombra la empresa y pide
+   elegir campus, en vez de hablar de «Todos los proyectos».
+
+De paso salió un fallo vivo: `if (pProj)` era siempre cierto, así que abrir la
+cola **sin proyecto** llamaba a `null.map()` y devolvía un 500. Estaba arreglado
+en testeo desde el 11/09 y en producción no. Ya está en las dos.
+
+### Dónde está
 
 | | |
 |---|---|
-| `CON_SOCIEDAD_OK` (AppLayout) | **no** incluye `/prospectos/proceso` ni `/prospectos/cola` |
-| Módulo `proceso` (backend) | **cero** menciones a `issuer` o `sociedad`: solo entiende de `projectIds` |
+| MultiCRM | producción (`/crm/`) y testeo |
+| ISEIE | staging entero; en producción **solo el backend** |
 
-Y el aviso además **miente**: dice «tienes activa la vista Todos los proyectos»
-cuando lo que hay activo es una empresa. No es lo mismo, y por eso el texto no
-ayuda a salir del problema.
-
-### Qué habría que hacer
-
-1. **Las dos pantallas aceptan empresa.** Añadir `/prospectos/proceso` y
-   `/prospectos/cola` a `CON_SOCIEDAD_OK`. El backend ya recibe `projectIds`, así
-   que el ámbito se le pasa como la lista de campus — igual que hace Prospectos
-   desde el #103. No hace falta inventar un parámetro nuevo.
-2. **Filtro de proyecto dentro de la empresa.** Con CEDIA puesta, poder acotar a
-   uno de sus 7 campus sin cambiar el selector de arriba. Los dos ejes a la vez:
-   empresa y proyecto.
-3. **Que cada fila diga de qué proyecto es.** Con varios campus mezclados, una
-   cola sin esa columna no se puede repartir. Esto ya lo había pedido Carlos el
-   11/09 y sigue sin hacerse.
-4. **Arreglar el texto del muro.** Si hay una empresa elegida, el aviso tiene que
-   hablar de la empresa, no de «todos los proyectos».
-
-### Ojo con dónde está cada cosa
-
-Diego lo vio en **producción** (`/crm/`), y ahí no está ni siquiera el ámbito por
-empresa de Prospectos y Clientes: eso entró en `staging` el 11/09 y producción
-sigue sin recibirlo. Así que en producción el problema es más ancho de lo que se
-ve en esa pantalla.
-
-*Sin asignar. Toca frontend (AppLayout y las dos pantallas) y backend
-(`proceso.model.js`), y encaja con lo de Fabián en el #103.*
+En ISEIE no hay sociedades en el selector —un único proyecto—, así que el filtro
+de campus no llega a aparecer. Su frontend de producción es del **10/09**:
+mandarle el paquete de la rama arrastraría cuatro días de cosas que no son esto,
+así que se dejó fuera a propósito. Ver [[project-produccion-sin-main]].
 
 ---
 
@@ -732,7 +871,7 @@ los atajos, **un solo componente** para las tres pantallas.
 
 ---
 
-## Tutores: los estados de la comisión
+## Tutores: los estados de la comisión — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando la columna ESTADO de
 `/tutores/comisiones`:
@@ -765,6 +904,16 @@ explica por qué no se le paga todavía.
 
 *Sin asignar. Migración + backend + la columna en la pantalla.*
 
+
+**Hecho el 14/09 en los dos CRM (testeo).** Migración 156: el CHECK pasa a
+aceptar `notificada` y `falta_factura`. La columna es un selector con los tres
+de seguimiento; *pagada* y *revertida* no salen en la lista porque mueven
+dinero y tienen su propia puerta, con su rastro.
+
+Y una trampa que habría pasado desapercibida: «Por pagar» sumaba solo
+`estado = 'pendiente'`, así que marcar una comisión como notificada la habría
+**borrado del total** y el mes habría parecido cuadrado sin estarlo. Ahora
+cuenta todo lo que no está pagado ni revertido.
 ---
 
 ## La lupa en Tutores y en Clientes
@@ -835,7 +984,7 @@ prospecto vivo.
 
 ---
 
-## Tutores: que se puedan editar, y que se vea
+## Tutores: que se puedan editar, y que se vea — HECHO
 
 Anotado el **14/09/2026**. Diego: «necesitamos algo visible para poder editar
 tutores».
@@ -859,9 +1008,16 @@ llegar; el aviso dice el problema y no lleva a la solución.
 
 *Sin asignar. Frontend, y backend si no existe el endpoint de editar.*
 
+
+**Hecho el 14/09.** En MultiCRM el botón «Datos de pago» pasa a ser **Editar
+tutor**, con nombre y correo arriba —el nombre no se podía cambiar en ninguna
+pantalla—. En ISEIE ya existía «Editar datos», así que ahí iba por delante.
+
+La formación ya asignada se edita desde su fila: porcentaje y fechas, sin
+quitarla y rehacerla.
 ---
 
-## BUG · No deja asignar una formación al tutor
+## BUG · No deja asignar una formación al tutor — RESUELTO
 
 Anotado el **14/09/2026**. Diego: «no me deja asignar esta formación».
 
@@ -892,9 +1048,14 @@ decirle qué pasa.
 
 *Sin asignar. Pendiente de revisar.*
 
+
+**Era la tercera opción de la lista.** El buscador excluye los cursos que el
+tutor ya tiene —incluidos los desactivados— y luego decía «ningún curso con
+ese nombre», que es mentira. Ahora dice el motivo: *«X» ya la tiene asignada;
+si sale como desactivada, reactívala desde su tabla*.
 ---
 
-## BUG · Una formación desactivada por error no se puede recuperar
+## BUG · Una formación desactivada por error no se puede recuperar — RESUELTO
 
 Anotado el **14/09/2026**. Diego: «no deja editar: está aquí y ha sido
 desactivada por error». Sin investigar, como los dos de arriba.
@@ -923,9 +1084,13 @@ depende cuál de los tres es la causa y cuáles son consecuencia.
 
 *Sin asignar. Pendiente de revisar, junto con los otros dos de tutores.*
 
+
+**Hecho el 14/09.** La fila tiene **Reactivar** y **Desactivar** además de
+Quitar. Nada de borrar para arreglar: borrar se lleva el histórico de por qué
+se le pagó lo que se le pagó.
 ---
 
-## Los 133,33 € sin formación: Diego ya sabe cuál es
+## Los 133,33 € sin formación: Diego ya sabe cuál es — HECHO
 
 Anotado el **14/09/2026**. No es un fallo del CRM: es **el dato que faltaba**, y
 Diego lo ha dado.
@@ -960,9 +1125,17 @@ parecerá que el arreglo no funcionó.
 *Sin asignar. Es dato, no código — pero conviene hacerlo con la pantalla
 delante para ver si el aviso desaparece.*
 
+
+**Aplicado en producción el 14/09.** La venta #177 tenía el nombre de la
+formación como texto libre y `producto_contratado_id` a `NULL`: por eso salía
+«sin formación». Atada a la **#5670** (1.100 €, igual que el importe).
+
+Alba ya la tutorizaba al 10 % desde el 01/08, así que no hubo que crear nada.
+Al recalcular salieron **dos** comisiones de 13,33 €: la de septiembre y la de
+agosto, que es el mismo caso. El aviso de septiembre queda en **0 €**.
 ---
 
-## Tutores: una columna para saber qué ha entregado cada uno
+## Tutores: una columna para saber qué ha entregado cada uno — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco entre ESTADO y Quitar en la
 tabla de formaciones del tutor:
@@ -1009,9 +1182,19 @@ está publicado.
 *Sin asignar. Migración (columnas en la asignación tutor–formación) + la columna
 en la pantalla.*
 
+
+**Hecho el 14/09.** Migración 157: `entrego_foto`, `entrego_video` y
+`modulos_pct` en la colaboración —van ahí y no en el tutor porque los módulos
+son de una formación concreta—.
+
+La pregunta que estaba abierta se resolvió así: **foto y vídeo son dos
+casillas** («Foto y Vídeo» es las dos marcadas, no una tercera opción) y
+**25/50/100 se pintan como casillas pero son un solo valor**, porque nadie
+está al 25 y al 50 a la vez; pulsar la que ya está puesta la quita. Si lo
+prefieres de otra forma, se cambia en un sitio.
 ---
 
-## Comisiones: «Estado de la colaboración» en la fila del cobro
+## Comisiones: «Estado de la colaboración» en la fila del cobro — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco entre FORMACIÓN y BASE, al
 desplegar un tutor en `/tutores/comisiones`:
@@ -1043,48 +1226,95 @@ para saber qué ha entregado cada uno»*.
 
 *Sin asignar. Va con la anterior, no por separado.*
 
+
+**Hecho el 14/09.** La misma marca, leída en la fila del cobro —que es donde
+se pulsa «Marcar pagado»—, sin tener que salirse a `/tutores` a comprobarlo.
 ---
 
-## BUG · Meta Ads: ni conjuntos, ni leads, ni productos
+## BUG · Meta Ads: revisado el 14/09, y son tres cosas distintas
 
-Anotado el **14/09/2026**. Diego, sobre `/meta-ads` en ISAEG: «esta parte no
-anda bien». Sin investigar, como los demás de hoy.
+Diego, sobre `/meta-ads`: «esta parte no anda bien». Revisado contra la base de
+producción. **Ninguna de las tres es la que parecía.**
 
-Lo que se ve en pantalla, y son tres cosas distintas aunque parezcan una:
+### 1. «Sin conjuntos en este rango» — el mensaje miente
 
-1. **Sin conjuntos.** Al desplegar la campaña *Ventas* (OUTCOME_SALES, 209 €,
-   34.570 impresiones, 642 clics) dice:
-   *«Sin conjuntos en este rango (o backfill aún no incluye adsets).»*
-   El propio mensaje admite que no sabe si no hay datos o si la sincronización no
-   los ha traído — y esa duda es el problema: no se puede distinguir «Meta no
-   tiene nada» de «nosotros no lo hemos bajado».
+Los conjuntos **están**: 924 en total, con 18.441 días de datos. Ninguna de las
+32 campañas se ha quedado sin ellos. Lo que pasa es que `listAdSetsForUI` filtra
+por `ma.project_id`, y **sin proyecto elegido devuelve cero**:
 
-2. **Cero leads con 642 clics.** Las cuatro campañas marcan `Leads 0` y el CPL
-   sale en blanco. Con 246 € gastados y casi 100.000 impresiones, o no llega ni
-   un lead —posible, pero hay que verlo— o **no se está atando el lead a la
-   campaña**, que es lo que hace que la pantalla no sirva para nada.
+| lo que se pide | conjuntos |
+|---|---|
+| proyecto 6, cualquier rango de fechas | 17 |
+| sin proyecto (`null`) | **0** |
+| «Todos los proyectos» (`-1`) | **0** |
 
-3. **«Por producto (0)».** Cero. Ya está comprobado de antes: las tablas que
-   cruzan anuncio con producto **llevan vacías desde siempre**, así que nada que
-   mezcle publicidad y catálogo puede calcularse solo. El botón *Asociar* de cada
-   fila es justo lo que no se ha usado nunca.
+O sea que el aviso confunde dos cosas que no se parecen: «no hay datos» y «no me
+has dicho de qué proyecto». Y el texto se disculpa por el backfill, que no tiene
+nada que ver. La lista de campañas hace lo mismo —cero campañas sin proyecto—,
+así que la pantalla entera es por proyecto y no lo dice.
 
-### Al revisarlo, en este orden
+### 2. «Leads 0» — el CRM sí sabe de dónde vienen, pero no lo usa
 
-Primero **si el backfill trae adsets** (1), porque si no baja los conjuntos el
-resto no puede cuadrar. Luego **por dónde se pierde el lead** (2): si el webhook
-guarda el identificador de campaña o si se queda por el camino. Y lo de los
-productos (3) no es un fallo del código sino trabajo que nadie ha hecho, así que
-va aparte y probablemente es de negocio.
+La columna enseña **el número de Meta**, que solo cuenta los formularios de
+Meta. Las campañas que llevan a la web no le reportan nada. Mientras tanto el
+CRM guarda en `lead_utms.utm_campaign` **el identificador de campaña**, y en
+`utm_content`/`utm_term` el conjunto y el anuncio.
 
-Contexto que ya teníamos: el módulo se desplegó en etapas 1 y 2 y **nunca se
-validó con datos reales**. Esto es esa validación, llegando tarde.
+Cruzado a mano, con 21.204 € gastados:
 
-*Sin asignar. Pendiente de revisar.*
+| campaña | proyecto | gasto | leads Meta | **leads CRM** | ventas |
+|---|---|---:|---:|---:|---:|
+| VENTAS - Cursos destacados | Psiko Aprende | 3.168 € | 0 | **31** | 2 |
+| Ventas | Psiko Aprende | 3.419 € | 1 | **27** | 3 |
+| Ventas - Clientes potenciales | ISAEG | 181 € | 31 | 25 | 0 |
+| Ventas | ISAEG | 322 € | 23 | 21 | 1 |
+| Ventas | ISEIH | 1.971 € | 0 | **17** | 4 |
+| Ventas Cursos / Ventas | Fono Aprende | 1.125 € | 1 | 8 | 0 |
+| **Total** | | **21.204 €** | 336 | **129** | **10** |
+
+Hay **10 ventas** que se pueden atribuir a una campaña y que hoy no se ven en
+ninguna pantalla. El dato está; falta el cruce.
+
+Y al revés, un aviso: la campaña **Masterclass Melisa** (75 €) tiene **277 leads
+en Meta y 0 en el CRM**. Esos son formularios de Meta que **nunca entraron**.
+
+### 3. ICTESS y ACADEMIA IA: se pierde antes de llegar
+
+No es la pantalla. Es que sus leads llegan **sin la UTM de campaña**:
+
+| proyecto | leads desde junio | por webhook (`whk_…`) | con campaña de Meta |
+|---|---:|---:|---:|
+| ICTESS | 352 | 121 | **0** |
+| ACADEMIA IA | 75 | 32 | **0** |
+| Psiko Aprende | 541 | 0 | 56 |
+| ISAEG | 99 | 0 | 46 |
+| ISEIH | 169 | 0 | 14 |
+| Fono Aprende | 164 | 0 | 7 |
+
+ICTESS lleva **5.782 €** gastados y ACADEMIA IA **1.735 €**, y de los dos no se
+puede atribuir ni un lead. Se arregla en el formulario y en Make —que pasen las
+UTM—, no en el CRM.
+
+### Y lo de «Por producto (0)»
+
+Sigue igual: `meta_adset_products` y `meta_campaign_products` están **a cero**.
+Eso no es un fallo, es trabajo que nadie ha hecho: el botón *Asociar* de cada
+fila no se ha usado nunca. Ver [[project-meta-sin-asociar-productos]].
+
+### Qué haría, por orden
+
+1. **El mensaje y el filtro** (1). Barato: decir «elige un proyecto» cuando es
+   eso, y no hablar de backfill.
+2. **La columna de leads del CRM** (2). Es un `JOIN` con `lead_utms` — y trae
+   además las ventas, que es lo que de verdad se quiere ver.
+3. **Las UTM de ICTESS y ACADEMIA IA** (3). Fuera del CRM.
+4. Los 277 leads de Masterclass Melisa: mirar si se perdieron o entraron por
+   otro sitio.
+
+*Revisado. Falta decidir qué se hace; el 1 y el 2 son de aquí.*
 
 ---
-
-## Los atajos de fecha: pedidos tres veces, hacerlos UNA
+## Los atajos de fecha: pedidos tres veces, hacerlos UNA — HECHO
 
 Anotado el **14/09/2026**. Diego, otra vez: «aquí necesito opciones rápidas de
 hoy, ayer, esta semana, este mes, mes pasado».
@@ -1118,6 +1348,10 @@ distintos con cinco comportamientos.
 
 *Sin asignar. Solo frontend. Es de las que más se nota por lo poco que cuesta.*
 
+
+**Hecho el 14/09.** El mismo componente que en Facturación, ahora también en
+**Análisis de ventas, Ingresos y Reportes**. Comisiones no lo lleva: va por
+mes, y un selector de mes ya es el control correcto.
 ---
 
 ## Orden de Diego al equipo: nada nuevo hasta cerrar lo enviado
@@ -1140,7 +1374,7 @@ seis de WhatsApp con Zadarma a la cabeza.
 
 ---
 
-## Comisiones: el cálculo que el tutor tiene que facturar
+## Comisiones: el cálculo que el tutor tiene que facturar — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco bajo las filas de cobros de
 cada tutor en `/tutores/comisiones`:
@@ -1190,6 +1424,10 @@ mandarlo.
 *Sin asignar. Es frontend puro: el dato ya está, solo hay que hacer las tres
 cuentas y pintarlas.*
 
+
+**Hecho el 14/09.** Debajo de las comisiones de cada tutor, con el total del
+mes como base y el redondeo línea a línea. Con 17,82 € da 18,89 €, como en tu
+ejemplo. Debajo, los dos puntos del texto tal cual.
 ---
 
 ## «Avisar tutor» · TAREA PARA ÁNGEL Y DIEGO
@@ -1257,3 +1495,177 @@ que va a cambiar varias veces antes de quedarse quieta.
 
 *Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
 la vista previa y el editor de la plantilla).*
+
+---
+
+## 16 de septiembre · el día en que `main` volvió a decir la verdad
+
+**Las dos ramas `main` describen otra vez lo que corre en producción**, en los
+dos CRM, con cero ficheros de diferencia. Llevaban paradas desde el 20 de agosto
+(MultiCRM) y el 6 (ISEIE) mientras producción recibía despliegues por SSH. Era
+la tarea #24, abierta desde agosto.
+
+**De veinte peticiones de cambio abiertas a ninguna.** Dos fusionadas —las de
+`main`— y dieciséis cerradas porque su contenido ya estaba dentro, comprobado
+con un merge de prueba cada una antes de tocarlas. Las ramas se quedan en el
+remoto; lo que siga pendiente vive en su issue.
+
+**WhatsApp de ISEIE al 100 % de MultiCRM.** El módulo llevaba meses divergiendo,
+no solo septiembre: el controlador iba por 1.060 líneas contra 1.441 y el chat
+por 1.719 contra 2.369. Se trajo entero —40 ficheros hoy idénticos—, más cuatro
+migraciones renumeradas a su serie (159-162), el banco de mensajes con su ruta y
+su menú, y el módulo de exportación, que allí era un esbozo con un `TODO`.
+
+**Y una factura que no se podía emitir.** Sin régimen fiscal, la pantalla manda
+`leyendaIva: null` y el validador solo admitía texto: «Expected string, received
+null». Pasaba con Solvenic emitiendo en ICTESS, que no cae en ningún régimen.
+Una palabra —`.nullable()`— en los dos CRM.
+
+### Lo que se rompió, para que quede escrito
+
+Al portar WhatsApp medí las dependencias mirando **solo los imports hacia
+`shared/`** y se me escapó uno entre módulos: `chat.model.js` importa
+`products/plazas.sql.js`. El fichero estaba en el repo de ISEIE pero nunca se
+había desplegado a su servidor, así que la API no arrancó y **producción estuvo
+caída dos minutos**. La próxima vez: `grep` de TODOS los `from '../`.
+
+De paso salió que **la base de staging de ISEIE iba 21 tablas por detrás** de la
+suya de producción — nunca se le aplicó la cadena de WhatsApp desde la 128, de
+agosto. Se le aplicaron las nueve que faltaban.
+
+### Lo que sigue esperando
+
+- El **repaso de Diego del 15** en `TAREAS-EQUIPO.md`: once puntos sin tocar.
+  Los dos más gordos, los filtros duplicados en Prospectos y Clientes, e
+  Informes peor que producción.
+- **Nadie tiene `usa_whatsapp` encendido en ISEIE.** El día que vayan a usarlo,
+  el selector saldrá vacío hasta que se encienda a las gestoras.
+- El **precio del curso 654 de ISEIE**: a 340, y Adriana dice 410.
+- El **enlace de contraseña de Brevo** sigue roto y `facturacion@cediaidsl.com`
+  sin verificar. Hoy no bloquean nada porque los correos a tutores están parados.
+
+## 16 de septiembre, tarde — el CRM sumó el 21 % encima del precio cerrado
+
+**Pasó en ISEIE, pero el código es el mismo en los dos**, así que la nota va en
+los dos repos.
+
+**Lo reporta Diego**: Fabiola registra una venta con descuento y el total no es
+el que pactó. Por WhatsApp: «el crm no me agarra los datos bien», 1.793,36 € en
+dos pagos de 896,68 €.
+
+### La venta
+
+ISEIE, conversión **646**, lead 386 (Javier Alfonso Cifuentes Parrado), **Máster
+en Odontología Digital**, creada el 15/09 a las 20:30 por Fabiola.
+
+```
+subtotal_bruto    4.195,00      precio de catálogo del producto 1018
+descuento 57,25%  −2.401,64
+                  ──────────
+neto               1.793,36     el precio acordado
++ IVA 21%            376,61     el CRM lo suma ENCIMA
+importe_total      2.169,97     lo que quedó guardado
+```
+
+El 57,25 % no es un número redondo: está elegido para caer exactamente en
+1.793,36. La gestora metió ese porcentaje **para que el neto fuera el precio
+final**, y el CRM lo trató como base imponible.
+
+La venta entró con `iva_incluido = false` e `iva_pct = 21`. La ventana de
+conversión ya trae `iva_incluido: true` por defecto, así que la casilla «IVA
+incluido» se desmarcó a mano. Con un catálogo cuyos precios ya son finales, esa
+casilla desmarcada sube el total un 21 % sin avisar de nada.
+
+### Lo que sí quedó bien
+
+- El **cobro inicial** de 896,68 y la **cuota pendiente** de 896,68 (vence el
+  15/10). Suman 1.793,36: las cuotas son correctas.
+- La **factura 2026/0799** del primer pago: 896,68, exenta de IVA, pagada.
+  `emitirFacturaDePago` fuerza `ivaPct = 0` para servicios académicos.
+
+De ahí la incoherencia que ve la gestora: la venta dice 2.169,97 con 21 % de
+IVA y su propia factura dice exenta, y el pendiente sale 1.273,29 en vez de los
+896,68 de la cuota.
+
+### Qué hay que arreglar
+
+1. **La venta 646**, a mano: `importe_total` 1.793,36, `base_imponible`
+   1.793,36, `iva_importe` 0, `iva_pct` 0, `iva_exento` true. Es como quedaron
+   las demás ventas académicas de ISEIE (643, 647, 639, 634) y como salió su
+   propia factura. La factura no se toca, ya está bien.
+
+2. **Que no vuelva a pasar.** Si el catálogo guarda precios finales, «IVA
+   incluido» no puede ser una casilla que se apague sin consecuencia visible.
+   Como mínimo, avisar cuando el total resultante no coincide con el precio del
+   producto menos el descuento. Va con el pendiente de «IVA incluido por
+   defecto», que sigue sin subir a ninguna producción.
+
+3. **Barrer las que ya estén así**, en los dos CRMs: ventas con
+   `iva_incluido = false`, `iva_exento = false` e `iva_pct > 0` cuyo producto
+   tenga precio de catálogo.
+
+### Un segundo fallo, distinto, que salió buscando este
+
+No es lo que le pasó a Fabiola, pero está ahí. Los dos botones que la interfaz
+ofrece para aplicar un descuento —`EditConversionDialog` («corregir
+importe_total con descuentos/becas») e `InstallmentsDialog` («¿Aplicar descuento
+o beca? Modifica el importe total antes de fraccionar»)— llaman a
+`conversionsApi.update(id, { importe_total })`, y el modelo solo deja pasar:
+
+```js
+const allowed = ['producto_contratado', 'producto_contratado_id',
+                 'importe_total', 'metodo_pago', 'fecha_compromiso_pago',
+                 'fecha_conversion', 'notas_pago'];
+```
+
+`importe_total` baja y **`subtotal_bruto`, `descuento_tipo`, `descuento_valor`,
+`descuento_importe`, `base_imponible` e `iva_importe` se quedan con el precio de
+antes**. De ahí dos cosas:
+
+- **El descuento no aparece en la ficha.** `ConversionsTab.tsx:299` solo pinta
+  el desglose si `descuento_tipo !== 'none'` o `descuento_importe > 0`, y por
+  esta vía no se cumple ninguna de las dos.
+- **La factura del total sale descuadrada.** `invoices.model.js` la arma con
+  `baseImponible: conv.base_imponible` e `ivaImporte: conv.iva_importe`, pero
+  `total: conv.importe_total`: línea y total con descuento, base e IVA sin él.
+  El PDF los imprime tal cual.
+
+Las facturas de cada cuota no están afectadas: sacan `base = monto` del propio
+cobro. El arreglo es que `update` recalcule igual que `create` —es el mismo
+bloque de cuentas, hay que sacarlo a una función común.
+
+**En los dos CRMs, mismo código**: ISEIH `conversion.model.js:723`, ISEIE
+`conversion.model.js:663`.
+
+*Anotado. La 646 sigue sin corregir: la escritura en la base de producción está
+bloqueada y la espera Diego.*
+
+## 16 de septiembre, 13:15 — producción de ISEIE en blanco durante la tarde
+
+`crm.iseie.com` cargaba en blanco. No era el servidor: nginx activo, la API en
+200, los ficheros en su sitio. Era el **build**.
+
+El `index.html` de `/var/www/crm-iseie/` pedía `/staging/assets/index-…js`, y
+tenía el **mismo md5 que el de staging**. En el despliegue de WhatsApp de esta
+mañana se construyó staging —que lleva `VITE_BASE_PATH=/staging/`— y se subió
+ese mismo `dist` a producción. La aplicación arrancaba con base `/staging/`
+sobre la URL `/`, así que el router no casaba nada y la página quedaba vacía.
+
+Restaurado desde `/var/www/crm-iseie.20260916_1318`, que era el build bueno del
+15 a las 15:24. El build malo quedó guardado en
+`/var/www/crm-iseie.ROTO-base-staging-20260916`.
+
+**Producción está sirviendo el front del 15, no el de hoy.** Falta volver a
+subir el build de hoy, ya reconstruido con `VITE_BASE_PATH=/`.
+
+### La comprobación que faltaba
+
+Antes de copiar nada a producción, mirar el `index.html` generado:
+
+```bash
+grep -oE '(src|href)="[^"]+"' dist/index.html   # tiene que decir /assets/, nunca /staging/
+grep -rl '"/staging/"' dist/assets/             # tiene que salir vacío
+```
+
+Y en el servidor, comprobar el directorio nuevo **antes** de moverlo encima del
+que funciona, no después.

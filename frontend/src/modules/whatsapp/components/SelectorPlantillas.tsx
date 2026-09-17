@@ -22,12 +22,14 @@ const plano = (s: string) =>
 
 export default function SelectorPlantillas({
   projectId,
+  issuerId = null,
   datos,
   nombreProyecto,
   alElegir,
   alCerrar,
 }: {
-  projectId: number;
+  projectId: number | null;
+  issuerId?: number | null;
   /** De quien es la conversacion, para rellenar los huecos. */
   datos: DatosParaRellenar;
   nombreProyecto?: string | null;
@@ -42,7 +44,7 @@ export default function SelectorPlantillas({
   useEffect(() => {
     let vivo = true;
     setError(null);
-    whatsappApi.plantillas(projectId)
+    whatsappApi.plantillas(projectId, issuerId)
       .then((r) => {
         if (!vivo) return;
         if (r.success) setPlantillas(r.data || []);
@@ -50,7 +52,7 @@ export default function SelectorPlantillas({
       })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar'); });
     return () => { vivo = false; };
-  }, [projectId]);
+  }, [projectId, issuerId]);
 
   // El foco va a la busqueda al abrir: con veinte plantillas, escribir es mas
   // rapido que recorrer la lista, y es lo que se va a hacer siempre.

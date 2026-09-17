@@ -139,7 +139,7 @@ function SaasMonitor({ projectId }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext();
   const { user } = useAuth();
   // Los tres dashboards del #130 no son tres pantallas: es la misma, y lo que
   // cambia es de quien son los numeros y quien puede elegirlo.
@@ -156,6 +156,10 @@ export default function DashboardPage() {
   const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard(gestoraId);
   // Los mismos proyectos que mira el resto del dashboard (#130).
   const idsDelAmbito = useIdsDelAmbito();
+  // El proyecto de verdad, o nada. `-1` es el pseudo-proyecto «Todos» y
+  // mandarlo como identificador devolvia cero en todas las tarjetas.
+  const proyectoReal = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const campusCsv = !proyectoReal && idsDelAmbito.length ? idsDelAmbito.join(',') : null;
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const nombreGestora = gestoras.find((g) => g.id === gestoraId)?.nombre || null;
 
@@ -220,11 +224,12 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle={
-          nombreGestora
-            ? `${todayDate} - ${activeProject?.nombre || 'Sin proyecto'} - ${nombreGestora}`
-            : `${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`
-        }
+        /* Tres cosas en una linea: el dia, DE QUE se estan viendo los numeros
+           --una empresa con sus campus, o un proyecto-- y, si se ha filtrado,
+           de quien. */
+        subtitle={`${todayDate} - ${activeIssuer
+          ? `${activeIssuer.nombre} (${activeIssuer.campus.length} campus)`
+          : (activeProject?.nombre || 'Sin proyecto')}${nombreGestora ? ` - ${nombreGestora}` : ''}`}
         actions={(
           <SelectorDeGestora valor={gestoraId} alCambiar={setGestoraId} gestoras={gestoras} />
         )}
@@ -232,7 +237,7 @@ export default function DashboardPage() {
 
       {/* Lo que toca, de la cola del proceso (#130). Va ANTES del resumen: lo
           primero de la mañana es que hay que hacer, no que paso ayer. */}
-      <ParaHoyYManana projectId={proyectoId} gestoraId={gestoraId} />
+      <ParaHoyYManana projectId={proyectoReal} projectIds={campusCsv} gestoraId={gestoraId} />
 
       {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
       <ResumenDeAyerYHoy projectIds={idsDelAmbito} asesoraId={gestoraId} />
@@ -424,10 +429,10 @@ export default function DashboardPage() {
       {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
-          <CursosVendidosCard projectId={activeProject?.id} />
+          <CursosVendidosCard projectId={proyectoReal} issuerId={activeIssuerId} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
+          <TopProductsCard projectId={proyectoReal} issuerId={activeIssuerId} days={null} limit={5} />
         </Suspense>
       </div>
 

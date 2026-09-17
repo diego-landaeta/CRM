@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /**
  * Los tres dashboards por rol (#130, parte 1).
@@ -152,7 +154,12 @@ describe('el desplegable', () => {
 describe('la gestora elegida llega a los bloques', () => {
   it('«Lo que toca» se la pide a la cola', async () => {
     render(<ParaHoyYManana projectId={1} gestoraId={12} />);
-    await waitFor(() => expect(traerResumen).toHaveBeenCalledWith({ projectId: 1, gestoraId: 12 }));
+    // `objectContaining` y no el objeto entero: lo que esta prueba defiende es
+    // que LA GESTORA LLEGA, no la forma exacta de la llamada. Con la
+    // comparación estricta, el día que alguien añadió `projectIds` para las
+    // empresas esto se puso rojo sin que nada estuviera mal.
+    await waitFor(() => expect(traerResumen).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 1, gestoraId: 12 })));
   });
 
   it('«Ayer y hoy» se la pide a los informes', async () => {
@@ -162,7 +169,8 @@ describe('la gestora elegida llega a los bloques', () => {
 
   it('sin gestora elegida se piden los del equipo, no los de nadie', async () => {
     render(<ParaHoyYManana projectId={1} />);
-    await waitFor(() => expect(traerResumen).toHaveBeenCalledWith({ projectId: 1, gestoraId: null }));
+    await waitFor(() => expect(traerResumen).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 1, gestoraId: null })));
   });
 });
 
@@ -256,5 +264,48 @@ describe('los avisos de la campana, en «lo que toca» (#130 punto 2)', () => {
     contarSinLeer.mockRejectedValue(new Error('caida'));
     render(<ParaHoyYManana projectId={1} />);
     expect(await screen.findByLabelText(/Para hoy: 6/)).toBeInTheDocument();
+  });
+});
+
+describe('el cable entre el dashboard y los bloques', () => {
+  /*
+    ESTO SE LEE DEL FUENTE, A PROPÓSITO.
+
+    Las pruebas de arriba montan `ParaHoyYManana` sola y comprueban que, si le
+    llega `gestoraId`, se lo pide a la cola. Eso está bien y no basta: nadie
+    comprobaba que EL DASHBOARD SE LO PASE. Renderizar el dashboard entero pide
+    media docena de mocks de bloques que no pintan nada aquí.
+
+    El fallo que esto caza es concreto y ya ha estado a punto de pasar: al
+    traer el tronco, la línea del dashboard chocó —el tronco le añadía
+    `projectIds` para las empresas y la nuestra `gestoraId` para el #130— y
+    quedarse con una de las dos versiones tal cual habría dejado el filtro de
+    gestora desconectado. La pantalla seguiría pintando el desplegable, se
+    podría elegir a Laura, y «Lo que toca» seguiría enseñando los del equipo.
+    Sin error, sin test rojo, y con dos cifras que se contradicen al lado.
+  */
+  // Ruta desde la raíz del frontal: en Vite `import.meta.url` no es un
+  // `file://` y `readFileSync` no lo acepta. Vitest corre con el cwd ahí.
+  const fuente = readFileSync(
+    resolve(process.cwd(), 'src/shared/pages/DashboardPage.jsx'), 'utf8');
+
+  it('el dashboard le pasa la gestora a «Lo que toca»', () => {
+    const linea = fuente.match(/<ParaHoyYManana[^/]*\/>/s);
+    expect(linea, 'no se encontró <ParaHoyYManana> en DashboardPage').toBeTruthy();
+    expect(linea[0]).toMatch(/gestoraId=\{gestoraId\}/);
+  });
+
+  it('y también el proyecto y los campus de la empresa', () => {
+    // Los tres van juntos: el bloque necesita saber de quién, de qué proyecto
+    // y, con una empresa puesta, de qué campus.
+    const linea = fuente.match(/<ParaHoyYManana[^/]*\/>/s)[0];
+    expect(linea).toMatch(/projectId=/);
+    expect(linea).toMatch(/projectIds=/);
+  });
+
+  it('y le pasa la asesora al resumen de ayer y hoy', () => {
+    const linea = fuente.match(/<ResumenDeAyerYHoy[^/]*\/>/s);
+    expect(linea, 'no se encontró <ResumenDeAyerYHoy> en DashboardPage').toBeTruthy();
+    expect(linea[0]).toMatch(/asesoraId=/);
   });
 });

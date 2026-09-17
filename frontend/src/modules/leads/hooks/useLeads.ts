@@ -174,7 +174,7 @@ export function useLeads(): UseLeadsResult {
       }
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterEstado) params.set('status', filterEstado);
       if (filterSeguimiento) params.set('seguimiento', filterSeguimiento);
       if (filterOrigen) params.set('canal', filterOrigen);

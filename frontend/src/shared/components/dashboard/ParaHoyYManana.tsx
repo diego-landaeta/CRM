@@ -49,9 +49,13 @@ const TRAMOS: Tramo[] = [
 
 export default function ParaHoyYManana({
   projectId,
+  projectIds = null,
   gestoraId = null,
 }: {
   projectId?: number | null;
+  /** La lista de campus cuando hay una EMPRESA puesta: la cola del proceso ya
+      sabia recibir varios, lo que faltaba era pasarselos. */
+  projectIds?: string | null;
   /** Solo lo manda quien puede filtrar (#130). Para una gestora el servidor
       devuelve lo suyo aunque llegue el id de otra, asi que esto no recorta:
       elige DE QUIEN es la cola que se esta mirando. */
@@ -63,11 +67,11 @@ export default function ParaHoyYManana({
 
   useEffect(() => {
     let vivo = true;
-    traerResumen({ projectId, gestoraId })
+    traerResumen({ projectId, projectIds, gestoraId })
       .then((r) => { if (vivo) setResumen(r); })
       .catch(() => { if (vivo) setResumen(null); });
     return () => { vivo = false; };
-  }, [projectId, gestoraId]);
+  }, [projectId, projectIds, gestoraId]);
 
   // Los avisos de la campana que PIDEN ALGO (#130, punto 2 · #111).
   //

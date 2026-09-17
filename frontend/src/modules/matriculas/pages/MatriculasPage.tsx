@@ -57,7 +57,10 @@ export default function MatriculasPage() {
    *  está viendo y no otra cosa. */
   const queryDeLosFiltros = useCallback((extra: Record<string, string> = {}) => {
     const p = new URLSearchParams({ projectId: String(activeProject?.id ?? '') });
-    if (search) p.set('search', search);
+    // `trim()`: un espacio pegado al nombre dejaba la lista vacia. Viene del
+    // tronco (f95020c9) y aqui se repone, porque este helper sustituye a la
+    // consulta que lo llevaba.
+    if (search.trim()) p.set('search', search.trim());
     if (filterEstado) p.set('estado', filterEstado);
     if (filterResp) p.set('responsableId', filterResp);
     if (filterProd) p.set('productoId', filterProd);

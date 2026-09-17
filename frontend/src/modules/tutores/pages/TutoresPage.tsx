@@ -8,6 +8,8 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import Entregables from '../components/Entregables';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { lasQueYaRigen, laQueDuerme } from '../lib/colaboraciones';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
@@ -44,13 +46,20 @@ function generarContrasena() {
 
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject, projects, activeIssuerId } = useProjectContext() as {
+  const { activeProject, projects, activeIssuer, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
     activeIssuerId: number | null;
     projects: Array<{ id: number; nombre: string }>;
   };
+  // Los campus de la empresa. Dar de alta o asignar un curso necesita UNO
+  // concreto --hay que saber en cual entra y de que catalogo sale el curso--,
+  // pero eso no obliga a cambiar el selector de arriba: se elige aqui, y solo
+  // entre los suyos. Diego, 14/09: «puse empresa y tuve que entrar a un campus
+  // si o si».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
   // lee siempre: quien lleva las colaboraciones trabaja con la plantilla
   // entera, y cada fila dice de qué marca es.
@@ -58,6 +67,8 @@ export default function TutoresPage() {
   // Dar de alta a alguien o asignarle un curso SÍ necesita un proyecto
   // concreto: hay que saber en cuál se le da de alta y de qué catálogo sale el
   // curso. Eso se apaga, no se tapia la pantalla entera.
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  const projectId = proyectoFijado ?? soloCampus;
   const puedeAlta = Boolean(projectId);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
@@ -73,6 +84,11 @@ export default function TutoresPage() {
   const [cursoColab, setCursoColab] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState<number | null>(null);
+  // La formacion que se esta editando. Hasta hoy la unica accion de la fila era
+  // «Quitar»: un 10 % mal puesto solo se arreglaba borrando la asignacion, y
+  // eso se lleva por delante el historico de por que se le pago lo que se le
+  // pago. El servidor ya sabia editarla —PATCH /colaboraciones/:id—; no habia
+  // boton.
   // Cursos que se le asignan EN EL ALTA. Crear al tutor y luego entrar a
   // añadirle cursos son dos pasos para una sola decision: cuando das de alta a
   // alguien ya sabes que imparte.
@@ -285,7 +301,13 @@ export default function TutoresPage() {
     const f = new FormData(e.currentTarget);
     setProcesando(true);
     try {
+      const nombre = String(f.get('nombre') || '').trim();
+      const email = String(f.get('email') || '').trim();
       const r = await tutoresApi.guardarPerfil(elegido.id, {
+        // El nombre y el correo solo se mandan si han cambiado: el correo es la
+        // credencial y tocarlo por costumbre echaria a alguien de su cuenta.
+        ...(nombre && nombre !== elegido.nombre ? { nombre } : {}),
+        ...(email && email !== elegido.email ? { email, reenviarEnlace: f.get('reenviarEnlace') === 'on' } : {}),
         dniNif: String(f.get('dniNif') || ''),
         telefono: String(f.get('telefono') || ''),
         // Sin espacios: se copian del banco con ellos y luego no casan.
@@ -386,18 +408,6 @@ export default function TutoresPage() {
     } finally { setGuardando(false); }
   }
 
-  async function reactivarColaboracion(c: Colaboracion) {
-    setGuardando(true);
-    try {
-      const r = await tutoresApi.editarColaboracion(c.id, { activa: true });
-      if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Formación reactivada', description: `${c.formacion || 'La formación'} vuelve a estar vigente.` });
-      if (elegido) cargarColabs(elegido);
-      cargar();
-    } catch (err) {
-      toast({ title: 'No se ha podido reactivar', description: err instanceof Error ? err.message : '', variant: 'destructive' });
-    } finally { setGuardando(false); }
-  }
 
   async function altaColaboracion(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -440,6 +450,59 @@ export default function TutoresPage() {
     } finally { setGuardando(false); }
   }
 
+  /** Marcar lo que ha entregado de una formacion. Se guarda al pulsar, sin
+   *  boton de guardar: es una casilla, y pedir confirmacion para una casilla
+   *  sobra. */
+  async function marcarEntregado(
+    c: Colaboracion,
+    cambio: { entregoFoto?: boolean; entregoVideo?: boolean; modulosPct?: number },
+  ) {
+    // Se pinta ya y se corrige si el servidor dice que no: esperar medio segundo
+    // por una casilla se siente roto.
+    const antes = colabs;
+    setColabs((xs) => xs.map((x) => (x.id === c.id ? {
+      ...x,
+      entrego_foto: cambio.entregoFoto ?? x.entrego_foto,
+      entrego_video: cambio.entregoVideo ?? x.entrego_video,
+      modulos_pct: cambio.modulosPct ?? x.modulos_pct,
+    } : x)));
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, cambio);
+      if (!r?.success) throw new Error('no');
+    } catch (err) {
+      setColabs(antes);
+      toast({
+        title: 'No se ha podido marcar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    }
+  }
+
+  /** Volver a activar una formacion desactivada, o desactivarla sin borrarla. */
+  async function alternarColab(c: Colaboracion) {
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, { activa: !c.activa });
+      if (!r?.success) throw new Error('no');
+      toast({
+        title: c.activa ? 'Formación desactivada' : 'Formación reactivada',
+        description: c.activa
+          ? 'Deja de generar comisión nueva. Lo ya generado se queda.'
+          : 'Vuelve a generar comisión desde su fecha de inicio.',
+      });
+      if (elegido) { cargarColabs(elegido); cargar(); }
+    } catch (err) {
+      toast({
+        title: 'No se ha podido cambiar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally { setProcesando(false); }
+  }
+
+  /** El porcentaje y las fechas, sin quitar y rehacer. */
+
   async function quitar(c: Colaboracion) {
     // Dos toques: el primero avisa, el segundo hace. Sin dialogo aparte, que
     // los dos CRM tienen componentes distintos para eso.
@@ -470,15 +533,30 @@ export default function TutoresPage() {
         subtitle={cargando
           ? 'cargando…'
           : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'}`
+            + (activeIssuer && !proyectoFijado ? ` de ${activeIssuer.nombre}` : '')
             + ' · cobran un porcentaje de lo que se cobra de sus formaciones'
-            + (puedeAlta ? '' : ' · elige un proyecto para dar de alta a alguien')}
+            + (puedeAlta ? '' : ' · elige un campus para dar de alta o asignar cursos')}
         actions={(
-          // Dar de alta necesita saber EN QUE proyecto: se apaga el boton y se
-          // dice por que, en vez de tapiar la pantalla entera como antes.
-          <Button onClick={abrirAlta} disabled={!puedeAlta}
-            title={puedeAlta ? undefined : 'Elige un proyecto concreto para dar de alta a alguien'}>
-            <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* El campus, dentro de la empresa. Dar de alta o asignar un curso
+                necesita uno concreto —hay que saber en cuál entra y de qué
+                catálogo sale el curso—, pero se elige AQUÍ y solo entre los
+                suyos, sin tocar el selector de arriba. */}
+            {activeIssuer && !proyectoFijado && campus.length > 0 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label={`Campus de ${activeIssuer.nombre}`}
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus (solo ver)</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
+            <Button onClick={abrirAlta} disabled={!puedeAlta}
+              title={puedeAlta ? undefined : 'Elige un campus para dar de alta a alguien'}>
+              <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
+            </Button>
+          </div>
         )}
       />
 
@@ -574,8 +652,12 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
+                      {/* Editar al tutor. Antes no habia forma de cambiarle el
+                          nombre ni el correo desde ninguna pantalla. Diego,
+                          14/09: «necesitamos algo visible para poder editar
+                          tutores». Va el primero, que es lo que se busca. */}
                       <Button variant="outline" size="sm" onClick={() => setPopupPago(true)}>
-                        <Bank size={14} weight="bold" className="mr-1.5" /> Datos de pago
+                        <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar tutor
                       </Button>
                       <Button variant="outline" size="sm" onClick={abrirClave}>
                         <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
@@ -608,6 +690,7 @@ export default function TutoresPage() {
                         <th className="py-2 px-3 font-semibold">Desde</th>
                         <th className="py-2 px-3 font-semibold">Hasta</th>
                         <th className="py-2 px-3 font-semibold">Estado</th>
+                        <th className="py-2 px-3 font-semibold">Entregado</th>
                         <th className="py-2 pl-3" />
                       </tr>
                     </thead>
@@ -657,6 +740,16 @@ export default function TutoresPage() {
                               </span>
                             )}
                           </td>
+                          <td className="py-2 px-3">
+                            {/* Marcas, no archivos: aqui se apunta que llego la
+                                foto, el video o los modulos. Se lee igual en la
+                                fila del cobro de Comisiones. */}
+                            <Entregables
+                              valor={c}
+                              ocupado={procesando}
+                              onCambiar={(cambio) => marcarEntregado(c, cambio)}
+                            />
+                          </td>
                           <td className="py-2 pl-3 text-right">
                             {/* Una desactivada por error no tenia salida: la unica
                                 accion era «Quitar», que borra el historico de por
@@ -694,11 +787,22 @@ export default function TutoresPage() {
                               </button>
                             )}
                             {!c.activa && editando !== c.id && (
-                              <button type="button" onClick={() => reactivarColaboracion(c)}
-                                disabled={guardando}
+                              <button type="button" onClick={() => alternarColab(c)}
+                                disabled={procesando}
                                 className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
                                 <ArrowsClockwise size={13} weight="bold" />
                                 Reactivar
+                              </button>
+                            )}
+                            {c.activa && editando !== c.id && (
+                              /* Apagarla sin borrarla. Sin este lado, la unica
+                                 forma de parar una formacion era «Quitar», que
+                                 se lleva por delante el historico. */
+                              <button type="button" onClick={() => alternarColab(c)}
+                                disabled={procesando}
+                                className="text-xs font-semibold inline-flex items-center gap-1 mr-3 text-muted-foreground hover:text-foreground">
+                                <ArrowsClockwise size={13} weight="bold" />
+                                Desactivar
                               </button>
                             )}
                             <button type="button" onClick={() => quitar(c)}
@@ -731,7 +835,7 @@ export default function TutoresPage() {
 
             <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
               <div className="min-w-0">
-                <h2 className="font-bold text-base">Datos de pago</h2>
+                <h2 className="font-bold text-base">Editar tutor</h2>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{elegido.nombre}</p>
               </div>
               <button type="button" onClick={() => setPopupPago(false)} aria-label="Cerrar"
@@ -747,6 +851,25 @@ export default function TutoresPage() {
                   <span>Sin IBAN no se le puede pagar la comisión, aunque ya la haya generado.</span>
                 </p>
               )}
+
+              <div>
+                <label htmlFor="pago-nombre" className="text-xs font-semibold">Nombre y apellidos</label>
+                <input id="pago-nombre" name="nombre" defaultValue={elegido.nombre || ''} required
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label htmlFor="pago-email" className="text-xs font-semibold">Correo</label>
+                <input id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
+                  className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm" />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior.
+                </p>
+                <label className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
+                  Mandarle el enlace para poner contraseña en la dirección nueva
+                </label>
+              </div>
 
               <div>
                 <label htmlFor="pago-dni" className="text-xs font-semibold">DNI / NIF</label>
@@ -805,12 +928,12 @@ export default function TutoresPage() {
               <section className="space-y-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     Nombre y apellidos <span className="text-red-500">*</span>
                     <input name="nombre" required autoFocus
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     Correo <span className="text-red-500">*</span>
                     <input name="email" type="email" required
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
@@ -818,17 +941,17 @@ export default function TutoresPage() {
                       Es con lo que entra al CRM.
                     </span>
                   </label>
-                  <label className="text-xs font-medium">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium">
                     DNI / NIF
                     <input name="dniNif"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium">
                     Teléfono
                     <input name="telefono"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
                   </label>
-                  <label className="text-xs font-medium sm:col-span-2">
+                  <label className="mb-1.5 block px-1 text-secundario font-medium sm:col-span-2">
                     IBAN
                     <input name="iban" placeholder="ES00 0000 0000 0000 0000 0000"
                       className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
@@ -902,7 +1025,7 @@ export default function TutoresPage() {
                 </p>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
-                  <label className="text-[11px] text-muted-foreground min-w-0">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground min-w-0">
                     Curso
                     <div className="mt-1">
                       <BuscadorEnLista
@@ -916,13 +1039,13 @@ export default function TutoresPage() {
                       />
                     </div>
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     %
                     <input type="number" step="0.5" min="0" max="100" value={nuevoPct}
                       onChange={(e) => setNuevoPct(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm tabular-nums" />
                   </label>
-                  <label className="text-[11px] text-muted-foreground">
+                  <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     Lo lleva desde
                     <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
                       className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
@@ -981,6 +1104,7 @@ export default function TutoresPage() {
         </div>
       )}
 
+
       {/* Añadir formación */}
       {popupColab && elegido && (
         <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setPopupColab(false)}>
@@ -1013,17 +1137,17 @@ export default function TutoresPage() {
             <input type="hidden" name="productId" value={cursoColab ?? ''} />
 
             <div className="grid grid-cols-3 gap-2">
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Porcentaje
                 <input name="pct" type="number" step="0.5" min="0" max="100" defaultValue="10" required
                   className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Desde
                 <input name="desde" type="date" defaultValue={hoy()} required
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                 Hasta
                 <input name="hasta" type="date"
                   className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />

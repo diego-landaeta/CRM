@@ -69,6 +69,9 @@ export const updateUserSchema = z.object({
   factura_manager: z.boolean().optional(),
   editar_fechas_factura: z.boolean().optional(),
   gestor_colaboraciones: z.boolean().optional(),
+  // Si usa el WhatsApp del CRM (#128). No es lo mismo que poder tenerlo: eso lo
+  // decide el rol. Esto dice si sale en el panel de sesiones y si puede enlazar.
+  usa_whatsapp: z.boolean().optional(),
   projectIds: z.array(z.number().int().positive()).optional(),
   projects: z.array(projectAssignmentSchema).optional(),
   // Teléfono del gestor (WhatsApp): usado por el widget y para contacto.

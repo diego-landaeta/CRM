@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -134,6 +135,16 @@ function exportReportCSV(data, project, range, panel, seguimiento) {
     sections.push(sep(['Contactos', 'Personas', 'Por persona', 'WhatsApp', 'Llamadas', 'Correos', 'Notas']));
     const t = ac.por_tipo || {};
     sections.push(sep([ac.toques, ac.personas, ac.toques_por_persona, t.whatsapp, t.llamada, t.email, t.nota]));
+    // Escrito contra voz (#128). Va en su propia fila y no en la de arriba: no
+    // son toques, son mensajes, y sumarlos con las llamadas seria mezclar dos
+    // unidades en la misma linea.
+    const vs = ac.whatsapp_saliente;
+    if (vs) {
+      sections.push('');
+      sections.push(sep(['De lo que sale por WhatsApp']));
+      sections.push(sep(['Escrito', 'De voz', '% de voz', 'Con archivo']));
+      sections.push(sep([vs.escrito, vs.voz, vs.pct_voz, vs.adjunto]));
+    }
     sections.push('');
   }
 
@@ -322,6 +333,7 @@ export default function ReportsPage() {
                   </button>
                 ))}
               </div>
+              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}

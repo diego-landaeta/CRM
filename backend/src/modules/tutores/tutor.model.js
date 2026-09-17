@@ -114,6 +114,20 @@ export async function ponerContrasena(userId, password) {
   );
 }
 
+/**
+ * Cambiar el nombre del tutor. Vive en `users` y solo se toca si es OTRO:
+ * un UPDATE que escribe lo mismo ensucia `updated_at` y no dice nada.
+ */
+export async function renombrarTutor(tutorId, nombre) {
+  const { rows } = await query(
+    `UPDATE users SET nombre = $2, updated_at = now()
+      WHERE id = $1 AND role = 'tutor' AND nombre IS DISTINCT FROM $2
+      RETURNING id, nombre`,
+    [tutorId, String(nombre).trim()]
+  );
+  return rows[0] || null;
+}
+
 export async function guardarPerfil(tutorId, datos = {}) {
   // Lo que NO se manda no se toca.
   //
@@ -230,18 +244,38 @@ export async function crearColaboracion({ tutorId, productId, pct, desde, hasta,
   return c;
 }
 
-export async function actualizarColaboracion(id, { pct, desde, hasta, activa, notas }) {
+export async function actualizarColaboracion(id, datos = {}) {
+  // Lo que NO viene no se toca. Antes `vigente_hasta = $4` iba siempre, asi que
+  // una llamada que solo cambiaba el porcentaje --o ahora una casilla de
+  // entregables-- BORRABA la fecha de fin sin decirlo. Es el mismo fallo que ya
+  // nos comio los datos de pago de los tutores.
+  //
+  // `undefined` = ausente, no se toca. `null` = vaciar a proposito.
+  const COLUMNAS = {
+    pct: 'pct',
+    desde: 'vigente_desde',
+    hasta: 'vigente_hasta',
+    activa: 'activa',
+    notas: 'notas',
+    entregoFoto: 'entrego_foto',
+    entregoVideo: 'entrego_video',
+    modulosPct: 'modulos_pct',
+  };
+  const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
+  if (!presentes.length) return colaboracionPorId(id);
+
+  const params = [id];
+  const sets = presentes.map((k) => {
+    params.push(datos[k]);
+    return `${COLUMNAS[k]} = $${params.length}`;
+  });
+
   const { rows: [c] } = await query(
     `UPDATE tutor_collaborations
-        SET pct = COALESCE($2, pct),
-            vigente_desde = COALESCE($3, vigente_desde),
-            vigente_hasta = $4,
-            activa = COALESCE($5, activa),
-            notas = COALESCE($6, notas),
-            updated_at = NOW()
+        SET ${sets.join(', ')}, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
-    [id, pct ?? null, desde ?? null, hasta ?? null, activa ?? null, notas ?? null]
+    params
   );
   return c || null;
 }
@@ -365,7 +399,7 @@ export async function formacionEsDeSuProyecto(tutorId, productId) {
 // Una comision ya creada NO se toca aunque despues cambie el porcentaje de la
 // colaboracion: lo devengado, devengado esta. Para rehacerla hay que revertirla
 // a mano, y eso deja rastro.
-export async function reconciliar({ desde = null, hasta = null, projectId = null } = {}) {
+export async function reconciliar({ desde = null, hasta = null, projectId = null, projectIds = null } = {}) {
   const { rows } = await query(
     `INSERT INTO tutor_commissions
        (payment_id, tutor_id, collaboration_id, product_id, base_calculo, pct, importe, periodo)
@@ -386,10 +420,14 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
         AND (c.vigente_hasta IS NULL OR cp.fecha <= c.vigente_hasta)
         AND ($1::date IS NULL OR cp.fecha >= $1::date)
         AND ($2::date IS NULL OR cp.fecha <= $2::date)
-        AND ($3::int  IS NULL OR p.project_id = $3)
+        -- Con una empresa elegida se calcula de todos sus campus de una vez,
+        -- que es lo que se pide al pulsar «Calcular» con CEDIA puesta.
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
      ON CONFLICT (payment_id, tutor_id) DO NOTHING
      RETURNING id, importe, tutor_id, periodo`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
 
   return {
@@ -408,6 +446,10 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
             tc.tutor_id, u.nombre AS tutor,
             tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
             cp.fecha AS fecha_cobro, cp.importe AS cobro,
+            -- Que ha entregado de ESA formacion. Se lee aqui porque esta es la
+            -- pantalla donde se pulsa «Marcar pagado»: pagar una colaboracion a
+            -- medio entregar obligaba a salirse a /tutores a comprobarlo.
+            col.entrego_foto, col.entrego_video, col.modulos_pct,
             COALESCE(l.nombre, '—') AS alumno,
             liq.nombre AS liquidada_por_nombre
        FROM tutor_commissions tc
@@ -418,6 +460,7 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
        LEFT JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
        LEFT JOIN users liq ON liq.id = tc.liquidada_por
+       LEFT JOIN tutor_collaborations col ON col.id = tc.collaboration_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
@@ -432,12 +475,15 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
 }
 
 // Una fila por tutor y mes: lo que hay que pagarle y lo que ya se le pago.
-export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
+export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
             u.email AS tutor_email, perfil.iban AS tutor_iban,
             COUNT(*)::int AS lineas,
             COALESCE(SUM(tc.base_calculo), 0) AS base,
+            -- Por pagar = todo lo que no esta pagado ni revertido. Filtrar por
+            -- 'pendiente' a secas hacia que una comision marcada «notificada»
+            -- se cayera del total y el mes pareciera cuadrado sin estarlo.
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0) AS pendiente,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
@@ -454,10 +500,13 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
        LEFT JOIN products p ON p.id = tc.product_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
-        AND ($3::int IS NULL OR p.project_id = $3)
+        -- Una empresa manda sobre el proyecto: son sus campus, no «todos».
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
       GROUP BY tc.periodo, tc.tutor_id, u.nombre, u.email, perfil.iban
       ORDER BY tc.periodo DESC, u.nombre`,
-    [periodo, tutorId, projectId]
+    [periodo, tutorId, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -474,6 +523,9 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
             fecha_liquidacion = CURRENT_DATE,
             liquidada_por = $1,
             updated_at = NOW()
+      -- Se paga lo que se debe, tambien si ya se le habia avisado o si
+      -- faltaba su factura. Se dice por descarte a proposito: asi un
+      -- estado nuevo entra solo, sin tener que acordarse de esta linea.
       WHERE estado NOT IN ('pagada', 'revertida')
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
@@ -537,7 +589,7 @@ export async function revertirComision(id, { userId, motivo }) {
 //
 // Salen a la vista a proposito: si desaparecieran, el total del mes pareceria
 // cuadrado cuando en realidad hay dinero sin atribuir y un tutor sin cobrar.
-export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
+export async function pagosSinFormacion({ desde, hasta, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT cp.id, cp.fecha, cp.importe,
             cv.id AS venta, COALESCE(l.nombre, '—') AS alumno,
@@ -551,9 +603,11 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
       WHERE cv.producto_contratado_id IS NULL
         AND cp.fecha >= GREATEST($1::date, s.aplica_desde)
         AND cp.fecha <= $2::date
-        AND ($3::int IS NULL OR cv.project_id = $3)
+        AND ($4::int[] IS NOT NULL AND cv.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR cv.project_id = $3))
       ORDER BY cp.fecha DESC, cp.importe DESC`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }

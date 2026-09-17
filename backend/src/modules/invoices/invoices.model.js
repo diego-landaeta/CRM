@@ -161,8 +161,15 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
 
-    // Proforma = presupuesto NO fiscal. No consume el correlativo 'A', usa su
-    // propia serie (issuer.serie_proforma, def 'PRO') y NO pasa por el gating fiscal.
+    // Proforma = presupuesto NO fiscal: no pasa por el gating fiscal.
+    //
+    // OJO, esto decia que usaba su propia serie (`issuer.serie_proforma`, 'PRO').
+    // Ya NO es asi y la columna no se lee en ningun sitio: desde el cambio de
+    // criterio, la proforma toma numero del MISMO correlativo que las facturas
+    // --misma serie y mismo contador-- y lo MANTIENE al convertirse en factura.
+    // El comentario viejo sobrevivio al cambio y decia lo contrario que el codigo
+    // de tres lineas mas abajo. Quedan 4 proformas antiguas con serie PRO, de
+    // abril a junio de 2026, sin venta asociada: son de entonces.
     const isProforma = data.tipo === 'proforma';
     // Borrador = factura preliminar (al convertir): se guarda aunque falten datos
     // fiscales, SIN numero/codigo (no consume correlativo) y sin gating. Se
@@ -480,6 +487,32 @@ export async function findByConversion(conversionId) {
   return rows[0] || null;
 }
 
+/*
+  LA MISMA SOCIEDAD, AUNQUE SEAN DOS FILAS.
+
+  Dos emisores pueden ser la misma empresa a efectos fiscales: mismo NIF y misma
+  serie, y por tanto UN SOLO correlativo. En MultiCRM son el 9 y el 11 --los dos
+  «Ictess Ingenieria e Innovacion SL», NIF B25951955, serie ICTESS; el 11 lleva
+  el alias «Solvenic»--. `invoice_sequences` tiene UNA sola fila para los dos y
+  la numeracion va seguida entre ellos: …62, 63 de Solvenic, 64… 78, 79 de
+  Solvenic, 80.
+
+  Filtrar por `issuer_id` a secas partia ese correlativo en dos listas y dejaba
+  huecos en ambas: la 2026/0079 no salia por ningun lado y parecia perdida
+  --Diego, 16/09: «ponla en la facturacion que no se ve»--. Un correlativo
+  fiscal se lee entero o no se lee.
+
+  Se filtra por la IDENTIDAD FISCAL, no por la fila. Sin NIF no se agrupa nada:
+  cae al emisor exacto, que es el comportamiento de antes.
+*/
+const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
+    SELECT e.id
+      FROM invoice_issuers e, invoice_issuers base
+     WHERE base.id = ${marcador}
+       AND (e.id = base.id
+            OR (base.nif IS NOT NULL AND e.nif = base.nif
+                AND e.serie IS NOT DISTINCT FROM base.serie)))`;
+
 // Listado de facturas. Ámbito:
 //  - por PROYECTO (projectId): el flujo normal.
 //  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
@@ -489,7 +522,7 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   const conds = [];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
   // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
@@ -504,7 +537,9 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   else conds.push(`i.tipo <> 'rectificativa'`);                                // compat
   if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
   // Busca por nombre, NIF, codigo y tambien por NUMERO de factura (escribir "641").
-  if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
+  // Recortado: un espacio pegado al nombre dejaba el buscador a cero.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx})`); params.push(`%${termino.toLowerCase()}%`); idx++; }
   if (from) { conds.push(`i.fecha_emision >= $${idx++}`); params.push(from); }
   if (to)   { conds.push(`i.fecha_emision <= $${idx++}`); params.push(to); }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
@@ -553,7 +588,7 @@ export async function getStats({ projectId, issuerId } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`issuer_id = $${idx++}`);  params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
   const { rows } = await query(
     `SELECT
@@ -1558,9 +1593,15 @@ export async function getProjectInvoicerData(projectId) {
   // solo aporta nombre/defaults del proyecto. No se referencia datos_fiscales
   // porque esa columna no existe en todas las instancias.
   const { rows } = await query(
-    `SELECT id, nombre, slug, logo_url,
-            factura_pie_default, factura_serie_default, factura_metodo_default
-     FROM projects WHERE id = $1`,
+    `SELECT p.id, p.nombre, p.slug, p.logo_url,
+            p.factura_pie_default, p.factura_serie_default, p.factura_metodo_default,
+            -- Si las gestoras de esa empresa pueden numerar al registrar la venta,
+            -- en vez de mandarla a la cola. Va en la empresa: CEDIA lleva siete
+            -- campus y en los siete decide la misma gente.
+            COALESCE(e.numera_al_convertir, false) AS numera_al_convertir
+     FROM projects p
+     LEFT JOIN invoice_issuers e ON e.id = p.sociedad_emisora_id
+    WHERE p.id = $1`,
     [projectId]
   );
   return rows[0] || null;
@@ -1667,6 +1708,32 @@ export async function listProformasPendientes(projectId) {
   return rows;
 }
 
+/*
+  UNA FACTURA SIN PAGO VINCULADO TAMBIEN CUENTA.
+
+  La cola miraba solo `i.payment_id = cp.id`. Pero una factura puede existir por
+  ese mismo dinero y tener el `payment_id` a NULL: pasa cuando se emite DESDE LA
+  VENTA en vez de desde la cola --`crearDesdeConversion` guarda la venta, no el
+  cobro--. El cobro seguia entonces en la cola con su boton de «Generar
+  factura», invitando a emitir una segunda por lo mismo.
+
+  Diego, 16/09: «en cola de facturacion esta INNOVACION VERDE INVER, SL
+  UNIPERSONAL, y ya se genero su factura» --la 2026/0080, 859,10, con
+  conversion_id puesto y payment_id nulo--.
+
+  Es la MISMA condicion con la que `emitirFacturaDePago` engancha una factura
+  huerfana a su cobro: misma venta, sin pago vinculado y por el mismo importe.
+  Si el CRM la considera suya para engancharla, la cola tiene que considerarla
+  suya para no volver a pedirla.
+*/
+const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
+        SELECT 1 FROM invoices h
+         WHERE h.conversion_id = cp.conversion_id
+           AND h.payment_id IS NULL
+           AND h.tipo = 'normal'
+           AND h.estado <> 'cancelada'
+           AND ABS(h.total - cp.importe) < 0.01)`;
+
 // Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran
 // dentro del corte; sin hasta, todos los que no tienen factura.
 export async function listPagosSinFactura(projectId, hasta = null) {
@@ -1701,6 +1768,7 @@ export async function listPagosSinFactura(projectId, hasta = null) {
         ${yaHecho}
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+        ${FACTURA_HUERFANA_LO_CUBRE}
       ORDER BY cp.fecha ASC, cp.id ASC`,
     params
   );
@@ -1726,6 +1794,7 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
                    FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)
           AND NOT EXISTS (SELECT 1 FROM invoices i
                            WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+          ${FACTURA_HUERFANA_LO_CUBRE}
      ) AS hay`,
     [projectId, fecha, paymentId || 0]
   );

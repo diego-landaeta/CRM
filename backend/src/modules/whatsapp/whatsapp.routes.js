@@ -52,6 +52,10 @@ router.delete('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.olvidarF
 router.get('/banco', chat.banco);
 router.get('/banco/numeros', chat.bancoNumeros);
 
+// Las etiquetas de WhatsApp de esta sesion (#128, #138). Son las del movil de
+// la gestora, no el estado del prospecto que filtra la lista.
+router.get('/etiquetas', chat.etiquetasDeWhatsapp);
+
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);
@@ -62,6 +66,7 @@ router.post('/chats/:id/historial', chat.traerHistorial);
 router.post('/chats/:id/reenviar', chat.reenviar);
 router.post('/chats/:id/no-escribir', chat.noEscribir);
 // Llamar se hace desde el movil; el CRM solo lo apunta.
+router.post('/chats/:id/etiqueta', chat.etiquetarChat);
 router.post('/chats/:id/llamada', chat.registrarLlamada);
 router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
 // Corregir un mensaje ya enviado. WhatsApp deja 15 minutos (#75).

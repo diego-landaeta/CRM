@@ -1,3 +1,4 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
 
 // ============================================================
@@ -43,12 +44,15 @@ export async function findExpenseById(id) {
   return rows[0] || null;
 }
 
-export async function listExpenses({ projectId, categoria, from, to, page, limit }) {
+export async function listExpenses({ projectId, projectIds = null, categoria, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  if (projectId) { conditions.push(`e.project_id = $${idx++}`); params.push(projectId); }
+  // Una EMPRESA son sus campus: `comoLista` deja los dos casos --un proyecto
+  // o una sociedad-- en una sola lista, que es lo que entiende `= ANY`.
+  const idsGasto = comoLista(projectId, projectIds);
+  if (idsGasto) { conditions.push(`e.project_id = ANY($${idx++}::int[])`); params.push(idsGasto); }
   if (categoria) { conditions.push(`e.categoria = $${idx++}`); params.push(categoria); }
   if (from) { conditions.push(`e.fecha >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`e.fecha <= $${idx++}`); params.push(to); }
@@ -268,11 +272,12 @@ export async function getDashboardStats({ projectId, from, to }) {
 // plan de cuotas (importe pendiente de la conversión). Cada fila trae su fecha de
 // vencimiento, cliente, producto, proyecto y gestora responsable.
 // ============================================================
-export async function getReceivable({ projectId = null, responsableId = null, from = null, to = null } = {}) {
+export async function getReceivable({ projectId = null, projectIds = null, responsableId = null, from = null, to = null } = {}) {
   const conds = [];
   const params = [];
   let i = 1;
-  if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
+  const idsCobro = comoLista(projectId, projectIds);
+  if (idsCobro)      { conds.push(`c.project_id = ANY($${i++}::int[])`); params.push(idsCobro); }
   if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
   // Rango de vencimiento (opcional). Se aplica a la fecha de cada fila (vence).

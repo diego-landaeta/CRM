@@ -3,6 +3,7 @@ import { Receipt, Warning } from '@phosphor-icons/react';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, InvoiceItem } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
+import client from '@/shared/api/client';
 
 const EmitirBorradorDialog = lazy(() => import('./EmitirBorradorDialog'));
 const FiscalDataDialog = lazy(() => import('./FiscalDataDialog'));
@@ -40,6 +41,17 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
+  /*
+    El numero, ANTES de emitir. Diego, 15/09: «registrando cada conversion, sea o
+    no sea proforma, se debe colocar el nº de factura».
+
+    Vale igual para las dos: una proforma toma numero del MISMO correlativo que
+    las facturas --misma serie y mismo contador-- y ese numero se mantiene cuando
+    se convierte en factura al cobrar. Asi que aqui se enseña cual toca, se puede
+    cambiar, y cancelar no gasta ninguno.
+  */
+  const [numero, setNumero] = useState('');
+  const [sugerido, setSugerido] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -60,6 +72,17 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       invoicesApi.openPdf(existing.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
       return;
     }
+    // Se pregunta el siguiente libre al abrir, no al emitir: quien decide quiere
+    // verlo antes de pulsar.
+    setNumero(''); setSugerido('');
+    client.get<{ codigo: string; siguiente: number; serie: string }>(
+      `/invoices/siguiente-numero?projectId=${projectId}`)
+      .then((r) => {
+        if (!r?.success) return;
+        setSugerido(String(r.data.siguiente));
+        setNumero(String(r.data.siguiente));
+      })
+      .catch(() => { /* si no se puede consultar, se escribe a mano */ });
     setChoiceOpen(true);
   }
 
@@ -90,6 +113,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           clientePais: d.pais_fiscal || 'España',
           clienteEmail: d.email, clienteTelefono: d.telefono,
           items, metodoPago: metodoDefault as 'transferencia', piePago: pieDefault,
+          ...(numero ? { numero: Number(numero) } : {}),
         });
         if (res.success && res.data) {
           setExisting(res.data);
@@ -124,6 +148,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         items,
         metodoPago: metodoDefault as 'transferencia',
         piePago: pieDefault,
+        ...(numero ? { numero: Number(numero) } : {}),
       });
       if (res.success && res.data) {
         setExisting(res.data);
@@ -162,20 +187,51 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           : sinPago ? 'Emitir proforma' : 'Emitir factura'}
       </button>
 
-      {/* Confirmación: proforma sin pago o factura cuando ya existe un cobro. */}
+      {/* Confirmación: proforma sin pago o factura cuando ya existe un cobro.
+
+          Dos arreglos distintos caen en la misma línea de abajo:
+
+            `!m-0` — la capa la pinta un contenedor con `space-y`, que le mete
+            un margen arriba y dejaba una franja blanca sin tapar. Es el mismo
+            de las otras 54 pantallas.
+
+            `text-left` — este cuadro se pinta DENTRO de la celda de la tabla,
+            que es `text-right`, y el alineado se hereda por el DOM aunque el
+            modal flote encima. Se veía todo pegado a la derecha. */}
       {choiceOpen && (
         <div className="fixed inset-0 !m-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
           <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" />
-          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5 text-left" onClick={e => e.stopPropagation()}>
             {sinPago ? (
               <>
                 <h3 className="font-semibold text-base mb-1">¿Emitir una proforma?</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Esta venta <b>no tiene ningún pago</b>. Se emitirá una <b>PROFORMA</b> (documento sin validez fiscal) que reserva el número y se <b>convertirá en factura</b> automáticamente cuando registres el pago.
                 </p>
+            {/* El numero, para las dos. Una proforma NO tiene numeracion aparte:
+                sale del mismo correlativo que las facturas y se queda con el
+                cuando pase a factura. */}
+            <label className="block text-sm mb-4">
+              <span className="font-medium">Número de {sinPago ? 'la proforma' : 'la factura'}</span>
+              <input
+                type="number" min="1" value={numero} autoFocus
+                onChange={(e) => setNumero(e.target.value)}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums"
+              />
+              {sugerido && (
+                <span className="block text-[11px] text-muted-foreground mt-1">
+                  El siguiente libre es el <b>{sugerido}</b>. Puedes poner ese u otro.
+                </span>
+              )}
+              <span className="block text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">
+                ⚠ Comprueba la numeración en el Excel de facturación primero. Si hay discrepancia,
+                contacta con soporte; y si hace falta, genera {sinPago ? 'la proforma' : 'la factura'} manualmente y avisa.
+              </span>
+            </label>
+
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setChoiceOpen(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">No</button>
-                  <button onClick={() => doEmit(true)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir proforma</button>
+                  <button onClick={() => doEmit(true)} disabled={!numero} className="h-9 px-4 rounded-md bg-primary disabled:opacity-50 text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir proforma</button>
                 </div>
               </>
             ) : (
@@ -184,9 +240,30 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
                 <p className="text-sm text-muted-foreground mb-4">
                   Esta venta ya tiene pagos registrados. A partir del primer cobro no se pueden emitir proformas.
                 </p>
+            {/* El numero, para las dos. Una proforma NO tiene numeracion aparte:
+                sale del mismo correlativo que las facturas y se queda con el
+                cuando pase a factura. */}
+            <label className="block text-sm mb-4">
+              <span className="font-medium">Número de {sinPago ? 'la proforma' : 'la factura'}</span>
+              <input
+                type="number" min="1" value={numero} autoFocus
+                onChange={(e) => setNumero(e.target.value)}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums"
+              />
+              {sugerido && (
+                <span className="block text-[11px] text-muted-foreground mt-1">
+                  El siguiente libre es el <b>{sugerido}</b>. Puedes poner ese u otro.
+                </span>
+              )}
+              <span className="block text-[11px] text-amber-700 dark:text-amber-300 mt-1.5">
+                ⚠ Comprueba la numeración en el Excel de facturación primero. Si hay discrepancia,
+                contacta con soporte; y si hace falta, genera {sinPago ? 'la proforma' : 'la factura'} manualmente y avisa.
+              </span>
+            </label>
+
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setChoiceOpen(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">Cancelar</button>
-                  <button onClick={() => doEmit(false)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir factura</button>
+                  <button onClick={() => doEmit(false)} disabled={!numero} className="h-9 px-4 rounded-md bg-primary disabled:opacity-50 text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir factura</button>
                 </div>
               </>
             )}

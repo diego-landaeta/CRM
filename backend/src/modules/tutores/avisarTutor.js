@@ -3,6 +3,7 @@ import { sendEmail } from '../../shared/services/brevo.service.js';
 import { renderTemplate } from '../email-templates/email-templates.service.js';
 import { comisiones, resumenComisiones } from './tutor.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 
 /**
  * «Avisar tutor»: el correo mensual de comisiones. Diego, 14/09:
@@ -280,6 +281,15 @@ export async function avisar({ tutorId, periodo, userId, asunto, html }) {
   // Lo retocado pisa al compuesto, pero solo el texto: el resto del aviso
   // —a quien, cuanto, de que formaciones— sigue saliendo de la base.
   const aviso = { ...compuesto, ...(loRetocado({ asunto, html }) || {}) };
+
+  // El freno del 15/09. Se corta AQUI, despues de calcular el aviso, para que
+  // la vista previa siga funcionando: se puede repasar lo que se le mandaria y
+  // la cuenta que lleva, sin que salga nada.
+  if (NO_ESCRIBIR_A_TUTORES) {
+    throw new AppError(
+      'Los correos a tutores estan parados. Puedes ver la vista previa, pero no se envia nada hasta que Diego lo levante.',
+      423, 'CORREOS_A_TUTORES_PARADOS');
+  }
 
   // SIN `clave`, y es la decision de poder reenviar: `sendEmail` deduplica por
   // esa clave, asi que pasarla bloquearia el segundo envio del mes. Un tutor que

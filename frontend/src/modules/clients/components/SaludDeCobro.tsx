@@ -12,8 +12,10 @@ import RepartoEnBarras from '@/shared/components/ui/RepartoEnBarras';
  */
 
 function euros(n: number): string {
+  // Con centimos: son tramos de dinero pendiente de cobro.
   return new Intl.NumberFormat('es-ES', {
-    style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n || 0);
 }
 

@@ -205,6 +205,34 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
           <InfoField label="Fecha de solicitud">
             {lead.fecha_solicitud ? new Date(lead.fecha_solicitud).toLocaleString('es-ES') : '--'}
           </InfoField>
+          {/* Las etiquetas que la gestora tiene puestas en SU WhatsApp (#138).
+              «Quien mira la ficha del prospecto no ve lo que la gestora ya
+              sabe» — es literal del ticket, y este es el sitio del que habla.
+
+              NO se mezclan con el estado del prospecto, que está arriba: son de
+              otro sitio y las decide otra persona. El ticket lo dice: «se
+              enseñan las dos, no se pisa ninguna». Por eso van con borde y sin
+              relleno, como en el chat.
+
+              Si no hay ninguna no se pinta el campo: una fila «Sin etiquetas»
+              en cada ficha es ruido en el 95 % de los casos. */}
+          {(lead.etiquetas_wa || []).length > 0 && (
+            <div className="sm:col-span-2">
+              <InfoField label="Etiquetas de WhatsApp">
+                <span className="flex flex-wrap gap-1.5">
+                  {(lead.etiquetas_wa || []).map((e) => (
+                    <span
+                      key={`${e.instancia}-${e.waId}`}
+                      title="Puesta desde WhatsApp, no desde el CRM"
+                      className="inline-flex items-center px-2 py-0.5 rounded-full border border-border text-secundario text-muted-foreground"
+                    >
+                      {e.nombre}
+                    </span>
+                  ))}
+                </span>
+              </InfoField>
+            </div>
+          )}
           {lead.notas && (
             <div className="sm:col-span-2">
               <InfoField label="Notas">{lead.notas}</InfoField>

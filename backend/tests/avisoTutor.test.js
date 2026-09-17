@@ -21,6 +21,24 @@ vi.mock('../src/shared/config/db.js', () => ({
 vi.mock('../src/shared/services/brevo.service.js', () => ({
   sendEmail: vi.fn(async (a) => { enviados.push(a); return { sent: true }; }),
 }));
+
+/*
+  EL FRENO DE MANO, que llegó del tronco el 15/09.
+
+  Diego lo puso con Vanessa dando de alta a una tutora y el correo de Brevo
+  saliendo con el enlace roto: «que nadie reciba nada aún». `frenoTutores.js`
+  corta los TRES caminos al buzón de un tutor de una vez.
+
+  Estas pruebas nacieron antes y daban por hecho que el correo sale, así que
+  al traer el tronco se pusieron rojas sin que nada estuviera mal. Se suelta
+  aquí —y solo aquí— para poder seguir comprobando QUÉ se manda; y hay una
+  prueba abajo que lo deja puesto y exige que no salga nada, que hoy es la
+  parte que de verdad protege a alguien.
+*/
+let frenado = false;
+vi.mock('../src/shared/config/frenoTutores.js', () => ({
+  get NO_ESCRIBIR_A_TUTORES() { return frenado; },
+}));
 vi.mock('../src/modules/tutores/tutor.model.js', () => ({
   comisiones: vi.fn(async () => ([{
     alumno: 'María Muñoz', formacion: 'Máster', cobro: '1200.00',
@@ -138,6 +156,18 @@ describe('lo que no puede fallar', () => {
     await _internos.vuelta();
     expect(enviados).toHaveLength(1);
     expect(enviados[0].clave).toMatch(/^venta_tutor-7-\d{4}-\d{2}-\d{2}$/);
+    vi.restoreAllMocks();
+  });
+
+  it('CON EL FRENO PUESTO no sale ni un correo', async () => {
+    // Es el estado de hoy en las dos ramas: `NO_ESCRIBIR_A_TUTORES = true`.
+    // Este cron es el único camino al tutor que no necesita que alguien pulse
+    // un botón, así que si el freno se soltara por descuido, saldrían solos.
+    frenado = true;
+    vi.spyOn(Date.prototype, 'getHours').mockReturnValue(19);
+    await _internos.vuelta();
+    expect(enviados).toHaveLength(0);
+    frenado = false;
     vi.restoreAllMocks();
   });
 

@@ -535,7 +535,7 @@ export default function InvoiceCreatePage() {
               si ese numero ya existe, el servidor dice QUIEN lo tiene. */}
           {!esProforma && !esRect && (
             <div className="mt-3">
-              <label className="text-xs font-bold uppercase text-muted-foreground">Número de factura</label>
+              <label className="mb-1.5 block px-1 text-secundario font-bold uppercase text-muted-foreground">Número de factura</label>
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <input
                   value={numeroManual}

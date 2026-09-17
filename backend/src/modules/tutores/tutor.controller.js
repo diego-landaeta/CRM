@@ -110,6 +110,9 @@ export async function guardarPerfil(req, res, next) {
       reenviarEnlace: d.reenviarEnlace === true,
     });
 
+    // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
+    if (d.nombre) await model.renombrarTutor(id, d.nombre);
+
     const perfil = await model.guardarPerfil(id, d);
     res.json({ success: true, data: { ...perfil, correo } });
   } catch (err) { next(err); }
@@ -265,6 +268,7 @@ export async function calcular(req, res, next) {
       desde: d.desde || null,
       hasta: d.hasta || null,
       projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -294,7 +298,9 @@ export async function resumenComisiones(req, res, next) {
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Con una EMPRESA elegida son SUS campus, no «todos». Diego, 14/09:
+      // «puse empresa y tuve que entrar a un campus si o si».
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -390,7 +396,7 @@ export async function pagosSinFormacion(req, res, next) {
     res.json({ success: true, data: await model.pagosSinFormacion({
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : hoy.slice(0, 8) + '01',
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy,
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -524,9 +530,16 @@ export async function avisarTutor(req, res, next) {
   } catch (e) { next(e); }
 }
 
-/** PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero. */
+/**
+ * PATCH /api/tutores/comisiones/:id/estado — mover el tramite, no el dinero.
+ *
+ * Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
+ * sus propias puertas porque mueven dinero y dejan rastro. El modelo dice que
+ * no y por que; aqui solo se comprueba QUIEN puede.
+ */
 export async function cambiarEstadoComision(req, res, next) {
   try {
+    await exigirGestion(req);
     const r = await model.cambiarEstadoComision(
       Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
     res.json({ success: true, data: r });

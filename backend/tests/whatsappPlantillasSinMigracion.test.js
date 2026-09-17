@@ -43,6 +43,12 @@ describe('plantillas sin la migracion 122', () => {
     const sql = query.mock.calls[0][0];
     // Ni siquiera siendo admin: una plantilla personal es de quien la escribio.
     expect(sql).toContain("t.ambito = 'compartida' OR t.owner_id = $2");
-    expect(query.mock.calls[0][1]).toEqual([1, 3]);
+    // Se mira la POSICION que le toca a cada uno, no el array entero. Comparar
+    // `[1, 3]` completo hacia que esto se pusiera rojo el dia que el tronco
+    // añadio un tercer parametro para las empresas --sin que la regla que
+    // defiende, que una plantilla personal es de su dueño, hubiera cambiado--.
+    const params = query.mock.calls[0][1];
+    expect(params[0]).toBe(1);   // $1 · el proyecto
+    expect(params[1]).toBe(3);   // $2 · quien mira, que es lo que importa aqui
   });
 });

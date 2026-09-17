@@ -13,6 +13,7 @@ import { Plus, X, Receipt, Trash, PencilSimple, Paperclip, UploadSimple, Lightni
 import { toast } from '@/shared/hooks/useToast';
 import { formatDate } from '@/shared/lib/format';
 import { lista } from '@/shared/lib/lista';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -84,7 +85,7 @@ function fmt(n) {
 }
 
 export default function ExpensesPage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -102,8 +103,8 @@ export default function ExpensesPage() {
   async function load() {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = {};
-      if (activeProject?.id) params.projectId = activeProject.id;
+      // Con una EMPRESA puesta van sus campus; el servidor lo traduce.
+      const params: Record<string, string | number> = { ...ambitoComoObjeto({ activeIssuerId, activeProject }) };
       if (filterCat) params.categoria = filterCat;
       const res = await accountingApi.listExpenses(params);
       if (res.success) setExpenses(lista(res.data));
@@ -114,7 +115,7 @@ export default function ExpensesPage() {
     }
   }
 
-  useEffect(() => { load(); }, [activeProject?.id, filterCat, page]);
+  useEffect(() => { load(); }, [activeProject?.id, activeIssuerId, filterCat, page]);
   useEffect(() => { setPage(1); }, [activeProject?.id, filterCat]);
 
   async function handleExport() {

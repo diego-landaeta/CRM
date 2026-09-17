@@ -53,6 +53,11 @@ export interface Colaboracion {
   proyecto: string;
   /** Marcada activa Y con las fechas de hoy dentro. Son dos cosas distintas. */
   rige_hoy: boolean;
+  /** Lo que ha entregado de esta formacion. Marcas, no archivos. */
+  entrego_foto: boolean;
+  entrego_video: boolean;
+  /** 0, 25, 50 o 100. */
+  modulos_pct: number;
 }
 
 export interface LineaSimulacion {
@@ -97,6 +102,10 @@ export interface ComisionReal {
   cobro: string | null;
   alumno: string;
   liquidada_por_nombre: string | null;
+  /** Lo entregado de esa formacion, para no pagar a ciegas. */
+  entrego_foto?: boolean | null;
+  entrego_video?: boolean | null;
+  modulos_pct?: number | null;
 }
 
 export interface ResumenComision {
@@ -245,7 +254,7 @@ export const tutoresApi = {
   // Mover el tramite de una comision. Solo entre las tres que no han cobrado:
   // pagar y revertir tienen su propio camino, que deja rastro de quien y por que.
   cambiarEstadoComision: (id: number, estado: 'pendiente' | 'notificada' | 'falta_factura') =>
-    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<{ id: number; estado: string }>>,
+    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<ComisionReal>>,
 
   borrarColaboracion: (id: number) =>
     client.delete(`/tutores/colaboraciones/${id}`) as Promise<ApiResponse<{ borrada: boolean; desactivada: boolean; comisiones: number }>>,
@@ -260,17 +269,29 @@ export const tutoresApi = {
       + `${tutorId ? `&tutorId=${tutorId}` : ''}${projectId ? `&projectId=${projectId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
 
   /** Crea las comisiones que falten. Pulsarlo dos veces no duplica nada. */
-  calcularComisiones: (datos: { desde?: string | null; hasta?: string | null; projectId?: number | null }) =>
+  calcularComisiones: (datos: {
+    desde?: string | null; hasta?: string | null; projectId?: number | null;
+    /** Los campus de la empresa, para calcularlos todos de una vez. */
+    projectIds?: number[] | null;
+  }) =>
     client.post('/tutores/comisiones/calcular', datos) as Promise<ApiResponse<{
       creadas: number; importe: number; tutores: number; periodos: string[];
     }>>,
 
-  comisiones: (q: { periodo?: string | null; tutorId?: number | null; estado?: string | null; projectId?: number | null }) =>
+  comisiones: (q: {
+    periodo?: string | null; tutorId?: number | null; estado?: string | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ComisionReal[]>>,
 
-  resumenComisiones: (q: { periodo?: string | null; tutorId?: number | null; projectId?: number | null }) =>
+  // `issuerId` manda sobre `projectId`: el servidor lo traduce a los campus
+  // de esa empresa, igual que en Ventas y en Reportes.
+  resumenComisiones: (q: {
+    periodo?: string | null; tutorId?: number | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones/resumen?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ResumenComision[]>>,
@@ -283,9 +304,10 @@ export const tutoresApi = {
     client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
 
   // Las que ya venden y no tienen a quien pagarle.
-  formacionesSinTutor: (projectId?: number | null) =>
+  formacionesSinTutor: (projectId?: number | null, issuerId?: number | null) =>
     client.get('/tutores/formaciones-sin-tutor'
-      + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
+      + (projectId ? `?projectId=${projectId}`
+        : (issuerId ? `?issuerId=${issuerId}` : ''))) as Promise<ApiResponse<FormacionSinTutor[]>>,
 
   /** «Se busca tutor para esta formación», y con qué anuncio si lo hay. */
   marcarBusquedaTutor: (productId: number, datos: {
@@ -299,9 +321,10 @@ export const tutoresApi = {
     client.get('/tutores/anuncios' + (projectId ? `?projectId=${projectId}` : '')) as
       Promise<ApiResponse<AnuncioMeta[]>>,
 
-  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
+  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null, issuerId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
-      + (projectId ? `&projectId=${projectId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
+      + (projectId ? `&projectId=${projectId}` : '')
+      + (issuerId ? `&issuerId=${issuerId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
 
   /** La ficha del curso que imparte. El servidor comprueba que sea suyo. */
   curso: (productId: number) =>
