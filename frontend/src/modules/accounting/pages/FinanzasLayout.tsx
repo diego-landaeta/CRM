@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import {
-  Calculator, ChartBar, TrendUp, Receipt, TrendDown,
+  Calculator, ChartBar, Receipt, TrendDown,
   Wallet, HandCoins, CurrencyEur, PlugsConnected, WarningCircle, CreditCard,
 } from '@phosphor-icons/react';
 import SubNav from '@/shared/components/ui/SubNav';
@@ -8,9 +8,15 @@ import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 
 const TABS = [
   { label: 'Dashboard', to: '/finanzas', icon: ChartBar },
+  // «Ventas» e «Ingresos» ERAN LA MISMA PANTALLA (#43).
+  //
+  // Las dos rutas montaban `IncomePage`; lo único que cambiaba era el título.
+  // Dos pestañas al lado que abren lo mismo hacen dudar de si enseñan cosas
+  // distintas, y se acaba comparando una cifra consigo misma. Se queda
+  // «Ventas», que es lo que la pantalla lista, y `/finanzas/ingresos` redirige
+  // —los enlaces guardados siguen funcionando—.
   { label: 'Ventas', to: '/finanzas/ventas', icon: Receipt },
   { label: 'Análisis de ventas', to: '/finanzas/ventas-analisis', icon: ChartBar },
-  { label: 'Ingresos', to: '/finanzas/ingresos', icon: TrendUp },
   { label: 'Conversiones', to: '/finanzas/conversiones', icon: CurrencyEur },
   { label: 'Egresos', to: '/finanzas/egresos', icon: TrendDown },
   { label: 'Por cobrar', to: '/finanzas/por-cobrar', icon: Wallet },

@@ -47,7 +47,6 @@ import {
   ListBullets,
   GraduationCap,
   CurrencyEur,
-  TrendUp,
   TrendDown,
   Wallet,
   HandCoins,
@@ -222,7 +221,10 @@ const NAV_SECTIONS = [
     icon: Bank,
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
-      { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions', statusTag: 'Pruebas' },
+      // «Ventas» NO se repite aqui: la misma entrada, con el mismo texto y la
+      // misma ruta, ya esta en PRINCIPAL, que es donde la busca una gestora
+      // para registrar una. Dentro de Finanzas se llega por su pestaña.
+      // Estaban las dos, visibles para todo el mundo.
       // HAY TRES PANTALLAS DE VENTAS Y ESTA ERA LA UNICA SIN PUERTA (#100).
       //
       //   /finanzas/ventas           IncomePage con otro titulo — «Ventas» e
@@ -243,8 +245,11 @@ const NAV_SECTIONS = [
       // tres se fusionan, que es el plan aprobado y sin ejecutar del #43— lo
       // decide Diego; esto solo abre la puerta.
       { label: 'Panel de ventas', to: '/ventas', detail: 'Resumen, evolución y desglose', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
-      { label: 'Ingresos', to: '/finanzas/ingresos', detail: 'Entradas de dinero', icon: TrendUp, roles: ['superadmin', 'admin'], module: 'accounting_income', statusTag: 'Pruebas' },
-      { label: 'Conversiones', to: '/finanzas/conversiones', detail: 'Los que compraron', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
+      // «Ingresos» sale de aqui: montaba `IncomePage`, exactamente la misma
+      // pantalla que la pestaña «Ventas» de Finanzas. Su ruta redirige, asi
+      // que nada se rompe. Y «Conversiones» se va a Analisis, que es lo que
+      // pide el plan del #43: no es dinero que gestionar, es mirar quien
+      // compro.
       { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
       { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
@@ -261,6 +266,10 @@ const NAV_SECTIONS = [
     icon: ChartPieSlice,
     items: [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports' },
+      // Venia de Finanzas (#43). La ruta no se mueve —`/finanzas/conversiones`
+      // sigue siendo la suya y la pestaña de Finanzas tambien— lo que cambia
+      // es donde se busca en el menu.
+      { label: 'Conversiones', to: '/finanzas/conversiones', detail: 'Los que compraron', icon: CurrencyEur, roles: ['superadmin', 'admin'], module: 'conversions', statusTag: 'Pruebas' },
       { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia' },
       // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
       // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y

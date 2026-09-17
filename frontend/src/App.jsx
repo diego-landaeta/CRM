@@ -248,7 +248,10 @@ function App() {
             <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
             <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
-            <Route path="ingresos" element={<IncomePage />} />
+            {/* «Ingresos» y «Ventas» eran el mismo componente con otro titulo
+                (#43). Se fusionan en «Ventas» y esto redirige, para que los
+                enlaces guardados y los de los correos no acaben en un 404. */}
+            <Route path="ingresos" element={<Navigate to="/finanzas/ventas" replace />} />
             <Route path="conversiones" element={<RevenuePage />} />
             <Route path="egresos" element={<ExpensesPage />} />
             <Route path="por-cobrar" element={<ReceivablePage />} />
