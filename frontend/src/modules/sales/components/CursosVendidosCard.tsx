@@ -111,7 +111,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <GraduationCap size={16} weight="duotone" className="text-primary" />
-          {title || `${etiqueta.plural} vendidos`}
+          {title || `Ventas por ${etiqueta.singular.toLowerCase()}`}
         </h3>
         {/* Si el periodo lo manda la pantalla, la tarjeta no pinta su propio
             selector: se elige una sola vez, arriba. */}
@@ -145,7 +145,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
       <div className="flex items-end justify-between mb-3 px-1">
         <div>
           <div className="text-3xl font-bold tabular-nums leading-none">{loading ? '—' : totalCursos}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">{totalCursos === 1 ? `${etiqueta.singular.toLowerCase()} vendido` : `${etiqueta.plural.toLowerCase()} vendidos`}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">{totalCursos === 1 ? 'venta' : 'ventas'}</div>
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold tabular-nums">{fmt(totalFacturado)}</div>

@@ -255,7 +255,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-lg flex flex-col max-h-[90vh]">
           <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-            <div className="w-9 h-9 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-md bg-success-soft text-success-soft-foreground flex items-center justify-center flex-shrink-0">
               <Receipt size={18} weight="regular" />
             </div>
             <div className="min-w-0 flex-1">
@@ -328,12 +328,12 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                     )}
                   </div>
                 ) : (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-md p-3 flex items-start gap-3">
-                    <UserCheck size={20} weight="duotone" className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div className="bg-success-soft border border-success/30 rounded-md p-3 flex items-start gap-3">
+                    <UserCheck size={20} weight="duotone" className="text-success flex-shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold truncate">{selectedClient.nombre || '— sin nombre —'}</p>
                       <p className="text-[11px] text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
+                      <p className="text-[11px] text-success-soft-foreground mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
                     </div>
                     <button type="button" onClick={clearSelectedClient} className="text-[11px] text-muted-foreground hover:text-foreground underline flex-shrink-0">
                       Cambiar
@@ -442,7 +442,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                 <div>
                   <label className="mb-1.5 block px-1 text-secundario text-muted-foreground">
                     Fecha de pago *
-                    {isRetroactiva && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Histórica</span>}
+                    {isRetroactiva && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-warning-soft text-warning-soft-foreground">Histórica</span>}
                   </label>
                   <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
                     className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
@@ -498,7 +498,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                             className="h-8 px-2 rounded border border-border bg-card text-xs text-right" />
                         </div>
                       ))}
-                      <div className={`text-[11px] text-right pt-1 ${installmentsMismatch ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                      <div className={`text-[11px] text-right pt-1 ${installmentsMismatch ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
                         Suma: {installmentsSum.toFixed(2)} € · Total: {(parseFloat(importeTotal) || 0).toFixed(2)} €
                         {installmentsMismatch && ' ⚠ no coinciden'}
                       </div>
