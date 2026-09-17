@@ -36,6 +36,13 @@ export const BETA_ROUTES: readonly string[] = [
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
   '/soporte',                // Soporte: ya tiene backend (#38)
   '/notificaciones',         // Sistema básico
+  // Terminadas y escondidas: sus issues estan CERRADOS y las pantallas
+  // funcionan con datos de verdad, pero nadie las añadio aqui, asi que en
+  // produccion salian como «Proximamente» y no se podian abrir. Es lo mismo
+  // que le paso al panel de ventas, que estuvo seis semanas sin que lo viera
+  // nadie.
+  '/correos',                // La bandeja del CRM (#146, cerrado el 16/09)
+  '/registro',               // Todo lo que ha pasado (#111, cerrado el 15/09)
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias
   '/perfil',                // Perfil
