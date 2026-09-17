@@ -4,6 +4,7 @@ import { getDecryptedValue } from '../credentials/credentials.model.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as gastoIA from '../../shared/services/gastoIA.service.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
+import * as supabaseIA from './supabase.service.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -123,4 +124,31 @@ export async function getGasto(req, res, next) {
   try {
     res.json({ success: true, data: await gastoIA.estado() });
   } catch (err) { next(err); }
+}
+
+// ─── Supabase de los proyectos IA (#44) ──────────────────────────────────
+
+/** El id del proyecto, comprobado. Sin esto un id con letras llega a Postgres
+ *  como NaN y sale un 500 donde deberia salir un 400. */
+function idDelProyecto(req) {
+  const n = Number(req.params.projectId);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new AppError('projectId invalido', 400, 'BAD_PROJECT_ID');
+  }
+  return n;
+}
+
+export async function previoSupabase(req, res, next) {
+  try {
+    res.json({ success: true, data: await supabaseIA.previo(idDelProyecto(req)) });
+  } catch (e) { next(e); }
+}
+
+export async function importarSupabase(req, res, next) {
+  try {
+    // `soloProbar` cuenta lo que haria sin escribir nada. La pantalla lo usa
+    // para poder enseñar el numero ANTES de que alguien pulse de verdad.
+    const soloProbar = req.query.soloProbar === 'true' || req.body?.soloProbar === true;
+    res.json({ success: true, data: await supabaseIA.importar(idDelProyecto(req), { soloProbar, usuarioId: req.user?.userId || null }) });
+  } catch (e) { next(e); }
 }

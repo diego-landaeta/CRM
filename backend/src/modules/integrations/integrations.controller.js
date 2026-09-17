@@ -5,7 +5,23 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
 
-const SUPPORTED = ['stripe', 'brevo'];
+/*
+  SUPABASE, EL TERCERO (#44).
+
+  Los proyectos IA guardan sus propios datos en Supabase --usuarios,
+  suscripciones, consumo-- y de ahi se puede leer lo que la app sabe de cada
+  cliente, que es mas de lo que dice Stripe.
+
+  Se conecta con un ACCESS TOKEN de la Management API. Lo que NO sirve es
+  sacar de ahi las claves de otros servicios: los secrets de un proyecto
+  vuelven como SHA-256 de 64 caracteres, no como su valor. Comprobado contra
+  Tarot IA: los 19, incluido `SUPABASE_URL`, que es publica. Queda escrito para
+  que nadie lo intente otra vez.
+
+  La referencia del proyecto (`project_ref`) va en `config_public`: no es
+  secreta --sale en la URL de la propia app-- y hace falta en cada llamada.
+*/
+const SUPPORTED = ['stripe', 'brevo', 'supabase'];
 
 // Sólo aceptamos los providers conocidos. Cada provider tiene su shape de
 // config_public propia, pero validamos lo mínimo aquí (el detalle de cada
@@ -144,6 +160,7 @@ export async function test(req, res, next) {
     try {
       if (provider === 'stripe') testResult = await testStripe(apiKey);
       else if (provider === 'brevo') testResult = await testBrevo(apiKey);
+      else if (provider === 'supabase') testResult = await testSupabase(apiKey, row.config_public?.project_ref);
     } catch (e) {
       testResult = { ok: false, message: e.message };
     }
@@ -184,6 +201,34 @@ async function testStripe(apiKey) {
   }
   if (r.status === 401) return { ok: false, message: 'API key inválida (401 Unauthorized)' };
   return { ok: false, message: `Stripe HTTP ${r.status}` };
+}
+
+/**
+ * Probar el access token de Supabase.
+ *
+ * Se pide la lista de proyectos, que es la llamada mas inocua que hay, y se
+ * comprueba ademas que el `project_ref` guardado esta entre los que el token
+ * alcanza. Un token valido de OTRA cuenta daria 200 y no serviria de nada: sin
+ * esa segunda comprobacion la pantalla diria «conectado» y no traeria un dato.
+ */
+async function testSupabase(accessToken, projectRef) {
+  const r = await fetch('https://api.supabase.com/v1/projects', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (r.status === 401) return { ok: false, message: 'Access token invalido (401 Unauthorized)' };
+  if (!r.ok) return { ok: false, message: `Supabase HTTP ${r.status}` };
+  const proyectos = await r.json().catch(() => []);
+  if (!projectRef) {
+    return { ok: false, message: `Token valido (${proyectos.length} proyectos), pero falta la referencia del proyecto.` };
+  }
+  const suyo = proyectos.find((x) => x.id === projectRef);
+  if (!suyo) {
+    return {
+      ok: false,
+      message: `El token no alcanza el proyecto ${projectRef}. Alcanza: ${proyectos.map((x) => x.name).join(', ') || 'ninguno'}.`,
+    };
+  }
+  return { ok: true, message: `Conexion OK con «${suyo.name}» (${suyo.region}).`, projectRef };
 }
 
 async function testBrevo(apiKey) {
