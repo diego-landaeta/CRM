@@ -34,14 +34,21 @@ interface Proyecto {
   sociedad_nombre?: string | null;
 }
 
-interface EstadoStripe {
+interface EstadoProveedor {
   has_secret: boolean;
   secret_preview: string | null;
   last_test_status: 'success' | 'error' | null;
   last_test_at: string | null;
 }
 
-type Fila = Proyecto & { stripe: EstadoStripe | null; cargando: boolean };
+type Fila = Proyecto & {
+  stripe: EstadoProveedor | null;
+  supabase: EstadoProveedor | null;
+  cargando: boolean;
+};
+
+/** Cómo se llama cada vía, para poder decirlo en la fila. */
+const COMO_SE_LLAMA: Record<string, string> = { stripe: 'Stripe', supabase: 'Supabase' };
 
 export default function ProyectosIAConectados() {
   const { activeProject, switchProject, projects: losMios } = useProjectContext() as {
@@ -59,17 +66,30 @@ export default function ProyectosIAConectados() {
         const r = await client.get<Proyecto[]>('/projects');
         const ia = (r?.data || []).filter((p) => p.type === 'ia');
         if (!vivo) return;
-        setFilas(ia.map((p) => ({ ...p, stripe: null, cargando: true })));
-        // Uno por proyecto. Son tres: no compensa un endpoint nuevo, y si
-        // mañana son treinta esto se nota y se cambia.
-        await Promise.all(ia.map(async (p) => {
-          let estado: EstadoStripe | null = null;
+        setFilas(ia.map((p) => ({ ...p, stripe: null, supabase: null, cargando: true })));
+        /*
+          SE MIRAN LAS DOS VÍAS, no solo Stripe.
+
+          Esta lista se escribió cuando Stripe era el único camino. Con Tarot
+          conectado por Supabase, la fila decía «sin access token» y el
+          recuento «0 de 3» mientras la tarjeta de abajo estaba en verde: el
+          resumen contradecía a lo que tenía justo debajo, que es peor que no
+          tener resumen.
+        */
+        const deProveedor = async (pid: number, proveedor: string) => {
           try {
-            const s = await client.get<EstadoStripe>(`/integrations/stripe?projectId=${p.id}`);
-            estado = s?.data || null;
-          } catch { estado = null; }
+            const s = await client.get<EstadoProveedor>(`/integrations/${proveedor}?projectId=${pid}`);
+            return s?.data || null;
+          } catch { return null; }
+        };
+        // Dos por proyecto, tres proyectos. Si mañana son treinta, esto se
+        // nota y se cambia por un endpoint que los devuelva juntos.
+        await Promise.all(ia.map(async (p) => {
+          const [stripe, supabase] = await Promise.all([
+            deProveedor(p.id, 'stripe'), deProveedor(p.id, 'supabase'),
+          ]);
           if (!vivo) return;
-          setFilas((prev) => prev.map((f) => (f.id === p.id ? { ...f, stripe: estado, cargando: false } : f)));
+          setFilas((prev) => prev.map((f) => (f.id === p.id ? { ...f, stripe, supabase, cargando: false } : f)));
         }));
       } catch {
         if (vivo) setFilas([]);
@@ -84,7 +104,11 @@ export default function ProyectosIAConectados() {
   // que ya tiene tres bloques de ayuda estorba.
   if (cargando || filas.length === 0) return null;
 
-  const conectados = filas.filter((f) => f.stripe?.has_secret && f.stripe?.last_test_status === 'success').length;
+  /** Conectado = alguna vía con clave Y con la prueba en verde. */
+  const vias = (f: Fila) => ([['stripe', f.stripe], ['supabase', f.supabase]] as Array<[string, EstadoProveedor | null]>)
+    .filter(([, e]) => e?.has_secret);
+  const estaConectado = (f: Fila) => vias(f).some(([, e]) => e?.last_test_status === 'success');
+  const conectados = filas.filter(estaConectado).length;
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -95,17 +119,18 @@ export default function ProyectosIAConectados() {
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-sm">Proyectos IA</h3>
           <p className="text-[11px] text-muted-foreground">
-            Se conectan con un access token, sin webhook. {conectados} de {filas.length} probados con éxito.
+            Se conectan con un access token, sin webhook — por Stripe, por su Supabase, o por los dos.
+            {' '}{conectados} de {filas.length} con la conexión probada.
           </p>
         </div>
       </div>
 
       <div className="divide-y divide-border">
         {filas.map((f) => {
-          const s = f.stripe;
-          const conToken = !!s?.has_secret;
-          const probado = s?.last_test_status === 'success';
-          const fallo = s?.last_test_status === 'error';
+          const conectadas = vias(f);
+          const conToken = conectadas.length > 0;
+          const probado = estaConectado(f);
+          const fallo = conToken && !probado && conectadas.some(([, e]) => e?.last_test_status === 'error');
           const esElActivo = activeProject?.id === f.id;
           /*
             ¿ESTE PROYECTO ESTÁ ASIGNADO A QUIEN MIRA?
@@ -141,11 +166,18 @@ export default function ProyectosIAConectados() {
                 <p>
                   {f.cargando ? 'Consultando…'
                     : !conToken ? <span className="text-amber-700 dark:text-amber-400">Sin access token</span>
-                      : <>Token <code className="px-1 rounded bg-muted">{s?.secret_preview || '—'}</code>{' · '}
-                        {probado ? <span className="text-emerald-700 dark:text-emerald-400">conexión probada</span>
-                          : fallo ? <span className="text-red-600 dark:text-red-400">la última prueba falló</span>
-                            : <span className="text-amber-700 dark:text-amber-400">sin probar</span>}
-                      </>}
+                      : conectadas.map(([nombre, e], i) => (
+                        <span key={nombre}>
+                          {i > 0 && ' · '}
+                          {COMO_SE_LLAMA[nombre]}{' '}
+                          <code className="px-1 rounded bg-muted">{e?.secret_preview || '—'}</code>{' '}
+                          {e?.last_test_status === 'success'
+                            ? <span className="text-emerald-700 dark:text-emerald-400">probado</span>
+                            : e?.last_test_status === 'error'
+                              ? <span className="text-red-600 dark:text-red-400">la última prueba falló</span>
+                              : <span className="text-amber-700 dark:text-amber-400">sin probar</span>}
+                        </span>
+                      ))}
                 </p>
               </div>
 

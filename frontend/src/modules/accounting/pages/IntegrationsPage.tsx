@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import CorteDeFacturacion from '../components/CorteDeFacturacion';
 import ProyectosIAConectados from '../components/ProyectosIAConectados';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
+import SupabaseCard from '../components/SupabaseCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -12,7 +13,7 @@ import {
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
-type Provider = 'stripe' | 'brevo';
+type Provider = 'stripe' | 'brevo' | 'supabase';
 interface Integration {
   id?: number;
   project_id?: number;
@@ -68,8 +69,9 @@ function fmt(d: string | null): string {
 }
 
 export default function IntegrationsPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string; type?: string } };
   const pid = activeProject?.id;
+  const esIA = activeProject?.type === 'ia';
 
   return (
     <div className="space-y-5 pb-8">
@@ -80,7 +82,7 @@ export default function IntegrationsPage() {
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">PRUEBAS</span>
           </span>
         ) as unknown as string}
-        subtitle={`Configura conexiones externas (Stripe, Brevo) para ${activeProject?.nombre || 'el proyecto activo'}.`}
+        subtitle={`Configura conexiones externas (Stripe, Brevo${esIA ? ', Supabase' : ''}) para ${activeProject?.nombre || 'el proyecto activo'}.`}
       />
 
       <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4 text-sm space-y-2">
@@ -94,6 +96,11 @@ export default function IntegrationsPage() {
           <ul className="list-disc list-inside pl-2 space-y-0.5">
             <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. En proyectos IA, además, el dashboard lee MRR, suscripciones y cobros fallidos en vivo. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
+            {esIA && (
+              <li><strong>Supabase:</strong> la base de la propia app IA. De ahí salen sus usuarios y
+                suscripciones, con más detalle del que da Stripe — quién compró, qué plan y desde qué
+                país. Se trae a mano, con «Traer al CRM», y no duplica lo que ya esté.</li>
+            )}
           </ul>
           <p className="text-amber-700 dark:text-amber-400 pt-1">
             <strong>⚠ Importante:</strong> cada proyecto tiene sus propias credenciales. Cambiá el proyecto en el sidebar antes de configurar para no mezclar cuentas.
@@ -113,6 +120,9 @@ export default function IntegrationsPage() {
       ) : (
         <div className="space-y-5">
           <StripeCard projectId={pid} />
+          {/* Supabase solo en los proyectos IA: es donde vive su app. En un
+              proyecto CRM la tarjeta no diría nada. */}
+          {esIA && <SupabaseCard projectId={pid} />}
           <BrevoCard projectId={pid} />
         </div>
       )}

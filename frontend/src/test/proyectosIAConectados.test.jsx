@@ -41,16 +41,23 @@ const PROYECTOS = [
   { id: 5, nombre: 'Nutricionista IA', type: 'ia', sociedad_emisora_id: 3, sociedad_nombre: 'IA Labs SL' },
 ];
 
-/** Estado de Stripe por proyecto; lo que no se diga, sin configurar. */
+const SIN_NADA = { has_secret: false, secret_preview: null, last_test_status: null, last_test_at: null };
+
+/**
+ * Estado por proyecto y POR PROVEEDOR.
+ *
+ * La lista consulta las dos vías —Stripe y Supabase—, así que el doble tiene
+ * que distinguirlas: con una sola respuesta para ambas, un proyecto saldría
+ * conectado por las dos y no se vería la diferencia que estas pruebas fijan.
+ *
+ *   conEstados({ 4: { stripe: {...}, supabase: {...} } })
+ */
 function conEstados(porId = {}) {
   get.mockImplementation((url) => {
     if (url === '/projects') return Promise.resolve({ success: true, data: PROYECTOS });
-    const m = String(url).match(/projectId=(\d+)/);
-    const id = m ? Number(m[1]) : 0;
-    return Promise.resolve({
-      success: true,
-      data: porId[id] || { has_secret: false, secret_preview: null, last_test_status: null, last_test_at: null },
-    });
+    const id = Number(String(url).match(/projectId=(\d+)/)?.[1] || 0);
+    const proveedor = String(url).match(/integrations\/(\w+)/)?.[1] || '';
+    return Promise.resolve({ success: true, data: porId[id]?.[proveedor] || SIN_NADA });
   });
 }
 
@@ -83,23 +90,36 @@ describe('el recuento de conectados', () => {
   it('un token guardado que NO pasó la prueba no cuenta', async () => {
     // Es el caso real: se guardó un token falso, Stripe contestó 401. Tener
     // texto guardado no es estar conectado.
-    conEstados({ 4: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: 'error' } });
+    conEstados({ 4: { stripe: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: 'error' } } });
     render(<ProyectosIAConectados />);
-    expect(await screen.findByText(/0 de 2 probados con éxito/)).toBeTruthy();
+    expect(await screen.findByText(/0 de 2 con la conexión probada/)).toBeTruthy();
     expect(screen.getByText(/la última prueba falló/)).toBeTruthy();
   });
 
   it('sin probar tampoco cuenta', async () => {
-    conEstados({ 4: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: null } });
+    conEstados({ 4: { stripe: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: null } } });
     render(<ProyectosIAConectados />);
-    expect(await screen.findByText(/0 de 2 probados con éxito/)).toBeTruthy();
+    expect(await screen.findByText(/0 de 2 con la conexión probada/)).toBeTruthy();
     expect(screen.getByText(/sin probar/)).toBeTruthy();
   });
 
-  it('con la prueba en verde, sí', async () => {
-    conEstados({ 4: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: 'success' } });
+  it('conectado por SUPABASE también cuenta', async () => {
+    // El fallo que se vio en pantalla: Tarot estaba conectado por Supabase y
+    // la lista decía «0 de 3» y «sin access token», contradiciendo a la
+    // tarjeta verde que tenía justo debajo.
+    conEstados({ 4: { supabase: { has_secret: true, secret_preview: 'sbp_…4753', last_test_status: 'success' } } });
     render(<ProyectosIAConectados />);
-    expect(await screen.findByText(/1 de 2 probados con éxito/)).toBeTruthy();
+    expect(await screen.findByText(/1 de 2 con la conexión probada/)).toBeTruthy();
+    expect(screen.getByText(/sbp_…4753/)).toBeTruthy();
+    // El otro IA sigue sin nada, así que ese aviso sale UNA vez y no dos: el
+    // de Psicólogo desapareció porque ya está conectado.
+    expect(screen.getAllByText(/Sin access token/)).toHaveLength(1);
+  });
+
+  it('con la prueba en verde, sí', async () => {
+    conEstados({ 4: { stripe: { has_secret: true, secret_preview: 'rk_t...0000', last_test_status: 'success' } } });
+    render(<ProyectosIAConectados />);
+    expect(await screen.findByText(/1 de 2 con la conexión probada/)).toBeTruthy();
   });
 });
 
