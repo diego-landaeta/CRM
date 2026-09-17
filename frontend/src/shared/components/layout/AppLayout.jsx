@@ -83,6 +83,16 @@ const CON_SOCIEDAD_OK = [
   // procesos en empresas deben ser por empresa, no por proyecto».
   /^\/prospectos\/cola$/,
   /^\/prospectos\/proceso$/,
+  // El Dashboard. Diego, 15/09: «es por empresa, eso lo sabes» — y el 17 otra
+  // vez, viendo el muro con CEDIA puesta: «aqui debo de tener la opcion de
+  // verlos todos».
+  //
+  // La pantalla YA sabe hacerlo y no hay que tocarla: `useDashboard` llama a
+  // `useIdsDelAmbito`, que con una empresa elegida devuelve SUS campus y
+  // ninguno mas, y despues suma las estadisticas de cada uno. Lo unico que
+  // pasaba es que el muro se levantaba antes de que la pantalla llegara a
+  // pintarse, asi que ese trabajo no se veia nunca.
+  /^\/$/,
   // WhatsApp (#128, #138). El chat es de la GESTORA, no del proyecto: sus
   // conversaciones son las mismas con una empresa puesta que con uno de sus
   // campus. Lo unico que miraba el proyecto --buscar un prospecto para empezar

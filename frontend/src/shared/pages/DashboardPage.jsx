@@ -133,7 +133,17 @@ function SaasMonitor({ projectId }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext();
+  /*
+    Con una EMPRESA elegida no hay un proyecto real: `activeProject.id` vale -1,
+    que es el pseudo-proyecto de «todos». Mandarselo a una tarjeta que espera un
+    campus la deja sin datos, asi que aqui se traduce: o un campus de verdad, o
+    ninguno y que la tarjeta pregunte por la sociedad entera.
+
+    Los numeros de arriba no necesitan esto: `useDashboard` ya suma los campus
+    del ambito por su cuenta.
+  */
+  const campusReal = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const { stats, leadsRecientes, today, loading, error, refetch } = useDashboard();
   const [drawerLeadId, setDrawerLeadId] = useState(null);
 
@@ -198,7 +208,9 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
+        subtitle={`${todayDate} — ${activeIssuer
+          ? `${activeIssuer.nombre} · ${activeIssuer.campus.length} campus`
+          : (activeProject?.nombre || 'Sin proyecto')}`}
       />
 
       {/* SECCION HOY */}
@@ -383,10 +395,10 @@ export default function DashboardPage() {
       {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
-          <CursosVendidosCard projectId={activeProject?.id} />
+          <CursosVendidosCard projectId={campusReal} issuerId={activeIssuerId} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
+          <TopProductsCard projectId={campusReal} issuerId={activeIssuerId} days={null} limit={5} />
         </Suspense>
       </div>
 
