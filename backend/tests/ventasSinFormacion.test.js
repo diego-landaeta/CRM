@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pool from '../src/shared/config/db.js';
 import { ventasSinFormacion } from '../src/modules/sales/sales.service.js';
+import { create } from '../src/modules/conversions/conversion.model.js';
 
 /**
  * Las ventas que no dicen de qué formación son (#41).
@@ -152,5 +153,89 @@ describe('el resumen', () => {
     expect(r.total).toBe(r.filas.length);
     expect(r.conSugerencia).toBe(r.filas.filter((f) => f.sugerencia).length);
     expect(r.importe).toBeGreaterThan(0);
+  });
+});
+
+describe('cerrar el grifo: el curso sale de las lineas', () => {
+  /*
+    De dónde salían las nuevas (#41, última subfase).
+
+    Una venta con VARIOS ARTÍCULOS nacía siempre sin curso: el diálogo manda
+    `producto_contratado_id: null` a propósito —son varias líneas, no cabe una
+    sola FK— y el texto queda como «1x Curso A + 2x Curso B», que no cruza con
+    nada. Ningún profesor cobraba comisión por ellas, y entraban en la lista de
+    arriba para quedarse.
+
+    Las líneas sí guardan su `product_id`, así que de ahí sale el curso cuando
+    todas apuntan al mismo. Cuando apuntan a cursos distintos no se inventa
+    ninguno: ahí de verdad no hay un curso único.
+  */
+  async function lead() {
+    const { rows } = await pool.query(
+      `INSERT INTO leads (project_id, nombre, email, status, created_at, fecha_solicitud)
+       VALUES ($1, 'Alumno Lineas', $2, 'en_seguimiento', '2026-02-01', '2026-02-01') RETURNING id`,
+      [PROYECTO, `lineas-${Math.random().toString(36).slice(2, 9)}@test.com`]);
+    creado.leads.push(rows[0].id);
+    return rows[0].id;
+  }
+
+  async function conLineas(items) {
+    const leadId = await lead();
+    const c = await create({
+      lead_id: leadId, project_id: PROYECTO,
+      producto_contratado: items.map((i) => `1x ${i.descripcion}`).join(' + '),
+      importe_total: 300, importe_pagado: 0, items,
+      // `lead_status_history.changed_by` es NOT NULL: el modelo apunta quién
+      // pasó el lead a convertido. Sin esto la creación se cae entera.
+      changed_by: 1,
+    });
+    creado.ventas.push(c.id);
+    return c;
+  }
+
+  it('una sola línea del catálogo: la venta se queda con ese curso', async () => {
+    const c = await conLineas([
+      { product_id: idUnico, descripcion: 'Diplomado en Neurociencia', cantidad: 1, precio_unitario: 300 },
+    ]);
+    expect(c.producto_contratado_id).toBe(idUnico);
+  });
+
+  it('varias líneas del MISMO curso, también', async () => {
+    // El caso normal: una venta partida en dos lineas del mismo curso.
+    const c = await conLineas([
+      { product_id: idUnico, descripcion: 'Diplomado en Neurociencia', cantidad: 1, precio_unitario: 150 },
+      { product_id: idUnico, descripcion: 'Diplomado en Neurociencia', cantidad: 1, precio_unitario: 150 },
+    ]);
+    expect(c.producto_contratado_id).toBe(idUnico);
+  });
+
+  it('líneas de cursos DISTINTOS: no se inventa ninguno', async () => {
+    const otro = await producto('Otro Curso Distinto');
+    const c = await conLineas([
+      { product_id: idUnico, descripcion: 'Diplomado en Neurociencia', cantidad: 1, precio_unitario: 150 },
+      { product_id: otro, descripcion: 'Otro Curso Distinto', cantidad: 1, precio_unitario: 150 },
+    ]);
+    expect(c.producto_contratado_id).toBeNull();
+  });
+
+  it('líneas sin producto del catálogo: se queda sin curso, como antes', async () => {
+    const c = await conLineas([
+      { product_id: null, descripcion: 'Algo escrito a mano', cantidad: 1, precio_unitario: 300 },
+    ]);
+    expect(c.producto_contratado_id).toBeNull();
+  });
+
+  it('si el curso venía puesto, las líneas NO lo pisan', async () => {
+    const otro = await producto('Curso Que No Manda');
+    const leadId = await lead();
+    const c = await create({
+      lead_id: leadId, project_id: PROYECTO,
+      producto_contratado: 'Diplomado en Neurociencia',
+      producto_contratado_id: idUnico,
+      importe_total: 300, importe_pagado: 0, changed_by: 1,
+      items: [{ product_id: otro, descripcion: 'Curso Que No Manda', cantidad: 1, precio_unitario: 300 }],
+    });
+    creado.ventas.push(c.id);
+    expect(c.producto_contratado_id).toBe(idUnico);
   });
 });
