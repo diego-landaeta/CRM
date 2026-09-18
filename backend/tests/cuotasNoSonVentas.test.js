@@ -69,6 +69,34 @@ beforeAll(async () => {
     .send({ email: 'diego@empresa.com', password: 'CrmTemp2026!' });
   token = login.body.data.accessToken;
 
+  // Barrer lo que haya quedado de una ejecucion anterior que se cortara.
+  // Sin esto, una suite interrumpida a medias deja estos productos en la
+  // base y TODAS las ejecuciones siguientes fallan contra el indice unico
+  // (project_id, nombre) — el fichero entero se salta y nadie entiende por
+  // que. Paso de verdad el 18/09.
+  await pool.query(
+    `DELETE FROM products WHERE project_id = $1 AND nombre = ANY($2::text[])`,
+    [PROYECTO, ['Curso Cuota Test', 'Curso Cuota Ranking']]);
+  // El lead con TODO lo que le cuelga, y en orden: si una ejecucion anterior
+  // dejo ventas suyas, un DELETE a secas falla por la clave ajena y el
+  // beforeAll se rompe — que era justo lo que hacia que estos nueve se
+  // saltaran de vez en cuando.
+  const { rows: viejos } = await pool.query(
+    `SELECT id FROM leads WHERE email = 'cuota-test@test-cuota.com'`);
+  for (const v of viejos) {
+    await pool.query(
+      `DELETE FROM invoices WHERE conversion_id IN (SELECT id FROM conversions WHERE lead_id = $1)`, [v.id]);
+    await pool.query(
+      `DELETE FROM conversion_payments WHERE conversion_id IN (SELECT id FROM conversions WHERE lead_id = $1)`, [v.id]);
+    await pool.query(
+      `DELETE FROM conversion_items WHERE conversion_id IN (SELECT id FROM conversions WHERE lead_id = $1)`, [v.id]);
+    await pool.query(`DELETE FROM conversions WHERE lead_id = $1`, [v.id]);
+    await pool.query(`DELETE FROM lead_status_history WHERE lead_id = $1`, [v.id]);
+    await pool.query(`DELETE FROM lead_steps WHERE lead_id = $1`, [v.id]);
+    await pool.query(`DELETE FROM lead_interactions WHERE lead_id = $1`, [v.id]);
+    await pool.query(`DELETE FROM leads WHERE id = $1`, [v.id]);
+  }
+
   const { rows: pr } = await pool.query(
     `INSERT INTO products (project_id, nombre, precio, active)
      VALUES ($1, 'Curso Cuota Test', 300, TRUE) RETURNING id`, [PROYECTO]);

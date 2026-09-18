@@ -30,14 +30,28 @@ async function hayBase() {
   try { await query('SELECT 1'); return true; } catch { return false; }
 }
 
-/** El dia con mas leads del historico. Comparar contra hoy no sirve: hoy puede
- *  no haber ninguno, y entonces la prueba compara cero con cero y pasa sin
- *  haber mirado nada — que es como se cuela un fallo. */
+/*
+ * El dia con mas leads del historico. Comparar contra hoy no sirve: hoy puede
+ * no haber ninguno, y entonces la prueba compara cero con cero y pasa sin
+ * haber mirado nada — que es como se cuela un fallo.
+ *
+ * HOY SE EXCLUYE, y no es lo mismo que lo anterior. Media docena de pruebas de
+ * la suite crean ventas y prospectos con la fecha de hoy y los borran al
+ * acabar; corriendo en paralelo, esta llegaba a elegir el dia de hoy y a
+ * contarlo mientras otra estaba a medio crear los suyos. Salia «expected 6 to
+ * be 5» de vez en cuando, sin que nada estuviera roto.
+ *
+ * Un rojo que no señala un fallo es peor que no tener la prueba: enseña a
+ * mirar la suite y encogerse de hombros. Un dia ya cerrado no lo puede mover
+ * nadie, y lo que la prueba defiende —que las dos pantallas cuenten igual—
+ * se comprueba exactamente igual de bien.
+ */
 async function diaConLeads() {
   const { rows } = await query(
     `SELECT created_at::date AS dia, COUNT(*)::int AS n
        FROM leads
       WHERE deleted_at IS NULL
+        AND created_at::date < CURRENT_DATE
         AND project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
       GROUP BY 1 ORDER BY n DESC, dia DESC LIMIT 1`);
   return rows[0] || null;
@@ -47,7 +61,8 @@ async function diaConVentas() {
   const { rows } = await query(
     `SELECT fecha_conversion AS dia, COUNT(*)::int AS n
        FROM conversions
-      WHERE project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
+      WHERE fecha_conversion < CURRENT_DATE
+        AND project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
       GROUP BY 1 ORDER BY n DESC, dia DESC LIMIT 1`);
   return rows[0] || null;
 }

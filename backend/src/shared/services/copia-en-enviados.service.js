@@ -104,6 +104,20 @@ export async function guardarEnEnviados({ de, deNombre, para, asunto, html, fech
       auth: { user: USUARIO, pass: CLAVE },
       logger: false,
     });
+    // Un corte de red en el socket TLS —un ECONNRESET del servidor de
+    // correo— llega como evento 'error' del cliente, NO como rechazo de la
+    // promesa, asi que el try/catch de aqui no lo ve. Sin nadie escuchando,
+    // Node lo trata como excepcion sin capturar y el manejador de `app.js`
+    // CIERRA EL BACKEND ENTERO: la API se cae para todos porque el buzon
+    // corto una conexion. Visto en local el 18/09, y en produccion lo tapa
+    // PM2 reiniciando, que es justo por lo que no se habia notado.
+    //
+    // Escuchar y anotar basta: el fallo de verdad ya lo recoge el catch de
+    // abajo cuando la operacion en curso se rompe.
+    cliente.on('error', (err) => {
+      logger.warn({ err: err?.message, host: HOST }, 'Buzon: se cayo la conexion');
+    });
+
     await cliente.connect();
 
     const carpeta = await carpetaDeEnviados(cliente);
