@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MagnifyingGlass, WarningCircle, X, ImageSquare } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
@@ -74,6 +74,23 @@ export default function SelectorPlantillas({
     );
   }, [plantillas, busca]);
 
+  /**
+   * Las DOS FAMILIAS, separadas (#129).
+   *
+   * Diego: «serían plantillas de procesos de ventas y plantillas
+   * personalizadas, las de ellas». No es un capricho de orden: son cosas
+   * distintas y se usan distinto. Las del proceso vienen del documento
+   * comercial, van atadas a un paso y se usan tal cual; las suyas las
+   * escribe cada gestora y las cambia cuando quiere.
+   *
+   * Mezcladas —que es como estaban— la lista es un montón de veinte nombres
+   * donde no se sabe cuál es la que toca hoy.
+   */
+  const [delProceso, suyas] = useMemo(() => [
+    filtradas.filter((p) => p.paso_clave),
+    filtradas.filter((p) => !p.paso_clave),
+  ], [filtradas]);
+
   const elegir = (p: PlantillaWhatsapp) => {
     // Se pasa la plantilla entera y no solo el texto: el chat necesita saber si
     // lleva imagen detrás para abrir el selector de archivos sin que haya que
@@ -136,14 +153,27 @@ export default function SelectorPlantillas({
           </div>
         )}
 
-        {/* 5 · Lleno */}
-        {filtradas.map((p) => {
+        {/* 5 · Lleno, en dos familias. La cabecera solo sale cuando hay algo
+            que separar: con una sola familia, dos titulos sobran. */}
+        {delProceso.length > 0 && suyas.length > 0 && (
+          <p className="wa-plantillas-familia">Del proceso de ventas</p>
+        )}
+        {[...delProceso, ...suyas].map((p, i) => {
+          const abreLasSuyas = delProceso.length > 0 && suyas.length > 0
+            && i === delProceso.length;
           const huecos = huecosSinRellenar(p.body, datos, nombreProyecto);
           return (
-            <button key={p.id} type="button" onClick={() => elegir(p)} className="wa-plantilla">
+            <Fragment key={p.id}>
+            {abreLasSuyas && <p className="wa-plantillas-familia">Tuyas y del equipo</p>}
+            <button type="button" onClick={() => elegir(p)} className="wa-plantilla">
               <span className="wa-plantilla-nombre">
                 {p.label}
-                {p.ambito === 'compartida' && (
+                {/* El paso al que pertenece, para saber cuál toca sin
+                    acordarse del documento. */}
+                {p.paso_nombre && (
+                  <span className="wa-plantilla-etiqueta">{p.paso_nombre}</span>
+                )}
+                {!p.paso_clave && p.ambito === 'compartida' && (
                   <span className="wa-plantilla-etiqueta">compartida</span>
                 )}
               </span>
@@ -166,6 +196,7 @@ export default function SelectorPlantillas({
                 </span>
               )}
             </button>
+            </Fragment>
           );
         })}
       </div>

@@ -29,9 +29,19 @@ export async function listTemplates({ projectId, projectIds = null, userId }) {
               -- pide_adjunto abre el selector de archivos al elegirla;
               -- pista es para la gestora y NO se envia.
               t.pide_adjunto, t.pista,
+              -- De que paso del proceso es, si lo es (#129). Las del documento
+              -- comercial y las que escribe cada gestora son dos familias
+              -- distintas y en el chat se enseñan aparte: las primeras son de
+              -- la casa y se usan tal cual; las suyas las edita ella.
+              t.paso_clave,
+              s.nombre AS paso_nombre, s.orden AS paso_orden,
               u.nombre AS creada_por
          FROM whatsapp_templates t
          LEFT JOIN users u ON u.id = t.created_by
+         -- El paso es del MISMO proyecto que la plantilla: cada marca lleva su
+         -- proceso y el paso_2 de una no es el de la otra.
+         LEFT JOIN commercial_steps s
+                ON s.project_id = t.project_id AND s.clave = t.paso_clave
         -- Con una EMPRESA puesta llegan sus campus y valen los de todos:
         -- una gestora de CEDIA atiende sus siete, y tener que bajar a uno
         -- para poder usar una plantilla no significaba nada.
@@ -39,7 +49,10 @@ export async function listTemplates({ projectId, projectIds = null, userId }) {
                OR $3::int[] IS NULL AND t.project_id = $1)
           AND t.active
           AND (t.ambito = 'compartida' OR t.owner_id = $2)
-        ORDER BY t.ambito DESC, t.orden, t.id`,
+        -- Las del proceso primero y en el orden del proceso; despues las
+        -- demas como siempre.
+        ORDER BY (t.paso_clave IS NULL), s.orden NULLS LAST,
+                 t.ambito DESC, t.orden, t.id`,
       [projectId, userId, projectIds && projectIds.length ? projectIds.map(Number) : null]
     );
     return rows;

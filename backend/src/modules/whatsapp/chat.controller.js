@@ -1,4 +1,5 @@
 import * as model from './chat.model.js';
+import { vozOTexto } from './vozOTexto.js';
 import * as servicio from './chat.service.js';
 import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
@@ -1437,5 +1438,29 @@ export async function editarMensaje(req, res, next) {
       instancia: await instanciaObjetivo(req),
     });
     res.json({ success: true, data: fila });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/voz-o-texto
+ *
+ * Cuanto se manda por voz y cuanto escrito (#128). Solo lo SALIENTE: lo que
+ * entra lo decide el cliente y no dice nada de como trabaja el equipo.
+ */
+export async function vozOTextoCtrl(req, res, next) {
+  try {
+    const varios = String(req.query.projectIds || '')
+      .split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0);
+    const uno = Number(req.query.projectId);
+    const projectIds = varios.length ? varios
+      : (Number.isInteger(uno) && uno > 0 ? [uno] : null);
+
+    const fecha = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+    const data = await vozOTexto({
+      projectIds,
+      desde: fecha(req.query.desde),
+      hasta: fecha(req.query.hasta),
+    });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
