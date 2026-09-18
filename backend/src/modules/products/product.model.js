@@ -13,6 +13,8 @@ import { PLAZAS_JOIN, PLAZAS_COLS } from './plazas.sql.js';
 const LIST_COLS = [
   'p.id', 'p.project_id', 'p.nombre', 'p.sku', 'p.precio', 'p.moneda',
   'p.duracion', 'p.horas', 'p.modalidad', 'p.fecha_inicio_texto', 'p.num_modulos',
+  // Si tiene opiniones publicadas en Opynio. Lo mira el paso 2 (#91).
+  'p.opiniones_publicadas',
   'p.image_url', 'p.url_info', 'p.stripe_link',
   'p.source_type', 'p.wc_product_id',
   'p.categoria_id', 'p.subcategoria_id', 'p.regimen_fiscal_id',
@@ -74,6 +76,7 @@ export async function update(id, data) {
                    'precio', 'moneda', 'stripe_link', 'sku', 'duracion', 'url_info',
                    'image_url', 'regimen_fiscal_id',
                    'horas', 'num_modulos', 'modalidad', 'fecha_inicio_texto',
+                   'opiniones_publicadas',
                    'plazas_totales', 'plazas_ocupadas_previas', 'fecha_cierre_convocatoria',
                    'presentacion_texto', 'objetivos_texto', 'beneficios_texto',
                    'dirigido_a_texto', 'para_que_te_prepara_texto', 'por_que_estudiar_texto',

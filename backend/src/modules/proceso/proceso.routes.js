@@ -28,6 +28,11 @@ router.delete('/pasos/:id', roleGuard('admin', 'superadmin'), projectAccess, ctr
 router.get('/cola', ctrl.cola);
 router.get('/cola/resumen', ctrl.resumenCola);
 router.get('/lead/:leadId', ctrl.pasosDeUnLead);
+
+// Las plantillas de ese paso, ya rellenas, para COPIARLAS (#88). No hay ruta
+// de envio a proposito: el documento pide que la gestora escriba encima de la
+// plantilla, no que el CRM la mande tal cual.
+router.get('/lead/:leadId/plantillas/:clave', ctrl.plantillasDelPaso);
 // Rellena los pasos que falten. Util despues de anadir un paso nuevo al
 // proceso: los prospectos que ya estaban no lo tenian.
 router.post('/lead/:leadId/replanificar', roleGuard('admin', 'superadmin'), ctrl.replanificar);

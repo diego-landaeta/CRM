@@ -427,7 +427,7 @@ export default function ColaDelDiaPage() {
                         admisiones, y el documento dice que se comprueba antes
                         de cada envío y nunca se arrastra el del mensaje
                         anterior. Aquí solo se recuerda. */}
-                    {(p.producto || p.avisa_plazas) && (
+                    {(p.producto || p.avisa_plazas || p.ofrece_descuento) && (
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                         {p.producto && (
                           <span className="text-muted-foreground truncate max-w-[22rem]">{p.producto}</span>
@@ -442,6 +442,28 @@ export default function ColaDelDiaPage() {
                           >
                             comprueba las plazas
                           </span>
+                        )}
+                        {/* El 5 % de contado, solo en el paso donde toca
+                            ofrecerlo (#91). En «no consta» se avisa en vez de
+                            callar: no ofrecerlo en un master no se nota nunca,
+                            y es el error caro de los dos. */}
+                        {p.ofrece_descuento && (
+                          p.lleva_descuento === true ? (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              title="Master o diplomado: lleva el 5 % de contado, y se ofrece en este paso, no antes.">
+                              lleva el 5 %
+                            </span>
+                          ) : p.lleva_descuento === false ? (
+                            <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-muted-foreground"
+                              title="El 5 % de contado solo aplica en master y diplomado.">
+                              sin 5 %
+                            </span>
+                          ) : (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                              title="No consta que formacion le interesa: comprueba si lleva el 5 % antes de ofrecerlo.">
+                              ¿lleva 5 %?
+                            </span>
+                          )
                         )}
                       </p>
                     )}

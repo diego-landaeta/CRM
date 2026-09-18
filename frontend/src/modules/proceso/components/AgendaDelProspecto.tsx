@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { CheckCircle, Circle, WarningCircle, CaretRight, ListChecks } from '@phosphor-icons/react';
 import { traerPasosDeLead, type PasoDeLead } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import PlantillasDelPaso from './PlantillasDelPaso';
+import AvisoDelCinco from './AvisoDelCinco';
 
 /**
  * El proceso comercial de ESTA persona, en su ficha.
@@ -101,9 +103,54 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
               Comprueba cuántas plazas quedan antes de enviar. No las lleva el CRM.
             </p>
           )}
+          {/* «Sin correo no hay guía de Moodle ni homologaciones: si falta,
+              pedirlo el día 1» (#91). Se avisa solo mientras el paso sea de
+              los primeros: a estas alturas del proceso ya es tarde para
+              recordarlo y sería ruido en todas las fichas. */}
+          {siguiente.sin_correo && siguiente.orden <= 2 && (
+            <p className="mt-1.5 rounded bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              No tenemos su correo. Pídeselo hoy: sin él no se le puede mandar la guía del campus ni las homologaciones.
+            </p>
+          )}
+
+          {/* «Cada correo se avisa por WhatsApp» (#91). El paso sigue
+              abierto aunque ya se haya escrito: el documento dice que nunca
+              se da por hecho que lo ha visto. Se explica POR QUÉ, o parece
+              que el CRM no se ha enterado de que la gestora ya escribió. */}
+          {siguiente.falta_aviso && (
+            <p className="mt-1.5 rounded bg-blue-100 px-2 py-1 text-[11px] font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+              El correo salió, pero no consta el aviso por WhatsApp. Sin él el paso no se cierra: nunca damos por hecho que lo ha visto.
+            </p>
+          )}
+          {siguiente.falta_correo && (
+            <p className="mt-1.5 rounded bg-blue-100 px-2 py-1 text-[11px] font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+              Le has escrito por WhatsApp, pero falta el correo con la información. Este paso va por los dos.
+            </p>
+          )}
+
+          {/* La prueba social del paso 2 (#91). El documento lo subraya: «si
+              no tiene opiniones, pedir internamente que se cree la de ese
+              curso — NO LO DEJES PASAR». Esa segunda mitad es la que se
+              pierde: el prospecto de la semana que viene se encuentra el
+              mismo curso sin opiniones. */}
+          {siguiente.pide_opiniones && siguiente.opiniones_publicadas !== true && (
+            <p className="mt-1.5 rounded bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              {siguiente.opiniones_publicadas === false
+                ? 'Esta formación no tiene opiniones publicadas: manda la captura de la vista general y pide que se cree la suya. No lo dejes para otro día.'
+                : 'No consta si esta formación tiene opiniones publicadas. Compruébalo antes de mandar la prueba social.'}
+            </p>
+          )}
+
+          {siguiente.ofrece_descuento && <AvisoDelCinco lleva={siguiente.lleva_descuento ?? null} />}
+
           {siguiente.nota_del_paso && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{siguiente.nota_del_paso}</p>
           )}
+
+          {/* Las plantillas de ESTE paso, escritas y rellenas (#88). Iban
+              en otra pantalla, así que había que acordarse de cuál era y
+              salir de la ficha a buscarla. */}
+          <PlantillasDelPaso leadId={leadId} clave={siguiente.clave} />
         </div>
       ) : (
         <p className="mb-3 text-[11px] text-muted-foreground">

@@ -14,6 +14,9 @@ const richFields = {
   horas: z.string().max(80).nullable().optional().or(z.literal('')),
   num_modulos: z.union([z.coerce.number().int().nonnegative(), z.literal(''), z.null()]).optional(),
   modalidad: z.string().max(80).nullable().optional().or(z.literal('')),
+  // Sí, no, o sin decidir: `null` es «no consta» y la pantalla lo dice
+  // distinto de «no tiene» (#91).
+  opiniones_publicadas: z.boolean().nullable().optional(),
   fecha_inicio_texto: z.string().max(200).nullable().optional().or(z.literal('')),
   presentacion_texto: z.string().max(50000).nullable().optional().or(z.literal('')),
   objetivos_texto: z.string().max(50000).nullable().optional().or(z.literal('')),

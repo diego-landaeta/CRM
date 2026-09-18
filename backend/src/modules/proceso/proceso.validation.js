@@ -27,6 +27,11 @@ export const crearPasoSchema = z.object({
   // Su mensaje dice cuantas plazas quedan: el CRM avisa de ir a mirarlas
   // fuera, no las calcula. Se puede apagar en un proyecto sin convocatorias.
   avisa_plazas: z.coerce.boolean().optional(),
+  // Este es el paso donde se ofrece el 5 % de contado. A que formaciones
+  // aplica NO se guarda: se mira del catalogo, que cambia cada semana.
+  ofrece_descuento: z.coerce.boolean().optional(),
+  // Este paso manda las opiniones: la pantalla avisa si el curso no tiene.
+  pide_opiniones: z.coerce.boolean().optional(),
   nota: z.string().max(2000).nullable().optional().or(z.literal('')),
 }).refine(
   (d) => d.dia_desde == null || d.dia_hasta == null || d.dia_hasta >= d.dia_desde,
@@ -44,6 +49,11 @@ export const editarPasoSchema = z.object({
   // Su mensaje dice cuantas plazas quedan: el CRM avisa de ir a mirarlas
   // fuera, no las calcula. Se puede apagar en un proyecto sin convocatorias.
   avisa_plazas: z.coerce.boolean().optional(),
+  // Este es el paso donde se ofrece el 5 % de contado. A que formaciones
+  // aplica NO se guarda: se mira del catalogo, que cambia cada semana.
+  ofrece_descuento: z.coerce.boolean().optional(),
+  // Este paso manda las opiniones: la pantalla avisa si el curso no tiene.
+  pide_opiniones: z.coerce.boolean().optional(),
   nota: z.string().max(2000).nullable().optional().or(z.literal('')),
   activo: z.coerce.boolean().optional(),
 }).refine((d) => Object.keys(d).length > 0, {

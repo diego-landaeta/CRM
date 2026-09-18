@@ -1,4 +1,6 @@
 import { query } from '../../shared/config/db.js';
+import { llevaCincoDeContado } from './reglasDelProceso.js';
+import { PASOS_POR_DEFECTO } from './pasosPorDefecto.js';
 /*
   LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
 
@@ -23,7 +25,7 @@ import { query } from '../../shared/config/db.js';
 
 const COLS = `id, project_id, clave, nombre, orden, cuando,
               dia_desde, dia_hasta, canales, es_seguimiento, nota, activo,
-              avisa_plazas, created_at, updated_at`;
+              avisa_plazas, ofrece_descuento, pide_opiniones, created_at, updated_at`;
 
 export async function listByProject(projectId, { includeInactive = false } = {}) {
   const { rows } = await query(
@@ -75,7 +77,8 @@ export async function update(id, data) {
   // `clave` NO esta en la lista a proposito: es por donde entra el codigo, y
   // dejar que se renombre desde la pantalla es exactamente como se rompe.
   const permitidos = ['nombre', 'orden', 'cuando', 'dia_desde', 'dia_hasta',
-                      'canales', 'es_seguimiento', 'nota', 'activo', 'avisa_plazas'];
+                      'canales', 'es_seguimiento', 'nota', 'activo', 'avisa_plazas',
+                      'ofrece_descuento', 'pide_opiniones'];
   const campos = [];
   const valores = [];
   let i = 1;
@@ -118,6 +121,48 @@ export async function deactivate(id) {
   return rows[0];
 }
 
+// ── LOS CINCO PASOS DE UNA MARCA NUEVA ──────────────────────────────────────
+//
+// La migracion `143_pasos_comerciales.sql` sembro los cinco pasos con un
+// `CROSS JOIN projects`, o sea para los proyectos que existian AQUEL DIA. Un
+// proyecto creado despues nace con la tabla vacia, y sin pasos no hay proceso
+// comercial: «que toca hoy» sale en blanco, la cola del dia no tiene de que
+// tirar y las plantillas no cuelgan de ningun sitio. La pantalla no da ningun
+// error — simplemente no hay nada, que es la peor forma de fallar.
+//
+// Comprobado creando una marca por el panel: cero pasos.
+//
+// Se llama desde el alta del proyecto, y tambien desde la migracion que repara
+// los que se quedaron sin ellos. La lista vive en `pasosPorDefecto.js`, no
+// aqui: es la misma para los dos sitios y asi no puede divergir.
+export async function sembrarPorDefecto(projectId) {
+  // Un solo INSERT: cinco viajes a la base por cada marca creada no hacen
+  // falta, y si uno fallara a medias el proyecto quedaria con tres pasos, que
+  // es peor que con ninguno — nadie mira una lista que ya tiene contenido.
+  const params = [projectId];
+  const filas = PASOS_POR_DEFECTO.map((p) => {
+    const i = params.length;
+    params.push(p.clave, p.nombre, p.orden, p.cuando, p.dia_desde, p.dia_hasta,
+                p.canales, p.es_seguimiento, p.nota);
+    return `($1, $${i + 1}, $${i + 2}, $${i + 3}, $${i + 4}, $${i + 5}::integer,`
+         + ` $${i + 6}::integer, $${i + 7}::text[], $${i + 8}, $${i + 9})`;
+  });
+
+  // ON CONFLICT y no un DELETE previo: si la marca ya tiene sus pasos —o los
+  // tiene EDITADOS, que es lo normal pasado un tiempo— esto no debe pisarlos.
+  // El indice unico es (project_id, clave).
+  const { rows } = await query(
+    `INSERT INTO commercial_steps
+       (project_id, clave, nombre, orden, cuando, dia_desde, dia_hasta,
+        canales, es_seguimiento, nota)
+     VALUES ${filas.join(', ')}
+     ON CONFLICT (project_id, clave) DO NOTHING
+     RETURNING id`,
+    params
+  );
+  return rows.length;
+}
+
 // ── LA AGENDA DE CADA PROSPECTO (#89 · #90) ─────────────────────────────────
 //
 // `commercial_steps` dice el proceso en general; esto dice a QUIEN le toca QUE
@@ -138,6 +183,33 @@ const ENTRADA = `COALESCE(l.fecha_solicitud, l.created_at)`;
 // no es contactar con nadie.
 const CONTACTOS = `(SELECT count(*) FROM lead_interactions li
                      WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+
+// ── «CADA CORREO SE AVISA POR WHATSAPP» (#91) ───────────────────────────────
+//
+// El documento: «nunca damos por hecho que lo ha visto». Un paso que se hace
+// por los dos canales NO esta hecho hasta que salen los dos, aunque se haya
+// contactado tres veces por uno solo.
+//
+// Solo se exige donde el paso DECLARA los dos canales —hoy el paso 1—, y solo
+// sobre correo y WhatsApp. La llamada no entra aunque el paso la declare: no
+// todas las gestoras las registran, y exigir un registro que no se hace
+// dejaria media cola pendiente para siempre por un motivo falso.
+const POR_CANAL = (tipo) => `(SELECT count(*) FROM lead_interactions li
+                     WHERE li.lead_id = l.id AND li.tipo = '${tipo}')`;
+
+// Y no se le exige a quien no tiene correo: no se le puede mandar. De eso
+// avisa `sin_correo`, que pide que se lo pidan el dia 1.
+const EXIGE_LOS_DOS = `(s.canales @> ARRAY['email','whatsapp']::text[]
+                        AND l.email IS NOT NULL AND btrim(l.email) <> '')`;
+
+// Lo que falta para dar el paso por hecho, cuando se piden los dos.
+const FALTA_CORREO   = `(${EXIGE_LOS_DOS} AND ${POR_CANAL('email')} = 0)`;
+const FALTA_WHATSAPP = `(${EXIGE_LOS_DOS} AND ${POR_CANAL('whatsapp')} = 0)`;
+
+// El paso se cierra con los contactos, como siempre, y ademas con los dos
+// canales cuando toca.
+const HECHO = `((${CONTACTOS}) >= ls.orden
+                AND NOT ${FALTA_CORREO} AND NOT ${FALTA_WHATSAPP})`;
 
 /**
  * Escribe la agenda de un prospecto: un apunte por cada paso del proceso de su
@@ -181,11 +253,30 @@ export async function pasosDeLead(leadId) {
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
             s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
             COALESCE(s.avisa_plazas, false) AS avisa_plazas,
-            (${CONTACTOS}) >= ls.orden AS hecho,
+            -- El 5 % de contado (#91): el paso dice si es el suyo y la
+            -- formacion dice si lo lleva. Las dos cosas hacen falta.
+            COALESCE(s.ofrece_descuento, false) AS ofrece_descuento,
+            COALESCE(s.pide_opiniones, false) AS pide_opiniones,
+            p.nombre AS producto, pc.nombre AS producto_categoria,
+            -- La prueba social del paso 2 (#91). NULL es «no consta» y no es
+            -- lo mismo que «no tiene»: sin saberlo se pide comprobar, no se
+            -- afirma que no hay.
+            p.opiniones_publicadas,
+            -- «Sin correo no hay guia de Moodle ni homologaciones: si falta,
+            -- pedirlo el dia 1» (#91). El CRM sabe si lo tiene; hasta ahora
+            -- habia que acordarse de mirarlo.
+            (l.email IS NULL OR btrim(l.email) = '') AS sin_correo,
+            ${HECHO} AS hecho,
+            -- Por que sigue pendiente, para decirlo en vez de dejar a la
+            -- gestora mirando un paso que ella cree hecho.
+            ${FALTA_CORREO} AS falta_correo,
+            ${FALTA_WHATSAPP} AS falta_aviso,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
        JOIN leads l ON l.id = ls.lead_id
        LEFT JOIN commercial_steps s ON s.id = ls.step_id
+       LEFT JOIN products p ON p.id = l.producto_interes_id
+       LEFT JOIN product_categories pc ON pc.id = p.categoria_id
       WHERE ls.lead_id = $1
       ORDER BY ls.orden, ls.id`,
     [leadId]
@@ -196,6 +287,11 @@ export async function pasosDeLead(leadId) {
     // Un paso vence solo si no esta hecho ni saltado. Uno hecho tarde ya no
     // urge: urge el siguiente.
     vencido: !r.hecho && r.estado === 'pendiente' && Number(r.dias_de_retraso) > 0,
+    // `null` es «no consta la formacion», y no es lo mismo que «no lo lleva»:
+    // ahi hay que preguntar, no dar por hecho que no.
+    lleva_descuento: r.ofrece_descuento
+      ? llevaCincoDeContado(r.producto, r.producto_categoria)
+      : null,
   }));
 }
 
@@ -231,17 +327,25 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
        SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
               l.producto_interes_id,
               ${CONTACTOS} AS contactos,
+              ${FALTA_CORREO} AS falta_correo,
+              ${FALTA_WHATSAPP} AS falta_aviso,
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
          FROM lead_steps ls
          JOIN leads l ON l.id = ls.lead_id
+         -- El paso hace falta AQUI DENTRO, no solo fuera: la regla de los dos
+         -- canales mira los canales del paso para saber si los pide. (Sin
+         --  comillas invertidas aqui: esto va dentro de una plantilla de JS.)
+         LEFT JOIN commercial_steps s ON s.id = ls.step_id
         WHERE l.deleted_at IS NULL
           AND ls.estado = 'pendiente'
           AND ls.fecha_prevista <= ${pHasta}
           -- Quien ya compro o dijo que no, sale de la cola: seguir el proceso
           -- con alguien que ya cerro es hacerle perder el tiempo a las dos.
           AND l.status NOT IN ('convertido', 'no_interesado')
-          -- El paso ya hecho no se pide otra vez.
-          AND ${CONTACTOS} < ls.orden
+          -- El paso ya hecho no se pide otra vez. «Hecho» incluye desde el
+          -- #91 que hayan salido los dos canales cuando el paso los pide:
+          -- un correo sin su aviso por WhatsApp deja el paso abierto.
+          AND NOT ${HECHO}
           ${pProj} ${pAses}
      )
      SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
@@ -257,12 +361,18 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
             -- Las plazas NO: solo la marca de que este paso las menciona y hay
             -- que ir a comprobarlas fuera.
             p.nombre AS producto, p.precio AS producto_precio,
-            COALESCE(s.avisa_plazas, false) AS avisa_plazas
+            pc.nombre AS producto_categoria,
+            p.opiniones_publicadas,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
+            COALESCE(s.ofrece_descuento, false) AS ofrece_descuento,
+            COALESCE(s.pide_opiniones, false) AS pide_opiniones,
+            q.falta_correo, q.falta_aviso
        FROM pendientes q
        LEFT JOIN commercial_steps s ON s.id = q.step_id
        LEFT JOIN projects pr ON pr.id = q.project_id
        LEFT JOIN users u ON u.id = q.responsable_id
        LEFT JOIN products p ON p.id = q.producto_interes_id
+       LEFT JOIN product_categories pc ON pc.id = p.categoria_id
       WHERE q.pos = 1
       ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite}`,
@@ -271,6 +381,11 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   return rows.map((r) => ({
     ...r,
     dias_de_retraso: Number(r.dias_de_retraso),
+    // Ver `pasosDeLead`: el paso dice si toca ofrecerlo, la formacion si lo
+    // lleva, y `null` es «no consta la formacion».
+    lleva_descuento: r.ofrece_descuento
+      ? llevaCincoDeContado(r.producto, r.producto_categoria)
+      : null,
   }));
 }
 
@@ -301,9 +416,13 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
          FROM lead_steps ls
          JOIN leads l ON l.id = ls.lead_id
+         -- El paso, por la regla de los dos canales. Cuenta lo MISMO que la
+         -- cola o el numero de arriba no cuadra con la lista de abajo, que es
+         -- la forma mas rapida de que nadie se crea ninguno de los dos.
+         LEFT JOIN commercial_steps s ON s.id = ls.step_id
         WHERE l.deleted_at IS NULL AND ls.estado = 'pendiente'
           AND l.status NOT IN ('convertido', 'no_interesado')
-          AND ${CONTACTOS} < ls.orden
+          AND NOT ${HECHO}
           ${pProj} ${pAses}
      )
      SELECT count(*) FILTER (WHERE fecha_prevista < CURRENT_DATE)::int      AS atrasados,

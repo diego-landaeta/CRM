@@ -1,4 +1,5 @@
 import * as Pasos from './proceso.model.js';
+import { plantillasDelPaso } from './plantillasDelPaso.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 export function listarPasos(projectId, opciones) {
@@ -61,4 +62,17 @@ export async function ajustarPaso(id, datos) {
   const paso = await Pasos.ajustarPaso(id, datos);
   if (!paso) throw new AppError('Ese paso no existe', 404);
   return paso;
+}
+
+/**
+ * Las plantillas de un paso, rellenas (#88).
+ *
+ * Un paso sin plantillas NO es un error: hay pasos que son una llamada, y el
+ * documento no trae texto para el paso 4 de MultiCRM. Lo que si es un error es
+ * pedir las de un prospecto que no existe.
+ */
+export async function plantillasDeUnPaso(leadId, clave) {
+  const r = await plantillasDelPaso(leadId, clave);
+  if (!r) throw new AppError('Ese prospecto no existe', 404);
+  return r;
 }

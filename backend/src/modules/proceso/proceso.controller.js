@@ -112,3 +112,17 @@ export async function ajustarPasoDeLead(req, res, next) {
     res.json({ success: true, data: paso });
   } catch (err) { next(err); }
 }
+
+export async function plantillasDelPaso(req, res, next) {
+  try {
+    // La clave viene de la URL y se usa tal cual en un WHERE parametrizado.
+    // Se acota igual a lo que admite la validacion de un paso: una clave
+    // rara no encuentra nada, pero tampoco hace falta dejarla pasar.
+    const clave = String(req.params.clave || '');
+    if (!/^[a-z0-9_]{1,40}$/.test(clave)) {
+      return res.status(400).json({ success: false, error: 'Clave de paso no valida' });
+    }
+    const data = await Proceso.plantillasDeUnPaso(Number(req.params.leadId), clave);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
