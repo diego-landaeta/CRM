@@ -304,6 +304,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         <div className="flex items-center gap-2 self-start sm:self-auto">
         {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
             cifras que cuentan cosas distintas, asi que se explica aqui mismo. */}
+        {!esIA && (<>
         <button
           type="button"
           onClick={() => setTutorialesOpen(true)}
@@ -320,6 +321,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         >
           Análisis
         </button>
+        </>)}
         {/* Registrar a mano no aplica en IA: las ventas entran solas, de
             Stripe o de la base de la propia app. */}
         {activeProject?.id && !esIA && (
@@ -498,7 +500,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             no es una venta nueva y no puede sumarse con ellas. Solo tiene
             sentido con un periodo elegido: sin fechas, «cobrado en estas
             fechas» no significa nada. */}
-        {(rango.from && rango.to) && (
+        {/* En IA no se facturan cuotas: son suscripciones que cobra Stripe. */}
+        {(rango.from && rango.to) && !esIA && (
           <div title={`Facturas con etiqueta CUOTA emitidas en estas fechas: las mismas que se ven en Facturación con este filtro`}>
             <KpiCard
               icon={Receipt}
@@ -516,6 +519,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         {/* Ventas por facturas: cuantas de estas ventas tienen factura.
             El detalle va en el texto que sale al pasar el raton, que es donde
             lo pidio Diego — la tarjeta enseña la proporcion de un vistazo. */}
+        {!esIA && (
         <div title={`${totales.facturadas} ventas facturadas · ${totales.noRequiereFactura} no necesitan factura · ${totales.pendientesDeFacturar} pendientes de facturar`}>
           <KpiCard
             icon={Receipt}
@@ -531,6 +535,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             trend="down"
           />
         </div>
+        )}
         {/* Se llamaba «Facturado» y NO es lo facturado: es la suma del importe
             de las ventas del periodo. El 8/9 en ISEIH decia 200 € cuando ese
             dia se emitieron 317,50 € en facturas, y por eso Ventas y
@@ -553,6 +558,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             format={fmt}
           />
         </div>
+        {/* El IVA de una suscripcion de 9,99 EUR no se mira a diario: esta
+            en Facturacion cuando haga falta. */}
+        {!esIA && (
         <KpiCard
           icon={Receipt}
           iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
@@ -560,6 +568,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           numericValue={totales.iva}
           format={fmt}
         />
+        )}
       </div>
 
 
@@ -610,7 +619,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
       {/* Lo unico que hay que HACER: las ventas que esperan factura. Lleva a la
           pantalla donde se emiten, que cuenta exactamente lo mismo. */}
-      {totales.pendientesDeFacturar > 0 && (
+      {!esIA && totales.pendientesDeFacturar > 0 && (
         <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="text-sm text-amber-900 dark:text-amber-200">
             <strong>{totales.pendientesDeFacturar}</strong>{' '}
