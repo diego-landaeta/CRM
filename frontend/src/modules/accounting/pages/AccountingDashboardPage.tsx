@@ -35,6 +35,18 @@ const DEFAULT_TO = new Date().toISOString().slice(0, 10);
 export default function AccountingDashboardPage() {
   const navigate = useNavigate();
   const { activeProject, activeIssuerId } = useProjectContext();
+
+  /**
+   * En un proyecto IA este panel enseña MENOS (#44).
+   *
+   * Una suscripcion se cobra o no se cobra: no hay «por cobrar», ni
+   * «vencido», ni una vendedora detras de cada alta. Y no se emite factura
+   * por cada cobro de 4,90 EUR, asi que «Facturado» sale a cero siempre.
+   *
+   * Lo que si aplica se queda: lo cobrado, los gastos --que los hay, del
+   * software de la propia app-- y el balance.
+   */
+  const esIA = activeProject?.type === 'ia';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useUrlFilters({ from: DEFAULT_FROM, to: DEFAULT_TO });
@@ -146,6 +158,7 @@ export default function AccountingDashboardPage() {
           label="Ingresos cobrados"
           value={fmt(ingresos.total_cobrado)}
         />
+        {!esIA && (<>
         <KpiCard
           icon={Receipt}
           iconBg="bg-info-soft text-info-soft-foreground"
@@ -171,6 +184,7 @@ export default function AccountingDashboardPage() {
           badgeColor="bg-destructive-soft text-destructive-soft-foreground"
           trend="down"
         />
+        </>)}
         <KpiCard
           icon={TrendDown}
           iconBg="bg-destructive-soft text-destructive-soft-foreground"
@@ -222,7 +236,8 @@ export default function AccountingDashboardPage() {
         </div>
       </div>
 
-      {/* Ventas por vendedora */}
+      {/* Ventas por vendedora. En IA no hay: la gente se suscribe sola. */}
+      {!esIA && (
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-semibold mb-3">Ventas por vendedora</h3>
         {vend.length === 0 ? (
@@ -254,8 +269,11 @@ export default function AccountingDashboardPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Cuentas por cobrar */}
+      {/* Cuentas por cobrar. Tampoco en IA: Stripe cobra o no cobra, no deja
+          una deuda pendiente que perseguir. */}
+      {!esIA && (
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Cuentas por cobrar ({cxc.num})</h3>
@@ -354,6 +372,7 @@ export default function AccountingDashboardPage() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
