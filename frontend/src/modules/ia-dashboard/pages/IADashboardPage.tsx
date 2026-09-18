@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useStripeMonitor } from '../hooks/useStripeMonitor';
 import MetricLabel from '@/shared/components/ui/MetricLabel';
+import PorQueSeVan from '../components/PorQueSeVan';
 import useCountUp from '@/shared/hooks/useCountUp';
 import {
   CurrencyEur, Users, TrendDown, ArrowUp, ArrowDown,
@@ -225,6 +226,13 @@ export default function IADashboardPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+
+          {/* Por que se van (#44). Va al final y no arriba: primero se mira
+              cuanto entra, y esto explica lo que se pierde. */}
+          <PorQueSeVan
+            datos={metrics.porQueSeVan}
+            comentarios={metrics.comentariosDeBaja}
+          />
         </>
       )}
     </div>

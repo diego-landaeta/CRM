@@ -5,6 +5,7 @@ import { logger } from '../../shared/utils/logger.js';
 import * as gastoIA from '../../shared/services/gastoIA.service.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import * as supabaseIA from './supabase.service.js';
+import { agrupaPorMotivo, comentarios } from './motivosDeBaja.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -56,9 +57,14 @@ async function fetchStripeMetrics(apiKey) {
   const newSubsRes = await fetch(`${urlDeStripe('/v1/subscriptions')}?created[gte]=${monthStart}&limit=100`, { headers });
   const newSubsJ = newSubsRes.ok ? await newSubsRes.json() : { data: [] };
   const newSubs = (newSubsJ.data || []).length;
+  // Las canceladas del mes. Se piden con `cancellation_details` porque ahi
+  // viene POR QUE se fueron, que es la unica cifra de retencion accionable:
+  // que el churn sea del 8 % no se puede arreglar; que cuatro de cada diez
+  // digan «no lo uso suficiente», si.
   const cancelledRes = await fetch(`${urlDeStripe('/v1/subscriptions')}?status=canceled&canceled_at[gte]=${monthStart}&limit=100`, { headers });
   const cancelledJ = cancelledRes.ok ? await cancelledRes.json() : { data: [] };
-  const cancelledSubs = (cancelledJ.data || []).length;
+  const canceladas = cancelledJ.data || [];
+  const cancelledSubs = canceladas.length;
   // Failed payments (charges del mes con status failed)
   const failedRes = await fetch(`${urlDeStripe('/v1/charges')}?created[gte]=${monthStart}&limit=100`, { headers });
   const failedJ = failedRes.ok ? await failedRes.json() : { data: [] };
@@ -70,6 +76,9 @@ async function fetchStripeMetrics(apiKey) {
     activeSubs: active.length,
     newSubs, cancelledSubs, failedPayments,
     churnRate: Math.round(churnRate * 100) / 100,
+    porQueSeVan: agrupaPorMotivo(canceladas),
+    // Los escritos a mano van aparte y sin agregar: son de cada persona.
+    comentariosDeBaja: comentarios(canceladas).slice(0, 20),
   };
 }
 
@@ -103,7 +112,8 @@ export async function getMetrics(req, res, next) {
     res.json({
       success: true,
       data: {
-        ...(metrics || { mrr: 0, activeSubs: 0, newSubs: 0, cancelledSubs: 0, failedPayments: 0, churnRate: 0 }),
+        ...(metrics || { mrr: 0, activeSubs: 0, newSubs: 0, cancelledSubs: 0, failedPayments: 0, churnRate: 0,
+          porQueSeVan: { total: 0, motivos: [] }, comentariosDeBaja: [] }),
         evolution12Months,
         warning,
         api_configured: !!key,
