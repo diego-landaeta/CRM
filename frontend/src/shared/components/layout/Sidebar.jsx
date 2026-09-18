@@ -235,7 +235,11 @@ const NAV_SECTIONS = [
     label: 'Proyecto IA',
     icon: Robot,
     items: [
-      { label: 'Resumen', to: '/stripe', detail: 'MRR, altas y bajas', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      // Lleva al panel de Contabilidad, que en IA YA trae lo suyo: MRR,
+      // activas, altas, bajas y por que se van, ademas de cobrado, gastos y
+      // balance. Antes eran dos pantallas de resumen del mismo proyecto, que
+      // es como se llega a que digan cifras distintas.
+      { label: 'Resumen', to: '/finanzas', detail: 'Lo que entra y lo que se va', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia' },
       { label: 'Cobros', to: '/finanzas/pagos-stripe', detail: 'Lo que ha entrado', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia' },
       { label: 'Suscriptores', to: '/clientes', detail: 'Quien paga', icon: UserCheck, projectType: 'ia' },
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin'], projectType: 'ia' },
