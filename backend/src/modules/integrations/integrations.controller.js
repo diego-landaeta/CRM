@@ -185,8 +185,23 @@ export async function remove(req, res, next) {
 
 // ─── Test helpers ────────────────────────────────────────────────────────
 
+/**
+ * Probar una clave de Stripe.
+ *
+ * Se prueba con `/v1/balance`, que es de solo lectura y no cuesta nada. Pero
+ * una CLAVE RESTRINGIDA —las `rk_`, las que hay que crear cuando no se tiene
+ * la secreta original— puede no llevar permiso de balance y responder 403
+ * aunque sirva perfectamente para leer cobros.
+ *
+ * Con el 403 como error, la pantalla decía «Stripe HTTP 403» y la clave
+ * parecía inválida: cerraba justo el camino recomendado, que es dar al CRM una
+ * clave de solo lectura en vez de la secreta de la cuenta.
+ *
+ * Así que ante un 403 se vuelve a preguntar por lo que el CRM de verdad
+ * necesita —los cobros— y, si eso responde, la clave vale. Se dice que es
+ * limitada, porque importa saberlo: con ella no se puede leer el saldo.
+ */
 async function testStripe(apiKey) {
-  // /v1/balance es read-only y siempre disponible. Devuelve 401 si la key es mala.
   const r = await fetch(urlDeStripe('/v1/balance'), {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
@@ -200,6 +215,29 @@ async function testStripe(apiKey) {
     };
   }
   if (r.status === 401) return { ok: false, message: 'API key inválida (401 Unauthorized)' };
+
+  if (r.status === 403) {
+    // Lo que el CRM lee de verdad. `limit=1` para no traerse nada.
+    const c = await fetch(urlDeStripe('/v1/charges?limit=1'), {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (c.ok) {
+      const data = await c.json().catch(() => null);
+      const livemode = data?.data?.[0]?.livemode === true;
+      return {
+        ok: true,
+        limitada: true,
+        livemode,
+        message: 'Conexión OK con una clave restringida: lee los cobros, pero no el saldo. '
+               + 'Es suficiente para el CRM.',
+      };
+    }
+    return {
+      ok: false,
+      message: 'La clave no tiene permiso ni para el saldo ni para los cobros. '
+             + 'Si es restringida, dale lectura de «Charges».',
+    };
+  }
   return { ok: false, message: `Stripe HTTP ${r.status}` };
 }
 
@@ -244,3 +282,8 @@ async function testBrevo(apiKey) {
   if (r.status === 401) return { ok: false, message: 'API key inválida (401 Unauthorized)' };
   return { ok: false, message: `Brevo HTTP ${r.status}` };
 }
+
+// Para las pruebas. `testStripe` es interna —no es un endpoint— y lo que hay
+// que fijar es su comportamiento ante el 403 de una clave restringida, que es
+// justo lo que impedia conectar los proyectos de IA.
+export { testStripe as testStripeParaPruebas };
