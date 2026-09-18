@@ -162,3 +162,16 @@ export async function importarSupabase(req, res, next) {
     res.json({ success: true, data: await supabaseIA.importar(idDelProyecto(req), { soloProbar, usuarioId: req.user?.userId || null }) });
   } catch (e) { next(e); }
 }
+
+/**
+ * POST /api/ia/supabase/quitar-pruebas/:projectId
+ *
+ * Quita las ventas que eran pruebas. Con `soloProbar` dice cuantas quitaria
+ * sin tocar nada -- que es como hay que mirarlo la primera vez.
+ */
+export async function quitarPruebasSupabase(req, res, next) {
+  try {
+    const soloProbar = req.query.soloProbar === 'true' || req.body?.soloProbar === true;
+    res.json({ success: true, data: await supabaseIA.quitarLasDePrueba(idDelProyecto(req), { soloProbar }) });
+  } catch (err) { next(err); }
+}
