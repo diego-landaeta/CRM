@@ -22,7 +22,7 @@ const ALL_PROJECTS_ID = -1;
 
 export default function SalesPage() {
   const { activeProject, activeIssuerId, switchProject, projects } = useProjectContext() as {
-    activeProject: { id: number; nombre?: string } | null;
+    activeProject: { id: number; nombre?: string; type?: string } | null;
     activeIssuerId: number | null;
     switchProject: (id: number) => void;
     projects: Array<{ id: number; nombre?: string }>;
@@ -60,6 +60,23 @@ export default function SalesPage() {
   // Arranca en el año en curso: un mes recién empezado sale en blanco —ISEIE
   // no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
   const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('ytd');
+
+  /**
+   * En un proyecto IA esta pantalla enseña MENOS.
+   *
+   * Un proyecto IA no tiene equipo comercial: nadie vende, la gente se
+   * suscribe sola y los cobros entran de Stripe o de su propia base. Con la
+   * pantalla completa se veía «Mi meta del mes» a cero, «Equipo de ventas —
+   * 0 gestores», un filtro de gestoras vacío y un botón de registrar ventas a
+   * mano que nadie va a pulsar.
+   *
+   * Media pantalla diciendo que no hay nadie. Y lo que sí importa —cuánto
+   * entró y de quién— quedaba debajo de todo eso.
+   *
+   * No se esconde por ser IA porque sí: se esconde lo que en un proyecto sin
+   * equipo NO PUEDE tener contenido nunca.
+   */
+  const esIA = activeProject?.type === 'ia';
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
@@ -106,7 +123,7 @@ export default function SalesPage() {
               <span className="hidden sm:inline">Todos los proyectos</span>
             </button>
           )}
-          {isAdmin && !allProjects && (
+          {isAdmin && !allProjects && !esIA && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />
               <select
@@ -120,6 +137,8 @@ export default function SalesPage() {
               </select>
             </div>
           )}
+          {/* Registrar a mano no aplica en IA: las ventas entran solas. */}
+          {!esIA && (
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -130,6 +149,7 @@ export default function SalesPage() {
             <Plus size={14} weight="bold" />
             Nueva venta
           </button>
+          )}
           </>
         )}
       />
@@ -158,7 +178,7 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* «Mi meta» es de quien vende. Un admin o superadmin no tiene
                 ventas propias y la tarjeta le salia siempre a cero. */}
-            {!isAdmin && (
+            {!isAdmin && !esIA && (
               <Suspense fallback={null}>
                 <MyGoalCard projectId={projectIdParam} issuerId={issuerIdParam} periodo={mes} />
               </Suspense>
@@ -191,7 +211,7 @@ export default function SalesPage() {
             </Suspense>
           )}
 
-          {isAdmin && (
+          {isAdmin && !esIA && (
             <Suspense fallback={null}>
               <GestoresStatsTable projectId={projectIdParam} issuerId={issuerIdParam} canEdit={!allProjects} periodo={mes} />
             </Suspense>
