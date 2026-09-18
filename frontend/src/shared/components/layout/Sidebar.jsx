@@ -113,6 +113,7 @@ const NAV_SECTIONS = [
       // propia pantalla y el servidor.
       {
         label: 'Prospectos',
+        salvoTipo: ['ia'],
         icon: Users,
         module: 'leads',
         defaultOpen: true,
@@ -129,6 +130,7 @@ const NAV_SECTIONS = [
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
         label: 'WhatsApp',
+        salvoTipo: ['ia'],
         icon: WhatsappLogo,
         module: 'whatsapp',
         apagable: 'whatsapp',
@@ -168,6 +170,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Captación',
+    salvoTipo: ['ia'],
     icon: Funnel,
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences' },
@@ -184,6 +187,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Publicidad',
+    salvoTipo: ['ia'],
     icon: Megaphone,
     items: [
       { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'] },
@@ -192,6 +196,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Catálogo',
+    salvoTipo: ['ia'],
     icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
@@ -207,6 +212,7 @@ const NAV_SECTIONS = [
   },
   {
     label: 'Tutores',
+    salvoTipo: ['ia'],
     icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
@@ -217,7 +223,31 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    // EL APARTADO DE LOS PROYECTOS IA.
+    //
+    // Angel: «deberias hacer un apartado especifico para los proyectos IA,
+    // estos no estan muy cargados, por ende la cantidad de apartados son
+    // menores». Un proyecto IA es una suscripcion: quien paga, cuanto entra
+    // y por que se va. No hay embudo, ni equipo, ni catalogo.
+    //
+    // Cuatro entradas y se acabo. El resto del menu se esconde solo, porque
+    // sus secciones no aplican a este tipo.
+    label: 'Proyecto IA',
+    icon: Robot,
+    items: [
+      { label: 'Resumen', to: '/stripe', detail: 'MRR, altas y bajas', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Cobros', to: '/finanzas/pagos-stripe', detail: 'Lo que ha entrado', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Suscriptores', to: '/clientes', detail: 'Quien paga', icon: UserCheck, projectType: 'ia' },
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin'], projectType: 'ia' },
+      { label: 'Conexión', to: '/finanzas/integraciones', detail: 'Stripe y Supabase', icon: PlugsConnected, roles: ['superadmin', 'admin'], projectType: 'ia' },
+    ],
+  },
+  {
     label: 'Finanzas',
+    // En IA no: sus doce entradas se resumen en las cinco de «Proyecto IA»,
+    // que estan justo encima. Doce apartados para un proyecto que solo
+    // cobra suscripciones es lo que hacia que no se encontrara ninguno.
+    salvoTipo: ['ia'],
     icon: Bank,
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
@@ -253,8 +283,8 @@ const NAV_SECTIONS = [
       { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas' },
       { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'] },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas' },
-      { label: 'Comisiones', to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
-      { label: 'Nóminas', to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
+      { label: 'Comisiones', salvoTipo: ['ia'], to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas' },
+      { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas' },
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'factura_manager' },
@@ -396,6 +426,14 @@ function canSeeItem(item, role, modules, projectType, soloColaboraciones, permis
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
   if (item.projectType && projectType !== item.projectType) return false;
+  // Y al reves: lo que en un tipo de proyecto NO EXISTE.
+  //
+  // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas
+  // ni catalogo de veinte cursos: tiene suscriptores y cobros. Enseñarle ocho
+  // apartados vacios es lo que hace que no encuentre los dos que si tienen
+  // algo. Angel, mirando Tarot: «estos no estan muy cargados, por ende la
+  // cantidad de apartados son menores».
+  if (Array.isArray(item.salvoTipo) && item.salvoTipo.includes(projectType)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
@@ -1176,7 +1214,14 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user));
+          // Una seccion entera puede no aplicar a un tipo de proyecto. En IA
+          // no hay campañas, ni catalogo, ni tutores: son apartados que no
+          // pueden tener contenido, no apartados vacios por ahora.
+          const seccionAplica = !(Array.isArray(section.salvoTipo)
+            && section.salvoTipo.includes(activeProject?.type));
+          const visibleItems = seccionAplica
+            ? section.items.filter((item) => canSeeItem(item, user?.role, activeProject?.modules, activeProject?.type, soloColab, user))
+            : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];

@@ -43,6 +43,10 @@ export const BETA_ROUTES: readonly string[] = [
   // nadie.
   '/correos',                // La bandeja del CRM (#146, cerrado el 16/09)
   '/registro',               // Todo lo que ha pasado (#111, cerrado el 15/09)
+  // El resumen de un proyecto IA (#44). La pantalla existe desde hace
+  // semanas y salia como «Proximamente»: es la de MRR, altas, bajas y por
+  // que se van, y es la primera que se abre de una marca IA.
+  '/stripe',                 // Proyecto IA › Resumen
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias
   '/perfil',                // Perfil
