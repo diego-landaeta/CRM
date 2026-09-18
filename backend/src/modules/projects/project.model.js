@@ -1,5 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import crypto from 'crypto';
+import { logger } from '../../shared/utils/logger.js';
+import { sembrarPorDefecto } from '../proceso/proceso.model.js';
 
 export async function findAll({ active }) {
   const where = active === undefined ? '' : `WHERE p.active = ${active === 'true' || active === true}`;
@@ -97,6 +99,20 @@ export async function create(data) {
        ON CONFLICT DO NOTHING`,
       [rows[0].id]
     );
+  }
+
+  // Los cinco pasos del proceso comercial (#87). Van para TODOS los tipos, no
+  // solo `crm`: la migracion que los sembro no distinguia y los proyectos IA
+  // tambien tienen prospectos a los que perseguir.
+  //
+  // No tumba el alta si falla: la marca ya esta creada y devolver un error
+  // aqui haria pensar que no se creo, con lo que alguien la crearia otra vez.
+  // Los pasos se pueden sembrar despues —hay pantalla para anadirlos— y un
+  // proyecto sin pasos se ve a simple vista.
+  try {
+    await sembrarPorDefecto(rows[0].id);
+  } catch (err) {
+    logger.error({ err, projectId: rows[0].id }, 'No se pudieron sembrar los pasos del proceso');
   }
 
   return rows[0];
