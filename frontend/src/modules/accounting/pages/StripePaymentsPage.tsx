@@ -78,6 +78,16 @@ export default function StripePaymentsPage() {
    * y solo una tiene algo que hacer.
    */
   const [hayClave, setHayClave] = useState<boolean | null>(null);
+  /**
+   * Si este proyecto trae sus cobros por SUPABASE en vez de por Stripe.
+   *
+   * Los dos caminos existen y traen lo mismo --lo que ha entrado-- pero esta
+   * pantalla solo mira `stripe_payments`. Tarot tiene 23 cobros importados de
+   * su Supabase y aqui salia «sin pagos»: la entrada del menu promete «lo que
+   * ha entrado» y enseñaba una pantalla vacia. Peor que un error, porque
+   * parece que no ha entrado nada.
+   */
+  const [porSupabase, setPorSupabase] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -163,6 +173,9 @@ export default function StripePaymentsPage() {
     client.get(`/integrations/stripe?projectId=${pid}`)
       .then((r) => { if (vivo) setHayClave(Boolean(r?.data?.has_secret)); })
       .catch(() => { if (vivo) setHayClave(null); });
+    client.get(`/integrations/supabase?projectId=${pid}`)
+      .then((r) => { if (vivo) setPorSupabase(Boolean(r?.data?.has_secret)); })
+      .catch(() => {});
     return () => { vivo = false; };
   }, [pid]);
 
@@ -298,14 +311,15 @@ export default function StripePaymentsPage() {
                   {activeProject?.nombre || 'Este proyecto'} todavía no está conectado a Stripe
                 </p>
                 <p className="mx-auto max-w-md text-xs text-muted-foreground">
-                  Falta su clave. Mientras no esté, los botones de arriba no pueden traer nada.
-                  Vale una clave <strong>restringida</strong> de solo lectura.
+                  {porSupabase
+                    ? 'Sus cobros entran por Supabase, no por Stripe: los verás en Ventas, no en esta pantalla. Conectar Stripe además solo hace falta para el MRR, las bajas y sus motivos.'
+                    : 'Falta su clave. Mientras no esté, los botones de arriba no pueden traer nada. Vale una clave restringida de solo lectura.'}
                 </p>
                 <a
-                  href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/finanzas/integraciones`}
+                  href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}${porSupabase ? '/finanzas/ventas' : '/finanzas/integraciones'}`}
                   className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
                 >
-                  Ir a Integraciones
+                  {porSupabase ? 'Ver sus cobros en Ventas' : 'Ir a Integraciones'}
                 </a>
               </>
             ) : (
