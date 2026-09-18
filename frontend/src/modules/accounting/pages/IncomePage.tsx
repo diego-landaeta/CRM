@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -92,6 +92,38 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // pedia el proyecto numero MENOS UNO, que no existe: la pantalla salia vacia
   // y parecia que faltaban ventas.
   const projectIdParam = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+
+  /**
+   * En un proyecto IA esta pantalla enseña MENOS.
+   *
+   * Un proyecto IA no tiene equipo comercial: nadie vende, la gente se
+   * suscribe sola y los cobros entran de Stripe o de su propia base. Con la
+   * pantalla entera se veia «Mi meta del mes» a cero, «Equipo de ventas — 0
+   * gestores», un filtro de gestoras vacio y un boton de registrar ventas a
+   * mano que nadie va a pulsar.
+   *
+   * Media pantalla para decir que no hay nadie, y lo que si importa --cuanto
+   * entro y de quien-- debajo de todo eso.
+   *
+   * No se esconde por ser IA porque si: se esconde lo que en un proyecto sin
+   * equipo NO PUEDE tener contenido nunca.
+   */
+  const esIA = activeProject?.type === 'ia';
+
+  // Se ajusta cuando se sabe de que proyecto se trata, y UNA sola vez por
+  // proyecto: si se forzara en cada render, cambiar el filtro a mano no
+  // serviria de nada.
+  const rangoAjustado = useRef<number | null>(null);
+  useEffect(() => {
+    if (!esIA || !activeProject?.id) return;
+    if (rangoAjustado.current === activeProject.id) return;
+    rangoAjustado.current = activeProject.id;
+    const hoy = new Date();
+    setRango({
+      from: `${hoy.getFullYear()}-01-01`,
+      to: rangoDe('hoy').to,
+    });
+  }, [esIA, activeProject?.id]);
   const issuerIdParam = activeIssuerId ?? null;
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -131,6 +163,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // Por defecto, ESTE MES. Diego: «por defecto es este mes». Sin fechas la
   // lista era el historico entero, y la etiqueta venta/cuota solo tiene sentido
   // con un periodo: asi la pantalla abre ya con la lista mezclada y etiquetada.
+  /**
+   * El periodo con el que abre.
+   *
+   * «Este mes» para un proyecto normal, que es lo que se mira a diario. Pero
+   * en un proyecto IA los cobros se importan de golpe y pueden ser de meses
+   * atras: Tarot tiene 23 ventas de enero a julio, asi que la pantalla abria
+   * con seis ceros y parecia que no habia nada. El año en curso los enseña.
+   */
   const [rango, setRango] = useState(rangoDe('mes'));
   // La lista de abajo con fechas puestas: ventas + cuotas facturadas, cada una
   // con su etiqueta. Sin fechas, la lista sigue siendo la de ventas.
@@ -281,7 +321,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         >
           Análisis
         </button>
-        {activeProject?.id && ((puedeSinGestora || puedeDeOtra) ? (
+        {activeProject?.id && !esIA && ((puedeSinGestora || puedeDeOtra) ? (
           <div className="relative self-start sm:self-auto">
             <button
               type="button"
@@ -741,10 +781,12 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${esIA ? '' : 'lg:grid-cols-2'}`}>
+        {!esIA && (
         <Suspense fallback={null}>
           <MyGoalCard projectId={projectIdParam} />
         </Suspense>
+        )}
         <Suspense fallback={null}>
           <TopProductsCard projectId={projectIdParam} issuerId={issuerIdParam}
             from={rango.from || null} to={rango.to || null}
@@ -752,7 +794,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </Suspense>
       </div>
 
-      {isAdmin && (
+      {isAdmin && !esIA && (
         <Suspense fallback={null}>
           {/* El mes ES el del filtro de arriba. Sin pasarlo, la tabla cogia
               siempre el mes en curso: con el filtro en agosto decia
