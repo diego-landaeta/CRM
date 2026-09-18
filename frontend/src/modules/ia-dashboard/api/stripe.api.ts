@@ -26,6 +26,15 @@ export interface StripeMetrics {
   failedPayments: number;
   churnRate: number;
   evolution12Months: StripeEvolutionPoint[];
+  /**
+   * Por qué se fueron, de `cancellation_details` de Stripe.
+   *
+   * Es la única cifra de retención accionable: el churn no se puede
+   * arreglar, «no lo uso suficiente» sí apunta a algún sitio.
+   */
+  porQueSeVan?: { total: number; motivos: { clave: string; etiqueta: string; bajas: number; pct: number }[] };
+  /** Los escritos a mano, sin agregar: son de cada persona. */
+  comentariosDeBaja?: { cuando: string | null; motivo: string | null; comentario: string | null }[];
 }
 
 export async function getStripeMetrics(projectId: string | number): Promise<ApiResponse<StripeMetrics>> {
