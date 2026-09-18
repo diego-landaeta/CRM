@@ -136,7 +136,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totales, setTotales] = useState({
-    importe: 0, pagado: 0, pendiente: 0, iva: 0,
+    importe: 0, pagado: 0, devuelto: 0, neto: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0,
     facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
@@ -239,11 +239,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           } else { setFilas([]); setTotalFilas(0); }
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
+          setTotales(res.totales || { importe: 0, pagado: 0, devuelto: 0, neto: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
         }
       } catch {
         if (cancelado) return;
-        setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
+        setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, devuelto: 0, neto: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
       } finally { if (!cancelado) setLoading(false); }
     })();
     return () => { cancelado = true; };
@@ -553,9 +553,13 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <KpiCard
             icon={CheckCircle}
             iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-            label="Cobrado de esas ventas"
-            numericValue={totales.pagado}
+            label={totales.devuelto > 0 ? 'Cobrado (neto)' : 'Cobrado de esas ventas'}
+            numericValue={totales.devuelto > 0 ? totales.neto : totales.pagado}
             format={fmt}
+            /* Lo devuelto se resta y SE DICE. Un neto sin explicacion hace
+               dudar de la cifra; y el bruto solo, miente. */
+            badge={totales.devuelto > 0 ? `−${fmt(totales.devuelto)} devueltos` : null}
+            badgeColor="bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
           />
         </div>
         {/* El IVA de una suscripcion de 9,99 EUR no se mira a diario: esta

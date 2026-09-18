@@ -346,6 +346,25 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     `SELECT COUNT(*) AS count,
             COALESCE(SUM(c.importe_total), 0) AS total_importe,
             COALESCE(SUM(c.importe_pagado), 0) AS total_pagado,
+            /*
+              LO DEVUELTO, Y LO QUE DE VERDAD SE QUEDO LA EMPRESA.
+
+              El importe pagado es lo que entro; no baja cuando se devuelve el
+              dinero, y hace bien: el cobro existio. Pero el historico de
+              ingreso no puede ser ese numero -- si se cobraron 9,99 EUR y se
+              devolvieron, la empresa se quedo con cero, y hasta ahora el CRM
+              seguia diciendo 9,99.
+
+              Las devoluciones ya se registraban en conversion_refunds y solo
+              se veian dentro de la ficha de un cliente. En ninguna suma.
+
+              Angel, 18/09, de los cobros de prueba de Tarot: «nos devolvimos
+              el dinero... debes tener mas logica para registro historico real
+              de ingreso».
+            */
+            COALESCE(SUM((SELECT COALESCE(SUM(cr.importe), 0)
+                            FROM conversion_refunds cr
+                           WHERE cr.conversion_id = c.id)), 0) AS total_devuelto,
             COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
             COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva,
             -- Cuantas de estas ventas tienen factura de verdad. Una proforma no
@@ -384,6 +403,11 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
   const totales = {
     importe: Number(countRows[0].total_importe),
     pagado: Number(countRows[0].total_pagado),
+    // Lo devuelto y lo que quedo. `pagado` se mantiene como estaba --es lo
+    // que entro, y hay pantallas que lo necesitan-- y el neto va aparte para
+    // que nadie tenga que restarlo de memoria.
+    devuelto: Number(countRows[0].total_devuelto),
+    neto: Number((Number(countRows[0].total_pagado) - Number(countRows[0].total_devuelto)).toFixed(2)),
     pendiente: Number(countRows[0].total_pendiente),
     iva: Number(countRows[0].total_iva),
     facturadas: Number(countRows[0].facturadas),
