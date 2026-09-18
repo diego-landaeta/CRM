@@ -2105,6 +2105,10 @@ export default function ChatPage() {
                                 plazas: p.plazas_libres,
                                 cierre: p.fecha_cierre_convocatoria,
                                 inicio: p.fecha_inicio_texto,
+                                // La ficha de la formación los pide desde
+                                // la 177; sin esto saldría «{duracion}».
+                                duracion: p.duracion, horas: p.horas,
+                                precio: p.precio, moneda: p.moneda,
                               }
                               : { telefono: r.data.telefono, nombre: r.data.nombre });
                           })

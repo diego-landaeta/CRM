@@ -35,6 +35,19 @@ export interface DatosParaRellenar {
   plazas?: number | null;
   cierre?: string | null;
   inicio?: string | null;
+  /**
+   * Duración, horas e importe (#88).
+   *
+   * Desde la migración 177 la ficha de la formación los pide como huecos en
+   * vez de a mano: son datos del catálogo y escribirlos en cada mensaje es
+   * donde se cuela la duración de otro curso. El importe SÍ está aquí, al
+   * revés que en la nota de la 151: aquel aviso era por el plan de pagos, que
+   * el CRM no tiene; el precio del catálogo sí lo tiene.
+   */
+  duracion?: string | null;
+  horas?: string | null;
+  precio?: string | number | null;
+  moneda?: string | null;
 }
 
 /** Los huecos que el CRM sabe rellenar, para enseñarlos donde se escribe. */
@@ -48,6 +61,9 @@ export const VARIABLES = [
   { clave: 'plazas', pista: 'las que quedan libres, contadas ahora' },
   { clave: 'cierre', pista: 'cuándo cierra la convocatoria' },
   { clave: 'inicio', pista: 'cuándo empieza' },
+  { clave: 'duracion', pista: 'lo que dura, del catálogo' },
+  { clave: 'horas', pista: 'las horas lectivas' },
+  { clave: 'inversion', pista: 'el precio del catálogo' },
 ] as const;
 
 /**
@@ -64,6 +80,30 @@ export const VARIABLES = [
 const sinTilde = (s: string) => s.toLowerCase()
   .replace(/[áàäâ]/g, 'a').replace(/[éèëê]/g, 'e').replace(/[íìïî]/g, 'i')
   .replace(/[óòöô]/g, 'o').replace(/[úùüû]/g, 'u');
+
+/**
+ * Las horas, sin la palabra «horas» detras.
+ *
+ * El catalogo las guarda como texto libre y en produccion vienen escritas
+ * «750 horas». La plantilla ya dice «{horas} horas lectivas», asi que tal cual
+ * salia «750 horas horas lectivas». Se recorta el sufijo y se respeta lo que
+ * haya escrito si no es uno de esos: mejor raro que inventado.
+ */
+export function horasSueltas(v: string | null | undefined): string {
+  const t = String(v ?? '').trim();
+  if (!t) return '';
+  const corto = t.replace(/\s*(horas?|hrs?|h)\.?$/i, '').trim();
+  return corto || t;
+}
+
+/** El importe, como se escribe en un mensaje. Sin precio no se inventa nada. */
+function dinero(precio: string | number | null | undefined, moneda?: string | null): string {
+  if (precio == null || precio === '' || Number.isNaN(Number(precio))) return '';
+  return Number(precio).toLocaleString('es-ES', {
+    style: 'currency', currency: moneda || 'EUR',
+    minimumFractionDigits: 0, maximumFractionDigits: 2,
+  });
+}
 
 /** Cómo se dice en un mensaje una fecha que viene de la base. */
 function comoFecha(v: string | null | undefined): string {
@@ -100,6 +140,17 @@ export function rellenar(
     plazas: plazas == null ? '' : String(plazas),
     cierre: comoFecha(prospecto.cierre),
     inicio: prospecto.inicio || '',
+    // AQUÍ SE QUEDAN VACÍOS, y en la ficha del prospecto vuelven como
+    // [corchete]. No es una incoherencia: son dos usos distintos.
+    //
+    // Desde el chat el mensaje SE ENVÍA, y un hueco vacío es lo que hace
+    // saltar el aviso de «te faltan datos» antes de mandarlo. Un «[importe]»
+    // no dispara nada y se va tal cual al cliente. Desde la ficha solo se
+    // copia, así que allí el corchete es la señal correcta de «esto lo
+    // escribes tú».
+    duracion: prospecto.duracion || '',
+    horas: horasSueltas(prospecto.horas),
+    inversion: dinero(prospecto.precio, prospecto.moneda),
   };
   // Con `\p{L}` y la bandera unicode: con `\w`, `{teléfono}` no se reconocía ni
   // como hueco.

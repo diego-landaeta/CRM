@@ -90,3 +90,25 @@ describe('los datos de su formación', () => {
     expect(rellenar('{cierre}', { ...marta, cierre: '2026-01-01' })).toBe('1 de enero');
   });
 });
+
+describe('los datos de la formación que pide la ficha (#88)', () => {
+  const curso = { duracion: '9 meses', horas: '750 horas', precio: '1200.00', moneda: 'EUR' };
+
+  it('se rellenan cuando el catálogo los tiene', () => {
+    // Antes se escribían a mano en cada mensaje, y así es como se le manda a
+    // alguien la duración del curso de al lado.
+    expect(rellenar('{duracion}', curso)).toBe('9 meses');
+    // La plantilla ya dice «horas lectivas»: sin recortar salía «750 horas horas».
+    expect(rellenar('{horas} horas', curso)).toBe('750 horas');
+    expect(rellenar('{inversion}', curso)).toContain('€');
+  });
+
+  it('sin dato quedan VACÍOS, para que salte el aviso antes de enviar', () => {
+    // Desde el chat el mensaje se manda. Un hueco vacío avisa; un «[importe]»
+    // se iría tal cual al cliente. En la ficha del prospecto, donde solo se
+    // copia, sí vuelve el corchete — eso lo hace el servidor.
+    expect(rellenar('{duracion}', {})).toBe('');
+    expect(huecosSinRellenar('{duracion} {horas} {inversion}', {}))
+      .toEqual(expect.arrayContaining(['duracion', 'horas', 'inversion']));
+  });
+});

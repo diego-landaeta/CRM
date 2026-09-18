@@ -17,6 +17,16 @@ export interface PlantillaWhatsapp {
   /** Aviso para la gestora. NO se envía: es la letra pequeña del documento
       comercial, que hasta ahora solo estaba en el PDF. */
   pista?: string | null;
+  /**
+   * El paso del proceso al que pertenece, si es de las del documento (#129).
+   *
+   * Son dos familias distintas: las del proceso son de la casa —las gestoras
+   * las usan, no las editan— y las suyas las escribe cada una. En el chat se
+   * enseñan separadas; mezcladas, la lista es un montón sin orden.
+   */
+  paso_clave?: string | null;
+  paso_nombre?: string | null;
+  paso_orden?: number | null;
 }
 
 export interface ProspectoCola {
@@ -270,6 +280,11 @@ export interface FichaProspecto {
   plazas_libres?: number | null;
   fecha_cierre_convocatoria?: string | null;
   fecha_inicio_texto?: string | null;
+  /** Lo que la ficha de la formación pide desde la migración 177. */
+  duracion?: string | null;
+  horas?: string | null;
+  precio?: string | number | null;
+  moneda?: string | null;
 }
 
 export interface InteraccionProspecto {
