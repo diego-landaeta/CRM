@@ -194,6 +194,19 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, rango.from, rango.to]);
 
   useEffect(() => {
+    /**
+     * LA RESPUESTA VIEJA NO PISA A LA NUEVA.
+     *
+     * Dos peticiones seguidas --cambiar de filtro, o el ajuste automatico del
+     * periodo en los proyectos IA-- y la que sale primero puede volver
+     * despues. Sin esto, la pantalla acababa enseñando el resultado del filtro
+     * ANTERIOR: Tarot decia «0 ventas · 0,00 EUR» con el rango del año puesto
+     * en la barra y 23 ventas en la base.
+     *
+     * Lo peor no es que falle: es que el numero que se queda es plausible, y
+     * nadie sospecha de un cero.
+     */
+    let cancelado = false;
     (async () => {
       setLoading(true);
       try {
@@ -212,6 +225,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         // se quedan; solo se vacia la lista. Antes un 500 aqui lo borraba todo.
         const resFilas = conFechas
           ? await client.get('/conversions/filas', { params }).catch(() => null) : null;
+        if (cancelado) return;
         if (res.success) {
           setItems(res.data || []);
           setTotal(res.pagination?.total ?? (res.data || []).length);
@@ -228,9 +242,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
         }
       } catch {
+        if (cancelado) return;
         setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
-      } finally { setLoading(false); }
+      } finally { if (!cancelado) setLoading(false); }
     })();
+    return () => { cancelado = true; };
   }, [projectIdParam, issuerIdParam, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
 
   async function abrirCuotas() {
