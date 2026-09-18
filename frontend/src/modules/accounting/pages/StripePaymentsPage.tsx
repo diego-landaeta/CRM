@@ -68,9 +68,24 @@ export default function StripePaymentsPage() {
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+
+  /**
+   * ¿Tiene clave de Stripe guardada este proyecto?
+   *
+   * Sin esto, la pantalla vacía decía «pulsa Sincronizar» a alguien que no
+   * puede sincronizar nada: los tres botones fallan hasta que la clave está.
+   * Son dos situaciones distintas --no conectado, y conectado sin cobros--
+   * y solo una tiene algo que hacer.
+   */
+  const [hayClave, setHayClave] = useState<boolean | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [filters, setFilters] = useState({ status: '', linked: '', search: '', from: '', to: '' });
+
+  /** Si hay algun filtro puesto: la barra se enseña aunque no salga nada, o
+   *  no habria forma de quitarlo. */
+  const hayFiltro = Boolean(filters.search || filters.from || filters.to || filters.status || filters.linked);
   const [linkDialog, setLinkDialog] = useState<Payment | null>(null);
   const [disputeDialog, setDisputeDialog] = useState<Payment | null>(null);
 
@@ -142,6 +157,15 @@ export default function StripePaymentsPage() {
     } finally { setSyncing(false); }
   }
 
+  useEffect(() => {
+    if (!pid) return;
+    let vivo = true;
+    client.get(`/integrations/stripe?projectId=${pid}`)
+      .then((r) => { if (vivo) setHayClave(Boolean(r?.data?.has_secret)); })
+      .catch(() => { if (vivo) setHayClave(null); });
+    return () => { vivo = false; };
+  }, [pid]);
+
   if (!pid) {
     return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
   }
@@ -153,15 +177,21 @@ export default function StripePaymentsPage() {
         subtitle={`Histórico de pagos sincronizados desde Stripe — ${activeProject?.nombre || ''}`}
         actions={(
           <div className="flex gap-2">
-            <button onClick={() => syncNow(false)} disabled={syncing}
+            <button onClick={() => syncNow(false)} disabled={syncing || hayClave === false}
+              title={hayClave === false ? 'Falta la clave de Stripe de este proyecto' : 'Trae los ultimos 30 dias'}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
               <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
-            <button onClick={() => syncNow(true)} disabled={syncing}
+            <button onClick={() => syncNow(true)} disabled={syncing || hayClave === false}
               title="Trae todo desde el alta del proyecto (puede tardar varios minutos)"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
               <ArrowCounterClockwise size={14} weight="bold" /> Importar desde el alta
             </button>
+            {/* Solo cuando YA hay cobros: sirve para cuadrar con Stripe, y
+                antes del primer sincronizado no hay nada que cuadrar. Tres
+                botones de traer datos en una pantalla vacia es la forma mas
+                rapida de que se pulse el que no era. */}
+            {payments.length > 0 && (<>
             {/* EL HISTÓRICO ABSOLUTO, APARTE Y CON AVISO.
 
                 Trae también lo anterior al corte. Sirve para que el CRM cuadre
@@ -184,12 +214,14 @@ export default function StripePaymentsPage() {
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-400 dark:border-amber-800 bg-card text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">
               <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
             </button>
+            </>)}
           </div>
         )}
       />
 
-      {/* KPIs */}
-      {stats && (
+      {/* KPIs. Sin un solo cobro son cuatro ceros que no dicen nada y
+          empujan hacia abajo lo unico util, que es como conectar. */}
+      {stats && payments.length > 0 && (
         <div className={`grid grid-cols-2 gap-3 ${puedeAsociar ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
           {/* El importe global de la pasarela es informacion de direccion:
               la gestora ve sus cobros en la ficha de cada cliente, no el total. */}
@@ -214,7 +246,10 @@ export default function StripePaymentsPage() {
         </div>
       )}
 
-      {/* Filtros */}
+      {/* Filtros. No se pintan sobre una tabla vacia: filtrar la nada no lleva
+          a ninguna parte, y aqui lo que hace falta es conectar el proyecto.
+          Si hay filtro puesto SI se enseñan, o no habria forma de quitarlo. */}
+      {(payments.length > 0 || hayFiltro) && (
       <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -248,6 +283,7 @@ export default function StripePaymentsPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
@@ -256,11 +292,32 @@ export default function StripePaymentsPage() {
         ) : payments.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <CreditCard size={32} className="text-muted-foreground mx-auto" weight="duotone" />
-            <p className="font-semibold text-sm">Sin pagos sincronizados</p>
-            <p className="text-xs text-muted-foreground">
-              Pulsá <strong>Sincronizar</strong> para traer los últimos 30 días o <strong>Importar histórico completo</strong> para todo.
-              Requiere tener la API key de Stripe guardada en <a href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/finanzas/integraciones`} className="text-primary hover:underline">Integraciones</a>.
-            </p>
+            {hayClave === false ? (
+              <>
+                <p className="font-semibold text-sm">
+                  {activeProject?.nombre || 'Este proyecto'} todavía no está conectado a Stripe
+                </p>
+                <p className="mx-auto max-w-md text-xs text-muted-foreground">
+                  Falta su clave. Mientras no esté, los botones de arriba no pueden traer nada.
+                  Vale una clave <strong>restringida</strong> de solo lectura.
+                </p>
+                <a
+                  href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/finanzas/integraciones`}
+                  className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Ir a Integraciones
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-sm">Sin cobros todavía</p>
+                <p className="mx-auto max-w-md text-xs text-muted-foreground">
+                  La clave está guardada. Pulsa <strong>Sincronizar</strong> para traer los últimos
+                  treinta días, o <strong>Importar desde el alta</strong> para todo lo posterior a
+                  la fecha de corte del proyecto.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <table className="tabla-cifras w-full text-[13px]">
