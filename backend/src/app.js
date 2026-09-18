@@ -12,6 +12,7 @@ import usersModule from './modules/users/index.js';
 import leadsModule from './modules/leads/index.js';
 import productsModule from './modules/products/index.js';
 import dossiersModule from './modules/dossiers/index.js';
+import documentosMarcaModule from './modules/documentos-marca/index.js';
 import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
@@ -116,6 +117,7 @@ app.get('/api', (_req, res) => {
         leads: '/api/leads',
         products: '/api/products',
         dossiers: '/api/dossiers',
+        'documentos-marca': '/api/documentos-marca',
       },
     },
   });
@@ -139,6 +141,9 @@ const ALL_MODULES = [
   { name: 'convocatorias', mod: convocatoriasModule },
   { name: 'products', mod: productsModule },
   { name: 'dossiers', mod: dossiersModule },
+  // La guia del campus y las homologaciones: van con el correo del dia 1
+  // y son de la marca, no del curso (#91).
+  { name: 'documentos-marca', mod: documentosMarcaModule },
   { name: 'conversions', mod: conversionsModule },
   { name: 'sales', mod: salesModule },
   { name: 'whatsapp', mod: whatsappModule },
@@ -292,6 +297,17 @@ process.on('unhandledRejection', (motivo) => {
 
 process.on('uncaughtException', (err) => {
   logger.fatal({ err: err.message, stack: err.stack }, 'Excepcion sin capturar — se cierra');
+  // EN LAS PRUEBAS NO SE SALE. Los ficheros de prueba importan `app.js`, asi
+  // que este manejador acaba instalado dentro del worker de Vitest: cualquier
+  // excepcion suelta —un socket que se cae, una consulta contra un pool que
+  // otro fichero ya cerro— mataba el worker entero. Se veia como «Worker
+  // exited unexpectedly» y como veinte pruebas que no llegaban a correr, sin
+  // ninguna roja que señalara nada.
+  //
+  // Fuera de las pruebas se mantiene igual: ahi el proceso puede haber quedado
+  // a medias y PM2 lo levanta. Aqui lo que hace falta es que Vitest vea el
+  // error y lo cuente.
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') return;
   // Un margen para que el registro salga antes de irse.
   setTimeout(() => process.exit(1), 500).unref();
 });

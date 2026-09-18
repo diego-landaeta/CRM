@@ -2,11 +2,20 @@ import { z } from 'zod';
 import { query } from '../../shared/config/db.js';
 import { sendEmail } from '../../shared/services/brevo.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { adjuntosDelDiaUno, losTresDelDiaUno } from './adjuntosDelDiaUno.js';
 
 const sendEmailSchema = z.object({
   subject:   z.string().min(1).max(500),
   body_html: z.string().min(1).max(50000),
   body_text: z.string().max(50000).optional(),
+  /**
+   * De qué paso del proceso es este correo (#91).
+   *
+   * Solo importa `paso_1`: es el que lleva los tres adjuntos obligatorios. Se
+   * manda desde la pantalla, no se adivina aquí — un correo suelto a un
+   * prospecto que ya va por el día 4 no tiene por qué llevarlos.
+   */
+  paso: z.string().max(40).optional(),
 });
 
 // POST /api/leads/:id/send-email
@@ -29,7 +38,31 @@ export async function sendLeadEmail(req, res, next) {
     const lead = rows[0];
     if (!lead.email) throw new AppError('El lead no tiene email', 400, 'NO_EMAIL');
 
-    const { subject, body_html, body_text } = parsed.data;
+    const { subject, body_html, body_text, paso } = parsed.data;
+
+    /**
+     * LOS TRES ADJUNTOS DEL DÍA 1, O NO SALE (#91).
+     *
+     * El documento comercial no lo deja a interpretación: «sin los tres, el
+     * correo no sale». Van el dossier de su formación, la guía del campus y
+     * las homologaciones.
+     *
+     * Se comprueba ANTES de llamar a Brevo: un correo a medias ya salió y no
+     * se puede recoger. Y se dice QUÉ falta, porque «faltan adjuntos» obliga a
+     * ir a buscarlo a mano.
+     */
+    let adjuntos;
+    if (paso === 'paso_1') {
+      const { listos, faltan } = await adjuntosDelDiaUno(leadId);
+      if (faltan.length) {
+        throw new AppError(
+          `Este correo va con tres documentos y falta${faltan.length > 1 ? 'n' : ''} `
+          + `${faltan.join(', ')}. Sin los tres no sale.`,
+          400, 'FALTAN_ADJUNTOS'
+        );
+      }
+      adjuntos = listos;
+    }
 
     const result = await sendEmail({
       to: { email: lead.email, name: lead.nombre },
@@ -38,6 +71,7 @@ export async function sendLeadEmail(req, res, next) {
       textContent: body_text,
       tags: ['manual', `project-${lead.project_id}`],
       projectId: lead.project_id,
+      attachment: adjuntos,
     });
 
     if (!result.sent) {
@@ -70,5 +104,30 @@ export async function listLeadEmails(req, res, next) {
       [leadId]
     );
     res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/leads/:id/adjuntos-dia-uno
+ *
+ * Que documentos van con el correo del dia 1 y cuales faltan, ANTES de
+ * escribirlo. Sin esto la gestora escribe el correo entero y se entera al
+ * pulsar enviar, que es la peor forma de enterarse.
+ */
+export async function estadoDeLosAdjuntos(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id, 10);
+    if (Number.isNaN(leadId) || leadId <= 0) throw new AppError('ID invalido', 400, 'INVALID_ID');
+
+    const { piezas } = await losTresDelDiaUno(leadId);
+    res.json({
+      success: true,
+      data: {
+        completo: piezas.every((p) => p.key),
+        // Que hay y que no, uno a uno: enseñar solo lo que falta obliga a
+        // adivinar si lo demas esta o es que no se ha mirado.
+        piezas: piezas.map((p) => ({ tipo: p.tipo, como: p.comoSeLlama, esta: Boolean(p.key) })),
+      },
+    });
   } catch (err) { next(err); }
 }

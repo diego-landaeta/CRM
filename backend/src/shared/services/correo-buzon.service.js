@@ -83,9 +83,21 @@ function elTransporte() {
 /** Los adjuntos vienen en el formato de Brevo; aqui se dicen de la otra forma. */
 function comoAdjuntos(attachment) {
   if (!Array.isArray(attachment) || attachment.length === 0) return undefined;
-  return attachment
-    .filter((a) => a && a.content)
-    .map((a) => ({ filename: a.name, content: a.content, encoding: 'base64' }));
+  const salen = [];
+  for (const a of attachment) {
+    if (!a) continue;
+    // En base64, como las facturas y los certificados.
+    if (a.content) { salen.push({ filename: a.name, content: a.content, encoding: 'base64' }); continue; }
+    // Por ENLACE, como los tres documentos del dia 1 (#91): nodemailer se lo
+    // descarga. Antes esta rama no existia y un adjunto por url se DESCARTABA
+    // EN SILENCIO — el correo salia sin el dossier y el CRM decia «enviado»,
+    // que es peor que no mandarlo.
+    if (a.url) { salen.push({ filename: a.name, path: a.url }); continue; }
+    // Ni una cosa ni la otra: se avisa. Si un adjunto no se puede mandar, que
+    // al menos quede dicho en el registro y no desaparezca.
+    logger.warn({ nombre: a.name }, 'Buzon: un adjunto no tiene ni contenido ni enlace, no se manda');
+  }
+  return salen.length ? salen : undefined;
 }
 
 /**

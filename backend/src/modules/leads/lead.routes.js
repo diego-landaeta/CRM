@@ -82,6 +82,8 @@ router.get('/:id/purchase-history', leadController.getPurchaseHistory);
 // Envío manual de email + historial (CRM-231)
 router.post('/:id/send-email', leadEmailsController.sendLeadEmail);
 router.get('/:id/emails', leadEmailsController.listLeadEmails);
+// Que lleva el correo del dia 1 y que falta, antes de escribirlo (#91).
+router.get('/:id/adjuntos-dia-uno', leadEmailsController.estadoDeLosAdjuntos);
 
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);

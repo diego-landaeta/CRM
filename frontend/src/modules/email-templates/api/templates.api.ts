@@ -14,6 +14,13 @@ export interface EmailTemplate {
   created_by_nombre?: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * El paso del proceso al que pertenece (#88).
+   *
+   * Importa para el `paso_1`: su correo lleva tres documentos obligatorios y
+   * sin los tres no sale (#91).
+   */
+  paso_clave?: string | null;
 }
 
 export interface TemplateVariable {

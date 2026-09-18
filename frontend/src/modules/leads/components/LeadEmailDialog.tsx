@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, EnvelopeSimple, PaperPlaneTilt, FileText } from '@phosphor-icons/react';
-import { leadEmailsApi } from '../api/lead-emails.api';
+import { leadEmailsApi, type AdjuntosDelDiaUno } from '../api/lead-emails.api';
 import Select from '@/shared/components/ui/Select';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
@@ -29,12 +29,24 @@ export default function LeadEmailDialog({
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
   const [renderingTemplate, setRenderingTemplate] = useState(false);
 
+  /**
+   * Los tres documentos del correo del día 1 (#91).
+   *
+   * «Sin los tres, el correo no sale». Se miran al elegir la plantilla del
+   * paso 1, ANTES de escribir: enterarse al pulsar enviar, con el correo ya
+   * redactado, es la peor forma de enterarse.
+   */
+  const [delDiaUno, setDelDiaUno] = useState<AdjuntosDelDiaUno | null>(null);
+  const [pasoDeLaPlantilla, setPasoDeLaPlantilla] = useState<string | null>(null);
+
   useEffect(() => {
     if (open) {
       setSubject('');
       setBody('');
       setSending(false);
       setSelectedTemplateId('');
+      setDelDiaUno(null);
+      setPasoDeLaPlantilla(null);
     }
   }, [open]);
 
@@ -50,6 +62,16 @@ export default function LeadEmailDialog({
   async function applyTemplate(templateId: number) {
     if (!activeProject?.id) return;
     setRenderingTemplate(true);
+    // De qué paso es la plantilla elegida. Lo dice ella, no se adivina aquí:
+    // un correo suelto a alguien que ya va por el día 4 no lleva los tres.
+    const paso = templates.find((t) => t.id === templateId)?.paso_clave || null;
+    setPasoDeLaPlantilla(paso);
+    setDelDiaUno(null);
+    if (paso === 'paso_1') {
+      leadEmailsApi.adjuntosDelDiaUno(leadId)
+        .then((r) => { if (r.success) setDelDiaUno(r.data); })
+        .catch(() => { /* si no se puede mirar, lo dirá el servidor al enviar */ });
+    }
     try {
       const res = await emailTemplatesApi.render(templateId, activeProject.id, leadId);
       if (res.success && res.data) {
@@ -89,7 +111,10 @@ export default function LeadEmailDialog({
       const body_html = looksLikeHtml ? body : body.replace(/\n/g, '<br/>');
       const body_text = looksLikeHtml ? body.replace(/<[^>]+>/g, '') : body;
 
-      const res = await leadEmailsApi.send(leadId, { subject: subject.trim(), body_html, body_text });
+      const res = await leadEmailsApi.send(leadId, {
+        subject: subject.trim(), body_html, body_text,
+        paso: pasoDeLaPlantilla || undefined,
+      });
       if (res.success) {
         toast({ title: 'Email enviado', description: leadEmail });
         onSent?.();
@@ -157,6 +182,39 @@ export default function LeadEmailDialog({
               {renderingTemplate && (
                 <p className="text-[10px] text-muted-foreground mt-1">Aplicando plantilla…</p>
               )}
+
+              {/* LOS TRES DEL DÍA 1 (#91). El documento comercial: «sin los
+                  tres, el correo no sale». Se enseñan los tres, no solo los
+                  que faltan: una lista de faltantes obliga a adivinar si lo
+                  demás está o es que nadie lo ha mirado. */}
+              {delDiaUno && (
+                <div className={`mt-2 rounded-md border p-2 text-[11px] ${
+                  delDiaUno.completo
+                    ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/20'
+                    : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20'
+                }`}>
+                  <p className="font-semibold mb-1">
+                    {delDiaUno.completo
+                      ? 'Este correo va con los tres documentos'
+                      : 'Faltan documentos: este correo no puede salir'}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {delDiaUno.piezas.map((p) => (
+                      <li key={p.tipo} className="flex items-center gap-1.5">
+                        <span aria-hidden="true">{p.esta ? '✓' : '×'}</span>
+                        <span className={p.esta ? '' : 'font-medium'}>{p.como}</span>
+                        <span className="sr-only">{p.esta ? 'incluido' : 'falta'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {!delDiaUno.completo && (
+                    <p className="mt-1 text-muted-foreground">
+                      El dossier se sube en la ficha de la formación; la guía del campus y las
+                      homologaciones, en los documentos de la marca.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <div>
@@ -201,7 +259,11 @@ export default function LeadEmailDialog({
           <button
             type="button"
             onClick={send}
-            disabled={sending || !leadEmail || !subject.trim() || !body.trim()}
+            disabled={sending || !leadEmail || !subject.trim() || !body.trim()
+              /* Con la plantilla del día 1 y algún documento sin subir, no se
+                 manda. El servidor lo rechaza igual — esto es para no dejar
+                 escribir el correo entero y avisar al final. */
+              || (pasoDeLaPlantilla === 'paso_1' && delDiaUno !== null && !delDiaUno.completo)}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             <PaperPlaneTilt size={14} weight="bold" />

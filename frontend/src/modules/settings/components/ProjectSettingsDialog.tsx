@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   X, Gear, FolderOpen, Notepad, PlugsConnected, Key, Tag, Table as TableIcon, CreditCard, Globe, TextT,
+  FilePdf,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +15,7 @@ import ApisTab from './projectSettings/ApisTab';
 import StripeTab from './projectSettings/StripeTab';
 import ExternalPanelsTab from './projectSettings/ExternalPanelsTab';
 import SidebarLabelsTab from './projectSettings/SidebarLabelsTab';
+import DocumentosTab from './projectSettings/DocumentosTab';
 
 const TABS_BASE = [
   { id: 'general', label: 'General', icon: Gear },
@@ -22,6 +24,9 @@ const TABS_BASE = [
   { id: 'campos', label: 'Campos', icon: Notepad },
   { id: 'columnas', label: 'Columnas', icon: TableIcon },
   { id: 'paneles', label: 'Paneles externos', icon: Globe },
+  // Los dos PDF que van con el correo del dia 1 (#91). Van aqui y no en el
+  // catalogo porque son de la MARCA: los mismos para todos sus cursos.
+  { id: 'documentos', label: 'Documentos', icon: FilePdf },
   { id: 'webhook', label: 'Webhook', icon: PlugsConnected },
   { id: 'apis', label: 'APIs', icon: Key },
 ];
@@ -84,6 +89,7 @@ export default function ProjectSettingsDialog({ project, onClose, onSaved, initi
               {tab === 'columnas' && <ColumnsTab project={project} onSaved={onSaved} />}
               {tab === 'paneles' && <ExternalPanelsTab project={project} onSaved={onSaved} />}
               {tab === 'etiquetas' && isSuperadmin && <SidebarLabelsTab project={project} onSaved={onSaved} />}
+              {tab === 'documentos' && <DocumentosTab project={project} />}
               {tab === 'webhook' && <WebhookTab project={project} />}
               {tab === 'apis' && <ApisTab project={project} />}
               {tab === 'stripe' && <StripeTab project={project} />}
