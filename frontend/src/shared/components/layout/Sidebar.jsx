@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  SealCheck,
+  Certificate,
   CalendarCheck,
   SquaresFour,
   Users,
@@ -259,6 +261,19 @@ const NAV_SECTIONS = [
       { label: 'Revisión duplicados', to: '/prospectos/revision-duplicados', detail: 'Repetidos por webhook', icon: GitMerge, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Buscar duplicados', to: '/prospectos/duplicados', detail: 'Buscarlos a mano', icon: CopySimple, roles: ['superadmin', 'admin'], module: 'leads' },
       { label: 'Matrículas', to: '/clientes/matriculas', detail: 'Altas en cada curso', icon: GraduationCap, module: 'matriculas' },
+    ],
+  },
+  {
+    // Certifex: lo que llega desde la web del registro de titulaciones. Un centro que
+    // quiere inscribir su campus, o cualquier otra consulta. Va aparte de Prospectos
+    // porque no es de ninguna marca, y el aviso sale por la campana. Los mismos roles
+    // que la API (`roleGuard('admin', 'superadmin', 'soporte')`).
+    label: 'Certifex',
+    icon: SealCheck,
+    items: [
+      // Emisiones: el visto bueno y la emisión de títulos. Solo administración, como la API.
+      { label: 'Emisiones', to: '/certifex/emisiones', detail: 'Visto bueno y emisión', icon: Certificate, roles: ['superadmin', 'admin'] },
+      { label: 'Consultas', to: '/certifex/consultas', detail: 'Desde la web de Certifex', icon: ChatText, roles: ['superadmin', 'admin', 'soporte'] },
     ],
   },
   {
