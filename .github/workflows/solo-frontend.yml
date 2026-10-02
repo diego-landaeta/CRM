@@ -39,12 +39,20 @@ jobs:
           # 43 ficheros de servidor que no habia tocado, igual que antes le
           # salian 156 comparando contra `main`.
           #
+          # Y `staging` va antes que `integracion/fabian`, que es este mismo
+          # fallo una vez mas. El tronco se movio a `staging` —los 15 PR se
+          # cerraron porque su trabajo ya estaba dentro— y la lista se quedo
+          # apuntando a la rama de antes. Resultado del 16/09: las dos ramas
+          # abiertas de Fabian salian con 138 ficheros de servidor que el no
+          # habia tocado, y el aviso volvia a no significar nada. Contra
+          # `staging` son cero.
+          #
           # El orden es de mas cercano a mas lejano y no debilita nada: se
           # compara contra el punto de partida (`merge-base`), asi que lo que
           # SI se toque despues de salir de la rama sigue apareciendo. Para una
           # rama que salga de `todo` el resultado no cambia, porque `fabian`
           # contiene a `todo` y el punto de partida es el mismo.
-          for CANDIDATA in origin/integracion/fabian origin/integracion/todo origin/main; do
+          for CANDIDATA in origin/staging origin/integracion/fabian origin/integracion/todo origin/main; do
             if git rev-parse --verify --quiet "$CANDIDATA" > /dev/null; then
               BASE=$(git merge-base "$CANDIDATA" HEAD)
               echo "Comparando contra $CANDIDATA"
