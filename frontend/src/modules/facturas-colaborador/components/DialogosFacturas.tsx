@@ -1,0 +1,291 @@
+import { useEffect, useState } from 'react';
+import { X } from '@phosphor-icons/react';
+import client from '@/shared/api/client';
+import { toast } from '@/shared/hooks/useToast';
+import { Button } from '@/shared/components/ui/button';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
+import {
+  AREAS, AREA_ES, euros, facturasColaboradorApi, fechaHora,
+  type Area, type Colaborador, type EmpresaDelGrupo, type LineaRegistro,
+} from '../api/facturasColaborador.api';
+
+/** El marco de los diálogos de esta pantalla. */
+export function Dialogo({ titulo, alCerrar, children, ancho = 'max-w-lg' }: {
+  titulo: string; alCerrar: () => void; children: React.ReactNode; ancho?: string;
+}) {
+  return (
+    // `!m-0`: el contenedor de la página pone margen al primer hijo (como en Certifex).
+    <div role="dialog" aria-label={titulo} className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={alCerrar}>
+      <div onClick={(e) => e.stopPropagation()}
+        className={`bg-card border border-border rounded-lg shadow-2xl w-full ${ancho} max-h-[85vh] overflow-y-auto`}>
+        <div className="flex items-center justify-between gap-3 p-4 border-b border-border">
+          <h2 className="font-bold">{titulo}</h2>
+          <button type="button" onClick={alCerrar} aria-label="Cerrar" className="text-muted-foreground hover:text-foreground">
+            <X size={16} weight="bold" />
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const mesActual = () => new Date().toISOString().slice(0, 7);
+const errorDe = (err: any) => err?.data?.error || err?.message || 'Inténtalo de nuevo';
+
+/* ─────────────────────────── alta y edición ─────────────────────────── */
+
+interface UsuarioColaborador { id: number; nombre: string; email: string }
+
+export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }: {
+  colaborador: Colaborador | null;
+  empresas: EmpresaDelGrupo[];
+  alCerrar: () => void;
+  alGuardar: () => void;
+}) {
+  const c = colaborador;
+  const [nombre, setNombre] = useState(c?.nombre ?? '');
+  const [email, setEmail] = useState(c?.email ?? '');
+  const [nif, setNif] = useState(c?.nif ?? '');
+  const [area, setArea] = useState<Area>(c?.area ?? 'otra');
+  const [notas, setNotas] = useState(c?.notas ?? '');
+  const [altaDesde, setAltaDesde] = useState(c?.alta_desde ?? '');
+  const [userId, setUserId] = useState<number | null>(c?.user_id ?? null);
+  // Empresa marcada → su importe acordado (texto, vacío = sin importe).
+  const [marcadas, setMarcadas] = useState<Record<number, string>>(() => Object.fromEntries(
+    (c?.empresas ?? []).map((e) => [e.issuer_id, e.importe_acordado === null ? '' : String(e.importe_acordado)]),
+  ));
+  const [usuarios, setUsuarios] = useState<UsuarioColaborador[]>([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Su usuario del CRM, si lo tiene: los que tienen el rol colaborador (#210).
+  useEffect(() => {
+    client.get('/users?role=colaborador&active=true&limit=100')
+      .then((r: any) => setUsuarios(r.data || []))
+      .catch(() => setUsuarios([]));
+  }, []);
+
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault();
+    const lista = Object.entries(marcadas).map(([id, imp]) => ({
+      issuer_id: Number(id),
+      importe_acordado: imp.trim() === '' ? null : Number(imp.replace(',', '.')),
+    }));
+    if (!lista.length) { setError('Elige al menos una empresa a la que factura.'); return; }
+    if (lista.some((l) => l.importe_acordado !== null && !Number.isFinite(l.importe_acordado))) {
+      setError('Revisa los importes acordados: tienen que ser números.'); return;
+    }
+    const cuerpo = {
+      nombre: nombre.trim(), email: email.trim(), nif: nif.trim() || null, area,
+      notas: notas.trim() || null, alta_desde: altaDesde || null, user_id: userId, empresas: lista,
+    };
+    setGuardando(true);
+    setError(null);
+    try {
+      if (c) await facturasColaboradorApi.editar(c.id, cuerpo);
+      else await facturasColaboradorApi.crear(cuerpo);
+      toast({ title: c ? 'Colaborador guardado' : 'Colaborador dado de alta' });
+      alGuardar();
+    } catch (err) {
+      setError(errorDe(err));
+    } finally { setGuardando(false); }
+  }
+
+  return (
+    <Dialogo titulo={c ? `Editar · ${c.nombre}` : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
+      <form onSubmit={guardar} className="space-y-4" noValidate>
+        <FilaCampos>
+          <Field label="Nombre" htmlFor="col-nombre" required>
+            <input id="col-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Correo" htmlFor="col-email" required hint="Al que le llega el enlace de cada mes">
+            <input id="col-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          </Field>
+        </FilaCampos>
+        <FilaCampos>
+          <Field label="NIF" htmlFor="col-nif" hint="Opcional">
+            <input id="col-nif" value={nif} onChange={(e) => setNif(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Área">
+            <Select<Area> value={area} onChange={setArea} ariaLabel="Área"
+              options={AREAS.map((a) => ({ value: a, label: AREA_ES[a] }))} />
+          </Field>
+        </FilaCampos>
+
+        <Field label="Empresas a las que factura" required hint="Una o varias. El importe acordado es opcional: se le enseña como referencia">
+          <div className="space-y-2">
+            {empresas.map((e) => {
+              const on = e.id in marcadas;
+              return (
+                <div key={e.id} className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm min-w-0 flex-1">
+                    <input type="checkbox" checked={on} onChange={() => setMarcadas((m) => {
+                      const n = { ...m };
+                      if (on) delete n[e.id]; else n[e.id] = '';
+                      return n;
+                    })} />
+                    <span className="truncate">{e.razon_social}</span>
+                  </label>
+                  {on && (
+                    <div className="w-40 flex-none">
+                      <input aria-label={`Importe acordado con ${e.razon_social}`} inputMode="decimal" placeholder="€/mes (opcional)"
+                        value={marcadas[e.id]} onChange={(ev) => setMarcadas((m) => ({ ...m, [e.id]: ev.target.value }))}
+                        className={inputClass} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Field>
+
+        <FilaCampos>
+          <Field label="Desde qué mes" htmlFor="col-alta" hint="Vacío: desde ya">
+            <input id="col-alta" type="month" value={altaDesde} onChange={(e) => setAltaDesde(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Su usuario del CRM" hint="Solo si lo tiene: entonces ve «Mi factura»">
+            <Select<string> value={userId ? String(userId) : ''} onChange={(v) => setUserId(v ? Number(v) : null)} ariaLabel="Usuario del CRM"
+              options={[{ value: '', label: 'Sin usuario' }, ...usuarios.map((u) => ({ value: String(u.id), label: `${u.nombre} · ${u.email}` }))]} />
+          </Field>
+        </FilaCampos>
+
+        <Field label="Notas" htmlFor="col-notas">
+          <textarea id="col-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className={`${inputClass} h-auto py-2`} />
+        </Field>
+
+        {error && <p role="alert" className="rounded-md bg-destructive-soft text-destructive-soft-foreground px-3 py-2 text-secundario">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={alCerrar}>Cancelar</Button>
+          <Button type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
+        </div>
+      </form>
+    </Dialogo>
+  );
+}
+
+/* ─────────────────────────── baja ─────────────────────────── */
+
+export function BajaDialog({ colaborador, alCerrar, alGuardar }: {
+  colaborador: Colaborador; alCerrar: () => void; alGuardar: () => void;
+}) {
+  const [desde, setDesde] = useState(mesActual());
+  const [guardando, setGuardando] = useState(false);
+  async function guardar() {
+    setGuardando(true);
+    try {
+      await facturasColaboradorApi.darDeBaja(colaborador.id, desde);
+      toast({ title: `${colaborador.nombre}, de baja desde ${desde}` });
+      alGuardar();
+    } catch (err) {
+      toast({ title: 'No se pudo dar de baja', description: errorDe(err), variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+  return (
+    <Dialogo titulo={`Dar de baja · ${colaborador.nombre}`} alCerrar={alCerrar}>
+      <div className="space-y-4">
+        <Field label="Desde qué mes deja de recibir el enlace" htmlFor="baja-desde" required>
+          <input id="baja-desde" type="month" value={desde} onChange={(e) => setDesde(e.target.value)} className={inputClass} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={alCerrar}>Cancelar</Button>
+          <Button variant="destructive" onClick={guardar} disabled={guardando || !desde}>Dar de baja</Button>
+        </div>
+      </div>
+    </Dialogo>
+  );
+}
+
+/* ─────────────────────────── anular ─────────────────────────── */
+
+export function AnularDialog({ facturaId, quien, alCerrar, alGuardar }: {
+  facturaId: number; quien: string; alCerrar: () => void; alGuardar: () => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  async function guardar() {
+    setGuardando(true);
+    try {
+      await facturasColaboradorApi.anular(facturaId, motivo.trim());
+      toast({ title: 'Factura anulada', description: 'Se le manda un enlace nuevo para subirla otra vez.' });
+      alGuardar();
+    } catch (err) {
+      toast({ title: 'No se pudo anular', description: errorDe(err), variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+  return (
+    <Dialogo titulo={`Anular la factura · ${quien}`} alCerrar={alCerrar}>
+      <div className="space-y-4">
+        <p className="text-secundario text-muted-foreground">
+          El archivo no se borra: queda marcado como anulado. Al colaborador le llega un enlace nuevo para subirla otra vez.
+        </p>
+        <Field label="Motivo" htmlFor="anular-motivo" required>
+          <textarea id="anular-motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3}
+            placeholder="Por ejemplo: subió la de agosto" className={`${inputClass} h-auto py-2`} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={alCerrar}>Cancelar</Button>
+          <Button variant="destructive" onClick={guardar} disabled={guardando || motivo.trim().length < 3}>Anular</Button>
+        </div>
+      </div>
+    </Dialogo>
+  );
+}
+
+/* ─────────────────────────── registro ─────────────────────────── */
+
+const EVENTO: Record<string, string> = {
+  alta: 'Alta en la lista', baja: 'Baja de la lista', cambio: 'Cambio en la ficha',
+  enviado: 'Correo enviado', no_enviado: 'No se pudo enviar', abierto: 'Enlace abierto',
+  recibida: 'Factura recibida', acuse: 'Acuse enviado', recordatorio: 'Recordatorio enviado',
+  anulada: 'Factura anulada', reenviado: 'Enlace nuevo', caducado: 'Enlace caducado',
+};
+
+/** «factura-sept.pdf (214 KB) · 600,00 € · n.º F-2026-09», como en la definición. */
+function detalleDe(l: LineaRegistro) {
+  const d = l.detalle || {};
+  const partes: string[] = [];
+  if (d.archivo) partes.push(`${d.archivo}${d.tamano ? ` (${Math.ceil(Number(d.tamano) / 1024)} KB)` : ''}`);
+  if (d.importe !== undefined && d.importe !== null) partes.push(euros(d.importe as number));
+  if (d.numero_factura) partes.push(`n.º ${d.numero_factura}`);
+  if (d.numero_recepcion) partes.push(String(d.numero_recepcion));
+  if (d.motivo) partes.push(`«${d.motivo}»`);
+  if (d.desde) partes.push(`desde ${String(d.desde).slice(0, 7)}`);
+  if (d.para) partes.push(`a ${d.para}`);
+  if (l.evento === 'cambio') partes.push(Object.keys(d).join(', '));
+  if (l.usuario_nombre) partes.push(`por ${l.usuario_nombre}`);
+  if (l.ip) partes.push(l.ip);
+  return partes.join(' · ');
+}
+
+export function RegistroDialog({ titulo, cargar, alCerrar }: {
+  titulo: string; cargar: () => Promise<LineaRegistro[]>; alCerrar: () => void;
+}) {
+  const [lineas, setLineas] = useState<LineaRegistro[] | null>(null);
+  useEffect(() => {
+    cargar().then(setLineas).catch((err) => {
+      toast({ title: 'No se pudo cargar el registro', description: errorDe(err), variant: 'destructive' });
+      setLineas([]);
+    });
+  }, [cargar]);
+  return (
+    <Dialogo titulo={titulo} alCerrar={alCerrar} ancho="max-w-2xl">
+      {!lineas ? <p className="text-muted-foreground">Cargando…</p>
+        : lineas.length === 0 ? <p className="text-muted-foreground">Todavía no hay nada.</p>
+          : (
+            <ol className="space-y-2 border-l-2 border-border pl-4">
+              {lineas.map((l) => (
+                <li key={l.id} className="text-sm">
+                  <span className="font-mono text-secundario text-muted-foreground mr-2">{fechaHora(l.creado_at)}</span>
+                  <strong>{EVENTO[l.evento] || l.evento}</strong>
+                  {detalleDe(l) && <span className="text-muted-foreground"> · {detalleDe(l)}</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+    </Dialogo>
+  );
+}
