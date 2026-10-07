@@ -107,6 +107,9 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0]).toMatchObject({ periodo: '2026-08', estado: 'sin_enviar', importe_acordado: 450 });
     deLaura = res.body.data[0].id;
+    // Su enlace (ficha de Diego: «sus meses, su enlace…»), y es el que vale.
+    const codigo = res.body.data[0].enlace.match(/factura-colaborador\/([A-Za-z0-9_-]{43})$/)[1];
+    expect((await request.get(`${API}/enlace/${codigo}`)).body.data.periodo).toBe('2026-08');
     dePedro = (await request.get(`${API}/mias`).set(como('pedro'))).body.data[0].id;
     expect(dePedro).not.toBe(deLaura);
   });

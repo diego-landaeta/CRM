@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS facturas_colaborador (
     -- Copiado del acordado al preparar el mes: si luego cambia, este no.
     importe_esperado NUMERIC(12, 2),
     -- Del enlace solo se guarda la huella (sha256), como los tokens del MCP.
+    -- La semilla (32 bytes al azar) no es el enlace: el enlace se calcula con
+    -- ella y la clave del servidor, así el recordatorio del día 5 puede llevar
+    -- el mismo enlace sin guardarlo. Con la base sola no se puede fabricar.
+    token_semilla CHAR(64),
     token_hash CHAR(64),
     caduca_at TIMESTAMPTZ,
     enviado_at TIMESTAMPTZ,

@@ -102,7 +102,7 @@ describe('facturas de colaboradores (#202) · correos apagados (por defecto)', (
   it('el recordatorio no se manda, ni cambia el enlace', async () => {
     const antes = await one('SELECT token_hash FROM facturas_colaborador WHERE id = $1', [(await fila()).id]);
     const r = await recordar(PERIODO);
-    expect(r.omitido).toBe('correos apagados');
+    expect(r.recordados).toBe(0);
     const despues = await one('SELECT token_hash FROM facturas_colaborador WHERE id = $1', [(await fila()).id]);
     expect(despues.token_hash).toBe(antes.token_hash);
     expect(sendEmail).not.toHaveBeenCalled();
@@ -131,20 +131,21 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
     enlace = enlaceDelCorreo(c);
     const guardada = await one('SELECT token_hash, enviado_at FROM facturas_colaborador WHERE id = $1', [f.id]);
     expect(guardada.token_hash).toBe(huella(enlace));
+    // En la base no está el enlace: ni la semilla ni la huella lo son.
+    const { token_semilla: semilla } = await one('SELECT token_semilla FROM facturas_colaborador WHERE id = $1', [f.id]);
+    expect([semilla, guardada.token_hash]).not.toContain(enlace);
     expect(guardada.enviado_at).not.toBeNull();
     expect((await request.get(`${API}/enlace/${enlace}`)).body.data.estado).toBe('abierto');
   });
 
-  it('el recordatorio del día 5 lleva un enlace nuevo, y no se repite', async () => {
+  it('el recordatorio del día 5 lleva el mismo enlace, y no se repite', async () => {
     encender();
     sendEmail.mockClear();
     expect((await recordar(PERIODO)).recordados).toBe(1);
     const [c] = correosA(laura.email);
     expect(c.subject).toBe(`Falta tu factura de julio para ${CORTA}`);
-    const nuevo = enlaceDelCorreo(c);
-    expect(nuevo).not.toBe(enlace);
-    expect((await request.get(`${API}/enlace/${enlace}`)).status).toBe(404);
-    enlace = nuevo;
+    expect(enlaceDelCorreo(c)).toBe(enlace);
+    expect((await request.get(`${API}/enlace/${enlace}`)).status).toBe(200);
 
     sendEmail.mockClear();
     expect((await recordar(PERIODO)).recordados).toBe(0);

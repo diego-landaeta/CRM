@@ -45,14 +45,14 @@ export async function pendientesDePreparar(periodo, db = pool) {
 }
 
 /** Crea la fila del mes. Si otra llamada se adelantó, no hace nada y devuelve null. */
-export async function crearDelMes(db, { colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt }) {
+export async function crearDelMes(db, { colaboradorId, issuerId, periodo, importeEsperado, tokenHash, semilla, caducaAt }) {
   const { rows } = await db.query(
     `INSERT INTO facturas_colaborador
-       (colaborador_id, issuer_id, periodo, importe_esperado, token_hash, caduca_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (colaborador_id, issuer_id, periodo, importe_esperado, token_hash, caduca_at, token_semilla)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (colaborador_id, issuer_id, periodo) WHERE anulada_at IS NULL DO NOTHING
      RETURNING id`,
-    [colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt],
+    [colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt, semilla],
   );
   return rows[0] ? Number(rows[0].id) : null;
 }
@@ -84,7 +84,7 @@ export async function porTokenHash(tokenHash) {
  */
 export async function delUsuario(userId) {
   const { rows } = await query(
-    `SELECT ${CAMPOS_ENLACE}
+    `SELECT ${CAMPOS_ENLACE}, f.token_semilla
        FROM facturas_colaborador f
        JOIN colaboradores c ON c.id = f.colaborador_id
        JOIN invoice_issuers ii ON ii.id = f.issuer_id
@@ -126,13 +126,13 @@ export async function marcarEnviado(id) {
 /** Las del mes que siguen sin subir, para el recordatorio del día 5: ni recibidas, ni anuladas, ni caducadas. */
 export async function sinSubir(periodo) {
   const { rows } = await query(
-    `SELECT f.id FROM facturas_colaborador f
+    `SELECT f.id, f.token_semilla, f.token_hash FROM facturas_colaborador f
       WHERE f.periodo = $1::date AND f.subida_at IS NULL AND f.anulada_at IS NULL
         AND (f.caduca_at IS NULL OR f.caduca_at > NOW())
       ORDER BY f.id`,
     [periodo],
   );
-  return rows.map((r) => Number(r.id));
+  return rows.map((r) => ({ ...r, id: Number(r.id) }));
 }
 
 /** ¿Ya pasó esto con esta factura? (para no repetir el recordatorio) */
@@ -198,10 +198,12 @@ export async function anular(db, id, porUserId, motivo) {
   );
 }
 
-export async function cambiarEnlace(db, id, tokenHash, caducaAt) {
+export async function cambiarEnlace(db, id, tokenHash, semilla, caducaAt) {
   await db.query(
-    'UPDATE facturas_colaborador SET token_hash = $2, caduca_at = $3, abierto_at = NULL WHERE id = $1',
-    [id, tokenHash, caducaAt],
+    `UPDATE facturas_colaborador
+        SET token_hash = $2, token_semilla = $3, caduca_at = $4, abierto_at = NULL
+      WHERE id = $1`,
+    [id, tokenHash, semilla, caducaAt],
   );
 }
 

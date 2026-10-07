@@ -7,7 +7,7 @@ import * as model from './facturas.model.js';
 import { anotar } from './facturas-colaborador.model.js';
 import { ambitoDe } from './facturas-colaborador.service.js';
 import { logger } from '../../shared/utils/logger.js';
-import { enviarCorreoDelMes, enviarAcuse, correosActivos } from './facturas.emails.js';
+import { enviarCorreoDelMes, enviarAcuse, urlDelEnlace } from './facturas.emails.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -33,9 +33,26 @@ export function nombreDelMes(periodo) {
 
 export const huella = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 
+/**
+ * El enlace de una semilla: 32 bytes, firmados con la clave del servidor. Como
+ * las firmas de los documentos de matrícula (`firmaDeDocumento.js`), se lee la
+ * clave en cada llamada.
+ */
+export function enlaceDeLaSemilla(semilla) {
+  const clave = process.env.JWT_SECRET;
+  if (!clave) throw new Error('Falta JWT_SECRET: no se pueden hacer los enlaces de las facturas');
+  return crypto.createHmac('sha256', clave).update(`facturas-colaborador:${semilla}`).digest('base64url');
+}
+
+/**
+ * Un enlace nuevo. En la base quedan la semilla (al azar) y la huella del
+ * enlace; el enlace en sí, no. Así se cumplen las dos cosas de la definición:
+ * «solo se guarda su sha256» y el recordatorio «con el mismo enlace».
+ */
 function tokenNuevo() {
-  const token = crypto.randomBytes(32).toString('base64url');
-  return { token, hash: huella(token) };
+  const semilla = crypto.randomBytes(32).toString('hex');
+  const token = enlaceDeLaSemilla(semilla);
+  return { token, hash: huella(token), semilla };
 }
 
 const caducidad = (ahora = Date.now()) => new Date(ahora + DIAS_DE_ENLACE * 24 * 3600 * 1000);
@@ -64,7 +81,7 @@ export async function prepararMes(periodo) {
   const pendientes = await model.pendientesDePreparar(periodo);
   const preparados = [];
   for (const p of pendientes) {
-    const { token, hash } = tokenNuevo();
+    const { token, hash, semilla } = tokenNuevo();
     // Una por una, fuera de una transacción común: si una falla, las demás siguen.
     const id = await model.crearDelMes(pool, {
       colaboradorId: p.colaborador_id,
@@ -72,6 +89,7 @@ export async function prepararMes(periodo) {
       periodo,
       importeEsperado: p.importe_acordado,
       tokenHash: hash,
+      semilla,
       caducaAt: caducidad(),
     });
     if (id) preparados.push({ facturaId: id, colaboradorId: p.colaborador_id, issuerId: p.issuer_id, token });
@@ -245,7 +263,13 @@ const NO_ES_TUYA = () => new AppError('Factura no encontrada', 404, 'NOT_FOUND')
 /** Sus meses: los de los colaboradores de la lista que llevan su usuario. */
 export async function mias(user) {
   const filas = await model.delUsuario(user.userId);
-  return filas.map((f) => ({ id: f.id, ...paraElColaborador(f) }));
+  return filas.map((f) => ({
+    id: f.id,
+    ...paraElColaborador(f),
+    // Su enlace, rehecho con la semilla; solo mientras sirve para subirla.
+    enlace: f.token_semilla && !['recibida', 'anulada', 'caducado'].includes(f.estado)
+      ? urlDelEnlace(enlaceDeLaSemilla(f.token_semilla)) : null,
+  }));
 }
 
 export async function subirMia(user, id, datos, ip) {
@@ -306,13 +330,13 @@ export async function anular(user, id, motivo, ip) {
   if (!f) throw NO_ESTA();
   if (f.anulada_at) throw new AppError('Esta factura ya está anulada', 409, 'CONFLICT');
 
-  const { token, hash } = tokenNuevo();
+  const { token, hash, semilla } = tokenNuevo();
   const nuevaId = await enTransaccion(async (db) => {
     await model.anular(db, id, user.userId, motivo);
     await anotar(db, { facturaId: id, evento: 'anulada', userId: user.userId, ip, detalle: { motivo } });
     const nueva = await model.crearDelMes(db, {
       colaboradorId: f.colaborador_id, issuerId: f.issuer_id, periodo: f.periodo,
-      importeEsperado: f.importe_esperado, tokenHash: hash, caducaAt: caducidad(),
+      importeEsperado: f.importe_esperado, tokenHash: hash, semilla, caducaAt: caducidad(),
     });
     await anotar(db, { facturaId: nueva, evento: 'reenviado', userId: user.userId, ip, detalle: { sustituye_a: id } });
     return nueva;
@@ -328,9 +352,9 @@ export async function reenviar(user, id, ip) {
   if (f.anulada_at) throw new AppError('Esta factura está anulada', 409, 'CONFLICT');
   if (f.subida_at) throw new AppError('Esta factura ya está recibida', 409, 'CONFLICT');
 
-  const { token, hash } = tokenNuevo();
+  const { token, hash, semilla } = tokenNuevo();
   await enTransaccion(async (db) => {
-    await model.cambiarEnlace(db, id, hash, caducidad());
+    await model.cambiarEnlace(db, id, hash, semilla, caducidad());
     await anotar(db, { facturaId: id, evento: 'reenviado', userId: user.userId, ip });
   });
   await mandarEnlace(id, token, { nuevo: true, clave: `facturas-colaborador-reenvio-${id}-${Date.now()}` });
@@ -345,22 +369,20 @@ export async function registroDeFactura(user, id) {
 /* ─────────────────────────── la tarea del mes ─────────────────────────── */
 
 /**
- * El día 5: a quien todavía no ha subido la del mes anterior, el recordatorio.
- * El enlace del primer correo no se puede repetir (en la base solo está su
- * huella), así que el recordatorio lleva uno nuevo y el anterior deja de valer.
- * Con los correos apagados no se toca nada: cambiar el enlace sin mandarlo
- * dejaría al colaborador sin ninguno que funcione.
+ * El día 5: a quien todavía no ha subido la del mes anterior, el recordatorio,
+ * con el mismo enlace (Definición acordada, «Cómo funciona», 6). Se rehace con
+ * su semilla y se comprueba contra la huella: si no cuadra (la clave del
+ * servidor cambió), no se manda un enlace que no funcionaría.
  */
 export async function recordar(periodo) {
-  if (!correosActivos()) {
-    logger.info({ periodo }, 'Recordatorio de facturas de colaboradores sin enviar (correos apagados)');
-    return { recordados: 0, omitido: 'correos apagados' };
-  }
   let recordados = 0;
-  for (const id of await model.sinSubir(periodo)) {
-    if (await model.tieneEvento(id, 'recordatorio')) continue;
-    const { token, hash } = tokenNuevo();
-    await model.cambiarEnlace(pool, id, hash, caducidad());
+  for (const { id, token_semilla: semilla, token_hash: hash } of await model.sinSubir(periodo)) {
+    if (!semilla || await model.tieneEvento(id, 'recordatorio')) continue;
+    const token = enlaceDeLaSemilla(semilla);
+    if (huella(token) !== hash) {
+      logger.warn({ facturaId: id }, 'El enlace de la factura no cuadra con su huella: no se manda el recordatorio');
+      continue;
+    }
     const r = await mandarEnlace(id, token, { recordatorio: true, clave: `facturas-colaborador-recordatorio-${id}` });
     if (r?.sent) recordados++;
   }
