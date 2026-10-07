@@ -16,7 +16,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import ComoVoy from '@/modules/reports/components/ComoVoy';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import ClientsFiltersBar, { ESTADO_PAGO_LABELS, SORT_LABELS } from '../components/ClientsFiltersBar';
+import ClientsFiltersBar from '../components/ClientsFiltersBar';
 import BarraFiltros from '@/shared/components/ui/BarraFiltros';
 import CifrasClientes from '../components/CifrasClientes';
 import SaludDeCobro from '../components/SaludDeCobro';
@@ -90,9 +90,9 @@ function CeldaCuotas({ client: c }: { client: Client }) {
         {total} {total === 1 ? 'cuota' : 'cuotas'}
       </span>
       <div className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap">
-        <span className="text-green-700 dark:text-green-400">{pagadas} pagadas</span>
+        <span className="text-success-soft-foreground">{pagadas} pagadas</span>
         <span> · </span>
-        <span className={pendientes > 0 ? 'text-orange-700 dark:text-orange-400' : ''}>
+        <span className={pendientes > 0 ? 'text-warning-soft-foreground' : ''}>
           {pendientes} pendientes
         </span>
       </div>
@@ -130,25 +130,25 @@ function QuickActions({ client: c, onUpsell, onDelete }: QuickActionsProps) {
     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
       {wa && (
         <button type="button" onClick={() => abrirAqui()} title="WhatsApp" aria-label="Abrir WhatsApp"
-          className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
+          className="p-1.5 rounded hover:bg-success-soft text-muted-foreground hover:text-success-soft-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <WhatsappLogo size={14} weight="regular" />
         </button>
       )}
       {c.email && (
         <a href={`mailto:${c.email}`} title="Email" aria-label="Enviar email"
-          className="p-1.5 rounded hover:bg-amber-100 dark:hover:bg-amber-950/40 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
+          className="p-1.5 rounded hover:bg-warning-soft text-muted-foreground hover:text-warning-soft-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <EnvelopeSimple size={14} weight="regular" />
         </a>
       )}
       {onUpsell && (
         <button onClick={() => onUpsell(c)} title="Nueva venta / upsell" aria-label="Registrar nueva venta o upsell"
-          className="p-1.5 rounded hover:bg-violet-100 dark:hover:bg-violet-950/40 text-muted-foreground hover:text-violet-700 dark:hover:text-violet-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
+          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
           <ShoppingCart size={14} weight="regular" />
         </button>
       )}
       {onDelete && (
         <button onClick={() => onDelete(c)} title="Eliminar cliente (soft delete)" aria-label="Eliminar cliente"
-          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400/40">
+          className="p-1.5 rounded hover:bg-destructive-soft text-muted-foreground hover:text-destructive transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40">
           <Trash size={14} weight="regular" />
         </button>
       )}
@@ -415,45 +415,16 @@ export default function ClientsPage() {
       {/* Barra de filtros FUERA del card de la tabla: el card lleva overflow-hidden
           (para recortar las esquinas de la tabla) y eso recortaba el popover de
           "Filtros". Va como fila propia encima del card, igual que en Prospectos. */}
-      {/* Los filtros que mas se usan, a la vista y en una fila, como en
-          Prospectos. Estaban TODOS detras del boton «Filtros»: para saber si
-          habia algo puesto habia que abrirlo, y un filtro que no se ve es un
-          filtro que se queda puesto sin querer — y entonces la pantalla ensena
-          menos de lo que hay sin decirlo.
-
-          Programa y fechas siguen detras del boton: no caben en una fila y no
-          se tocan a diario. */}
+      {/* Arriba solo el buscador, como en Prospectos desde el 23/09 (Diego: «mete
+          esos filtros allí»). Gestora, estado de pago y orden salían aquí Y otra vez
+          dentro de «Filtros»: dos sitios donde mirar qué había puesto (repaso del
+          15/09, rescatado de la PR #153 de Fabián). Ahora van solo dentro, y lo que
+          esté puesto lo cantan el número del botón y las píldoras de al lado. */}
       <BarraFiltros
         busqueda={search}
         onBusqueda={setSearch}
         placeholder="Buscar por nombre, email o teléfono"
-        desplegables={[
-          ...(user?.role === 'gestor' ? [] : [{
-            nombre: 'Gestora',
-            valor: filterResp,
-            onChange: setFilterResp,
-            opciones: [
-              { value: '', label: 'Todas las gestoras' },
-              { value: 'unassigned', label: 'Sin asignar' },
-              ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
-            ],
-          }]),
-          {
-            nombre: 'Estado de pago',
-            valor: filterEstadoPago,
-            onChange: setFilterEstadoPago,
-            opciones: [
-              { value: '', label: 'Todos los pagos' },
-              ...Object.entries(ESTADO_PAGO_LABELS).map(([value, label]) => ({ value, label })),
-            ],
-          },
-          {
-            nombre: 'Orden',
-            valor: sortBy,
-            onChange: setSortBy,
-            opciones: Object.entries(SORT_LABELS).map(([value, label]) => ({ value, label })),
-          },
-        ]}
+        desplegables={[]}
         hayFiltros={hasActiveFilters}
         onLimpiar={clearAllFilters}
         onActualizar={() => setReloadKey((k) => k + 1)}
@@ -544,7 +515,7 @@ export default function ClientsPage() {
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(c.total_compras)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>
+                      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
                         {fmt(c.pendiente)}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -592,7 +563,7 @@ export default function ClientsPage() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Pendiente</div>
-                      <div className={`tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-orange-600' : 'text-muted-foreground'}`}>{fmt(c.pendiente)}</div>
+                      <div className={`tabular-nums font-semibold ${Number(c.pendiente) > 0 ? 'text-warning' : 'text-muted-foreground'}`}>{fmt(c.pendiente)}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-border/60">

@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { contrasenaNueva } from '../auth/auth.validation.js';
+
+// El correo de otro, solo el super admin (#248). Igual que al crear: sin
+// espacios y en minúsculas.
+export const correoSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+  z.string().email('Email invalido').max(255)
+);
 
 const projectAssignmentSchema = z.object({
   projectId: z.number().int().positive(),
@@ -8,11 +16,11 @@ const projectAssignmentSchema = z.object({
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor'], { message: 'Rol debe ser admin, gestor, soporte o tutor' }),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'], { message: 'Rol debe ser admin, gestor, soporte, tutor o colaborador' }),
   // Roles de MAS. Quien lleva prospectos y ademas da clase no tiene que elegir.
   // Superadmin no cabe aqui a proposito: un rol añadido no puede dar acceso
   // total --eso se pone como rol principal o no se pone--.
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor'])).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
   // Legacy: lista de ids (recibe_leads queda en false).
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
@@ -69,8 +77,13 @@ export const createUserSchema = z.object({
 // factura. Vanessa lo es y no debe.
 export const updateUserSchema = z.object({
   nombre: z.string().min(2).max(200).optional(),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor'])).optional(),
+  // Solo lo acepta el super admin (lo comprueba el controlador): #248.
+  email: correoSchema.optional(),
+  // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
+  // A un tutor no le sale nada mientras siga el freno.
+  reenviarEnlace: z.boolean().optional(),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
   factura_manager: z.boolean().optional(),
   editar_fechas_factura: z.boolean().optional(),
   gestor_colaboraciones: z.boolean().optional(),
@@ -85,14 +98,19 @@ export const updateUserSchema = z.object({
 });
 
 // Reset de contraseña por un superadmin (no requiere la contraseña actual).
+// #248: las mismas reglas que «Establece tu contraseña», y repetida.
 export const adminSetPasswordSchema = z.object({
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200),
+  password: contrasenaNueva,
+  confirmPassword: z.string().min(1, 'Repite la contraseña'),
+}).refine((d) => d.password === d.confirmPassword, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirmPassword'],
 });
 
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor'])).optional(),
+  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
   projectId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),

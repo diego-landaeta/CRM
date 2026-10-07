@@ -28,6 +28,7 @@ const {
   generarToken, huella, pareceToken,
 } = await import('../src/modules/mcp/mcp.acceso.js');
 const { HERRAMIENTAS, INFORMES } = await import('../src/modules/mcp/mcp.tools.js');
+const db = await import('../src/shared/config/db.js');
 
 // Dos empresas: CEDIA (1) con los campus 10 y 11, Ictess (2) con el 20.
 const PROYECTOS = [
@@ -147,14 +148,24 @@ const ARGS = {
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
+  listar_tutores: { texto: 'ana', incluir_retirados: true },
+  comisiones_tutores: { desde: '2026-08', hasta: '2026-09', tutor_id: 3 },
+  formaciones_sin_tutor: { incluir_anteriores_al_corte: true },
+  listar_formaciones: { texto: 'máster', pagina: 1, limite: 25 },
+  resumen_catalogo: {},
+  ver_formacion: { id: 5 },
 };
 
 const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
   for (const h of HERRAMIENTAS.filter((x) => !omitir.includes(x.nombre))) {
     // ver_prospecto devuelve «no existe» con la base vacia; lo que se mira
     // aqui es la consulta que lanzo, no el resultado.
+    // Y las de tutores, a una gestora, se niegan: es lo que tienen que hacer.
     await h.ejecutar(ambito, { ...ARGS[h.nombre], ...extra }).catch((e) => {
-      if (e.code !== 'MCP_NO_ENCONTRADO') throw e;
+      // ver_formacion, con la base de mentira, recibe una fila sin campus: la
+      // rechaza por ajena, que es justo lo que tiene que hacer.
+      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN'
+        && !(h.nombre === 'ver_formacion' && e.code === 'MCP_FUERA_DE_AMBITO')) throw e;
     });
   }
 };
@@ -262,6 +273,97 @@ describe('lo que nunca sale', () => {
       if (/FROM invoices i|FROM leads l|FROM conversions c|lead_interactions/.test(sql)) {
         expect(sql).not.toMatch(PROHIBIDO);
       }
+    }
+  });
+});
+
+describe('tutores (Carlos, 01/10: «la conexión no exporta los datos de tutores»)', () => {
+  const TUTORES = ['listar_tutores', 'comisiones_tutores', 'formaciones_sin_tutor'];
+
+  it('existen y van acotadas a los campus pedidos', async () => {
+    for (const n of TUTORES) {
+      consultas.length = 0;
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), { ...ARGS[n], proyecto_id: 11 });
+      expect(consultas.length, n).toBeGreaterThan(0);
+      for (const { sql, params } of consultas) {
+        // «formaciones_sin_tutor» usa la consulta de la pantalla, que lleva la
+        // lista en $2; lo que importa es que la lleve y que sea solo [11].
+        expect(sql).toMatch(/project_id = ANY\(\$\d::int\[\]\)/);
+        expect(params.find((p) => Array.isArray(p))).toEqual([11]);
+      }
+    }
+  });
+
+  it('a una gestora se le niegan sin llegar a la base', async () => {
+    for (const n of TUTORES) {
+      consultas.length = 0;
+      const r = await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('gestor'), ARGS[n]).catch((e) => e);
+      expect(r?.code, n).toBe('MCP_SOLO_ADMIN');
+      expect(consultas).toEqual([]);
+    }
+  });
+
+  it('no piden DNI, IBAN, banco ni teléfono', async () => {
+    consultas.length = 0;
+    for (const n of TUTORES) await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), ARGS[n]);
+    for (const { sql } of consultas) {
+      expect(sql).not.toMatch(/iban|dni|nif|banco|telefono|tutor_profiles|password|\btoken\b/i);
+      // El `s.*` de «Cursos sin tutor» lee de su propia subconsulta, que no
+      // tiene nada personal; en las demás, ni un `*`.
+      if (!/WITH sin_tutor AS/.test(sql)) expect(sql).not.toMatch(/\b[a-z]+\.\*/i);
+    }
+  });
+});
+
+describe('el catálogo (#215: «¿cuánto cuesta el Máster X en Psiko?»)', () => {
+  const CATALOGO = ['listar_formaciones', 'resumen_catalogo'];
+
+  it('existe y va acotado a los campus pedidos', async () => {
+    for (const n of CATALOGO) {
+      consultas.length = 0;
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), { ...ARGS[n], proyecto_id: 11 });
+      expect(consultas.length, n).toBeGreaterThan(0);
+      for (const { params } of consultas) expect(params.find((p) => Array.isArray(p)), n).toEqual([11]);
+    }
+  });
+
+  it('una gestora también lo usa (lo necesita para vender), solo con sus campus y sin imponerle su id', async () => {
+    const soloIseih = ambitoDe('gestor', [PROYECTOS[0]]);
+    for (const n of CATALOGO) {
+      consultas.length = 0;
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(soloIseih, ARGS[n]);
+      for (const { params } of consultas) {
+        expect(params.find((p) => Array.isArray(p)), n).toEqual([10]);
+        // El catálogo no es de nadie: si se le impusiera su id, no vería ninguna.
+        expect(params, n).not.toContain(7);
+      }
+    }
+  });
+
+  it('una formación de otro campus da el mismo 403 que las demás herramientas', async () => {
+    const soloIseih = ambitoDe('gestor', [PROYECTOS[0]]);
+    db.query.mockResolvedValueOnce({ rows: [{ id: 5, curso: 'Máster de Ictess', campus_id: 20, precio: '1200' }] });
+    const r = await HERRAMIENTAS.find((h) => h.nombre === 'ver_formacion').ejecutar(soloIseih, { id: 5 }).catch((e) => e);
+    expect(r.code).toBe('MCP_FUERA_DE_AMBITO');
+    expect(r.statusCode).toBe(403);
+    expect(r.message).toMatch(/campus 20/);
+  });
+
+  it('y una de su campus, sí', async () => {
+    const soloIseih = ambitoDe('gestor', [PROYECTOS[0]]);
+    db.query.mockResolvedValueOnce({ rows: [{ id: 5, curso: 'Máster de ISEIH', campus_id: 10, precio: '1200', dossier_version: null }] });
+    const r = await HERRAMIENTAS.find((h) => h.nombre === 'ver_formacion').ejecutar(soloIseih, { id: 5 });
+    expect(r).toMatchObject({ curso: 'Máster de ISEIH', precio: 1200, tiene_dossier: false });
+  });
+
+  it('no pide el enlace de pago, ni ventas, ni lo que cobra el tutor', async () => {
+    consultas.length = 0;
+    for (const n of [...CATALOGO, 'ver_formacion']) {
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), ARGS[n]).catch(() => {});
+    }
+    expect(consultas.length).toBeGreaterThan(2);
+    for (const { sql } of consultas) {
+      expect(sql).not.toMatch(/stripe_link|conversions|invoices|importe|pct|tutor_commission|iban|[a-z]+.*/i);
     }
   });
 });

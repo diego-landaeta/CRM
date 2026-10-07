@@ -125,6 +125,7 @@ const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage
 // El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
 const SeguimientoPage = lazy(() => import('./modules/proceso/pages/SeguimientoPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
+const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/ConvocatoriasPage'));
 const EmailSequencesPage = lazy(() => import('./modules/email-sequences/pages/EmailSequencesPage'));
 const FormsPage = lazy(() => import('./modules/forms/pages/FormsPage'));
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
@@ -147,6 +148,7 @@ const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
 const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/DocumentsConfigPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
+const TasksPage = lazy(() => import('./modules/tasks/pages/TasksPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
@@ -195,12 +197,15 @@ function App() {
           <Route path="/prospectos/cola" element={<ColaDelDiaPage />} />
           <Route path="/prospectos/seguimiento" element={<SeguimientoPage />} />
           <Route path="/prospectos/proceso" element={<ProcesoPage />} />
+          <Route path="/prospectos/convocatorias" element={<ConvocatoriasPage />} />
           <Route path="/prospectos/:id" element={<LeadDetailPage />} />
 
           {/* Clientes — tabs */}
           <Route path="/clientes" element={<ClientesLayout />}>
             <Route index element={<ClientsPage />} />
             <Route path="matriculas" element={<MatriculasPage />} />
+            {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
+            <Route path="matriculas/certificaciones" element={<MatriculasPage />} />
           </Route>
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
@@ -282,10 +287,13 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           {/* Conexión → MCP. Quién puede usarlo lo decide el servidor; la página lo dice. */}
           <Route path="/conexion/mcp" element={<McpPage />} />
+          {/* Conexión → Conectores (WordPress, tiendas, APIs). Estaba en Captación
+              hasta el 29/09; la dirección vieja lleva a la nueva. */}
+          <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/proceso" element={<Navigate to="/prospectos/proceso" replace />} />
-          <Route path="/captacion/conectores" element={<ConnectorsPage />} />
+          <Route path="/captacion/conectores" element={<Navigate to="/conexion/conectores" replace />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/configuracion/documentos" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
@@ -294,6 +302,9 @@ function App() {
           <Route path="/informes/feedback" element={<FeedbackPanelPage />} />
           <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />
+          {/* Las direcciones de antes (avisos ya enviados, marcadores): a Certificaciones. */}
+          <Route path="/certifex/consultas" element={<Navigate to="/clientes/matriculas/certificaciones?vista=consultas" replace />} />
+          <Route path="/certifex/emisiones" element={<Navigate to="/clientes/matriculas/certificaciones" replace />} />
           <Route path="/registro" element={<RegistroPage />} />
           <Route path="/novedades" element={<NovedadesPage />} />
           <Route path="/correos" element={<CorreosPage />} />
@@ -305,6 +316,7 @@ function App() {
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/preferencias" element={<PreferencesPage />} />
+          <Route path="/tareas" element={<TasksPage />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

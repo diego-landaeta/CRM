@@ -25,6 +25,7 @@ import {
   Envelope,
   Globe,
   PlugsConnected,
+  CloudArrowDown,
   WarningCircle,
   ShoppingBag,
   BookOpen,
@@ -129,6 +130,7 @@ const NAV_SECTIONS = [
           // compro, y se repasa cuando se puede, no cada mañana.
           { label: 'Seguimiento de fin de mes', to: '/prospectos/seguimiento', detail: 'La base que no compró', icon: ArrowCounterClockwise },
           { label: 'Proceso comercial', to: '/prospectos/proceso', detail: 'Los cinco pasos', icon: ListChecks },
+          { label: 'Convocatorias', to: '/prospectos/convocatorias', detail: 'Las becas y su embudo', icon: GraduationCap },
         ],
       },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
@@ -170,6 +172,7 @@ const NAV_SECTIONS = [
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { label: 'Ventas', to: '/finanzas/ventas', detail: 'Registrar y consultar', icon: Receipt, module: 'conversions' },
+      { label: 'Tareas', to: '/tareas', detail: 'Tablero del equipo', icon: ListChecks, roles: ['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'colaborador'] },
     ],
   },
   {
@@ -180,9 +183,6 @@ const NAV_SECTIONS = [
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
-      // Conectores (#6). El backend existia desde `bcf9c3e` y no habia forma
-      // de llegar: sin pantalla y sin entrada.
-      { label: 'Conectores', to: '/captacion/conectores', detail: 'Traer datos de fuera', icon: PlugsConnected, roles: ['superadmin', 'admin'], module: 'connectors' },
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
@@ -208,7 +208,8 @@ const NAV_SECTIONS = [
       // árbol de verdad no tenía entrada en ningún sitio.
       { label: 'Productos por categoría', to: '/productos/arbol', detail: 'Productos agrupados', icon: ListBullets, roles: ['superadmin', 'admin'], module: 'products' },
       { label: 'Árbol de categorías', to: '/productos/categorias', detail: 'Jerarquía de categorías', icon: Tree, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Certificados', to: '/documentos', detail: 'Certificados', icon: FilePdf, roles: ['superadmin', 'admin'], module: 'documents' },
+      // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
+      // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
     ],
   },
   {
@@ -273,11 +274,16 @@ const NAV_SECTIONS = [
   // Claude: super admin, admin, personas que se le puedes colocar».
   // `accesoMcp` y no `roles`/`permiso`: soporte se salta esos dos, y aquí no
   // puede. Es la misma regla que el servidor (`puedeUsarMcp` en mcp.acceso.js).
+  //
+  // Y los Conectores (#6), que estaban en Captación. Diego, 29/09: «todo lo que
+  // sea conexión con WordPress y eso pase allí, a la sección de conexión del
+  // menú». Lo que conecta el CRM con fuera, junto.
   {
     label: 'Conexión',
     icon: PlugsConnected,
     items: [
-      { label: 'MCP', to: '/conexion/mcp', icon: Robot, accesoMcp: true },
+      { label: 'MCP', to: '/conexion/mcp', detail: 'Consultar desde Claude', icon: Robot, accesoMcp: true },
+      { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors' },
     ],
   },
   {
@@ -290,7 +296,7 @@ const NAV_SECTIONS = [
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge },
       { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
+      { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador'] },
       { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
       // Claves y variables (#80). Los mismos roles que exige el servidor con
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
@@ -387,7 +393,7 @@ export function applyLabel(original, overrides) {
 // PRINCIPAL, como el servidor: un rol añadido no da el MCP.
 export function tieneAccesoMcp(role, permisos) {
   if (role === 'superadmin' || role === 'admin') return true;
-  if (role === 'tutor') return false;
+  if (role === 'tutor' || role === 'colaborador') return false;
   return permisos?.usa_mcp === true;
 }
 
@@ -412,6 +418,11 @@ function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permi
   // no se le esconde el CRM: se le suma lo suyo.
   if (suyos.length === 1 && suyos[0] === 'tutor') {
     return Array.isArray(item.roles) && item.roles.includes('tutor');
+  }
+  // Lo mismo para quien es SOLO colaborador (#210, fase 5): Tareas y sus
+  // preferencias. El servidor le responde 403 en todo lo demas.
+  if (suyos.length > 0 && suyos.every((r) => r === 'colaborador')) {
+    return Array.isArray(item.roles) && item.roles.includes('colaborador');
   }
   // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
   // Va ANTES del atajo de soporte: «roles únicamente», dijo Diego.
@@ -1068,7 +1079,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // que es dar de alta profesores y ajustarles el porcentaje.
   const rolLabel = user?.gestor_colaboraciones
     ? 'Colaboraciones'
-    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' }[user?.role] || '');
+    : ({ superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' }[user?.role] || '');
 
   async function handleLogout() {
     await logout();
@@ -1354,9 +1365,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                  // «del CRM»: desde el menú personal se esperaba llegar a lo
+                  // suyo, y esto son los proyectos, usuarios y APIs de todo el
+                  // CRM (#208). Lo personal es «Mi perfil», justo encima.
                   <UserMenuItem
                     icon={Gear}
-                    label="Configuración"
+                    label="Configuración del CRM"
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}

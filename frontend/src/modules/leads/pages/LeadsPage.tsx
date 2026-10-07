@@ -64,6 +64,8 @@ import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
+// Las dos formas de abrir a una persona, a la vista y no escondidas.
+import AtajosDeFicha from '../components/AtajosDeFicha';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
@@ -98,7 +100,7 @@ type ChipTone = 'default' | 'danger' | 'warning';
 
 function QuickChip({ active, onClick, label, count, tone = 'default' }: { active: boolean; onClick: () => void; label: string; count?: number; tone?: ChipTone }) {
   const toneActive: string = {
-    default: 'bg-primary text-white',
+    default: 'bg-primary text-primary-foreground',
     danger: 'bg-destructive text-destructive-foreground',
     warning: 'bg-warning text-warning-foreground',
   }[tone];
@@ -144,6 +146,11 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
+  // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
+  // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
+  const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
+    user?.role === 'superadmin' || user?.role === 'admin'
+    || (can('leads.delete') && l.responsable_id === user?.id && l.status !== 'convertido');
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
@@ -859,6 +866,10 @@ export default function LeadsPage() {
           organizarse el dia le hace falta. */}
       <BloquePlegable
         clave="prospectos-resumen"
+        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado»
+        // (rescatado de la PR #153). Quien ya lo dejó abierto lo sigue viendo
+        // abierto: lo guardado manda sobre el arranque.
+        abiertoPorDefecto={false}
         titulo="Resumen del dia"
         resumen={
           quickCounts.urgent > 0
@@ -891,11 +902,20 @@ export default function LeadsPage() {
           }}
         />
         <AccesosClave
+          // Cada acceso, solo a quien puede entrar: la gestora veía Duplicados,
+          // Reportes y Audiencias y al pulsarlos acababa en «sin permiso». Los
+          // mismos roles que el menú y el servidor (y que ISEIE, 02/10).
           accesos={[
             { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/prospectos/pipeline' },
-            { label: 'Audiencias', detail: 'Exportar a Meta y Google', icon: Export, to: '/prospectos/audiencias' },
-            { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/prospectos/revision-duplicados' },
-            { label: 'Reportes', detail: 'Numeros descargables', icon: ChartLineUp, to: '/informes' },
+            ...(['admin', 'superadmin', 'soporte'].includes(user?.role || '')
+              ? [{ label: 'Audiencias', detail: 'Exportar a Meta y Google', icon: Export, to: '/prospectos/audiencias' }]
+              : []),
+            ...(['admin', 'superadmin'].includes(user?.role || '')
+              ? [
+                { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/prospectos/revision-duplicados' },
+                { label: 'Reportes', detail: 'Números descargables', icon: ChartLineUp, to: '/informes' },
+              ]
+              : []),
           ]}
         />
       </section>
@@ -1162,7 +1182,10 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    <div className="flex items-center justify-end gap-1.5">
+                    <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    </div>
                   </td>
                 </tr>
                 );
@@ -1226,7 +1249,10 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                <span className="flex items-center gap-1.5">
+                <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                </span>
               </div>
             </div>
           ))}
@@ -1259,7 +1285,7 @@ export default function LeadsPage() {
                   onClick={() => setPage(p)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                     p === page
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'border border-border bg-card hover:bg-muted'
                   }`}
                 >

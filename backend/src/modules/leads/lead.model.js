@@ -1,5 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
+import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { gestoresDelReparto } from './reparto.js';
 
 // ============================================================
@@ -672,6 +673,22 @@ const ULTIMO_CONTACTO = `(SELECT MAX(i.fecha) FROM lead_interactions i WHERE i.l
 // «Sin tocar» = ni una interaccion Y todavia en la entrada del embudo.
 const SIN_TOCAR = `(${ULTIMO_CONTACTO} IS NULL AND l.status IN ('nuevo', 'por_contactar'))`;
 
+/*
+  QUE ES UN PROSPECTO Y NO UN CLIENTE (06/10).
+
+  Prospectos escondia todo lo que estuviera en «convertido», y Clientes solo
+  enseña lo que tiene al menos una venta. Una ficha en «convertido» SIN venta
+  no salia en ninguna de las dos. Le paso a Yolanda con Orlando Villalobos: se
+  le registro la venta, se borro como «Error al cargar», la ficha se quedo en
+  «convertido» y desaparecio; al dia siguiente intento darlo de alta otra vez.
+  En ICTESS habia dos mas (Eric Garcia, Tomas Franco).
+
+  Asi que un «convertido» sin ninguna venta sigue siendo prospecto: sale en la
+  lista, con su estado, para que alguien lo vea y lo arregle.
+*/
+const NO_ES_CLIENTE = `(l.status <> 'convertido'
+     OR NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id))`;
+
 /**
  * «Sin revisar este mes» (#132, el repaso de fin de mes).
  *
@@ -708,17 +725,25 @@ export async function sePuedeRevisar() {
   return hayTablaDeRevisiones;
 }
 
+// LA BARRA DE VENCIDOS CUENTA DESDE EL 01/09, como la cola. Diego, 30/09:
+// «los atrasados y eso también que sean a partir de esa fecha». Los prospectos
+// de antes siguen en el listado y se pueden buscar y filtrar por todo lo demas;
+// lo que no hacen es inflar «Vencidos», «Sin contacto» o «Urgente» con fichas
+// de meses atras (ver enElProceso.js). Getters y no cadenas fijas: la fecha se
+// lee en cada consulta, como en el resto del proceso.
+const desdeElInicio = (cond) => `(${EN_EL_PROCESO('l')} AND ${cond})`;
+
 export const FILTROS_RAPIDOS = {
   // Ojo: `NULL < CURRENT_DATE` es NULL, o sea que no pasa el filtro. Es lo que
   // se quiere —«sin recordatorio» no es «atrasado»— y coincide con el `next &&`
   // que hacia el frontend.
-  overdue: `${PROXIMO} < CURRENT_DATE`,
-  today: `${PROXIMO} = CURRENT_DATE`,
-  tomorrow: `${PROXIMO} = CURRENT_DATE + 1`,
-  week: `${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`,
-  'no-reminder': `${PROXIMO} IS NULL`,
-  'no-contact': SIN_TOCAR,
-  urgent: `(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`,
+  get overdue() { return desdeElInicio(`${PROXIMO} < CURRENT_DATE`); },
+  get today() { return desdeElInicio(`${PROXIMO} = CURRENT_DATE`); },
+  get tomorrow() { return desdeElInicio(`${PROXIMO} = CURRENT_DATE + 1`); },
+  get week() { return desdeElInicio(`${PROXIMO} BETWEEN CURRENT_DATE AND CURRENT_DATE + 7`); },
+  get 'no-reminder'() { return desdeElInicio(`${PROXIMO} IS NULL`); },
+  get 'no-contact'() { return desdeElInicio(SIN_TOCAR); },
+  get urgent() { return desdeElInicio(`(${PROXIMO} <= CURRENT_DATE OR ${SIN_TOCAR})`); },
 };
 
 export async function findAll({ projectId, projectIds, status, seguimiento, pasoProceso, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, qf }) {
@@ -769,7 +794,7 @@ export async function findAll({ projectId, projectIds, status, seguimiento, paso
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
   } else if (!includeConverted && !conConversion) {
-    conditions.push(`l.status <> 'convertido'`);
+    conditions.push(NO_ES_CLIENTE);
   }
   // POR QUE SEGUIMIENTO VA (#100).
   //
@@ -801,10 +826,11 @@ export async function findAll({ projectId, projectIds, status, seguimiento, paso
     puedan decir cosas distintas de la misma persona.
 
     Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
-    elegido, y es lo correcto: no estan en el proceso.
+    elegido, y es lo correcto: no estan en el proceso. Tampoco quien entro antes
+    del 01/09 aunque le quede agenda escrita de antes (ver enElProceso.js).
   */
   if (pasoProceso) {
-    conditions.push(`(SELECT ls.clave FROM lead_steps ls
+    conditions.push(`${EN_EL_PROCESO('l')} AND (SELECT ls.clave FROM lead_steps ls
                        WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
                          AND NOT ${PASO_CERRADO('ls')}
                        ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);
@@ -1018,7 +1044,7 @@ export async function contarFiltrosRapidos({ projectId, projectIds, responsableI
     params.push(responsableId);
   }
   // Igual que el listado: los convertidos no cuentan salvo que se pidan.
-  if (!includeConverted) cond.push(`l.status <> 'convertido'`);
+  if (!includeConverted) cond.push(NO_ES_CLIENTE);
 
   const cuenta = (clave) => `COUNT(*) FILTER (WHERE ${FILTROS_RAPIDOS[clave]})::int`;
   const { rows } = await query(
@@ -1048,7 +1074,7 @@ export async function comoVaLaRevision({ projectId, responsableId }) {
   if (!(await sePuedeRevisar())) {
     return { disponible: false, total: 0, revisadas: 0, pendientes: 0 };
   }
-  const cond = ['l.deleted_at IS NULL', `l.status <> 'convertido'`];
+  const cond = ['l.deleted_at IS NULL', NO_ES_CLIENTE];
   const params = [];
   let i = 1;
   if (projectId) { cond.push(`l.project_id = $${i++}`); params.push(projectId); }
