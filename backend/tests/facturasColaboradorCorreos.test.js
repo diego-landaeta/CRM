@@ -76,6 +76,8 @@ afterAll(async () => {
   await q(`DELETE FROM facturas_colaborador_registro
             WHERE colaborador_id = $1
                OR factura_id IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = $1)`, [laura.id]);
+  await q(`DELETE FROM admin_notifications WHERE type = 'factura_colaborador'
+            AND (metadata->>'factura_id')::int IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = $1)`, [laura.id]);
   await q('DELETE FROM facturas_colaborador WHERE colaborador_id = $1', [laura.id]);
   await q('DELETE FROM colaboradores WHERE id = $1', [laura.id]);
   await q('DELETE FROM users WHERE id = $1', [admin.id]);

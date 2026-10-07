@@ -124,6 +124,8 @@ afterAll(async () => {
   await q(`DELETE FROM facturas_colaborador_registro
             WHERE colaborador_id = ANY($1::int[])
                OR factura_id IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[]))`, [cs]);
+  await q(`DELETE FROM admin_notifications WHERE type = 'factura_colaborador'
+            AND (metadata->>'factura_id')::int IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[]))`, [cs]);
   await q('DELETE FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[])', [cs]);
   await q('DELETE FROM colaboradores WHERE id = ANY($1::int[])', [cs]);
   const ids = Object.values(U).map((u) => u.id);
@@ -206,6 +208,18 @@ describe('facturas de colaboradores (#202) · el enlace', () => {
     expect(mime).toBe('application/pdf');
     // 2026-09_<empresa>_<colaborador>_<n.º de factura>.pdf, sin tildes ni símbolos.
     expect(key).toMatch(/^facturas-colaborador\/2026-09\/\d+-[0-9a-f]{8}\/2026-09_FCMES-[a-z0-9]+_FCMES-[a-z0-9]+-Laura_F-2026-09\.pdf$/);
+  });
+
+  it('a administración le llega el aviso en la campana: al admin de esa empresa y al super admin', async () => {
+    const aviso = await one(
+      `SELECT title, link_path, target_user_ids FROM admin_notifications
+        WHERE type = 'factura_colaborador' AND (metadata->>'factura_id')::int = $1`,
+      [await filaViva(C.laura, E.A)],
+    );
+    expect(aviso.title).toBe(`Factura recibida: ${MARCA} Laura`);
+    expect(aviso.link_path).toBe('/finanzas/facturas-colaboradores?periodo=2026-09');
+    expect(aviso.target_user_ids).toEqual(expect.arrayContaining([U.adminA.id, U.super.id]));
+    expect(aviso.target_user_ids).not.toContain(U.gestora.id);
   });
 
   it('una segunda factura del mismo mes se rechaza, con un mensaje claro', async () => {

@@ -135,6 +135,21 @@ export async function sinSubir(periodo) {
   return rows.map((r) => ({ ...r, id: Number(r.id) }));
 }
 
+/** A quién avisar en la campana: los admins de los campus de esa empresa y los super admin. */
+export async function avisarA(issuerId) {
+  const { rows } = await query(
+    `SELECT u.id FROM users u
+      WHERE u.active = true AND u.role = 'superadmin'
+     UNION
+     SELECT DISTINCT u.id FROM users u
+       JOIN user_projects up ON up.user_id = u.id AND up.active = true
+       JOIN projects p ON p.id = up.project_id
+      WHERE u.active = true AND u.role = 'admin' AND p.sociedad_emisora_id = $1`,
+    [issuerId],
+  );
+  return rows.map((r) => Number(r.id));
+}
+
 /** ¿Ya pasó esto con esta factura? (para no repetir el recordatorio) */
 export async function tieneEvento(id, evento) {
   const { rows } = await query(

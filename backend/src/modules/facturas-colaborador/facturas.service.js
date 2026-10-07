@@ -8,6 +8,7 @@ import { anotar } from './facturas-colaborador.model.js';
 import { ambitoDe } from './facturas-colaborador.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { enviarCorreoDelMes, enviarAcuse, urlDelEnlace } from './facturas.emails.js';
+import { notifyUsers } from '../notifications/notifications.service.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -121,6 +122,19 @@ export async function mandarEnlace(facturaId, token, { recordatorio = false, nue
   }
 }
 
+/** El aviso en la campana a administración. `notifyUsers` no falla nunca. */
+async function avisarDeLaFactura(f) {
+  const importe = f.importe === null ? '' : ` · ${Number(f.importe).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €`;
+  await notifyUsers({
+    targetUserIds: await model.avisarA(f.issuer_id),
+    type: 'factura_colaborador',
+    title: `Factura recibida: ${f.colaborador_nombre}`,
+    message: `${nombreDelMes(f.periodo)} · ${f.razon_social}${importe} · ${f.numero_recepcion}`,
+    link_path: `/finanzas/facturas-colaboradores?periodo=${f.periodo.slice(0, 7)}`,
+    metadata: { factura_id: f.id, issuer_id: f.issuer_id },
+  });
+}
+
 /** El acuse con la copia. Si falla, la factura ya está guardada: solo se apunta en el log. */
 async function mandarAcuse(f, archivo) {
   try {
@@ -201,6 +215,7 @@ export async function subir(token, datos, ip) {
   // Ya guardada: se lee fuera de la transacción, con lo que ve todo el mundo.
   const subida = await model.porTokenHash(huella(token));
   await mandarAcuse(subida, { nombre, buffer: datos.archivo.buffer });
+  await avisarDeLaFactura(subida);
   return paraElColaborador(subida);
 }
 
@@ -278,6 +293,7 @@ export async function subirMia(user, id, datos, ip) {
   const nombre = await guardarFactura(f, datos, { ip, userId: user.userId });
   const subida = await model.delUsuarioPorId(user.userId, id);
   await mandarAcuse(subida, { nombre, buffer: datos.archivo.buffer });
+  await avisarDeLaFactura(subida);
   return { id, ...paraElColaborador(subida) };
 }
 

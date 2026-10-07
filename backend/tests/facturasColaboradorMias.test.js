@@ -87,6 +87,8 @@ afterAll(async () => {
   await q(`DELETE FROM facturas_colaborador_registro
             WHERE colaborador_id = ANY($1::int[])
                OR factura_id IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[]))`, [cs]);
+  await q(`DELETE FROM admin_notifications WHERE type = 'factura_colaborador'
+            AND (metadata->>'factura_id')::int IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[]))`, [cs]);
   await q('DELETE FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[])', [cs]);
   await q('DELETE FROM colaboradores WHERE id = ANY($1::int[])', [cs]);
   const ids = Object.values(U).map((u) => u.id);
