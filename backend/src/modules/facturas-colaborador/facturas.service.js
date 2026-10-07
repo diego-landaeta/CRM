@@ -6,6 +6,8 @@ import { generatePresignedUrl } from '../../shared/utils/presignedUrl.js';
 import * as model from './facturas.model.js';
 import { anotar } from './facturas-colaborador.model.js';
 import { ambitoDe } from './facturas-colaborador.service.js';
+import { logger } from '../../shared/utils/logger.js';
+import { enviarCorreoDelMes, enviarAcuse, correosActivos } from './facturas.emails.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -77,6 +79,40 @@ export async function prepararMes(periodo) {
   return preparados;
 }
 
+/**
+ * Manda el enlace de una fila por correo y lo apunta: `enviado` (o
+ * `recordatorio`) si Brevo lo acepta, `no_enviado` si falla. Con los correos
+ * apagados solo queda en el log (lo hace `despachar`) y la fila sigue «sin enviar».
+ */
+export async function mandarEnlace(facturaId, token, { recordatorio = false, nuevo = false, clave }) {
+  const f = await model.porId(facturaId, null);
+  if (!f) return { sent: false };
+  try {
+    const r = await enviarCorreoDelMes({ f, token, recordatorio, nuevo, clave });
+    if (r?.sent) {
+      await model.marcarEnviado(facturaId);
+      await anotar(pool, {
+        facturaId, evento: recordatorio ? 'recordatorio' : 'enviado', detalle: { para: f.colaborador_email },
+      });
+    }
+    return r;
+  } catch (err) {
+    logger.error({ err: err.message, facturaId }, 'No se pudo mandar el enlace de la factura de colaborador');
+    await anotar(pool, { facturaId, evento: 'no_enviado', detalle: { motivo: err.message } });
+    return { sent: false, error: err.message };
+  }
+}
+
+/** El acuse con la copia. Si falla, la factura ya está guardada: solo se apunta en el log. */
+async function mandarAcuse(f, archivo) {
+  try {
+    const r = await enviarAcuse({ f, archivo });
+    if (r?.sent) await anotar(pool, { facturaId: f.id, evento: 'acuse', detalle: { para: f.colaborador_email } });
+  } catch (err) {
+    logger.error({ err: err.message, facturaId: f.id }, 'No se pudo mandar el acuse de la factura de colaborador');
+  }
+}
+
 /* ─────────────────────────── el enlace (sin usuario) ─────────────────────────── */
 
 const ENLACE_NO_VALE = () => new AppError('Este enlace no existe o ya no es válido', 404, 'NOT_FOUND');
@@ -143,9 +179,11 @@ export function nombreDelArchivo({ periodo, empresa, colaborador, numeroFactura,
 export async function subir(token, datos, ip) {
   const f = await model.porTokenHash(huella(token));
   if (!f) throw ENLACE_NO_VALE();
-  await guardarFactura(f, datos, { ip });
+  const nombre = await guardarFactura(f, datos, { ip });
   // Ya guardada: se lee fuera de la transacción, con lo que ve todo el mundo.
-  return paraElColaborador(await model.porTokenHash(huella(token)));
+  const subida = await model.porTokenHash(huella(token));
+  await mandarAcuse(subida, { nombre, buffer: datos.archivo.buffer });
+  return paraElColaborador(subida);
 }
 
 /**
@@ -197,6 +235,7 @@ async function guardarFactura(f, { archivo, importe, numeroFactura }, { ip = nul
       },
     });
   });
+  return nombre;
 }
 
 /* ─────────────────────────── «Mi factura» (colaborador con usuario) ─────────────────────────── */
@@ -212,8 +251,9 @@ export async function mias(user) {
 export async function subirMia(user, id, datos, ip) {
   const f = await model.delUsuarioPorId(user.userId, id);
   if (!f) throw NO_ES_TUYA();
-  await guardarFactura(f, datos, { ip, userId: user.userId });
+  const nombre = await guardarFactura(f, datos, { ip, userId: user.userId });
   const subida = await model.delUsuarioPorId(user.userId, id);
+  await mandarAcuse(subida, { nombre, buffer: datos.archivo.buffer });
   return { id, ...paraElColaborador(subida) };
 }
 
@@ -277,6 +317,7 @@ export async function anular(user, id, motivo, ip) {
     await anotar(db, { facturaId: nueva, evento: 'reenviado', userId: user.userId, ip, detalle: { sustituye_a: id } });
     return nueva;
   });
+  await mandarEnlace(nuevaId, token, { nuevo: true, clave: `facturas-colaborador-reenvio-${nuevaId}-${Date.now()}` });
   return { anulada: id, nueva: nuevaId, token };
 }
 
@@ -292,10 +333,47 @@ export async function reenviar(user, id, ip) {
     await model.cambiarEnlace(db, id, hash, caducidad());
     await anotar(db, { facturaId: id, evento: 'reenviado', userId: user.userId, ip });
   });
+  await mandarEnlace(id, token, { nuevo: true, clave: `facturas-colaborador-reenvio-${id}-${Date.now()}` });
   return { id, token };
 }
 
 export async function registroDeFactura(user, id) {
   if (!(await model.porId(id, await ambitoDe(user)))) throw NO_ESTA();
   return model.registroDeFactura(id);
+}
+
+/* ─────────────────────────── la tarea del mes ─────────────────────────── */
+
+/**
+ * El día 5: a quien todavía no ha subido la del mes anterior, el recordatorio.
+ * El enlace del primer correo no se puede repetir (en la base solo está su
+ * huella), así que el recordatorio lleva uno nuevo y el anterior deja de valer.
+ * Con los correos apagados no se toca nada: cambiar el enlace sin mandarlo
+ * dejaría al colaborador sin ninguno que funcione.
+ */
+export async function recordar(periodo) {
+  if (!correosActivos()) {
+    logger.info({ periodo }, 'Recordatorio de facturas de colaboradores sin enviar (correos apagados)');
+    return { recordados: 0, omitido: 'correos apagados' };
+  }
+  let recordados = 0;
+  for (const id of await model.sinSubir(periodo)) {
+    if (await model.tieneEvento(id, 'recordatorio')) continue;
+    const { token, hash } = tokenNuevo();
+    await model.cambiarEnlace(pool, id, hash, caducidad());
+    const r = await mandarEnlace(id, token, { recordatorio: true, clave: `facturas-colaborador-recordatorio-${id}` });
+    if (r?.sent) recordados++;
+  }
+  return { recordados };
+}
+
+/** El último día del mes: prepara el mes y manda a cada uno su enlace. */
+export async function prepararYMandar(periodo) {
+  const preparados = await prepararMes(periodo);
+  let mandados = 0;
+  for (const p of preparados) {
+    const r = await mandarEnlace(p.facturaId, p.token, { clave: `facturas-colaborador-mes-${p.facturaId}` });
+    if (r?.sent) mandados++;
+  }
+  return { preparados: preparados.length, mandados };
 }

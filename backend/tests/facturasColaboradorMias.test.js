@@ -27,7 +27,8 @@ import { prepararMes } from '../src/modules/facturas-colaborador/facturas.servic
 
 const request = supertest(app);
 const MARCA = `FCMIA_${Date.now().toString(36)}`;
-const PERIODO = '2026-09-01';
+// Agosto: cada fichero de pruebas prepara su propio mes (se ejecutan a la vez).
+const PERIODO = '2026-08-01';
 const API = '/api/facturas-colaborador';
 const PDF = Buffer.from('%PDF-1.4\n% factura de prueba\n');
 
@@ -72,7 +73,8 @@ beforeAll(async () => {
 
   for (const clave of ['laura', 'pedro']) {
     C[clave] = await one(
-      `INSERT INTO colaboradores (nombre, email, area, user_id) VALUES ($1, $2, 'seo', $3) RETURNING id`,
+      `INSERT INTO colaboradores (nombre, email, area, user_id, alta_desde, baja_desde)
+       VALUES ($1, $2, 'seo', $3, '2026-08-01', '2026-09-01') RETURNING id`,
       [`${MARCA} ${clave}`, `${clave}_${MARCA.toLowerCase()}@test.local`, U[clave].id]);
     await q('INSERT INTO colaborador_empresas (colaborador_id, issuer_id, importe_acordado) VALUES ($1, $2, 450)',
       [C[clave].id, empresa.id]);
@@ -103,7 +105,7 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
     const res = await request.get(`${API}/mias`).set(como('laura'));
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0]).toMatchObject({ periodo: '2026-09', estado: 'sin_enviar', importe_acordado: 450 });
+    expect(res.body.data[0]).toMatchObject({ periodo: '2026-08', estado: 'sin_enviar', importe_acordado: 450 });
     deLaura = res.body.data[0].id;
     dePedro = (await request.get(`${API}/mias`).set(como('pedro'))).body.data[0].id;
     expect(dePedro).not.toBe(deLaura);
@@ -118,11 +120,11 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
     const res = await subir('laura', deLaura);
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.data.estado).toBe('recibida');
-    expect(res.body.data.recibida.numero_recepcion).toMatch(/^REC-2026-09-\d{4}$/);
+    expect(res.body.data.recibida.numero_recepcion).toMatch(/^REC-2026-08-\d{4}$/);
 
     const otra = await subir('laura', deLaura, 'F-2');
     expect(otra.status).toBe(409);
-    expect(otra.body.error || otra.body.message).toMatch(/Ya subiste la factura de septiembre de 2026/);
+    expect(otra.body.error || otra.body.message).toMatch(/Ya subiste la factura de agosto de 2026/);
 
     const reg = await one(`SELECT user_id FROM facturas_colaborador_registro WHERE factura_id = $1 AND evento = 'recibida'`, [deLaura]);
     expect(reg.user_id).toBe(U.laura.id);
@@ -135,7 +137,7 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
   });
 
   it('con el rol colaborador, lo de administración da 403', async () => {
-    for (const ruta of ['/mes?periodo=2026-09', '/colaboradores', '/empresas', `/facturas/${deLaura}/archivo`]) {
+    for (const ruta of ['/mes?periodo=2026-08', '/colaboradores', '/empresas', `/facturas/${deLaura}/archivo`]) {
       expect((await request.get(`${API}${ruta}`).set(como('laura'))).status, ruta).toBe(403);
     }
   });

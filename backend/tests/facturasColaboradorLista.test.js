@@ -77,7 +77,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (creados.length) {
-    await q('DELETE FROM facturas_colaborador_registro WHERE colaborador_id = ANY($1::int[])', [creados]);
+    // Las otras pruebas preparan meses a la vez: las filas que les toquen también se borran.
+    await q(`DELETE FROM facturas_colaborador_registro
+              WHERE colaborador_id = ANY($1::int[])
+                 OR factura_id IN (SELECT id FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[]))`, [creados]);
+    await q('DELETE FROM facturas_colaborador WHERE colaborador_id = ANY($1::int[])', [creados]);
     await q('DELETE FROM colaboradores WHERE id = ANY($1::int[])', [creados]);
   }
   const ids = Object.values(U).map((u) => u.id);

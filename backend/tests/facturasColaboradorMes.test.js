@@ -73,7 +73,9 @@ const subir = (t, { archivo = PDF, nombre = 'factura.pdf', importe = '600', nume
 
 async function colaborador(nombre, empresas) {
   const c = await one(
-    `INSERT INTO colaboradores (nombre, email, area) VALUES ($1, $2, 'seo') RETURNING id`,
+    // Solo en septiembre: las demás pruebas preparan otros meses a la vez y no los tocan.
+    `INSERT INTO colaboradores (nombre, email, area, alta_desde, baja_desde)
+     VALUES ($1, $2, 'seo', '2026-09-01', '2026-10-01') RETURNING id`,
     [`${MARCA} ${nombre}`, `${nombre.toLowerCase()}_${MARCA.toLowerCase()}@test.local`],
   );
   for (const [issuer, importe] of empresas) {

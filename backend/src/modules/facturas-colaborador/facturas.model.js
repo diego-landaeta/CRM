@@ -119,6 +119,29 @@ export async function bloquear(db, id) {
   return rows[0] || null;
 }
 
+export async function marcarEnviado(id) {
+  await query('UPDATE facturas_colaborador SET enviado_at = NOW() WHERE id = $1', [id]);
+}
+
+/** Las del mes que siguen sin subir, para el recordatorio del día 5: ni recibidas, ni anuladas, ni caducadas. */
+export async function sinSubir(periodo) {
+  const { rows } = await query(
+    `SELECT f.id FROM facturas_colaborador f
+      WHERE f.periodo = $1::date AND f.subida_at IS NULL AND f.anulada_at IS NULL
+        AND (f.caduca_at IS NULL OR f.caduca_at > NOW())
+      ORDER BY f.id`,
+    [periodo],
+  );
+  return rows.map((r) => Number(r.id));
+}
+
+/** ¿Ya pasó esto con esta factura? (para no repetir el recordatorio) */
+export async function tieneEvento(id, evento) {
+  const { rows } = await query(
+    'SELECT 1 FROM facturas_colaborador_registro WHERE factura_id = $1 AND evento = $2 LIMIT 1', [id, evento]);
+  return rows.length > 0;
+}
+
 export async function marcarAbierto(id) {
   const { rowCount } = await query(
     'UPDATE facturas_colaborador SET abierto_at = NOW() WHERE id = $1 AND abierto_at IS NULL',
