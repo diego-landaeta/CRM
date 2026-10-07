@@ -33,6 +33,16 @@ const recibirArchivo = (req, res, next) => {
 router.get('/enlace/:token', limite(60), facturas.verEnlace);
 router.post('/enlace/:token', limite(20), recibirArchivo, facturas.subir);
 
+// ─── «Mi factura»: el colaborador con usuario en el CRM, solo lo suyo ───
+// Son las únicas de este módulo que puede pedir el rol colaborador
+// (`RUTAS_DEL_COLABORADOR`, shared/utils/roles.js).
+
+const sube = [verifyToken, checkPermission('facturas_colaborador', 'subir')];
+
+router.get('/mias', sube, facturas.mias);
+router.post('/mias/:id', sube, limite(20), recibirArchivo, facturas.subirMia);
+router.get('/mias/:id/archivo', sube, facturas.archivoMio);
+
 // ─── Administración: la lista de colaboradores ───
 // El permiso se mira en el servidor; qué empresas ve cada uno lo acota el servicio.
 

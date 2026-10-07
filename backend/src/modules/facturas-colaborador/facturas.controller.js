@@ -75,3 +75,20 @@ export const reenviar = accion(async (req, res) => {
 export const registro = accion(async (req, res) => {
   res.json({ success: true, data: await service.registroDeFactura(req.user, validarId(req.params.id)) });
 });
+
+// ─── «Mi factura»: el colaborador con usuario, solo lo suyo ───
+
+export const mias = accion(async (req, res) => {
+  res.json({ success: true, data: await service.mias(req.user) });
+});
+
+export const subirMia = accion(async (req, res) => {
+  const id = validarId(req.params.id);
+  const { importe, numero_factura: numeroFactura } = validar(subidaSchema, req.body);
+  const data = await service.subirMia(req.user, id, { archivo: req.file, importe, numeroFactura }, ipDe(req));
+  res.status(201).json({ success: true, data });
+});
+
+export const archivoMio = accion(async (req, res) => {
+  res.json({ success: true, data: await service.archivoMio(req.user, validarId(req.params.id)) });
+});

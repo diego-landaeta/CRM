@@ -140,9 +140,19 @@ export function nombreDelArchivo({ periodo, empresa, colaborador, numeroFactura,
   return [periodo.slice(0, 7), corta, limpio(colaborador), limpio(numeroFactura)].filter(Boolean).join('_') + `.${ext}`;
 }
 
-export async function subir(token, { archivo, importe, numeroFactura }, ip) {
+export async function subir(token, datos, ip) {
   const f = await model.porTokenHash(huella(token));
   if (!f) throw ENLACE_NO_VALE();
+  await guardarFactura(f, datos, { ip });
+  // Ya guardada: se lee fuera de la transacción, con lo que ve todo el mundo.
+  return paraElColaborador(await model.porTokenHash(huella(token)));
+}
+
+/**
+ * Subir la factura de una fila del mes. Lo mismo por el enlace del correo que
+ * desde «Mi factura»: una por empresa y mes, PDF o foto, 10 MB.
+ */
+async function guardarFactura(f, { archivo, importe, numeroFactura }, { ip = null, userId = null }) {
   const delMes = `${nombreDelMes(f.periodo)} para ${f.razon_social}`;
   if (f.estado === 'anulada') {
     throw new AppError('Esta factura se anuló: te llegará un enlace nuevo', 409, 'ANULADA');
@@ -180,16 +190,38 @@ export async function subir(token, { archivo, importe, numeroFactura }, ip) {
       mime: tipo.mime, tamano: archivo.size, sha256,
     });
     await anotar(db, {
-      facturaId: f.id, evento: 'recibida', ip,
+      facturaId: f.id, evento: 'recibida', ip, userId,
       detalle: {
         archivo: archivo.originalname, tamano: archivo.size, importe,
         numero_factura: numeroFactura, numero_recepcion: numeroRecepcion,
       },
     });
   });
+}
 
-  // Ya guardada: se lee fuera de la transacción, con lo que ve todo el mundo.
-  return paraElColaborador(await model.porTokenHash(huella(token)));
+/* ─────────────────────────── «Mi factura» (colaborador con usuario) ─────────────────────────── */
+
+const NO_ES_TUYA = () => new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+
+/** Sus meses: los de los colaboradores de la lista que llevan su usuario. */
+export async function mias(user) {
+  const filas = await model.delUsuario(user.userId);
+  return filas.map((f) => ({ id: f.id, ...paraElColaborador(f) }));
+}
+
+export async function subirMia(user, id, datos, ip) {
+  const f = await model.delUsuarioPorId(user.userId, id);
+  if (!f) throw NO_ES_TUYA();
+  await guardarFactura(f, datos, { ip, userId: user.userId });
+  const subida = await model.delUsuarioPorId(user.userId, id);
+  return { id, ...paraElColaborador(subida) };
+}
+
+export async function archivoMio(user, id) {
+  const f = await model.delUsuarioPorId(user.userId, id);
+  if (!f) throw NO_ES_TUYA();
+  if (!f.archivo_key) throw new AppError('Esta factura todavía no tiene archivo', 404, 'NOT_FOUND');
+  return { url: await generatePresignedUrl(f.archivo_key), nombre: f.nombre_original, caduca_en_segundos: 15 * 60 };
 }
 
 /* ─────────────────────────── administración ─────────────────────────── */

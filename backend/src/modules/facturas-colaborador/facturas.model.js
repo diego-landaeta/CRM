@@ -78,6 +78,36 @@ export async function porTokenHash(tokenHash) {
   return rows[0] || null;
 }
 
+/**
+ * «Mi factura»: las filas de los colaboradores que llevan este usuario. Las
+ * anuladas no salen: en su lugar está la nueva del mismo mes.
+ */
+export async function delUsuario(userId) {
+  const { rows } = await query(
+    `SELECT ${CAMPOS_ENLACE}
+       FROM facturas_colaborador f
+       JOIN colaboradores c ON c.id = f.colaborador_id
+       JOIN invoice_issuers ii ON ii.id = f.issuer_id
+      WHERE c.user_id = $1 AND f.anulada_at IS NULL
+      ORDER BY f.periodo DESC, ii.razon_social`,
+    [userId],
+  );
+  return rows;
+}
+
+/** Una fila suya, o nada: la de otro colaborador no existe para él. */
+export async function delUsuarioPorId(userId, id) {
+  const { rows } = await query(
+    `SELECT ${CAMPOS_ENLACE}, f.archivo_key
+       FROM facturas_colaborador f
+       JOIN colaboradores c ON c.id = f.colaborador_id
+       JOIN invoice_issuers ii ON ii.id = f.issuer_id
+      WHERE f.id = $2 AND c.user_id = $1`,
+    [userId, id],
+  );
+  return rows[0] || null;
+}
+
 /** La misma fila, bloqueada, para subir la factura sin que se crucen dos envíos. */
 export async function bloquear(db, id) {
   const { rows } = await db.query(
