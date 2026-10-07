@@ -10,7 +10,7 @@ import { Button } from '@/shared/components/ui/button';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
 import Entregables from '../components/Entregables';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
-import { lasQueYaRigen, laQueDuerme } from '../lib/colaboraciones';
+import { lasQueYaRigen, laQueDuerme, cursosParaElAlta, avisoDelAlta, type CursoDelAlta, type CursoQueFallo } from '../lib/colaboraciones';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -24,7 +24,6 @@ interface Formacion { id: number; nombre: string; precio: string }
 // Un curso tal como se asigna en el alta: cada uno con SU fecha. No es un
 // detalle: un tutor puede llevar Logopedia desde marzo y haber cogido Disfagia
 // en septiembre, y cobrar de los dos desde el mismo dia le regala meses.
-interface CursoDelAlta { productId: number; pct: number; desde: string }
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
@@ -98,6 +97,9 @@ export default function TutoresPage() {
   const [nuevoPct, setNuevoPct] = useState('10');
   const [nuevaFecha, setNuevaFecha] = useState(hoy());
   const [ajustes, setAjustes] = useState<AjustesTutores | null>(null);
+  // Si el CRM NO escribe a los tutores (freno del 15/09). Mientras no se sepa,
+  // se da por parado: prometer un correo que no sale es peor que no ofrecerlo.
+  const sinCorreos = ajustes?.correos_a_tutores !== true;
   const [contrasena, setContrasena] = useState('');
   const [copiada, setCopiada] = useState(false);
   // En que marcas da clase. Un profesor puede estar en varias —Filtracion en
@@ -189,7 +191,9 @@ export default function TutoresPage() {
     setCursosAlta([]);
     setNuevoCurso('');
     setNuevoPct(String(ajustes?.pct_por_defecto ?? 10));
-    setContrasena('');
+    // Con los correos a tutores parados la contraseña es la UNICA forma de
+    // entrar: va ya generada, y el alta no se deja sin ella.
+    setContrasena(sinCorreos ? generarContrasena() : '');
     setCopiada(false);
     setMarcas(projectId ? [projectId] : []);
     setPopupAlta(true);
@@ -365,31 +369,28 @@ export default function TutoresPage() {
       });
       if (!r.success) throw new Error(r.error || 'no se pudo');
 
-      // Cada curso con SU fecha. Si alguno falla se dice cual: el tutor ya
-      // existe y no tiene sentido deshacerlo por eso.
-      const fallidos: string[] = [];
-      for (const c of cursosAlta) {
-        const rc = await tutoresApi.crearColaboracion({
-          tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
-        });
-        if (!rc.success) fallidos.push(formaciones.find((x) => x.id === c.productId)?.nombre || String(c.productId));
+      // Cada curso con SU fecha, y cada uno por separado. El tutor YA existe:
+      // un curso que falla —por ejemplo, que es de otro campus del tutor— no
+      // puede convertir el alta entera en «No se ha podido dar de alta», que
+      // era lo que pasaba, porque la llamada lanza el error y saltaba al
+      // `catch` de abajo con el tutor ya creado y el resto sin intentar (#206).
+      const cursos = cursosParaElAlta(cursosAlta, nuevoCurso, nuevoPct, nuevaFecha, Number(ajustes?.pct_por_defecto ?? 10));
+      const fallidos: CursoQueFallo[] = [];
+      for (const c of cursos) {
+        const nombre = formaciones.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
+        try {
+          const rc = await tutoresApi.crearColaboracion({
+            tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
+          });
+          if (!rc.success) fallidos.push({ nombre, motivo: rc.error || 'no se pudo guardar' });
+        } catch (err) {
+          fallidos.push({ nombre, motivo: err instanceof Error ? err.message : 'no se pudo guardar' });
+        }
       }
-      if (fallidos.length) {
-        toast({ title: 'Algún curso no se ha podido asignar', description: fallidos.join(', '), variant: 'destructive' });
-      }
-
-      const cuantos = cursosAlta.length - fallidos.length;
-      toast({
-        title: 'Tutor dado de alta',
-        description: [
-          r.data?.entraYa
-            ? 'Ya puede entrar con el correo y la contraseña que le has puesto.'
-            : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
-          cuantos > 0 ? `Con ${cuantos} ${cuantos === 1 ? 'curso asignado' : 'cursos asignados'}.` : '',
-        ].filter(Boolean).join(' '),
-      });
+      toast(avisoDelAlta(Boolean(r.data?.entraYa), cursos.length - fallidos.length, fallidos));
       setPopupAlta(false);
       setCursosAlta([]);
+      setNuevoCurso('');
       setContrasena('');
       cargar();
     } catch (err) {
@@ -891,10 +892,12 @@ export default function TutoresPage() {
                 <p className="text-[11px] text-muted-foreground mt-1">
                   Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior.
                 </p>
-                <label className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
-                  Mandarle el enlace para poner contraseña en la dirección nueva
-                </label>
+                {!sinCorreos && (
+                  <label className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <input type="checkbox" name="reenviarEnlace" className="h-3.5 w-3.5 rounded border-border" />
+                    Mandarle el enlace para poner contraseña en la dirección nueva
+                  </label>
+                )}
               </div>
 
               <div>
@@ -992,7 +995,7 @@ export default function TutoresPage() {
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Cómo entra</h3>
                 <div className="flex gap-2">
                   <input value={contrasena} onChange={(e) => { setContrasena(e.target.value); setCopiada(false); }}
-                    type="text" minLength={8} autoComplete="new-password" placeholder="Contraseña (mínimo 8)"
+                    type="text" minLength={8} required={sinCorreos} autoComplete="new-password" placeholder="Contraseña (mínimo 8)"
                     className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm" />
                   <Button type="button" variant="outline" size="sm"
                     onClick={() => { setContrasena(generarContrasena()); setCopiada(false); }}>
@@ -1004,9 +1007,11 @@ export default function TutoresPage() {
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {contrasena
-                    ? 'Entra ya con esa contraseña. Cópiala antes de dar de alta — después no se puede volver a ver.'
-                    : 'Si la dejas vacía se le manda un correo para que la ponga él, y eso necesita que Brevo esté configurado. Con contraseña entra al momento.'}
+                  {sinCorreos
+                    ? 'No se le manda ningún correo: entra con esta contraseña. Cópiala y pásasela tú antes de dar de alta, porque después no se puede volver a ver.'
+                    : contrasena
+                      ? 'Entra ya con esa contraseña. Cópiala antes de dar de alta — después no se puede volver a ver.'
+                      : 'Si la dejas vacía se le manda un correo para que la ponga él. Con contraseña entra al momento.'}
                 </p>
               </section>
 
@@ -1103,7 +1108,9 @@ export default function TutoresPage() {
                   </ul>
                 ) : (
                   <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md px-3 py-3 text-center">
-                    Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.
+                    {nuevoCurso
+                      ? 'El curso elegido se le asigna al darle de alta, aunque no pulses «Añadir».'
+                      : 'Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.'}
                   </p>
                 )}
 

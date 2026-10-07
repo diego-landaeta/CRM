@@ -25,6 +25,7 @@ import {
   Envelope,
   Globe,
   PlugsConnected,
+  CloudArrowDown,
   WarningCircle,
   ShoppingBag,
   BookOpen,
@@ -180,9 +181,6 @@ const NAV_SECTIONS = [
       { label: 'Formularios', to: '/captacion', detail: 'Formularios de la web', icon: Globe, roles: ['superadmin', 'admin'], module: 'forms' },
       { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make' },
       { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks' },
-      // Conectores (#6). El backend existia desde `bcf9c3e` y no habia forma
-      // de llegar: sin pantalla y sin entrada.
-      { label: 'Conectores', to: '/captacion/conectores', detail: 'Traer datos de fuera', icon: PlugsConnected, roles: ['superadmin', 'admin'], module: 'connectors' },
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'] },
       { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'] },
       { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
@@ -273,11 +271,16 @@ const NAV_SECTIONS = [
   // Claude: super admin, admin, personas que se le puedes colocar».
   // `accesoMcp` y no `roles`/`permiso`: soporte se salta esos dos, y aquí no
   // puede. Es la misma regla que el servidor (`puedeUsarMcp` en mcp.acceso.js).
+  //
+  // Y los Conectores (#6), que estaban en Captación. Diego, 29/09: «todo lo que
+  // sea conexión con WordPress y eso pase allí, a la sección de conexión del
+  // menú». Lo que conecta el CRM con fuera, junto.
   {
     label: 'Conexión',
     icon: PlugsConnected,
     items: [
-      { label: 'MCP', to: '/conexion/mcp', icon: Robot, accesoMcp: true },
+      { label: 'MCP', to: '/conexion/mcp', detail: 'Consultar desde Claude', icon: Robot, accesoMcp: true },
+      { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors' },
     ],
   },
   {
@@ -1354,9 +1357,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                  // «del CRM»: desde el menú personal se esperaba llegar a lo
+                  // suyo, y esto son los proyectos, usuarios y APIs de todo el
+                  // CRM (#208). Lo personal es «Mi perfil», justo encima.
                   <UserMenuItem
                     icon={Gear}
-                    label="Configuración"
+                    label="Configuración del CRM"
                     onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); onNavigate?.(); }}
                   />
                 )}

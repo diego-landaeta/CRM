@@ -81,7 +81,32 @@ export const INFORMES = {
     descripcion: 'Formaciones (productos) más vendidas.',
     ejecutar: reportes.formacionesMasVendidas,
   },
+  // Diego, 30/09: «el ranking de gestoras será por montos facturados; así es
+  // como se medirá». El mismo calculo que «Cómo voy» (`miPuesto`), para que
+  // Claude no conteste «la mejor comercial» con otra medida.
+  //
+  // Solo super admin y admin: el puesto se calcula con los numeros de TODO el
+  // equipo, y por Claude una gestora no saca cifras de nadie mas (lo vigila
+  // `mcpAmbito.test.js`). Su puesto lo ve en «Cómo voy».
+  ranking_gestoras: {
+    descripcion: 'El ranking de gestoras, que se mide por lo FACTURADO: facturas emitidas en el periodo, IVA incluido, y los abonos restan. '
+      + 'Es la respuesta a «quién es la mejor comercial» (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => reportes.miPuesto({ userId: 0, projectIds, from, to, esJefe: true }),
+    soloAdmin: true,
+  },
 };
+
+/**
+ * Lo de tutores es de administracion: lo que se le paga a cada profesor no lo
+ * ve una gestora, igual que en la pantalla (Tutores pide admin, superadmin o
+ * quien lleva las colaboraciones). Se llama DESPUES de acotar, para que un
+ * campus ajeno se rechace por ajeno y no por esto.
+ */
+function soloAdministracion(ambito, herramienta) {
+  if (ambito.soloLoSuyo) {
+    throw new AppError(`«${herramienta}» es de administración: solo la ven super admin y admin.`, 403, 'MCP_SOLO_ADMIN');
+  }
+}
 
 async function conTope(promesa, ms, nombre) {
   let reloj;
@@ -159,7 +184,8 @@ export const HERRAMIENTAS = [
   {
     nombre: 'resumen_ventas',
     titulo: 'Resumen de ventas',
-    descripcion: 'Número de ventas, importe vendido, cobrado y pendiente en un periodo, desglosado por campus.',
+    descripcion: 'Número de ventas, importe vendido, cobrado y pendiente en un periodo, desglosado por campus. '
+      + 'Para comparar gestoras no uses esto: se miden por lo facturado, con el informe «ranking_gestoras».',
     entrada: { ...AMBITO, ...PERIODO },
     ejecutar: (ambito, a) => model.resumenVentas({ ...a, ...acotar(ambito, a) }),
   },
@@ -196,6 +222,55 @@ export const HERRAMIENTAS = [
       limite: z.number().int().min(1).max(200).default(50).describe('Máximo de filas de detalle'),
     },
     ejecutar: (ambito, a) => model.cobrosPendientes({ ...a, ...acotar(ambito, a) }),
+  },
+  {
+    nombre: 'listar_tutores',
+    titulo: 'Tutores y sus cursos',
+    descripcion: 'Los tutores (profesores colaboradores) de tus campus: en qué campus están, qué cursos dan, con qué porcentaje de comisión '
+      + 'y desde cuándo. «rige_hoy» dice si ese curso le genera comisión hoy. No incluye DNI, IBAN ni teléfono (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      texto: z.string().max(100).optional().describe('Busca en nombre, email o nombre del curso'),
+      incluir_retirados: z.boolean().default(false).describe('true: también los tutores dados de baja'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'listar_tutores');
+      return model.tutoresConCursos({ ...a, projectIds });
+    },
+  },
+  {
+    nombre: 'comisiones_tutores',
+    titulo: 'Comisiones de tutores',
+    descripcion: 'Lo que se le debe y lo ya pagado a cada tutor, mes a mes: base de cálculo, generado, por pagar, pagado, revertido '
+      + 'y cuándo se le avisó. Un mes o un tramo de meses. Los mismos números que la pantalla Comisiones de tutores (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Un mes, AAAA-MM'),
+      desde: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Primer mes del tramo, AAAA-MM'),
+      hasta: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Último mes del tramo, AAAA-MM'),
+      tutor_id: z.number().int().positive().optional().describe('Un tutor concreto (id de «listar_tutores»)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'comisiones_tutores');
+      return model.comisionesDeTutores({ ...a, projectIds });
+    },
+  },
+  {
+    nombre: 'formaciones_sin_tutor',
+    titulo: 'Formaciones sin tutor',
+    descripcion: 'Formaciones que se han vendido y cobrado y que hoy no tiene ningún tutor: lo mismo que la pantalla «Cursos sin tutor». '
+      + 'Por defecto, solo las vendidas desde el arranque de las comisiones (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      incluir_anteriores_al_corte: z.boolean().default(false).describe('true: también las vendidas antes del arranque de las comisiones'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'formaciones_sin_tutor');
+      return model.formacionesSinTutorDe({ ...a, projectIds });
+    },
   },
   {
     nombre: 'informe',

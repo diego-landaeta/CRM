@@ -38,8 +38,19 @@ const ALL_PROJECTS_OK = [
   /^\/leads$/, /^\/leads\/pipeline$/, /^\/leads\/\d+$/,
   /^\/clients$/, /^\/clients\/\d+$/,
   // Generales (no dependen de proyecto)
+  // La sección Conexión (Diego, 29/09: «que funcione por empresa y todos los
+  // proyectos»): el servidor enseña a cada uno lo suyo.
+  /^\/conexion\/mcp$/,
+  /^\/conexion\/conectores$/,
   /^\/profile$/,
   /^\/preferences$/,
+  // Las de verdad. Solo estaban las rutas viejas en ingles (/profile,
+  // /settings), que ya solo redirigen: con «Todos los proyectos» puesto, «Mi
+  // perfil» y «Configuración» enseñaban «selecciona un proyecto» en vez del
+  // perfil y la contraseña. Carlos, 01/10.
+  /^\/perfil$/,
+  /^\/preferencias$/,
+  /^\/configuracion$/,
   /^\/notificaciones$/,
   /^\/manual$/,
   /^\/settings$/,
@@ -49,7 +60,9 @@ const ALL_PROJECTS_OK = [
   /^\/prueba_ui(?:_[a-z]+)?$/,
 ];
 
-function pathAllowsAll(pathname) {
+// Exportadas para la prueba del muro (#208): que «Mi perfil» no vuelva a quedar
+// detras de «selecciona un proyecto» con ningun ambito.
+export function pathAllowsAll(pathname) {
   return ALL_PROJECTS_OK.some((rx) => rx.test(pathname));
 }
 
@@ -70,6 +83,9 @@ function pathAllowsAll(pathname) {
 //   un proyecto» es la respuesta correcta, no un fallo.
 const CON_SOCIEDAD_OK = [
   /^\/informes$/,
+  // Conexión: MCP y Conectores, con una empresa puesta, lo de esa empresa.
+  /^\/conexion\/mcp$/,
+  /^\/conexion\/conectores$/,
   // Feedback suma los campus de la empresa (Diego, 28/09: «tiene que ser campus
   // y no empresas… lo hemos dicho»): la pantalla ya manda issuerId y el
   // backend lo resuelve con proyectosDelAmbito. Solo faltaba esta línea.
@@ -162,6 +178,9 @@ const CON_SOCIEDAD_OK = [
   // sabe sumar; estas no ensenan cifras de nada.
   /^\/perfil$/,
   /^\/preferencias$/,
+  // Configuración: proyectos, usuarios y disponibilidad son de todo el CRM, y
+  // la pestaña de APIs elige su proyecto dentro del dialogo.
+  /^\/configuracion$/,
   /^\/notificaciones$/,
   /^\/manual$/,
   /^\/soporte$/,
@@ -209,7 +228,7 @@ const CON_SOCIEDAD_OK = [
   /^\/finanzas\/ventas\/\d+$/,
 ];
 
-function rutaAceptaSociedad(pathname) {
+export function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
 }
 
