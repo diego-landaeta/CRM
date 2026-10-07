@@ -31,6 +31,8 @@ const ACCION_ES: Record<string, string> = {
   export: 'Exportar', assign: 'Asignar', bulk_action: 'En bloque',
   upload: 'Subir', sync: 'Sincronizar', sin_gestora: 'Sin gestora',
   view_all: 'Ver todo', view_own: 'Ver lo suyo', close: 'Aprobar y cerrar', manage: 'Configurar',
+  // Facturas de colaboradores (#202).
+  ver_todas: 'Ver todas', gestionar: 'Gestionar', anular: 'Anular', subir: 'Subir la suya',
 };
 
 // Qué permite cada clave, cuando el nombre no basta. Sale al pasar el ratón.

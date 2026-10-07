@@ -59,6 +59,7 @@ import certifexModule from './modules/certifex/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 import mcpModule from './modules/mcp/index.js';
 import tasksModule from './modules/tasks/index.js';
+import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -192,6 +193,8 @@ const ALL_MODULES = [
   { name: 'mcp', mod: mcpModule },
   { name: 'certifex', mod: certifexModule },
   { name: 'tasks', mod: tasksModule },
+  // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
+  { name: 'facturas-colaborador', mod: facturasColaboradorModule },
 ];
 
 // Módulos siempre activos (fuera del sistema de bundles)
