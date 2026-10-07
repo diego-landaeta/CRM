@@ -1,0 +1,193 @@
+import pool, { query } from '../../shared/config/db.js';
+
+/*
+  Facturas de colaboradores (#202) · las facturas del mes, en la base.
+
+  Una fila por colaborador, empresa y mes. Nace al preparar el mes, con la
+  huella de su enlace, y se completa cuando el colaborador sube la factura.
+*/
+
+/** El estado que se enseña, calculado siempre igual en la lista y en el enlace. */
+export const ESTADO = `
+  CASE
+    WHEN f.anulada_at IS NOT NULL THEN 'anulada'
+    WHEN f.subida_at IS NOT NULL THEN 'recibida'
+    WHEN f.caduca_at IS NOT NULL AND f.caduca_at < NOW() THEN 'caducado'
+    WHEN f.abierto_at IS NOT NULL THEN 'abierto'
+    WHEN f.enviado_at IS NOT NULL THEN 'enviado'
+    WHEN EXISTS (SELECT 1 FROM facturas_colaborador_registro r
+                  WHERE r.factura_id = f.id AND r.evento = 'no_enviado') THEN 'no_enviado'
+    ELSE 'sin_enviar'
+  END`;
+
+/**
+ * Quién tiene que facturar ese mes: activos, dados de alta como muy tarde ese
+ * mes y sin baja que empiece ese mes o antes. Uno por empresa. Los que ya tienen
+ * su fila viva de ese mes no salen: preparar dos veces no duplica nada.
+ */
+export async function pendientesDePreparar(periodo, db = pool) {
+  const { rows } = await db.query(
+    `SELECT c.id AS colaborador_id, ce.issuer_id, ce.importe_acordado
+       FROM colaboradores c
+       JOIN colaborador_empresas ce ON ce.colaborador_id = c.id
+       JOIN invoice_issuers ii ON ii.id = ce.issuer_id AND ii.activo = true
+      WHERE c.activo = true
+        AND (c.alta_desde IS NULL OR c.alta_desde <= $1::date)
+        AND (c.baja_desde IS NULL OR c.baja_desde > $1::date)
+        AND NOT EXISTS (
+              SELECT 1 FROM facturas_colaborador f
+               WHERE f.colaborador_id = c.id AND f.issuer_id = ce.issuer_id
+                 AND f.periodo = $1::date AND f.anulada_at IS NULL)
+      ORDER BY c.id, ce.issuer_id`,
+    [periodo],
+  );
+  return rows;
+}
+
+/** Crea la fila del mes. Si otra llamada se adelantó, no hace nada y devuelve null. */
+export async function crearDelMes(db, { colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt }) {
+  const { rows } = await db.query(
+    `INSERT INTO facturas_colaborador
+       (colaborador_id, issuer_id, periodo, importe_esperado, token_hash, caduca_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (colaborador_id, issuer_id, periodo) WHERE anulada_at IS NULL DO NOTHING
+     RETURNING id`,
+    [colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt],
+  );
+  return rows[0] ? Number(rows[0].id) : null;
+}
+
+const CAMPOS_ENLACE = `
+  f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo,
+  f.importe_esperado, f.importe, f.numero_factura, f.numero_recepcion,
+  f.subida_at, f.abierto_at, f.caduca_at, f.anulada_at, f.nombre_original,
+  ${ESTADO} AS estado,
+  c.nombre AS colaborador_nombre, c.email AS colaborador_email, c.area, c.nif AS colaborador_nif,
+  ii.razon_social, ii.nif AS empresa_nif, ii.direccion, ii.cp, ii.ciudad, ii.pais, ii.logo_url`;
+
+/** La fila de un enlace, por la huella de su token. */
+export async function porTokenHash(tokenHash) {
+  const { rows } = await query(
+    `SELECT ${CAMPOS_ENLACE}
+       FROM facturas_colaborador f
+       JOIN colaboradores c ON c.id = f.colaborador_id
+       JOIN invoice_issuers ii ON ii.id = f.issuer_id
+      WHERE f.token_hash = $1`,
+    [tokenHash],
+  );
+  return rows[0] || null;
+}
+
+/** La misma fila, bloqueada, para subir la factura sin que se crucen dos envíos. */
+export async function bloquear(db, id) {
+  const { rows } = await db.query(
+    `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo,
+            f.subida_at, f.anulada_at, f.caduca_at
+       FROM facturas_colaborador f WHERE f.id = $1 FOR UPDATE`,
+    [id],
+  );
+  return rows[0] || null;
+}
+
+export async function marcarAbierto(id) {
+  const { rowCount } = await query(
+    'UPDATE facturas_colaborador SET abierto_at = NOW() WHERE id = $1 AND abierto_at IS NULL',
+    [id],
+  );
+  return rowCount > 0;
+}
+
+/**
+ * El número de recepción del mes: REC-2026-09-0007. Se toma con un candado por
+ * mes para que dos subidas a la vez no se lleven el mismo.
+ */
+export async function siguienteRecepcion(db, periodo) {
+  await db.query(`SELECT pg_advisory_xact_lock(hashtext('facturas_colaborador_rec_' || $1))`, [periodo]);
+  const { rows } = await db.query(
+    `SELECT COUNT(*)::int AS n FROM facturas_colaborador
+      WHERE periodo = $1::date AND numero_recepcion IS NOT NULL`,
+    [periodo],
+  );
+  const n = rows[0].n + 1;
+  return `REC-${periodo.slice(0, 7)}-${String(n).padStart(4, '0')}`;
+}
+
+export async function guardarSubida(db, id, datos) {
+  await db.query(
+    `UPDATE facturas_colaborador
+        SET subida_at = NOW(), numero_recepcion = $2, importe = $3, numero_factura = $4,
+            archivo_key = $5, nombre_original = $6, mime = $7, tamano = $8, sha256 = $9
+      WHERE id = $1`,
+    [id, datos.numeroRecepcion, datos.importe, datos.numeroFactura,
+      datos.archivoKey, datos.nombreOriginal, datos.mime, datos.tamano, datos.sha256],
+  );
+}
+
+/** Para administración: una factura, si es de una empresa que se ve. */
+export async function porId(id, issuerIds, db = pool) {
+  const { rows } = await db.query(
+    `SELECT ${CAMPOS_ENLACE}, f.archivo_key, f.mime, f.tamano
+       FROM facturas_colaborador f
+       JOIN colaboradores c ON c.id = f.colaborador_id
+       JOIN invoice_issuers ii ON ii.id = f.issuer_id
+      WHERE f.id = $1 AND ($2::int[] IS NULL OR f.issuer_id = ANY($2::int[]))`,
+    [id, issuerIds],
+  );
+  return rows[0] || null;
+}
+
+export async function anular(db, id, porUserId, motivo) {
+  await db.query(
+    `UPDATE facturas_colaborador
+        SET anulada_at = NOW(), anulada_por = $2, motivo_anulacion = $3
+      WHERE id = $1`,
+    [id, porUserId, motivo],
+  );
+}
+
+export async function cambiarEnlace(db, id, tokenHash, caducaAt) {
+  await db.query(
+    'UPDATE facturas_colaborador SET token_hash = $2, caduca_at = $3, abierto_at = NULL WHERE id = $1',
+    [id, tokenHash, caducaAt],
+  );
+}
+
+/** La lista del mes para administración, con su cabecera. */
+export async function delMes({ periodo, issuerIds, issuerId = null, estado = null, area = null }) {
+  const { rows } = await query(
+    `SELECT * FROM (
+       SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM') AS periodo,
+              c.nombre AS colaborador_nombre, c.email, c.area,
+              ii.razon_social AS empresa,
+              f.importe_esperado, f.importe,
+              CASE WHEN f.importe IS NOT NULL AND f.importe_esperado IS NOT NULL
+                   THEN f.importe - f.importe_esperado END AS diferencia,
+              f.numero_factura, f.numero_recepcion, f.subida_at, f.enviado_at, f.abierto_at,
+              f.caduca_at, f.anulada_at, f.motivo_anulacion, f.nombre_original, f.tamano,
+              ${ESTADO} AS estado
+         FROM facturas_colaborador f
+         JOIN colaboradores c ON c.id = f.colaborador_id
+         JOIN invoice_issuers ii ON ii.id = f.issuer_id
+        WHERE f.periodo = $1::date
+          AND ($2::int[] IS NULL OR f.issuer_id = ANY($2::int[]))
+          AND ($3::int IS NULL OR f.issuer_id = $3)
+          AND ($5::text IS NULL OR c.area = $5)
+     ) t
+     WHERE ($4::text IS NULL OR t.estado = $4)
+     ORDER BY (t.estado = 'anulada'), t.colaborador_nombre, t.empresa, t.id`,
+    [periodo, issuerIds, issuerId, estado, area],
+  );
+  return rows;
+}
+
+export async function registroDeFactura(id) {
+  const { rows } = await query(
+    `SELECT r.id, r.evento, r.creado_at, r.ip, r.detalle, u.nombre AS usuario_nombre
+       FROM facturas_colaborador_registro r
+       LEFT JOIN users u ON u.id = r.user_id
+      WHERE r.factura_id = $1
+      ORDER BY r.creado_at DESC, r.id DESC`,
+    [id],
+  );
+  return rows;
+}

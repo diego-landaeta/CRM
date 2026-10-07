@@ -55,3 +55,24 @@ export const listarColaboradoresSchema = z.object({
   estado: z.enum(['activos', 'de_baja', 'todos']).default('activos'),
   q: z.string().trim().max(100).optional(),
 });
+
+// ─── Las facturas del mes ───
+
+// Lo que manda el colaborador con el archivo. Llega por multipart: todo texto.
+export const subidaSchema = z.object({
+  importe: z.string().trim().min(1, 'Escribe el importe de tu factura')
+    .transform((v) => Number(v.replace(',', '.')))
+    .refine((n) => Number.isFinite(n) && n >= 0 && n <= 9999999999.99, 'Importe inválido'),
+  numero_factura: z.string().trim().min(1, 'Escribe el número de tu factura').max(60),
+});
+
+export const delMesSchema = z.object({
+  periodo: mes,
+  issuerId: z.coerce.number().int().positive().optional(),
+  estado: z.enum(['sin_enviar', 'enviado', 'abierto', 'recibida', 'anulada', 'no_enviado', 'caducado']).optional(),
+  area: z.enum(AREAS).optional(),
+});
+
+export const anularSchema = z.object({
+  motivo: z.string().trim().min(3, 'Escribe el motivo de la anulación').max(1000),
+});

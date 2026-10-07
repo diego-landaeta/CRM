@@ -1,0 +1,77 @@
+import * as service from './facturas.service.js';
+import { AppError } from '../../shared/utils/AppError.js';
+import { subidaSchema, delMesSchema, anularSchema } from './facturas-colaborador.validation.js';
+
+function validar(schema, datos) {
+  const r = schema.safeParse(datos ?? {});
+  if (!r.success) {
+    throw new AppError(r.error.errors[0]?.message || 'Datos inválidos', 400, 'VALIDATION_ERROR');
+  }
+  return r.data;
+}
+
+function validarId(paramId) {
+  const id = Number(paramId);
+  if (!/^\d+$/.test(String(paramId)) || !Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
+    throw new AppError('ID inválido', 400, 'VALIDATION_ERROR');
+  }
+  return id;
+}
+
+const ipDe = (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+
+/** El código del enlace personal del colaborador, tal como llega en la dirección. */
+function enlaceDe(req) {
+  const t = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{40,60}$/.test(t)) {
+    throw new AppError('Este enlace no existe o ya no es válido', 404, 'NOT_FOUND');
+  }
+  return t;
+}
+
+const accion = (fn) => async (req, res, next) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── El enlace (sin usuario) ───
+
+export const verEnlace = accion(async (req, res) => {
+  res.json({ success: true, data: await service.verEnlace(enlaceDe(req), ipDe(req)) });
+});
+
+export const subir = accion(async (req, res) => {
+  const token = enlaceDe(req);
+  const { importe, numero_factura: numeroFactura } = validar(subidaSchema, req.body);
+  const data = await service.subir(token, { archivo: req.file, importe, numeroFactura }, ipDe(req));
+  res.status(201).json({ success: true, data });
+});
+
+// ─── Administración ───
+// Nunca se devuelve el enlace en claro: lo lleva el correo, y solo el correo.
+
+export const delMes = accion(async (req, res) => {
+  res.json({ success: true, data: await service.delMes(req.user, validar(delMesSchema, req.query)) });
+});
+
+export const archivo = accion(async (req, res) => {
+  res.json({ success: true, data: await service.urlDelArchivo(req.user, validarId(req.params.id)) });
+});
+
+export const anular = accion(async (req, res) => {
+  const { motivo } = validar(anularSchema, req.body);
+  const r = await service.anular(req.user, validarId(req.params.id), motivo, ipDe(req));
+  res.json({ success: true, data: { anulada: r.anulada, nueva: r.nueva } });
+});
+
+export const reenviar = accion(async (req, res) => {
+  const r = await service.reenviar(req.user, validarId(req.params.id), ipDe(req));
+  res.json({ success: true, data: { id: r.id } });
+});
+
+export const registro = accion(async (req, res) => {
+  res.json({ success: true, data: await service.registroDeFactura(req.user, validarId(req.params.id)) });
+});
