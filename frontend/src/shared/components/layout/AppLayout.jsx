@@ -55,8 +55,12 @@ const ALL_PROJECTS_OK = [
   /^\/manual$/,
   /^\/settings$/,
   /^\/soporte$/,
+  /^\/certifex\/consultas$/,
+  /^\/certifex\/emisiones$/,
+  /^\/clientes\/matriculas\/certificaciones$/,
   /^\/status$/,
   /^\/ai-chat$/,
+  /^\/tareas(?:\/.*)?$/,
   /^\/prueba_ui(?:_[a-z]+)?$/,
 ];
 
@@ -83,6 +87,8 @@ export function pathAllowsAll(pathname) {
 //   un proyecto» es la respuesta correcta, no un fallo.
 const CON_SOCIEDAD_OK = [
   /^\/informes$/,
+  // Tareas funciona tanto con todos como con empresa elegida
+  /^\/tareas(?:\/.*)?$/,
   // Conexión: MCP y Conectores, con una empresa puesta, lo de esa empresa.
   /^\/conexion\/mcp$/,
   /^\/conexion\/conectores$/,
@@ -184,6 +190,9 @@ const CON_SOCIEDAD_OK = [
   /^\/notificaciones$/,
   /^\/manual$/,
   /^\/soporte$/,
+  /^\/certifex\/consultas$/,
+  /^\/certifex\/emisiones$/,
+  /^\/clientes\/matriculas\/certificaciones$/,
   /^\/status$/,
   /^\/registro$/,
   /^\/mensajes$/,
