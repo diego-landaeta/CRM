@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, MagnifyingGlass, ArrowsClockwise, Warning, X, SlidersHorizontal, ArrowClockwise } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -80,7 +80,14 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => JSON.parse(ambitoClave), [ambitoClave]);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>('mio');
+  // Quien ve todo (superadmin, admin) entra en «Todo el equipo»; el resto, en lo
+  // suyo (Diego, 09/10). Los permisos pueden llegar después del primer render:
+  // hasta que la persona elija otra vista, se sigue esa regla.
+  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(canViewAll ? 'equipo' : 'mio');
+  const vistaElegida = useRef(false);
+  useEffect(() => {
+    if (!vistaElegida.current) setVistaTablero(canViewAll ? 'equipo' : 'mio');
+  }, [canViewAll]);
   const vista: Vista = enRevisar ? 'revisar' : vistaTablero;
   const [agrupar, setAgrupar] = useState<Agrupar>('persona');
 
@@ -293,6 +300,7 @@ export default function TasksPage() {
   ];
   function cambiarVista(v: Vista) {
     if (v === 'revisar') { navigate('/tareas/revisar'); return; }
+    vistaElegida.current = true;
     setVistaTablero(v);
     if (enRevisar) navigate('/tareas');
   }
