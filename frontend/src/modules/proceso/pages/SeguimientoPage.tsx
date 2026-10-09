@@ -358,8 +358,8 @@ export default function SeguimientoPage() {
       await client.patch(`/leads/${p.lead_id}/status`, {
         status: 'no_interesado',
         motivo: `Descartado del repaso de fin de mes · ${motivo}`,
-        // El correo de «¿por qué has desistido?»: ya, o para verlo antes.
-        feedback,
+        // Sin correo: el de «¿por qué has desistido?» sale solo a los 7 días sin interacción (09/10).
+        feedback: 'no',
       });
       setBase((b) => b.filter((x) => x.lead_id !== p.lead_id));
       setMarcados((m) => m.filter((x) => x !== p.lead_id));
@@ -367,9 +367,7 @@ export default function SeguimientoPage() {
         .then((r) => { if (r) setResumen(r); }).catch(() => {});
       toast({
         title: 'Descartado del repaso',
-        description: feedback === 'revisar'
-          ? `${p.lead_nombre || 'Sin nombre'} pasa a no interesado. El correo de «por qué desististe» espera en su ficha; te llega una copia.`
-          : `${p.lead_nombre || 'Sin nombre'} pasa a no interesado y le llega el correo de «por qué desististe».`,
+        description: `${p.lead_nombre || 'Sin nombre'} pasa a no interesado.`,
       });
     } catch (e) {
       toast({

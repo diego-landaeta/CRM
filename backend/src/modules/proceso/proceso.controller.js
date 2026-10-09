@@ -1,5 +1,5 @@
 import * as Proceso from './proceso.service.js';
-import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema } from './proceso.validation.js';
+import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema, anadirSeguimientoSchema } from './proceso.validation.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { avanzarPorContacto } from '../../shared/services/estado-prospecto.service.js';
 
@@ -309,5 +309,14 @@ export async function ajustarPasoDeLead(req, res, next) {
     }
 
     res.json({ success: true, data: { ...paso, estado_del_lead: estadoDelLead } });
+  } catch (err) { next(err); }
+}
+
+/** POST /proceso/lead/:leadId/seguimiento — un seguimiento más, «por hacer». */
+export async function anadirSeguimientoDeLead(req, res, next) {
+  try {
+    const datos = anadirSeguimientoSchema.parse(req.body || {});
+    const paso = await Proceso.anadirSeguimiento(Number(req.params.leadId), datos);
+    res.status(201).json({ success: true, data: paso });
   } catch (err) { next(err); }
 }

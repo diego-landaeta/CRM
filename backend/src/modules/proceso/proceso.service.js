@@ -122,3 +122,9 @@ export async function ajustarPaso(id, datos, userId = null) {
   if (!paso) throw new AppError('Ese paso no existe', 404);
   return paso;
 }
+
+export async function anadirSeguimiento(leadId, datos) {
+  const paso = await Pasos.anadirSeguimiento(leadId, datos);
+  if (!paso) throw new AppError('Ese prospecto no existe', 404);
+  return paso;
+}

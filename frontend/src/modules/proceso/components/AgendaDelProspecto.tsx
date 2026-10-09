@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Circle, WarningCircle, CaretRight, ListChecks, CircleNotch } from '@phosphor-icons/react';
-import { traerPasosDeLead, ajustarPaso, type PasoDeLead } from '../api/agenda.api';
+import { CheckCircle, Circle, WarningCircle, CaretRight, ListChecks, CircleNotch, Plus } from '@phosphor-icons/react';
+import { traerPasosDeLead, ajustarPaso, anadirSeguimiento, type PasoDeLead } from '../api/agenda.api';
 import { toast } from '@/shared/hooks/useToast';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import PlantillaDelPaso from './PlantillaDelPaso';
@@ -29,8 +29,14 @@ import { fechaCorta, fechaAplazada, APLAZAMIENTOS } from '../lib/fechasDelPaso';
  * escribir —contesto la madre, ya tenia la informacion— se quedaba pendiente
  * para siempre y la persona salia en la cola del dia cada mañana.
  *
- * El que ya esta cerrado por los contactos apuntados no se puede desmarcar: no
- * hay nada que desmarcar, esta hecho porque las llamadas estan ahi.
+ * DESDE EL 09/10 LA CASILLA ES LA QUE MANDA (Diego: «que sea manual pero que
+ * aparezca por hacer, porque uno lo toca y luego no quiere funcionar»). Antes un
+ * paso salía hecho también por los contactos apuntados, y esa casilla ya no se
+ * podía tocar: pulsarla no hacía nada. Ahora cada paso está «por hacer» hasta
+ * que la gestora lo marca; si ya hay un contacto que lo daría, se dice al lado.
+ *
+ * Y DESPUÉS DEL PASO 4, «+ Seguimiento» añade el 5, el 6… (antes no había
+ * casilla para quien seguía hablando con la persona).
  */
 
 // La fecha como día del calendario: con `new Date(d)` a secas, al oeste de
@@ -77,15 +83,6 @@ export default function AgendaDelProspecto({
   }, [leadId]);
 
   async function alternar(p: PasoDeLead) {
-    // Hecho por los contactos apuntados: no es de esta casilla, y dejar
-    // pulsarla haria creer que se ha desmarcado algo.
-    if (p.hecho && !p.a_mano) {
-      toast({
-        title: 'Ese paso ya esta dado',
-        description: 'Se cerro con los contactos que hay apuntados en su historial.',
-      });
-      return;
-    }
     if (guardando) return;
     setGuardando(p.id);
     try {
@@ -120,6 +117,23 @@ export default function AgendaDelProspecto({
       toast({ title: aviso });
     } catch {
       toast({ title: 'No se pudo guardar', description: 'Vuelve a intentarlo.', variant: 'destructive' });
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  /** «+ Seguimiento»: uno más, por hacer, para hoy. Se aplaza como cualquier paso. */
+  async function nuevoSeguimiento() {
+    if (guardando) return;
+    setGuardando(-1);
+    try {
+      const nuevo = await anadirSeguimiento(leadId);
+      if (!nuevo) throw new Error('sin respuesta');
+      setPasos(await traerPasosDeLead(leadId));
+      alCambiar?.();
+      toast({ title: `Seguimiento ${nuevo.orden} añadido`, description: 'Queda por hacer, para hoy.' });
+    } catch {
+      toast({ title: 'No se pudo añadir el seguimiento', description: 'Vuelve a intentarlo.', variant: 'destructive' });
     } finally {
       setGuardando(null);
     }
@@ -250,7 +264,7 @@ export default function AgendaDelProspecto({
         {pasos.map((p) => {
           const esSiguiente = siguiente?.id === p.id;
           const esperando = guardando === p.id;
-          const porContactos = p.hecho && !p.a_mano;
+          const conContacto = !p.hecho && !!p.con_contacto;
           return (
             <li key={p.id}>
               <button
@@ -259,16 +273,15 @@ export default function AgendaDelProspecto({
                 disabled={esperando}
                 aria-pressed={p.hecho}
                 title={
-                  porContactos
-                    ? 'Dado por los contactos apuntados en su historial'
-                    : p.a_mano
-                      ? `Lo marcó ${p.hecho_por_nombre || 'alguien'}. Púlsalo para desmarcarlo.`
+                  p.a_mano
+                    ? `Lo marcó ${p.hecho_por_nombre || 'alguien'}. Púlsalo para desmarcarlo.`
+                    : conContacto
+                      ? 'Ya hay un contacto apuntado para este paso. Márcalo cuando lo hayas dado.'
                       : 'Marcar este paso como hecho'
                 }
                 className={
                   'flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-[12px] '
-                  + 'transition-colors hover:bg-muted/60 disabled:opacity-60 '
-                  + (porContactos ? 'cursor-default hover:bg-transparent' : '')
+                  + 'transition-colors hover:bg-muted/60 disabled:opacity-60'
                 }
               >
                 <span className="mt-0.5 flex-shrink-0">
@@ -283,6 +296,11 @@ export default function AgendaDelProspecto({
                 <span className={`min-w-0 flex-1 truncate ${p.hecho ? 'text-muted-foreground line-through' : esSiguiente ? 'font-semibold' : ''}`}>
                   {p.nombre || p.clave}
                 </span>
+                {conContacto && (
+                  <span className="flex-shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Hay un contacto apuntado">
+                    contactado
+                  </span>
+                )}
                 <span className="flex-shrink-0 text-[11px] tabular-nums text-muted-foreground">
                   {p.estado === 'saltado' ? 'saltado' : fecha(p.fecha_prevista)}
                 </span>
@@ -292,10 +310,21 @@ export default function AgendaDelProspecto({
         })}
       </ol>
 
+      {/* Un seguimiento más, tras los pasos del proceso: el 5, el 6… */}
+      <button
+        type="button"
+        onClick={nuevoSeguimiento}
+        disabled={guardando !== null}
+        className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
+      >
+        {guardando === -1 ? <CircleNotch size={12} className="animate-spin" /> : <Plus size={12} weight="bold" />}
+        Seguimiento {pasos.length + 1}
+      </button>
+
       {/* Que se sepa sin preguntar: la casilla no manda nada, solo apunta. */}
       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
-        Marca un paso cuando lo hayas dado. Se cierra solo si apuntas el contacto
-        en su historial.
+        Marca cada paso cuando lo hayas dado: apuntar el contacto no lo marca solo.
+        La casilla no envía nada.
       </p>
 
       <Link
