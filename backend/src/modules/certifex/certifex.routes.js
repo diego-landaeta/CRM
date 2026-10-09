@@ -42,6 +42,7 @@ router.get('/diplomas/resumen', soloAdmin, diplomas.resumen);
 router.get('/diplomas/solicitudes', soloAdmin, diplomas.solicitudes);
 router.get('/diplomas/por-avisar', soloAdmin, diplomas.porAvisar);
 router.post('/diplomas/aprobar-emitir', soloAdmin, diplomas.aprobarEmitir);
+router.post('/diplomas/emitir', soloAdmin, diplomas.emitir);
 router.post('/diplomas/rechazar', soloAdmin, diplomas.rechazar);
 router.post('/diplomas/avisos', soloAdmin, diplomas.avisos);
 router.post('/diplomas/avisos-rechazo', soloAdmin, diplomas.avisosRechazo);

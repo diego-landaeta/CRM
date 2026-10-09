@@ -31,6 +31,7 @@ const { default: supertest } = await import('supertest');
 const { default: app } = await import('../src/app.js');
 const { default: pool } = await import('../src/shared/config/db.js');
 const { diaDe } = await import('../src/modules/certifex/certifex.diplomas.js');
+const { horasDeTexto, encaja } = await import('../src/modules/certifex/certifex.programa.js');
 
 const request = supertest(app);
 // Ids de matricula altos y unicos por ejecucion, para no chocar con nada sembrado.
@@ -311,30 +312,35 @@ describe('diplomas emitidos', () => {
 
 describe('aprobar y emitir', () => {
   it('aprueba y emite en un paso, a nombre del usuario con sesion, y NO avisa', async () => {
-    responder = (p) => p.ruta === '/decisiones'
-      ? { status: 200, body: { resultados: [{ matriculaId: 7, ok: true, decision: 'aprobada' }, { matriculaId: 8, ok: false, error: 'Ya está rechazada' }] } }
-      : { status: 200, body: { resultados: [{ matriculaId: 7, ok: true, nexpediente: 'CTF-2026-000007-AAAA' }] } };
+    responder = (p) => p.ruta === '/candidatos'
+      ? { status: 200, body: { filas: [], total: 0, pagina: 1, tam: 200 } }
+      : p.ruta === '/decisiones'
+        ? { status: 200, body: { resultados: [{ matriculaId: 7, ok: true, decision: 'aprobada' }, { matriculaId: 8, ok: false, error: 'Ya está rechazada' }] } }
+        : { status: 200, body: { resultados: [{ matriculaId: 7, ok: true, nexpediente: 'CTF-2026-000007-AAAA' }] } };
     const r = await sa(request.post('/api/certifex/diplomas/aprobar-emitir'))
       .send({ matriculaIds: [7, 8], decididoPor: 'otra@persona.test', emitidaPor: 'otra@persona.test' });
     expect(r.status).toBe(200);
-    expect(pedidas.map((p) => p.ruta)).toEqual(['/decisiones', '/emitir']);
-    expect(pedidas[0].cuerpo.decisiones).toEqual([
+    // Primero se busca la matricula (para su programa), luego se decide y se emite.
+    expect(pedidas.map((p) => p.ruta)).toEqual(['/candidatos', '/decisiones', '/emitir']);
+    expect(pedidas[1].cuerpo.decisiones).toEqual([
       { matriculaId: 7, decision: 'aprobada', decididoPor: 'manuel@empresa.com' },
       { matriculaId: 8, decision: 'aprobada', decididoPor: 'manuel@empresa.com' },
     ]);
     // Solo se emite lo que se aprobo.
-    expect(pedidas[1].cuerpo).toEqual({ matriculaIds: [7], emitidaPor: 'manuel@empresa.com' });
+    expect(pedidas[2].cuerpo).toEqual({ items: [{ matriculaId: 7 }], emitidaPor: 'manuel@empresa.com' });
     expect(r.body.data.resultados).toEqual([
-      { matriculaId: 7, ok: true, nexpediente: 'CTF-2026-000007-AAAA', fase: 'emitir' },
+      { matriculaId: 7, ok: true, nexpediente: 'CTF-2026-000007-AAAA', fase: 'emitir', sinPrograma: 'No se encontró la matrícula para buscar su venta.' },
       { matriculaId: 8, ok: false, fase: 'aprobar', error: 'Ya está rechazada' },
     ]);
     expect(pedidas.some((p) => p.ruta.startsWith('/avisos'))).toBe(false);
   });
 
   it('si la emision falla, se dice que quedo aprobada sin diploma', async () => {
-    responder = (p) => p.ruta === '/decisiones'
-      ? { status: 200, body: { resultados: [{ matriculaId: 7, ok: true }] } }
-      : { status: 500, body: { error: 'Moodle no responde' } };
+    responder = (p) => p.ruta === '/candidatos'
+      ? { status: 200, body: { filas: [], total: 0, pagina: 1, tam: 200 } }
+      : p.ruta === '/decisiones'
+        ? { status: 200, body: { resultados: [{ matriculaId: 7, ok: true }] } }
+        : { status: 500, body: { error: 'Moodle no responde' } };
     const r = await sa(request.post('/api/certifex/diplomas/aprobar-emitir')).send({ matriculaIds: [7] });
     expect(r.status).toBe(200);
     expect(r.body.data.resultados[0]).toMatchObject({ matriculaId: 7, ok: false, fase: 'emitir' });
@@ -423,5 +429,118 @@ describe('fechas', () => {
   it('el dia se cuenta en hora de Madrid', () => {
     expect(diaDe('2026-10-07T22:30:00Z')).toBe('2026-10-08');
     expect(diaDe(null)).toBeNull();
+  });
+});
+
+// ───────────────────────────────────────────────────────────── programa oficial
+
+describe('el programa oficial de la formacion vendida', () => {
+  const sufijo = `${Date.now()}`.slice(-6);
+  const correo = `programa.${sufijo}@prueba.test`;
+  const otro = `sinventa.${sufijo}@prueba.test`;
+  const doble = `doble.${sufijo}@prueba.test`;
+  const ids = { conVenta: base + 50, sinVenta: base + 51, doble: base + 52, sinGuardar: base + 53 };
+  let proyecto;
+  let productos = [];
+  let leads = [];
+
+  beforeAll(async () => {
+    // Un campus de Certifex «ZPRUEBA» se casa con el proyecto «Zprueba Academia».
+    ({ rows: [proyecto] } = await pool.query(
+      `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Zprueba Academia', $1, 'whk_test') RETURNING id`, [`zprueba-academia-${sufijo}`]));
+    const prod = async (nombre, horas) => (await pool.query(
+      `INSERT INTO products (project_id, nombre, horas, num_modulos) VALUES ($1, $2, $3, 2) RETURNING id`, [proyecto.id, nombre, horas])).rows[0].id;
+    const p1 = await prod('Programa IA Experto', '1.500 horas');
+    const p2 = await prod('Programa IA Experto Avanzado', '200 h');
+    const p3 = await prod('Programa IA Experto (2ª edición)', '100 h');
+    productos = [p1, p2, p3];
+    await pool.query(
+      `INSERT INTO product_modules (product_id, orden, titulo, horas) VALUES ($1, 2, 'Modelos de lenguaje', 700), ($1, 1, 'Fundamentos de IA', 800)`, [p1]);
+    const lead = async (email) => (await pool.query(
+      `INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Alumno programa', $2) RETURNING id`, [proyecto.id, email])).rows[0].id;
+    const l1 = await lead(correo.toUpperCase());
+    const l2 = await lead(otro);
+    const l3 = await lead(doble);
+    leads = [l1, l2, l3];
+    const venta = (l, p) => pool.query(
+      `INSERT INTO conversions (lead_id, project_id, producto_contratado, producto_contratado_id, importe_total) VALUES ($1, $2, 'x', $3, 100)`, [l, proyecto.id, p]);
+    await venta(l1, p1);
+    // Dos ventas cuyo nombre contiene el del curso: no se adivina cual es.
+    await venta(l3, p2);
+    await venta(l3, p3);
+    // Lo que guardo el CRM al recibir cada solicitud.
+    for (const [id, email] of [[ids.conVenta, correo], [ids.sinVenta, otro], [ids.doble, doble]]) {
+      await pool.query(
+        `INSERT INTO certifex_solicitudes (matricula_id, centro, curso_nombre, nombre_diploma, email, solicitada_en)
+         VALUES ($1, 'ZPRUEBA', 'Programa IA Experto', 'Alumno Programa', $2, NOW())`, [id, email]);
+    }
+  });
+  afterAll(async () => {
+    await pool.query('DELETE FROM conversions WHERE lead_id = ANY($1::int[])', [leads]);
+    await pool.query('DELETE FROM leads WHERE id = ANY($1::int[])', [leads]);
+    await pool.query('DELETE FROM product_modules WHERE product_id = ANY($1::int[])', [productos]);
+    await pool.query('DELETE FROM products WHERE id = ANY($1::int[])', [productos]);
+    await pool.query('DELETE FROM projects WHERE id = $1', [proyecto.id]);
+  });
+
+  it('las horas salen del texto del catalogo', () => {
+    expect(horasDeTexto('1.500 horas')).toBe(1500);
+    expect(horasDeTexto('1 500 h')).toBe(1500);
+    expect(horasDeTexto('120 h')).toBe(120);
+    expect(horasDeTexto('sin datos')).toBeNull();
+    expect(horasDeTexto('9000 horas')).toBeNull();
+    expect(encaja('Programa IA Experto', 'PROGRAMA IA EXPERTO')).toBe(true);
+    expect(encaja('Máster en Neuropsicología', 'Master en neuropsicologia clinica')).toBe(true);
+    expect(encaja('IA', 'Programa IA Experto')).toBe(false);
+  });
+
+  it('aprobar y emitir manda el programa de la venta; sin venta o con dudas, sin programa y marcado', async () => {
+    responder = (p) => {
+      if (p.ruta === '/decisiones') return { status: 200, body: { resultados: p.cuerpo.decisiones.map((d) => ({ matriculaId: d.matriculaId, ok: true })) } };
+      if (p.ruta === '/emitir') return { status: 200, body: { resultados: p.cuerpo.items.map((i) => ({ matriculaId: i.matriculaId, ok: true, nexpediente: 'CTF-2026-000001-AAAA' })) } };
+      return { status: 200, body: { filas: [], total: 0, pagina: 1, tam: 200 } };
+    };
+    const r = await sa(request.post('/api/certifex/diplomas/aprobar-emitir')).send({ matriculaIds: [ids.conVenta, ids.sinVenta, ids.doble] });
+    expect(r.status).toBe(200);
+    // Todo estaba guardado en el CRM: no hace falta preguntar a Certifex por ellas.
+    expect(pedidas.map((p) => p.ruta)).toEqual(['/decisiones', '/emitir']);
+    const items = pedidas[1].cuerpo.items;
+    expect(items[0]).toEqual({ matriculaId: ids.conVenta, programa: { horas: 1500, modulos: [{ titulo: 'Fundamentos de IA', horas: 800 }, { titulo: 'Modelos de lenguaje', horas: 700 }] } });
+    expect(items[1]).toEqual({ matriculaId: ids.sinVenta });
+    expect(items[2]).toEqual({ matriculaId: ids.doble });
+    const [a, b, c] = r.body.data.resultados;
+    expect(a.programa).toEqual({ horas: 1500, modulos: 2, formacion: 'Programa IA Experto' });
+    expect(b.sinPrograma).toMatch(/No tiene ninguna venta en Zprueba Academia/);
+    expect(c.sinPrograma).toMatch(/Varias formaciones vendidas encajan/);
+  });
+
+  it('si el CRM no la tiene guardada, la busca en Certifex; un campus sin proyecto, sin programa', async () => {
+    responder = (p) => {
+      if (p.ruta === '/candidatos') {
+        return { status: 200, body: { total: 2, pagina: 1, tam: 200, filas: [
+          candidato(ids.sinGuardar, '2026-10-08T10:00:00Z', { centro: 'ZPRUEBA', titular: { nombre: 'X', email: correo, dni: null }, curso: { ref: 1, nombre: 'Programa IA Experto' } }),
+          candidato(ids.sinGuardar + 1, '2026-10-08T10:00:00Z', { centro: 'NOEXISTE', titular: { nombre: 'Y', email: correo, dni: null } }),
+        ] } };
+      }
+      return { status: 200, body: { resultados: (p.cuerpo.items ?? []).map((i) => ({ matriculaId: i.matriculaId, ok: true })) } };
+    };
+    const r = await sa(request.post('/api/certifex/diplomas/emitir')).send({ matriculaIds: [ids.sinGuardar, ids.sinGuardar + 1] });
+    expect(r.status).toBe(200);
+    expect(pedidas[0]).toMatchObject({ ruta: '/candidatos', query: { estado: 'todas' } });
+    expect(pedidas[1].cuerpo.items[0].programa.horas).toBe(1500);
+    expect(pedidas[1].cuerpo.items[1]).toEqual({ matriculaId: ids.sinGuardar + 1 });
+    expect(r.body.data.resultados[1].sinPrograma).toMatch(/Ningún proyecto del CRM corresponde al campus NOEXISTE/);
+  });
+
+  it('el listado de pendientes dice que programa se imprimira', async () => {
+    responder = () => ({ status: 200, body: { total: 2, pagina: 1, tam: 50, filas: [
+      candidato(ids.conVenta, '2026-10-08T10:00:00Z', { centro: 'ZPRUEBA', titular: { nombre: 'X', email: correo, dni: null }, curso: { ref: 1, nombre: 'Programa IA Experto' } }),
+      candidato(ids.sinVenta, '2026-10-08T10:00:00Z', { centro: 'ZPRUEBA', titular: { nombre: 'Y', email: otro, dni: null }, curso: { ref: 1, nombre: 'Programa IA Experto' } }),
+    ] } });
+    const r = await sa(request.get('/api/certifex/diplomas/solicitudes'));
+    const [a, b] = r.body.data.filas;
+    expect(a.programaCrm).toMatchObject({ programa: { horas: 1500 }, formacion: { nombre: 'Programa IA Experto', numModulos: 2 }, motivo: null });
+    expect(b.programaCrm).toMatchObject({ programa: null });
+    expect(b.programaCrm.motivo).toMatch(/No tiene ninguna venta/);
   });
 });

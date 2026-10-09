@@ -72,6 +72,8 @@ export interface Candidato {
    * diploma, que es el que se imprime. null si no lo pidió.
    */
   solicitud?: { en: string; nombre: string | null } | null;
+  /** El programa oficial que mandó el CRM al emitir (horas y temario), si lo mandó. */
+  programa?: ProgramaOficial | null;
   /**
    * Lo que el CRM sabe de ese correo, en los campus que ve quien mira: `null` si no
    * está en el CRM; sin el campo si el cruce falló (el listado sale igual).
@@ -181,8 +183,26 @@ export type PestanaDiplomas = 'pendientes' | 'enviados' | 'rechazados' | 'revoca
 export type ResultadoAviso = 'enviado' | 'correo_apagado' | 'sin_correo' | 'error';
 export type FiltroAviso = 'pendiente' | 'enviado' | 'no_salio';
 
+/** Horas y temario de la formación vendida, tal y como se imprimen en el diploma. */
+export interface ProgramaOficial {
+  horas?: number | null;
+  modulos: { titulo: string; horas?: number | null }[];
+}
+
+/**
+ * El programa que se imprimiría si se emite ahora: el de la formación que compró el
+ * alumno en el CRM. `programa` null = se usará lo de Moodle, y `motivo` dice por qué.
+ */
+export interface ProgramaDelCrm {
+  programa: ProgramaOficial | null;
+  formacion: { id: number; nombre: string; numModulos: number | null } | null;
+  motivo: string | null;
+}
+
 /** Una solicitud de diploma: un candidato de Certifex que lo pidió desde Moodle. */
 export interface Solicitud extends Candidato {
+  /** Solo sin diploma: el programa que se mandará al emitir. */
+  programaCrm?: ProgramaDelCrm | null;
   /** El aviso de rechazo que ya se aprobó (solo en las rechazadas). */
   avisoRechazo?: { en: string; por: string; resultado: string } | null;
   /** Solo en «por avisar»: el diploma emitido. */
@@ -226,7 +246,18 @@ export interface FiltrosDiplomas {
   todo?: '1';
 }
 
-export interface ResultadoAprobarEmitir { matriculaId: number; ok: boolean; fase: 'aprobar' | 'emitir'; nexpediente?: string; yaExistia?: boolean; error?: string }
+export interface ResultadoAprobarEmitir {
+  matriculaId: number;
+  ok: boolean;
+  fase?: 'aprobar' | 'emitir';
+  nexpediente?: string;
+  yaExistia?: boolean;
+  error?: string;
+  /** Con programa del CRM: lo que se mandó. */
+  programa?: { horas: number | null; modulos: number; formacion: string | null };
+  /** Sin programa del CRM (se usó lo de Moodle): por qué. */
+  sinPrograma?: string;
+}
 export interface RespuestaAvisos { correoActivo: boolean; resultados: { nexpediente: string | null; ok: boolean; resultado?: ResultadoAviso; error?: string }[] }
 export interface RespuestaAvisosRechazo { correoActivo: boolean; resultados: { matriculaId: number | null; ok: boolean; resultado?: string; error?: string }[] }
 
@@ -246,6 +277,9 @@ export const diplomasApi = {
     client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma>>,
   aprobarEmitir: (matriculaIds: number[]) =>
     client.post('/certifex/diplomas/aprobar-emitir', { matriculaIds }) as R<{ resultados: ResultadoAprobarEmitir[] }>,
+  /** Emitir lo ya aprobado (reintento), también con el programa del CRM. */
+  emitir: (matriculaIds: number[]) =>
+    client.post('/certifex/diplomas/emitir', { matriculaIds }) as R<{ resultados: ResultadoAprobarEmitir[] }>,
   rechazar: (matriculaIds: number[], motivo: string) =>
     client.post('/certifex/diplomas/rechazar', { matriculaIds, motivo }) as R<{ resultados: ResultadoDecision[] }>,
   avisos: (nexpedientes: string[]) => client.post('/certifex/diplomas/avisos', { nexpedientes }) as R<RespuestaAvisos>,

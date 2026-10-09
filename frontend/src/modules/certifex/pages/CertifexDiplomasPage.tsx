@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowClockwise, ArrowSquareOut, Certificate, CheckCircle, DownloadSimple, Envelope, FileXls, FilePdf,
+  ArrowClockwise, ArrowSquareOut, BookOpenText, Certificate, CheckCircle, DownloadSimple, Envelope, FileXls, FilePdf,
   HourglassMedium, LinkSimple, PaperPlaneTilt, PencilSimple, PlugsConnected, Prohibit, SealCheck, Warning, X, XCircle,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
@@ -21,7 +21,7 @@ import { runExport, type ExportColumn } from '@/shared/lib/export';
 import {
   diplomasApi, emisionesApi,
   type CampusCertifex, type ConexionCertifex, type CursoCertifex, type Diploma, type FiltroAviso,
-  type PestanaDiplomas, type ResumenDiplomas, type Solicitud,
+  type PestanaDiplomas, type ProgramaDelCrm, type ProgramaOficial, type ResultadoAprobarEmitir, type ResumenDiplomas, type Solicitud,
 } from '../api/certifex.api';
 import { Avance, Buscador, EnElCrmEtiqueta, Etiqueta, Pestana } from '../components/piezas';
 
@@ -109,6 +109,46 @@ function NombreDiploma({ c }: { c: Solicitud }) {
   );
 }
 
+const resumenPrograma = (p: ProgramaOficial) => [
+  p.horas ? `${p.horas.toLocaleString('es')} h` : null,
+  p.modulos.length ? `${p.modulos.length} ${p.modulos.length === 1 ? 'módulo' : 'módulos'}` : null,
+].filter(Boolean).join(' · ');
+
+/** La lista de módulos, plegada: se abre para revisarla antes de aprobar. */
+function Modulos({ programa, rotulo }: { programa: ProgramaOficial; rotulo: string }) {
+  return (
+    <details className="group mt-1 max-w-[280px] text-xs">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-success-soft-foreground hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40">
+        <BookOpenText size={13} /> {rotulo}
+      </summary>
+      {programa.modulos.length > 0 && (
+        <ol className="mt-1 list-decimal space-y-0.5 rounded-md border border-border bg-muted/30 py-1.5 pl-6 pr-2 text-muted-foreground">
+          {programa.modulos.map((m, i) => (
+            <li key={i}><span className="text-foreground">{m.titulo}</span>{m.horas != null && <span className="tabular-nums"> · {m.horas} h</span>}</li>
+          ))}
+        </ol>
+      )}
+    </details>
+  );
+}
+
+/**
+ * Lo que se imprimirá en el diploma si se aprueba ahora: el programa de la formación
+ * vendida (horas y módulos), o el aviso de que se usará lo de Moodle, con el motivo.
+ */
+function ProgramaAImprimir({ p }: { p: ProgramaDelCrm | null | undefined }) {
+  if (p === undefined) return null;
+  if (p?.programa) {
+    return <Modulos programa={p.programa} rotulo={resumenPrograma(p.programa)} />;
+  }
+  return (
+    <div className="mt-1 max-w-[280px]" title={p?.motivo ?? undefined}>
+      <Etiqueta tono="warning">Sin programa del CRM: se usará lo de Moodle</Etiqueta>
+      {p?.motivo && <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{p.motivo}</p>}
+    </div>
+  );
+}
+
 function EstadoAviso({ d }: { d: Diploma }) {
   const a = d.aviso;
   if (!a) return <StatusDot tono="warning">Pendiente de aviso</StatusDot>;
@@ -188,6 +228,8 @@ export default function CertifexDiplomasPage() {
   const [trabajando, setTrabajando] = useState(false);
   const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null);
   const [fallos, setFallos] = useState<Fallo[]>([]);
+  // Emitidos sin programa del CRM (con lo de Moodle): no es un fallo, pero se dice.
+  const [notas, setNotas] = useState<Fallo[]>([]);
   const [correoApagado, setCorreoApagado] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso'>; enviable: boolean } | null>(null);
@@ -325,14 +367,20 @@ export default function CertifexDiplomasPage() {
   async function ejecutar(fn: () => Promise<void>, titulo: string) {
     setTrabajando(true);
     setFallos([]);
+    setNotas([]);
     try { await fn(); } catch (e) { toast({ title: titulo, description: (e as Error).message, variant: 'destructive' }); }
     finally { setTrabajando(false); setLote(null); recargar(); }
   }
+
+  const anotarPrograma = (res: ResultadoAprobarEmitir[]) => setNotas(res
+    .filter((r) => r.ok && r.sinPrograma)
+    .map((r) => ({ quien: nombre(r.matriculaId), error: r.sinPrograma! })));
 
   const aprobarEmitir = (ids: number[]) => ejecutar(async () => {
     setLote({ hechas: 0, total: ids.length });
     const res = await enTandas(ids, TANDA_EMITIR, async (l) => (await diplomasApi.aprobarEmitir(l)).data.resultados,
       (h) => setLote({ hechas: h, total: ids.length }));
+    anotarPrograma(res);
     const ok = res.filter((r) => r.ok).length;
     setFallos(res.filter((r) => !r.ok).map((r) => ({ quien: nombre(r.matriculaId), error: r.error ?? 'Error' })));
     toast({
@@ -344,8 +392,9 @@ export default function CertifexDiplomasPage() {
 
   const emitir = (ids: number[]) => ejecutar(async () => {
     setLote({ hechas: 0, total: ids.length });
-    const res = await enTandas(ids, TANDA_EMITIR, async (l) => (await emisionesApi.emitir(l)).data.resultados,
+    const res = await enTandas(ids, TANDA_EMITIR, async (l) => (await diplomasApi.emitir(l)).data.resultados,
       (h) => setLote({ hechas: h, total: ids.length }));
+    anotarPrograma(res);
     const ok = res.filter((r) => r.ok).length;
     setFallos(res.filter((r) => !r.ok).map((r) => ({ quien: nombre(r.matriculaId), error: r.error ?? 'Error' })));
     toast({ title: `${ok} ${ok === 1 ? 'diploma emitido' : 'diplomas emitidos'}`, description: 'Quedan pendientes de aviso.' });
@@ -556,6 +605,23 @@ export default function CertifexDiplomasPage() {
         </div>
       )}
 
+      {notas.length > 0 && (
+        <div role="status" className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="font-medium text-warning-soft-foreground">
+              {notas.length} {notas.length === 1 ? 'diploma emitido' : 'diplomas emitidos'} sin programa del CRM: llevan lo de Moodle
+            </span>
+            <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setNotas([])}>Cerrar</button>
+          </div>
+          <ul className="space-y-1">
+            {notas.slice(0, 12).map((f, i) => (
+              <li key={i} className="text-xs"><span className="font-medium">{f.quien}:</span> <span className="text-muted-foreground">{f.error}</span></li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-xs text-muted-foreground">Revisa su PDF antes de enviarlo. Si el temario no es el bueno, corrige la venta o el catálogo antes de emitir los siguientes.</p>
+        </div>
+      )}
+
       <Card padding="none">
         {/* Pestañas y filtros */}
         <CardSection className="flex flex-wrap items-center gap-2">
@@ -651,7 +717,13 @@ export default function CertifexDiplomasPage() {
                   </Button>
                 </div>
                 <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {despues.sinEmitir.slice(0, 20).map((c) => <li key={c.matriculaId}><Etiqueta tono="info">{nombre(c.matriculaId)} · {c.curso.nombre}</Etiqueta></li>)}
+                  {despues.sinEmitir.slice(0, 20).map((c) => (
+                    <li key={c.matriculaId}>
+                      <Etiqueta tono={c.programaCrm?.programa ? 'info' : 'warning'}>
+                        {nombre(c.matriculaId)} · {c.curso.nombre} · {c.programaCrm?.programa ? resumenPrograma(c.programaCrm.programa) : 'sin programa del CRM'}
+                      </Etiqueta>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -672,7 +744,7 @@ export default function CertifexDiplomasPage() {
                     <tr className="border-b border-border">
                       <th className="w-10 px-4 py-2 text-left"><Casilla id="diplomas-elegir-todas" etiqueta="Elegir toda la página" marcada={todas} alCambiar={() => setElegidas(todas ? new Set() : new Set(filasClave))} /></th>
                       <Th>Nombre para el diploma</Th>
-                      <Th>Formación</Th>
+                      <Th>Formación · programa a imprimir</Th>
                       <Th>Solicitado</Th>
                       <Th className="text-right">Nota · avance</Th>
                       <Th>En el CRM</Th>
@@ -690,8 +762,9 @@ export default function CertifexDiplomasPage() {
                             <div className="mt-0.5 max-w-[280px] truncate text-xs text-muted-foreground" title={c.titular.email ?? undefined}>{c.titular.email || 'sin correo'}</div>
                           </td>
                           <td className="px-2 py-3">
-                            <div className="max-w-[220px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div>
+                            <div className="max-w-[260px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div>
                             <div className="text-xs text-muted-foreground">{c.centro}</div>
+                            <ProgramaAImprimir p={c.programaCrm} />
                           </td>
                           <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(c.solicitud?.en)}</td>
                           <td className="px-2 py-3 text-right">
@@ -1031,7 +1104,13 @@ function BloquePorAvisar({ filas, elegidas, alternar, todas, ocupado, verPdf, en
                     <div className="max-w-[260px] truncate font-semibold">{c.diploma?.alumno ?? c.solicitud?.nombre}</div>
                     <div className="max-w-[260px] truncate text-xs text-muted-foreground">{c.titular.email || 'sin correo'}</div>
                   </td>
-                  <td className="px-2 py-2.5"><div className="max-w-[220px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div><div className="text-xs text-muted-foreground">{c.centro}</div></td>
+                  <td className="px-2 py-2.5">
+                    <div className="max-w-[240px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div>
+                    <div className="text-xs text-muted-foreground">{c.centro}</div>
+                    {c.programa
+                      ? <Modulos programa={c.programa} rotulo={`Programa del CRM · ${resumenPrograma(c.programa)}`} />
+                      : <div className="mt-1"><Etiqueta tono="neutral">Con lo de Moodle</Etiqueta></div>}
+                  </td>
                   <td className="px-2 py-2.5 font-mono text-[11px] text-primary">{k}</td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-xs">{fecha(c.diploma?.emitidoEn)}</td>
                   <td className="px-2 py-2.5 pr-4">

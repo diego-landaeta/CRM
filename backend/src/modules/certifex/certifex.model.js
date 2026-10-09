@@ -196,3 +196,16 @@ export async function avisosRechazoDe(matriculaIds) {
     en: r.aviso_rechazo_en, por: r.aviso_rechazo_por, resultado: r.aviso_rechazo_resultado,
   }]));
 }
+
+/** Lo que el CRM guardo de cada solicitud (correo, campus, curso), por matricula. */
+export async function datosDeSolicitudes(matriculaIds) {
+  if (!matriculaIds.length) return new Map();
+  const { rows } = await query(
+    `SELECT matricula_id, centro, email, curso_nombre FROM certifex_solicitudes
+      WHERE matricula_id = ANY($1::bigint[]) AND centro IS NOT NULL`,
+    [matriculaIds],
+  );
+  return new Map(rows.map((r) => [Number(r.matricula_id), {
+    matriculaId: Number(r.matricula_id), centro: r.centro, email: r.email, curso: r.curso_nombre ?? '',
+  }]));
+}
