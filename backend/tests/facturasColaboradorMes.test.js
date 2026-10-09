@@ -233,6 +233,9 @@ describe('facturas de colaboradores (#202) · el enlace', () => {
     const ver = await request.get(`${API}/enlace/${enlace['laura-B']}`);
     expect(ver.body.data.estado).toBe('caducado');
     expect((await subir(enlace['laura-B'])).status).toBe(410);
+    // Queda en el registro, una sola vez aunque se intente varias.
+    const lineas = await q(`SELECT 1 FROM facturas_colaborador_registro WHERE factura_id = $1 AND evento = 'caducado'`, [await filaViva(C.laura, E.B)]);
+    expect(lineas).toHaveLength(1);
   });
 });
 
@@ -296,8 +299,20 @@ describe('facturas de colaboradores (#202) · administración', () => {
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toMatch(/token/);
     expect((await request.get(`${API}/enlace/${enlace['pedro-B']}`)).status).toBe(404);
+    expect((await subir(enlace['pedro-B'])).status).toBe(404);
 
     const reg = await request.get(`${API}/facturas/${pedroB}/registro`).set(como('super'));
     expect(reg.body.data.map((r) => r.evento)).toEqual(['reenviado']);
+  });
+
+  it('dos anulaciones a la vez: una vale y la otra dice que ya está anulada', async () => {
+    const lauraB = await filaViva(C.laura, E.B);
+    const anula = () => request.post(`${API}/facturas/${lauraB}/anular`).set(como('super')).send({ motivo: 'Dos a la vez' });
+    const [a, b] = await Promise.all([anula(), anula()]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const vivas = await q(
+      'SELECT id FROM facturas_colaborador WHERE colaborador_id = $1 AND issuer_id = $2 AND periodo = $3 AND anulada_at IS NULL',
+      [C.laura.id, E.B.id, PERIODO]);
+    expect(vivas).toHaveLength(1);
   });
 });

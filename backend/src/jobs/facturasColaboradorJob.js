@@ -24,7 +24,7 @@ const TICK_MS = 30 * 60 * 1000;
 /** Año, mes, día y hora en Madrid (el servidor está en UTC). */
 export function enMadrid(ahora = new Date()) {
   const partes = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-    timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid',
+    timeZone: 'Europe/Madrid',
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
   }).formatToParts(ahora).map((p) => [p.type, p.value]));
   return { anio: Number(partes.year), mes: Number(partes.month), dia: Number(partes.day), hora: Number(partes.hour) };
@@ -35,7 +35,9 @@ const diasDelMes = (anio, mes) => new Date(Date.UTC(anio, mes, 0)).getUTCDate();
 
 export async function runFacturasColaborador({ ahora = new Date() } = {}) {
   const { anio, mes, dia, hora } = enMadrid(ahora);
-  if (hora !== HORA) return { omitido: 'fuera de hora' };
+  // Desde las 10:00 y no solo en la vuelta de las 10: si el proceso se reinicia
+  // a las 10:30, la siguiente vuelta lo hace igual. Repetirlo no duplica nada.
+  if (hora < HORA) return { omitido: 'fuera de hora' };
 
   if (dia === diasDelMes(anio, mes)) {
     const r = await prepararYMandar(primerDia(anio, mes));

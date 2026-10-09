@@ -57,8 +57,8 @@ async function crearPersona(clave, role) {
 
 const como = (clave) => ({ Authorization: `Bearer ${T[clave]}` });
 
-const subir = (clave, id, numero = 'F-1') => request.post(`${API}/mias/${id}`).set(como(clave))
-  .field('importe', '450').field('numero_factura', numero).attach('archivo', PDF, 'factura.pdf');
+const subir = (clave, id, numero = 'F-1', nombre = 'factura.pdf') => request.post(`${API}/mias/${id}`).set(como(clave))
+  .field('importe', '450').field('numero_factura', numero).attach('archivo', PDF, nombre);
 
 beforeAll(async () => {
   empresa = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id',
@@ -122,8 +122,10 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
   });
 
   it('sube la suya desde «Mi factura», una sola vez', async () => {
-    const res = await subir('laura', deLaura);
+    const res = await subir('laura', deLaura, 'F-1', 'Factura_Peña.pdf');
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    // Con su ñ: multer lo lee como Latin-1 y llegaba «PeÃ±a».
+    expect(res.body.data.recibida.archivo).toBe('Factura_Peña.pdf');
     expect(res.body.data.estado).toBe('recibida');
     expect(res.body.data.recibida.numero_recepcion).toMatch(/^REC-2026-08-\d{4}$/);
 

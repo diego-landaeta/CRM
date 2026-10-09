@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowClockwise, ClockCounterClockwise, FileText, PaperPlaneTilt, Plus, Prohibit, UsersThree } from '@phosphor-icons/react';
+import {
+  ArrowClockwise, ClockCounterClockwise, FileText, LockKey, PaperPlaneTilt, PencilSimple, Plus, Prohibit, UserMinus, UserPlus, UsersThree,
+} from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -9,10 +11,10 @@ import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, ESTADO, euros, diaMes, facturasColaboradorApi, fechaHora,
+  AREAS, AREA_ES, ESTADO, euros, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, primeraMayuscula,
   type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes,
 } from '../api/facturasColaborador.api';
-import { AnularDialog, BajaDialog, ColaboradorDialog, RegistroDialog } from '../components/DialogosFacturas';
+import { AltaDialog, AnularDialog, BajaDialog, ColaboradorDialog, RegistroDialog, esMes } from '../components/DialogosFacturas';
 
 /**
  * Finanzas › Facturas de colaboradores (#202).
@@ -27,11 +29,16 @@ import { AnularDialog, BajaDialog, ColaboradorDialog, RegistroDialog } from '../
  * decide el servidor: aquí solo se pinta lo que llega.
  */
 
-const mesAnterior = () => {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 7);
+/**
+ * El mes que se abre: el último preparado. El último día del mes ya es ese mes
+ * (se prepara a las 10:00); los demás días, el anterior. En hora local: con
+ * `toISOString` (UTC), de 00:00 a 02:00 en Madrid salía un mes menos.
+ */
+const mesPorDefecto = () => {
+  const hoy = new Date();
+  const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const d = hoy.getDate() === ultimoDia ? hoy : new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 const errorDe = (err: any) => err?.data?.error || err?.message || 'Inténtalo de nuevo';
@@ -42,12 +49,19 @@ function Pildora({ estado }: { estado: EstadoFactura }) {
 
 export default function FacturasColaboradoresPage() {
   const [params, setParams] = useSearchParams();
-  const vista = params.get('vista') === 'colaboradores' ? 'colaboradores' : 'mes';
   const [empresas, setEmpresas] = useState<EmpresaDelGrupo[]>([]);
+  // Lo decide el servidor (403); aquí solo se evita enseñar una pantalla vacía
+  // como si no hubiera facturas a quien no tiene permiso para verlas.
+  const { can } = usePermission();
+  const veElMes = can('facturas_colaborador.ver_todas');
+  const gestiona = can('facturas_colaborador.gestionar');
+  const pedida = params.get('vista') === 'colaboradores' ? 'colaboradores' : 'mes';
+  const vista = pedida === 'mes' && !veElMes ? 'colaboradores' : pedida === 'colaboradores' && !gestiona ? 'mes' : pedida;
 
   useEffect(() => {
+    if (!veElMes && !gestiona) return;
     facturasColaboradorApi.empresas().then((r) => setEmpresas(r.data)).catch(() => setEmpresas([]));
-  }, []);
+  }, [veElMes, gestiona]);
 
   const cambiar = (v: 'mes' | 'colaboradores') => {
     const n = new URLSearchParams(params);
@@ -55,11 +69,27 @@ export default function FacturasColaboradoresPage() {
     setParams(n, { replace: true });
   };
 
+  const cabecera = <PageHeader title="Facturas de colaboradores" subtitle="Quien factura al grupo cada mes sube su factura por un enlace personal, una por empresa y mes" />;
+  if (!veElMes && !gestiona) {
+    return (
+      <div className="p-4 sm:p-6 space-y-4">
+        {cabecera}
+        <div className="bg-card border border-border rounded-lg">
+          <EmptyState icon={LockKey} title="No tienes acceso a las facturas de colaboradores"
+            description="Las ve administración. Si crees que deberías verlas, pídelo a un administrador." />
+        </div>
+      </div>
+    );
+  }
+
+  const pestanas = ([['mes', 'Del mes', veElMes], ['colaboradores', 'Colaboradores', gestiona]] as const)
+    .filter(([, , puede]) => puede);
+
   return (
     <div className="p-4 sm:p-6 space-y-4">
-      <PageHeader title="Facturas de colaboradores" subtitle="Quien factura al grupo cada mes sube su factura por un enlace personal, una por empresa y mes" />
+      {cabecera}
       <div className="flex items-center gap-1">
-        {([['mes', 'Del mes'], ['colaboradores', 'Colaboradores']] as const).map(([clave, rotulo]) => (
+        {pestanas.map(([clave, rotulo]) => (
           <button key={clave} type="button" aria-pressed={vista === clave} onClick={() => cambiar(clave)}
             className={`h-8 px-3 rounded-md border text-xs font-medium transition-colors ${
               vista === clave ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-muted/60'
@@ -77,7 +107,7 @@ export default function FacturasColaboradoresPage() {
 
 function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   const [params, setParams] = useSearchParams();
-  const periodo = params.get('periodo') || mesAnterior();
+  const periodo = params.get('periodo') || mesPorDefecto();
   const [issuerId, setIssuerId] = useState('');
   const [estado, setEstado] = useState<'' | EstadoFactura>('');
   const [area, setArea] = useState<'' | Area>('');
@@ -87,6 +117,10 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   const [registro, setRegistro] = useState<FacturaDelMes | null>(null);
   const { can } = usePermission();
   const puedeAnular = can('facturas_colaborador.anular');
+  const puedeReenviar = can('facturas_colaborador.gestionar');
+  // La fila que se está reenviando: un segundo clic mandaba otro correo y el
+  // enlace del primero ya no valía.
+  const [reenviando, setReenviando] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -118,12 +152,16 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   }
 
   async function reenviar(f: FacturaDelMes) {
+    if (reenviando) return;
+    setReenviando(f.id);
     try {
       await facturasColaboradorApi.reenviar(f.id);
       toast({ title: 'Enlace nuevo', description: `Para ${f.colaborador_nombre}. El anterior deja de valer.` });
       void cargar();
     } catch (err) {
       toast({ title: 'No se pudo reenviar', description: errorDe(err), variant: 'destructive' });
+    } finally {
+      setReenviando(null);
     }
   }
 
@@ -136,8 +174,8 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
-        <div className="w-40 flex-none">
-          <input type="month" aria-label="Mes" value={periodo} onChange={(e) => e.target.value && ponerPeriodo(e.target.value)} className={inputClass} />
+        <div className="w-52 flex-none">
+          <input type="month" aria-label="Mes" value={periodo} onChange={(e) => esMes(e.target.value) && ponerPeriodo(e.target.value)} className={inputClass} />
         </div>
         <div className="w-56 flex-none">
           <Select<string> value={issuerId} onChange={setIssuerId} ariaLabel="Empresa"
@@ -159,7 +197,7 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         {datos && r && (
           <div className="px-4 py-2.5 border-b border-border text-sm">
-            <strong className="capitalize">{datos.mes.replace(' de ', ' ')}</strong>
+            <strong>{primeraMayuscula(datos.mes.replace(' de ', ' '))}</strong>
             <span className="text-muted-foreground"> · {r.recibidas} de {r.total} recibidas · {euros(r.importe_recibido)} de {euros(r.importe_acordado)} acordados</span>
           </div>
         )}
@@ -171,41 +209,45 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
             <table className="w-full text-tabla">
               <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2">Colaborador</th><th className="px-3 py-2">Área</th><th className="px-3 py-2">Empresa</th>
-                  <th className="px-3 py-2 text-right">Acordado</th><th className="px-3 py-2">Enlace</th><th className="px-3 py-2">Factura</th>
-                  <th className="px-3 py-2 text-right">Importe</th><th className="px-3 py-2 text-right">Diferencia</th><th className="px-3 py-2" />
+                  <th className="px-2 py-2">Colaborador</th><th className="px-2 py-2">Área</th><th className="px-2 py-2">Empresa</th>
+                  <th className="px-2 py-2 text-right">Acordado</th><th className="px-2 py-2">Correo</th><th className="px-2 py-2">Enlace</th><th className="px-2 py-2">Factura</th>
+                  <th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-right">Diferencia</th><th className="px-2 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {datos.facturas.map((f) => (
                   <tr key={f.id} className={f.estado === 'anulada' ? 'opacity-60' : ''}>
-                    <td className="px-3 py-2"><div className="font-medium">{f.colaborador_nombre}</div><div className="text-xs text-muted-foreground">{f.email}</div></td>
-                    <td className="px-3 py-2">{AREA_ES[f.area]}</td>
-                    <td className="px-3 py-2">{f.empresa}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{euros(f.importe_esperado)}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                      {f.abierto_at ? `Abierto ${diaMes(f.abierto_at)}` : f.enviado_at ? `Enviado ${diaMes(f.enviado_at)}` : '—'}
+                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}</td>
+                    <td className="px-2 py-2">{AREA_ES[f.area]}</td>
+                    <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado)}</td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground"><div className="max-w-[8rem] truncate" title={f.email}>{f.email}</div></td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {f.abierto_at ? <>Abierto<br />{diaMes(f.abierto_at)}</> : f.enviado_at ? <>Enviado<br />{diaMes(f.enviado_at)}</> : '—'}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2">
                       <Pildora estado={f.estado} />
-                      {f.numero_recepcion && <div className="text-xs text-muted-foreground mt-0.5">{f.numero_recepcion} · {fechaHora(f.subida_at)}</div>}
+                      {f.numero_recepcion && (
+                        <div className="text-xs text-muted-foreground mt-0.5 whitespace-nowrap">{f.numero_recepcion}<br />{fechaHora(f.subida_at)}</div>
+                      )}
                       {f.motivo_anulacion && <div className="text-xs text-muted-foreground mt-0.5">«{f.motivo_anulacion}»</div>}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{euros(f.importe)}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${f.diferencia && Number(f.diferencia) !== 0 ? 'text-warning-soft-foreground font-semibold' : ''}`}>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe)}</td>
+                    <td className={`px-2 py-2 text-right tabular-nums ${f.diferencia && Number(f.diferencia) !== 0 ? 'text-warning-soft-foreground font-semibold' : ''}`}>
                       {f.diferencia === null ? '—' : euros(f.diferencia)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2">
                       <div className="flex justify-end gap-1">
                         {f.nombre_original && (
-                          <Button variant="ghost" size="sm" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><FileText size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><FileText size={15} /></Button>
                         )}
-                        <Button variant="ghost" size="sm" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ClockCounterClockwise size={15} /></Button>
-                        {!f.subida_at && !f.anulada_at && (
-                          <Button variant="ghost" size="sm" title="Reenviar el enlace" aria-label="Reenviar el enlace" onClick={() => reenviar(f)}><PaperPlaneTilt size={15} /></Button>
+                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ClockCounterClockwise size={15} /></Button>
+                        {puedeReenviar && !f.subida_at && !f.anulada_at && (
+                          <Button variant="ghost" size="sm" className="px-2" title="Reenviar el enlace" aria-label="Reenviar el enlace"
+                            disabled={reenviando !== null} onClick={() => reenviar(f)}><PaperPlaneTilt size={15} /></Button>
                         )}
                         {puedeAnular && !f.anulada_at && (
-                          <Button variant="ghost" size="sm" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><Prohibit size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><Prohibit size={15} /></Button>
                         )}
                       </div>
                     </td>
@@ -238,6 +280,7 @@ function Colaboradores({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   const [cargando, setCargando] = useState(true);
   const [editando, setEditando] = useState<Colaborador | 'nuevo' | null>(null);
   const [baja, setBaja] = useState<Colaborador | null>(null);
+  const [vuelve, setVuelve] = useState<Colaborador | null>(null);
   const [historial, setHistorial] = useState<Colaborador | null>(null);
 
   const cargar = useCallback(async () => {
@@ -295,21 +338,31 @@ function Colaboradores({ empresas }: { empresas: EmpresaDelGrupo[] }) {
               <tbody className="divide-y divide-border">
                 {lista.map((c) => (
                   <tr key={c.id}>
-                    <td className="px-3 py-2 font-medium">{c.nombre}{c.usuario_nombre && <div className="text-xs text-muted-foreground">Usuario: {c.usuario_nombre}</div>}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {c.nombre}
+                      {c.usuario_nombre && <div className="text-xs font-normal text-muted-foreground">Usuario: {c.usuario_nombre}</div>}
+                      {c.compartido && <div className="text-xs font-normal text-muted-foreground">También factura a otras empresas</div>}
+                    </td>
                     <td className="px-3 py-2">{AREA_ES[c.area]}</td>
-                    <td className="px-3 py-2">{c.empresas.map((e) => e.razon_social).join(' · ')}</td>
+                    <td className="px-3 py-2 whitespace-nowrap" title={c.empresas.map((e) => e.razon_social).join(' · ')}>
+                      {c.empresas.map((e) => empresaCorta(e.razon_social)).join(' · ')}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">{acordado(c)}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{c.email}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground"><div className="max-w-[14rem] truncate" title={c.email}>{c.email}</div></td>
                     <td className="px-3 py-2">
-                      {c.activo
-                        ? <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-success-soft text-success-soft-foreground">Activo</span>
-                        : <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-destructive-soft text-destructive-soft-foreground whitespace-nowrap">Baja desde {c.baja_desde}</span>}
+                      {/* Una baja de un mes que no ha llegado: sigue activo hasta entonces. */}
+                      {c.activo && !c.baja_desde && <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-success-soft text-success-soft-foreground">Activo</span>}
+                      {c.activo && c.baja_desde && <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground whitespace-nowrap">Activo · baja desde {c.baja_desde}</span>}
+                      {!c.activo && <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-destructive-soft text-destructive-soft-foreground whitespace-nowrap">Baja desde {c.baja_desde}</span>}
                     </td>
                     <td className="px-3 py-2">
+                      {/* Iconos, como en «Del mes»: con la columna Correo, los botones con texto no cabían en un portátil. */}
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => setEditando(c)}>Editar</Button>
+                        <Button variant="ghost" size="sm" title="Editar" aria-label="Editar" onClick={() => setEditando(c)}><PencilSimple size={15} /></Button>
                         <Button variant="ghost" size="sm" title="Historial" aria-label="Historial" onClick={() => setHistorial(c)}><ClockCounterClockwise size={15} /></Button>
-                        {c.activo && <Button variant="ghost" size="sm" onClick={() => setBaja(c)}>Dar de baja</Button>}
+                        {!c.compartido && (c.baja_desde
+                          ? <Button variant="ghost" size="sm" title="Volver a dar de alta" aria-label="Volver a dar de alta" onClick={() => setVuelve(c)}><UserPlus size={15} /></Button>
+                          : <Button variant="ghost" size="sm" title="Dar de baja" aria-label="Dar de baja" onClick={() => setBaja(c)}><UserMinus size={15} /></Button>)}
                       </div>
                     </td>
                   </tr>
@@ -325,6 +378,7 @@ function Colaboradores({ empresas }: { empresas: EmpresaDelGrupo[] }) {
           alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); void cargar(); }} />
       )}
       {baja && <BajaDialog colaborador={baja} alCerrar={() => setBaja(null)} alGuardar={() => { setBaja(null); void cargar(); }} />}
+      {vuelve && <AltaDialog colaborador={vuelve} alCerrar={() => setVuelve(null)} alGuardar={() => { setVuelve(null); void cargar(); }} />}
       {historial && <RegistroDialog titulo={`Historial · ${historial.nombre}`} cargar={cargarHistorial} alCerrar={() => setHistorial(null)} />}
     </div>
   );

@@ -22,13 +22,14 @@ export const correosActivos = () => {
 };
 
 /** Todos los correos de facturas de colaboradores salen por aquí. */
-export async function despachar({ to, subject, htmlContent, textContent, fromName, attachment, tags, clave }) {
+export async function despachar({ to, subject, htmlContent, textContent, fromName, attachment, tags, clave, projectId = null }) {
   if (!correosActivos()) {
     logger.info({ to: to[0]?.email, subject, clave },
       'Correo de facturas de colaboradores registrado sin enviar (FACTURAS_COLABORADOR_CORREOS_ACTIVOS apagado)');
     return { sent: false, simulated: true };
   }
-  return sendEmail({ to, subject, htmlContent, textContent, fromName, attachment, tags, clave });
+  // Con el campus de la marca, Brevo usa su cuenta y su remitente «no contestar».
+  return sendEmail({ to, subject, htmlContent, textContent, fromName, attachment, tags, clave, projectId });
 }
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
@@ -36,7 +37,8 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
 const mesDe = (periodo) => MESES[Number(periodo.slice(5, 7)) - 1];
 const anioDe = (periodo) => periodo.slice(0, 4);
 
-const euros = (n) => `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+// `useGrouping: 'always'`: «1.113,00 €» y no «1113,00 €» (en español el punto de miles solo sale desde cinco cifras).
+const euros = (n) => `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })} €`;
 const tz = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
 const diaMes = (d) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', timeZone: tz() });
 
@@ -74,7 +76,7 @@ function aNombreDe(e) {
  * El correo del mes y el recordatorio del día 5: lo mismo, cambia el asunto.
  * `f`: la fila con colaborador y empresa (CAMPOS_ENLACE de facturas.model.js).
  */
-export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = false }) {
+export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, marca = null }) {
   const mes = mesDe(f.periodo);
   const corta = empresaCorta(f.razon_social);
   const acordado = f.importe_esperado === null || f.importe_esperado === undefined ? null : Number(f.importe_esperado);
@@ -85,6 +87,8 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
   if (!recordatorio && acordado !== null) asunto += ` · ${euros(acordado)}`;
 
   const { htmlContent, textContent } = correo({
+    // La misma cabecera con logo que el resumen diario (definición del 01/10).
+    proyecto: marca || {},
     titulo: recordatorio ? `Falta tu factura de ${mes}` : `Tu factura de ${mes}`,
     saludo: f.colaborador_nombre,
     resumen: `Súbela desde tu enlace personal: ${mes} ${anioDe(f.periodo)} · ${corta}`,
@@ -104,10 +108,11 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
 }
 
 /** El acuse, con la copia de la factura adjunta. */
-export function armarAcuse({ f }) {
+export function armarAcuse({ f, marca = null }) {
   const mes = mesDe(f.periodo);
   const corta = empresaCorta(f.razon_social);
   const { htmlContent, textContent } = correo({
+    proyecto: marca || {},
     titulo: 'Factura recibida',
     saludo: f.colaborador_nombre,
     resumen: `${f.numero_recepcion} · ${mes} ${anioDe(f.periodo)} · ${corta}`,
@@ -129,17 +134,19 @@ export function armarAcuse({ f }) {
 const para = (f) => [{ email: f.colaborador_email, name: f.colaborador_nombre }];
 
 /** Manda el del mes (o el recordatorio, o el enlace nuevo). La clave evita repetirlo. */
-export async function enviarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, clave }) {
-  const c = armarCorreoDelMes({ f, token, recordatorio, nuevo });
+export async function enviarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, clave, marca = null }) {
+  const c = armarCorreoDelMes({ f, token, recordatorio, nuevo, marca });
   return despachar({
+    projectId: marca?.id ?? null,
     to: para(f), subject: c.asunto, htmlContent: c.htmlContent, textContent: c.textContent,
     fromName: c.fromName, tags: ['facturas-colaborador', recordatorio ? 'recordatorio' : 'enlace-del-mes'], clave,
   });
 }
 
-export async function enviarAcuse({ f, archivo }) {
-  const c = armarAcuse({ f });
+export async function enviarAcuse({ f, archivo, marca = null }) {
+  const c = armarAcuse({ f, marca });
   return despachar({
+    projectId: marca?.id ?? null,
     to: para(f), subject: c.asunto, htmlContent: c.htmlContent, textContent: c.textContent,
     fromName: c.fromName,
     attachment: archivo ? [{ name: archivo.nombre, content: archivo.buffer.toString('base64') }] : undefined,

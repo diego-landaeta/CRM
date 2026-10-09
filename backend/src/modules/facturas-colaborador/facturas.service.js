@@ -9,6 +9,7 @@ import { ambitoDe } from './facturas-colaborador.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { enviarCorreoDelMes, enviarAcuse, urlDelEnlace } from './facturas.emails.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { enUtf8 } from '../whatsapp/media.service.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -60,16 +61,19 @@ const caducidad = (ahora = Date.now()) => new Date(ahora + DIAS_DE_ENLACE * 24 *
 
 async function enTransaccion(fn) {
   const db = await getClient();
+  let roto = false;
   try {
     await db.query('BEGIN');
     const r = await fn(db);
     await db.query('COMMIT');
     return r;
   } catch (err) {
-    await db.query('ROLLBACK');
+    // Si el ROLLBACK también falla, el error que cuenta es el primero, y esa
+    // conexión no vuelve al pool (`release(true)` la cierra).
+    await db.query('ROLLBACK').catch(() => { roto = true; });
     throw err;
   } finally {
-    db.release();
+    db.release(roto);
   }
 }
 
@@ -99,6 +103,12 @@ export async function prepararMes(periodo) {
 }
 
 /**
+ * Lo que `sendEmail` devuelve sin enviar y no es un fallo: el freno de los
+ * entornos de pruebas y la clave de idempotencia (ya salió antes).
+ */
+const NO_ES_FALLO = new Set(['FRENO_DE_PRUEBAS', 'YA_ENVIADO']);
+
+/**
  * Manda el enlace de una fila por correo y lo apunta: `enviado` (o
  * `recordatorio`) si Brevo lo acepta, `no_enviado` si falla. Con los correos
  * apagados solo queda en el log (lo hace `despachar`) y la fila sigue «sin enviar».
@@ -107,23 +117,41 @@ export async function mandarEnlace(facturaId, token, { recordatorio = false, nue
   const f = await model.porId(facturaId, null);
   if (!f) return { sent: false };
   try {
-    const r = await enviarCorreoDelMes({ f, token, recordatorio, nuevo, clave });
+    const marca = await model.marcaDeLaEmpresa(f.issuer_id);
+    const r = await enviarCorreoDelMes({ f, token, recordatorio, nuevo, clave, marca });
     if (r?.sent) {
       await model.marcarEnviado(facturaId);
       await anotar(pool, {
         facturaId, evento: recordatorio ? 'recordatorio' : 'enviado', detalle: { para: f.colaborador_email },
       });
+    } else if (r && !r.simulated && !NO_ES_FALLO.has(r.reason)) {
+      // `sendEmail` no lanza: si Brevo no lo acepta, lo dice con {sent:false}.
+      await anotar(pool, {
+        facturaId, evento: 'no_enviado', detalle: { motivo: r.reason || r.error || 'desconocido', recordatorio },
+      });
     }
     return r;
   } catch (err) {
     logger.error({ err: err.message, facturaId }, 'No se pudo mandar el enlace de la factura de colaborador');
-    await anotar(pool, { facturaId, evento: 'no_enviado', detalle: { motivo: err.message } });
+    await anotar(pool, { facturaId, evento: 'no_enviado', detalle: { motivo: err.message, recordatorio } });
     return { sent: false, error: err.message };
   }
 }
 
-/** El aviso en la campana a administración. `notifyUsers` no falla nunca. */
+/**
+ * El aviso en la campana a administración. Si falla, la factura ya está
+ * guardada: se apunta en el log y el colaborador no ve un error (si lo viera,
+ * al reintentar le diría «Ya subiste…»).
+ */
 async function avisarDeLaFactura(f) {
+  try {
+    await avisar(f);
+  } catch (err) {
+    logger.error({ err: err.message, facturaId: f.id }, 'No se pudo avisar en la campana de la factura de colaborador');
+  }
+}
+
+async function avisar(f) {
   const importe = f.importe === null ? '' : ` · ${Number(f.importe).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €`;
   await notifyUsers({
     targetUserIds: await model.avisarA(f.issuer_id),
@@ -138,7 +166,7 @@ async function avisarDeLaFactura(f) {
 /** El acuse con la copia. Si falla, la factura ya está guardada: solo se apunta en el log. */
 async function mandarAcuse(f, archivo) {
   try {
-    const r = await enviarAcuse({ f, archivo });
+    const r = await enviarAcuse({ f, archivo, marca: await model.marcaDeLaEmpresa(f.issuer_id) });
     if (r?.sent) await anotar(pool, { facturaId: f.id, evento: 'acuse', detalle: { para: f.colaborador_email } });
   } catch (err) {
     logger.error({ err: err.message, facturaId: f.id }, 'No se pudo mandar el acuse de la factura de colaborador');
@@ -177,9 +205,17 @@ function paraElColaborador(f) {
   };
 }
 
+/** La primera vez que se usa un enlace caducado, queda en el registro. */
+async function anotarCaducado(f, ip) {
+  if (f.estado === 'caducado' && !(await model.tieneEvento(f.id, 'caducado'))) {
+    await anotar(pool, { facturaId: f.id, evento: 'caducado', ip, detalle: { caduco: f.caduca_at } });
+  }
+}
+
 export async function verEnlace(token, ip) {
   const f = await model.porTokenHash(huella(token));
   if (!f) throw ENLACE_NO_VALE();
+  await anotarCaducado(f, ip);
   if (['enviado', 'sin_enviar', 'no_enviado'].includes(f.estado) && await model.marcarAbierto(f.id)) {
     await anotar(pool, { facturaId: f.id, evento: 'abierto', ip });
     f.estado = 'abierto';
@@ -211,7 +247,8 @@ export function nombreDelArchivo({ periodo, empresa, colaborador, numeroFactura,
 export async function subir(token, datos, ip) {
   const f = await model.porTokenHash(huella(token));
   if (!f) throw ENLACE_NO_VALE();
-  const nombre = await guardarFactura(f, datos, { ip });
+  await anotarCaducado(f, ip);
+  const nombre = await guardarFactura(f, datos, { ip, enlaceHash: huella(token) });
   // Ya guardada: se lee fuera de la transacción, con lo que ve todo el mundo.
   const subida = await model.porTokenHash(huella(token));
   await mandarAcuse(subida, { nombre, buffer: datos.archivo.buffer });
@@ -223,7 +260,7 @@ export async function subir(token, datos, ip) {
  * Subir la factura de una fila del mes. Lo mismo por el enlace del correo que
  * desde «Mi factura»: una por empresa y mes, PDF o foto, 10 MB.
  */
-async function guardarFactura(f, { archivo, importe, numeroFactura }, { ip = null, userId = null }) {
+async function guardarFactura(f, { archivo, importe, numeroFactura }, { ip = null, userId = null, enlaceHash = null }) {
   const delMes = `${nombreDelMes(f.periodo)} para ${f.razon_social}`;
   if (f.estado === 'anulada') {
     throw new AppError('Esta factura se anuló: te llegará un enlace nuevo', 409, 'ANULADA');
@@ -245,25 +282,33 @@ async function guardarFactura(f, { archivo, importe, numeroFactura }, { ip = nul
     periodo: f.periodo, empresa: f.razon_social, colaborador: f.colaborador_nombre, numeroFactura, ext: tipo.ext,
   });
 
+  // El nombre tal como lo puso el colaborador: multer lo lee como Latin-1 y
+  // «Peña» llegaba como «PeÃ±a». El mismo arreglo que los adjuntos de WhatsApp.
+  const nombreOriginal = (enUtf8(archivo.originalname) || nombre).slice(0, 255);
+
+  // El archivo, a R2 antes de abrir la transacción: con la subida dentro, la
+  // conexión a la base y el candado de la fila quedaban ocupados todo lo que
+  // tardara. Si luego la factura no se guarda (otra subida se adelantó), el
+  // archivo se queda en R2 sin fila que lo use: es lo raro, y no se pierde nada.
+  const archivoKey = `facturas-colaborador/${f.periodo.slice(0, 7)}/${f.id}-${sha256.slice(0, 8)}/${nombre}`;
+  await uploadToR2(archivoKey, archivo.buffer, tipo.mime);
+
   await enTransaccion(async (db) => {
     // Con la fila bloqueada: dos envíos a la vez no pueden subir los dos.
     const fila = await model.bloquear(db, f.id);
+    if (enlaceHash && fila.token_hash !== enlaceHash) throw ENLACE_NO_VALE();
     if (fila.anulada_at) throw new AppError('Esta factura se anuló: te llegará un enlace nuevo', 409, 'ANULADA');
     if (fila.subida_at) throw new AppError(`Ya subiste la factura de ${delMes}`, 409, 'YA_SUBIDA');
 
     const numeroRecepcion = await model.siguienteRecepcion(db, f.periodo);
-    const archivoKey = `facturas-colaborador/${f.periodo.slice(0, 7)}/${f.id}-${sha256.slice(0, 8)}/${nombre}`;
-    await uploadToR2(archivoKey, archivo.buffer, tipo.mime);
-
     await model.guardarSubida(db, f.id, {
-      numeroRecepcion, importe, numeroFactura, archivoKey,
-      nombreOriginal: String(archivo.originalname || nombre).slice(0, 255),
+      numeroRecepcion, importe, numeroFactura, archivoKey, nombreOriginal,
       mime: tipo.mime, tamano: archivo.size, sha256,
     });
     await anotar(db, {
       facturaId: f.id, evento: 'recibida', ip, userId,
       detalle: {
-        archivo: archivo.originalname, tamano: archivo.size, importe,
+        archivo: nombreOriginal, tamano: archivo.size, importe,
         numero_factura: numeroFactura, numero_recepcion: numeroRecepcion,
       },
     });
@@ -348,6 +393,9 @@ export async function anular(user, id, motivo, ip) {
 
   const { token, hash, semilla } = tokenNuevo();
   const nuevaId = await enTransaccion(async (db) => {
+    // Con la fila bloqueada: si otra anulación se adelantó, esta no sigue.
+    const fila = await model.bloquear(db, id);
+    if (fila.anulada_at) throw new AppError('Esta factura ya está anulada', 409, 'CONFLICT');
     await model.anular(db, id, user.userId, motivo);
     await anotar(db, { facturaId: id, evento: 'anulada', userId: user.userId, ip, detalle: { motivo } });
     const nueva = await model.crearDelMes(db, {
@@ -370,6 +418,11 @@ export async function reenviar(user, id, ip) {
 
   const { token, hash, semilla } = tokenNuevo();
   await enTransaccion(async (db) => {
+    // Con la fila bloqueada: si la subida se adelantó, no se cambia el enlace
+    // de una factura ya recibida.
+    const fila = await model.bloquear(db, id);
+    if (fila.anulada_at) throw new AppError('Esta factura está anulada', 409, 'CONFLICT');
+    if (fila.subida_at) throw new AppError('Esta factura ya está recibida', 409, 'CONFLICT');
     await model.cambiarEnlace(db, id, hash, semilla, caducidad());
     await anotar(db, { facturaId: id, evento: 'reenviado', userId: user.userId, ip });
   });
@@ -393,7 +446,7 @@ export async function registroDeFactura(user, id) {
 export async function recordar(periodo) {
   let recordados = 0;
   for (const { id, token_semilla: semilla, token_hash: hash } of await model.sinSubir(periodo)) {
-    if (!semilla || await model.tieneEvento(id, 'recordatorio')) continue;
+    if (!semilla || await model.tieneEvento(id, 'recordatorio') || await model.recordatorioFallido(id)) continue;
     const token = enlaceDeLaSemilla(semilla);
     if (huella(token) !== hash) {
       logger.warn({ facturaId: id }, 'El enlace de la factura no cuadra con su huella: no se manda el recordatorio');

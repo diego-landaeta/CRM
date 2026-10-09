@@ -8,7 +8,7 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, euros, facturasColaboradorApi, fechaHora,
+  AREAS, AREA_ES, euros, facturasColaboradorApi, fechaHora, normalizarImporte,
   type Area, type Colaborador, type EmpresaDelGrupo, type LineaRegistro,
 } from '../api/facturasColaborador.api';
 
@@ -33,7 +33,13 @@ export function Dialogo({ titulo, alCerrar, children, ancho = 'max-w-lg' }: {
   );
 }
 
-const mesActual = () => new Date().toISOString().slice(0, 7);
+// En hora local: con `toISOString` (UTC), el día 1 de 00:00 a 02:00 en Madrid salía el mes anterior.
+const mesActual = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+// Firefox no tiene el selector de mes y deja escribir: solo vale «AAAA-MM».
+export const esMes = (v: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 const errorDe = (err: any) => err?.data?.error || err?.message || 'Inténtalo de nuevo';
 
 /* ─────────────────────────── alta y edición ─────────────────────────── */
@@ -73,7 +79,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
     e.preventDefault();
     const lista = Object.entries(marcadas).map(([id, imp]) => ({
       issuer_id: Number(id),
-      importe_acordado: imp.trim() === '' ? null : Number(imp.replace(',', '.')),
+      importe_acordado: imp.trim() === '' ? null : Number(normalizarImporte(imp)),
     }));
     if (!lista.length) { setError('Elige al menos una empresa a la que factura.'); return; }
     if (lista.some((l) => l.importe_acordado !== null && !Number.isFinite(l.importe_acordado))) {
@@ -95,9 +101,19 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
     } finally { setGuardando(false); }
   }
 
+  // Factura también a otras empresas: este admin solo cambia lo de las suyas.
+  const soloSusEmpresas = Boolean(c?.compartido);
+
   return (
     <Dialogo titulo={c ? `Editar · ${c.nombre}` : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
       <form onSubmit={guardar} className="space-y-4" noValidate>
+        {soloSusEmpresas && (
+          <p className="rounded-md bg-info-soft text-info-soft-foreground px-3 py-2 text-secundario">
+            También factura a otras empresas: sus datos, su baja y su alta los cambia el super admin.
+            Tú puedes cambiar lo de tu empresa (si factura a ella y lo acordado).
+          </p>
+        )}
+        <fieldset disabled={soloSusEmpresas} className="space-y-4 disabled:opacity-60">
         <FilaCampos>
           <Field label="Nombre" htmlFor="col-nombre" required>
             <input id="col-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
@@ -115,6 +131,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
               options={AREAS.map((a) => ({ value: a, label: AREA_ES[a] }))} />
           </Field>
         </FilaCampos>
+        </fieldset>
 
         <Field label="Empresas a las que factura" required hint="Una o varias. El importe acordado es opcional: se le enseña como referencia">
           <div className="space-y-2">
@@ -143,6 +160,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
           </div>
         </Field>
 
+        <fieldset disabled={soloSusEmpresas} className="space-y-4 disabled:opacity-60">
         <FilaCampos>
           <Field label="Desde qué mes" htmlFor="col-alta" hint="Vacío: desde ya">
             <input id="col-alta" type="month" value={altaDesde} onChange={(e) => setAltaDesde(e.target.value)} className={inputClass} />
@@ -156,6 +174,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
         <Field label="Notas" htmlFor="col-notas">
           <textarea id="col-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className={`${inputClass} h-auto py-2`} />
         </Field>
+        </fieldset>
 
         {error && <p role="alert" className="rounded-md bg-destructive-soft text-destructive-soft-foreground px-3 py-2 text-secundario">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -192,7 +211,38 @@ export function BajaDialog({ colaborador, alCerrar, alGuardar }: {
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={alCerrar}>Cancelar</Button>
-          <Button variant="destructive" onClick={guardar} disabled={guardando || !desde}>Dar de baja</Button>
+          <Button variant="destructive" onClick={guardar} disabled={guardando || !esMes(desde)}>Dar de baja</Button>
+        </div>
+      </div>
+    </Dialogo>
+  );
+}
+
+/** Volver a darlo de alta, desde un mes («desde qué mes entra»). */
+export function AltaDialog({ colaborador, alCerrar, alGuardar }: {
+  colaborador: Colaborador; alCerrar: () => void; alGuardar: () => void;
+}) {
+  const [desde, setDesde] = useState(mesActual());
+  const [guardando, setGuardando] = useState(false);
+  async function guardar() {
+    setGuardando(true);
+    try {
+      await facturasColaboradorApi.volverDeAlta(colaborador.id, desde);
+      toast({ title: `${colaborador.nombre}, de alta otra vez desde ${desde}` });
+      alGuardar();
+    } catch (err) {
+      toast({ title: 'No se pudo dar de alta', description: errorDe(err), variant: 'destructive' });
+    } finally { setGuardando(false); }
+  }
+  return (
+    <Dialogo titulo={`Volver a dar de alta · ${colaborador.nombre}`} alCerrar={alCerrar}>
+      <div className="space-y-4">
+        <Field label="Desde qué mes vuelve a recibir el enlace" htmlFor="alta-desde" required>
+          <input id="alta-desde" type="month" value={desde} onChange={(e) => setDesde(e.target.value)} className={inputClass} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={alCerrar}>Cancelar</Button>
+          <Button onClick={guardar} disabled={guardando || !esMes(desde)}>Dar de alta</Button>
         </div>
       </div>
     </Dialogo>
@@ -244,6 +294,32 @@ const EVENTO: Record<string, string> = {
   anulada: 'Factura anulada', reenviado: 'Enlace nuevo', caducado: 'Enlace caducado',
 };
 
+const CAMPO: Record<string, string> = {
+  nombre: 'nombre', email: 'correo', nif: 'NIF', area: 'área', notas: 'notas', user_id: 'usuario', alta_desde: 'desde',
+};
+const valor = (k: string, v: unknown) => {
+  if (v === null || v === undefined || v === '') return '—';
+  if (k === 'area') return AREA_ES[v as Area] || String(v);
+  if (k === 'alta_desde') return String(v).slice(0, 7);
+  return String(v);
+};
+/** «nombre: prueba → prueba editada»; las empresas, con su importe acordado. */
+function cambiosDe(d: Record<string, any>) {
+  return Object.entries(d).map(([k, c]) => {
+    if (k === 'empresas') {
+      const lista = (l: any[]) => (l || []).map((e) => (e.importe_acordado === null ? `#${e.issuer_id}` : `#${e.issuer_id} ${euros(e.importe_acordado)}`)).join(', ') || '—';
+      return `empresas: ${lista(c?.antes)} → ${lista(c?.despues)}`;
+    }
+    return `${CAMPO[k] || k}: ${valor(k, c?.antes)} → ${valor(k, c?.despues)}`;
+  }).join(' · ');
+}
+
+/** «88.12.x.x», como en la definición: basta para reconocerla sin enseñarla entera. */
+const ipCorta = (ip: string) => {
+  const v4 = ip.replace(/^::ffff:/, '').match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+  return v4 ? `${v4[1]}.${v4[2]}.x.x` : ip;
+};
+
 /** «factura-sept.pdf (214 KB) · 600,00 € · n.º F-2026-09», como en la definición. */
 function detalleDe(l: LineaRegistro) {
   const d = l.detalle || {};
@@ -255,9 +331,9 @@ function detalleDe(l: LineaRegistro) {
   if (d.motivo) partes.push(`«${d.motivo}»`);
   if (d.desde) partes.push(`desde ${String(d.desde).slice(0, 7)}`);
   if (d.para) partes.push(`a ${d.para}`);
-  if (l.evento === 'cambio') partes.push(Object.keys(d).join(', '));
+  if (l.evento === 'cambio') return [cambiosDe(d), l.usuario_nombre ? `por ${l.usuario_nombre}` : null, l.ip ? ipCorta(l.ip) : null].filter(Boolean).join(' · ');
   if (l.usuario_nombre) partes.push(`por ${l.usuario_nombre}`);
-  if (l.ip) partes.push(l.ip);
+  if (l.ip) partes.push(ipCorta(l.ip));
   return partes.join(' · ');
 }
 

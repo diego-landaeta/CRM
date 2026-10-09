@@ -107,16 +107,16 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Comentario en tarea', agrupa: false,
     descripcion: 'Cuando alguien comenta en una tarea que tienes asignada o creaste',
   },
-  task_aprobada: {
-    clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
-    descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',
-  },
   // Facturas de colaboradores (#202): a los admins de esa empresa y al super
   // admin, cuando un colaborador sube la suya. Propuesta de la definición de
   // Diego (01/10), que la ficha del 07/10 dice programar.
   factura_colaborador: {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
+  },
+  task_aprobada: {
+    clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
+    descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',
   },
   venta_automatica: {
     clase: AVISO, etiqueta: 'Venta automática', agrupa: false,

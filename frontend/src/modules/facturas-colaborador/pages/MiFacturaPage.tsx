@@ -5,7 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import SubirFactura from '../components/SubirFactura';
-import { ESTADO, euros, facturasColaboradorApi, type FacturaDelColaborador } from '../api/facturasColaborador.api';
+import { ESTADO, euros, facturasColaboradorApi, primeraMayuscula, type FacturaDelColaborador } from '../api/facturasColaborador.api';
 
 /**
  * «Mi factura» (#202): el colaborador con usuario en el CRM ve sus meses, su
@@ -56,7 +56,7 @@ export default function MiFacturaPage() {
             <div key={m.id} className="bg-card border border-border rounded-lg">
               <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold capitalize">{m.mes} · {m.empresa.razon_social}</p>
+                  <p className="font-semibold">{primeraMayuscula(m.mes)} · {m.empresa.razon_social}</p>
                   <p className="text-secundario text-muted-foreground">
                     {m.recibida
                       ? `Recibida · ${m.recibida.numero_recepcion} · ${euros(m.recibida.importe)}`

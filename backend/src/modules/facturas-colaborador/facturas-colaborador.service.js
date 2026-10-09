@@ -33,23 +33,38 @@ function comprobarEmpresas(empresas, ambito) {
 }
 
 async function comprobarUsuario(userId) {
-  if (userId && !(await model.existeUsuario(userId))) {
-    throw new AppError('El usuario del CRM elegido no existe', 400, 'VALIDATION_ERROR');
+  if (userId && !(await model.esUsuarioColaborador(userId))) {
+    throw new AppError('El usuario elegido tiene que tener el rol colaborador', 400, 'VALIDATION_ERROR');
   }
 }
 
+/**
+ * Un colaborador que factura también a empresas que este admin no lleva es de
+ * varios: sus datos, su baja y su alta los cambia el super admin. El admin solo
+ * toca lo de sus empresas (que factura o no a ellas, y lo acordado). Si no, el
+ * admin de una empresa cambiaría el correo al que le llegan las facturas de la
+ * otra, o lo daría de baja para todas.
+ */
+const COMPARTIDO = () => new AppError(
+  'Este colaborador también factura a otras empresas: sus datos, su baja y su alta los cambia el super admin. Tú puedes cambiar lo de tu empresa.',
+  403, 'FORBIDDEN',
+);
+
 async function enTransaccion(fn) {
   const db = await getClient();
+  let roto = false;
   try {
     await db.query('BEGIN');
     const r = await fn(db);
     await db.query('COMMIT');
     return r;
   } catch (err) {
-    await db.query('ROLLBACK');
+    // Si el ROLLBACK también falla, el error que cuenta es el primero, y esa
+    // conexión no vuelve al pool (`release(true)` la cierra).
+    await db.query('ROLLBACK').catch(() => { roto = true; });
     throw err;
   } finally {
-    db.release();
+    db.release(roto);
   }
 }
 
@@ -107,7 +122,14 @@ export async function editar(user, id, cambios, ip) {
   const antes = await model.porId(id, ambito);
   if (!antes) throw NO_ESTA();
   if (cambios.empresas) comprobarEmpresas(cambios.empresas, ambito);
-  if ('user_id' in cambios) await comprobarUsuario(cambios.user_id);
+  const deLaFicha = Object.keys(cambios).filter((k) => k !== 'empresas' && cambios[k] !== undefined);
+  if (deLaFicha.length && await model.facturaFueraDe(id, ambito)) {
+    // Si llega igual que está (la pantalla manda la ficha entera), no es un cambio.
+    const igual = (k) => String(antes[k] ?? '') === String(k === 'alta_desde' && cambios[k] ? cambios[k].slice(0, 7) : cambios[k] ?? '');
+    if (!deLaFicha.every(igual)) throw COMPARTIDO();
+    for (const k of deLaFicha) delete cambios[k];
+  }
+  if (cambios.user_id !== undefined) await comprobarUsuario(cambios.user_id);
 
   // `alta_desde` llega como «2026-09-01» y se guarda así; en la ficha sale «2026-09».
   const comparables = { ...antes, alta_desde: antes.alta_desde ? `${antes.alta_desde}-01` : null };
@@ -149,7 +171,8 @@ export async function darDeBaja(user, id, desde, ip) {
   const ambito = await ambitoDe(user);
   const c = await model.porId(id, ambito);
   if (!c) throw NO_ESTA();
-  if (!c.activo) throw new AppError('Este colaborador ya está de baja', 409, 'CONFLICT');
+  if (await model.facturaFueraDe(id, ambito)) throw COMPARTIDO();
+  if (c.baja_desde) throw new AppError(`Este colaborador ya tiene la baja desde ${c.baja_desde}`, 409, 'CONFLICT');
 
   await enTransaccion(async (db) => {
     await model.darDeBaja(db, id, desde);
@@ -158,8 +181,33 @@ export async function darDeBaja(user, id, desde, ip) {
   return model.porId(id, ambito);
 }
 
+/** Volver a darlo de alta, desde un mes («desde qué mes entra», definición del 01/10). */
+export async function volverDeAlta(user, id, desde, ip) {
+  const ambito = await ambitoDe(user);
+  const c = await model.porId(id, ambito);
+  if (!c) throw NO_ESTA();
+  if (await model.facturaFueraDe(id, ambito)) throw COMPARTIDO();
+  if (!c.baja_desde) throw new AppError('Este colaborador no está de baja', 409, 'CONFLICT');
+
+  await enTransaccion(async (db) => {
+    await model.volverDeAlta(db, id, desde);
+    await model.anotar(db, { colaboradorId: id, evento: 'alta', userId: user.userId, ip, detalle: { desde, vuelve: true } });
+  });
+  return model.porId(id, ambito);
+}
+
 export async function registro(user, id) {
   const ambito = await ambitoDe(user);
   if (!(await model.porId(id, ambito))) throw NO_ESTA();
-  return model.registroDe(id, ambito);
+  const lineas = await model.registroDe(id, ambito);
+  if (!ambito) return lineas;
+  // Las líneas de alta y cambio llevan las empresas y lo acordado: a un admin,
+  // solo las de sus empresas (lo de las demás no es suyo).
+  const suyas = (l) => (Array.isArray(l) ? l.filter((e) => ambito.includes(Number(e.issuer_id))) : l);
+  return lineas.map((l) => {
+    const e = l.detalle?.empresas;
+    if (!e) return l;
+    const empresas = Array.isArray(e) ? suyas(e) : { antes: suyas(e.antes), despues: suyas(e.despues) };
+    return { ...l, detalle: { ...l.detalle, empresas } };
+  });
 }

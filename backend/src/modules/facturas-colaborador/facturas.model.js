@@ -15,8 +15,11 @@ export const ESTADO = `
     WHEN f.caduca_at IS NOT NULL AND f.caduca_at < NOW() THEN 'caducado'
     WHEN f.abierto_at IS NOT NULL THEN 'abierto'
     WHEN f.enviado_at IS NOT NULL THEN 'enviado'
-    WHEN EXISTS (SELECT 1 FROM facturas_colaborador_registro r
-                  WHERE r.factura_id = f.id AND r.evento = 'no_enviado') THEN 'no_enviado'
+    -- Solo si lo último que pasó con el envío fue el fallo: un enlace nuevo
+    -- después (reenviado) vuelve a «sin enviar» hasta que salga.
+    WHEN (SELECT r.evento FROM facturas_colaborador_registro r
+           WHERE r.factura_id = f.id AND r.evento IN ('enviado', 'recordatorio', 'no_enviado', 'reenviado')
+           ORDER BY r.id DESC LIMIT 1) = 'no_enviado' THEN 'no_enviado'
     ELSE 'sin_enviar'
   END`;
 
@@ -31,8 +34,9 @@ export async function pendientesDePreparar(periodo, db = pool) {
        FROM colaboradores c
        JOIN colaborador_empresas ce ON ce.colaborador_id = c.id
        JOIN invoice_issuers ii ON ii.id = ce.issuer_id AND ii.activo = true
-      WHERE c.activo = true
-        AND (c.alta_desde IS NULL OR c.alta_desde <= $1::date)
+      -- Ese mes: dado de alta como muy tarde ese mes y sin baja que empiece
+      -- ese mes o antes. (La baja se mira por su mes, no por si hoy está activo.)
+      WHERE (c.alta_desde IS NULL OR c.alta_desde <= $1::date)
         AND (c.baja_desde IS NULL OR c.baja_desde > $1::date)
         AND NOT EXISTS (
               SELECT 1 FROM facturas_colaborador f
@@ -112,7 +116,7 @@ export async function delUsuarioPorId(userId, id) {
 export async function bloquear(db, id) {
   const { rows } = await db.query(
     `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo,
-            f.subida_at, f.anulada_at, f.caduca_at
+            f.subida_at, f.anulada_at, f.caduca_at, f.token_hash
        FROM facturas_colaborador f WHERE f.id = $1 FOR UPDATE`,
     [id],
   );
@@ -135,6 +139,21 @@ export async function sinSubir(periodo) {
   return rows.map((r) => ({ ...r, id: Number(r.id) }));
 }
 
+/**
+ * La marca con la que salen los correos de una empresa: uno de sus campus,
+ * mejor el que tiene remitente «no contestar» (#177). Da el logo de la cabecera
+ * y, por `projectId`, la cuenta y el remitente de la marca en Brevo.
+ */
+export async function marcaDeLaEmpresa(issuerId) {
+  const { rows } = await query(
+    `SELECT id, nombre, slug, logo_url, emoji FROM projects
+      WHERE sociedad_emisora_id = $1 AND active = true
+      ORDER BY (remitente_no_contestar IS NULL), id LIMIT 1`,
+    [issuerId],
+  );
+  return rows[0] || null;
+}
+
 /** A quién avisar en la campana: los admins de los campus de esa empresa y los super admin. */
 export async function avisarA(issuerId) {
   const { rows } = await query(
@@ -148,6 +167,16 @@ export async function avisarA(issuerId) {
     [issuerId],
   );
   return rows.map((r) => Number(r.id));
+}
+
+/** ¿El recordatorio de esta factura ya se intentó y falló? (no se reintenta solo) */
+export async function recordatorioFallido(id) {
+  const { rows } = await query(
+    `SELECT 1 FROM facturas_colaborador_registro
+      WHERE factura_id = $1 AND evento = 'no_enviado' AND detalle->>'recordatorio' = 'true' LIMIT 1`,
+    [id],
+  );
+  return rows.length > 0;
 }
 
 /** ¿Ya pasó esto con esta factura? (para no repetir el recordatorio) */
@@ -216,7 +245,7 @@ export async function anular(db, id, porUserId, motivo) {
 export async function cambiarEnlace(db, id, tokenHash, semilla, caducaAt) {
   await db.query(
     `UPDATE facturas_colaborador
-        SET token_hash = $2, token_semilla = $3, caduca_at = $4, abierto_at = NULL
+        SET token_hash = $2, token_semilla = $3, caduca_at = $4, abierto_at = NULL, enviado_at = NULL
       WHERE id = $1`,
     [id, tokenHash, semilla, caducaAt],
   );

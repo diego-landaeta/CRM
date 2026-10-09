@@ -5,7 +5,7 @@ import { Button } from '@/shared/components/ui/button';
 import Field from '@/shared/components/ui/Field';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 import { inputClass } from '@/shared/lib/ui';
-import { euros, type FacturaDelColaborador } from '../api/facturasColaborador.api';
+import { euros, normalizarImporte, type FacturaDelColaborador } from '../api/facturasColaborador.api';
 
 /*
   La factura de un mes, tal como la ve el colaborador (#202): por su enlace
@@ -45,7 +45,7 @@ export default function SubirFactura({ factura, alSubir }: {
   const [arrastrando, setArrastrando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
 
-  const importeNum = Number(importe.replace(/\./g, '').replace(',', '.'));
+  const importeNum = Number(normalizarImporte(importe));
   const noCoincide = f.importe_acordado !== null && importe.trim() !== ''
     && Number.isFinite(importeNum) && Math.abs(importeNum - f.importe_acordado) > 0.005;
 
@@ -74,8 +74,8 @@ export default function SubirFactura({ factura, alSubir }: {
     setEnviando(true);
     setError(null);
     try {
-      // El servidor entiende «600,00» y «600.00»; los puntos de miles se quitan aquí.
-      await alSubir(archivo, importe.replace(/\./g, ''), numero.trim());
+      // Tal cual: lo normaliza el servidor (hacerlo dos veces convertía «12,500» en 12500).
+      await alSubir(archivo, importe.trim(), numero.trim());
     } catch (err: any) {
       setError(err?.data?.error || err?.message || 'No se pudo enviar la factura.');
     } finally {

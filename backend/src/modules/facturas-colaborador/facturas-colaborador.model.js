@@ -38,8 +38,17 @@ export async function empresas(issuerIds) {
   return rows;
 }
 
+/**
+ * Activo = sin baja, o con la baja en un mes que todavía no ha llegado (en
+ * Madrid). Se calcula, no se guarda: dar de baja «desde noviembre» el 7 de
+ * octubre no lo apaga hasta noviembre (antes se apagaba en el acto y octubre
+ * ya no se preparaba).
+ */
+export const ACTIVO = `(c.baja_desde IS NULL
+  OR c.baja_desde > date_trunc('month', NOW() AT TIME ZONE 'Europe/Madrid')::date)`;
+
 const CAMPOS_COLABORADOR = `
-  c.id, c.nombre, c.email, c.nif, c.area, c.notas, c.user_id, c.activo,
+  c.id, c.nombre, c.email, c.nif, c.area, c.notas, c.user_id, ${ACTIVO} AS activo,
   to_char(c.alta_desde, 'YYYY-MM') AS alta_desde,
   to_char(c.baja_desde, 'YYYY-MM') AS baja_desde,
   c.created_at, c.updated_at,
@@ -62,6 +71,15 @@ const EMPRESAS_VISIBLES = `
        AND ($1::int[] IS NULL OR ce.issuer_id = ANY($1::int[]))
   ), '[]'::json) AS empresas`;
 
+/**
+ * Si también factura a empresas que quien mira no lleva (`$1` = sus empresas).
+ * Para el super admin (`$1` null), nunca. La pantalla lo usa para avisar antes
+ * de que el admin intente cambiar lo que no le toca.
+ */
+const COMPARTIDO = `($1::int[] IS NOT NULL AND EXISTS (
+  SELECT 1 FROM colaborador_empresas ce
+   WHERE ce.colaborador_id = c.id AND NOT (ce.issuer_id = ANY($1::int[])))) AS compartido`;
+
 /** Que factura a alguna de las empresas que se ven. */
 const VISIBLE = `($1::int[] IS NULL OR EXISTS (
   SELECT 1 FROM colaborador_empresas ce
@@ -69,16 +87,16 @@ const VISIBLE = `($1::int[] IS NULL OR EXISTS (
 
 export async function listar({ issuerIds, issuerId = null, estado = 'activos', q = null }) {
   const { rows } = await query(
-    `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}
+    `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}, ${COMPARTIDO}
        FROM colaboradores c
        LEFT JOIN users u ON u.id = c.user_id
       WHERE ${VISIBLE}
         AND ($2::int IS NULL OR EXISTS (
               SELECT 1 FROM colaborador_empresas ce
                WHERE ce.colaborador_id = c.id AND ce.issuer_id = $2))
-        AND ($3 = 'todos' OR ($3 = 'activos') = c.activo)
+        AND ($3 = 'todos' OR ($3 = 'activos') = ${ACTIVO})
         AND ($4::text IS NULL OR c.nombre ILIKE $4 OR c.email ILIKE $4)
-      ORDER BY c.activo DESC, c.nombre`,
+      ORDER BY activo DESC, c.nombre`,
     [issuerIds, issuerId, estado, q ? textoParaLike(q) : null],
   );
   return rows;
@@ -86,7 +104,7 @@ export async function listar({ issuerIds, issuerId = null, estado = 'activos', q
 
 export async function porId(id, issuerIds) {
   const { rows } = await query(
-    `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}
+    `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}, ${COMPARTIDO}
        FROM colaboradores c
        LEFT JOIN users u ON u.id = c.user_id
       WHERE c.id = $2 AND ${VISIBLE}`,
@@ -108,8 +126,27 @@ export async function empresasDe(colaboradorId, db = pool) {
   }));
 }
 
-export async function existeUsuario(userId) {
-  const { rows } = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
+/**
+ * Que el usuario exista y tenga el rol colaborador (#210) como rol principal.
+ * Como rol añadido no sirve: los permisos se resuelven por el rol principal, y
+ * vería «Mi factura» en el menú pero el servidor le daría 403.
+ */
+export async function esUsuarioColaborador(userId) {
+  const { rows } = await query(
+    `SELECT 1 FROM users WHERE id = $1 AND role = 'colaborador'`,
+    [userId],
+  );
+  return rows.length > 0;
+}
+
+/** ¿Factura también a alguna empresa fuera de estas? (`null` = el super admin: nunca.) */
+export async function facturaFueraDe(colaboradorId, issuerIds) {
+  if (!issuerIds) return false;
+  const { rows } = await query(
+    `SELECT 1 FROM colaborador_empresas
+      WHERE colaborador_id = $1 AND NOT (issuer_id = ANY($2::int[])) LIMIT 1`,
+    [colaboradorId, issuerIds],
+  );
   return rows.length > 0;
 }
 
@@ -127,7 +164,8 @@ export async function insertar(db, datos, porUserId) {
 const EDITABLES = ['nombre', 'email', 'nif', 'area', 'notas', 'user_id', 'alta_desde'];
 
 export async function actualizar(db, id, cambios) {
-  const campos = EDITABLES.filter((k) => k in cambios);
+  // Lo que no llega no se toca (undefined); lo que llega vacío, null.
+  const campos = EDITABLES.filter((k) => cambios[k] !== undefined);
   if (!campos.length) return;
   const sets = campos.map((k, i) => `${k} = $${i + 2}`);
   await db.query(
@@ -137,8 +175,13 @@ export async function actualizar(db, id, cambios) {
 }
 
 export async function darDeBaja(db, id, desde) {
+  await db.query('UPDATE colaboradores SET baja_desde = $2, updated_at = NOW() WHERE id = $1', [id, desde]);
+}
+
+/** Vuelve a la lista desde un mes: sin baja, y con ese mes como alta. */
+export async function volverDeAlta(db, id, desde) {
   await db.query(
-    `UPDATE colaboradores SET activo = false, baja_desde = $2, updated_at = NOW() WHERE id = $1`,
+    'UPDATE colaboradores SET baja_desde = NULL, alta_desde = $2, activo = true, updated_at = NOW() WHERE id = $1',
     [id, desde],
   );
 }

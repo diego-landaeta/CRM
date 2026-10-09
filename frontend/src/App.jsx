@@ -24,7 +24,9 @@ function DocumentTitle() {
     // El nombre sale del mismo sitio que usa la cabecera: una pantalla no
     // puede llamarse de una forma en la pestaña y de otra encima del contenido.
     const route = tituloDeRuta(pathname);
-    const proj = project?.nombre;
+    // «Sin proyecto» es el hueco de cuando no hay ninguno (la página del enlace
+    // del colaborador, sin sesión): no es un nombre que poner en la pestaña.
+    const proj = project?.id ? project.nombre : null;
     // Formato: "Prospectos · Psiko Aprende — MultiCRM"
     if (route && proj) document.title = `${route} · ${proj} — ${base}`;
     else if (route) document.title = `${route} — ${base}`;

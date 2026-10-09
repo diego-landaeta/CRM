@@ -140,6 +140,10 @@ describe('facturas de colaboradores (#202) · la lista', () => {
     const ella = res.body.data.find((c) => c.id === laura.id);
     expect(ella).toBeTruthy();
     expect(ella.empresas.map((e) => e.issuer_id)).toEqual([E.A.id]);
+    // Y se le avisa antes: también factura a una empresa que este admin no lleva.
+    expect(ella.compartido).toBe(true);
+    const comoSuper = (await request.get(`${API}/colaboradores/${laura.id}`).set(como('super'))).body.data;
+    expect(comoSuper.compartido).toBe(false);
   });
 
   it('el admin de A no puede dar de alta a nadie en la empresa B', async () => {
@@ -194,17 +198,58 @@ describe('facturas de colaboradores (#202) · la lista', () => {
     expect(res.status).toBe(400);
   });
 
-  it('la baja pide desde qué mes, queda en el registro y no se repite', async () => {
-    const res = await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('adminA')).send({ desde: '2026-11' });
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.data.activo).toBe(false);
-    expect(res.body.data.baja_desde).toBe('2026-11');
+  it('Laura factura también a B: el admin de A no cambia sus datos ni la da de baja', async () => {
+    const correo = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('adminA')).send({ email: 'otra@prueba.local' });
+    expect(correo.status).toBe(403);
+    expect(correo.body.error).toMatch(/los cambia el super admin/);
+    expect((await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('adminA')).send({ desde: '2026-11' })).status).toBe(403);
 
-    const otra = await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('adminA')).send({ desde: '2026-12' });
+    // La pantalla manda la ficha entera: si los datos llegan igual, solo cambia lo de su empresa.
+    const ficha = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('adminA')).send({
+      nombre: laura.nombre, email: laura.email, area: 'seo', empresas: [{ issuer_id: E.A.id, importe_acordado: 660 }],
+    });
+    expect(ficha.status, JSON.stringify(ficha.body)).toBe(200);
+    expect((await one('SELECT email FROM colaboradores WHERE id = $1', [laura.id])).email).toBe('laura@prueba.local');
+  });
+
+  it('el usuario del CRM que se le pone tiene que tener el rol colaborador', async () => {
+    const mal = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.gestora.id });
+    expect(mal.status).toBe(400);
+    // Colaborador solo como rol añadido tampoco: el servidor le daría 403 en «Mi factura».
+    await q(`UPDATE users SET roles_extra = ARRAY['colaborador']::user_role[] WHERE id = $1`, [U.gestora.id]);
+    expect((await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.gestora.id })).status).toBe(400);
+    const bien = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.colaborador.id });
+    expect(bien.status, JSON.stringify(bien.body)).toBe(200);
+    expect(bien.body.data.user_id).toBe(U.colaborador.id);
+  });
+
+  it('una baja para un mes que no ha llegado no lo quita todavía; no se repite, y se puede volver', async () => {
+    const res = await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('super')).send({ desde: '2099-01' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.activo).toBe(true);
+    expect(res.body.data.baja_desde).toBe('2099-01');
+
+    const otra = await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('super')).send({ desde: '2099-02' });
     expect(otra.status).toBe(409);
 
+    const vuelve = await request.post(`${API}/colaboradores/${laura.id}/alta`).set(como('super')).send({ desde: '2026-12' });
+    expect(vuelve.status, JSON.stringify(vuelve.body)).toBe(200);
+    expect(vuelve.body.data).toMatchObject({ activo: true, baja_desde: null, alta_desde: '2026-12' });
+
+    // Y una baja desde un mes ya pasado, sí, en el acto.
+    const ya = await request.post(`${API}/colaboradores/${laura.id}/baja`).set(como('super')).send({ desde: '2026-01' });
+    expect(ya.body.data.activo).toBe(false);
+  });
+
+  it('el historial, al admin de A, sin lo acordado con la empresa B', async () => {
     const reg = await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('adminA'));
-    expect(reg.body.data.map((r) => r.evento)).toEqual(['baja', 'cambio', 'alta']);
+    expect(reg.body.data.map((r) => r.evento)).toEqual(['baja', 'alta', 'baja', 'cambio', 'cambio', 'cambio', 'alta']);
+    const alta = reg.body.data[reg.body.data.length - 1];
+    expect(alta.detalle.empresas.map((e) => e.issuer_id)).toEqual([E.A.id]);
+
+    const todo = await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('super'));
+    const altaSuper = todo.body.data[todo.body.data.length - 1];
+    expect(altaSuper.detalle.empresas.map((e) => e.issuer_id).sort()).toEqual([E.A.id, E.B.id].sort());
   });
 
   it('la búsqueda con «%» o «_» busca ese carácter, no cualquier cosa', async () => {

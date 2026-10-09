@@ -18,7 +18,9 @@ function validarId(paramId) {
   return id;
 }
 
-const ipDe = (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+// `req.ip`: con `trust proxy` (app.js) ya es la de verdad; `X-Forwarded-For` a
+// pelo la puede escribir el cliente.
+const ipDe = (req) => req.ip;
 
 /** El código del enlace personal del colaborador, tal como llega en la dirección. */
 function enlaceDe(req) {

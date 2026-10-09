@@ -40,6 +40,7 @@ const q = (sql, params) => pool.query(sql, params).then((r) => r.rows);
 const one = async (sql, params) => (await q(sql, params))[0];
 
 let empresa;
+let campus;   // el campus de la empresa: su marca (logo y remitente) va en los correos
 let laura;
 let admin;
 let tokenAdmin;
@@ -57,6 +58,10 @@ beforeAll(async () => {
   empresa = await one(
     'INSERT INTO invoice_issuers (razon_social, nif, direccion) VALUES ($1, $2, $3) RETURNING id',
     [`${MARCA} Formación, S.L.`, `B${Date.now().toString().slice(-8)}`, 'Calle Mayor, 1']);
+  campus = await one(
+    `INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id, logo_url, remitente_no_contestar)
+     VALUES ($1, $2, $3, $4, 'https://logo.prueba/marca.png', 'noresponder@marca.prueba') RETURNING id`,
+    [`${MARCA} Campus`, `${MARCA.toLowerCase()}-c`, `${MARCA}-key`, empresa.id]);
   laura = await one(
     `INSERT INTO colaboradores (nombre, email, area, alta_desde, baja_desde)
      VALUES ($1, $2, 'desarrollo', '2026-07-01', '2026-08-01') RETURNING id, nombre, email`,
@@ -81,6 +86,7 @@ afterAll(async () => {
   await q('DELETE FROM facturas_colaborador WHERE colaborador_id = $1', [laura.id]);
   await q('DELETE FROM colaboradores WHERE id = $1', [laura.id]);
   await q('DELETE FROM users WHERE id = $1', [admin.id]);
+  await q('DELETE FROM projects WHERE id = $1', [campus.id]);
   await q('DELETE FROM invoice_issuers WHERE id = $1', [empresa.id]);
   await pool.end();
 });
@@ -128,6 +134,9 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
     expect(c.htmlContent).toContain('Servicios de desarrollo web · julio 2026');
     expect(c.htmlContent).toContain('Calle Mayor, 1');
     expect(c.htmlContent).toContain('Subir mi factura de julio');
+    // Con la marca de la empresa: su logo en la cabecera y su campus para el remitente de Brevo.
+    expect(c.projectId).toBe(campus.id);
+    expect(c.htmlContent).toContain('https://logo.prueba/marca.png');
 
     // El enlace del correo es el que vale: su huella es la de la fila.
     enlace = enlaceDelCorreo(c);
@@ -143,14 +152,16 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
   it('el recordatorio del día 5 lleva el mismo enlace, y no se repite', async () => {
     encender();
     sendEmail.mockClear();
-    expect((await recordar(PERIODO)).recordados).toBe(1);
+    // Solo los suyos: en la base puede haber otros colaboradores (de otras pruebas, o a mano).
+    await recordar(PERIODO);
+    expect(correosA(laura.email)).toHaveLength(1);
     const [c] = correosA(laura.email);
     expect(c.subject).toBe(`Falta tu factura de julio para ${CORTA}`);
     expect(enlaceDelCorreo(c)).toBe(enlace);
     expect((await request.get(`${API}/enlace/${enlace}`)).status).toBe(200);
 
     sendEmail.mockClear();
-    expect((await recordar(PERIODO)).recordados).toBe(0);
+    await recordar(PERIODO);
     expect(correosA(laura.email)).toHaveLength(0);
   });
 
@@ -172,13 +183,48 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
     encender();
     const f = await fila();
     // La de julio ya está recibida: se anula para tener una nueva que mandar.
-    sendEmail.mockRejectedValueOnce(new Error('Brevo caído'));
+    // Brevo no lanza un error: contesta {sent:false} (así lo hace sendEmail de verdad).
+    sendEmail.mockResolvedValueOnce({ sent: false, reason: 'HTTP_400' });
     const res = await request.post(`${API}/facturas/${f.id}/anular`).set({ Authorization: `Bearer ${tokenAdmin}` })
       .send({ motivo: 'Prueba de fallo de envío' });
     expect(res.status).toBe(200);
     const estado = await request.get(`${API}/mes?periodo=2026-07`).set({ Authorization: `Bearer ${tokenAdmin}` });
     const nueva = estado.body.data.facturas.find((x) => x.id === res.body.data.nueva);
     expect(nueva.estado).toBe('no_enviado');
+    const motivo = await one(`SELECT detalle->>'motivo' AS m FROM facturas_colaborador_registro WHERE factura_id = $1 AND evento = 'no_enviado'`, [nueva.id]);
+    expect(motivo.m).toBe('HTTP_400');
+  });
+
+  it('y si el envío lanza un error, también', async () => {
+    encender();
+    const f = await fila();
+    sendEmail.mockRejectedValueOnce(new Error('Brevo caído'));
+    expect((await request.post(`${API}/facturas/${f.id}/reenviar`).set({ Authorization: `Bearer ${tokenAdmin}` })).status).toBe(200);
+    const linea = await one(`SELECT detalle->>'motivo' AS m FROM facturas_colaborador_registro
+                             WHERE factura_id = $1 AND evento = 'no_enviado' ORDER BY id DESC LIMIT 1`, [f.id]);
+    expect(linea.m).toBe('Brevo caído');
+  });
+
+  it('tras un «No enviado», reenviar con los correos apagados lo deja «sin enviar»', async () => {
+    const f = await fila();
+    apagar();
+    expect((await request.post(`${API}/facturas/${f.id}/reenviar`).set({ Authorization: `Bearer ${tokenAdmin}` })).status).toBe(200);
+    const estado = await request.get(`${API}/mes?periodo=2026-07`).set({ Authorization: `Bearer ${tokenAdmin}` });
+    expect(estado.body.data.facturas.find((x) => x.id === f.id).estado).toBe('sin_enviar');
+  });
+
+  it('un recordatorio que Brevo no aceptó no se reintenta en cada vuelta', async () => {
+    encender();
+    const f = await fila();
+    sendEmail.mockClear();
+    sendEmail.mockResolvedValueOnce({ sent: false, reason: 'HTTP_500' });
+    await recordar(PERIODO);
+    expect(correosA(laura.email)).toHaveLength(1);
+    expect(await one(`SELECT 1 AS si FROM facturas_colaborador_registro
+                        WHERE factura_id = $1 AND evento = 'no_enviado' AND detalle->>'recordatorio' = 'true'`, [f.id])).toBeTruthy();
+    sendEmail.mockClear();
+    await recordar(PERIODO);
+    expect(correosA(laura.email)).toHaveLength(0);
   });
 });
 
@@ -193,6 +239,8 @@ describe('facturas de colaboradores (#202) · la tarea del mes', () => {
     expect((await runFacturasColaborador({ ahora: new Date('2026-07-30T08:00:00Z') })).omitido).toBe('no toca hoy');
     const r = await runFacturasColaborador({ ahora: new Date('2026-07-31T08:00:00Z') });
     expect(r.tarea).toBe('mes');
+    // Si el servidor arrancó a las 10:45, la vuelta de las 10:45 lo hace igual.
+    expect((await runFacturasColaborador({ ahora: new Date('2026-07-31T08:45:00Z') })).tarea).toBe('mes');
   });
 
   it('el día 5 a las 10:00 toca el recordatorio del mes anterior', async () => {

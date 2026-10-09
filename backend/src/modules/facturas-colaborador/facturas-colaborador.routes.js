@@ -3,6 +3,7 @@ import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { checkPermission } from '../../shared/middleware/permissions.js';
+import { resolvePermission } from '../permissions/permissions.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './facturas-colaborador.controller.js';
 import * as facturas from './facturas.controller.js';
@@ -50,12 +51,24 @@ const gestiona = [verifyToken, checkPermission('facturas_colaborador', 'gestiona
 const ve = [verifyToken, checkPermission('facturas_colaborador', 'ver_todas')];
 const anula = [verifyToken, checkPermission('facturas_colaborador', 'anular')];
 
-router.get('/empresas', gestiona, ctrl.empresas);
+// Las empresas, para el filtro de «Del mes» (ver_todas) y para la ficha (gestionar).
+const veOGestiona = async (req, res, next) => {
+  try {
+    const { userId, role, customRoleId } = req.user;
+    for (const accion of ['ver_todas', 'gestionar']) {
+      if (await resolvePermission(userId, role, customRoleId ?? null, 'facturas_colaborador', accion)) return next();
+    }
+    next(new AppError('No tienes permiso para esta accion', 403, 'FORBIDDEN'));
+  } catch (err) { next(err); }
+};
+
+router.get('/empresas', verifyToken, veOGestiona, ctrl.empresas);
 router.get('/colaboradores', gestiona, ctrl.listar);
 router.post('/colaboradores', gestiona, ctrl.crear);
 router.get('/colaboradores/:id', gestiona, ctrl.ver);
 router.patch('/colaboradores/:id', gestiona, ctrl.editar);
 router.post('/colaboradores/:id/baja', gestiona, ctrl.darDeBaja);
+router.post('/colaboradores/:id/alta', gestiona, ctrl.volverDeAlta);
 router.get('/colaboradores/:id/registro', gestiona, ctrl.registro);
 
 // ─── Administración: las facturas del mes ───

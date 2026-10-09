@@ -31,6 +31,8 @@ export interface Colaborador {
   alta_desde: string | null; // AAAA-MM
   baja_desde: string | null; // AAAA-MM
   empresas: EmpresaDelColaborador[];
+  /** También factura a empresas que quien mira no lleva: sus datos los cambia el super admin. */
+  compartido?: boolean;
 }
 
 export interface ColaboradorEnvio {
@@ -132,6 +134,7 @@ export const facturasColaboradorApi = {
   crear: (b: ColaboradorEnvio) => client.post(`${BASE}/colaboradores`, b) as R<Colaborador>,
   editar: (id: number, b: Partial<ColaboradorEnvio>) => client.patch(`${BASE}/colaboradores/${id}`, b) as R<Colaborador>,
   darDeBaja: (id: number, desde: string) => client.post(`${BASE}/colaboradores/${id}/baja`, { desde }) as R<Colaborador>,
+  volverDeAlta: (id: number, desde: string) => client.post(`${BASE}/colaboradores/${id}/alta`, { desde }) as R<Colaborador>,
   registroDelColaborador: (id: number) => client.get(`${BASE}/colaboradores/${id}/registro`) as R<LineaRegistro[]>,
 
   // ── Administración: las facturas del mes ──
@@ -156,9 +159,45 @@ export const facturasColaboradorApi = {
 
 // ── Formato compartido por las pantallas ──
 
+/**
+ * «CEDIA Investigación y Desarrollo SL» → «CEDIA», para las tablas (como la
+ * maqueta de Diego: «CEDIA · ICTESS»). El nombre entero va en el `title`.
+ */
+export const empresaCorta = (razonSocial: string) => String(razonSocial || '').trim().split(/[\s,]+/)[0] || razonSocial;
+
+/** Solo la primera letra en mayúscula: «Septiembre de 2026», no «Septiembre De 2026» (lo que hace `capitalize`). */
+export const primeraMayuscula = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
+/**
+ * El importe tal como lo escribe la persona, a número (texto con punto decimal).
+ *   «1.234,56», «1,234.56» → con los dos, el decimal es el que va último.
+ *   «600,50», «12,500»     → solo coma: es el decimal (12,5).
+ *   «1.200», «12.500»      → solo punto y separa grupos de tres: miles.
+ *   «600.50», «600»        → si no, el punto es el decimal.
+ * Aquí sirve para avisar en pantalla; al servidor se le manda lo escrito tal cual.
+ */
+export function normalizarImporte(texto: string): string {
+  const t = texto.trim().replace(/\s|€/g, '');
+  const coma = t.lastIndexOf(',');
+  const punto = t.lastIndexOf('.');
+  // Con los dos, el decimal es el que va último: «1.234,56» y «1,234.56».
+  if (coma >= 0 && punto >= 0) {
+    return coma > punto ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  }
+  if (coma >= 0) return t.replace(',', '.');
+  if (/^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');
+  return t;
+}
+
+// `useGrouping: 'always'`: sin él, «1150,00» (en español el punto de miles solo
+// sale desde cinco cifras) y la maqueta dice «3.600,00 €». Los tipos de
+// TypeScript del proyecto aún no lo conocen; los navegadores, sí.
+const FORMATO_EUROS = {
+  minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always',
+} as unknown as Intl.NumberFormatOptions;
+
 export const euros = (n: number | string | null | undefined) =>
-  n === null || n === undefined || n === '' ? '—'
-    : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  n === null || n === undefined || n === '' ? '—' : `${Number(n).toLocaleString('es-ES', FORMATO_EUROS)} €`;
 
 export const fechaHora = (iso: string | null | undefined) => {
   if (!iso) return '—';
