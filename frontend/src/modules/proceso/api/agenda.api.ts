@@ -87,8 +87,10 @@ export type PasoDeLead = {
   estado: 'pendiente' | 'saltado' | 'hecho';
   nota: string | null;
   hecho: boolean;
-  /** Lo marco una persona, en vez de deducirse de los contactos apuntados. */
+  /** Lo marco una persona (desde el 09/10, la única forma de que salga hecho). */
   a_mano: boolean;
+  /** Ya hay un contacto apuntado que daría este paso, aunque nadie lo haya marcado. */
+  con_contacto?: boolean;
   hecho_at: string | null;
   hecho_por_nombre: string | null;
   vencido: boolean;
@@ -174,6 +176,12 @@ export async function ajustarPaso(id: number, datos: {
   estado?: 'pendiente' | 'saltado' | 'hecho'; fecha_prevista?: string; nota?: string;
 }) {
   const r = await client.patch(`/proceso/paso-lead/${id}`, datos);
+  return r?.success ? r.data : null;
+}
+
+/** Un seguimiento más tras los pasos del proceso (5, 6…), «por hacer». */
+export async function anadirSeguimiento(leadId: number, fecha_prevista?: string) {
+  const r = await client.post(`/proceso/lead/${leadId}/seguimiento`, fecha_prevista ? { fecha_prevista } : {});
   return r?.success ? r.data : null;
 }
 

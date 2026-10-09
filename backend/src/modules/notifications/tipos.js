@@ -107,6 +107,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Comentario en tarea', agrupa: false,
     descripcion: 'Cuando alguien comenta en una tarea que tienes asignada o creaste',
   },
+  // «Cualquier cambio, desde el más mínimo, queda guardado y notificado»
+  // (Diego, WhatsApp 09/10).
+  task_cambio: {
+    clase: AVISO, etiqueta: 'Cambio en tarea', agrupa: false,
+    descripcion: 'Cuando otra persona cambia algo de una tarea que tienes asignada o creaste',
+  },
   // Facturas de colaboradores (#202): a los admins de esa empresa y al super
   // admin, cuando un colaborador sube la suya. Propuesta de la definición de
   // Diego (01/10), que la ficha del 07/10 dice programar.
