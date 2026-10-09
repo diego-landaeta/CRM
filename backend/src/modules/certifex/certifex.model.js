@@ -84,3 +84,115 @@ export async function actualizar(id, { estado, notaInterna }, userId) {
   const u = await query(`SELECT nombre FROM users WHERE id = $1`, [userId]);
   return fila({ ...rows[0], atendida_por_nombre: u.rows[0]?.nombre || null });
 }
+
+// ── Solicitudes de diploma (#272, migracion 197) ─────────────────────────────
+
+function solicitud(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    matriculaId: Number(r.matricula_id),
+    centro: r.centro,
+    curso: { ref: r.curso_ref == null ? null : Number(r.curso_ref), nombre: r.curso_nombre },
+    nombreDiploma: r.nombre_diploma,
+    nombreMoodle: r.nombre_moodle,
+    email: r.email,
+    leadId: r.lead_id,
+    solicitadaEn: r.solicitada_en,
+    veces: r.veces,
+    recibidaEn: r.recibida_en,
+  };
+}
+
+/**
+ * La ficha del CRM con ese correo, si hay: la mas reciente, sin las borradas ni las
+ * de los proyectos de prueba. Es la misma clave que usa el cruce de Emisiones.
+ */
+export async function leadPorCorreo(email) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e) return null;
+  const { rows } = await query(
+    `SELECT l.id FROM leads l
+      WHERE l.deleted_at IS NULL AND lower(l.email) = $1
+        AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
+      ORDER BY l.id DESC LIMIT 1`,
+    [e],
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Guarda la solicitud que avisa Certifex. Una fila por matricula:
+ *  · `nueva`: no estaba.
+ *  · `actualizada`: el alumno lo ha vuelto a pedir (otra fecha u otro nombre). Se
+ *    actualiza la que habia y el aviso de rechazo anterior deja de valer.
+ *  · `repetida`: un reintento identico de Certifex. No cambia nada ni debe avisar.
+ */
+export async function recibirSolicitud(s) {
+  const leadId = await leadPorCorreo(s.alumno.email);
+  const { rows } = await query(
+    `INSERT INTO certifex_solicitudes
+       (matricula_id, centro, curso_ref, curso_nombre, nombre_diploma, nombre_moodle, email, lead_id, solicitada_en)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (matricula_id) DO UPDATE SET
+       centro = EXCLUDED.centro,
+       curso_ref = EXCLUDED.curso_ref,
+       curso_nombre = EXCLUDED.curso_nombre,
+       nombre_diploma = EXCLUDED.nombre_diploma,
+       nombre_moodle = EXCLUDED.nombre_moodle,
+       email = EXCLUDED.email,
+       lead_id = COALESCE(EXCLUDED.lead_id, certifex_solicitudes.lead_id),
+       solicitada_en = EXCLUDED.solicitada_en,
+       veces = CASE WHEN certifex_solicitudes.solicitada_en IS NULL THEN 1 ELSE certifex_solicitudes.veces + 1 END,
+       aviso_rechazo_en = NULL,
+       aviso_rechazo_por = NULL,
+       aviso_rechazo_resultado = NULL,
+       updated_at = NOW()
+     WHERE certifex_solicitudes.solicitada_en IS DISTINCT FROM EXCLUDED.solicitada_en
+        OR certifex_solicitudes.nombre_diploma IS DISTINCT FROM EXCLUDED.nombre_diploma
+     RETURNING *, (xmax = 0) AS insertada`,
+    [s.matriculaId, s.centro.toUpperCase(), s.curso?.ref ?? null, s.curso?.nombre ?? null,
+      s.alumno.nombreDiploma, s.alumno.nombreMoodle || null, s.alumno.email || null, leadId, s.solicitadaEn],
+  );
+  if (rows[0]) return { solicitud: solicitud(rows[0]), estado: rows[0].insertada ? 'nueva' : 'actualizada' };
+  const ya = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [s.matriculaId]);
+  return { solicitud: solicitud(ya.rows[0]), estado: 'repetida' };
+}
+
+/** Los usuarios activos de administracion: a quienes suena la campana de una solicitud. */
+export async function idsAdministracion() {
+  const { rows } = await query(
+    `SELECT id FROM users
+      WHERE active = true
+        AND (role IN ('admin', 'superadmin') OR roles_extra && ARRAY['admin', 'superadmin']::user_role[])`,
+  );
+  return rows.map((r) => r.id);
+}
+
+/** Apunta el aviso de rechazo que aprobo alguien del CRM, haya salido o no. */
+export async function registrarAvisosRechazo(resultados, por) {
+  for (const r of resultados) {
+    if (!r?.matriculaId || !r.resultado) continue;
+    await query(
+      `INSERT INTO certifex_solicitudes (matricula_id, aviso_rechazo_en, aviso_rechazo_por, aviso_rechazo_resultado)
+       VALUES ($1, NOW(), $2, $3)
+       ON CONFLICT (matricula_id) DO UPDATE SET
+         aviso_rechazo_en = NOW(), aviso_rechazo_por = $2, aviso_rechazo_resultado = $3, updated_at = NOW()`,
+      [r.matriculaId, por, r.resultado],
+    );
+  }
+}
+
+/** El ultimo aviso de rechazo aprobado de cada matricula, por id. */
+export async function avisosRechazoDe(matriculaIds) {
+  if (!matriculaIds.length) return new Map();
+  const { rows } = await query(
+    `SELECT matricula_id, aviso_rechazo_en, aviso_rechazo_por, aviso_rechazo_resultado
+       FROM certifex_solicitudes
+      WHERE matricula_id = ANY($1::bigint[]) AND aviso_rechazo_en IS NOT NULL`,
+    [matriculaIds],
+  );
+  return new Map(rows.map((r) => [Number(r.matricula_id), {
+    en: r.aviso_rechazo_en, por: r.aviso_rechazo_por, resultado: r.aviso_rechazo_resultado,
+  }]));
+}

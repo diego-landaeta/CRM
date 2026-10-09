@@ -84,6 +84,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Consulta desde Certifex', agrupa: false,
     descripcion: 'Un centro quiere inscribir su campus, o alguien escribe desde la web de Certifex',
   },
+  // Un alumno pide su diploma desde Moodle (#272). Alguien de administracion tiene que
+  // revisar el nombre y aprobarlo o rechazarlo en el panel Diplomas.
+  certifex_solicitud: {
+    clase: ACCION, etiqueta: 'Solicitud de diploma', agrupa: false,
+    descripcion: 'Un alumno termina su formación y pide su diploma desde Moodle',
+  },
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',

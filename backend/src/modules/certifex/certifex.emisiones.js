@@ -36,7 +36,7 @@ function urlPublica() {
 }
 
 /** Forma de un numero de expediente de Certifex: CTF-2026-000123-AB12. */
-const NEXP = /^[A-Z]{3}-\d{4}-\d{6}-[A-Z0-9]{4}$/;
+export const NEXP = /^[A-Z]{3}-\d{4}-\d{6}-[A-Z0-9]{4}$/;
 
 function parsear(schema, datos) {
   const r = schema.safeParse(datos);
@@ -48,7 +48,7 @@ function parsear(schema, datos) {
  * Una llamada a la API de Certifex. Los errores salen con un mensaje que la pantalla
  * puede ensenar tal cual; la clave no aparece nunca en un log.
  */
-async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}) {
+export async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}) {
   const c = config();
   if (!c) throw new AppError('Certifex no esta conectado: faltan CERTIFEX_API_URL y CERTIFEX_CRM_CLAVE en el servidor.', 503, 'CERTIFEX_SIN_CONFIGURAR');
   let r;
@@ -107,7 +107,7 @@ export async function listar(req, res, next) {
  * que Conexion. Si la consulta falla, el listado sale igual, sin la columna: decidir
  * no puede quedarse bloqueado por esto.
  */
-async function conLoDelCrm(filas, user) {
+export async function conLoDelCrm(filas, user) {
   const correos = [...new Set(filas.map((f) => String(f?.titular?.email || '').trim().toLowerCase()).filter(Boolean))];
   for (const f of filas) f.crm = null;
   if (!correos.length) return;
