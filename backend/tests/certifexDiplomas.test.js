@@ -436,6 +436,27 @@ describe('revocar y corregir', () => {
   });
 });
 
+describe('sin Certifex configurado', () => {
+  it('el panel dice que no esta conectado y nada sale a la red', async () => {
+    const url = process.env.CERTIFEX_API_URL;
+    delete process.env.CERTIFEX_API_URL;
+    try {
+      expect((await sa(request.get('/api/certifex/emisiones/estado'))).body.data).toEqual({ conectado: false });
+      for (const r of [
+        await sa(request.get('/api/certifex/diplomas/resumen')),
+        await sa(request.get('/api/certifex/diplomas/solicitudes')),
+        await sa(request.post('/api/certifex/diplomas/aprobar-emitir')).send({ matriculaIds: [7] }),
+      ]) {
+        expect(r.status).toBe(503);
+        expect(r.body.error).toMatch(/Certifex no esta conectado/);
+      }
+      expect(pedidas).toHaveLength(0);
+    } finally {
+      process.env.CERTIFEX_API_URL = url;
+    }
+  });
+});
+
 describe('fechas', () => {
   it('el dia se cuenta en hora de Madrid', () => {
     expect(diaDe('2026-10-07T22:30:00Z')).toBe('2026-10-08');

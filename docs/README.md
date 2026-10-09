@@ -43,6 +43,38 @@ VPS `187.124.128.126`. PM2 corre como el usuario **claude** (`export PATH=~/.nvm
 **Resumen del día de dirección:** a las 19 del reloj del servidor (`RESUMEN_HORA`, las 21:00 de Madrid). La tarea mira cada 30 minutos y la primera vez a los 30 minutos de arrancar: **no reiniciar la API entre las 21:31 y las 22:00 de Madrid**, o ese día no sale. El reporte semanal sale los lunes. Un superadmin recibe todas las empresas, tenga o no campus asignados.
 
 
+## Certifex: enlace en producción (#272)
+
+Certifex emite los diplomas; el CRM decide **quién** lo recibe y **cuándo** se le avisa. Pantallas: Matrículas → **Certificaciones** (Emisiones y Consultas de la web) y Matrículas → **Diplomas** (lo que piden los alumnos desde Moodle; también en el menú, Clientes → Diplomas). Solo admin y superadmin aprueban, emiten, envían, corrigen y revocan; soporte ve las Consultas.
+
+**Lo que hace el CRM y lo que no.** Emitir **no** manda correo: el diploma queda «pendiente de aviso» y alguien lo envía con «Enviar diploma al alumno» después de ver el PDF. Rechazar tampoco avisa: el aviso de rechazo es otro botón. Un nombre mal escrito se **corrige** (mismo número y mismo QR, queda quién y por qué), no se revoca. Al emitir, el CRM manda el **programa oficial** de la formación vendida (horas de `products.horas` y temario de `product_modules`) si la encuentra sin dudas: el campus de Certifex tiene que casar con **un** proyecto del CRM por nombre o slug (PSIKO → «Psiko Aprende», ACADEMIAIA → «Academia IA») y la venta, con el nombre del curso de Moodle. Si no, se emite con lo de Moodle y el panel lo dice antes de aprobar.
+
+**Variables — backend (`.env` del servidor, nunca en el frontal):**
+
+| Variable | Qué es |
+|---|---|
+| `CERTIFEX_API_URL` | La URL de Certifex (`https://certifex.tech`). Sin ella y sin la clave, «Certifex no está conectado». |
+| `CERTIFEX_CRM_CLAVE` | La clave de este CRM (`cfx_crm_…`). La genera Certifex en **su** servidor con `npm run crm:clave` y la deja en un fichero 600; se trae por el canal de secretos y se borra el fichero. Volver a ejecutarlo la rota. |
+| `CERTIFEX_PUBLICO_URL` | Opcional: la web pública (verificación y PDF) si algún día no es la de la API. |
+| `CERTIFEX_WEBHOOK_SECRETO` | Secreto compartido con el que Certifex entrega consultas (`POST /api/certifex/consultas`) y solicitudes de diploma (`POST /api/certifex/solicitudes`). En Certifex es `CRM_CONSULTAS_SECRETO`, con `CRM_CONSULTAS_URL=https://<crm>/crm/api/certifex/consultas` (las solicitudes van a `…/solicitudes`, o a `CRM_SOLICITUDES_URL`). Sin él, las dos entradas responden 404. `openssl rand -hex 32`. |
+
+**Interruptor — frontal:** `VITE_CERTIFEX_PANEL=1` enseña Certificaciones y Diplomas (`frontend/src/shared/lib/certifexPanel.ts`). Sin ponerla: **apagado en producción**, encendido en local y en /testeo; `=0` lo apaga también en pruebas. Se lee al compilar: cambiarla pide `npm run build` del frontal de ese entorno. Solo enseña las pantallas: lo que conecta es el backend.
+
+**Migraciones:** `186_certifex_consultas.sql` (consultas de la web, si aún no está) y `197_certifex_solicitudes_diploma.sql` (solicitudes y aviso de rechazo). Las dos son reaplicables. (La `175` del repositorio es «paso hecho a mano», no tiene que ver con Certifex.)
+
+**Orden de despliegue.**
+1. **Certifex primero**: su versión con el contrato `/api/crm/v1` completo (decisiones, emitir con `items`/programa, avisos, avisos-rechazo, diplomas, revocar, corregir) y el plugin de Moodle de la solicitud.
+2. **CRM en staging** (/testeo): migraciones 186 y 197 en `crm_test_db` (como se describe arriba: `postgres` + `dar-propiedad-a-crm-user.sql`), backend con las cuatro variables apuntando a un Certifex de pruebas, frontal de staging (el interruptor ya va encendido allí).
+3. Comprobar en staging (abajo) y que Diego lo apruebe.
+4. **CRM en producción**: PR a `main`, migraciones en `crm_prod_db`, variables en `/opt/crm/production/.env`, `pm2 restart crm-api-production`, y el frontal con `VITE_CERTIFEX_PANEL=1`.
+5. **El último paso, en Certifex: el candado** (abajo). Hasta ese momento Certifex sigue emitiendo como antes.
+
+**Cómo comprobar que está conectado.** `GET /api/certifex/emisiones/estado` con sesión de admin: `{"conectado": true, "nombre": "<CRM>", "centros": [...], "urlPublica": "…"}`. Si la clave no vale, `conectado: false` con el motivo; sin variables, `{"conectado": false}`. En la pantalla: el punto verde «Conectado como …» en Certificaciones y en Diplomas. La entrada de solicitudes: un `POST /api/certifex/solicitudes` sin la cabecera `X-Certifex-Secreto` tiene que dar **401** (404 = falta `CERTIFEX_WEBHOOK_SECRETO`).
+
+**El candado de un centro.** `npm run crm:clave -- --nombre=CRM --centros=PSIKO,ISEIH,…` (en el servidor de Certifex) da de alta este CRM para esos centros, y **desde ese momento esos centros no emiten nada sin el OK del CRM** (lo sostiene la base de Certifex, no solo su API). Si el CRM aún no está desplegado y conectado, en esos centros no sale ningún diploma. Hacerlo centro a centro, empezando por un piloto, y solo con el CRM ya comprobado.
+
+**Ningún correo sale solo:** ni al emitir, ni al revocar, ni al rechazar. Si el correo de Certifex está apagado (`CERTIFEX_EMAIL_ACTIVO`), al «Enviar» el panel lo dice («Aprobado, pero el correo está apagado») y queda registrado para reenviar.
+
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
 Lo nuevo, con un botón para ir a cada pantalla, está dentro del CRM en **Novedades** (`backend/src/modules/novedades/versiones.js`) y en la release `v2.0.0` de GitHub. En corto:
