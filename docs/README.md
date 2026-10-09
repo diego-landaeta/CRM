@@ -3,7 +3,7 @@
 > **Fuente de verdad del esquema:** `backend/migrations/*.sql` — todos los SQL ejecutados, en orden.
 > Este es el **único** documento de referencia; el resto se consolidó aquí (el historial completo queda en git).
 
-## Deploy y ramas (al día el 29/09/2026)
+## Deploy y ramas (al día el 09/10/2026)
 
 **Ramas.** `main` = **producción**, con la etiqueta de cada versión (`v2.0.0`, `v2.0.1`). `staging` = **pruebas** (/testeo), independiente de `main`. Lo nuevo entra por `staging`; cuando Diego lo aprueba pasa a `main` con un **pull request** (`gh pr create` + `gh pr merge --admin`: la protección de `main` pide revisión y no se aplica a administradores). El gancho `pre-push` no deja empujar a `main` ni a `feat/angel|fabian|diego`. Las ramas de trabajo salen de `staging`.
 
@@ -22,9 +22,22 @@ VPS `187.124.128.126`. PM2 corre como el usuario **claude** (`export PATH=~/.nvm
 **Migraciones.** Como `postgres` (`sudo -u postgres psql -v ON_ERROR_STOP=1`), con su bloque de GRANT a `crm_user`, y comprobando el catálogo después (un aviso sin «ERROR» ha dado por aplicada alguna que no lo estaba). Si la columna es un ENUM, hay que ampliar el tipo, no solo el CHECK. **Después de cada tanda, `scripts/dar-propiedad-a-crm-user.sql`** sobre la misma base (#71): lo que crea `postgres` nace suyo, y así las bases de pruebas y de producción dejan de separarse. Es idempotente; el destino es el dueño de la base.
 **Copias.** Antes de una subida grande: `pg_dump -Fc`, tar del backend y del frontal en `/var/backups/crm/`.
 
-**Interruptores del `.env` de producción** (29/09): `NOVEDADES_AUTO=1` (manda las Novedades de una versión nueva al arrancar, una sola vez) · `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros contactos desde ese día) · `PASO_VENCIDO_DISABLED=1` (el trabajo de las 3:00 apagado) · correos del equipo encendidos (sin `RESUMEN_DISABLED` ni `REPORTE_SEMANAL_DISABLED`) · `LEAD_SIN_TOCAR_DISABLED=1`. En pruebas, `EMAIL_LISTA_BLANCA` frena los correos a todo el que no esté en la lista.
+**Interruptores del `.env` de producción** (09/10): `NOVEDADES_AUTO=0` desde la 2.1.0 (las Novedades se mandan a mano, primero la prueba a Diego; con `1` saldrían solas al arrancar) · `MCP_CODIGO_OBLIGATORIO=true` (Claude pide el código de verificación) · `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros contactos desde ese día) · `PASO_VENCIDO_DISABLED=1` (el trabajo de las 3:00 apagado) · correos del equipo encendidos (sin `RESUMEN_DISABLED` ni `REPORTE_SEMANAL_DISABLED`) · `LEAD_SIN_TOCAR_DISABLED=1`. En pruebas, `EMAIL_LISTA_BLANCA` frena los correos a todo el que no esté en la lista.
 **Frontal:** `VITE_BETA_MODE=true` en producción (lo que no está en `BETA_ROUTES` sale como «Próximamente»); `VITE_FACTURACION_V2` solo en pruebas (la emisión automática de facturas no va a producción).
-**Paridad:** ISEIE (https://crm.iseie.com, repo `CRM-ISEIE`) tiene las mismas funciones; los módulos se copian, la navegación no (ISEIE usa `/leads` donde aquí es `/prospectos`).
+**Paridad:** ISEIE (https://crm.iseie.com, repo `CRM-ISEIE`) tiene las mismas funciones; los módulos se copian, la navegación no (ISEIE usa `/leads` donde aquí es `/prospectos`). Las personas de fuera (Diana, Hugo) trabajan solo aquí; el paso a ISEIE lo hace el equipo de Diego.
+**nginx** (#193, 07/10): el registro de accesos tapa la llave del MCP (`crm_mcp_***`) con el formato `crm_seguro` (`/etc/nginx/conf.d/crm-registro-seguro.conf`). Las copias del sitio van a la carpeta de copias, **nunca** dentro de `sites-enabled`: nginx carga todo lo que hay ahí.
+
+**Versiones y arreglos urgentes** (09/10). `v2.1.0` en producción desde el 07/10 (etiqueta en `main`). Un arreglo que tiene que llegar a producción sin esperar a la versión siguiente va **solo**: rama `hotfix/<nombre>` sacada de `origin/main`, `git cherry-pick -x` del commit que ya entró en `staging`, pull request a `main` y despliegue desde `main`. Así no se arrastra lo que está en pruebas (el 08 y el 09/10: el ranking por lo cobrado, la paginación de Facturas de ISEIE y la checklist manual). `staging` siempre lleva todo lo de `main` y algo más; nunca al revés.
+**Comprobar qué corre de verdad un servidor:** el md5 de cada `.js` de `backend/src` (quitando los `\r`) contra el de la rama. El 09/10 los cuatro entornos daban 0 ficheros distintos.
+
+**Lo que no está aprobado para producción** va detrás de `SOLO_EN_PRUEBAS` en el frontal (verdadero en local y en el entorno de pruebas, falso en producción): no sale ni en el menú ni por la dirección. El 09/10: Tareas (#210), Convocatorias y Certificaciones (Certifex). Para aprobar una pantalla, se quita de detrás de la bandera.
+
+**Checklist del proceso comercial** (09/10). Es **manual**: un paso solo sale hecho si la gestora lo marca (guarda quién y cuándo). Si ya hay un contacto apuntado que lo daría, lleva la marca «contactado», pero sigue por hacer. «+ Seguimiento» añade el 5, el 6… (`POST /proceso/lead/:leadId/seguimiento`). La cola del día no cambia: sigue sacando a quien ya se contactó según la regla de un paso por contacto y día.
+
+**Correo de «¿por qué has desistido?»** (09/10). Sale en **un solo caso**: tras **7 días sin ninguna interacción** (de cualquier tipo, también una nota), con un primer contacto y sin comprar. Ya no sale al descartar a alguien. `FEEDBACK_DIA7_INICIO` sigue mirando el primer contacto.
+
+**Resumen del día de dirección:** a las 19 del reloj del servidor (`RESUMEN_HORA`, las 21:00 de Madrid). La tarea mira cada 30 minutos y la primera vez a los 30 minutos de arrancar: **no reiniciar la API entre las 21:31 y las 22:00 de Madrid**, o ese día no sale. El reporte semanal sale los lunes. Un superadmin recibe todas las empresas, tenga o no campus asignados.
+
 
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
@@ -232,7 +245,22 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 182 | 182_mcp_acceso.sql | Conexion de Claude al CRM por MCP (Model Context Protocol). |
 | 183 | 183_conectores_alcance.sql | Conectores de un campus, de una EMPRESA o de TODO el sistema. |
 | 184 | 184_mcp_por_conector.sql | Un token del MCP de Claude puede nacer de un CONECTOR. |
+| 185 | 185_conectores_creador.sql | Quién creó cada conector, y cada conexión de Claude. |
+| 186 | 186_certifex_consultas.sql | Las consultas que llegan desde la web de Certifex. |
+| 187 | 187_emisor_bic.sql | El BIC/SWIFT de cada sociedad emisora, para las facturas por transferencia. |
+| 188 | 188_enlace_opynio_iseie.sql | El enlace de Opynio de ISEIE (#209). |
+| 189 | 189_mcp_codigo_desbloqueo.sql | Código de desbloqueo del MCP de Claude (#192). |
+| 190 | 190_mcp_caducidad_y_rotacion.sql | MCP de Claude: caducidad, rotación y URLs sin usar (#194). |
+| 191 | 191_mcp_auditoria_visible_y_alertas.sql | MCP de Claude: auditoría visible y alertas (#195). |
+| 192 | 192_mcp_interruptor.sql | Interruptor de emergencia del MCP de Claude (#196). |
+| 193 | 193_tasks_tablero.sql | Tablero de tareas del equipo (#210): tareas, historial, lista de comprobación, comentarios y etiquetas. |
+| 194 | 194_rol_colaborador.sql | El rol `colaborador` en el ENUM `user_role`: solo ve el Equipo de Desarrollo (#210, lo comparte #202). |
+| 195 | 195_tasks_enlaces.sql | Los enlaces de la tarjeta de una tarea (#210). |
 
+> **09/10/2026, comprobado contra el catálogo de producción:** aplicadas hasta la **195**. La 193–195
+> (tablas del tablero de Hugo, #210, y el rol `colaborador`) están, pero vacías y sin pantalla: el
+> tablero va detrás de `SOLO_EN_PRUEBAS`. La **196** está en `staging` y solo en /testeo; va con el tablero cuando se apruebe.
+>
 > **Comprobado el 29/09/2026 contra el catálogo de producción** (no contra la
 > salida de ningún comando): aplicadas todas las de esta lista hasta la **184**.
 > Las de la 2.0.0 se aplicaron ese día (160, 164, 166, 171 correo recibido y 175–184).
