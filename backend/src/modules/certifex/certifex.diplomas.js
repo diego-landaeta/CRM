@@ -2,8 +2,9 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { certifex, conLoDelCrm } from './certifex.emisiones.js';
 import * as model from './certifex.model.js';
+import { programasPara, datosDeCandidato } from './certifex.programa.js';
 import {
-  listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema,
+  listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
   avisosSchema, avisosRechazoSchema, revocarSchema, corregirSchema,
 } from './certifex.validation.js';
 
@@ -121,8 +122,20 @@ export async function solicitudes(req, res, next) {
     }, f, { fecha: (c) => c?.solicitud?.en });
     await conLoDelCrm(data.filas, req.user);
     await conAvisoRechazo(data.filas);
+    if ((f.estado ?? 'pendiente') !== 'rechazada') await conProgramaCrm(data.filas);
     res.json({ success: true, data });
   } catch (err) { next(err); }
+}
+
+/**
+ * El programa que se imprimiria si se emite ahora (`programaCrm`): el de la formacion
+ * vendida, o null con el motivo. Es lo que se revisa antes de aprobar.
+ */
+async function conProgramaCrm(filas) {
+  const sinTitulo = filas.filter((c) => !c.nexpediente);
+  for (const c of filas) c.programaCrm = null;
+  const m = await programasPara(sinTitulo.map(datosDeCandidato));
+  for (const c of sinTitulo) c.programaCrm = m.get(c.matriculaId) ?? null;
 }
 
 async function conAvisoRechazo(filas) {
@@ -171,6 +184,7 @@ export async function porAvisar(req, res, next) {
     const f = parsear(porAvisarSchema, req.query);
     const data = await despuesDeAprobar({ centro: f.centro?.toUpperCase(), q: f.q });
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
+    await conProgramaCrm(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
@@ -204,8 +218,51 @@ export async function resumen(req, res, next) {
 }
 
 /**
- * «Aprobar y emitir», en un paso: el visto bueno y la emision. NO avisa al alumno: el
- * diploma queda «pendiente de aviso» hasta que alguien lo vea y lo envie.
+ * Lo que hace falta para buscar el programa de cada matricula: primero lo que guardo el
+ * CRM al recibir la solicitud; lo que falte, de Certifex (lo mas reciente primero).
+ */
+async function datosPara(ids) {
+  const datos = await model.datosDeSolicitudes(ids).catch(() => new Map());
+  const faltan = new Set(ids.filter((id) => !datos.has(id)));
+  if (faltan.size) {
+    const r = await recorrer('/candidatos', { estado: 'todas' }, {
+      filtro: (c) => faltan.has(c.matriculaId),
+      parar: (_c, hallados) => hallados.length >= faltan.size,
+    });
+    for (const c of r.filas) datos.set(c.matriculaId, datosDeCandidato(c));
+  }
+  return datos;
+}
+
+/**
+ * Emite con el programa oficial de la formacion vendida, si se encuentra sin dudas. Lo
+ * que no lo tiene se emite igual (con lo de Moodle) y se marca con `sinPrograma`.
+ * Devuelve los resultados por matricula, o el error si la llamada entera fallo.
+ */
+async function emitirConPrograma(req, ids, datos) {
+  const programas = await programasPara(ids.map((id) => datos.get(id)).filter(Boolean));
+  const items = ids.map((matriculaId) => {
+    const p = programas.get(matriculaId)?.programa;
+    return p ? { matriculaId, programa: p } : { matriculaId };
+  });
+  const marca = (r) => {
+    const p = programas.get(r.matriculaId);
+    return p?.programa
+      ? { programa: { horas: p.programa.horas ?? null, modulos: p.programa.modulos.length, formacion: p.formacion?.nombre ?? null } }
+      : { sinPrograma: p?.motivo ?? 'No se encontró la matrícula para buscar su venta.' };
+  };
+  try {
+    const em = await certifex('POST', '/emitir', { items, emitidaPor: quien(req) }, { timeoutMs: 180_000 });
+    return { porId: new Map((em?.resultados ?? []).map((r) => [r.matriculaId, { ...r, ...marca(r) }])), error: null };
+  } catch (e) {
+    return { porId: new Map(), error: e.message };
+  }
+}
+
+/**
+ * «Aprobar y emitir», en un paso: el visto bueno y la emision, con el programa oficial de
+ * la formacion vendida. NO avisa al alumno: el diploma queda «pendiente de aviso» hasta
+ * que alguien lo vea y lo envie.
  *
  * Si la aprobacion sale y la emision falla, la matricula queda aprobada sin diploma
  * (sale en «Aprobados sin diploma» para reintentar) y se dice asi, no como un fallo
@@ -214,30 +271,34 @@ export async function resumen(req, res, next) {
 export async function aprobarEmitir(req, res, next) {
   try {
     const { matriculaIds } = parsear(aprobarEmitirSchema, req.body);
+    // Antes de decidir: la busqueda en Certifex es la misma y no depende del estado.
+    const datos = await datosPara(matriculaIds);
     const dec = await certifex('POST', '/decisiones', {
       decisiones: matriculaIds.map((matriculaId) => ({ matriculaId, decision: 'aprobada', decididoPor: quien(req) })),
     });
     const fallidas = new Map((dec?.resultados ?? []).filter((r) => !r.ok).map((r) => [r.matriculaId, r.error || 'No se pudo aprobar']));
     const aEmitir = matriculaIds.filter((id) => !fallidas.has(id));
-
-    let emitidas = new Map();
-    let errorEmision = null;
-    if (aEmitir.length) {
-      try {
-        const em = await certifex('POST', '/emitir', { matriculaIds: aEmitir, emitidaPor: quien(req) }, { timeoutMs: 180_000 });
-        emitidas = new Map((em?.resultados ?? []).map((r) => [r.matriculaId, r]));
-      } catch (e) {
-        errorEmision = e.message;
-      }
-    }
+    const { porId, error } = aEmitir.length ? await emitirConPrograma(req, aEmitir, datos) : { porId: new Map(), error: null };
 
     const resultados = matriculaIds.map((matriculaId) => {
       if (fallidas.has(matriculaId)) return { matriculaId, ok: false, fase: 'aprobar', error: fallidas.get(matriculaId) };
-      const r = emitidas.get(matriculaId);
+      const r = porId.get(matriculaId);
       if (r) return { ...r, matriculaId, fase: 'emitir', ...(r.ok ? {} : { error: `Aprobada, pero sin diploma: ${r.error || 'error al emitir'}` }) };
-      return { matriculaId, ok: false, fase: 'emitir', error: `Aprobada, pero sin diploma: ${errorEmision || 'Certifex no contestó por esta matrícula'}` };
+      return { matriculaId, ok: false, fase: 'emitir', error: `Aprobada, pero sin diploma: ${error || 'Certifex no contestó por esta matrícula'}` };
     });
     logger.info({ userId: req.user.userId, n: matriculaIds.length, ok: resultados.filter((r) => r.ok).length }, 'Certifex: aprobar y emitir');
+    res.json({ success: true, data: { resultados } });
+  } catch (err) { next(err); }
+}
+
+/** Emitir lo ya aprobado (reintento de «Aprobados sin diploma»), tambien con su programa. */
+export async function emitir(req, res, next) {
+  try {
+    const { matriculaIds } = parsear(emitirDiplomasSchema, req.body);
+    const datos = await datosPara(matriculaIds);
+    const { porId, error } = await emitirConPrograma(req, matriculaIds, datos);
+    if (error && porId.size === 0) throw new AppError(error, 502, 'CERTIFEX_ERROR');
+    const resultados = matriculaIds.map((matriculaId) => porId.get(matriculaId) ?? { matriculaId, ok: false, error: 'Certifex no contestó por esta matrícula' });
     res.json({ success: true, data: { resultados } });
   } catch (err) { next(err); }
 }

@@ -121,6 +121,8 @@ export const aprobarEmitirSchema = z.object({
   matriculaIds: ids(10, 'Maximo 10 por vez: dividelo en tandas'),
 });
 
+export const emitirDiplomasSchema = aprobarEmitirSchema;
+
 export const rechazarSchema = z.object({
   matriculaIds: ids(200, 'Maximo 200 por vez'),
   motivo,
