@@ -49,12 +49,19 @@ export function diaDe(iso) {
 /**
  * Recorre un listado de Certifex pagina a pagina, quedandose con lo que pasa `filtro`.
  *
- * Certifex no filtra por fechas ni (en diplomas) por curso, pero ordena lo mas
- * reciente primero —solicitudes por fecha de solicitud, diplomas por fecha de
- * emision—: con un `desde`, en cuanto aparece algo anterior se deja de pedir.
+ *  · `completo(filas)`: ya esta todo lo que se buscaba; se deja de pedir. No depende
+ *    del orden.
+ *  · `antiguo(fila)` con `fecha(fila)`: Certifex no filtra por fechas, pero en su base
+ *    ordena lo mas reciente primero. Se deja de pedir cuando una pagina ENTERA llega
+ *    ordenada (tambien respecto a la anterior) y su ultima fila ya es anterior a lo que
+ *    se busca. Si alguna vez llega desordenada, no se para por fecha: se recorre todo.
+ *    (El Certifex de pruebas, con el repositorio en memoria, no ordena: con una parada
+ *    por la primera fila antigua, «desde hoy» devolvia vacio.)
  */
-async function recorrer(ruta, params, { filtro = () => true, parar = () => false } = {}) {
+async function recorrer(ruta, params, { filtro = () => true, completo = () => false, antiguo = null, fecha = null } = {}) {
   const filas = [];
+  let ordenado = true;
+  let previa = null;
   for (let p = 1; p <= MAX_PAGINAS; p++) {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
@@ -63,10 +70,17 @@ async function recorrer(ruta, params, { filtro = () => true, parar = () => false
     const d = await certifex('GET', `${ruta}?${qs.toString()}`);
     const lote = Array.isArray(d?.filas) ? d.filas : [];
     for (const f of lote) {
-      if (parar(f, filas)) return { filas, truncado: false };
       if (filtro(f)) filas.push(f);
+      if (completo(filas)) return { filas, truncado: false };
+      if (fecha) {
+        const t = fecha(f) || null;
+        if (previa && t && t > previa) ordenado = false;
+        if (t) previa = t;
+      }
     }
     if (lote.length < TAM_CERTIFEX || p * TAM_CERTIFEX >= Number(d?.total ?? 0)) return { filas, truncado: false };
+    const ultima = lote[lote.length - 1];
+    if (antiguo && fecha && ordenado && ultima && antiguo(ultima)) return { filas, truncado: false };
   }
   return { filas, truncado: true };
 }
@@ -96,12 +110,9 @@ async function listado(ruta, params, f, { fecha, extra = null }) {
   };
   const r = await recorrer(ruta, params, {
     filtro: (row) => enRango(row) && (!extra || extra(row)),
-    // Lo de antes de `desde` ya no puede entrar: lo que sigue es aun mas antiguo.
-    parar: (row) => {
-      if (!f.desde) return false;
-      const d = diaDe(fecha(row));
-      return !!d && d < f.desde;
-    },
+    // Lo de antes de `desde` ya no puede entrar si lo que sigue es aun mas antiguo.
+    fecha,
+    antiguo: f.desde ? (row) => { const d = diaDe(fecha(row)); return !!d && d < f.desde; } : null,
   });
   if (f.todo === '1') return { filas: r.filas, total: r.filas.length, pagina: 1, tam: r.filas.length, truncado: r.truncado };
   return { filas: r.filas.slice((pagina - 1) * tam, pagina * tam), total: r.filas.length, pagina, tam, truncado: r.truncado };
@@ -170,7 +181,9 @@ async function despuesDeAprobar({ centro, q }) {
   const limite = masAntigua ? new Date(new Date(masAntigua).getTime() - 86_400_000).toISOString() : null;
   const diplomas = await recorrer('/diplomas', { estado: 'vigentes', centro }, {
     filtro: (d) => buscados.has(d.nexpediente),
-    parar: (d, hallados) => hallados.length >= buscados.size || (!!limite && !!d.emitidoEn && d.emitidoEn < limite),
+    completo: (hallados) => hallados.length >= buscados.size,
+    fecha: (d) => d.emitidoEn,
+    antiguo: limite ? (d) => !!d.emitidoEn && d.emitidoEn < limite : null,
   });
   const porExp = new Map(diplomas.filas.map((d) => [d.nexpediente, d]));
   const porAvisar = conTitulo
@@ -227,7 +240,7 @@ async function datosPara(ids) {
   if (faltan.size) {
     const r = await recorrer('/candidatos', { estado: 'todas' }, {
       filtro: (c) => faltan.has(c.matriculaId),
-      parar: (_c, hallados) => hallados.length >= faltan.size,
+      completo: (hallados) => hallados.length >= faltan.size,
     });
     for (const c of r.filas) datos.set(c.matriculaId, datosDeCandidato(c));
   }

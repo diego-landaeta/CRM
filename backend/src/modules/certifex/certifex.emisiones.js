@@ -207,7 +207,12 @@ export async function diploma(req, res, next) {
       logger.error({ err: e.message, nexp }, 'Certifex: el diploma no responde');
       throw new AppError('Certifex no responde. Prueba de nuevo en un momento.', 502, 'CERTIFEX_NO_RESPONDE');
     }
-    if (r.status === 404) throw new AppError('Ese titulo no existe en Certifex.', 404, 'NOT_FOUND');
+    if (r.status === 404) throw new AppError('Ese titulo no existe en Certifex (o esta revocado).', 404, 'NOT_FOUND');
+    // Sin generador de PDF en su servidor, Certifex redirige a la vista de impresion
+    // (HTML). No es un fallo del diploma: se dice para que se abra en Certifex.
+    if (r.ok && (r.headers.get('content-type') || '').includes('html')) {
+      throw new AppError('Certifex no ha podido generar el PDF ahora mismo: abre el diploma en Certifex.', 502, 'CERTIFEX_SIN_PDF');
+    }
     if (!r.ok || !(r.headers.get('content-type') || '').includes('pdf')) {
       throw new AppError(`Certifex no devolvio el diploma (${r.status}).`, 502, 'CERTIFEX_ERROR');
     }

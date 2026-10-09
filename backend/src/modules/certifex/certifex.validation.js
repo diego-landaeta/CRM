@@ -66,7 +66,7 @@ const centro = z.string().trim().regex(/^[A-Za-z0-9]{2,10}$/, 'Centro no valido'
 const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha no valida (AAAA-MM-DD)');
 const nexp = z.string().trim().toUpperCase().regex(/^[A-Z]{3}-\d{4}-\d{6}-[A-Z0-9]{4}$/, 'Numero de expediente no valido');
 const ids = (max, msg) => z.array(z.number().int().positive()).min(1, 'Elige al menos una').max(max, msg);
-const motivo = z.string().trim().min(3, 'Indica el motivo').max(500);
+const motivo = z.string({ required_error: 'Indica el motivo', invalid_type_error: 'Indica el motivo' }).trim().min(3, 'Indica el motivo').max(500);
 
 /**
  * Lo que manda Certifex al pedir un alumno su diploma. SIN DNI (decision del 08/10):
