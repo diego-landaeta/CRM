@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.js';
 import * as ctrl from './certifex.controller.js';
 import * as emisiones from './certifex.emisiones.js';
+import * as diplomas from './certifex.diplomas.js';
 
 const router = Router();
 
-// La unica ruta sin sesion: la entrega desde el servidor de Certifex. La protege el
-// secreto compartido (CERTIFEX_WEBHOOK_SECRETO), no una sesion de nadie. Va antes del
-// `verifyToken` a proposito, y es la unica que debe ir aqui arriba.
+// Las unicas rutas sin sesion: las entregas desde el servidor de Certifex (consultas y
+// solicitudes de diploma). Las protege el secreto compartido (CERTIFEX_WEBHOOK_SECRETO),
+// no una sesion de nadie. Van antes del `verifyToken` a proposito, y son las unicas que
+// deben ir aqui arriba.
 router.post('/consultas', ctrl.recibir);
+// Lo mismo para las solicitudes de diploma que el alumno hace desde Moodle (#272).
+router.post('/solicitudes', ctrl.recibirSolicitud);
 
 router.use(verifyToken);
 // Los mismos roles que ven la campana de administracion: son quienes reciben el aviso.
@@ -30,5 +34,19 @@ router.post('/emisiones/decisiones', soloAdmin, emisiones.decidir);
 router.post('/emisiones/emitir', soloAdmin, emisiones.emitir);
 router.get('/emisiones/diploma/:nexp', soloAdmin, emisiones.diploma);
 router.get('/emisiones/logo', soloAdmin, emisiones.logo);
+
+// Diplomas (#272): las solicitudes desde Moodle y los diplomas emitidos. Tambien solo
+// administracion: aprobar, rechazar, emitir, aprobar el aviso, revocar y corregir.
+// Ver el PDF reutiliza `/emisiones/diploma/:nexp`.
+router.get('/diplomas/resumen', soloAdmin, diplomas.resumen);
+router.get('/diplomas/solicitudes', soloAdmin, diplomas.solicitudes);
+router.get('/diplomas/por-avisar', soloAdmin, diplomas.porAvisar);
+router.post('/diplomas/aprobar-emitir', soloAdmin, diplomas.aprobarEmitir);
+router.post('/diplomas/rechazar', soloAdmin, diplomas.rechazar);
+router.post('/diplomas/avisos', soloAdmin, diplomas.avisos);
+router.post('/diplomas/avisos-rechazo', soloAdmin, diplomas.avisosRechazo);
+router.post('/diplomas/revocar', soloAdmin, diplomas.revocar);
+router.post('/diplomas/corregir', soloAdmin, diplomas.corregir);
+router.get('/diplomas', soloAdmin, diplomas.diplomas);
 
 export default router;
