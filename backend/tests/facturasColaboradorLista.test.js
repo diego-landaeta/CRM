@@ -242,13 +242,18 @@ describe('facturas de colaboradores (#202) · la lista', () => {
   });
 
   it('el historial, al admin de A, sin lo acordado con la empresa B', async () => {
+    // Solo los cambios de la ficha. Los otros ficheros de pruebas preparan su mes
+    // para TODOS los activos (como la tarea de verdad) y, si coinciden en el tiempo,
+    // a Laura le cae una factura de ese mes con su «recordatorio».
+    const deLaFicha = (filas) => filas.filter((r) => ['alta', 'baja', 'cambio'].includes(r.evento));
     const reg = await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('adminA'));
-    expect(reg.body.data.map((r) => r.evento)).toEqual(['baja', 'alta', 'baja', 'cambio', 'cambio', 'cambio', 'alta']);
-    const alta = reg.body.data[reg.body.data.length - 1];
+    const ficha = deLaFicha(reg.body.data);
+    expect(ficha.map((r) => r.evento)).toEqual(['baja', 'alta', 'baja', 'cambio', 'cambio', 'cambio', 'alta']);
+    const alta = ficha[ficha.length - 1];
     expect(alta.detalle.empresas.map((e) => e.issuer_id)).toEqual([E.A.id]);
 
-    const todo = await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('super'));
-    const altaSuper = todo.body.data[todo.body.data.length - 1];
+    const todo = deLaFicha((await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('super'))).body.data);
+    const altaSuper = todo[todo.length - 1];
     expect(altaSuper.detalle.empresas.map((e) => e.issuer_id).sort()).toEqual([E.A.id, E.B.id].sort());
   });
 
