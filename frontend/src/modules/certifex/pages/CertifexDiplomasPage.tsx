@@ -109,8 +109,10 @@ function NombreDiploma({ c }: { c: Solicitud }) {
   );
 }
 
+// «1.500 h»: en español `toLocaleString` no agrupa los números de cuatro cifras.
+const miles = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const resumenPrograma = (p: ProgramaOficial) => [
-  p.horas ? `${p.horas.toLocaleString('es')} h` : null,
+  p.horas ? `${miles(p.horas)} h` : null,
   p.modulos.length ? `${p.modulos.length} ${p.modulos.length === 1 ? 'módulo' : 'módulos'}` : null,
 ].filter(Boolean).join(' · ');
 
@@ -232,7 +234,7 @@ export default function CertifexDiplomasPage() {
   const [notas, setNotas] = useState<Fallo[]>([]);
   const [correoApagado, setCorreoApagado] = useState(false);
   const [exportando, setExportando] = useState(false);
-  const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso'>; enviable: boolean } | null>(null);
+  const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso' | 'diplomaUrl'>; enviable: boolean } | null>(null);
   // Tras corregir, el PDF cambia: se pide otra vez sin caché.
   const [versiones, setVersiones] = useState<Record<string, number>>({});
 
@@ -867,11 +869,11 @@ export default function CertifexDiplomasPage() {
                     <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                       {pestana === 'enviados' && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir ${k}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
                       <td className={cn('px-2 py-3', pestana === 'revocados' && 'pl-4')}>
-                        <div className="max-w-[240px] truncate font-semibold" title={d.alumno}>{d.alumno}</div>
+                        <div className="max-w-[180px] truncate font-semibold" title={d.alumno}>{d.alumno}</div>
                         <div className="select-all font-mono text-[11px] text-primary">{d.nexpediente}</div>
                       </td>
-                      <td className="px-2 py-3"><div className="max-w-[240px] truncate" title={d.titulacion}>{d.titulacion}</div><div className="text-xs text-muted-foreground">{d.centro}</div></td>
-                      <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.emitidoEn)}<div className="max-w-[150px] truncate text-muted-foreground" title={d.emitidaPor ?? undefined}>{d.emitidaPor}</div></td>
+                      <td className="px-2 py-3"><div className="max-w-[170px] truncate" title={d.titulacion}>{d.titulacion}</div><div className="text-xs text-muted-foreground">{d.centro}</div></td>
+                      <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.emitidoEn)}<div className="max-w-[120px] truncate text-muted-foreground" title={d.emitidaPor ?? undefined}>{d.emitidaPor}</div></td>
                       {pestana === 'enviados' ? (
                         <td className="px-2 py-3"><EstadoAviso d={d} /></td>
                       ) : (
@@ -881,14 +883,15 @@ export default function CertifexDiplomasPage() {
                         </>
                       )}
                       <td className="px-2 py-3 pr-4">
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                        <div className="flex justify-end gap-1.5 whitespace-nowrap">
                           {pestana === 'enviados' && (
                             <Button size="sm" variant={d.aviso ? 'outline' : 'default'} disabled={trabajando}
                               onClick={() => setDialogo({ tipo: 'avisos', exps: [d.nexpediente], reenvio: !!d.aviso })}>
                               <PaperPlaneTilt size={14} className="mr-1.5" /> {d.aviso ? 'Reenviar' : 'Enviar al alumno'}
                             </Button>
                           )}
-                          <IconoAccion etiqueta="Ver PDF" onClick={() => setVisor({ d, enviable: pestana === 'enviados' && !d.aviso })}><FilePdf size={15} /></IconoAccion>
+                          {/* Revocado, Certifex ya no sirve su PDF (404): solo el enlace, que dice «revocado». */}
+                          {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => setVisor({ d, enviable: !d.aviso })}><FilePdf size={15} /></IconoAccion>}
                           <IconoAccion etiqueta="Copiar enlace de verificación" onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
                           {pestana === 'enviados' && (
                             <>
@@ -1188,7 +1191,7 @@ function DialogoCorregir({ d, ocupado, alCancelar, alConfirmar }: {
 
 /** El PDF del diploma, traído por el servidor del CRM (Certifex no se deja incrustar). */
 function VisorPdf({ d, version, alCerrar, alEnviar }: {
-  d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro'>;
+  d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'diplomaUrl'>;
   version?: number;
   alCerrar: () => void;
   alEnviar?: () => void;
@@ -1233,7 +1236,14 @@ function VisorPdf({ d, version, alCerrar, alEnviar }: {
           </div>
           <div className="flex-1 overflow-auto p-4">
             {error ? (
-              <p className="text-sm text-destructive">No se pudo traer el diploma: {error}</p>
+              <div className="space-y-3 rounded-md border border-dashed border-border p-6 text-center">
+                <p className="text-sm text-destructive">No se pudo traer el PDF: {error}</p>
+                {d.diplomaUrl && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={d.diplomaUrl} target="_blank" rel="noreferrer noopener"><ArrowSquareOut size={14} className="mr-1.5" /> Ver el diploma en Certifex</a>
+                  </Button>
+                )}
+              </div>
             ) : pdf ? (
               <iframe title={`Diploma ${d.nexpediente}`} src={pdf} className="h-[70vh] w-full rounded-md border border-border bg-muted" />
             ) : (

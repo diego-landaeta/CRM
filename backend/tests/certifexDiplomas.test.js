@@ -217,13 +217,24 @@ describe('solicitudes', () => {
   it('con fechas, recorre las paginas de Certifex y deja de pedir al pasar de `desde`', async () => {
     // 200 por pagina, lo mas reciente primero: la segunda pagina ya cruza el 01/10.
     const pag1 = Array.from({ length: 200 }, (_, i) => candidato(1000 + i, '2026-10-05T10:00:00Z'));
-    const pag2 = [candidato(2000, '2026-10-02T10:00:00Z'), candidato(2001, '2026-09-20T10:00:00Z'), candidato(2002, '2026-09-10T10:00:00Z')];
-    responder = (p) => ({ status: 200, body: { filas: p.query.pagina === '1' ? pag1 : p.query.pagina === '2' ? [...pag2, ...pag1.slice(0, 197)] : [], total: 1000, pagina: Number(p.query.pagina), tam: 200 } });
+    const pag2 = [candidato(2000, '2026-10-02T10:00:00Z'), candidato(2001, '2026-09-20T10:00:00Z'),
+      ...Array.from({ length: 198 }, (_, i) => candidato(3000 + i, '2026-09-10T10:00:00Z'))];
+    responder = (p) => ({ status: 200, body: { filas: p.query.pagina === '1' ? pag1 : p.query.pagina === '2' ? pag2 : [], total: 1000, pagina: Number(p.query.pagina), tam: 200 } });
     const r = await sa(request.get('/api/certifex/diplomas/solicitudes?desde=2026-10-01&hasta=2026-10-04&pagina=1&tam=50'));
     expect(r.status).toBe(200);
     expect(r.body.data.total).toBe(1);
     expect(r.body.data.filas.map((f) => f.matriculaId)).toEqual([2000]);
     expect(pedidas.map((p) => p.query.pagina)).toEqual(['1', '2']);
+  });
+
+  it('si Certifex no los da ordenados (repositorio en memoria), no para por fecha', async () => {
+    // Lo antiguo primero y lo de hoy al final: con parada por la primera fila antigua,
+    // «desde hoy» salia vacio contra el Certifex de pruebas.
+    responder = () => ({ status: 200, body: { filas: [
+      candidato(1, '2024-12-21T10:00:00Z'), candidato(2, '2023-12-05T10:00:00Z'), candidato(3, '2026-10-08T10:00:00Z'),
+    ], total: 3, pagina: 1, tam: 200 } });
+    const r = await sa(request.get('/api/certifex/diplomas/solicitudes?desde=2026-10-08'));
+    expect(r.body.data.filas.map((f) => f.matriculaId)).toEqual([3]);
   });
 
   it('las rechazadas traen el aviso de rechazo que se aprobo', async () => {
