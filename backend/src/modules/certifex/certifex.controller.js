@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 import * as model from './certifex.model.js';
-import { recibirSchema, listarSchema, actualizarSchema } from './certifex.validation.js';
+import { recibirSchema, listarSchema, actualizarSchema, solicitudSchema } from './certifex.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { notifyAdmins } from '../notifications/notifications.service.js';
+import { notifyAdmins, notifyUsers } from '../notifications/notifications.service.js';
 
 function parsear(schema, datos) {
   const r = schema.safeParse(datos);
@@ -78,5 +78,53 @@ export async function actualizar(req, res, next) {
     const c = await model.actualizar(id, d, req.user.userId);
     if (!c) throw new AppError('Consulta no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PUBLICO, con secreto: Certifex avisa aqui de cada solicitud de diploma que un
+ * alumno hace desde Moodle (#272). Misma puerta que las consultas: sin el secreto
+ * configurado, 404; con otro, 401.
+ *
+ * Suena la campana de ADMINISTRACION (admin y superadmin, que son quienes aprueban):
+ * va dirigida a ellos y no al reparto general, que tambien ve soporte. Un reintento
+ * identico de Certifex no duplica ni vuelve a avisar; si el alumno lo vuelve a pedir,
+ * se actualiza la solicitud y si avisa, porque hay algo nuevo que mirar.
+ *
+ * Aqui no se aprueba nada ni sale ningun correo: eso lo hace una persona desde el
+ * panel Diplomas.
+ */
+export async function recibirSolicitud(req, res, next) {
+  try {
+    if (!(process.env.CERTIFEX_WEBHOOK_SECRETO || '').trim()) {
+      throw new AppError('No encontrado', 404, 'NOT_FOUND');
+    }
+    if (!secretoValido(req.get('X-Certifex-Secreto'))) {
+      throw new AppError('No autorizado', 401, 'UNAUTHORIZED');
+    }
+    const d = parsear(solicitudSchema, req.body);
+    const { solicitud: s, estado } = await model.recibirSolicitud(d);
+
+    if (estado !== 'repetida') {
+      const otraVez = s.veces > 1;
+      const curso = s.curso?.nombre ? ` · ${s.curso.nombre}` : '';
+      const distinto = s.nombreMoodle && s.nombreMoodle.trim().toLowerCase() !== s.nombreDiploma.trim().toLowerCase()
+        ? ` (en Moodle: ${s.nombreMoodle})` : '';
+      model.idsAdministracion()
+        .then((ids) => notifyUsers({
+          targetUserIds: ids,
+          type: 'certifex_solicitud',
+          title: otraVez ? `Diploma: ${s.nombreDiploma} lo vuelve a pedir` : `Diploma: ${s.nombreDiploma} lo pide`,
+          message: `${s.centro}${curso}. Nombre para el diploma: «${s.nombreDiploma}»${distinto}.${s.leadId ? '' : ' Su correo no está en el CRM.'}`.slice(0, 300),
+          link_path: '/clientes/matriculas/diplomas',
+          metadata: { matriculaId: s.matriculaId, centro: s.centro, leadId: s.leadId, solicitudId: s.id },
+        }))
+        .catch((e) => logger.error({ err: e.message, matriculaId: s.matriculaId }, 'Aviso de solicitud de diploma: error'));
+    }
+
+    res.status(estado === 'nueva' ? 201 : 200).json({
+      success: true,
+      data: { id: s.id, estado, duplicada: estado === 'repetida', enCrm: !!s.leadId },
+    });
   } catch (err) { next(err); }
 }
