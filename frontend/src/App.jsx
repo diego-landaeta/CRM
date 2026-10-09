@@ -32,7 +32,7 @@ function DocumentTitle() {
     else if (route) document.title = `${route} — ${base}`;
     else if (proj) document.title = `${proj} — ${base}`;
     else document.title = base;
-  }, [pathname, project?.nombre]);
+  }, [pathname, project?.id, project?.nombre]);
   return null;
 }
 
