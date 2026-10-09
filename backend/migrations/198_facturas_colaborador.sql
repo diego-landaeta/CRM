@@ -10,7 +10,7 @@
 -- hora, por proyecto), el IVA y el IRPF y el pago van en la segunda PR, con su
 -- propia migración.
 --
--- 197 y no 196: la 196 la usa Hugo en su PR del tablero (#210).
+-- 198: la 196 y la 197 son de Hugo, del tablero (#210).
 -- Se puede pasar dos veces sin romper nada.
 
 BEGIN;
