@@ -220,14 +220,21 @@ export async function pasosDeLead(leadId) {
   const { rows } = await query(
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
             ls.hecho_at, ls.hecho_por, u.nombre AS hecho_por_nombre,
-            s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            -- Los seguimientos que se añaden a mano (5, 6…) no tienen paso en la
+            -- plantilla: se llaman por su número.
+            COALESCE(s.nombre, 'Seguimiento ' || ls.orden) AS nombre,
+            s.cuando, s.canales, s.nota AS nota_del_paso,
             COALESCE(s.avisa_plazas, false) AS avisa_plazas,
-            -- Hecho por CUALQUIERA de las dos vias: marcado a mano, o deducido
-            -- de los contactos apuntados. Ni una sola: quien apunta sus
-            -- llamadas no tiene ademas que ir tachando, y quien cierra un paso
-            -- sin escribir puede decirlo.
-            (ls.estado = 'hecho' OR ${PASO_CERRADO('ls')}) AS hecho,
+            -- HECHO = MARCADO A MANO (Diego, 09/10: «que sea manual pero que
+            -- aparezca por hacer, porque uno lo toca y luego no quiere
+            -- funcionar»). Antes un paso salía hecho también por los contactos
+            -- apuntados, y entonces la casilla no se podía tocar. Ahora la
+            -- checklist es de la gestora: cada paso está «por hacer» hasta que
+            -- lo marca. Que ya haya un contacto se dice aparte (con_contacto).
+            -- La cola del día no cambia: sigue sacando a quien ya se contactó.
+            ls.estado = 'hecho' AS hecho,
             ls.estado = 'hecho' AS a_mano,
+            (ls.estado <> 'hecho' AND ${PASO_CERRADO('ls')}) AS con_contacto,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
        JOIN leads l ON l.id = ls.lead_id
@@ -492,6 +499,29 @@ export async function ajustarPaso(id, { estado, fecha_prevista, nota }, userId =
       RETURNING id, lead_id, clave, orden, fecha_prevista, estado, nota,
                 hecho_at, hecho_por`,
     [id, estado || null, fecha_prevista || null, nota || null, userId || null]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Añadir un seguimiento a mano después de los pasos del proceso (Diego, 09/10:
+ * «cuando hacen el seguimiento 5, 6…» no había casilla). Va el último de su
+ * agenda, «por hacer», con la fecha que se diga (hoy si no). Sale en la cola
+ * cuando le toque, como cualquier otro paso.
+ */
+export async function anadirSeguimiento(leadId, { fecha_prevista } = {}) {
+  const { rows } = await query(
+    `INSERT INTO lead_steps (lead_id, project_id, step_id, clave, orden, fecha_prevista, estado)
+     SELECT l.id, l.project_id, NULL,
+            'seguimiento_' || (COALESCE(MAX(ls.orden), 0) + 1),
+            COALESCE(MAX(ls.orden), 0) + 1,
+            COALESCE($2::date, CURRENT_DATE), 'pendiente'
+       FROM leads l
+       LEFT JOIN lead_steps ls ON ls.lead_id = l.id
+      WHERE l.id = $1 AND l.deleted_at IS NULL
+      GROUP BY l.id, l.project_id
+     RETURNING id, lead_id, clave, orden, fecha_prevista, estado`,
+    [leadId, fecha_prevista || null]
   );
   return rows[0] || null;
 }

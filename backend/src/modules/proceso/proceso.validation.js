@@ -67,3 +67,8 @@ export const ajustarPasoSchema = z.object({
 }).refine((d) => d.estado || d.fecha_prevista || d.nota, {
   message: 'Hay que cambiar algo: el estado, la fecha o la nota',
 });
+
+// Un seguimiento más tras los pasos del proceso (5, 6…). La fecha es opcional: hoy.
+export const anadirSeguimientoSchema = z.object({
+  fecha_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD').optional(),
+});
