@@ -88,7 +88,7 @@ const IS_REDESIGN_NAV_ENABLED = import.meta.env.DEV
 // Secciones del sidebar — cada una con label + items.
 // Cada item: roles (omitir=todos) + module (clave en project.modules; omitir=siempre)
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend.
-const ROLES_TAREAS = ['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'colaborador'];
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 
 const NAV_SECTIONS = [
   {
