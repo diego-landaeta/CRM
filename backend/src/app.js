@@ -59,6 +59,7 @@ import certifexModule from './modules/certifex/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 import mcpModule from './modules/mcp/index.js';
 import tasksModule from './modules/tasks/index.js';
+import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
 import { query } from './shared/config/db.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -80,6 +81,7 @@ import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
+import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { tareasActivas } from './shared/config/soloEnPruebas.js';
 
 const app = express();
@@ -194,6 +196,8 @@ const ALL_MODULES = [
   { name: 'certifex', mod: certifexModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
+  // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
+  { name: 'facturas-colaborador', mod: facturasColaboradorModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 
@@ -337,6 +341,7 @@ if (process.env.NODE_ENV !== 'test') {
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     if (tareasActivas()) startTasksDailySummaryScheduler();
+    startFacturasColaboradorScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
 }
