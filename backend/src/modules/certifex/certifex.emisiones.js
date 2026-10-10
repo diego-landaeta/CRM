@@ -210,6 +210,10 @@ export async function diploma(req, res, next) {
     if (!base) throw new AppError('Certifex no esta conectado: falta CERTIFEX_API_URL en el servidor.', 503, 'CERTIFEX_SIN_CONFIGURAR');
     // El PDF es publico, pero desde aqui solo se ensena el de los campus de cada uno.
     await exigirExpedientes(await alcanceDe(req.user), [nexp]);
+    // El A3 de imprenta (#95 de Certifex) NO es publico: se pide con la clave del CRM.
+    const formato = req.query.formato == null || req.query.formato === '' ? 'digital' : String(req.query.formato);
+    if (formato !== 'digital' && formato !== 'imprenta') throw new AppError('Formato desconocido: usa «digital» o «imprenta».', 400, 'VALIDATION_ERROR');
+    if (formato === 'imprenta') return await enviarImprenta(res, nexp);
     let r;
     try {
       r = await fetch(`${base}/diploma.pdf?exp=${encodeURIComponent(nexp)}`, { signal: AbortSignal.timeout(30_000) });
@@ -231,6 +235,40 @@ export async function diploma(req, res, next) {
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(Buffer.from(await r.arrayBuffer()));
   } catch (err) { next(err); }
+}
+
+/**
+ * El A3 de imprenta de un diploma, para la imprenta. Al alumno le llega siempre el
+ * digital A4 (el publico); este solo lo da Certifex a quien tiene su clave, y solo de
+ * los centros de este CRM. Se descarga como fichero y no se cachea: se pide poco y no
+ * debe quedarse en ningun sitio.
+ */
+async function enviarImprenta(res, nexp) {
+  const c = config();
+  if (!c) throw new AppError('Certifex no esta conectado: faltan CERTIFEX_API_URL y CERTIFEX_CRM_CLAVE en el servidor.', 503, 'CERTIFEX_SIN_CONFIGURAR');
+  let r;
+  try {
+    // Generar el A3 lleva unos segundos (Chromium, A3): mas margen que el resto.
+    r = await fetch(`${c.url}/api/crm/v1/diplomas/${encodeURIComponent(nexp)}/pdf?formato=imprenta`, {
+      headers: { Authorization: `Bearer ${c.clave}` },
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (e) {
+    logger.error({ err: e.message, nexp }, 'Certifex: el A3 no responde');
+    throw new AppError('Certifex no responde. Prueba de nuevo en un momento.', 502, 'CERTIFEX_NO_RESPONDE');
+  }
+  if (!r.ok || !(r.headers.get('content-type') || '').includes('pdf')) {
+    const d = await r.json().catch(() => null);
+    if (r.status === 401) throw new AppError('Certifex no acepta la clave de este CRM (CERTIFEX_CRM_CLAVE).', 502, 'CERTIFEX_CLAVE');
+    // 404 (no es de este CRM o no existe), 409 (revocado, o su campus no tiene A3) y 503
+    // (Certifex sin navegador o con la cola llena): el mensaje de Certifex se ensena tal cual.
+    const estado = [400, 404, 409].includes(r.status) ? r.status : 502;
+    throw new AppError(d?.error || `Certifex no devolvio el A3 (${r.status}).`, estado, 'CERTIFEX_ERROR');
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${nexp}-imprenta-A3.pdf"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(Buffer.from(await r.arrayBuffer()));
 }
 
 /**

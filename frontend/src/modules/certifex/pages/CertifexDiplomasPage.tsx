@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ArrowClockwise, ArrowCounterClockwise, ArrowSquareOut, BookOpenText, Certificate, CheckCircle, DownloadSimple, Envelope, FileXls, FilePdf,
-  FlagCheckered, HourglassMedium, LinkSimple, NotePencil, PaperPlaneTilt, PencilSimple, PlugsConnected, Plus, Prohibit, SealCheck, Trash, Warning, X, XCircle,
+  FlagCheckered, HourglassMedium, LinkSimple, NotePencil, PaperPlaneTilt, PencilSimple, PlugsConnected, Plus, Printer, Prohibit, SealCheck, Trash, Warning, X, XCircle,
 } from '@phosphor-icons/react';
 import { toast, useToast } from '@/shared/hooks/useToast';
 import { useModalAccesible } from '@/shared/hooks/useDialogA11y';
@@ -389,7 +389,7 @@ export default function CertifexDiplomasPage() {
   const [notas, setNotas] = useState<Fallo[]>([]);
   const [correoApagado, setCorreoApagado] = useState(false);
   const [exportando, setExportando] = useState(false);
-  const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso' | 'diplomaUrl'>; enviable: boolean } | null>(null);
+  const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso' | 'diplomaUrl' | 'imprenta'>; enviable: boolean } | null>(null);
   // Tras corregir, el PDF cambia: se pide otra vez sin caché.
   const [versiones, setVersiones] = useState<Record<string, number>>({});
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
@@ -1838,7 +1838,7 @@ function DialogoCorregir({ d, ocupado, error, alCancelar, alConfirmar }: {
 
 /** El PDF del diploma, traído por el servidor del CRM (Certifex no se deja incrustar). */
 function VisorPdf({ d, version, alCerrar, alEnviar }: {
-  d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'diplomaUrl'>;
+  d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'diplomaUrl' | 'imprenta'>;
   version?: number;
   alCerrar: () => void;
   alEnviar?: () => void;
@@ -1877,6 +1877,7 @@ function VisorPdf({ d, version, alCerrar, alEnviar }: {
                   <Button variant="outline" size="sm" asChild><a href={pdf} download={`${d.nexpediente}.pdf`}><DownloadSimple size={14} className="mr-1.5" /> Descargar</a></Button>
                 </>
               )}
+              {d.imprenta && <BotonImprenta nexpediente={d.nexpediente} />}
               {alEnviar && <Button size="sm" disabled={!pdf} onClick={alEnviar}><PaperPlaneTilt size={14} className="mr-1.5" /> Está bien: enviar al alumno</Button>}
             </div>
           </div>
@@ -1899,5 +1900,43 @@ function VisorPdf({ d, version, alCerrar, alEnviar }: {
         </div>
       </div>
     </Portal>
+  );
+}
+
+/**
+ * El A3 de imprenta (#95 de Certifex). Al alumno le llega siempre el digital A4, que es el
+ * que se ve en este visor; el A3 es solo para la imprenta. Generarlo tarda unos segundos,
+ * así que el botón dice que está trabajando —también a un lector de pantalla— y no se
+ * puede pulsar dos veces.
+ */
+function BotonImprenta({ nexpediente }: { nexpediente: string }) {
+  const [bajando, setBajando] = useState(false);
+  async function bajar() {
+    if (bajando) return;
+    setBajando(true);
+    try {
+      const { blob, nombre } = await emisionesApi.diplomaImprenta(nexpediente);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revocar en el mismo turno deja a algún navegador sin llegar a leer el blob.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (e) {
+      toast({ title: 'No se pudo bajar el A3', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setBajando(false);
+    }
+  }
+  return (
+    <Button variant="outline" size="sm" onClick={bajar} disabled={bajando} aria-busy={bajando}
+      title="Solo para la imprenta. Al alumno le llega el diploma digital A4.">
+      <Printer size={14} className="mr-1.5" aria-hidden="true" />
+      {bajando ? 'Generando el A3…' : 'PDF de imprenta (A3)'}
+      <span className="sr-only"> (solo para la imprenta; al alumno le llega el digital A4)</span>
+    </Button>
   );
 }
