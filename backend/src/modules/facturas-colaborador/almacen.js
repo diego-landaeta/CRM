@@ -14,7 +14,8 @@ import { saveLocal, getLocal } from '../../shared/services/localStorage.service.
  * Lo guardado en disco lleva el prefijo «local:» en `archivo_key`, para saber
  * dónde buscarlo aunque más adelante se configure R2. Para descargarlo se da,
  * como con R2, un enlace firmado de 15 minutos, aquí hacia la propia API
- * (`GET /api/facturas-colaborador/archivo-local/:id?exp=&sig=`).
+ * (`GET /api/facturas-colaborador/archivo-local/:id?exp=&sig=`), como ruta relativa a la API
+ * que el frontal completa con la suya.
  */
 
 const LOCAL = 'local:';
@@ -61,6 +62,7 @@ export function firmaValida(id, exp, sig, ahora = Date.now()) {
 export async function urlDeDescarga(id, archivoKey) {
   if (!esLocal(archivoKey)) return generatePresignedUrl(archivoKey);
   const exp = Math.floor(Date.now() / 1000) + QUINCE_MINUTOS;
-  const base = (process.env.CRM_BASE_URL || 'http://localhost:5173/crm').replace(/\/+$/, '');
-  return `${base}/api/facturas-colaborador/archivo-local/${id}?exp=${exp}&sig=${firma(Number(id), exp)}`;
+  // Relativa a la API: la completa el frontal con la suya (/testeo/api, /crm/api). Con
+  // CRM_BASE_URL salía la de producción en /testeo, que allí apunta a /crm (QA del 10/10).
+  return `/facturas-colaborador/archivo-local/${id}?exp=${exp}&sig=${firma(Number(id), exp)}`;
 }

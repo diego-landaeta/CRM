@@ -1,4 +1,8 @@
 import client from '@/shared/api/client';
+import { API_BASE_URL } from '@/shared/api/client';
+
+/** El enlace del archivo: el de R2 ya viene entero; el del disco del servidor, relativo a la API. */
+export const urlDelArchivo = (url: string) => (url.startsWith('/') ? `${API_BASE_URL}${url}` : url);
 
 /*
   Facturas de colaboradores (#202): la gente de fuera que factura al grupo cada

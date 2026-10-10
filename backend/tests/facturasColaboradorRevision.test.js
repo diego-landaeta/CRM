@@ -43,8 +43,8 @@ describe('sin R2, el archivo va al disco del servidor (antes: 500 al subir)', ()
   });
   it('la descarga de lo guardado en disco: enlace firmado a la propia API, que caduca a los 15 min', async () => {
     const url = await almacen.urlDeDescarga(7, 'local:a/b.pdf');
-    expect(url).toMatch(/^https:\/\/360crm\.tech\/testeo\/api\/facturas-colaborador\/archivo-local\/7\?exp=\d+&sig=/);
-    const u = new URL(url);
+    expect(url).toMatch(/^\/facturas-colaborador\/archivo-local\/7\?exp=\d+&sig=/);
+    const u = new URL(url, 'https://ejemplo.invalid/api');
     const exp = u.searchParams.get('exp'); const sig = u.searchParams.get('sig');
     expect(almacen.firmaValida(7, exp, sig)).toBe(true);
     expect(almacen.firmaValida(8, exp, sig)).toBe(false); // otra factura

@@ -13,6 +13,7 @@ import { inputClass } from '@/shared/lib/ui';
 import {
   AREAS, AREA_ES, ESTADO, euros, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, primeraMayuscula,
   type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes,
+  urlDelArchivo,
 } from '../api/facturasColaborador.api';
 import { AltaDialog, AnularDialog, BajaDialog, ColaboradorDialog, RegistroDialog, esMes } from '../components/DialogosFacturas';
 
@@ -145,7 +146,7 @@ function DelMes({ empresas }: { empresas: EmpresaDelGrupo[] }) {
   async function verArchivo(f: FacturaDelMes) {
     try {
       const r = await facturasColaboradorApi.archivo(f.id);
-      window.open(r.data.url, '_blank', 'noopener');
+      window.open(urlDelArchivo(r.data.url), '_blank', 'noopener');
     } catch (err) {
       toast({ title: 'No se pudo abrir el archivo', description: errorDe(err), variant: 'destructive' });
     }
