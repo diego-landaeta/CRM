@@ -42,7 +42,9 @@ export const esLocal = (archivoKey) => String(archivoKey || '').startsWith(LOCAL
 
 /** Lee un archivo guardado en el disco del servidor. */
 export async function leerLocal(archivoKey) {
-  return getLocal(String(archivoKey).slice(LOCAL.length));
+  // getLocal da { buffer, size }: aquí solo hace falta el contenido (QA del 10/10).
+  const { buffer } = await getLocal(String(archivoKey).slice(LOCAL.length));
+  return buffer;
 }
 
 // La firma del enlace de descarga: separada de cualquier otro uso del secreto.

@@ -5,7 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const guardados = [];
 vi.mock('../src/shared/services/localStorage.service.js', () => ({
   saveLocal: vi.fn(async (k, b) => { guardados.push({ k, b }); return k; }),
-  getLocal: vi.fn(async () => Buffer.from('%PDF-1.4')),
+  // Como el de verdad: { buffer, size }.
+  getLocal: vi.fn(async () => ({ buffer: Buffer.from('%PDF-1.4'), size: 8 })),
 }));
 const subidosR2 = [];
 vi.mock('../src/shared/services/r2.service.js', () => ({ uploadToR2: vi.fn(async (k) => { subidosR2.push(k); }) }));
@@ -50,6 +51,11 @@ describe('sin R2, el archivo va al disco del servidor (antes: 500 al subir)', ()
     expect(almacen.firmaValida(8, exp, sig)).toBe(false); // otra factura
     expect(almacen.firmaValida(7, exp, sig + 'x')).toBe(false); // firma tocada
     expect(almacen.firmaValida(7, exp, sig, (Number(exp) + 1) * 1000)).toBe(false); // caducado
+  });
+  it('leer lo guardado en disco devuelve el contenido del archivo, no el objeto', async () => {
+    const b = await almacen.leerLocal('local:a/b.pdf');
+    expect(Buffer.isBuffer(b)).toBe(true);
+    expect(b.toString()).toBe('%PDF-1.4');
   });
   it('lo que está en R2 sigue con su enlace firmado de R2', async () => {
     expect(await almacen.urlDeDescarga(7, 'a/b.pdf')).toBe('https://r2.example/a/b.pdf?firmado');
