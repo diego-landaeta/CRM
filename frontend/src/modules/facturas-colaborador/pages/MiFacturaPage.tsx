@@ -5,7 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import SubirFactura from '../components/SubirFactura';
-import { ESTADO, euros, facturasColaboradorApi, primeraMayuscula, type FacturaDelColaborador } from '../api/facturasColaborador.api';
+import { ESTADO, euros, facturasColaboradorApi, primeraMayuscula, type FacturaDelColaborador, urlDelArchivo } from '../api/facturasColaborador.api';
 
 /**
  * «Mi factura» (#202): el colaborador con usuario en el CRM ve sus meses, su
@@ -34,7 +34,7 @@ export default function MiFacturaPage() {
   async function verArchivo(id: number) {
     try {
       const r = await facturasColaboradorApi.archivoMio(id);
-      window.open(r.data.url, '_blank', 'noopener');
+      window.open(urlDelArchivo(r.data.url), '_blank', 'noopener');
     } catch (err: any) {
       toast({ title: 'No se pudo abrir el archivo', description: err?.message, variant: 'destructive' });
     }
