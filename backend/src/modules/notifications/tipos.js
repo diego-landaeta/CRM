@@ -90,6 +90,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Solicitud de diploma', agrupa: false,
     descripcion: 'Un alumno termina su formación y pide su diploma desde Moodle',
   },
+  // Moodle da una formacion por terminada y el alumno aun no ha pedido el diploma (#272).
+  // Solo lo cuenta: lo que se aprueba e imprime sale de la solicitud del alumno.
+  certifex_completado: {
+    clase: AVISO, etiqueta: 'Formación terminada sin pedir diploma', agrupa: false,
+    descripcion: 'Moodle da la formación por terminada y el alumno aún no ha pedido su diploma',
+  },
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',

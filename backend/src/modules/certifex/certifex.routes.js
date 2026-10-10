@@ -13,6 +13,8 @@ const router = Router();
 router.post('/consultas', ctrl.recibir);
 // Lo mismo para las solicitudes de diploma que el alumno hace desde Moodle (#272).
 router.post('/solicitudes', ctrl.recibirSolicitud);
+// Y el aviso de que Moodle da una formacion por terminada sin que el alumno lo haya pedido.
+router.post('/completados', ctrl.recibirCompletado);
 
 router.use(verifyToken);
 // Los mismos roles que ven la campana de administracion: son quienes reciben el aviso.
@@ -36,11 +38,15 @@ router.get('/emisiones/diploma/:nexp', soloAdmin, emisiones.diploma);
 router.get('/emisiones/logo', soloAdmin, emisiones.logo);
 
 // Diplomas (#272): las solicitudes desde Moodle y los diplomas emitidos. Tambien solo
-// administracion: aprobar, rechazar, emitir, aprobar el aviso, revocar y corregir.
+// administracion: aprobar, rechazar, emitir, aprobar el aviso, revocar y corregir. Y
+// ademas, cada admin solo sobre los campus de sus proyectos (certifex.alcance.js): eso
+// lo mira cada controlador, porque depende de la matricula o del diploma.
 // Ver el PDF reutiliza `/emisiones/diploma/:nexp`.
 router.get('/diplomas/resumen', soloAdmin, diplomas.resumen);
 router.get('/diplomas/solicitudes', soloAdmin, diplomas.solicitudes);
 router.get('/diplomas/por-avisar', soloAdmin, diplomas.porAvisar);
+// Solo consulta: Moodle los da por terminados y aun no han pedido el diploma.
+router.get('/diplomas/terminados', soloAdmin, diplomas.terminados);
 router.post('/diplomas/aprobar-emitir', soloAdmin, diplomas.aprobarEmitir);
 router.post('/diplomas/emitir', soloAdmin, diplomas.emitir);
 router.post('/diplomas/rechazar', soloAdmin, diplomas.rechazar);
@@ -48,6 +54,9 @@ router.post('/diplomas/avisos', soloAdmin, diplomas.avisos);
 router.post('/diplomas/avisos-rechazo', soloAdmin, diplomas.avisosRechazo);
 router.post('/diplomas/revocar', soloAdmin, diplomas.revocar);
 router.post('/diplomas/corregir', soloAdmin, diplomas.corregir);
+// Revisar antes de aprobar: nombre (en Certifex), correo del CRM, formacion y programa.
+router.post('/diplomas/editar', soloAdmin, diplomas.editar);
+router.get('/diplomas/formaciones', soloAdmin, diplomas.formaciones);
 router.get('/diplomas', soloAdmin, diplomas.diplomas);
 
 export default router;
