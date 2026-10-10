@@ -8,6 +8,7 @@ import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import Select from '@/shared/components/ui/Select';
+import { agruparPorEmpresa, campusConEmpresa, campusDelAmbito, empresaCorta } from '../lib/campusPorEmpresa';
 import { Button } from '@/shared/components/ui/button';
 import { avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
@@ -110,11 +111,26 @@ export default function TasksPage() {
   const [arrastrando, setArrastrando] = useState<Task | null>(null);
   const [nueva, setNueva] = useState<{ status: TaskStatus } | null>(null);
 
+  // Por empresa, no por campus (Diego, 10/10): con una empresa o un campus en la
+  // cabecera, solo los de esa empresa; los de otras, con «Todos los proyectos».
   const misCampus = useMemo(
-    () => (projects || []).filter((p: { id: number; isAll?: boolean }) => p.id > 0 && !p.isAll)
-      .map((p: { id: number; nombre: string }) => ({ id: p.id, nombre: p.nombre })),
-    [projects]
+    () => campusDelAmbito(campusConEmpresa(projects), { activeIssuerId, activeProject }),
+    [projects, activeIssuerId, activeProject]
   );
+  const variasEmpresas = useMemo(() => agruparPorEmpresa(misCampus).length > 1, [misCampus]);
+  const opcionesCampus = useMemo(
+    () => agruparPorEmpresa(misCampus).flatMap((g) => g.campus.map((c) => ({
+      value: c.id as number | '',
+      label: variasEmpresas ? `${c.nombre} · ${empresaCorta(g.empresa)}` : c.nombre,
+    }))),
+    [misCampus, variasEmpresas]
+  );
+  // Si se cambia de empresa con un campus de la otra en el filtro, se quita.
+  useEffect(() => {
+    if (filtros.projectId && !misCampus.some((c) => c.id === filtros.projectId)) {
+      setFiltros((f) => ({ ...f, projectId: '' }));
+    }
+  }, [misCampus, filtros.projectId]);
   const areasActivas = useMemo(() => areas.filter((a) => a.is_active), [areas]);
   const proyectosActivos = useMemo(() => proyectosPropios.filter((p) => p.is_active), [proyectosPropios]);
 
@@ -387,7 +403,7 @@ export default function TasksPage() {
             <Select<number | ''>
               value={filtros.projectId}
               onChange={(v) => setFiltros((f) => ({ ...f, projectId: v }))}
-              options={[{ value: '', label: 'Cualquier campus' }, ...misCampus.map((p) => ({ value: p.id as number | '', label: p.nombre }))]}
+              options={[{ value: '', label: 'Cualquier campus' }, ...opcionesCampus]}
               ariaLabel="Campus" size="sm" className="w-44"
             />
             {proyectosActivos.length > 0 && (
