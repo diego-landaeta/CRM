@@ -209,6 +209,22 @@ export const emisionesApi = {
     }
     return r.blob();
   },
+  /**
+   * El A3 de imprenta de un diploma (#95 de Certifex). No es público: lo pide el servidor
+   * del CRM con su clave. Devuelve el fichero y el nombre con el que guardarlo.
+   */
+  diplomaImprenta: async (nexpediente: string): Promise<{ blob: Blob; nombre: string }> => {
+    const t = getAccessToken();
+    const r = await fetch(`${API_BASE_URL}/certifex/emisiones/diploma/${encodeURIComponent(nexpediente)}?formato=imprenta`, {
+      credentials: 'include',
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d?.error || `Error ${r.status}`);
+    }
+    return { blob: await r.blob(), nombre: `${nexpediente}-imprenta-A3.pdf` };
+  },
 };
 
 // --- Diplomas (#272): lo que el alumno pide desde Moodle y los diplomas emitidos ---
@@ -306,6 +322,8 @@ export interface Diploma {
   aviso: { resultado: ResultadoAviso; en: string; por: string } | null;
   /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
   emitidoEnCrm?: boolean;
+  /** Su diploma tiene versión de imprenta A3 (hoy, solo ISEIE). La da Certifex. */
+  imprenta?: boolean;
 }
 
 /**

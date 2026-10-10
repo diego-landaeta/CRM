@@ -237,6 +237,43 @@ describe('ver el titulo emitido', () => {
     expect(pedidas).toHaveLength(0);
   });
 
+  it('el A3 de imprenta se pide a la API de Certifex CON la clave, y baja como fichero', async () => {
+    const fetchAntes = globalThis.fetch;
+    let pedida;
+    globalThis.fetch = vi.fn(async (url, opts = {}) => {
+      if (!String(url).startsWith('https://certifex.test/')) return fetchReal(url, opts);
+      pedida = { url: String(url), cabeceras: opts.headers };
+      return new Response(Buffer.from('%PDF-1.7 A3'), { status: 200, headers: { 'Content-Type': 'application/pdf' } });
+    });
+    try {
+      const r = await conSesion(request.get('/api/certifex/emisiones/diploma/ctf-2026-000001-u2lh?formato=imprenta'));
+      expect(r.status).toBe(200);
+      expect(r.headers['content-type']).toContain('application/pdf');
+      expect(r.headers['content-disposition']).toBe('attachment; filename="CTF-2026-000001-U2LH-imprenta-A3.pdf"');
+      expect(r.headers['cache-control']).toContain('no-store');
+      // No es público: va a /api/crm/v1 con la clave en la cabecera, no a /diploma.pdf.
+      expect(pedida.url).toBe('https://certifex.test/api/crm/v1/diplomas/CTF-2026-000001-U2LH/pdf?formato=imprenta');
+      expect(pedida.cabeceras.Authorization).toBe(`Bearer ${CLAVE}`);
+      // Y la clave no vuelve al navegador.
+      expect(JSON.stringify(r.headers)).not.toContain(CLAVE);
+    } finally {
+      globalThis.fetch = fetchAntes;
+    }
+  });
+
+  it('un formato desconocido no sale del CRM', async () => {
+    const r = await conSesion(request.get('/api/certifex/emisiones/diploma/ctf-2026-000001-u2lh?formato=A0'));
+    expect(r.status).toBe(400);
+    expect(pedidas).toHaveLength(0);
+  });
+
+  it('si Certifex no da el A3 (revocado, o su campus no lo tiene), se dice con su mensaje', async () => {
+    respuesta = () => ({ status: 409, body: { error: 'El diploma de este centro no tiene versión de imprenta.' } });
+    const r = await conSesion(request.get('/api/certifex/emisiones/diploma/ctf-2026-000001-u2lh?formato=imprenta'));
+    expect(r.status).toBe(409);
+    expect(JSON.stringify(r.body)).toContain('no tiene versión de imprenta');
+  });
+
   it('el estado trae la web publica, para enlazar la verificacion', async () => {
     respuesta = () => ({ status: 200, body: { nombre: 'CRM', centros: ['ISEIE'] } });
     const r = await conSesion(request.get('/api/certifex/emisiones/estado'));
