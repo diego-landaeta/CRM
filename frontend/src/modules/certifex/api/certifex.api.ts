@@ -241,7 +241,7 @@ export interface ProgramaDelCrm {
   auto?: { programa: ProgramaOficial | null; formacion: ProgramaDelCrm['formacion']; motivo: string | null };
 }
 
-/** Lo revisado a mano antes de aprobar (migración 197): con qué datos se trabaja. */
+/** Lo revisado a mano antes de aprobar (migración 198): con qué datos se trabaja. */
 export interface EdicionSolicitud {
   /** El correo con el que se busca al alumno en el CRM, si no es el de Moodle. */
   emailCrm: string | null;
