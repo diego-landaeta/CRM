@@ -137,6 +137,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Prospectos', agrupa: true,
     descripcion: 'Avisos sueltos de prospecto',
   },
+  // #246 (Diego, 09/10): un tutor cambia su correo desde «Mi perfil». Es el correo
+  // de la factura de su comisión, así que administración tiene que enterarse.
+  tutor_correo_cambiado: {
+    clase: AVISO, etiqueta: 'Correo de tutor cambiado', agrupa: false,
+    descripcion: 'Un tutor cambia su correo desde «Mi perfil»',
+  },
 };
 
 const DESCONOCIDO = { clase: AVISO, agrupa: false, descripcion: null };
