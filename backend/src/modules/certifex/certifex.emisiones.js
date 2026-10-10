@@ -97,7 +97,7 @@ export async function listar(req, res, next) {
  * no puede quedarse bloqueado por esto.
  *
  * Si en el panel Diplomas alguien reviso a mano con que correo esta el alumno en el CRM
- * (`edicion.emailCrm`, migracion 197), se cruza por ese y no por el de Moodle.
+ * (`edicion.emailCrm`, migracion 198), se cruza por ese y no por el de Moodle.
  */
 export async function conLoDelCrm(filas, user) {
   const correoDe = (f) => String(f?.edicion?.emailCrm || f?.titular?.email || '').trim().toLowerCase();
