@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
@@ -96,6 +96,13 @@ export default function MatriculasPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // En el móvil la fila de pestañas se desliza y «Diplomas», la última, quedaba fuera de
+  // la vista: la activa se trae a la vista al entrar.
+  const pestanaDiplomas = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (enDiplomas) pestanaDiplomas.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [enDiplomas]);
+
   async function handleEstado(m, estado) {
     if (estado === 'rechazada') {
       setRechazoTarget(m);
@@ -155,6 +162,8 @@ export default function MatriculasPage() {
         )}
         {CERTIFEX_PANEL && verEmisiones && (
           <button
+            ref={pestanaDiplomas}
+            aria-current={enDiplomas ? 'page' : undefined}
             onClick={() => navigate('/clientes/matriculas/diplomas')}
             className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${enDiplomas ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
           >
