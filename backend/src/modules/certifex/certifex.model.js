@@ -86,7 +86,7 @@ export async function actualizar(id, { estado, notaInterna }, userId) {
   return fila({ ...rows[0], atendida_por_nombre: u.rows[0]?.nombre || null });
 }
 
-// ── Solicitudes de diploma (#272, migracion 198) ─────────────────────────────
+// ── Solicitudes de diploma (#272, migracion 199) ─────────────────────────────
 
 function solicitud(r) {
   if (!r) return null;
@@ -219,7 +219,7 @@ export async function datosDeSolicitudes(matriculaIds) {
   }]));
 }
 
-// ── Lo revisado a mano antes de aprobar (migracion 198, «Editar») ────────────
+// ── Lo revisado a mano antes de aprobar (migracion 199, «Editar») ────────────
 
 function edicion(r) {
   if (!r) return null;

@@ -18,7 +18,7 @@ import { AppError } from '../../shared/utils/AppError.js';
  *      Ninguna o varias: sin programa, y se dice por qué.
  * Sin programa, Certifex usa lo de Moodle; el panel lo enseña antes de aprobar.
  *
- * Lo que una persona revisó a mano en el panel (migración 198, «Editar») manda sobre
+ * Lo que una persona revisó a mano en el panel (migración 199, «Editar») manda sobre
  * esa búsqueda, por candidato:
  *   · `emailCrm`: las ventas se buscan con ese correo y no con el de Moodle.
  *   · `productoId`: esa formación del catálogo, encaje o no con el curso.
