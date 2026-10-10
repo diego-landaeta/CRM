@@ -54,6 +54,10 @@ export const ROUTE_TITLES = {
   '/finanzas/pagos-stripe': 'Pagos Stripe',
   '/finanzas/facturas': 'Facturas',
   '/finanzas/facturas/configuracion': 'Configuración de facturación',
+  // Facturas de colaboradores (#202)
+  '/finanzas/facturas-colaboradores': 'Facturas de colaboradores',
+  '/mi-factura': 'Mi factura',
+  '/factura-colaborador': 'Tu factura del mes',
   '/stripe': 'Stripe',
   '/soporte': 'Soporte',
   '/status': 'Estado del sistema',

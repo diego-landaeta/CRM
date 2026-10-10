@@ -1,0 +1,105 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowSquareOut, FileText, Receipt } from '@phosphor-icons/react';
+import { toast } from '@/shared/hooks/useToast';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { Button } from '@/shared/components/ui/button';
+import SubirFactura from '../components/SubirFactura';
+import { ESTADO, euros, facturasColaboradorApi, primeraMayuscula, type FacturaDelColaborador } from '../api/facturasColaborador.api';
+
+/**
+ * «Mi factura» (#202): el colaborador con usuario en el CRM ve sus meses, su
+ * enlace y el estado de cada factura, y la sube desde aquí. Solo lo suyo: lo
+ * comprueba el servidor. (El estado del pago llega con la segunda parte.)
+ */
+export default function MiFacturaPage() {
+  const [meses, setMeses] = useState<FacturaDelColaborador[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [abierta, setAbierta] = useState<number | null>(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      const r = await facturasColaboradorApi.mias();
+      setMeses(r.data);
+      // Se abre sola la primera que falta por subir.
+      setAbierta((a) => a ?? r.data.find((m) => !['recibida', 'anulada', 'caducado'].includes(m.estado))?.id ?? null);
+    } catch (err: any) {
+      toast({ title: 'No se pudieron cargar tus facturas', description: err?.message, variant: 'destructive' });
+    } finally { setCargando(false); }
+  }, []);
+
+  useEffect(() => { void cargar(); }, [cargar]);
+
+  async function verArchivo(id: number) {
+    try {
+      const r = await facturasColaboradorApi.archivoMio(id);
+      window.open(r.data.url, '_blank', 'noopener');
+    } catch (err: any) {
+      toast({ title: 'No se pudo abrir el archivo', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-4 max-w-3xl mx-auto">
+      <PageHeader title="Mi factura" subtitle="Tus facturas del mes: súbelas aquí o desde el enlace del correo" />
+
+      {meses.length === 0 ? (
+        <EmptyState
+          icon={Receipt}
+          title={cargando ? 'Cargando…' : 'Todavía no tienes ningún mes'}
+          description="El último día de cada mes aparece aquí el mes que tienes que facturar."
+        />
+      ) : (
+        <div className="space-y-3">
+          {meses.map((m) => (
+            <div key={m.id} className="bg-card border border-border rounded-lg">
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{primeraMayuscula(m.mes)} · {m.empresa.razon_social}</p>
+                  <p className="text-secundario text-muted-foreground">
+                    {m.recibida
+                      ? `Recibida · ${m.recibida.numero_recepcion} · ${euros(m.recibida.importe)}`
+                      : m.importe_acordado !== null ? `Acordado: ${euros(m.importe_acordado)}` : 'Sin importe acordado'}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO[m.estado].clase}`}>
+                  {m.estado === 'recibida' || m.estado === 'anulada' || m.estado === 'caducado' ? ESTADO[m.estado].rotulo : 'Pendiente'}
+                </span>
+                {m.recibida && (
+                  <Button variant="outline" size="sm" onClick={() => verArchivo(m.id!)}>
+                    <FileText size={13} className="mr-1.5" /> Ver archivo
+                  </Button>
+                )}
+                {m.enlace && (
+                  <a href={m.enlace} target="_blank" rel="noopener noreferrer"
+                    className="text-secundario text-primary inline-flex items-center gap-1 underline underline-offset-2">
+                    Tu enlace <ArrowSquareOut size={12} />
+                  </a>
+                )}
+                {!m.recibida && m.estado !== 'anulada' && m.estado !== 'caducado' && (
+                  <Button size="sm" variant={abierta === m.id ? 'outline' : 'default'} onClick={() => setAbierta(abierta === m.id ? null : m.id!)}>
+                    {abierta === m.id ? 'Cerrar' : 'Subir mi factura'}
+                  </Button>
+                )}
+              </div>
+              {abierta === m.id && !m.recibida && (
+                <div className="border-t border-border p-4">
+                  <SubirFactura
+                    factura={m}
+                    alSubir={async (archivo, importe, numero) => {
+                      await facturasColaboradorApi.subirMia(m.id!, archivo, importe, numero);
+                      toast({ title: 'Factura enviada', description: `${m.mes} · ${m.empresa.razon_social}` });
+                      setAbierta(null);
+                      await cargar();
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

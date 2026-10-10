@@ -24,13 +24,15 @@ function DocumentTitle() {
     // El nombre sale del mismo sitio que usa la cabecera: una pantalla no
     // puede llamarse de una forma en la pestaña y de otra encima del contenido.
     const route = tituloDeRuta(pathname);
-    const proj = project?.nombre;
+    // «Sin proyecto» es el hueco de cuando no hay ninguno (la página del enlace
+    // del colaborador, sin sesión): no es un nombre que poner en la pestaña.
+    const proj = project?.id ? project.nombre : null;
     // Formato: "Prospectos · Psiko Aprende — MultiCRM"
     if (route && proj) document.title = `${route} · ${proj} — ${base}`;
     else if (route) document.title = `${route} — ${base}`;
     else if (proj) document.title = `${proj} — ${base}`;
     else document.title = base;
-  }, [pathname, project?.nombre]);
+  }, [pathname, project?.id, project?.nombre]);
   return null;
 }
 
@@ -151,6 +153,10 @@ const DocumentsConfigPage = lazy(() => import('./modules/documents/pages/Documen
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const TasksPage = lazy(() => import('./modules/tasks/pages/TasksPage'));
 const TaskBoardConfigPage = lazy(() => import('./modules/tasks/pages/TaskBoardConfigPage'));
+// Facturas de colaboradores (#202)
+const FacturasColaboradoresPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturasColaboradoresPage'));
+const MiFacturaPage = lazy(() => import('./modules/facturas-colaborador/pages/MiFacturaPage'));
+const FacturaEnlacePage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaEnlacePage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
@@ -180,6 +186,8 @@ function App() {
         <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave. */}
+        <Route path="/factura-colaborador/:token" element={<FacturaEnlacePage />} />
         {IS_TESTEO2_BASE && SuiteDashCrmPreviewPage && (
           <Route path="/suite-dash" element={<ProtectedRoute><SuiteDashCrmPreviewPage /></ProtectedRoute>} />
         )}
@@ -279,6 +287,8 @@ function App() {
             <Route path="facturas/nueva" element={<InvoiceCreatePage />} />
             <Route path="facturas/configuracion" element={<InvoicingConfigPage />} />
             <Route path="facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
+            {/* #202: en evaluación, solo en /testeo y en local, como el tablero (#210). */}
+            <Route path="facturas-colaboradores" element={SOLO_EN_PRUEBAS ? <FacturasColaboradoresPage /> : <Navigate to="/finanzas" replace />} />
           </Route>
 
           <Route path="/secuencias-email" element={<EmailSequencesPage />} />
@@ -322,6 +332,7 @@ function App() {
           <Route path="/tareas" element={SOLO_EN_PRUEBAS ? <TasksPage /> : <Navigate to="/" replace />} />
           <Route path="/tareas/revisar" element={SOLO_EN_PRUEBAS ? <TasksPage /> : <Navigate to="/" replace />} />
           <Route path="/tareas/configurar" element={SOLO_EN_PRUEBAS ? <TaskBoardConfigPage /> : <Navigate to="/" replace />} />
+          <Route path="/mi-factura" element={SOLO_EN_PRUEBAS ? <MiFacturaPage /> : <Navigate to="/" replace />} />
           <Route path="/external/:panelId" element={<ExternalPanelPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
