@@ -71,7 +71,15 @@ export interface Candidato {
    * El alumno lo pidió desde Moodle (#272): cuándo y el nombre que escribió para el
    * diploma, que es el que se imprime. null si no lo pidió.
    */
-  solicitud?: { en: string; nombre: string | null } | null;
+  solicitud?: {
+    en: string;
+    /** El que se imprimirá: el revisado en el CRM, si lo está; si no, el del alumno. */
+    nombre: string | null;
+    /** Lo que escribió el alumno. */
+    nombreAlumno?: string | null;
+    /** Quién revisó el nombre desde el CRM, y cuándo. */
+    revisado?: { por: string; en: string } | null;
+  } | null;
   /** El programa oficial que mandó el CRM al emitir (horas y temario), si lo mandó. */
   programa?: ProgramaOficial | null;
   /**
@@ -116,6 +124,21 @@ export interface CampusCertifex extends Recuentos {
   logo: string | null;
   activo: boolean;
   cursos: number;
+  /**
+   * La salud del enlace con su Moodle: el plugin manda un latido diario desde su tarea
+   * programada, que solo corre si el cron de Moodle funciona. Un Certifex antiguo no lo
+   * manda: sin el campo, no se enseña nada.
+   */
+  salud?: SaludMoodle | null;
+}
+
+export interface SaludMoodle {
+  /** ok · sin_latido (más de 36 h) · nunca (plugin anterior a 2.7.0 o cron que no ha corrido) · sin_moodle. */
+  cron: 'ok' | 'sin_latido' | 'nunca' | 'sin_moodle';
+  latidoEn: string | null;
+  avisoEn?: string | null;
+  plugin: string | null;
+  moodle: string | null;
 }
 
 export interface CursoCertifex extends Recuentos {
@@ -131,7 +154,19 @@ export interface PaginaCandidatos {
 }
 
 export interface ResultadoDecision { matriculaId: number | null; ok: boolean; error?: string; decision?: string; yaEmitida?: string }
-export interface ResultadoEmision { matriculaId: number | null; ok: boolean; nexpediente?: string; yaExistia?: boolean; error?: string }
+export interface ResultadoEmision {
+  matriculaId: number | null;
+  ok: boolean;
+  nexpediente?: string;
+  yaExistia?: boolean;
+  error?: string;
+  /** 'emitir_bloqueado': revisada a mano y sin programa; no se ha emitido. */
+  fase?: string;
+  /** Con programa del CRM: lo que se mandó. */
+  programa?: { horas: number | null; modulos: number; formacion: string | null; editado?: boolean };
+  /** Sin programa del CRM (se usó lo de Moodle): por qué. */
+  sinPrograma?: string;
+}
 
 type R<T> = Promise<{ success: boolean; data: T; error?: string }>;
 
@@ -179,9 +214,10 @@ export const emisionesApi = {
 // --- Diplomas (#272): lo que el alumno pide desde Moodle y los diplomas emitidos ---
 // Emitir NO avisa al alumno: el correo sale solo cuando alguien lo aprueba aquí.
 
-export type PestanaDiplomas = 'pendientes' | 'enviados' | 'rechazados' | 'revocados';
+export type PestanaDiplomas = 'pendientes' | 'terminados' | 'enviados' | 'rechazados' | 'revocados';
 export type ResultadoAviso = 'enviado' | 'correo_apagado' | 'sin_correo' | 'error';
-export type FiltroAviso = 'pendiente' | 'enviado' | 'no_salio';
+/** 'fuera': emitido fuera del CRM (desde Certifex, o los antiguos) y sin aviso. */
+export type FiltroAviso = 'pendiente' | 'fuera' | 'enviado' | 'no_salio';
 
 /** Horas y temario de la formación vendida, tal y como se imprimen en el diploma. */
 export interface ProgramaOficial {
@@ -197,12 +233,58 @@ export interface ProgramaDelCrm {
   programa: ProgramaOficial | null;
   formacion: { id: number; nombre: string; numModulos: number | null } | null;
   motivo: string | null;
+  /** El programa lo escribió alguien a mano («Editar»): se imprime eso. */
+  editado?: boolean;
+  /** La formación vendida se eligió a mano del catálogo. */
+  elegida?: boolean;
+  /** Con algo revisado a mano: lo que habría salido solo (la formación «Automática»). */
+  auto?: { programa: ProgramaOficial | null; formacion: ProgramaDelCrm['formacion']; motivo: string | null };
+}
+
+/** Lo revisado a mano antes de aprobar (migración 197): con qué datos se trabaja. */
+export interface EdicionSolicitud {
+  /** El correo con el que se busca al alumno en el CRM, si no es el de Moodle. */
+  emailCrm: string | null;
+  /** La formación vendida, elegida del catálogo. */
+  productoId: number | null;
+  /** El programa a imprimir, escrito a mano. */
+  programaEditado: ProgramaOficial | null;
+  por: string | null;
+  en: string | null;
+}
+
+/** Una formación del catálogo del campus, para elegir la vendida. */
+export interface FormacionCatalogo {
+  id: number;
+  nombre: string;
+  activa: boolean;
+  horas: number | null;
+  numModulos: number | null;
+  modulos: { titulo: string; horas?: number | null }[];
+}
+
+export interface CatalogoDelCampus {
+  proyecto: { id: number; nombre: string } | null;
+  /** Por qué no hay catálogo (el campus no casa con un proyecto del CRM). */
+  motivo: string | null;
+  formaciones: FormacionCatalogo[];
+}
+
+/** «Editar»: null en un campo quita esa edición; sin el campo, no se toca. */
+export interface CambiosSolicitud {
+  matriculaId: number;
+  nombre?: string;
+  emailCrm?: string | null;
+  productoId?: number | null;
+  programa?: ProgramaOficial | null;
 }
 
 /** Una solicitud de diploma: un candidato de Certifex que lo pidió desde Moodle. */
 export interface Solicitud extends Candidato {
   /** Solo sin diploma: el programa que se mandará al emitir. */
   programaCrm?: ProgramaDelCrm | null;
+  /** Solo sin diploma: lo revisado a mano antes de aprobar. */
+  edicion?: EdicionSolicitud | null;
   /** El aviso de rechazo que ya se aprobó (solo en las rechazadas). */
   avisoRechazo?: { en: string; por: string; resultado: string } | null;
   /** Solo en «por avisar»: el diploma emitido. */
@@ -222,6 +304,17 @@ export interface Diploma {
   verificarUrl: string;
   diplomaUrl: string;
   aviso: { resultado: ResultadoAviso; en: string; por: string } | null;
+  /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
+  emitidoEnCrm?: boolean;
+}
+
+/**
+ * «Terminaron sin pedir»: Moodle da la formación por terminada y el alumno aún no ha
+ * pedido su diploma. Solo consulta. `aviso`: cuándo lo dio Moodle por terminado y cuándo
+ * llegó el aviso al CRM (null si no llegó).
+ */
+export interface Terminado extends Candidato {
+  aviso?: { en: string | null; recibidoEn: string | null; nota: number | null } | null;
 }
 
 export interface Pagina<T> { filas: T[]; total: number; pagina: number; tam: number; truncado?: boolean }
@@ -233,6 +326,10 @@ export interface ResumenDiplomas {
   revocados: number;
   porAvisar: number;
   sinEmitir: number;
+  /** Terminaron en Moodle y aún no han pedido el diploma. */
+  terminados?: number;
+  /** «Por enviar al alumno»: lo mismo que el filtro «Pendiente de aviso» de Emitidos. */
+  porEnviar?: number;
 }
 
 export interface FiltrosDiplomas {
@@ -249,12 +346,12 @@ export interface FiltrosDiplomas {
 export interface ResultadoAprobarEmitir {
   matriculaId: number;
   ok: boolean;
-  fase?: 'aprobar' | 'emitir';
+  fase?: 'aprobar' | 'emitir' | 'emitir_bloqueado';
   nexpediente?: string;
   yaExistia?: boolean;
   error?: string;
   /** Con programa del CRM: lo que se mandó. */
-  programa?: { horas: number | null; modulos: number; formacion: string | null };
+  programa?: { horas: number | null; modulos: number; formacion: string | null; editado?: boolean };
   /** Sin programa del CRM (se usó lo de Moodle): por qué. */
   sinPrograma?: string;
 }
@@ -271,6 +368,9 @@ export const diplomasApi = {
   resumen: (centro?: string) => client.get(`/certifex/diplomas/resumen?${qs({ centro })}`) as R<ResumenDiplomas>,
   solicitudes: (f: FiltrosDiplomas & { estado?: 'pendiente' | 'aprobada' | 'rechazada' | 'todas' }) =>
     client.get(`/certifex/diplomas/solicitudes?${qs(f)}`) as R<Pagina<Solicitud>>,
+  /** Solo consulta: terminaron en Moodle y aún no han pedido el diploma. */
+  terminados: (f: Omit<FiltrosDiplomas, 'desde' | 'hasta'>) =>
+    client.get(`/certifex/diplomas/terminados?${qs(f)}`) as R<Pagina<Terminado>>,
   porAvisar: (f: { centro?: string; q?: string }) =>
     client.get(`/certifex/diplomas/por-avisar?${qs(f)}`) as R<{ porAvisar: Solicitud[]; sinEmitir: Solicitud[]; truncado?: boolean }>,
   diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'todos'; aviso?: FiltroAviso }) =>
@@ -289,4 +389,11 @@ export const diplomasApi = {
     client.post('/certifex/diplomas/revocar', { nexpediente, motivo }) as R<{ ok: true; nexpediente: string }>,
   corregirNombre: (nexpediente: string, valor: string, motivo: string) =>
     client.post('/certifex/diplomas/corregir', { nexpediente, campo: 'alumno_nombre', valor, motivo }) as R<{ ok: true; nexpediente: string }>,
+  /**
+   * Revisar antes de aprobar (solo sin diploma): el nombre va a Certifex; el correo del
+   * CRM, la formación y el programa se guardan en el CRM. Devuelve la fila actualizada.
+   */
+  editar: (cambios: CambiosSolicitud) => client.post('/certifex/diplomas/editar', cambios) as R<Solicitud>,
+  /** Las formaciones del catálogo del proyecto de ese campus, para elegir la vendida. */
+  formaciones: (centro: string) => client.get(`/certifex/diplomas/formaciones?${qs({ centro })}`) as R<CatalogoDelCampus>,
 };

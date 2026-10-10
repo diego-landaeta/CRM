@@ -57,6 +57,57 @@ CREATE TABLE IF NOT EXISTS certifex_solicitudes (
 CREATE INDEX IF NOT EXISTS idx_certifex_solicitudes_recibida ON certifex_solicitudes (recibida_en DESC);
 CREATE INDEX IF NOT EXISTS idx_certifex_solicitudes_email ON certifex_solicitudes (lower(email));
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- LO QUE SE REVISA ANTES DE APROBAR (panel Diplomas, «Editar»)
+--
+-- Manuel, 08/10: «permite que se puedan editar los datos con los que se trabaja»
+-- para verificar al alumno. Moodle y el CRM no siempre casan: el alumno usa en
+-- Moodle otro correo que el de su venta, o la formación vendida no se llama como el
+-- curso. Sin esto salía «Sin programa del CRM: se usará lo de Moodle» y no había
+-- forma de arreglarlo desde el panel.
+--
+-- Lo que se guarda aquí (el nombre del diploma NO: vive en Certifex, que es quien
+-- lo imprime, y se le manda a su API):
+--   · `email_crm`: el correo con el que buscar al alumno en el CRM (su venta, si
+--     ha pagado) cuando no es el de Moodle.
+--   · `producto_id`: la formación vendida, elegida a mano del catálogo.
+--   · `programa_editado`: el programa a imprimir escrito a mano,
+--     { horas, modulos: [{ titulo, horas }] }. Manda sobre todo lo demás.
+--   · `editado_por` / `editado_en`: quién lo tocó por última vez y cuándo.
+-- Solo vale mientras no hay diploma: emitido, lo que cambia es el diploma (Corregir).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS email_crm TEXT;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS producto_id INTEGER REFERENCES products(id) ON DELETE SET NULL;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS programa_editado JSONB;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS editado_por TEXT;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS editado_en TIMESTAMPTZ;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'certifex_solicitudes_programa_editado_objeto') THEN
+    ALTER TABLE certifex_solicitudes ADD CONSTRAINT certifex_solicitudes_programa_editado_objeto
+      CHECK (programa_editado IS NULL OR jsonb_typeof(programa_editado) = 'object');
+  END IF;
+END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TERMINARON SIN PEDIR EL DIPLOMA (aviso «ha terminado la formación»)
+--
+-- Certifex avisa (POST /api/certifex/completados, mismo secreto) cuando Moodle da una
+-- formación por terminada y el alumno aún no ha pedido su diploma ni lo tiene. Una vez
+-- por matrícula. Se guarda en la misma fila (una por matrícula): si luego lo pide, el
+-- aviso de la solicitud completa la fila y la de «terminado» se queda como historia.
+--   · `completado_en`: cuándo lo dio Moodle por terminado (según Certifex).
+--   · `completado_nota`: la nota final que tenía entonces.
+--   · `completado_recibido_en`: cuándo llegó el aviso al CRM. Con valor, un reintento
+--     de Certifex no vuelve a sonar la campana.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS completado_en TIMESTAMPTZ;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS completado_nota NUMERIC;
+ALTER TABLE certifex_solicitudes ADD COLUMN IF NOT EXISTS completado_recibido_en TIMESTAMPTZ;
+
 -- La tabla es del usuario de la app, no de quien aplica la migración (mismo motivo
 -- que en la 186: aplicada como `postgres`, la API recibía «permission denied»).
 DO $$
