@@ -40,9 +40,17 @@ const jwtDe = (u) => jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SE
 const preguntar = (u, cuerpo = { pregunta: '¿cuánto se cobró en julio?' }, query = '') =>
   request.post(`/api/ia-analisis/preguntar${query}`).set('Authorization', `Bearer ${jwtDe(u)}`).send(cuerpo);
 
+/**
+ * Las personas de la prueba se crean INACTIVAS. Importa: otras pruebas de la suite
+ * (Certifex) comparan «los superadmin y admin activos» con quienes recibieron un
+ * aviso, y un usuario activo que aparece y desaparece mientras tanto las
+ * desajusta —eso rompio el CI de esta rama: «expected [20, 1] to include 25»,
+ * donde el 25 era un superadmin de esta prueba—. El alcance (`user_projects`) y
+ * el token no necesitan que el usuario este activo.
+ */
 async function persona(clave, role, campus = []) {
   const [u] = await q(
-    `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id, role`,
+    `INSERT INTO users (nombre, email, password_hash, role, active) VALUES ($1, $2, 'x', $3, FALSE) RETURNING id, role`,
     [`${MARCA} ${clave}`, `${clave.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]);
   ids.users.push(u.id);
   for (const c of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, c]);
@@ -53,7 +61,9 @@ beforeAll(async () => {
   await persona('ADMIN1', 'admin', [1]);
   await persona('ADMIN12', 'admin', [1, 2]);
   await persona('GESTORA', 'gestor', [1]);
-  await persona('SUPER', 'superadmin');
+  // Sin fila en la base: un superadmin NO se resuelve por `user_projects` (ve todo) y
+  // el token basta. Crearlo activo es justo lo que desajustaba a Certifex.
+  U.SUPER = { id: 987654321, role: 'superadmin' };
   await persona('LIMITE', 'admin', [1]);
 });
 
