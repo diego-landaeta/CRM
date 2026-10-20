@@ -65,7 +65,7 @@ export const TOPE_INFORME_MS = 8000;
  */
 export const INFORMES = {
   resumen_general: {
-    descripcion: 'Leads por estado y canal, conversiones y dinero cobrado del periodo (solo super admin y admin).',
+    descripcion: 'Leads por estado y canal, y las ventas CERRADAS en el periodo (por fecha de venta) con lo que se declara pagado en ellas. No es el dinero que entró en el periodo: para eso, «cobros_mensuales» (solo super admin y admin).',
     ejecutar: reportes.overview,
     // `overview` no aplicaba `asesoraId` hasta el 19/10/2026 (ver su
     // comentario: «Tu semana» de las gestoras). Ya lo aplica, pero esto sigue
@@ -74,7 +74,7 @@ export const INFORMES = {
     soloAdmin: true,
   },
   resumen_mensual: {
-    descripcion: 'Lo mismo desglosado mes a mes.',
+    descripcion: 'Prospectos, ventas y dinero mes a mes, por mes de VENTA (no de cobro): «cobrado» es lo que se declara pagado en las ventas de ese mes, como en «resumen_general». Para el dinero que entró en cada mes, usa «cobros_mensuales».',
     ejecutar: reportes.resumenMensual,
   },
   ventas_por_asesora: {
@@ -90,7 +90,7 @@ export const INFORMES = {
     ejecutar: reportes.seguimientoYTiempos,
   },
   cobros_mensuales: {
-    descripcion: 'Dinero cobrado mes a mes.',
+    descripcion: 'Dinero cobrado mes a mes: cada pago registrado, por su FECHA DE COBRO (la base de Finanzas). Es la respuesta a «cuánto dinero entró en tal mes».',
     ejecutar: reportes.cobrosMensuales,
   },
   paises: {
@@ -366,6 +366,7 @@ export const HERRAMIENTAS = [
     nombre: 'cobros_pendientes',
     titulo: 'Cobros pendientes',
     descripcion: 'Cuentas por cobrar: cuotas y ventas pendientes con su vencimiento, y cuánto está vencido. Las fechas filtran por vencimiento. '
+      + 'Ojo: el Dashboard («cobros vencidos») cuenta solo VENTAS con saldo y fecha de pago pasada, y esto cuenta cuotas e importes: no es un error que no coincidan. '
       + 'Da lo mismo que la pantalla «Cuentas por cobrar» del CRM, que se fía del campo de importe pagado de la venta: si una venta está marcada como pagada '
       + 'pero no tiene pagos registrados, aquí no sale como pendiente y en «listar_ventas» sí. Si las cifras no cuadran, dilo y explica esta diferencia.',
     entrada: { ...DATOS_COMPLETOS,
@@ -533,7 +534,7 @@ export const HERRAMIENTAS = [
   {
     nombre: 'informe',
     titulo: 'Informe del CRM',
-    descripcion: 'Ejecuta uno de los informes de Reportes del CRM (mismos números que la pantalla). Tipos: '
+    descripcion: 'Ejecuta uno de los informes de Reportes del CRM (mismos números que la pantalla, con el mismo periodo). Sin desde/hasta cubre TODO el histórico; la pantalla de Reportes arranca en «Este mes», así que para cuadrar con ella pasa las fechas del mes. Tipos: '
       + Object.entries(INFORMES).map(([k, v]) => `${k} (${v.descripcion})`).join('; '),
     entrada: { ...DATOS_COMPLETOS,
       tipo: z.enum(Object.keys(INFORMES)),
