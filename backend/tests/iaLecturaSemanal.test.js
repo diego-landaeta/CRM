@@ -16,7 +16,7 @@ const gasto = {
 };
 vi.mock('../src/shared/services/gastoIA.service.js', () => gasto);
 
-const clave = vi.fn(async () => 'sk-ant-de-prueba');
+const clave = vi.fn(async () => 'clave-falsa-de-prueba');
 vi.mock('../src/modules/credentials/credentials.model.js', () => ({ getDecryptedValue: (...a) => clave(...a) }));
 
 const { lecturaDeLaSemana, variacion, datosDeLaSemana } =
@@ -35,7 +35,7 @@ beforeEach(() => {
   gasto.compruebaAntesDeGastar.mockResolvedValue({ permitido: true, motivo: null, estado: {} });
   gasto.registrar.mockClear();
   clave.mockReset();
-  clave.mockResolvedValue('sk-ant-de-prueba');
+  clave.mockResolvedValue('clave-falsa-de-prueba');
 });
 
 describe('las variaciones van calculadas, no las calcula el modelo', () => {

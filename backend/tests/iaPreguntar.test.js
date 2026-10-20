@@ -25,7 +25,7 @@ const gasto = {
 };
 vi.mock('../src/shared/services/gastoIA.service.js', () => gasto);
 
-const clave = vi.fn(async () => 'sk-ant-de-prueba');
+const clave = vi.fn(async () => 'clave-falsa-de-prueba');
 vi.mock('../src/modules/credentials/credentials.model.js', () => ({ getDecryptedValue: (...a) => clave(...a) }));
 
 const { preguntar, instruccion, recortar, MAX_VUELTAS, SIN_DATO } =
@@ -60,7 +60,7 @@ const claudeQue = (...respuestas) => {
 beforeEach(() => {
   for (const f of [...Object.values(reportes), ...Object.values(gasto), clave]) f.mockClear();
   gasto.compruebaAntesDeGastar.mockResolvedValue({ permitido: true, motivo: null, estado: {} });
-  clave.mockResolvedValue('sk-ant-de-prueba');
+  clave.mockResolvedValue('clave-falsa-de-prueba');
 });
 
 const preguntaBase = { pregunta: '¿cuánto se cobró en julio?', alcance: { projectIds: [1, 2] }, userId: 9, hoy: HOY };
