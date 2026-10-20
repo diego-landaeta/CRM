@@ -5,6 +5,11 @@ import { resumenDelDia } from '../reports/resumenDelDia.js';
 import * as proceso from '../proceso/proceso.model.js';
 import * as feedback from '../feedback/feedback.model.js';
 import * as metas from '../sales/sales.goals.js';
+import * as egresos from '../expenses/expense.model.js';
+import * as porPagar from '../accounts-payable/payable.model.js';
+import * as stripe from '../stripe-payments/stripe-payments.model.js';
+import * as comisiones from '../commissions/commission.model.js';
+import * as duplicados from '../leads/dup-queue.service.js';
 import * as model from './mcp.model.js';
 import { acotarProyectos, responsableImpuesto } from './mcp.acceso.js';
 
@@ -125,6 +130,39 @@ export const INFORMES = {
   metas_gestoras: {
     descripcion: 'La meta de ventas y de facturación de cada gestora y su avance en el periodo (solo super admin y admin). Acepta desde y hasta.',
     ejecutar: ({ projectIds, from, to }) => metas.getGestoresStats({ projectIds, from: from || null, to: to || null }),
+    soloAdmin: true,
+  },
+  // ── Administración y dinero (#325): solo super admin y admin ───────────────
+  egresos: {
+    descripcion: 'Los gastos por categoría y periodo, como «Egresos» (incluye los de la empresa y los generales). Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => egresos.resumenExpenses({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  cuentas_por_pagar: {
+    descripcion: 'Facturas de proveedores: total facturado, pagado, pendiente y vencidas, como «Cuentas por pagar». Acepta desde y hasta, por fecha de factura (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => porPagar.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  pagos_stripe: {
+    descripcion: 'Los cobros de Stripe del periodo: correctos y fallidos, disputados, reembolsados, cuántos no están asociados a un cliente y el total cobrado, como «Pagos Stripe». Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => stripe.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  comisiones_gestoras: {
+    descripcion: 'Las comisiones de las gestoras por ventas: total, pagadas y pendientes del periodo (solo super admin y admin). Las de los tutores van en «comisiones_tutores».',
+    ejecutar: ({ projectIds, from, to }) => comisiones.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  duplicados: {
+    descripcion: 'La cola de prospectos duplicados: pendientes de revisar, aprobados, fusionados y descartados, de tus campus (solo super admin y admin).',
+    ejecutar: async ({ projectIds }) => {
+      const total = { pending: 0, approved: 0, merged: 0, rejected: 0 };
+      for (const id of projectIds) {
+        const c = await duplicados.counts(id);
+        for (const k of Object.keys(total)) total[k] += Number(c[k] || 0);
+      }
+      return { pendientes: total.pending, aprobados: total.approved, fusionados: total.merged, descartados: total.rejected };
+    },
     soloAdmin: true,
   },
   // Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado» (antes, del 30/09 al 08/10, por lo facturado).
@@ -389,6 +427,21 @@ export const HERRAMIENTAS = [
         throw new AppError(`No tienes acceso al campus ${r.campus_id}. Usa «mis_proyectos» para ver los tuyos.`, 403, 'MCP_FUERA_DE_AMBITO');
       }
       return r;
+    },
+  },
+  {
+    nombre: 'equipo',
+    titulo: 'Equipo',
+    descripcion: 'Quién hay en tus campus: nombre, rol y campus de cada persona, y cuántas hay por rol. Sin correos ni teléfonos. '
+      + 'Por defecto solo las activas (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      incluir_inactivos: z.boolean().optional().describe('true: también las personas desactivadas'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'equipo');
+      return model.equipoDeLosCampus({ projectIds, incluirInactivos: a.incluir_inactivos === true });
     },
   },
   {

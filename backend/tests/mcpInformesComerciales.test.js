@@ -225,3 +225,78 @@ describe('comisiones_tutores: la base de cálculo, en los totales', () => {
     expect(Object.keys(r.totales).sort()).toEqual(['base', 'generado', 'pagado', 'por_pagar', 'revertido']);
   });
 });
+
+// ─── Administración y dinero (#325) ───────────────────────────────────────
+
+describe('las consultas de administración, solo para quien manda y de SUS campus', () => {
+  const ADMINISTRACION = ['egresos', 'cuentas_por_pagar', 'pagos_stripe', 'comisiones_gestoras', 'duplicados'];
+
+  beforeAll(async () => {
+    await q(`INSERT INTO expenses (concepto, importe, fecha, project_id) VALUES ($1, 250, '2026-10-05', $2), ($3, 999, '2026-10-05', $4)`,
+      [`${MARCA} alquiler`, P, `${MARCA} otro campus`, OTRO]);
+  });
+  afterAll(async () => { await q(`DELETE FROM expenses WHERE concepto LIKE $1`, [`${MARCA}%`]); });
+
+  it('un admin las ejecuta contra la base sin error', async () => {
+    for (const n of ADMINISTRACION) expect((await ver(ADMIN, n, { desde: '2020-01-01', hasta: '2030-01-01' })).datos, n).toBeTruthy();
+  });
+
+  it('una gestora no: se le niega con el mismo código que el resto de lo de administración', async () => {
+    for (const n of ADMINISTRACION) {
+      await expect(ver(LAURA, n), n).rejects.toMatchObject({ code: 'MCP_INFORME_SOLO_ADMIN' });
+    }
+  });
+
+  it('egresos: solo lo de su campus, por categoría', async () => {
+    const { datos } = await ver(ADMIN, 'egresos', { desde: '2026-10-01', hasta: '2026-10-31' });
+    // El de OTRO campus (999) no entra; los gastos generales de la casa del resto de la base, sí pueden estar,
+    // así que se mira que el nuestro esté y el ajeno no.
+    expect(datos.por_categoria.some((c) => c.total >= 250)).toBe(true);
+    expect(datos.total).toBeGreaterThanOrEqual(250);
+    expect(JSON.stringify(datos)).not.toContain('999');
+  });
+
+  it('duplicados: cuatro cifras', async () => {
+    const { datos } = await ver(ADMIN, 'duplicados');
+    expect(Object.keys(datos).sort()).toEqual(['aprobados', 'descartados', 'fusionados', 'pendientes']);
+  });
+});
+
+describe('equipo: quién hay en tus campus, sin correos', () => {
+  beforeAll(async () => {
+    await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $3), ($2, $3), ($1, $4)`, [LAURA.id, ANA.id, P, OTRO]);
+    await q(`UPDATE users SET active = false WHERE id = $1`, [ANA.id]);
+  });
+
+  it('las personas activas del campus, con su rol y campus; ninguna de OTRO que no esté en P', async () => {
+    const r = await correr('equipo', ADMIN);
+    const nombres = r.personas.map((p) => p.nombre);
+    expect(nombres).toContain(`${MARCA} LAURA`);
+    expect(nombres).not.toContain(`${MARCA} ANA`); // desactivada
+    const laura = r.personas.find((p) => p.nombre === `${MARCA} LAURA`);
+    expect(laura).toMatchObject({ rol: 'gestor', activo: true });
+    // Laura está en P y en OTRO, pero solo se ve el campus que se pidió.
+    expect(laura.campus).toEqual([`${MARCA} a`]);
+    expect(r.total).toBe(r.personas.length);
+    expect(r.por_rol.gestor).toBeGreaterThanOrEqual(1);
+  });
+
+  it('con incluir_inactivos sale también la desactivada', async () => {
+    const r = await correr('equipo', ADMIN, { incluir_inactivos: true });
+    expect(r.personas.map((p) => p.nombre)).toContain(`${MARCA} ANA`);
+  });
+
+  it('ni un correo, ni un teléfono, ni nada personal en la respuesta', async () => {
+    const texto = JSON.stringify(await correr('equipo', ADMIN, { incluir_inactivos: true }));
+    expect(texto).not.toMatch(/@/);
+    expect(texto).not.toMatch(/email|correo|telefono|password/i);
+  });
+
+  it('una gestora no la ve', async () => {
+    await expect(correr('equipo', LAURA)).rejects.toMatchObject({ code: 'MCP_SOLO_ADMIN' });
+  });
+
+  it('un campus ajeno no se puede pedir', async () => {
+    await expect(correr('equipo', ADMIN, { proyecto_id: OTRO })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
+  });
+});

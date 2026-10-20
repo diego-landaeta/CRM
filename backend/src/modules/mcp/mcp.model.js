@@ -329,6 +329,30 @@ const paginado = (pagina = 1, limite = 25) => ({ limit: limite, offset: (pagina 
 
 const fechaLocal = (col) => `(${col} AT TIME ZONE '${TZ}')::date`;
 
+// ─── Equipo (#325) ────────────────────────────────────────────────────────
+
+/**
+ * Quién hay en los campus de la persona, con su rol y sus campus. SIN correos
+ * ni teléfonos: solo el nombre, el rol y a qué campus pertenece. Una persona de
+ * varios campus sale una vez, con los suyos dentro de los pedidos.
+ */
+export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.role AS rol, u.active AS activo,
+            array_agg(DISTINCT p.nombre ORDER BY p.nombre) AS campus
+       FROM users u
+       JOIN user_projects up ON up.user_id = u.id AND up.active
+       JOIN projects p ON p.id = up.project_id
+      WHERE up.project_id = ANY($1::int[]) ${incluirInactivos ? '' : 'AND u.active'}
+      GROUP BY u.id, u.nombre, u.role, u.active
+      ORDER BY u.role, u.nombre`,
+    [projectIds]
+  );
+  const porRol = {};
+  for (const r of rows) porRol[r.rol] = (porRol[r.rol] || 0) + 1;
+  return { total: rows.length, por_rol: porRol, personas: rows };
+}
+
 // ─── Prospectos ───────────────────────────────────────────────────────────
 
 function filtrosProspectos({ projectIds, responsableId, estado, texto, desde, hasta, canal }) {
