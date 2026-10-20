@@ -81,7 +81,8 @@ describe('#207: Claude, contra la base', () => {
     if (!hayBase) return;
     const r = await comisionesDeTutores({ projectIds: [projectId], desde: '2026-08', hasta: '2026-09' });
     expect(r.periodo).toBe('2026-08 a 2026-09');
-    expect(r.totales).toEqual({ generado: 0, por_pagar: 0, pagado: 0, revertido: 0 });
+    // La base de cálculo entró en los totales con la #325 (antes había que sumarla fila a fila).
+    expect(r.totales).toEqual({ base: 0, generado: 0, por_pagar: 0, pagado: 0, revertido: 0 });
   });
 });
 
