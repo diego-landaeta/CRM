@@ -558,7 +558,7 @@ export async function nuevo(req, res, next) {
       solicitadaEn: new Date().toISOString(),
     });
     logger.info({ userId: req.user.userId, centro: cod, matriculaId: r.matriculaId, productoId: p.id, yaExistia: !!r.yaExistia }, 'Certifex: nuevo diploma desde el CRM');
-    res.json({ success: true, data: { matriculaId: r.matriculaId, yaExistia: !!r.yaExistia, centro: cod, curso: p.nombre, nombre } });
+    res.json({ success: true, data: { matriculaId: r.matriculaId, yaExistia: !!r.yaExistia, vinculadaMoodle: !!r.vinculadaMoodle, centro: cod, curso: p.nombre, nombre } });
   } catch (err) { next(err); }
 }
 
