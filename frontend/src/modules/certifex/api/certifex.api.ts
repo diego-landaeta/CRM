@@ -304,6 +304,8 @@ export interface CatalogoDelCampus {
 export interface CambiosSolicitud {
   matriculaId: number;
   nombre?: string;
+  /** El DNI / NIE / pasaporte que se imprime en el diploma (vive en Certifex). null = quitarlo. */
+  dni?: string | null;
   emailCrm?: string | null;
   productoId?: number | null;
   programa?: ProgramaOficial | null;
