@@ -249,8 +249,9 @@ describe('el protocolo, con la base de verdad', () => {
     // 13 desde el 01/10: «listar_tutores», «comisiones_tutores» y «formaciones_sin_tutor».
     // 16 desde el 06/10 (#215): «listar_formaciones», «resumen_catalogo» y «ver_formacion».
     // 17 desde el 20/10 (#325): «equipo». Las demás consultas nuevas entran como tipos de «informe».
-    expect(list.body.result.tools.length).toBe(17);
-    expect(list.body.result.tools.map((t) => t.name)).toContain('equipo');
+    // 18 desde el 20/10 (#325, parte 2): «clientes». El resto de lo nuevo también entra como tipos de «informe».
+    expect(list.body.result.tools.length).toBe(18);
+    expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['equipo', 'clientes']));
     expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
 
