@@ -113,6 +113,11 @@ export const INFORMES = {
     descripcion: 'La cola del proceso comercial en cifras, como «La cola del día»: atrasados, para hoy, para mañana y esta semana.',
     ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeLaCola({ projectIds, asesoraId }),
   },
+  proceso_comercial: {
+    descripcion: 'El proceso comercial en cifras: cuántos prospectos hay en cada paso (1–4 y los que se añaden a mano), cuántos van atrasados y la fecha del siguiente. '
+      + 'Los mismos prospectos que «cola_del_dia», repartidos por paso.',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenPorPaso({ projectIds, asesoraId }),
+  },
   seguimiento_fin_de_mes: {
     descripcion: 'Prospectos por antigüedad (este mes, 1–3, 3–6 y más de 6 meses) y cuántos no se han contactado nunca, como «Seguimiento de fin de mes».',
     ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeSeguimiento({ projectIds, asesoraId }),
@@ -229,16 +234,24 @@ export const HERRAMIENTAS = [
     // En esta lista, «nombre» es el de un cliente: sale abreviado (#196).
     listasDeClientes: ['prospectos'],
     titulo: 'Buscar prospectos',
-    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono) y fechas de solicitud. Devuelve una página de resultados y el total.',
+    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono), gestora, programa de interés y fechas de solicitud. Cada fila trae el último contacto, el próximo (según el proceso comercial), el paso en el que va y lo vendido. Devuelve una página de resultados y el total.',
     entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       estado: z.string().max(40).optional().describe('nuevo, por_contactar, contactado, en_seguimiento, convertido, no_interesado…'),
       canal: z.string().max(40).optional().describe('Canal de captación (meta, google, organico…)'),
       texto: z.string().max(100).optional().describe('Busca en nombre, email o teléfono'),
+      gestora_id: z.number().int().positive().optional().describe('Solo los de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
+      programa: z.string().max(100).optional().describe('Parte del nombre del programa de interés, sin tildes ni mayúsculas (por ejemplo «coaching»)'),
       ...PERIODO,
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.buscarProspectos({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { gestora_id: gestoraId, ...resto } = a;
+      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propios prospectos: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return model.buscarProspectos({ ...resto, gestoraId, ...acotar(ambito, a) });
+    },
   },
   {
     nombre: 'ver_prospecto',
@@ -321,8 +334,17 @@ export const HERRAMIENTAS = [
       ...PERIODO,
       // 100 como máximo: es el tope de filas de cualquier respuesta (#196).
       limite: z.number().int().min(1).max(100).default(50).describe('Máximo de filas de detalle (hasta 100)'),
+      gestora_id: z.number().int().positive().optional().describe('Solo los cobros de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
     },
-    ejecutar: (ambito, a) => model.cobrosPendientes({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { gestora_id: gestoraId, ...resto } = a;
+      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propios cobros: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      const dondeVa = acotar(ambito, a);
+      // A quien ve solo lo suyo se le impone ella misma; quien ve todo el campus puede acotar a una gestora.
+      return model.cobrosPendientes({ ...resto, ...dondeVa, responsableId: dondeVa.responsableId || gestoraId || null });
+    },
   },
   {
     nombre: 'listar_tutores',

@@ -355,10 +355,19 @@ export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }
 
 // ─── Prospectos ───────────────────────────────────────────────────────────
 
-function filtrosProspectos({ projectIds, responsableId, estado, texto, desde, hasta, canal }) {
+function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   if (responsableId) f.add('l.responsable_id = ?', responsableId);
+  // Por gestora y por programa (#325). La gestora la pide quien ve todo el campus;
+  // a quien ve solo lo suyo ya se le impone `responsableId` arriba.
+  if (gestoraId) f.add('l.responsable_id = ?', gestoraId);
+  if (programa) {
+    f.add(`(EXISTS (SELECT 1 FROM products fp WHERE fp.id = l.producto_interes_id AND ${SIN_TILDES('fp.nombre')} LIKE ?)
+            OR EXISTS (SELECT 1 FROM lead_products lp JOIN products fp2 ON fp2.id = lp.product_id
+                        WHERE lp.lead_id = l.id AND ${SIN_TILDES('fp2.nombre')} LIKE ?))`,
+    `%${comoTexto(programa)}%`, `%${comoTexto(programa)}%`);
+  }
   if (estado) f.add('l.status::text = ?', estado);
   if (canal) f.add('EXISTS (SELECT 1 FROM lead_utms cu WHERE cu.lead_id = l.id AND cu.canal_detectado::text = ?)', canal);
   if (texto) f.add(`(l.nombre ILIKE ? OR l.email ILIKE ? OR l.telefono ILIKE ?)`, `%${texto}%`, `%${texto}%`, `%${texto}%`);
@@ -375,7 +384,13 @@ export async function buscarProspectos(filtros) {
             l.fecha_solicitud, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             lu.canal_detectado AS canal,
-            EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente
+            EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente,
+            -- Lo que hace falta para decidir a quién llamar (#325): cuándo se le tocó por última vez,
+            -- cuándo toca la próxima, en qué paso del proceso va y cuánto ha comprado.
+            (SELECT max(li.fecha) FROM lead_interactions li WHERE li.lead_id = l.id AND li.tipo <> 'nota') AS ultimo_contacto,
+            (SELECT min(ls.fecha_prevista) FROM lead_steps ls WHERE ls.lead_id = l.id AND ls.estado = 'pendiente') AS proximo_contacto,
+            (SELECT ls.clave FROM lead_steps ls WHERE ls.lead_id = l.id AND ls.estado = 'pendiente' ORDER BY ls.orden LIMIT 1) AS paso_actual,
+            (SELECT COALESCE(SUM(c.importe_total), 0) FROM conversions c WHERE c.lead_id = l.id AND NOT COALESCE(c.es_mensualidad, false)) AS valor_vendido
        FROM leads l
        JOIN projects p ON p.id = l.project_id
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
@@ -413,7 +428,7 @@ export async function verProspecto({ id, projectIds, responsableId }) {
   const prospecto = rows[0];
   if (!prospecto) return null;
 
-  const [{ rows: interacciones }, { rows: ventas }] = await Promise.all([
+  const [{ rows: interacciones }, { rows: ventas }, { rows: pasos }, { rows: recordatorios }, { rows: programas }] = await Promise.all([
     query(
       `SELECT li.tipo, li.nota, li.fecha, u.nombre AS por
          FROM lead_interactions li
@@ -430,8 +445,34 @@ export async function verProspecto({ id, projectIds, responsableId }) {
         ORDER BY c.fecha_conversion DESC`,
       [id, projectIds]
     ),
+    // El proceso comercial de esta persona (#325): en qué paso va y cuándo toca el siguiente.
+    query(
+      `SELECT ls.orden, ls.clave, ls.estado, ls.fecha_prevista
+         FROM lead_steps ls WHERE ls.lead_id = $1 ORDER BY ls.orden`,
+      [id]
+    ),
+    query(
+      `SELECT lr.fecha_recordatorio, lr.nota
+         FROM lead_reminders lr WHERE lr.lead_id = $1 AND NOT lr.completado
+        ORDER BY lr.fecha_recordatorio LIMIT 10`,
+      [id]
+    ),
+    query(
+      `SELECT pr.id, pr.nombre FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
+        WHERE lp.lead_id = $1 ORDER BY pr.nombre LIMIT 20`,
+      [id]
+    ),
   ]);
-  return { ...prospecto, ultimas_interacciones: interacciones, ventas };
+  const pendiente = pasos.find((p) => p.estado === 'pendiente') || null;
+  return {
+    ...prospecto,
+    ultimas_interacciones: interacciones,
+    ventas,
+    paso_actual: pendiente ? { orden: pendiente.orden, clave: pendiente.clave, fecha_prevista: pendiente.fecha_prevista } : null,
+    pasos_del_proceso: pasos,
+    recordatorios_pendientes: recordatorios,
+    programas_de_interes: programas,
+  };
 }
 
 export async function resumenProspectos(filtros) {

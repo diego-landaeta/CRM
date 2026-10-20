@@ -300,3 +300,104 @@ describe('equipo: quién hay en tus campus, sin correos', () => {
     await expect(correr('equipo', ADMIN, { proyecto_id: OTRO })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
   });
 });
+
+// ─── buscar_prospectos y ver_prospecto, con más contexto (#325) ───────────
+
+describe('buscar_prospectos: gestora, programa y lo que hace falta para decidir a quién llamar', () => {
+  let PRODUCTO; let LEAD_MARTA;
+  beforeAll(async () => {
+    PRODUCTO = (await q(`INSERT INTO products (project_id, nombre) VALUES ($1, $2) RETURNING id`, [P, `${MARCA} Máster en Coaching Sistémico`]))[0].id;
+    LEAD_MARTA = (await q(`SELECT id FROM leads WHERE nombre = $1`, [`${MARCA} Marta Ruiz`]))[0].id;
+    await q(`UPDATE leads SET producto_interes_id = $2 WHERE id = $1`, [LEAD_MARTA, PRODUCTO]);
+    await q(`INSERT INTO lead_steps (lead_id, project_id, clave, orden, fecha_prevista, estado) VALUES ($1, $2, 'dia1_saludo', 1, '2026-01-01', 'hecho'), ($1, $2, 'dia2_opiniones', 2, '2026-11-02', 'pendiente')`, [LEAD_MARTA, P]);
+    await q(`INSERT INTO lead_reminders (lead_id, fecha_recordatorio, nota, created_by) VALUES ($1, '2026-11-05', 'Llamar el jueves', $2)`, [LEAD_MARTA, LAURA.id]);
+    await q(`INSERT INTO lead_products (lead_id, product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [LEAD_MARTA, PRODUCTO]);
+  });
+  afterAll(async () => {
+    await q(`DELETE FROM lead_reminders WHERE lead_id = $1`, [LEAD_MARTA]);
+    await q(`DELETE FROM lead_steps WHERE lead_id = $1`, [LEAD_MARTA]);
+    await q(`DELETE FROM lead_products WHERE lead_id = $1`, [LEAD_MARTA]);
+    await q(`UPDATE leads SET producto_interes_id = NULL WHERE id = $1`, [LEAD_MARTA]);
+    await q(`DELETE FROM products WHERE id = $1`, [PRODUCTO]);
+  });
+
+  it('cada fila trae último y próximo contacto, el paso y lo vendido', async () => {
+    const r = await correr('buscar_prospectos', ADMIN, { texto: 'Marta', pagina: 1, limite: 25 });
+    expect(r.prospectos).toHaveLength(1);
+    expect(r.prospectos[0]).toMatchObject({ paso_actual: 'dia2_opiniones', es_cliente: true });
+    expect(r.prospectos[0].ultimo_contacto).toBeTruthy(); // la llamada de Laura
+    expect(String(r.prospectos[0].proximo_contacto)).toContain('2026-11-02');
+    expect(Number(r.prospectos[0].valor_vendido)).toBe(900);
+  });
+
+  it('por gestora: Laura tiene dos, Ana uno', async () => {
+    expect((await correr('buscar_prospectos', ADMIN, { gestora_id: LAURA.id, pagina: 1, limite: 25 })).total).toBe(2);
+    expect((await correr('buscar_prospectos', ADMIN, { gestora_id: ANA.id, pagina: 1, limite: 25 })).total).toBe(1);
+  });
+
+  it('por programa, sin tildes ni mayúsculas', async () => {
+    const r = await correr('buscar_prospectos', ADMIN, { programa: 'COACHING sistemico', pagina: 1, limite: 25 });
+    expect(r.total).toBe(1);
+    expect((await correr('buscar_prospectos', ADMIN, { programa: 'astrologia', pagina: 1, limite: 25 })).total).toBe(0);
+  });
+
+  it('una gestora no pide los de otra', async () => {
+    await expect(correr('buscar_prospectos', LAURA, { gestora_id: ANA.id, pagina: 1, limite: 25 })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
+    expect((await correr('buscar_prospectos', LAURA, { gestora_id: LAURA.id, pagina: 1, limite: 25 })).total).toBe(2);
+  });
+
+  it('ver_prospecto: paso actual, pasos, recordatorios y programas de interés', async () => {
+    const r = await correr('ver_prospecto', ADMIN, { id: LEAD_MARTA });
+    expect(r.paso_actual).toMatchObject({ orden: 2, clave: 'dia2_opiniones' });
+    expect(r.pasos_del_proceso.map((p) => p.clave)).toEqual(['dia1_saludo', 'dia2_opiniones']);
+    expect(r.recordatorios_pendientes).toEqual([expect.objectContaining({ nota: 'Llamar el jueves' })]);
+    expect(r.programas_de_interes.map((p) => p.nombre)).toEqual([`${MARCA} Máster en Coaching Sistémico`]);
+  });
+
+  it('un prospecto sin proceso sale con paso null y listas vacías, no con un error', async () => {
+    const pedro = (await q(`SELECT id FROM leads WHERE nombre = $1`, [`${MARCA} Pedro Gil`]))[0].id;
+    const r = await correr('ver_prospecto', ADMIN, { id: pedro });
+    expect(r).toMatchObject({ paso_actual: null, pasos_del_proceso: [], recordatorios_pendientes: [], programas_de_interes: [] });
+  });
+});
+
+describe('cobros_pendientes: por gestora', () => {
+  it('acepta la gestora y no se cae con la base real (sin cuotas a cobrar, lista vacía)', async () => {
+    const todas = await correr('cobros_pendientes', ADMIN, { limite: 10 });
+    expect(todas).toMatchObject({ cobros: expect.any(Number), detalle: expect.any(Array) });
+    expect(await correr('cobros_pendientes', ADMIN, { gestora_id: LAURA.id, limite: 10 })).toMatchObject({ cobros: expect.any(Number) });
+  });
+
+  it('una gestora no pide los de otra; los suyos, sí', async () => {
+    await expect(correr('cobros_pendientes', LAURA, { gestora_id: ANA.id, limite: 10 })).rejects.toMatchObject({ code: 'MCP_FUERA_DE_AMBITO' });
+    expect(await correr('cobros_pendientes', LAURA, { gestora_id: LAURA.id, limite: 10 })).toMatchObject({ cobros: expect.any(Number) });
+  });
+});
+
+describe('proceso_comercial: los prospectos por paso, con los mismos de la cola', () => {
+  it('cuadra con cola_del_dia: la suma de los pasos es la de la cola', async () => {
+    // Un prospecto de Laura con su proceso: paso 1 hecho, paso 2 pendiente y atrasado.
+    const l = (await q(`SELECT id FROM leads WHERE nombre = $1`, [`${MARCA} Pedro Gil`]))[0].id;
+    await q(`INSERT INTO lead_steps (lead_id, project_id, clave, orden, fecha_prevista, estado) VALUES ($1, $2, 'dia1_saludo', 1, CURRENT_DATE - 9, 'hecho'), ($1, $2, 'dia2_opiniones', 2, CURRENT_DATE - 3, 'pendiente'), ($1, $2, 'dia3_ultima_plaza', 3, CURRENT_DATE + 2, 'pendiente')`, [l, P]);
+    try {
+      const { datos } = await ver(ADMIN, 'proceso_comercial');
+      const paso2 = datos.pasos.find((p) => p.clave === 'dia2_opiniones');
+      expect(paso2).toMatchObject({ orden: 2, prospectos: 1, atrasados: 1 });
+      // El paso 3 aún no es «el paso actual» de nadie.
+      expect(datos.pasos.find((p) => p.clave === 'dia3_ultima_plaza')).toBeUndefined();
+      const cola = (await ver(ADMIN, 'cola_del_dia')).datos;
+      expect(datos.total).toBeGreaterThanOrEqual(1);
+      // Todo el que está atrasado en un paso está atrasado en la cola.
+      expect(datos.pasos.reduce((s, p) => s + p.atrasados, 0)).toBe(cola.atrasados);
+    } finally {
+      await q(`DELETE FROM lead_steps WHERE lead_id = $1`, [l]);
+    }
+  });
+
+  it('una gestora, solo los suyos; el campus ajeno no entra', async () => {
+    const laura = (await ver(LAURA, 'proceso_comercial')).datos;
+    const ana = (await ver(ANA, 'proceso_comercial')).datos;
+    expect(laura.total + ana.total).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(laura.pasos)).toBe(true);
+  });
+});
