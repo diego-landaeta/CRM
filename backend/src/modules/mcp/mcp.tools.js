@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as reportes from '../reports/report.model.js';
+import { resumenDelDia } from '../reports/resumenDelDia.js';
+import * as proceso from '../proceso/proceso.model.js';
+import * as feedback from '../feedback/feedback.model.js';
+import * as metas from '../sales/sales.goals.js';
 import * as model from './mcp.model.js';
 import { acotarProyectos, responsableImpuesto } from './mcp.acceso.js';
 
@@ -91,6 +95,37 @@ export const INFORMES = {
   formaciones: {
     descripcion: 'Formaciones (productos) más vendidas.',
     ejecutar: reportes.formacionesMasVendidas,
+  },
+  // ── Lo comercial del día a día (#325) ─────────────────────────────────────
+  // Las MISMAS funciones que las pantallas de origen, para que las cifras
+  // cuadren. Todas devuelven números agregados: ningún nombre ni contacto de
+  // cliente, salvo el `cliente` de «pendientes_de_facturar», que sale abreviado.
+  dashboard_hoy: {
+    descripcion: 'Ayer y hoy, como el Dashboard: prospectos que entraron, contactados, ventas y prospectos sin tocar.',
+    ejecutar: ({ projectIds, asesoraId }) => resumenDelDia({ projectIds, asesoraId }),
+  },
+  cola_del_dia: {
+    descripcion: 'La cola del proceso comercial en cifras, como «La cola del día»: atrasados, para hoy, para mañana y esta semana.',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeLaCola({ projectIds, asesoraId }),
+  },
+  seguimiento_fin_de_mes: {
+    descripcion: 'Prospectos por antigüedad (este mes, 1–3, 3–6 y más de 6 meses) y cuántos no se han contactado nunca, como «Seguimiento de fin de mes».',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeSeguimiento({ projectIds, asesoraId }),
+  },
+  feedback: {
+    descripcion: 'Encuestas de feedback de Reportes: enviadas y respondidas, motivos de no compra, por disparador, campus, gestora y mes. Acepta desde y hasta.',
+    ejecutar: ({ projectIds, asesoraId, from, to }) => feedback.panel({ projectIds, gestoraId: asesoraId, desde: from, hasta: to }),
+  },
+  pendientes_de_facturar: {
+    descripcion: 'Cobros que todavía no tienen factura (cliente abreviado, curso, último cobro e importe), como «Pendientes de facturar». Acepta desde y hasta (por fecha de cobro).',
+    ejecutar: ({ projectIds, from, to }) => reportes.ventasSinFacturaEnRango({ projectIds, from, to }),
+    // La pantalla es de administración: una gestora no la ve, y aquí tampoco.
+    soloAdmin: true,
+  },
+  metas_gestoras: {
+    descripcion: 'La meta de ventas y de facturación de cada gestora y su avance en el periodo (solo super admin y admin). Acepta desde y hasta.',
+    ejecutar: ({ projectIds, from, to }) => metas.getGestoresStats({ projectIds, from: from || null, to: to || null }),
+    soloAdmin: true,
   },
   // Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado» (antes, del 30/09 al 08/10, por lo facturado).
   // El mismo calculo que «Cómo voy» (`miPuesto`), para que
@@ -195,9 +230,18 @@ export const HERRAMIENTAS = [
       ...PERIODO,
       texto: z.string().max(100).optional().describe('Busca en producto o nombre del cliente'),
       pendiente: z.boolean().optional().describe('true: solo con cobro pendiente; false: solo cobradas'),
+      facturada: z.boolean().optional().describe('true: solo con factura (ni proformas ni canceladas); false: solo sin facturar'),
+      vendedora_id: z.number().int().positive().optional().describe('Solo las de una vendedora (su id sale del informe «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir las de otra.'),
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.listarVentas({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { vendedora_id: vendedoraId, ...resto } = a;
+      // Una gestora ve solo lo suyo: pedir otra vendedora no ensancha nada, y se le dice.
+      if (vendedoraId && ambito.soloLoSuyo && vendedoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propias ventas: no puedes pedir las de otra vendedora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return model.listarVentas({ ...resto, vendedoraId, ...acotar(ambito, a) });
+    },
   },
   {
     nombre: 'resumen_ventas',
@@ -306,15 +350,19 @@ export const HERRAMIENTAS = [
   {
     nombre: 'listar_formaciones',
     titulo: 'Formaciones y precios',
-    descripcion: 'El catálogo de tus campus: cada formación activa con su precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
+    descripcion: 'El catálogo de tus campus: cada formación activa (o también las inactivas con incluir_inactivas) con su SKU, precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
       + 'Busca por nombre sin distinguir mayúsculas ni tildes. Devuelve una página y el total: con muchas, pide un nombre o usa «resumen_catalogo». '
       + 'Si una formación no tiene precio, contesta que en el CRM no consta; no lo deduzcas ni lo inventes. No da ventas.',
     entrada: {
       ...AMBITO,
       texto: z.string().max(100).optional().describe('Parte del nombre de la formación, por ejemplo «psicología clínica»'),
+      incluir_inactivas: z.boolean().optional().describe('true: también las formaciones dadas de baja (cada fila dice si está «activa»). Por defecto, solo las activas.'),
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.listarFormaciones({ ...a, projectIds: acotar(ambito, a).projectIds }),
+    ejecutar: (ambito, a) => {
+      const { incluir_inactivas: incluirInactivas, ...resto } = a;
+      return model.listarFormaciones({ ...resto, incluirInactivas: incluirInactivas === true, projectIds: acotar(ambito, a).projectIds });
+    },
   },
   {
     nombre: 'resumen_catalogo',

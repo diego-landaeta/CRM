@@ -435,13 +435,25 @@ export async function resumenProspectos(filtros) {
 
 const COBRADO = `COALESCE((SELECT SUM(cp.importe) FROM conversion_payments cp WHERE cp.conversion_id = c.id), 0)`;
 
-function filtrosVentas({ projectIds, responsableId, desde, hasta, texto, pendiente }) {
+function filtrosVentas({ projectIds, responsableId, vendedoraId, facturada, desde, hasta, texto, pendiente }) {
   const f = condiciones('c.project_id', projectIds);
   // Las mensualidades son cuotas de una venta, no ventas: la pantalla de
   // Ventas tampoco las cuenta.
   f.cond.push('NOT COALESCE(c.es_mensualidad, false)');
   if (responsableId) {
     f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', responsableId);
+  }
+  // Una vendedora concreta (#325). Solo la pide quien ve todo el campus: a una gestora
+  // se le impone ella misma arriba (responsableId) y esto no la ensancha.
+  if (vendedoraId) {
+    f.add('EXISTS (SELECT 1 FROM conversion_reparto r2 WHERE r2.conversion_id = c.id AND r2.vendedora_id = ?)', vendedoraId);
+  }
+  // Con factura: la misma regla que «Pendientes de facturar» (la factura puede colgar de la venta o de un cobro suyo;
+  // ni proformas ni canceladas).
+  if (facturada === true || facturada === false) {
+    f.cond.push(`${facturada ? '' : 'NOT '}EXISTS (SELECT 1 FROM invoices i
+       WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+         AND (i.conversion_id = c.id OR i.payment_id IN (SELECT cp2.id FROM conversion_payments cp2 WHERE cp2.conversion_id = c.id)))`);
   }
   if (desde) f.add('c.fecha_conversion >= ?::date', desde);
   if (hasta) f.add('c.fecha_conversion <= ?::date', hasta);
@@ -742,7 +754,8 @@ export async function comisionesDeTutores({ projectIds, periodo = null, desde = 
   const suma = (k) => Math.round(filas.reduce((t, r) => t + Number(r[k] || 0), 0) * 100) / 100;
   return {
     periodo: periodo || (de || a ? `${de || 'el principio'} a ${a || 'hoy'}` : 'todos los meses'),
-    totales: { generado: suma('generado'), por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
+    // La base de cálculo, en los totales: antes había que sumarla fila a fila (#325).
+    totales: { base: suma('base'), generado: suma('generado'), por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
     filas,
   };
 }
@@ -792,14 +805,15 @@ const CON_PRECIO = (col) => `(${col} IS NOT NULL AND ${col} > 0)`;
 /** Por encima de esto, sin texto, se pide acotar: el catálogo entero no cabe en una respuesta. */
 export const AVISO_FORMACIONES = 100;
 
-export async function listarFormaciones({ projectIds, texto, pagina = 1, limite = 25 }) {
+export async function listarFormaciones({ projectIds, texto, incluirInactivas = false, pagina = 1, limite = 25 }) {
   const f = condiciones('p.project_id', projectIds);
-  f.cond.push('p.active = true');
+  // Por defecto solo las activas, como el catálogo; con `incluir_inactivas` también las dadas de baja (#325).
+  if (!incluirInactivas) f.cond.push('p.active = true');
   if (texto) f.add(`${SIN_TILDES('p.nombre')} LIKE ?`, `%${comoTexto(texto)}%`);
   const { limit, offset } = paginado(pagina, limite);
   const { rows } = await query(
     `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
-            p.precio, p.moneda, p.url_info AS enlace, p.modalidad
+            p.precio, p.moneda, p.url_info AS enlace, p.modalidad, p.sku, p.active AS activa
        FROM products p
        JOIN projects pr ON pr.id = p.project_id
       ${f.where()}
