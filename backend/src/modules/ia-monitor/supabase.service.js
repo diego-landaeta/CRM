@@ -84,12 +84,65 @@ const SQL_SUSCRIPCIONES = `
     FROM subscriptions s
     LEFT JOIN user_profiles u ON u.id = s.user_id
    WHERE s.amount > 0
+     -- LAS PRUEBAS NO SON VENTAS.
+     --
+     -- Angel, 18/09: «algunos de esos pagos fueron test, y nos devolvimos el
+     -- dinero». Su app las marca con metadata.is_test y su panel las cuenta
+     -- aparte; el CRM las estaba importando como ventas buenas. En Tarot son
+     -- 8 de 23 -- 44,20 EUR -- y ninguna tiene cobro de Stripe detras.
+     --
+     -- Una venta de mentira en el CRM no es un numero feo: entra en el mes, en
+     -- las comisiones y en la factura.
+     AND COALESCE(s.metadata->>'is_test', 'false') <> 'true'
    ORDER BY s.created_at`;
+
+/** Las de prueba, para poder decir cuantas se dejan fuera y cuanto suman. */
+const SQL_DE_PRUEBA = `
+  SELECT s.id::text AS id, s.amount, s.created_at
+    FROM subscriptions s
+   WHERE s.amount > 0
+     AND COALESCE(s.metadata->>'is_test', 'false') = 'true'
+   ORDER BY s.created_at`;
+
+/**
+ * Las columnas de su tabla de suscripciones.
+ *
+ * Hace falta para no adivinar: el panel de cada app distingue los pagos de
+ * PRUEBA y los devueltos, y el CRM los estaba importando como ventas
+ * buenas. Antes de filtrar hay que saber COMO se marcan alli, y cada app
+ * puede llamarlo de otra forma.
+ */
+/**
+ * Como se distinguen alli los pagos de PRUEBA.
+ *
+ * No hay columna que lo diga, asi que se mira por donde puede estar: las
+ * claves de `metadata` y si el cobro tiene un identificador de Stripe de
+ * verdad. Se piden las CLAVES, no los valores: dentro puede haber datos de
+ * la persona y aqui solo hace falta saber que campos existen.
+ */
+const SQL_PISTAS_DE_TEST = `
+  SELECT COALESCE(k.clave, '(sin metadata)') AS clave,
+         count(*)::int                       AS n,
+         count(*) FILTER (WHERE s.stripe_payment_intent_id IS NOT NULL)::int AS con_intent,
+         COALESCE(sum(s.amount), 0)          AS importe
+    FROM subscriptions s
+    LEFT JOIN LATERAL jsonb_object_keys(COALESCE(s.metadata, '{}'::jsonb)) AS k(clave) ON TRUE
+   WHERE s.amount > 0
+   GROUP BY 1 ORDER BY 2 DESC`;
+
+const SQL_COLUMNAS = `
+  SELECT column_name, data_type
+    FROM information_schema.columns
+   WHERE table_schema = 'public' AND table_name = 'subscriptions'
+   ORDER BY ordinal_position`;
 
 /** Un vistazo sin escribir nada: que hay al otro lado. */
 export async function previo(projectId) {
   const { token, ref } = await credenciales(projectId);
   const filas = await consulta(token, ref, SQL_SUSCRIPCIONES);
+  const columnas = await consulta(token, ref, SQL_COLUMNAS).catch(() => []);
+  const pistas = await consulta(token, ref, SQL_PISTAS_DE_TEST).catch(() => []);
+  const prueba = await consulta(token, ref, SQL_DE_PRUEBA).catch(() => []);
   const conEmail = filas.filter((f) => f.email).length;
   // NO SE SUMAN MONEDAS DISTINTAS. Sumar dolares y euros en la misma cifra da
   // un numero que no es nada. Si aparece otra moneda se cuenta aparte y se
@@ -108,7 +161,45 @@ export async function previo(projectId) {
     // Cuantas traen referencia de Stripe: son las que se podran reconciliar el
     // dia que haya clave.
     conReferenciaStripe: filas.filter((f) => f.stripe_payment_intent_id || f.stripe_subscription_id).length,
+    /**
+     * QUE HAY DE CADA ESTADO Y DE CADA PLAN.
+     *
+     * Angel, 18/09: «algunos de esos pagos fueron test, y nos devolvimos el
+     * dinero». Si eso entra como venta, el importe del CRM no es el dinero que
+     * se quedo la empresa -- y ese es justo el numero por el que existe esta
+     * importacion.
+     *
+     * Antes de decidir que se excluye hay que ver COMO lo marca su base: se
+     * enseña el reparto en vez de adivinar un nombre de estado.
+     */
+    porEstado: reparto(filas, (f) => f.status || 'sin estado'),
+    porPlan: reparto(filas, (f) => f.plan_type || 'sin plan'),
+    // Para poder ver si hay una columna que marque las pruebas.
+    columnas: columnas.map((c) => c.column_name),
+    pistasDeTest: pistas,
+    // Lo que se queda fuera por ser de prueba, dicho en voz alta: si un dia
+    // el importe no cuadra con su panel, es lo primero que hay que mirar.
+    dePrueba: {
+      n: prueba.length,
+      importe: Number(prueba.reduce((t, f) => t + Number(f.amount || 0), 0).toFixed(2)),
+      ids: prueba.map((f) => f.id),
+    },
   };
+}
+
+/** Cuantos y cuanto suma cada valor, para poder mirarlo antes de importar. */
+function reparto(filas, de) {
+  const m = new Map();
+  for (const f of filas) {
+    const k = de(f);
+    const a = m.get(k) || { n: 0, importe: 0 };
+    a.n += 1;
+    a.importe += Number(f.amount || 0);
+    m.set(k, a);
+  }
+  return [...m.entries()]
+    .map(([clave, v]) => ({ clave, n: v.n, importe: Number(v.importe.toFixed(2)) }))
+    .sort((a, b) => b.n - a.n);
 }
 
 /** El nombre del plan, como lo entiende el CRM. */
@@ -214,4 +305,66 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
   logger.info({ projectId, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, soloProbar },
     'Supabase IA: importacion');
   return { suscripciones: filas.length, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, soloProbar };
+}
+
+/**
+ * Quitar del CRM las ventas que eran PRUEBAS (#44).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUE HACE FALTA
+ *
+ * Las primeras importaciones se trajeron todo, incluidas las suscripciones que
+ * la app marca como `is_test`. En Tarot son 8 de 23 —44,20 €— y ninguna tiene
+ * un cobro de Stripe detras: son pruebas del equipo, y de algunas se devolvio
+ * el dinero.
+ *
+ * Una venta de mentira en el CRM no es un numero feo: entra en el mes, en las
+ * comisiones y puede acabar en una factura.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SOLO LAS QUE TRAJO ESTA IMPORTACION, Y SOLO SI NO TIENEN NADA DETRAS
+ *
+ * Se buscan por su marca `[supabase:<id>]`, asi que no puede llevarse por
+ * delante una venta metida a mano. Y si alguna tiene FACTURA emitida no se
+ * borra: eso ya no es un apunte interno, y anular una factura es otra cosa que
+ * se decide mirandola.
+ *
+ * Devuelve lo que ha hecho y lo que ha dejado, para poder cuadrarlo.
+ */
+export async function quitarLasDePrueba(projectId, { soloProbar = false } = {}) {
+  const { token, ref } = await credenciales(projectId);
+  const prueba = await consulta(token, ref, SQL_DE_PRUEBA);
+  if (!prueba.length) return { encontradas: 0, borradas: 0, conFactura: [], soloProbar };
+
+  const marcas = prueba.map((f) => `%[supabase:${f.id}]%`);
+  const { rows } = await query(
+    `SELECT c.id, c.importe_total,
+            EXISTS (SELECT 1 FROM invoices i WHERE i.conversion_id = c.id) AS con_factura
+       FROM conversions c
+      WHERE c.project_id = $1 AND c.notas_pago LIKE ANY($2::text[])`,
+    [projectId, marcas]
+  );
+
+  const borrables = rows.filter((r) => !r.con_factura).map((r) => r.id);
+  const conFactura = rows.filter((r) => r.con_factura).map((r) => r.id);
+  const importe = rows
+    .filter((r) => !r.con_factura)
+    .reduce((t, r) => t + Number(r.importe_total || 0), 0);
+
+  if (!soloProbar && borrables.length) {
+    // En orden: lo que cuelga primero. `conversion_payments` y los items no
+    // tienen borrado en cascada hacia atras y dejarian filas huerfanas
+    // sumando en el libro de cobros.
+    await query('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [borrables]);
+    await query('DELETE FROM conversion_items WHERE conversion_id = ANY($1::int[])', [borrables]);
+    await query('DELETE FROM conversions WHERE id = ANY($1::int[])', [borrables]);
+  }
+
+  return {
+    encontradas: rows.length,
+    borradas: soloProbar ? 0 : borrables.length,
+    importe: Number(importe.toFixed(2)),
+    conFactura,
+    soloProbar,
+  };
 }

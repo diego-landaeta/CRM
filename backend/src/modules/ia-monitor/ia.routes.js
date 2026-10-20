@@ -25,4 +25,7 @@ router.get('/gasto', ctrl.getGasto);
 */
 router.get('/supabase/previo/:projectId', soloRoles('admin', 'superadmin'), ctrl.previoSupabase);
 router.post('/supabase/importar/:projectId', soloRoles('admin', 'superadmin'), ctrl.importarSupabase);
+// Quitar las que eran pruebas. Borra ventas, asi que solo admin/superadmin
+// y con `?soloProbar=true` para verlo antes.
+router.post('/supabase/quitar-pruebas/:projectId', soloRoles('admin', 'superadmin'), ctrl.quitarPruebasSupabase);
 export default router;
