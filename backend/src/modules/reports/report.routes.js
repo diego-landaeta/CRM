@@ -29,6 +29,8 @@ router.get('/seguimiento', ctrl.seguimiento);
 router.get('/paises', ctrl.paises);
 router.get('/formaciones', ctrl.formaciones);
 router.get('/canales', ctrl.canales);
+// Con el gasto de publicidad: solo admin y super admin.
+router.get('/canales/dinero', roleGuard('admin', 'superadmin'), ctrl.dondePonerElDinero);
 router.get('/detalle', ctrl.detalle);
 
 // La tasa de cierre, con una sola definicion para todo el CRM.
