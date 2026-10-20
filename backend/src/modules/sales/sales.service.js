@@ -770,7 +770,12 @@ export async function ventasSinFormacion({ projectId, projectIds = null, from = 
     conSugerencia: filas.filter((f) => f.sugerencia).length,
     // Sin texto no hay nada que cruzar: esas son las que hay que mirar a mano.
     sinTexto: filas.filter((f) => !f.texto).length,
+    // Lo VENDIDO y lo COBRADO, por separado. La pantalla habla de ventas cobradas
+    // y la comision nace del cobro, asi que la tarjeta suma `cobrado`: sumar el
+    // total de la venta y rotularlo «cobrados» enseñaba 4.200 € arriba y 2.800 €
+    // en la fila de esa misma venta.
     importe: Number(filas.reduce((s, f) => s + f.importe, 0).toFixed(2)),
+    cobrado: Number(filas.reduce((s, f) => s + f.cobrado, 0).toFixed(2)),
   };
 }
 

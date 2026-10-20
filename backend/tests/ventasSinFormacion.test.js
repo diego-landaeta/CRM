@@ -45,7 +45,7 @@ async function producto(nombre) {
   return rows[0].id;
 }
 
-async function venta({ texto, productoId = null, conCobro = true }) {
+async function venta({ texto, productoId = null, conCobro = true, total = 300, cobro = 300 }) {
   const { rows: l } = await pool.query(
     `INSERT INTO leads (project_id, nombre, email, status, created_at, fecha_solicitud)
      VALUES ($1, 'Alumno SinForm', $2, 'convertido', '2026-02-01', '2026-02-01') RETURNING id`,
@@ -54,13 +54,13 @@ async function venta({ texto, productoId = null, conCobro = true }) {
   const { rows: c } = await pool.query(
     `INSERT INTO conversions (lead_id, project_id, producto_contratado, producto_contratado_id,
                               importe_total, importe_pagado, fecha_conversion)
-     VALUES ($1, $2, $3, $4, 300, 300, '2026-02-10') RETURNING id`,
-    [l[0].id, PROYECTO, texto, productoId]);
+     VALUES ($1, $2, $3, $4, $5, $6, '2026-02-10') RETURNING id`,
+    [l[0].id, PROYECTO, texto, productoId, total, cobro]);
   creado.ventas.push(c[0].id);
   if (conCobro) {
     await pool.query(
       `INSERT INTO conversion_payments (conversion_id, importe, fecha, metodo)
-       VALUES ($1, 300, '2026-02-10', 'tarjeta')`, [c[0].id]);
+       VALUES ($1, $2, '2026-02-10', 'tarjeta')`, [c[0].id, cobro]);
   }
   return c[0].id;
 }
@@ -153,6 +153,22 @@ describe('el resumen', () => {
     expect(r.total).toBe(r.filas.length);
     expect(r.conSugerencia).toBe(r.filas.filter((f) => f.sugerencia).length);
     expect(r.importe).toBeGreaterThan(0);
+  });
+});
+
+describe('lo vendido y lo cobrado no son lo mismo', () => {
+  it('la tarjeta suma lo COBRADO: una venta de 1.000 con 400 cobrados cuenta 400', async () => {
+    // Antes la tarjeta sumaba el total de la venta y lo rotulaba «cobrados»: con
+    // 1.000 vendidos y 400 cobrados enseñaba 1.000 arriba y 400 en la fila de la
+    // misma venta. Las demas pruebas crean ventas con total = cobrado y no lo veian.
+    const id = await venta({ texto: 'Curso Parcial Sin Catalogo', total: 1000, cobro: 400 });
+    const r = await ventasSinFormacion({ projectId: PROYECTO });
+
+    expect(r.filas.find((f) => f.id === id)).toMatchObject({ importe: 1000, cobrado: 400 });
+    expect(r.cobrado).toBeCloseTo(r.filas.reduce((t, f) => t + f.cobrado, 0), 2);
+    expect(r.importe).toBeCloseTo(r.filas.reduce((t, f) => t + f.importe, 0), 2);
+    // Y no son la misma cifra: hay una venta a medio cobrar en la lista.
+    expect(r.cobrado).toBeLessThan(r.importe);
   });
 });
 

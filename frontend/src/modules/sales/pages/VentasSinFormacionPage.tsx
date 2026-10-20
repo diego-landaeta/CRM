@@ -42,6 +42,8 @@ interface Datos {
   conSugerencia: number;
   sinTexto: number;
   importe: number;
+  /** Lo cobrado de verdad: lo que suma la tarjeta. `importe` es lo vendido. */
+  cobrado: number;
 }
 
 const eur = (n: number) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
@@ -98,7 +100,7 @@ export default function VentasSinFormacionPage() {
         <div className="h-24 rounded-lg bg-muted/40 animate-pulse" />
       ) : !datos || datos.total === 0 ? (
         <div className="bg-card border border-border rounded-lg p-8 text-center">
-          <GraduationCap size={28} className="mx-auto text-emerald-600 mb-2" weight="duotone" />
+          <GraduationCap size={28} className="mx-auto text-success mb-2" weight="duotone" />
           <p className="font-semibold text-sm">Todas las ventas cobradas tienen su formación</p>
           <p className="text-xs text-muted-foreground mt-1">No hay nada que cruzar en este proyecto.</p>
         </div>
@@ -108,18 +110,18 @@ export default function VentasSinFormacionPage() {
             <div className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground">Sin formación</p>
               <p className="text-2xl font-semibold tabular-nums">{datos.total}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{eur(datos.importe)} cobrados</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{eur(datos.cobrado)} cobrados</p>
             </div>
             <div className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground">Se pueden cruzar</p>
-              <p className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <p className="text-2xl font-semibold tabular-nums text-success">
                 {datos.conSugerencia}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">el nombre coincide con un curso</p>
             </div>
             <div className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground">A mano</p>
-              <p className="text-2xl font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+              <p className="text-2xl font-semibold tabular-nums text-warning">
                 {sinSugerencia}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -130,7 +132,7 @@ export default function VentasSinFormacionPage() {
 
           {/* Por qué esto importa, en una línea: sin esto la lista parece
               una tarea administrativa y es dinero que alguien no cobra. */}
-          <div className="rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-900 dark:text-amber-300">
+          <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs text-warning-soft-foreground">
             Mientras una venta no diga de qué formación es, <strong>su profesor no cobra comisión</strong> por
             ella y en los informes sale como «servicio académico». Las sugerencias se confirman una a una: atar
             un cobro a la formación equivocada se le paga a quien no era.
@@ -157,19 +159,19 @@ export default function VentasSinFormacionPage() {
                       <p className="text-[11px] text-muted-foreground">{f.alumnoEmail || ''}</p>
                     </td>
                     <td className="px-4 py-2 text-xs">
-                      {f.texto || <span className="text-amber-700 dark:text-amber-400">— no dice nada —</span>}
+                      {f.texto || <span className="text-warning">— no dice nada —</span>}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{eur(f.cobrado)}</td>
                     <td className="px-4 py-2 text-xs">
                       {f.sugerencia
-                        ? <span className="text-emerald-700 dark:text-emerald-400">{f.sugerencia.nombre}</span>
+                        ? <span className="text-success">{f.sugerencia.nombre}</span>
                         : <span className="text-muted-foreground">sin candidato único</span>}
                     </td>
                     <td className="px-4 py-2 text-right">
                       {f.sugerencia ? (
                         <button
                           onClick={() => atar(f)} disabled={atando === f.id}
-                          className="inline-flex items-center gap-1 h-7 px-2 rounded border border-emerald-400 dark:border-emerald-800 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 h-7 px-2 rounded border border-success/40 text-[11px] font-semibold text-success hover:bg-success-soft disabled:opacity-50"
                         >
                           <Check size={11} weight="bold" /> {atando === f.id ? '…' : 'Atar'}
                         </button>
