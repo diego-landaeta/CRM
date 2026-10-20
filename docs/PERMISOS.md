@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-785 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
+786 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -835,6 +835,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | paises | `GET /api/informes/paises` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | formaciones | `GET /api/informes/formaciones` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | canales | `GET /api/informes/canales` | (no existía) | (ruta nueva) | `reports.mis_informes` |
+| dondePonerElDinero | `GET /api/informes/canales/dinero` | (no existía) | (ruta nueva) | `reports.dinero` |
 | detalle | `GET /api/informes/detalle` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | avisoSinFactura | `GET /api/informes/aviso-sin-factura` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | tasaCierre | `GET /api/informes/tasa-cierre` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
@@ -1455,6 +1456,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver informes | `reports.mis_informes` | Los informes de ventas, prospectos y seguimiento (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager, Tutor |  |
 | Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte |  |
+| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin | `reports.view` |
 | El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte | `reports.mis_informes` |
 
 ### Feedback

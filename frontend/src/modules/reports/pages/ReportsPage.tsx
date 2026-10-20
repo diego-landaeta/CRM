@@ -16,6 +16,7 @@ import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
+import DondePonerElDinero from '../components/DondePonerElDinero';
 import PanelResumen from '@/shared/components/PanelResumen';
 import TasaDeCierre from '../components/TasaDeCierre';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
@@ -560,6 +561,9 @@ export default function ReportsPage() {
 
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
+
+      {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
+      <DondePonerElDinero from={range.from} to={range.to} />
 
       {/* Por qué no compran: las cifras de «Análisis → Feedback», con este rango y ámbito. */}
       <FeedbackEnReportes from={range.from} to={range.to} issuerId={issuerEfectivo}

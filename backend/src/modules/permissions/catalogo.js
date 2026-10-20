@@ -360,6 +360,7 @@ export const SECCIONES = [
         clave: 'reports', nombre: 'Reportes', acciones: [
           a('mis_informes', 'Ver informes', 'Los informes de ventas, prospectos y seguimiento (una gestora, los suyos).', TODOS, { independiente: true }),
           a('view', 'Ver el resumen general', 'El resumen de todo el equipo.', ADMIN_SOPORTE),
+          a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', ADMIN),
           a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', ADMIN_SOPORTE, { requiere: ['reports.mis_informes'], independiente: true }),
         ],
       },

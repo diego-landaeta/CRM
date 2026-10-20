@@ -1551,7 +1551,7 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
 // Dos fechas distintas, como en países: los prospectos por su fecha de entrada
 // y las ventas por su fecha de venta. Una venta cuenta en el canal del
 // prospecto del que salió; sin prospecto (cliente cargado a mano), en `sin_origen`.
-const CANAL_DE_ORIGEN = `CASE
+export const CANAL_DE_ORIGEN = `CASE
     WHEN lu.lead_id IS NULL THEN 'sin_origen'
     WHEN (lu.canal_detectado IS NULL OR lu.canal_detectado = 'directo')
          AND COALESCE(lu.utm_source, '') = '' AND COALESCE(lu.utm_medium, '') = ''
