@@ -34,6 +34,10 @@ router.get('/detalle', ctrl.detalle);
 router.get('/aviso-sin-factura', ctrl.avisoSinFactura);
 router.get('/tasa-cierre', ctrl.tasaCierre);
 router.get('/tasa-cierre/detalle', ctrl.tasaCierreDetalle);
+// El baremo (#39): leerlo, cualquiera con sesión (va dentro de la propia tasa); cambiarlo, admin y super admin.
+router.get('/tasa-cierre/baremo', ctrl.baremo);
+router.put('/tasa-cierre/baremo', roleGuard('admin', 'superadmin'), ctrl.guardarBaremo);
+router.delete('/tasa-cierre/baremo', roleGuard('admin', 'superadmin'), ctrl.quitarBaremo);
 
 // «Ayer y hoy» del dashboard (#130). Sin roleGuard a proposito: una gestora
 // entra y ve lo suyo, que es el caso principal de esta pantalla.
