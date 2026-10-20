@@ -498,3 +498,45 @@ export async function avisarVencimientos() {
   if (enviados) logger.info({ enviados }, 'Cursos pendientes: avisos de fecha enviados');
   return { revisados: rows.length, enviados };
 }
+
+/**
+ * El resumen de los lunes (#336), por campus: cursos abiertos, retrasados y
+ * alumnas esperando, y la carga de cada tutora. Va a los super admin, como una
+ * notificación, UNA vez por semana: si ya hay una de esta semana, no manda otra
+ * (repetir la vuelta del job, o reiniciar, no la duplica).
+ *
+ * Solo se manda si hay algo que contar: un campus a 0 se nombra al final, pero
+ * una semana con TODO a 0 no genera aviso (un resumen vacío entrena a no leerlo).
+ */
+export async function resumenDeLaSemana({ ahora = new Date() } = {}) {
+  const zona = process.env.APP_TIMEZONE || 'Europe/Madrid';
+  // «Esta semana» = desde el lunes de la zona de la aplicación.
+  const hoy = new Date(ahora.toLocaleDateString('en-CA', { timeZone: zona }) + 'T00:00:00Z');
+  const lunes = new Date(hoy);
+  lunes.setUTCDate(hoy.getUTCDate() - ((hoy.getUTCDay() + 6) % 7));
+  const desde = lunes.toISOString().slice(0, 10);
+  const { rows: [ya] } = await query(
+    `SELECT 1 FROM admin_notifications WHERE type = 'curso_pendiente_semana' AND created_at >= ($1::date AT TIME ZONE $2::text) LIMIT 1`,
+    [desde, zona]
+  );
+  if (ya) return { enviado: false, motivo: 'ya enviado esta semana' };
+
+  const campus = await model.resumenPorCampus({});
+  const carga = await model.cargaPorTutora({});
+  const total = campus.reduce((s, c) => s + c.abiertos, 0);
+  if (!total) return { enviado: false, motivo: 'nada abierto' };
+
+  const lineas = campus.filter((c) => c.abiertos > 0)
+    .map((c) => `${c.campus}: ${c.abiertos} abiertos, ${c.retrasados} retrasados, ${c.alumnas_esperando} alumnas esperando`);
+  const alDia = campus.filter((c) => c.abiertos === 0).map((c) => c.campus);
+  const tutoras = carga.slice(0, 5).map((t) => `${t.tutora} (${t.abiertos}${t.retrasados ? `, ${t.retrasados} retrasados` : ''})`);
+  const { rows: supers } = await query(`SELECT id FROM users WHERE role = 'superadmin' AND active`);
+  if (!supers.length) return { enviado: false, motivo: 'sin super admin' };
+  await notifyUsers({
+    targetUserIds: supers.map((u) => u.id), type: 'curso_pendiente_semana',
+    title: `Cursos pendientes: ${total} abiertos, ${campus.reduce((s, c) => s + c.retrasados, 0)} retrasados`,
+    message: [...lineas, alDia.length ? `Al día: ${alDia.join(', ')}.` : null, tutoras.length ? `Carga: ${tutoras.join('; ')}.` : null].filter(Boolean).join(' · '),
+    link_path: '/productos/pendientes',
+  });
+  return { enviado: true, campus: lineas.length };
+}

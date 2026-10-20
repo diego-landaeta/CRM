@@ -157,6 +157,10 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Alumna nueva en un curso pendiente', agrupa: false,
     descripcion: 'Se suma otra alumna a un curso pendiente tuyo',
   },
+  curso_pendiente_semana: {
+    clase: AVISO, etiqueta: 'Resumen semanal de cursos pendientes', agrupa: false,
+    descripcion: 'Cada lunes, por campus: cursos abiertos, retrasados, alumnas esperando y carga por tutora (super admin)',
+  },
   curso_pendiente_fecha_movida: {
     clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
     descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',

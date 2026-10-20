@@ -22,7 +22,7 @@ import jwt from 'jsonwebtoken';
 const { default: pool } = await import('../src/shared/config/db.js');
 const { default: modulo } = await import('../src/modules/cursos-pendientes/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
-const { avisarVencimientos } = await import('../src/modules/cursos-pendientes/cursos-pendientes.service.js');
+const { avisarVencimientos, resumenDeLaSemana } = await import('../src/modules/cursos-pendientes/cursos-pendientes.service.js');
 
 const app = express();
 app.use(express.json());
@@ -509,5 +509,38 @@ describe('los avisos por fecha, una sola vez', () => {
     await q(`UPDATE cursos_pendientes SET fecha_comprometida = CURRENT_DATE - 9 WHERE id = ANY($1::int[])`, [[TARDE]]).catch(() => {});
     const r = await avisarVencimientos();
     expect(r.enviados).toBe(0);
+  });
+});
+
+// ── El resumen de los lunes ──────────────────────────────────────────────
+
+describe('el resumen de la semana, a los super admin', () => {
+  const DEL_TIPO = `SELECT title, message, target_user_ids FROM admin_notifications WHERE type = 'curso_pendiente_semana' ORDER BY id DESC`;
+  beforeAll(async () => {
+    await q(`DELETE FROM admin_notifications WHERE type = 'curso_pendiente_semana'`);
+    // Un curso abierto en P, para que haya algo que contar.
+    await crear(GESTORA, { nombre: nombre('Curso para el resumen'), lead_id: LEAD_A });
+  });
+  afterAll(async () => { await q(`DELETE FROM admin_notifications WHERE type = 'curso_pendiente_semana'`); });
+
+  it('manda UN resumen por campus y semana a los super admin, con los números', async () => {
+    const r = await resumenDeLaSemana();
+    expect(r).toMatchObject({ enviado: true });
+    const [aviso] = await q(DEL_TIPO);
+    expect(aviso.target_user_ids).toContain(SUPER.id);
+    expect(aviso.title).toMatch(/^Cursos pendientes: \d+ abiertos, \d+ retrasados$/);
+    expect(aviso.message).toContain(`${MARCA} a: `);
+    expect(aviso.message).toMatch(/\d+ alumnas esperando/);
+  });
+
+  it('repetir la vuelta (o reiniciar) no lo duplica', async () => {
+    const antes = (await q(DEL_TIPO)).length;
+    expect(await resumenDeLaSemana()).toMatchObject({ enviado: false, motivo: 'ya enviado esta semana' });
+    expect((await q(DEL_TIPO)).length).toBe(antes);
+  });
+
+  it('la semana siguiente sí vuelve a mandarlo', async () => {
+    const dentroDeOcho = new Date(Date.now() + 8 * 86400000);
+    expect(await resumenDeLaSemana({ ahora: dentroDeOcho })).toMatchObject({ enviado: true });
   });
 });
