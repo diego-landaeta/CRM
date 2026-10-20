@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as ctrl from './wc.controller.js';
+import * as pedidos from './wc.pedidos.controller.js';
 
 const router = Router();
 router.use(verifyToken);
@@ -20,5 +21,11 @@ router.post('/auto-discover-cpts', ctrl.autoDiscoverCpts);
 router.get('/preview', ctrl.previewWc);
 router.put('/mapping', ctrl.saveMapping);
 router.post('/scrape-preview', ctrl.scrapePreview);
+
+// Pedidos (#14). El aviso de WooCommerce entra por wc.webhook.js (sin sesión, con firma).
+router.get('/orders', pedidos.listar);
+router.post('/sync/orders', pedidos.sincronizar);
+router.put('/orders-config', pedidos.configurar);
+router.post('/webhook-secret', pedidos.secretoDelAviso);
 
 export default router;
