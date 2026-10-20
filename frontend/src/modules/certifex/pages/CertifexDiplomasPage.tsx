@@ -244,6 +244,22 @@ function FirmaEnFila({ c, alSubir, deshabilitado }: { c: Solicitud; alSubir: () 
   );
 }
 
+/**
+ * El DNI en la fila (Carlos, 20/10: «los DNI se colocan en el diploma»): si lo tiene, se ve;
+ * si no, se ofrece ponerlo (abre «Revisar datos»).
+ */
+function DniEnFila({ c, alPoner, deshabilitado }: { c: Solicitud; alPoner: () => void; deshabilitado?: boolean }) {
+  if (c.titular.dni) {
+    return <div className="mt-1"><Etiqueta tono="neutral">DNI {c.titular.dni}</Etiqueta></div>;
+  }
+  return (
+    <button type="button" onClick={alPoner} disabled={deshabilitado}
+      className="mt-1 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning-soft-foreground hover:bg-warning-soft/70 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50">
+      Sin DNI · Poner
+    </button>
+  );
+}
+
 /** El fondo de cuadros para ver que la firma es transparente. */
 const CUADROS = { backgroundImage: 'conic-gradient(#e5e7eb 25%, #ffffff 0 50%, #e5e7eb 0 75%, #ffffff 0)', backgroundSize: '16px 16px' };
 
@@ -1220,7 +1236,10 @@ export default function CertifexDiplomasPage() {
                           <td className="px-2 py-3">
                             <NombreDiploma c={c} />
                             <CorreoDelAlumno c={c} />
-                            <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />
+                              <DniEnFila c={c} alPoner={() => setEditando(c)} deshabilitado={trabajando} />
+                            </div>
                           </td>
                           <td className="px-2 py-3">
                             <div className="max-w-[260px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div>
@@ -1890,6 +1909,8 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
   const [catalogo, setCatalogo] = useState<CatalogoDelCampus | null>(null);
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
   const [nombreD, setNombreD] = useState(c.solicitud?.nombre ?? '');
+  // El DNI que se imprimirá (Carlos, 20/10): hasta que llegue de la admisión, a mano.
+  const [dniD, setDniD] = useState(c.titular.dni ?? '');
   const [correo, setCorreo] = useState(ed?.emailCrm ?? '');
   const [producto, setProducto] = useState(ed?.productoId ? String(ed.productoId) : '');
   // `tocado`: el programa es el escrito a mano. Si no, se imprime el del catálogo.
@@ -1967,15 +1988,20 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
   const sumaModulos = form.modulos.reduce((s, m) => s + (/^\d+$/.test(m.horas.trim()) ? Number(m.horas) : 0), 0);
   const horasTotales = /^\d+$/.test(form.horas.trim()) ? Number(form.horas) : null;
 
+  const dniN = dniD.replace(/\s+/g, ' ').trim().toUpperCase();
+  const errorDni = dniN && (!/^[A-Z0-9](?:[A-Z0-9.-]*[A-Z0-9])?$/.test(dniN) || dniN.replace(/[.-]/g, '').length < 5 || dniN.replace(/[.-]/g, '').length > 20)
+    ? 'Solo letras y números (con «-» o «.» por dentro), de 5 a 20.' : null;
+
   const cambios: CambiosSolicitud = { matriculaId: c.matriculaId };
   if (nombreN !== normalizarNombre(c.solicitud?.nombre ?? '')) cambios.nombre = nombreN;
+  if (dniN !== (c.titular.dni ?? '').toUpperCase()) cambios.dni = dniN || null;
   if (correoN !== (ed?.emailCrm ?? '')) cambios.emailCrm = correoN || null;
   const productoN = producto ? Number(producto) : null;
   if (productoN !== (ed?.productoId ?? null)) cambios.productoId = productoN;
   if (tocado && prog.programa && !mismoPrograma(prog.programa, ed?.programaEditado)) cambios.programa = prog.programa;
   if (!tocado && ed?.programaEditado) cambios.programa = null;
   const hayCambios = Object.keys(cambios).length > 1;
-  const listo = !guardando && hayCambios && !errorNombre && !errorCorreo && !prog.error;
+  const listo = !guardando && hayCambios && !errorNombre && !errorDni && !errorCorreo && !prog.error;
 
   // Con cambios sin guardar, Escape, el fondo o «Cancelar» preguntan antes de descartar.
   const [preguntar, setPreguntar] = useState(false);
@@ -2039,6 +2065,17 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
               <span className="mt-1 block text-xs text-muted-foreground">Lo escribió el alumno: <span className="text-foreground">{delAlumno || '—'}</span></span>
               {revisado && <span className="mt-0.5 block text-xs text-muted-foreground">Revisado por {revisado.por} el {fechaHora(revisado.en)}</span>}
               {errorNombre && <span className="mt-0.5 block text-xs text-destructive" role="alert">{errorNombre}</span>}
+            </label>
+
+            {/* DNI: vive en Certifex, en el alumno, y se imprime junto al nombre (Carlos, 20/10). */}
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-muted-foreground">DNI / NIE / pasaporte</span>
+              <input value={dniD} onChange={(e) => setDniD(e.target.value)} maxLength={30} placeholder="Ej.: 12345678Z" aria-invalid={!!errorDni}
+                autoComplete="off" className={cn(campo, 'uppercase')} />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Se imprime en el diploma junto al nombre. {c.titular.dni ? '' : 'Todavía no lo tiene: escríbelo si debe salir.'}
+              </span>
+              {errorDni && <span className="mt-0.5 block text-xs text-destructive" role="alert">{errorDni}</span>}
             </label>
 
             <label className="block text-sm">
