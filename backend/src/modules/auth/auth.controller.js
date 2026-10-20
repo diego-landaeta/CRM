@@ -246,21 +246,26 @@ export async function forgotPassword(req, res, next) {
     }
 
     const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
-    const pedido = await authService.pedirRecuperacion(parsed.data.email, baseUrl);
 
-    if (pedido) {
-      sendPasswordResetEmail({
-        nombre: pedido.user.nombre,
-        email: pedido.user.email,
-        setPasswordToken: pedido.rawToken,
-        baseUrl: pedido.baseUrl,
-      })
-        .then((r) => {
+    // TODO EL TRABAJO VA SIN ESPERAR, no solo el correo. Con un correo que
+    // existe hay que buscar, guardar el token y apuntar el registro; con uno
+    // que no, nada de eso. Si se esperara aqui, la diferencia de tiempo
+    // delataria la cuenta igual que lo haria un 404: un cronometro basta.
+    // La respuesta sale a la vez en los dos casos y lo demas pasa detras.
+    authService.pedirRecuperacion(parsed.data.email, baseUrl)
+      .then((pedido) => {
+        if (!pedido) return null;
+        return sendPasswordResetEmail({
+          nombre: pedido.user.nombre,
+          email: pedido.user.email,
+          setPasswordToken: pedido.rawToken,
+          baseUrl: pedido.baseUrl,
+        }).then((r) => {
           if (r.sent) logger.info({ userId: pedido.user.id }, 'Correo de recuperacion enviado');
           else logger.warn({ userId: pedido.user.id, reason: r.reason }, 'Correo de recuperacion NO enviado');
-        })
-        .catch((err) => logger.error({ err: err.message, userId: pedido.user.id }, 'Correo de recuperacion: error'));
-    }
+        });
+      })
+      .catch((err) => logger.error({ err: err.message }, 'Recuperacion de contraseña: error'));
 
     res.json({
       success: true,

@@ -20,6 +20,10 @@ const modelo = {
   findActiveUserByEmail: vi.fn(),
   setRecoveryToken: vi.fn(async () => {}),
   logActivity: vi.fn(async () => {}),
+  // Para poner la contraseña con el enlace (setPassword).
+  findUserBySetPasswordToken: vi.fn(),
+  updatePassword: vi.fn(async () => {}),
+  revokeAllUserTokens: vi.fn(async () => {}),
 };
 vi.mock('../src/modules/auth/auth.model.js', () => modelo);
 
@@ -47,6 +51,9 @@ async function pedirRecuperacion(email) {
   const res = fingirRes();
   let error = null;
   await ctrl.forgotPassword({ body: { email } }, res, (e) => { error = e; });
+  // El trabajo va detras de la respuesta (para que no delate la cuenta por el
+  // tiempo): se deja que termine antes de mirar que ha pasado.
+  await new Promise((r) => setTimeout(r, 0));
   return { res, error };
 }
 
@@ -56,6 +63,9 @@ beforeEach(() => {
   modelo.findActiveUserByEmail.mockReset();
   modelo.setRecoveryToken.mockClear();
   modelo.logActivity.mockClear();
+  modelo.findUserBySetPasswordToken.mockReset();
+  modelo.updatePassword.mockClear();
+  modelo.revokeAllUserTokens.mockClear();
   enviado.mockClear();
   enviado.mockResolvedValue({ sent: true });
 });
@@ -90,6 +100,24 @@ describe('no delata quien tiene cuenta', () => {
     expect(error).toBeNull();
     expect(res.codigo).toBe(200);
     expect(res.cuerpo.success).toBe(true);
+  });
+
+  it('la respuesta NO espera al trabajo: el tiempo no delata la cuenta', async () => {
+    // Si buscar al usuario tardara, o no acabara nunca, la respuesta sale igual.
+    // Con un correo que existe se hace mas trabajo que con uno que no, y esperar
+    // a ese trabajo seria un cronometro para saber quien tiene cuenta.
+    modelo.findActiveUserByEmail.mockReturnValue(new Promise(() => {}));
+    const res = fingirRes();
+    await ctrl.forgotPassword({ body: { email: 'laura@empresa.com' } }, res, () => {});
+    expect(res.codigo).toBe(200);
+    expect(res.cuerpo.success).toBe(true);
+  });
+
+  it('si la base falla, tampoco cambia la respuesta ni se cae', async () => {
+    modelo.findActiveUserByEmail.mockRejectedValue(new Error('base caida'));
+    const { res, error } = await pedirRecuperacion('laura@empresa.com');
+    expect(error).toBeNull();
+    expect(res.codigo).toBe(200);
   });
 
   it('un correo mal escrito SI se rechaza: «pepe@» no es de nadie', async () => {
@@ -145,5 +173,43 @@ describe('el enlace que se manda', () => {
     expect(modelo.logActivity).toHaveBeenCalledWith(
       LAURA.id, 'password_reset_requested', null, null,
     );
+  });
+});
+
+describe('al poner la contraseña con el enlace', () => {
+  it('se cierran las sesiones abiertas, y antes de cambiar la clave', async () => {
+    // Quien recupera una cuenta suele hacerlo porque no se fia de ella. Si
+    // alguien ya tenia sesion, poner una contraseña nueva no le echaba.
+    const orden = [];
+    modelo.findUserBySetPasswordToken.mockResolvedValue({
+      id: LAURA.id, set_password_expires: new Date(Date.now() + 3_600_000),
+    });
+    modelo.revokeAllUserTokens.mockImplementation(async () => { orden.push('sesiones'); });
+    modelo.updatePassword.mockImplementation(async () => { orden.push('clave'); });
+
+    const service = await import('../src/modules/auth/auth.service.js');
+    await service.setPassword('token-en-claro', 'ClaveNueva1');
+
+    expect(modelo.revokeAllUserTokens).toHaveBeenCalledWith(LAURA.id);
+    expect(orden).toEqual(['sesiones', 'clave']);
+  });
+
+  it('con un enlace que no vale no se cierra la sesion de nadie', async () => {
+    modelo.findUserBySetPasswordToken.mockResolvedValue(null);
+    const service = await import('../src/modules/auth/auth.service.js');
+
+    await expect(service.setPassword('token-falso', 'ClaveNueva1')).rejects.toMatchObject({ code: 'TOKEN_INVALID' });
+    expect(modelo.revokeAllUserTokens).not.toHaveBeenCalled();
+    expect(modelo.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('con un enlace caducado tampoco', async () => {
+    modelo.findUserBySetPasswordToken.mockResolvedValue({
+      id: LAURA.id, set_password_expires: new Date(Date.now() - 1000),
+    });
+    const service = await import('../src/modules/auth/auth.service.js');
+
+    await expect(service.setPassword('token-viejo', 'ClaveNueva1')).rejects.toMatchObject({ code: 'TOKEN_EXPIRED' });
+    expect(modelo.revokeAllUserTokens).not.toHaveBeenCalled();
   });
 });

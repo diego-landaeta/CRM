@@ -148,6 +148,14 @@ export async function setPassword(token, newPassword) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  // Las sesiones abiertas se cierran ANTES de cambiar la clave (#37). Quien
+  // recupera una cuenta suele hacerlo porque no se fia de ella: si alguien ya
+  // tenia sesion, poner una contraseña nueva no le echaba y seguia dentro.
+  // Va primero a proposito: si el cambio fallara despues, lo peor que pasa es
+  // que la persona tiene que volver a entrar; al reves, quedaria la clave
+  // cambiada y la sesion ajena viva.
+  await authModel.revokeAllUserTokens(user.id);
   await authModel.updatePassword(user.id, passwordHash);
   await authModel.logActivity(user.id, 'set_password', null, null);
 
