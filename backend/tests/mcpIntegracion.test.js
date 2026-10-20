@@ -248,7 +248,8 @@ describe('el protocolo, con la base de verdad', () => {
     const list = await rpc(TOKENS.ANA, 'tools/list');
     // 13 desde el 01/10: «listar_tutores», «comisiones_tutores» y «formaciones_sin_tutor».
     // 16 desde el 06/10 (#215): «listar_formaciones», «resumen_catalogo» y «ver_formacion».
-    expect(list.body.result.tools.length).toBe(16);
+    // 20 desde el 20/10 (#335): «moodle_cursos», «moodle_alumnos», «moodle_recursos_externos» y «moodle_estructura».
+    expect(list.body.result.tools.length).toBe(20);
     expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
 
