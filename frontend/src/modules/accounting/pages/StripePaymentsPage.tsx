@@ -181,7 +181,7 @@ export default function StripePaymentsPage() {
               }}
               disabled={syncing}
               title="Incluye lo anterior a la fecha de alta. No lo hace facturable."
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-amber-400 dark:border-amber-800 bg-card text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-warning/40 bg-card text-sm font-semibold text-warning hover:bg-warning-soft disabled:opacity-50">
               <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
             </button>
           </div>
@@ -285,7 +285,7 @@ export default function StripePaymentsPage() {
                     {fmtDate(p.stripe_created_at)}
                     {esAnteriorAlCorte(p.stripe_created_at) && (
                       <span
-                        className="block text-[10px] font-bold text-amber-700 dark:text-amber-400"
+                        className="block text-[10px] font-bold text-warning"
                         title="Anterior a la fecha desde la que este proyecto factura. Ya se facturó fuera del CRM: asociarlo emitiría una factura repetida."
                       >
                         ANTES DEL CORTE · no facturable

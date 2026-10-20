@@ -152,7 +152,7 @@ Cada una se marca con su id, así que volver a pulsar no duplica nada.
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-success-soft/30 text-success flex items-center justify-center flex-shrink-0">
           <Database size={22} weight="duotone" />
         </div>
         <div className="flex-1">
@@ -165,7 +165,7 @@ Cada una se marca con su id, así que volver a pulsar no duplica nada.
           </p>
         </div>
         <span className={`text-[10px] font-bold px-2 py-1 rounded-full h-fit whitespace-nowrap ${conectado
-          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+          ? 'bg-success-soft text-success-soft-foreground'
           : 'bg-muted text-muted-foreground'}`}
         >
           {conectado ? 'Conectado' : data?.has_secret ? 'Sin probar' : 'Sin configurar'}
@@ -223,7 +223,7 @@ Cada una se marca con su id, así que volver a pulsar no duplica nada.
               {previo.conEmail} con correo, que son las que se pueden traer
               {previo.sinEmail > 0 && <> · {previo.sinEmail} sin correo, que se quedan fuera</>}
               {previo.otraMoneda > 0 && (
-                <> · <span className="text-amber-700 dark:text-amber-400">{previo.otraMoneda} en otra
+                <> · <span className="text-warning">{previo.otraMoneda} en otra
                   moneda, que tampoco entran: no se convierten a euros a ojo</span></>
               )}
               {' '}· {previo.conReferenciaStripe} con referencia de Stripe, que serán las que se
@@ -250,7 +250,7 @@ Cada una se marca con su id, así que volver a pulsar no duplica nada.
           </button>
           <button onClick={traer} disabled={trayendo || !conectado}
             title={!conectado ? 'Prueba antes la conexión' : 'Crea los clientes y las ventas en el CRM'}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-emerald-400 dark:border-emerald-800 bg-card text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 disabled:opacity-50 ml-auto">
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-success/40 bg-card text-sm font-semibold text-success hover:bg-success-soft disabled:opacity-50 ml-auto">
             <ArrowsClockwise size={14} weight="bold" className={trayendo ? 'animate-spin' : ''} /> Traer al CRM
           </button>
         </div>

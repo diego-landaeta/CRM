@@ -113,7 +113,7 @@ export default function ProyectosIAConectados() {
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-lg bg-info-soft/30 text-info-soft-foreground flex items-center justify-center flex-shrink-0">
           <Robot size={20} weight="duotone" />
         </div>
         <div className="flex-1 min-w-0">
@@ -151,8 +151,8 @@ export default function ProyectosIAConectados() {
             <div key={f.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2 min-w-[160px]">
                 {f.cargando ? <Circle size={14} className="text-muted-foreground animate-pulse" />
-                  : probado ? <CheckCircle size={14} weight="fill" className="text-emerald-600" />
-                    : fallo ? <WarningCircle size={14} weight="fill" className="text-red-500" />
+                  : probado ? <CheckCircle size={14} weight="fill" className="text-success" />
+                    : fallo ? <WarningCircle size={14} weight="fill" className="text-destructive" />
                       : <Circle size={14} className="text-muted-foreground" />}
                 <span className="text-sm font-medium">{f.nombre}</span>
               </div>
@@ -161,21 +161,21 @@ export default function ProyectosIAConectados() {
                 <p>
                   {f.sociedad_emisora_id
                     ? <>Sociedad: <span className="text-foreground">{f.sociedad_nombre || `#${f.sociedad_emisora_id}`}</span></>
-                    : <span className="text-amber-700 dark:text-amber-400">Sin sociedad emisora — no podrá facturar</span>}
+                    : <span className="text-warning">Sin sociedad emisora — no podrá facturar</span>}
                 </p>
                 <p>
                   {f.cargando ? 'Consultando…'
-                    : !conToken ? <span className="text-amber-700 dark:text-amber-400">Sin access token</span>
+                    : !conToken ? <span className="text-warning">Sin access token</span>
                       : conectadas.map(([nombre, e], i) => (
                         <span key={nombre}>
                           {i > 0 && ' · '}
                           {COMO_SE_LLAMA[nombre]}{' '}
                           <code className="px-1 rounded bg-muted">{e?.secret_preview || '—'}</code>{' '}
                           {e?.last_test_status === 'success'
-                            ? <span className="text-emerald-700 dark:text-emerald-400">probado</span>
+                            ? <span className="text-success">probado</span>
                             : e?.last_test_status === 'error'
-                              ? <span className="text-red-600 dark:text-red-400">la última prueba falló</span>
-                              : <span className="text-amber-700 dark:text-amber-400">sin probar</span>}
+                              ? <span className="text-destructive">la última prueba falló</span>
+                              : <span className="text-warning">sin probar</span>}
                         </span>
                       ))}
                 </p>
@@ -185,7 +185,7 @@ export default function ProyectosIAConectados() {
                 <span className="text-[11px] text-primary font-semibold px-2">Lo estás configurando abajo</span>
               ) : !esMio ? (
                 <span
-                  className="text-[11px] text-amber-700 dark:text-amber-400 px-2 text-right max-w-[220px]"
+                  className="text-[11px] text-warning px-2 text-right max-w-[220px]"
                   title="El proyecto activo solo puede ser uno de los asignados a tu usuario"
                 >
                   No está asignado a tu usuario — asígnatelo en Ajustes → Usuarios para poder configurarlo

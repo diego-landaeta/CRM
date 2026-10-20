@@ -62,23 +62,23 @@ export default function EstadoDeLaSincronizacion({ projectId }: { projectId: num
 
   return (
     <div className={`rounded-md border p-3 text-xs ${fallando
-      ? 'border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/20'
+      ? 'border-destructive/30 bg-destructive-soft'
       : 'border-border bg-muted/30'}`}
     >
       <p className="font-semibold flex items-center gap-1.5">
         {fallando
-          ? <WarningCircle size={13} weight="bold" className="text-red-600 dark:text-red-400" />
-          : <CheckCircle size={13} weight="bold" className="text-emerald-600" />}
+          ? <WarningCircle size={13} weight="bold" className="text-destructive" />
+          : <CheckCircle size={13} weight="bold" className="text-success" />}
         Sincronización
       </p>
 
       {fallando ? (
         <>
-          <p className="mt-1 text-red-800 dark:text-red-300">
+          <p className="mt-1 text-destructive-soft-foreground">
             <strong>El último intento falló.</strong> Sin webhook, este cron es la única vía por la
             que entran los cobros: mientras falle, no entra ninguno.
           </p>
-          <p className="mt-1 font-mono text-[11px] text-red-700 dark:text-red-400 break-all">
+          <p className="mt-1 font-mono text-[11px] text-destructive break-all">
             {sync.last_error}
           </p>
           <p className="mt-1 text-muted-foreground">

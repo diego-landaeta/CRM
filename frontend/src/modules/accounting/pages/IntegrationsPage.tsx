@@ -253,7 +253,7 @@ function StripeCard({ projectId }: { projectId: number }) {
               <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
                 <li>Entra a <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a></li>
                 <li><strong>Lo recomendado:</strong> «Create restricted key». Marca <strong>Read</strong> en <em>Charges</em> y en <em>Balance</em>, y deja todo lo demás en <em>None</em>. Sale una <code className="px-1 rounded bg-card">rk_live_…</code>.</li>
-                <li><strong>Por qué restringida:</strong> el CRM solo lee. Con la <code className="px-1 rounded bg-card">sk_live_…</code> le das además permiso para cobrar, devolver y transferir, que no usa nunca. <span className="text-red-600 dark:text-red-400 font-semibold">Si se filtra, esa es toda la diferencia.</span></li>
+                <li><strong>Por qué restringida:</strong> el CRM solo lee. Con la <code className="px-1 rounded bg-card">sk_live_…</code> le das además permiso para cobrar, devolver y transferir, que no usa nunca. <span className="text-destructive font-semibold">Si se filtra, esa es toda la diferencia.</span></li>
                 <li><strong>Para probar:</strong> activa «Modo prueba» arriba a la izquierda y usa la clave de test (<code className="px-1 rounded bg-card">sk_test_…</code>). Ahí no hay dinero de verdad.</li>
                 <li>Pégala abajo en <em>Access token</em>, pulsa <strong>Guardar</strong> y luego <strong>Probar conexión</strong>.</li>
               </ol>

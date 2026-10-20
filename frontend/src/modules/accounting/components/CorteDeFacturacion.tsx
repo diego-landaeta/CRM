@@ -76,7 +76,7 @@ export default function CorteDeFacturacion({ projectId }: { projectId: number })
   // suelo comprobado cuando no lo hay.
   if (fallo || !c) {
     return (
-      <div className="rounded-md border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-900 dark:text-amber-300">
+      <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-xs text-warning-soft-foreground">
         <p className="font-semibold flex items-center gap-1.5">
           <WarningCircle size={13} weight="bold" /> No se ha podido consultar desde qué fecha se factura
         </p>
@@ -98,7 +98,7 @@ export default function CorteDeFacturacion({ projectId }: { projectId: number })
       </p>
 
       {sinSuelo ? (
-        <p className="text-xs text-red-700 dark:text-red-400">
+        <p className="text-xs text-destructive">
           <strong>Este proyecto no tiene suelo de facturación.</strong> Sin él entra el histórico
           entero de la cuenta de Stripe. Ponle antes un corte, o comprueba que el proyecto tiene
           fecha de alta.
@@ -133,7 +133,7 @@ export default function CorteDeFacturacion({ projectId }: { projectId: number })
         // Sin sociedad emisora el segundo escalón no existe, y además no hay de
         // dónde sacar los datos fiscales de la factura. Se dice aquí porque es
         // el momento de arreglarlo, no cuando falle la primera factura.
-        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+        <p className="text-[11px] text-warning">
           El proyecto no tiene <strong>sociedad emisora</strong>. Sin ella no hay datos fiscales
           para facturar, y el segundo escalón del corte no se puede calcular.
         </p>
