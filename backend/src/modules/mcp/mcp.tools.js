@@ -5,6 +5,7 @@ import { resumenDelDia } from '../reports/resumenDelDia.js';
 import * as proceso from '../proceso/proceso.model.js';
 import * as feedback from '../feedback/feedback.model.js';
 import * as metas from '../sales/sales.goals.js';
+import * as metaAds from '../meta-ads/meta-ads.service.js';
 import * as egresos from '../expenses/expense.model.js';
 import * as porPagar from '../accounts-payable/payable.model.js';
 import * as stripe from '../stripe-payments/stripe-payments.model.js';
@@ -246,6 +247,16 @@ async function conTope(promesa, ms, nombre) {
   } finally {
     clearTimeout(reloj);
   }
+}
+
+/** De una campaña de la pantalla de Meta, lo que le sirve a Claude (sin ids internos de la cuenta publicitaria). */
+function resumirCampana(c) {
+  return {
+    campana_id: c.campaign_id, nombre: c.nombre, estado: c.effective_status || c.status || null,
+    gasto: c.total_spend, impresiones: c.total_impressions, clics: c.total_clicks, ctr: c.ctr,
+    leads_meta: c.total_leads, cpl_meta: c.cpl,
+    prospectos_crm: c.leads_crm, ventas_crm: c.ventas_crm, cpl_crm: c.cpl_crm,
+  };
 }
 
 export const HERRAMIENTAS = [
@@ -514,6 +525,41 @@ export const HERRAMIENTAS = [
         throw new AppError(`No tienes acceso al campus ${r.campus_id}. Usa «mis_proyectos» para ver los tuyos.`, 403, 'MCP_FUERA_DE_AMBITO');
       }
       return r;
+    },
+  },
+  {
+    nombre: 'meta_ads',
+    titulo: 'Meta Ads',
+    descripcion: 'Publicidad de Meta (Facebook e Instagram) de tus campus, como la pantalla «Meta Ads» (solo super admin y admin). Una vista cada vez: '
+      + '«campanas» (por campaña: estado, gasto, impresiones, clics, CTR, leads de Meta, prospectos que llegaron al CRM, ventas y coste por lead; es la de por defecto), '
+      + '«por_producto» (gasto, prospectos y ventas por formación asociada), «roi» (gasto frente a ventas por campaña) y «evolucion_diaria» (gasto, clics y leads por día). '
+      + 'Acepta desde y hasta. Los «leads de Meta» son los que cuenta Meta con su formulario; los «prospectos del CRM» son los que de verdad entraron por esa campaña: pueden no coincidir. '
+      + 'Si un campus no tiene Meta conectado, sale vacío con el aviso «sin Meta conectado», no como cero gastado.',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      vista: z.enum(['campanas', 'por_producto', 'roi', 'evolucion_diaria']).default('campanas'),
+      limite: z.number().int().min(1).max(100).default(30).describe('Máximo de campañas por campus (por gasto)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'meta_ads');
+      const nombres = new Map((ambito.proyectos || []).map((p) => [Number(p.id), p.nombre]));
+      const campus = [];
+      for (const projectId of projectIds) {
+        const base = { projectId, dateFrom: a.desde || null, dateTo: a.hasta || null };
+        const cuentas = await metaAds.listAccounts(projectId);
+        const entrada = { campus_id: projectId, campus: nombres.get(projectId) || String(projectId) };
+        if (!cuentas.length) { campus.push({ ...entrada, aviso: 'sin Meta conectado' }); continue; }
+        if (a.vista === 'por_producto') campus.push({ ...entrada, productos: await metaAds.getProductsView(base) });
+        else if (a.vista === 'roi') campus.push({ ...entrada, campanas: (await metaAds.getRoi(base)).slice(0, a.limite) });
+        else if (a.vista === 'evolucion_diaria') campus.push({ ...entrada, ...(await metaAds.getDashboard(base)) });
+        else {
+          const filas = await metaAds.listCampaignsForUI(base);
+          campus.push({ ...entrada, campanas: filas.slice(0, a.limite).map(resumirCampana), total_campanas: filas.length });
+        }
+      }
+      return { vista: a.vista, desde: a.desde || null, hasta: a.hasta || null, campus };
     },
   },
   {
