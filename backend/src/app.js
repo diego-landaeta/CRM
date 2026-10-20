@@ -44,6 +44,7 @@ import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
 import emailTemplatesModule from './modules/email-templates/index.js';
@@ -255,6 +256,7 @@ const ALL_MODULES = [
   { name: 'audiences', mod: audiencesModule },
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'ia-analisis', mod: iaAnalisisModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
   { name: 'email-templates', mod: emailTemplatesModule },
