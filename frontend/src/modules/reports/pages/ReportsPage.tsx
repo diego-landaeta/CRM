@@ -388,6 +388,21 @@ export default function ReportsPage() {
         }
       />
 
+      {/* Qué periodo se está viendo, dicho con palabras (#325): las cifras de esta pantalla
+          no coincidían con «el mes en curso» ni con «los últimos 30 días» porque nadie decía
+          cuál usaba. Arranca en «Este mes» y cada cifra de abajo es de este periodo. */}
+      {range.from && range.to && (
+        <p className="text-xs text-muted-foreground" data-testid="periodo-del-informe">
+          Periodo que estás viendo: <strong className="text-foreground">
+            {new Date(`${range.from}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' – '}
+            {new Date(`${range.to}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </strong>
+          {atajoActivo ? ` (${ATAJOS.find((a) => a.clave === atajoActivo)?.etiqueta})` : ' (a medida)'}.
+          {' '}Al abrir Reportes empieza en «Este mes»; las cifras de abajo son de este periodo, no del histórico.
+        </p>
+      )}
+
       {/* Tabs — solo mostrar Análisis IA si es proyecto IA */}
       {isIaProject && (
         <div className="flex border-b border-border" role="tablist">
