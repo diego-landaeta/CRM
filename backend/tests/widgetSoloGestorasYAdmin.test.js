@@ -15,7 +15,12 @@ import { listCandidateUsers, listActiveWidgetUsers } from '../src/modules/widget
  */
 
 const PROYECTO = 1;
-const ROLES = ['gestor', 'admin', 'superadmin', 'soporte', 'tutor'];
+// SIN superadmin, a proposito: otras pruebas de la suite (Certifex) comparan «los
+// superadmin activos» con quienes recibieron un aviso, y uno que aparece y
+// desaparece mientras tanto las desajusta (rompio el CI de otra rama). Con el
+// tutor y el soporte ya se prueba el mecanismo del filtro, que es `role IN
+// ('gestor', 'admin')`; un superadmin queda fuera por lo mismo.
+const ROLES = ['gestor', 'admin', 'soporte', 'tutor'];
 const ids = {};
 
 beforeAll(async () => {
@@ -47,11 +52,10 @@ describe('la lista de candidatos del panel', () => {
     expect(lista).toContain(ids.admin);
   });
 
-  it('no enseña tutores, soporte ni superadmin', async () => {
+  it('no enseña tutores ni soporte', async () => {
     const lista = (await listCandidateUsers(PROYECTO)).map((u) => u.id);
     expect(lista).not.toContain(ids.tutor);
     expect(lista).not.toContain(ids.soporte);
-    expect(lista).not.toContain(ids.superadmin);
   });
 });
 
@@ -62,12 +66,11 @@ describe('la rotacion publica del widget', () => {
     expect(rotacion).toContain(ids.admin);
   });
 
-  it('no incluye a un tutor, soporte o superadmin aunque esten marcados a mano', async () => {
-    // Los tres tienen `whatsapp_widget_active = TRUE` y telefono: es justo el
+  it('no incluye a un tutor o soporte aunque esten marcados a mano', async () => {
+    // Los dos tienen `whatsapp_widget_active = TRUE` y telefono: es justo el
     // caso de quien los marco por error en la base.
     const rotacion = (await listActiveWidgetUsers(PROYECTO)).map((u) => u.id);
     expect(rotacion).not.toContain(ids.tutor);
     expect(rotacion).not.toContain(ids.soporte);
-    expect(rotacion).not.toContain(ids.superadmin);
   });
 });
