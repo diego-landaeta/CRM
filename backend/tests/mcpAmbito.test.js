@@ -147,6 +147,7 @@ const ARGS = {
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
+  meta_ads: { vista: 'campanas', desde: '2026-01-01', hasta: '2026-09-01', limite: 30 },
   clientes: { texto: 'ana', desde: '2026-01-01', hasta: '2026-09-01', pagina: 1, limite: 25 },
   equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
