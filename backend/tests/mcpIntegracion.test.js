@@ -255,7 +255,8 @@ describe('el protocolo, con la base de verdad', () => {
     // 21 desde el 20/10 (#325): «equipo». Las demás consultas nuevas entran como tipos de «informe».
     // 25 desde el 20/10 (#335): «moodle_cursos», «moodle_alumnos», «moodle_recursos_externos» y «moodle_estructura».
     // 26 desde #325 (parte 2): «clientes». El resto de lo nuevo también entra como tipos de «informe».
-    expect(list.body.result.tools.length).toBe(26);
+    // 27 desde #325 (meta_ads): la publicidad de Meta por campaña, producto, ROI y día.
+    expect(list.body.result.tools.length).toBe(27);
     expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['equipo', 'clientes']));
     expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
