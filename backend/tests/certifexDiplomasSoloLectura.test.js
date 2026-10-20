@@ -23,8 +23,10 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const request = supertest(app);
 const sufijo = `${Date.now()}`.slice(-7);
 const base = 870000000 + Math.floor(Math.random() * 1000000);
-// Códigos que no casan con ningún otro proyecto (ni con los de otras pruebas).
-const [MIO, OTRO_MIO, AJENO] = ['QLECTA', 'QLECTB', 'QLECTAJ'];
+// Códigos que no casan con ningún otro proyecto (ni con los de otras pruebas), y
+// ninguno empieza por otro: un campus casa con los proyectos cuyo nombre EMPIEZA por
+// su código, y si casa con dos, no lo ve nadie más que el super admin.
+const [MIO, OTRO_MIO, AJENO] = ['QLXUNO', 'QLXDOS', 'QLXTRES'];
 const NEXP_MIO = 'CTF-2026-000870-AAAA';
 const NEXP_AJENO = 'CTF-2026-000871-AAAA';
 
