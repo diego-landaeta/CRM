@@ -195,7 +195,14 @@ function Modulos({ programa, rotulo }: { programa: ProgramaOficial; rotulo: stri
  * Lo que se imprimirá en el diploma si se aprueba ahora: el programa de la formación
  * vendida (horas y módulos), o el aviso de que se usará lo de Moodle, con el motivo.
  */
-function ProgramaAImprimir({ p }: { p: ProgramaDelCrm | null | undefined }) {
+/**
+ * ¿La solicitud va sobre una matrícula de Moodle? Las creadas desde cero en el CRM llevan
+ * una referencia de curso desde 900.000.000 (Certifex, REF_CURSO_CRM); las de Moodle, el id
+ * de su curso. Con Moodle, si el catálogo no trae módulos se imprimen los del curso de Moodle.
+ */
+const esDeMoodle = (c: Solicitud) => Number(c.curso?.ref) > 0 && Number(c.curso.ref) < 900_000_000;
+
+function ProgramaAImprimir({ p, deMoodle = false }: { p: ProgramaDelCrm | null | undefined; deMoodle?: boolean }) {
   if (p === undefined) return null;
   if (p?.programa) {
     const rotulo = p.editado
@@ -207,7 +214,11 @@ function ProgramaAImprimir({ p }: { p: ProgramaDelCrm | null | undefined }) {
         {/* Diego, 19/10: «todo tiene que tener módulos». Academia IA no los tiene en
             ningún sitio: se escriben a mano en «Editar» antes de aprobar. */}
         {p.programa.modulos.length === 0 && (
-          <div className="mt-1"><Etiqueta tono="destructive">Sin módulos: escríbelos en «Editar»</Etiqueta></div>
+          // Con matrícula de Moodle no falta nada: Certifex imprime los módulos del curso de
+          // Moodle cuando el catálogo no trae (Carlos, 20/10: «que tome los datos de Moodle»).
+          <div className="mt-1">{deMoodle
+            ? <Etiqueta tono="info">Módulos: los del curso de Moodle</Etiqueta>
+            : <Etiqueta tono="destructive">Sin módulos: escríbelos en «Editar»</Etiqueta>}</div>
         )}
         {p.elegida && p.formacion && (
           <p className="mt-0.5 max-w-[280px] truncate text-[11px] text-muted-foreground" title={p.formacion.nombre}>Formación: {p.formacion.nombre}</p>
@@ -1244,7 +1255,7 @@ export default function CertifexDiplomasPage() {
                           <td className="px-2 py-3">
                             <div className="max-w-[260px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div>
                             <div className="text-xs text-muted-foreground">{nombreCampus(c.centro)}</div>
-                            <ProgramaAImprimir p={c.programaCrm} />
+                            <ProgramaAImprimir p={c.programaCrm} deMoodle={esDeMoodle(c)} />
                           </td>
                           <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(c.solicitud?.en)}</td>
                           <td className="px-2 py-3 text-right">
@@ -1556,7 +1567,7 @@ export default function CertifexDiplomasPage() {
             setCreandoNuevo(false);
             toast({
               title: r.yaExistia ? 'Ya estaba creado' : 'Diploma creado',
-              description: `${r.nombre} · ${r.curso}. Está en «Por decidir»: apruébalo y emítelo cuando quieras.`,
+              description: `${r.nombre} · ${r.curso}. ${r.vinculadaMoodle ? 'Va sobre su matrícula de Moodle: saldrá con sus datos de Moodle. ' : ''}Está en «Por decidir»: apruébalo y emítelo cuando quieras.`,
             });
             irA('pendientes');
             recargar();
@@ -1725,7 +1736,7 @@ interface ClienteLite { id: number; nombre: string | null; email: string | null;
  * Certifex: queda en «Por decidir» para aprobarla y emitirla como las de Moodle.
  */
 function DialogoNuevoDiploma({ campus, alCerrar, alCrear }: {
-  campus: CampusCertifex[]; alCerrar: () => void; alCrear: (r: { matriculaId: number; yaExistia: boolean; curso: string; nombre: string }) => void;
+  campus: CampusCertifex[]; alCerrar: () => void; alCrear: (r: { matriculaId: number; yaExistia: boolean; curso: string; nombre: string; vinculadaMoodle?: boolean }) => void;
 }) {
   const [centro, setCentro] = useState(campus.length === 1 ? campus[0]!.codigo : '');
   const [catalogo, setCatalogo] = useState<CatalogoDelCampus | null>(null);
@@ -2141,9 +2152,11 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
                   )}
                 </div>
                 {form.modulos.length === 0 ? (
-                  <p className="mt-1 text-xs font-medium text-destructive" role="status">
-                    Sin módulos: el diploma saldría sin temario. Sincronízalos con el producto o escríbelos con «Añadir módulo».
-                  </p>
+                  esDeMoodle(c)
+                    ? <p className="mt-1 text-xs text-muted-foreground" role="status">Sin módulos en el catálogo: saldrán los del curso de Moodle. Si escribes alguno, mandan los tuyos.</p>
+                    : <p className="mt-1 text-xs font-medium text-destructive" role="status">
+                        Sin módulos: el diploma saldría sin temario. Sincronízalos con el producto o escríbelos con «Añadir módulo».
+                      </p>
                 ) : (
                   <ol className="mt-1 space-y-1.5">
                     {form.modulos.map((m, i) => (
