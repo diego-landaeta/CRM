@@ -160,13 +160,19 @@ export async function tokensDeConectores(userId, connectorIds) {
 
 /**
  * Todas las URLs vivas de la persona (sueltas y de conexiones), para la línea
- * de estado de «Código para Claude» (#192).
+ * de estado de cada URL (#192).
  */
 export async function urlsVivasDeLaPersona(userId) {
   const { rows } = await query(
-    `SELECT t.id, COALESCE(c.label, t.nombre) AS nombre
+    // `ambito` (#260): dónde está la conexión, para decir «cambia arriba a X para verla».
+    `SELECT t.id, COALESCE(c.label, t.nombre) AS nombre,
+            CASE c.alcance WHEN 'sistema' THEN 'Todo el sistema'
+                           WHEN 'empresa' THEN COALESCE(s.razon_social, 'una empresa')
+                           ELSE p.nombre END AS ambito
        FROM mcp_tokens t
        LEFT JOIN project_connectors c ON c.id = t.connector_id
+       LEFT JOIN projects p ON p.id = c.project_id
+       LEFT JOIN invoice_issuers s ON s.id = c.issuer_id
       WHERE t.user_id = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
       ORDER BY t.created_at`,
     [userId]
