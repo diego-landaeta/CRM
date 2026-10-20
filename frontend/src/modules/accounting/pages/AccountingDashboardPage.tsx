@@ -223,16 +223,16 @@ export default function AccountingDashboardPage() {
       {esIA && ia && ia.mrr > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard icon={CurrencyEur}
-            iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+            iconBg="bg-primary/10 text-primary"
             label="MRR" value={fmt(ia.mrr)} />
           <KpiCard icon={UsersThree}
-            iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+            iconBg="bg-success-soft text-success-soft-foreground"
             label="Suscripciones activas" value={String(ia.activeSubs)} />
           <KpiCard icon={TrendUp}
-            iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
+            iconBg="bg-info-soft text-info-soft-foreground"
             label="Altas del mes" value={String(ia.newSubs)} />
           <KpiCard icon={TrendDown}
-            iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+            iconBg="bg-destructive-soft text-destructive-soft-foreground"
             label="Bajas del mes" value={String(ia.cancelledSubs)} trend="down" />
         </div>
       )}
