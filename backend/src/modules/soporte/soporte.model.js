@@ -73,14 +73,19 @@ export async function porId(id) {
  * administra ve los SUYOS. Un ticket puede llevar dentro una captura con datos
  * de un cliente, asi que no es una lista para todo el mundo.
  */
-export async function listar({ estado, kind, projectId, soloDe, page = 1, limit = 50 }) {
+export async function listar({ estado, kind, projectId, alcance = null, page = 1, limit = 50 }) {
   const cond = [];
   const params = [];
   let i = 1;
   if (estado) { cond.push(`t.estado = $${i++}`); params.push(estado); }
   if (kind) { cond.push(`t.kind = $${i++}`); params.push(kind); }
   if (projectId) { cond.push(`t.project_id = $${i++}`); params.push(projectId); }
-  if (soloDe) { cond.push(`t.abierto_por = $${i++}`); params.push(soloDe); }
+  // El alcance de quien pregunta: los tickets que abrio el y los de sus campus.
+  // Una lista de campus vacia deja solo los suyos; sin alcance (`null`), todos.
+  if (alcance) {
+    cond.push(`(t.abierto_por = $${i++} OR t.project_id = ANY($${i++}::int[]))`);
+    params.push(alcance.userId, (alcance.projectIds || []).map(Number));
+  }
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
 
   const { rows: cnt } = await query(
@@ -183,7 +188,7 @@ export async function guardarAdjunto({ ticketId, mensajeId, nombre, clave, mime,
 
 export async function adjuntoPorId(id) {
   const { rows } = await query(
-    `SELECT a.*, t.abierto_por FROM ticket_adjuntos a
+    `SELECT a.*, t.abierto_por, t.project_id AS ticket_project_id FROM ticket_adjuntos a
        JOIN tickets t ON t.id = a.ticket_id
       WHERE a.id = $1`, [id]);
   return rows[0] || null;
@@ -198,10 +203,13 @@ export async function adjuntoPorId(id) {
  * Y se usa la MEDIANA, no la media: un ticket olvidado tres semanas mueve la
  * media lo bastante como para que el numero deje de describir el dia a dia.
  */
-export async function tiempos({ projectId = null } = {}) {
+export async function tiempos({ projectId = null, projectIds = null } = {}) {
   const params = [];
-  let where = '';
-  if (projectId) { params.push(projectId); where = 'WHERE project_id = $1'; }
+  const cond = [];
+  if (projectId) { params.push(projectId); cond.push(`project_id = $${params.length}`); }
+  // Un admin mide solo sus campus: la lista recorta aunque no pida ninguno.
+  if (projectIds) { params.push(projectIds.map(Number)); cond.push(`project_id = ANY($${params.length}::int[])`); }
+  const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,

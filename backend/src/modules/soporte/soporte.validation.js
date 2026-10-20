@@ -5,7 +5,7 @@ import { z } from 'zod';
   y usadas en la pantalla (`soporte/lib/tickets.ts`). Se copian en vez de
   inventar otras para que enganchar la interfaz no obligue a tocarla.
 
-  Y son las mismas que los CHECK de la migracion 172: si aqui se aceptara un
+  Y son las mismas que los CHECK de la migracion 213: si aqui se aceptara un
   valor que la tabla rechaza, el error saldria como un 500 de Postgres en vez
   de como un «ese campo no vale».
 */

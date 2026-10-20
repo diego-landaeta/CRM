@@ -16,12 +16,15 @@
 -- lo abrió cree que lo ha dicho.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
--- POR QUÉ ES LA 172 Y NO LA 168
+-- EL NÚMERO
 --
--- Esta rama va por la 167 y `staging` por la 171: la 167 de aquí se renumeró
--- allí al integrarla. Coger el siguiente número «libre» según esta rama
--- chocaría al fusionar, que es exactamente el tropiezo del #127. La 172 está
--- libre en las dos.
+-- La 213: `staging` llega a la 207 y las PR abiertas ocupan de la 208 a la 212.
+-- Antes de aplicarla, comprobar que sigue libre. Va numerada aparte en cada CRM.
+--
+-- Se aplica como `postgres`, con `psql -v ON_ERROR_STOP=1`, y después hay que
+-- darle los permisos a `crm_user` y pasarle la propiedad (las tablas nuevas
+-- nacen de `postgres`, #71): sin eso la API no puede leer ni escribir tickets.
+-- Es reaplicable (`IF NOT EXISTS`).
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- QUÉ NO SE TRAE

@@ -7,10 +7,39 @@ import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { sendTicketNuevoEmail } from '../../shared/services/brevo.service.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
+import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 
-/** Quien administra ve todos los tickets; el resto, los suyos. */
+/** Quien administra puede responder, cambiar el estado y ver las notas internas. */
 function administra(req) {
   return req.user?.role === 'admin' || req.user?.role === 'superadmin' || req.user?.role === 'soporte';
+}
+
+/**
+ * HASTA DONDE LLEGA CADA UNO (#245).
+ *
+ *   superadmin y soporte  todos los tickets: son quienes atienden el CRM.
+ *   admin                 los de SUS campus y los que abrio el mismo.
+ *   el resto              solo los suyos.
+ *
+ * Antes cualquier admin veia todos. Un ticket lleva pasos, una URL y a menudo
+ * una captura con datos de un cliente: que el admin de una empresa pudiera
+ * leer los de otra es la misma fuga de la que ya se cerro en Tutores, donde un
+ * admin de CEDIA veia a un profesor de ICTESS con su IBAN.
+ */
+async function alcanceDe(req) {
+  if (!administra(req)) return { tipo: 'propios', projectIds: [] };
+  if (veTodoElCrm(req.user)) return { tipo: 'todo', projectIds: [] };
+  return { tipo: 'campus', projectIds: await campusDeLaPersona(req.user.userId) };
+}
+
+/** ¿Alcanza este ticket quien pregunta, dado su alcance? */
+function alcanza(alcance, req, { autorId, projectId }) {
+  if (alcance.tipo === 'todo') return true;
+  if (autorId != null && autorId === req.user.userId) return true;
+  if (alcance.tipo === 'campus') {
+    return projectId != null && alcance.projectIds.includes(Number(projectId));
+  }
+  return false;
 }
 
 /**
@@ -24,7 +53,7 @@ function administra(req) {
 async function exigirAcceso(req, id) {
   const t = await model.porId(id);
   if (!t) throw new AppError('Ticket no encontrado', 404, 'NOT_FOUND');
-  if (!administra(req) && t.autorId !== req.user.userId) {
+  if (!alcanza(await alcanceDe(req), req, { autorId: t.autorId, projectId: t.projectId })) {
     throw new AppError('Ese ticket no es tuyo', 403, 'NO_ES_TUYO');
   }
   return t;
@@ -39,11 +68,16 @@ function parsear(schema, datos) {
 export async function listar(req, res, next) {
   try {
     const f = parsear(listarSchema, req.query);
+    const alcance = await alcanceDe(req);
     const data = await model.listar({
       ...f,
       // El recorte lo decide el servidor, no la pantalla: esconder el filtro y
       // fiarse seria dejar la puerta abierta a quien escriba la direccion.
-      soloDe: administra(req) ? null : req.user.userId,
+      // `null` = sin recorte (superadmin y soporte); si no, los suyos y los de
+      // sus campus.
+      alcance: alcance.tipo === 'todo'
+        ? null
+        : { userId: req.user.userId, projectIds: alcance.projectIds },
     });
     res.json({
       success: true,
@@ -164,11 +198,13 @@ export async function descargarAdjunto(req, res, next) {
   try {
     const a = await model.adjuntoPorId(Number(req.params.adjuntoId));
     if (!a) throw new AppError('Adjunto no encontrado', 404, 'NOT_FOUND');
-    if (!administra(req) && a.abierto_por !== req.user.userId) {
+    if (!alcanza(await alcanceDe(req), req, { autorId: a.abierto_por, projectId: a.ticket_project_id })) {
       throw new AppError('Ese adjunto no es tuyo', 403, 'NO_ES_TUYO');
     }
     const { buffer } = await getLocal(a.clave);
     res.setHeader('Content-Type', a.mime || 'application/octet-stream');
+    // Que el navegador respete el tipo declarado y no se ponga a adivinarlo.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(a.nombre)}"`);
     res.send(buffer);
   } catch (err) { next(err); }
@@ -194,6 +230,17 @@ export async function tiempos(req, res, next) {
   try {
     if (!administra(req)) throw new AppError('No autorizado', 403, 'FORBIDDEN');
     const projectId = req.query.projectId ? Number(req.query.projectId) : null;
-    res.json({ success: true, data: await model.tiempos({ projectId }) });
+    const alcance = await alcanceDe(req);
+    // Un admin mide SUS campus; pedir uno ajeno es un 403, no unos numeros.
+    if (alcance.tipo === 'campus' && projectId && !alcance.projectIds.includes(projectId)) {
+      throw new AppError('Ese proyecto no es tuyo', 403, 'NO_ES_TUYO');
+    }
+    res.json({
+      success: true,
+      data: await model.tiempos({
+        projectId,
+        projectIds: alcance.tipo === 'campus' ? alcance.projectIds : null,
+      }),
+    });
   } catch (err) { next(err); }
 }

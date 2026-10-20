@@ -43,6 +43,13 @@ const avisado = vi.fn(async () => {});
 vi.mock('../src/modules/notifications/notifications.service.js', () => ({
   notifyAdmins: (...a) => avisado(...a),
 }));
+// Los campus de cada persona. El alcance real lo calcula ambito.js contra la base;
+// aqui se simula su respuesta y se comprueba que el controlador la use.
+const campus = vi.fn(async () => []);
+vi.mock('../src/shared/utils/ambito.js', () => ({
+  campusDeLaPersona: (...a) => campus(...a),
+  veTodoElCrm: (u) => ['superadmin', 'soporte'].includes(u?.role),
+}));
 vi.mock('../src/shared/services/localStorage.service.js', () => ({
   saveLocal: vi.fn(), getLocal: vi.fn(async () => ({ buffer: Buffer.from('x') })), deleteLocal: vi.fn(),
 }));
@@ -67,6 +74,8 @@ async function llamar(handler, req) {
 
 const LAURA = { userId: 4, role: 'gestor', nombre: 'Laura' };
 const ADMIN = { userId: 9, role: 'admin', nombre: 'Diego' };
+const SUPER = { userId: 1, role: 'superadmin', nombre: 'Manuel' };
+const SOPORTE = { userId: 2, role: 'soporte', nombre: 'Soporte' };
 
 /** Un ticket de Laura. */
 const DE_LAURA = { id: '1', autorId: 4, title: 'No carga el chat' };
@@ -75,6 +84,8 @@ beforeEach(() => {
   for (const f of Object.values(modelo)) f.mockClear?.();
   enviado.mockClear();
   avisado.mockClear();
+  campus.mockReset();
+  campus.mockResolvedValue([]);
   avisado.mockResolvedValue(undefined);
   modelo.listar.mockResolvedValue({ tickets: [], total: 0, page: 1, limit: 50, totalPages: 0 });
   modelo.porId.mockResolvedValue(DE_LAURA);
@@ -85,12 +96,27 @@ beforeEach(() => {
 describe('quién ve qué tickets', () => {
   it('una gestora solo pide los suyos', async () => {
     await llamar(ctrl.listar, { user: LAURA, query: {} });
-    expect(modelo.listar).toHaveBeenCalledWith(expect.objectContaining({ soloDe: 4 }));
+    expect(modelo.listar).toHaveBeenCalledWith(expect.objectContaining({
+      alcance: { userId: 4, projectIds: [] },
+    }));
   });
 
-  it('quien administra los ve todos', async () => {
+  it('superadmin y soporte los ven todos', async () => {
+    for (const user of [SUPER, SOPORTE]) {
+      modelo.listar.mockClear();
+      await llamar(ctrl.listar, { user, query: {} });
+      expect(modelo.listar, user.role).toHaveBeenCalledWith(expect.objectContaining({ alcance: null }));
+    }
+  });
+
+  it('un admin ve los suyos y los de SUS campus, no todos (#245)', async () => {
+    // Antes veia todos los tickets del CRM: el admin de una empresa podia leer
+    // los de otra, con sus pasos, su URL y sus capturas.
+    campus.mockResolvedValue([1, 2]);
     await llamar(ctrl.listar, { user: ADMIN, query: {} });
-    expect(modelo.listar).toHaveBeenCalledWith(expect.objectContaining({ soloDe: null }));
+    expect(modelo.listar).toHaveBeenCalledWith(expect.objectContaining({
+      alcance: { userId: 9, projectIds: [1, 2] },
+    }));
   });
 
   it('una gestora no abre el ticket de otra', async () => {
@@ -98,6 +124,48 @@ describe('quién ve qué tickets', () => {
     const { error } = await llamar(ctrl.porId, { user: LAURA, params: { id: '1' }, query: {} });
     expect(error?.statusCode).toBe(403);
     expect(error?.code).toBe('NO_ES_TUYO');
+  });
+
+  it('un admin abre un ticket de uno de sus campus', async () => {
+    campus.mockResolvedValue([1, 2]);
+    modelo.porId.mockResolvedValue({ id: '1', autorId: 99, projectId: 2 });
+    const { error } = await llamar(ctrl.porId, { user: ADMIN, params: { id: '1' }, query: {} });
+    expect(error).toBeNull();
+  });
+
+  it('un admin NO abre el de otra empresa, ni uno sin proyecto que no es suyo', async () => {
+    campus.mockResolvedValue([1, 2]);
+    for (const t of [{ id: '1', autorId: 99, projectId: 7 }, { id: '1', autorId: 99, projectId: null }]) {
+      modelo.porId.mockResolvedValue(t);
+      const { error } = await llamar(ctrl.porId, { user: ADMIN, params: { id: '1' }, query: {} });
+      expect(error?.statusCode, JSON.stringify(t)).toBe(403);
+    }
+  });
+
+  it('pero un admin sí abre el que abrió él, sea del proyecto que sea', async () => {
+    campus.mockResolvedValue([1]);
+    modelo.porId.mockResolvedValue({ id: '1', autorId: 9, projectId: 7 });
+    const { error } = await llamar(ctrl.porId, { user: ADMIN, params: { id: '1' }, query: {} });
+    expect(error).toBeNull();
+  });
+
+  it('un admin tampoco responde ni cambia el estado de uno ajeno', async () => {
+    campus.mockResolvedValue([1]);
+    modelo.porId.mockResolvedValue({ id: '1', autorId: 99, projectId: 7 });
+    const r = await llamar(ctrl.responder, { user: ADMIN, params: { id: '1' }, body: { body: 'hola' } });
+    const e = await llamar(ctrl.cambiarEstado, { user: ADMIN, params: { id: '1' }, body: { status: 'closed' } });
+    expect(r.error?.statusCode).toBe(403);
+    expect(e.error?.statusCode).toBe(403);
+    expect(modelo.responder).not.toHaveBeenCalled();
+    expect(modelo.cambiarEstado).not.toHaveBeenCalled();
+  });
+
+  it('superadmin y soporte abren cualquiera', async () => {
+    modelo.porId.mockResolvedValue({ id: '1', autorId: 99, projectId: 7 });
+    for (const user of [SUPER, SOPORTE]) {
+      const { error } = await llamar(ctrl.porId, { user, params: { id: '1' }, query: {} });
+      expect(error, user.role).toBeNull();
+    }
   });
 
   it('el suyo sí', async () => {
@@ -120,8 +188,8 @@ describe('las notas internas', () => {
     expect(modelo.mensajesDe).toHaveBeenCalledWith(1, { incluirInternas: false });
   });
 
-  it('quien administra sí', async () => {
-    await llamar(ctrl.porId, { user: ADMIN, params: { id: '1' }, query: {} });
+  it('superadmin y soporte sí', async () => {
+    await llamar(ctrl.porId, { user: SUPER, params: { id: '1' }, query: {} });
     expect(modelo.mensajesDe).toHaveBeenCalledWith(1, { incluirInternas: true });
   });
 
@@ -136,9 +204,9 @@ describe('las notas internas', () => {
 
   it('quien administra sí puede', async () => {
     await llamar(ctrl.responder, {
-      user: ADMIN, params: { id: '1' }, body: { body: 'es del puente', interna: true },
+      user: SUPER, params: { id: '1' }, body: { body: 'es del puente', interna: true },
     });
-    expect(modelo.responder).toHaveBeenCalledWith(1, 9, 'es del puente', true);
+    expect(modelo.responder).toHaveBeenCalledWith(1, 1, 'es del puente', true);
   });
 });
 
@@ -160,10 +228,10 @@ describe('los adjuntos — la puerta que en Matrículas quedó abierta', () => {
     expect(res.cabeceras['Content-Type']).toBe('image/png');
   });
 
-  it('quien administra alcanza cualquiera', async () => {
+  it('superadmin alcanza cualquiera', async () => {
     modelo.adjuntoPorId.mockResolvedValue({ id: 1, clave: 'k', abierto_por: 99 });
     const { error } = await llamar(ctrl.descargarAdjunto, {
-      user: ADMIN, params: { adjuntoId: '1' },
+      user: SUPER, params: { adjuntoId: '1' },
     });
     expect(error).toBeNull();
   });
@@ -227,5 +295,40 @@ describe('los tiempos', () => {
   it('un admin sí', async () => {
     const { error } = await llamar(ctrl.tiempos, { user: ADMIN, query: {} });
     expect(error).toBeNull();
+  });
+});
+
+describe('los tiempos y los adjuntos respetan el mismo alcance (#245)', () => {
+  it('un admin mide SUS campus aunque no pida ninguno', async () => {
+    campus.mockResolvedValue([1, 2]);
+    await llamar(ctrl.tiempos, { user: ADMIN, query: {} });
+    expect(modelo.tiempos).toHaveBeenCalledWith({ projectId: null, projectIds: [1, 2] });
+  });
+
+  it('y si pide un campus que no es suyo, 403', async () => {
+    campus.mockResolvedValue([1, 2]);
+    const { error } = await llamar(ctrl.tiempos, { user: ADMIN, query: { projectId: '7' } });
+    expect(error?.statusCode).toBe(403);
+    expect(modelo.tiempos).not.toHaveBeenCalled();
+  });
+
+  it('superadmin mide todo', async () => {
+    await llamar(ctrl.tiempos, { user: SUPER, query: {} });
+    expect(modelo.tiempos).toHaveBeenCalledWith({ projectId: null, projectIds: null });
+  });
+
+  it('el adjunto de un ticket de otra empresa no lo descarga un admin', async () => {
+    campus.mockResolvedValue([1]);
+    modelo.adjuntoPorId.mockResolvedValue({ id: 5, clave: 'tickets/1/a.png', nombre: 'a.png', abierto_por: 99, ticket_project_id: 7 });
+    const { error } = await llamar(ctrl.descargarAdjunto, { user: ADMIN, params: { adjuntoId: '5' }, query: {} });
+    expect(error?.statusCode).toBe(403);
+  });
+
+  it('el de uno de sus campus sí, y con nosniff', async () => {
+    campus.mockResolvedValue([1]);
+    modelo.adjuntoPorId.mockResolvedValue({ id: 5, clave: 'tickets/1/a.png', nombre: 'a.png', mime: 'image/png', abierto_por: 99, ticket_project_id: 1 });
+    const { res, error } = await llamar(ctrl.descargarAdjunto, { user: ADMIN, params: { adjuntoId: '5' }, query: {} });
+    expect(error).toBeNull();
+    expect(res.cabeceras['X-Content-Type-Options']).toBe('nosniff');
   });
 });

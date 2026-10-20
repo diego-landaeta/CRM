@@ -580,7 +580,11 @@ export async function sendTicketNuevoEmail({ ticket, autor }) {
   const GRAVEDAD = { low: 'Baja', medium: 'Media', high: 'Alta', critical: 'Critica' };
   const CLASE = { bug: 'Averia', feature: 'Mejora', question: 'Duda' };
 
-  const saltos = (v) => String(v).split('\n').join('<br>');
+  // Todo lo que escribe quien abre el ticket entra ESCAPADO: es texto libre y
+  // llega a un buzon interno. Sin esto, un titulo con HTML pone enlaces o
+  // contenido ajeno dentro de un correo en el que el equipo confia.
+  const e = plantilla.esc;
+  const saltos = (v) => String(e(v)).split('\n').join('<br>');
   const campo = (rotulo, valor) => (valor
     ? `<p style="margin:10px 0"><strong>${rotulo}</strong><br>${saltos(valor)}</p>`
     : '');
@@ -590,18 +594,18 @@ export async function sendTicketNuevoEmail({ ticket, autor }) {
     <!DOCTYPE html>
     <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color:#1f2937; max-width:640px; margin:0 auto; padding:24px;">
       <p style="margin:0 0 4px; font-size:12px; color:#6b7280;">
-        ${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}${ticket.projectName ? ` · ${ticket.projectName}` : ''}
+        ${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}${ticket.projectName ? ` · ${e(ticket.projectName)}` : ''}
       </p>
-      <h2 style="margin:0 0 12px; font-size:19px;">${ticket.title}</h2>
+      <h2 style="margin:0 0 12px; font-size:19px;">${e(ticket.title)}</h2>
       <p style="font-size:13px; color:#6b7280; margin:0 0 16px;">
-        Lo abre <strong>${autor?.nombre || autor?.email || 'alguien del equipo'}</strong>.
+        Lo abre <strong>${e(autor?.nombre || autor?.email || 'alguien del equipo')}</strong>.
       </p>
       ${campo('Que pasa', ticket.description)}
       ${campo('Pasos para reproducirlo', ticket.steps)}
       ${campo('Que deberia pasar', ticket.expected)}
       ${campo('Que pasa en su lugar', ticket.actual)}
       ${campo('Por que importa', ticket.whyItMatters)}
-      ${ticket.url ? `<p style="margin:10px 0; font-size:13px;"><strong>Donde</strong><br><code style="background:#f3f4f6; padding:3px 6px; border-radius:4px; word-break:break-all;">${ticket.url}</code></p>` : ''}
+      ${ticket.url ? `<p style="margin:10px 0; font-size:13px;"><strong>Donde</strong><br><code style="background:#f3f4f6; padding:3px 6px; border-radius:4px; word-break:break-all;">${e(ticket.url)}</code></p>` : ''}
       <p style="text-align:center; margin:28px 0;">
         <a href="${link}" style="background:#3b82f6; color:#fff; padding:11px 22px; border-radius:8px; text-decoration:none; font-weight:bold; display:inline-block;">Abrir en el CRM</a>
       </p>
