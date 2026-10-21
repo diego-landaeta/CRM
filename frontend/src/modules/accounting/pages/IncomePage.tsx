@@ -252,17 +252,20 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   return (
     <div className="space-y-5 pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <PageHeader
-          title={title}
-          /* Con una empresa elegida decia «en Todos los proyectos», que es
-             justo lo contrario de lo que se esta mirando: son los campus de esa
-             empresa y ninguno mas. */
-          subtitle={`${subtitlePrefix}${
-            activeIssuer ? ' en ' + activeIssuer.nombre + ' (todos sus campus)'
-              : activeProject ? ' en ' + activeProject.nombre : ''}`}
-        />
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <PageHeader
+        title={title}
+        /* Con una empresa elegida decia «en Todos los proyectos», que es
+           justo lo contrario de lo que se esta mirando: son los campus de esa
+           empresa y ninguno mas. */
+        subtitle={`${subtitlePrefix}${
+          activeIssuer ? ' en ' + activeIssuer.nombre + ' (todos sus campus)'
+            : activeProject ? ' en ' + activeProject.nombre : ''}`}
+        /* #79 punto 3: estos botones iban en un <div> suelto que caía DEBAJO del
+           SubNav de Finanzas (dos barras). Ahora van como acciones del PageHeader,
+           que las sube a la barra con el título. Y se quita «Análisis», que
+           duplicaba «Análisis de ventas» del propio SubNav. */
+        actions={(
+          <>
         {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
             cifras que cuentan cosas distintas, asi que se explica aqui mismo. */}
         <button
@@ -273,13 +276,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         >
           <GraduationCap size={16} weight="duotone" className="text-primary" />
           Tutoriales
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/finanzas/ventas-analisis')}
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
-        >
-          Análisis
         </button>
         {activeProject?.id && ((puedeSinGestora || puedeDeOtra) ? (
           <div className="relative self-start sm:self-auto">
@@ -347,8 +343,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             Nueva venta
           </button>
         ))}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <Suspense fallback={null}>
         {tutorialesOpen && <TutorialesVentas onCerrar={() => setTutorialesOpen(false)} />}
