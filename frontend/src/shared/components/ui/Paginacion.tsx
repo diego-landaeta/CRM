@@ -37,7 +37,10 @@ export function paginasVisibles(actual: number, total: number): (number | '…')
   const orden = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
   const salida: (number | '…')[] = [];
   orden.forEach((n, i) => {
-    if (i > 0 && n - orden[i - 1] > 1) salida.push('…');
+    const salto = i > 0 ? n - orden[i - 1] : 1;
+    // Unos puntos que esconden UNA sola página no ahorran nada: se enseña la página.
+    if (salto === 2) salida.push(n - 1);
+    else if (salto > 2) salida.push('…');
     salida.push(n);
   });
   return salida;
