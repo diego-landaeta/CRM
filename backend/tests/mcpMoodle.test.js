@@ -1143,3 +1143,29 @@ describe('parametros de Moodle', () => {
     expect(deMoodle()[0].url).toBe('https://campus.fono.test/moodle/webservice/rest/server.php');
   });
 });
+
+describe('videos incrustados: se comprueban por su direccion de ver', () => {
+  // Visto contra el Moodle de Psiko (21/10): el oEmbed de YouTube contesta 404 a
+  // `/embed/ID` aunque el video exista, y tres videos vivos salian como «rotos».
+  it.each([
+    ['youtube', 'https://www.youtube.com/embed/Pt_4LGoEr8E?si=UK5l0IPfk6hKmXCK', 'https://www.youtube.com/watch?v=Pt_4LGoEr8E'],
+    ['youtube', 'https://www.youtube-nocookie.com/embed/abc123', 'https://www.youtube.com/watch?v=abc123'],
+    ['youtube', 'https://youtu.be/abc123?t=4', 'https://www.youtube.com/watch?v=abc123'],
+    ['youtube', 'https://www.youtube.com/shorts/abc123', 'https://www.youtube.com/watch?v=abc123'],
+    ['youtube', 'https://www.youtube.com/embed/videoseries?list=PL123', 'https://www.youtube.com/playlist?list=PL123'],
+    ['youtube', 'https://www.youtube.com/watch?v=abc123', 'https://www.youtube.com/watch?v=abc123'],
+    ['vimeo', 'https://player.vimeo.com/video/12345?h=deadbeef', 'https://vimeo.com/12345/deadbeef'],
+    ['vimeo', 'https://player.vimeo.com/video/12345', 'https://vimeo.com/12345'],
+    ['vimeo', 'https://vimeo.com/12345', 'https://vimeo.com/12345'],
+  ])('%s %s', async (tipo, entrada, esperada) => {
+    const { urlCanonica, urlDeComprobacion } = await import('../src/modules/mcp/mcp.moodle.enlaces.js');
+    expect(urlCanonica(entrada, tipo)).toBe(esperada);
+    expect(urlDeComprobacion(entrada, tipo)).toContain(encodeURIComponent(esperada));
+  });
+
+  it('una direccion que no es de video, o que no entiende, se deja como esta', async () => {
+    const { urlCanonica } = await import('../src/modules/mcp/mcp.moodle.enlaces.js');
+    expect(urlCanonica('https://ejemplo.org/pagina', 'enlace')).toBe('https://ejemplo.org/pagina');
+    expect(urlCanonica('no es una url', 'youtube')).toBe('no es una url');
+  });
+});

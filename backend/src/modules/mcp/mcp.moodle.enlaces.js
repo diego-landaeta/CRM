@@ -143,8 +143,43 @@ const AGENTE = 'Mozilla/5.0 (compatible; CRM-ComprobadorDeEnlaces/1.0)';
  * no una direccion de fuera.
  */
 export function urlDeComprobacion(url, tipo) {
-  if (tipo === 'youtube') return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`;
-  if (tipo === 'vimeo') return `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`;
+  const canonica = urlCanonica(url, tipo);
+  if (tipo === 'youtube') return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(canonica)}`;
+  if (tipo === 'vimeo') return `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(canonica)}`;
+  return url;
+}
+
+/**
+ * La direccion «de ver» de un video, que es la unica que entiende el oEmbed.
+ *
+ * Moodle guarda los videos incrustados como `youtube.com/embed/ID` o
+ * `player.vimeo.com/video/ID`, y el oEmbed contesta 404 a esas formas aunque el
+ * video exista: probado contra el Moodle de Psiko, tres videos vivos salian como
+ * «rotos». Se pasan a `watch?v=ID` / `vimeo.com/ID` antes de preguntar. Si la
+ * direccion no encaja con ninguna forma conocida, se deja tal cual.
+ */
+export function urlCanonica(url, tipo) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  const host = u.hostname.replace(/^(www|m)\./, '');
+  const partes = u.pathname.split('/').filter(Boolean);
+  if (tipo === 'youtube') {
+    if (host === 'youtu.be' && partes[0]) return `https://www.youtube.com/watch?v=${partes[0]}`;
+    if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+      if (partes[0] === 'embed' && partes[1] === 'videoseries' && u.searchParams.get('list')) {
+        return `https://www.youtube.com/playlist?list=${u.searchParams.get('list')}`;
+      }
+      if (['embed', 'v', 'shorts', 'live'].includes(partes[0]) && partes[1]) return `https://www.youtube.com/watch?v=${partes[1]}`;
+    }
+  }
+  if (tipo === 'vimeo' && host === 'player.vimeo.com' && partes[0] === 'video' && /^\d+$/.test(partes[1] || '')) {
+    const h = u.searchParams.get('h');
+    return `https://vimeo.com/${partes[1]}${h ? `/${h}` : ''}`;
+  }
   return url;
 }
 
