@@ -7,13 +7,14 @@ import { enteroEnv } from './mcp.config.js';
 /**
  * El cliente de los Moodle de los campus (#335), SOLO LECTURA.
  *
- * LO QUE SE HA CONSTRUIDO SIN UN MOODLE DELANTE
+ * COMO SE HA PROBADO
  *
- * Todo esto sigue la documentacion de los servicios web de Moodle y se prueba
- * con `fetch` simulado (tests/mcpMoodle.test.js). NO se ha probado contra un
- * Moodle real: no habia ninguno ni un token. Los formatos de respuesta son los
- * documentados; si un Moodle responde otra cosa, el sintoma sera un error claro
- * por campus, nunca un cero.
+ * Con `fetch` simulado (tests/mcpMoodle.test.js) y, el 21/10, contra el Moodle
+ * REAL de Psiko con un servicio propio de solo lectura. Salieron dos cosas que
+ * ningun simulacro habia previsto: el oEmbed de YouTube da 404 a las direcciones
+ * `/embed/ID`, y un curso con la finalizacion «activada» puede no tener criterios
+ * (`nocriteriaset`). Si un Moodle responde otra cosa, el sintoma es un error
+ * claro por campus, nunca un cero.
  *
  * LA REGLA DE ESTE FICHERO
  *
@@ -38,6 +39,8 @@ export const FUNCIONES_MOODLE = Object.freeze([
   'core_enrol_get_enrolled_users',
   'core_course_get_contents',
   'mod_url_get_urls_by_courses',
+  // «Terminados» (#335): Moodle solo lo dice alumno por alumno.
+  'core_completion_get_course_completion_status',
 ]);
 
 export const SERVICIO_MOODLE = 'moodle';
@@ -255,5 +258,8 @@ function errorDeExcepcion(d, funcion, token) {
     return new ErrorMoodle('servicios_web_apagados', 'los servicios web no están activados en ese Moodle');
   }
   const detalle = limpiarSecretos(d.message || d.error || '', token);
-  return new ErrorMoodle('moodle', `Moodle devolvió un error (${codigo})${detalle ? `: ${detalle}` : ''}`);
+  const e = new ErrorMoodle('moodle', `Moodle devolvió un error (${codigo})${detalle ? `: ${detalle}` : ''}`);
+  // El codigo de Moodle, para quien necesite distinguir (p. ej. `nocriteriaset`).
+  e.moodle = codigo;
+  return e;
 }

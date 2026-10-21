@@ -166,8 +166,9 @@ function moodleConCursos(campus, cursos = CURSOS) {
 // ─── 1. Solo lectura: lista blanca ────────────────────────────────────────
 
 describe('solo lectura: una lista cerrada de funciones de Moodle', () => {
-  it('son exactamente las cinco de la issue, y todas son «get»', () => {
+  it('son las cinco de la issue mas la de finalizacion, y todas son «get»', () => {
     expect([...cliente.FUNCIONES_MOODLE].sort()).toEqual([
+      'core_completion_get_course_completion_status',
       'core_course_get_categories',
       'core_course_get_contents',
       'core_course_get_courses_by_field',
@@ -413,6 +414,13 @@ describe('campus sin Moodle, con token malo o que no responde', () => {
 
 // ─── 4. moodle_cursos ─────────────────────────────────────────────────────
 
+// Categorias de ejemplo: 5 «Másteres» (con 7 dentro) y 6 «Cursos».
+const CATEGORIAS = [
+  { id: 5, name: 'Másteres', parent: 0, depth: 1, coursecount: 3, visible: 1 },
+  { id: 7, name: 'Psicología', parent: 5, depth: 2, coursecount: 1, visible: 1 },
+  { id: 6, name: 'Cursos', parent: 0, depth: 1, coursecount: 1, visible: 1 },
+];
+
 describe('moodle_cursos', () => {
   beforeEach(() => {
     configurar(10, ISEIE);
@@ -439,6 +447,7 @@ describe('moodle_cursos', () => {
   });
 
   it('busca por texto sin distinguir tildes ni mayusculas, y por categoria', async () => {
+    moodle(ISEIE, { core_course_get_courses_by_field: listaCursos(), core_course_get_categories: () => CATEGORIAS });
     expect((await T('moodle_cursos').ejecutar(a(), { estado: 'todos', texto: 'PSICOLOGIA' })).cursos.map((c) => c.curso_id)).toEqual([11]);
     expect((await T('moodle_cursos').ejecutar(a(), { estado: 'todos', categoria_id: 6 })).cursos.map((c) => c.curso_id)).toEqual([12]);
   });
@@ -1167,5 +1176,220 @@ describe('videos incrustados: se comprueban por su direccion de ver', () => {
     const { urlCanonica } = await import('../src/modules/mcp/mcp.moodle.enlaces.js');
     expect(urlCanonica('https://ejemplo.org/pagina', 'enlace')).toBe('https://ejemplo.org/pagina');
     expect(urlCanonica('no es una url', 'youtube')).toBe('no es una url');
+  });
+});
+
+// ─── Lo que pedia la issue y faltaba (#335, 21/10) ────────────────────────
+
+describe('moodle_cursos: visible y numero de alumnos', () => {
+  const S = [{ shortname: 'student' }];
+  const P = [{ shortname: 'editingteacher' }];
+  let pedidos;
+  const enrolados = ({ courseid, opciones }) => {
+    pedidos.push(courseid);
+    const lista = { 11: [{ id: 1, roles: S }, { id: 2, roles: S }, { id: 9, roles: P }], 12: [], 13: [{ id: 3, roles: S }] }[courseid];
+    if (!lista) return json({ exception: 'moodle_exception', errorcode: 'invalidrecord', message: 'x' });
+    const desde = Number(opciones.limitfrom || 0);
+    return lista.slice(desde, desde + Number(opciones.limitnumber || lista.length));
+  };
+  beforeEach(() => {
+    pedidos = [];
+    configurar(10, ISEIE);
+    moodle(ISEIE, { core_course_get_courses_by_field: listaCursos(), core_enrol_get_enrolled_users: enrolados });
+  });
+  const admin = () => ambitoDe('admin', [PROYECTOS[0]]);
+
+  it('cada curso trae si esta visible y cuantos alumnos tiene (sin contar profesores)', async () => {
+    const r = await T('moodle_cursos').ejecutar(admin(), { estado: 'todos' });
+    const por = Object.fromEntries(r.cursos.map((c) => [c.curso_id, c]));
+    expect(por[11]).toMatchObject({ visible: true, alumnos: 2 });
+    expect(por[12]).toMatchObject({ visible: true, alumnos: 0 });
+    expect(por[14]).toMatchObject({ visible: false });
+  });
+
+  it('un curso cuyos alumnos no se pudieron leer sale con null y el motivo, no con 0', async () => {
+    const r = await T('moodle_cursos').ejecutar(admin(), { estado: 'todos' });
+    const c14 = r.cursos.find((c) => c.curso_id === 14);
+    expect(c14.alumnos).toBeNull();
+    expect(c14.alumnos_error).toBeTruthy();
+    expect(r.cursos.find((c) => c.curso_id === 11).alumnos_error).toBeUndefined();
+  });
+
+  it('con_alumnos: false no pregunta por los alumnos', async () => {
+    const r = await T('moodle_cursos').ejecutar(admin(), { estado: 'todos', con_alumnos: false });
+    expect(pedidos).toEqual([]);
+    expect(r.cursos[0]).not.toHaveProperty('alumnos');
+  });
+
+  it('el recuento se guarda unos minutos y refrescar lo pide de nuevo', async () => {
+    await T('moodle_cursos').ejecutar(admin(), { texto: 'Psicolog' });
+    await T('moodle_cursos').ejecutar(admin(), { texto: 'Psicolog' });
+    expect(pedidos.filter((id) => id === 11)).toHaveLength(1);
+    await T('moodle_cursos').ejecutar(admin(), { texto: 'Psicolog', refrescar: true });
+    expect(pedidos.filter((id) => id === 11)).toHaveLength(2);
+  });
+});
+
+describe('por categoria, con sus subcategorias', () => {
+  const S = [{ shortname: 'student' }];
+  beforeEach(() => {
+    configurar(10, ISEIE);
+    const cursos = [
+      curso(11, 'Máster en Psicología Clínica', { categoryid: 7 }),
+      curso(12, 'Máster en Gestión', { categoryid: 5 }),
+      curso(13, 'Curso suelto', { categoryid: 6 }),
+    ];
+    moodle(ISEIE, {
+      core_course_get_courses_by_field: listaCursos(cursos),
+      core_course_get_categories: () => CATEGORIAS,
+      core_enrol_get_enrolled_users: () => [{ id: 1, roles: S }],
+      core_course_get_contents: () => [],
+      mod_url_get_urls_by_courses: () => ({ urls: [] }),
+    });
+  });
+  const admin = () => ambitoDe('admin', [PROYECTOS[0]]);
+
+  it('moodle_cursos: la categoria incluye lo que cuelga de sus subcategorias', async () => {
+    const r = await T('moodle_cursos').ejecutar(admin(), { categoria_id: 5, con_alumnos: false });
+    expect(r.cursos.map((c) => c.curso_id).sort()).toEqual([11, 12]);
+  });
+
+  it('moodle_alumnos y moodle_recursos_externos tambien filtran por categoria', async () => {
+    const a = await T('moodle_alumnos').ejecutar(admin(), { categoria_id: 7 });
+    expect(a.cursos.map((c) => c.curso_id)).toEqual([11]);
+    const r = await T('moodle_recursos_externos').ejecutar(admin(), { categoria_id: 6 });
+    expect(r.cursos.map((c) => c.curso_id)).toEqual([13]);
+  });
+
+  it('una categoria que no existe es un error claro, no «cero cursos»', async () => {
+    await expect(T('moodle_alumnos').ejecutar(admin(), { categoria_id: 99 })).rejects.toThrow(/categoría 99 no existe/);
+  });
+});
+
+describe('moodle_alumnos: terminados', () => {
+  const S = [{ shortname: 'student' }];
+  let preguntados;
+  let respuesta;
+  const alumnos = (n) => Array.from({ length: n }, (_, i) => ({ id: 100 + i, roles: S, lastcourseaccess: AHORA() - DIA, lastaccess: AHORA() - DIA }));
+  const montar = (cursoExtra = {}, n = 3) => {
+    configurar(10, ISEIE);
+    moodle(ISEIE, {
+      core_course_get_courses_by_field: listaCursos([curso(11, 'Curso con finalización', cursoExtra)]),
+      core_enrol_get_enrolled_users: ({ opciones }) => (Number(opciones.limitfrom || 0) ? [] : alumnos(n)),
+      core_completion_get_course_completion_status: (_p, q) => {
+        preguntados.push(Number(q.get('userid')));
+        return respuesta(Number(q.get('userid')));
+      },
+    });
+  };
+  beforeEach(() => {
+    preguntados = [];
+    respuesta = (id) => ({ completionstatus: { completed: id !== 101, completions: [{ complete: id !== 101 }] }, warnings: [] });
+  });
+  const admin = () => ambitoDe('admin', [PROYECTOS[0]]);
+
+  it('cuenta los alumnos que Moodle da por terminados', async () => {
+    montar();
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0]).toMatchObject({ matriculados: 3, terminados: 2, criterios_de_finalizacion: true });
+    expect(preguntados.sort()).toEqual([100, 101, 102]);
+    expect(r.totales_suma_de_matriculas).toMatchObject({ terminados: 2, cursos_sin_dato_de_terminados: 0 });
+  });
+
+  it('finalizacion activada pero SIN criterios (visto en Psiko): null con el motivo, y se pregunta una sola vez', async () => {
+    montar();
+    respuesta = () => json({ exception: 'moodle_exception', errorcode: 'nocriteriaset', message: 'No hay criterios establecidos' });
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0].terminados).toBeNull();
+    expect(r.cursos[0].criterios_de_finalizacion).toBe(false);
+    expect(r.cursos[0].avisos.join(' ')).toMatch(/no tiene criterios de finalización/);
+    expect(preguntados).toHaveLength(1);
+    expect(r.totales_suma_de_matriculas).toMatchObject({ terminados: null, cursos_sin_dato_de_terminados: 1 });
+  });
+
+  it('sin finalizacion activada: null y no se pregunta nada', async () => {
+    montar({ enablecompletion: 0 });
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0]).toMatchObject({ terminados: null, criterios_de_finalizacion: false });
+    expect(preguntados).toEqual([]);
+  });
+
+  it('terminados: false no pregunta', async () => {
+    montar();
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11, terminados: false });
+    expect(r.cursos[0].terminados).toBeNull();
+    expect(preguntados).toEqual([]);
+  });
+
+  it('demasiados alumnos: no se hace una llamada por cada uno, y se dice', async () => {
+    process.env.MCP_MOODLE_MAX_TERMINADOS = '2';
+    montar();
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0].terminados).toBeNull();
+    expect(r.cursos[0].avisos.join(' ')).toMatch(/Hay más de 2 alumnos/);
+    expect(preguntados).toEqual([]);
+  });
+
+  it('el token sin permiso para la finalizacion: null con el motivo, el resto de cifras siguen', async () => {
+    montar();
+    respuesta = () => json({ exception: 'webservice_access_exception', errorcode: 'accessexception', message: 'Access control exception' });
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0]).toMatchObject({ matriculados: 3, terminados: null });
+    expect(r.cursos[0].avisos.join(' ')).toMatch(/no tiene permiso para ver quién ha terminado/);
+  });
+
+  it('un curso sin alumnos: 0 activos y 0 que nunca entraron, no «no se sabe»', async () => {
+    montar({}, 0);
+    const r = await T('moodle_alumnos').ejecutar(admin(), { curso_id: 11 });
+    expect(r.cursos[0]).toMatchObject({ matriculados: 0, activos_ultimos_30_dias: 0, nunca_han_entrado: 0, terminados: 0 });
+  });
+});
+
+describe('moodle_estructura de un curso', () => {
+  beforeEach(() => {
+    configurar(10, ISEIE);
+    configurar(20, FONO);
+    moodle(ISEIE, {
+      core_course_get_courses_by_field: listaCursos(),
+      core_course_get_contents: ({ courseid }) => (courseid !== 11 ? [] : [
+        { id: 1, section: 0, name: '', visible: 1, modules: [{ id: 5, name: 'Bienvenida', modname: 'forum', visible: 1 }] },
+        { id: 2, section: 1, name: 'Módulo 1', visible: 1, modules: [
+          { id: 6, name: 'Tarea 1', modname: 'assign', visible: 1, contents: [{ fileurl: 'https://campus.iseie.test/pluginfile.php/x?token=SECRETO' }] },
+          { id: 7, name: 'Apuntes', modname: 'resource', visible: 0 },
+        ] },
+        { id: 3, section: 2, name: 'Módulo 2', visible: 0, modules: [] },
+      ]),
+    });
+  });
+  const admin = () => ambitoDe('admin', [PROYECTOS[0]]);
+
+  it('con curso_id, las secciones y las actividades de cada una', async () => {
+    const r = await T('moodle_estructura').ejecutar(admin(), { curso_id: 11 });
+    const c = r.campus[0];
+    expect(c.curso).toMatchObject({ curso_id: 11, nombre: 'Máster en Psicología Clínica', visible: true });
+    expect(c).toMatchObject({ total_secciones: 3, total_actividades: 3, por_tipo: { forum: 1, assign: 1, resource: 1 } });
+    expect(c.secciones[0]).toMatchObject({ numero: 0, nombre: 'General', total_actividades: 1 });
+    expect(c.secciones[1].actividades).toEqual([
+      { nombre: 'Tarea 1', tipo: 'assign', visible: true },
+      { nombre: 'Apuntes', tipo: 'resource', visible: false },
+    ]);
+    expect(c.secciones[2]).toMatchObject({ nombre: 'Módulo 2', visible: false, total_actividades: 0 });
+  });
+
+  it('no sale ni una direccion de fichero ni nada del contenido', async () => {
+    const r = await T('moodle_estructura').ejecutar(admin(), { curso_id: 11 });
+    expect(JSON.stringify(r)).not.toMatch(/pluginfile|SECRETO|fileurl/);
+  });
+
+  it('un curso que no existe es un error por campus; con varios campus pide proyecto_id', async () => {
+    await expect(T('moodle_estructura').ejecutar(admin(), { curso_id: 999 })).rejects.toThrow(/curso 999 no existe/);
+    await expect(T('moodle_estructura').ejecutar(ambitoDe('admin', [PROYECTOS[0], PROYECTOS[1]]), { curso_id: 11 }))
+      .rejects.toMatchObject({ code: 'MCP_FALTA_CAMPUS' });
+  });
+
+  it('sin curso_id sigue dando las categorias', async () => {
+    moodle(ISEIE, { core_course_get_categories: () => CATEGORIAS });
+    const r = await T('moodle_estructura').ejecutar(admin(), {});
+    expect(r.campus[0].total_categorias).toBe(3);
   });
 });

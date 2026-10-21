@@ -374,7 +374,8 @@ export const HERRAMIENTAS = [
     titulo: 'Cursos del Moodle de cada campus',
     descripcion: 'Los cursos que hay en el Moodle de tus campus (no son las formaciones del catálogo del CRM: es lo que hay montado en la plataforma). '
       + 'Por defecto solo los ACTIVOS (visibles y sin fecha de fin pasada); con estado puedes pedir proximos, terminados, ocultos o todos. '
-      + 'Filtra por texto (nombre, sin distinguir tildes) o categoria_id (de «moodle_estructura»). Devuelve cuántos cursos tiene cada campus y una página de cursos. '
+      + 'Filtra por texto (nombre, sin distinguir tildes) o categoria_id (de «moodle_estructura»; incluye sus subcategorías). Devuelve cuántos cursos tiene cada campus y una página de cursos, cada uno con su categoría, fechas de inicio y fin, si está visible y el número de alumnos. '
+      + 'El número de alumnos cuesta una lectura por curso de la página: con_alumnos: false la evita si solo quieres la lista. '
       + 'Si un campus no tiene Moodle configurado, el token no vale o no responde, sale en «campus_con_error» con el motivo: díselo a la persona, no lo des por «cero cursos». '
       + 'La lista puede tener unos minutos; refrescar: true la pide de nuevo.',
     entrada: {
@@ -382,6 +383,7 @@ export const HERRAMIENTAS = [
       estado: z.enum(['activos', 'proximos', 'terminados', 'ocultos', 'todos']).default('activos'),
       texto: z.string().max(100).optional().describe('Parte del nombre del curso'),
       categoria_id: z.number().int().positive().optional().describe('Una categoría de Moodle (id de «moodle_estructura»)'),
+      con_alumnos: z.boolean().default(true).describe('false: no cuenta los alumnos de cada curso (más rápido)'),
       refrescar: z.boolean().optional().describe('true: salta la caché y pregunta a Moodle ahora'),
       ...PAGINA,
     },
@@ -391,16 +393,18 @@ export const HERRAMIENTAS = [
     nombre: 'moodle_alumnos',
     titulo: 'Alumnos por curso en Moodle',
     descripcion: 'Cuántos alumnos hay en los cursos de Moodle de tus campus: matriculados, con matrícula activa, suspendidos, activos (accedieron al curso en los últimos N días, 30 por defecto) y los que nunca han entrado. '
-      + 'Pide curso_id (de «moodle_cursos»; con él, indica proyecto_id) o texto para elegir cursos; se miran como mucho limite_cursos (10 por defecto) y se dice cuántos quedan fuera. '
-      + 'Por defecto solo cifras. «terminados» no se puede dar con estos permisos (viene a null); finalizacion_activada dice si el curso tiene finalización. '
+      + 'Elige los cursos con curso_id (de «moodle_cursos»; con él, indica proyecto_id), con categoria_id (de «moodle_estructura»; incluye sus subcategorías) o con texto; sin ninguno, los de todo el campus. Se miran como mucho limite_cursos (10 por defecto) y se dice cuántos quedan fuera. '
+      + 'Por defecto solo cifras. «terminados» solo tiene dato si el curso tiene finalización activada Y criterios definidos (criterios_de_finalizacion); si no, viene a null con el motivo en «avisos», no a 0. Cuesta una lectura por alumno: terminados: false la evita. '
       + 'datos_completos: true añade nombre y correo de cada alumno (solo super admin y admin; queda registrado). '
       + 'Si un campus no responde, el token no vale o no tiene Moodle, sale en «campus_con_error»: no es «cero alumnos».',
     entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       curso_id: z.number().int().positive().optional().describe('Id del curso en el Moodle del campus (de «moodle_cursos»); exige proyecto_id si tienes varios campus'),
       texto: z.string().max(100).optional().describe('Parte del nombre del curso'),
+      categoria_id: z.number().int().positive().optional().describe('Una categoría de Moodle (id de «moodle_estructura»): sus cursos y los de sus subcategorías'),
       estado: z.enum(['activos', 'proximos', 'terminados', 'ocultos', 'todos']).default('activos').describe('Qué cursos mirar; con curso_id se ignora'),
       limite_cursos: z.number().int().min(1).max(25).default(10).describe('Máximo de cursos a consultar en esta petición'),
+      terminados: z.boolean().default(true).describe('false: no cuenta quién ha terminado el curso (una lectura por alumno)'),
       dias_actividad: z.number().int().min(1).max(365).default(30).describe('Un alumno es «activo» si accedió al curso en estos días'),
       refrescar: z.boolean().optional().describe('true: salta la caché de la lista de cursos'),
     },
@@ -415,7 +419,7 @@ export const HERRAMIENTAS = [
     nombre: 'moodle_recursos_externos',
     titulo: 'Recursos externos de los cursos de Moodle',
     descripcion: 'Los recursos externos de los cursos de Moodle: enlaces (módulos URL y los escritos en las descripciones), YouTube, Vimeo, Google Drive y herramientas externas (LTI), con su tipo y en qué sección están, y un resumen de qué cursos tienen y cuáles no. '
-      + 'Elige cursos con curso_id (con proyecto_id) o texto; se miran como mucho limite_cursos (10 por defecto) y se avisa de los que quedan fuera. '
+      + 'Elige cursos con curso_id (con proyecto_id), categoria_id (de «moodle_estructura»; incluye sus subcategorías) o texto; se miran como mucho limite_cursos (10 por defecto) y se avisa de los que quedan fuera. '
       + 'comprobar_enlaces: true (solo super admin y admin) comprueba si cada enlace responde (ok, roto, restringido, no_responde…; hasta un tope de enlaces por petición); '
       + 'las direcciones internas o privadas no se comprueban. Los LTI no tienen dirección visible. '
       + 'Un curso sin recursos sale con total 0 SOLO si se ha podido leer; si falla, trae «error». Un campus caído sale en «campus_con_error».',
@@ -423,6 +427,7 @@ export const HERRAMIENTAS = [
       ...AMBITO,
       curso_id: z.number().int().positive().optional().describe('Id del curso en el Moodle del campus (de «moodle_cursos»); exige proyecto_id si tienes varios campus'),
       texto: z.string().max(100).optional().describe('Parte del nombre del curso'),
+      categoria_id: z.number().int().positive().optional().describe('Una categoría de Moodle (id de «moodle_estructura»): sus cursos y los de sus subcategorías'),
       estado: z.enum(['activos', 'proximos', 'terminados', 'ocultos', 'todos']).default('activos').describe('Qué cursos mirar; con curso_id se ignora'),
       tipo: z.enum(['youtube', 'vimeo', 'drive', 'lti', 'enlace']).optional().describe('Solo recursos de este tipo (los recuentos siguen siendo del curso entero)'),
       comprobar_enlaces: z.boolean().default(false).describe('true: comprueba si los enlaces responden (solo super admin y admin)'),
@@ -437,11 +442,13 @@ export const HERRAMIENTAS = [
   },
   {
     nombre: 'moodle_estructura',
-    titulo: 'Categorías de cursos de Moodle',
-    descripcion: 'Las categorías de cursos del Moodle de tus campus (con su ruta, por ejemplo «Másteres > Psicología») y cuántos cursos tiene cada una. '
-      + 'Sirve para conocer el categoria_id y filtrar «moodle_cursos». Un campus sin Moodle o caído sale en «campus_con_error».',
+    titulo: 'Estructura de Moodle: categorías y contenido de un curso',
+    descripcion: 'Sin curso_id: las categorías de cursos del Moodle de tus campus (con su ruta, por ejemplo «Másteres > Psicología») y cuántos cursos tiene cada una; sirve para conocer el categoria_id y filtrar los demás. '
+      + 'Con curso_id (de «moodle_cursos»; con él, indica proyecto_id): las secciones del curso y las actividades de cada una (nombre, tipo y si están visibles), para preguntas como «¿qué tiene el módulo 3 de X?». '
+      + 'Un campus sin Moodle o caído sale en «campus_con_error».',
     entrada: {
       ...AMBITO,
+      curso_id: z.number().int().positive().optional().describe('Id del curso en el Moodle del campus (de «moodle_cursos»): devuelve sus secciones y actividades; exige proyecto_id si tienes varios campus'),
       refrescar: z.boolean().optional().describe('true: salta la caché'),
     },
     ejecutar: (ambito, a) => moodleConTope('moodle_estructura', (signal) => moodle.moodleEstructura(ambito, a, { signal })),

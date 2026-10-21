@@ -27,6 +27,7 @@ import {
 
 const MAX_CAMPUS_A_LA_VEZ = 3;
 const MAX_CURSOS_A_LA_VEZ = 3;
+const MAX_COMPLETION_A_LA_VEZ = 5;
 const POR_PAGINA_MOODLE = 500;
 const SEGUNDOS_DIA = 86400;
 
@@ -109,15 +110,41 @@ const sinTildes = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '')
 
 const ESTADOS = { activos: 'activo', proximos: 'proximo', terminados: 'terminado', ocultos: 'oculto' };
 
-function filtrarCursos(cursos, { estado = 'activos', texto, categoria_id, curso_id } = {}, ahoraS) {
+function filtrarCursos(cursos, { estado = 'activos', texto, categoria_id, categorias = null, curso_id } = {}, ahoraS) {
   if (curso_id != null) return cursos.filter((c) => c.id === Number(curso_id));
   const buscado = texto ? sinTildes(texto) : null;
   return cursos.filter((c) => {
     if (estado !== 'todos' && estadoDelCurso(c, ahoraS) !== ESTADOS[estado]) return false;
-    if (categoria_id != null && c.categoria_id !== Number(categoria_id)) return false;
+    // `categorias` = la pedida y todas las de dentro (los cursos cuelgan de subcategorias).
+    if (categorias ? !categorias.has(c.categoria_id) : categoria_id != null && c.categoria_id !== Number(categoria_id)) return false;
     if (buscado && !sinTildes(`${c.nombre} ${c.nombre_corto || ''}`).includes(buscado)) return false;
     return true;
   });
+}
+
+/**
+ * La categoria pedida y todas las de dentro. Una categoria que no existe es un
+ * error claro, no «cero cursos».
+ */
+async function categoriasDe(campus, a, signal) {
+  if (a.categoria_id == null) return null;
+  const { datos } = await conCache(`categorias:${campus.id}:${huellaDeCredencial(campus.cred)}`, a.refrescar === true,
+    () => cargarCategorias(campus.cred, signal));
+  const id = Number(a.categoria_id);
+  if (!datos.some((c) => c.id === id)) {
+    throw new ErrorMoodle('categoria_no_encontrada', `la categoría ${id} no existe en ese Moodle (mira «moodle_estructura»)`);
+  }
+  const dentro = new Set([id]);
+  for (let cambio = true; cambio;) {
+    cambio = false;
+    for (const c of datos) {
+      if (c.padre_id && dentro.has(c.padre_id) && !dentro.has(c.id)) {
+        dentro.add(c.id);
+        cambio = true;
+      }
+    }
+  }
+  return dentro;
 }
 
 const filaDeCurso = (c, campus, ahoraS) => ({
@@ -128,6 +155,7 @@ const filaDeCurso = (c, campus, ahoraS) => ({
   nombre_corto: c.nombre_corto,
   categoria: c.categoria,
   estado: estadoDelCurso(c, ahoraS),
+  visible: c.visible,
   inicio: fechaIso(c.inicio_s),
   fin: fechaIso(c.fin_s),
   finalizacion_activada: c.finalizacion,
@@ -199,7 +227,8 @@ async function elegirCursos(ambito, projectIds, a, signal) {
   const ahoraS = Math.floor(Date.now() / 1000);
   const { bien, errores } = await porCampus(ambito, projectIds, async (campus) => {
     const { datos } = await cursosDelCampus(campus, a.refrescar === true, signal);
-    const elegidos = filtrarCursos(datos, a, ahoraS);
+    const categorias = await categoriasDe(campus, a, signal);
+    const elegidos = filtrarCursos(datos, { ...a, categorias }, ahoraS);
     if (a.curso_id != null && !elegidos.length) {
       throw new ErrorMoodle('curso_no_encontrado',
         `el curso ${a.curso_id} no existe en ese Moodle o el token no lo ve (si es nuevo, prueba con refrescar: true)`);
@@ -234,7 +263,8 @@ export async function moodleCursos(ambito, a, { signal } = {}) {
     const { datos, deCache, hace_s: haceS } = await cursosDelCampus(campus, a.refrescar === true, signal);
     const cuenta = { activos: 0, proximos: 0, terminados: 0, ocultos: 0 };
     for (const c of datos) cuenta[`${estadoDelCurso(c, ahoraS)}s`] += 1;
-    const filtrados = filtrarCursos(datos, a, ahoraS);
+    const categorias = await categoriasDe(campus, a, signal);
+    const filtrados = filtrarCursos(datos, { ...a, categorias }, ahoraS);
     return { cuenta, total: datos.length, filtrados, deCache, haceS };
   });
 
@@ -243,8 +273,27 @@ export async function moodleCursos(ambito, a, { signal } = {}) {
     .sort((x, y) => x.campus.localeCompare(y.campus) || x.nombre.localeCompare(y.nombre));
   const pagina = a.pagina ?? 1;
   const limite = a.limite ?? 25;
+  const pag = filas.slice((pagina - 1) * limite, pagina * limite);
+  // El numero de alumnos de cada curso de la pagina (matriculados con rol de alumno):
+  // una lectura por curso, de a pocos y guardada unos minutos. Si una falla, ese curso
+  // sale con `alumnos: null` y su motivo; nunca un 0.
+  const campusPorId = new Map(bien.map((b) => [b.campus.id, b.campus]));
+  const cursosPagina = a.con_alumnos === false ? pag : await mapConLimite(pag, MAX_CURSOS_A_LA_VEZ, async (f) => {
+    const campus = campusPorId.get(f.campus_id);
+    try {
+      const { datos } = await conCache(`alumnos:${campus.id}:${huellaDeCredencial(campus.cred)}:${f.curso_id}`, a.refrescar === true, async () => {
+        const { lista, truncado } = await leerMatriculados(campus.cred, f.curso_id, { campos: 'id,roles', signal });
+        return { n: lista.filter(esAlumno).length, truncado };
+      });
+      return { ...f, alumnos: datos.n, ...(datos.truncado ? { alumnos_incompleto: true } : {}) };
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      return { ...f, alumnos: null, alumnos_error: errorDelCampus(err, campus).error };
+    }
+  });
   return {
     filtro: { estado: a.estado ?? 'activos', texto: a.texto ?? null, categoria_id: a.categoria_id ?? null },
+    con_alumnos: a.con_alumnos !== false,
     por_campus: bien.map((b) => ({
       campus_id: b.campus.id,
       campus: b.campus.nombre,
@@ -257,9 +306,9 @@ export async function moodleCursos(ambito, a, { signal } = {}) {
     total: filas.length,
     pagina,
     limite,
-    cursos: filas.slice((pagina - 1) * limite, pagina * limite),
+    cursos: cursosPagina,
     campus_con_error: errores,
-    nota: 'Son los cursos que ve el token de Moodle de cada campus. «activo» = visible y sin fecha de fin pasada; '
+    nota: 'Son los cursos que ve el token de Moodle de cada campus. «alumnos» = matriculados con rol de alumno (también los suspendidos; el desglose, en «moodle_alumnos»).  «activo» = visible y sin fecha de fin pasada; '
       + 'un curso sin fecha de fin cuenta como activo mientras esté visible. Los datos pueden tener hasta unos minutos (refrescar: true los pide de nuevo).',
   };
 }
@@ -297,11 +346,64 @@ const esAlumno = (u) => {
   return u.roles.some((r) => r?.shortname === 'student');
 };
 
+/** Hasta cuantos alumnos de un curso se pregunta «¿ha terminado?» (MCP_MOODLE_MAX_TERMINADOS, 150). */
+const maxTerminados = () => enteroEnv('MCP_MOODLE_MAX_TERMINADOS', 150);
+
+/**
+ * Cuantos alumnos han terminado el curso (#335).
+ *
+ * Moodle solo lo dice alumno por alumno (core_completion_get_course_completion_status),
+ * asi que cuesta una llamada por alumno: solo se hace hasta MCP_MOODLE_MAX_TERMINADOS y
+ * de a cinco. Lo que no se pueda saber va a `terminados: null` con el motivo, nunca a 0.
+ *
+ * Visto contra el Moodle real de Psiko: un curso con la finalizacion «activada» puede no
+ * tener criterios (`nocriteriaset`). El primer alumno lo decide: si no hay criterios, no se
+ * pregunta por los demas.
+ */
+export async function contarTerminados(cred, curso, alumnos, signal) {
+  const sinDato = (avisos, criterios = null) => ({ terminados: null, criterios, avisos });
+  if (!curso.finalizacion) return sinDato(['El curso no tiene la finalización activada en Moodle: no hay «terminados».'], false);
+  if (!alumnos.length) return { terminados: 0, criterios: null, avisos: [] };
+  if (alumnos.length > maxTerminados()) {
+    return sinDato([`Hay más de ${maxTerminados()} alumnos: saber quién ha terminado exige una llamada por alumno y no se hace (terminados: false lo evita; MCP_MOODLE_MAX_TERMINADOS lo sube).`]);
+  }
+  const preguntar = async (u) => {
+    try {
+      const r = await llamarMoodle(cred, 'core_completion_get_course_completion_status', { courseid: curso.id, userid: u.id }, { signal });
+      return r?.completionstatus?.completed === true ? 'si' : 'no';
+    } catch (err) {
+      if (!(err instanceof ErrorMoodle)) throw err;
+      if (err.moodle === 'nocriteriaset') return 'sin_criterios';
+      if (err.moodle === 'usernotenroled') return 'sin_comprobar';
+      throw err;
+    }
+  };
+  try {
+    const primero = await preguntar(alumnos[0]);
+    if (primero === 'sin_criterios') {
+      return sinDato(['El curso tiene la finalización activada pero no tiene criterios de finalización definidos en Moodle: no hay «terminados».'], false);
+    }
+    const resto = await mapConLimite(alumnos.slice(1), MAX_COMPLETION_A_LA_VEZ, preguntar);
+    const todos = [primero, ...resto];
+    const sinComprobar = todos.filter((x) => x === 'sin_comprobar' || x === 'sin_criterios').length;
+    return {
+      terminados: todos.filter((x) => x === 'si').length,
+      criterios: true,
+      avisos: sinComprobar ? [`${sinComprobar} alumno${sinComprobar === 1 ? '' : 's'} no se pudo${sinComprobar === 1 ? '' : 'ieron'} comprobar (Moodle no los da por matriculados para la finalización).`] : [],
+    };
+  } catch (err) {
+    if (signal?.aborted || !(err instanceof ErrorMoodle)) throw err;
+    return sinDato([err.codigo === 'sin_permiso'
+      ? 'El token no tiene permiso para ver quién ha terminado (core_completion_get_course_completion_status).'
+      : `No se pudo saber quién ha terminado (${err.message}).`]);
+  }
+}
+
 /**
  * Los numeros de UN curso. Las cifras que no se han podido saber van a `null`
  * con su motivo en `avisos`: nunca un 0 que parezca un dato.
  */
-export async function recuentoDeAlumnos(cred, curso, { completos = false, dias = 30, signal } = {}) {
+export async function recuentoDeAlumnos(cred, curso, { completos = false, dias = 30, terminados = true, signal } = {}) {
   const campos = ['id', 'lastaccess', 'lastcourseaccess', 'roles', ...(completos ? ['fullname', 'email'] : [])].join(',');
   const { lista, truncado } = await leerMatriculados(cred, curso.id, { campos, signal });
 
@@ -321,7 +423,8 @@ export async function recuentoDeAlumnos(cred, curso, { completos = false, dias =
   const desdeS = Math.floor(Date.now() / 1000) - dias * SEGUNDOS_DIA;
   const alumnos = lista.filter(esAlumno);
   const ultimoAcceso = (u) => Number(u.lastcourseaccess !== undefined ? u.lastcourseaccess : u.lastaccess) || 0;
-  const hayAcceso = alumnos.some((u) => u.lastcourseaccess !== undefined || u.lastaccess !== undefined);
+  // Sin alumnos no hay nadie a quien faltarle la fecha: los activos y los que nunca entraron son 0, no «no se sabe».
+  const hayAcceso = !alumnos.length || alumnos.some((u) => u.lastcourseaccess !== undefined || u.lastaccess !== undefined);
   if (alumnos.length && !hayAcceso) avisos.push('Moodle no devolvió la fecha de último acceso: no se pueden contar los activos.');
 
   let suspendidos = 0;
@@ -346,16 +449,18 @@ export async function recuentoDeAlumnos(cred, curso, { completos = false, dias =
   }
   if (truncado) avisos.push(`Hay más de ${maxAlumnos()} matriculados: el recuento está incompleto.`);
 
+  const fin = terminados ? await contarTerminados(cred, curso, alumnos, signal) : { terminados: null, criterios: null, avisos: [] };
+  avisos.push(...fin.avisos);
+
   return {
     matriculados: alumnos.length,
     matricula_activa: activas ? alumnos.length - suspendidos : null,
     suspendidos: activas ? suspendidos : null,
     [`activos_ultimos_${dias}_dias`]: hayAcceso ? activosRecientes : null,
     nunca_han_entrado: hayAcceso ? nuncaEntraron : null,
-    // Moodle no da quién ha terminado con las funciones de solo lectura
-    // autorizadas (haría falta preguntar alumno por alumno).
-    terminados: null,
+    terminados: fin.terminados,
     finalizacion_activada: curso.finalizacion,
+    criterios_de_finalizacion: fin.criterios,
     otros_roles: lista.length - alumnos.length,
     ...(avisos.length ? { avisos } : {}),
     ...(completos ? { alumnos: detalle } : {}),
@@ -379,7 +484,7 @@ export async function moodleAlumnos(ambito, a, { signal } = {}) {
   const filas = await mapConLimite(cursos, MAX_CURSOS_A_LA_VEZ, async ({ campus, curso }) => {
     const base = { campus_id: campus.id, campus: campus.nombre, curso_id: curso.id, curso: curso.nombre, estado: estadoDelCurso(curso) };
     try {
-      return { ...base, ...(await recuentoDeAlumnos(campus.cred, curso, { completos, dias, signal })) };
+      return { ...base, ...(await recuentoDeAlumnos(campus.cred, curso, { completos, dias, terminados: a.terminados !== false, signal })) };
     } catch (err) {
       if (signal?.aborted) throw err;
       return { ...base, error: errorDelCampus(err, campus).error };
@@ -390,6 +495,10 @@ export async function moodleAlumnos(ambito, a, { signal } = {}) {
   const totales = Object.fromEntries(SUMAS.map((k) => [k, buenas.some((f) => f[k] === null) ? null : buenas.reduce((s, f) => s + f[k], 0)]));
   const clave = `activos_ultimos_${dias}_dias`;
   totales[clave] = buenas.some((f) => f[clave] === null) ? null : buenas.reduce((s, f) => s + f[clave], 0);
+  // Terminados: se suman los cursos que dan dato y se dice cuantos no lo dan (sin criterios, sin finalizacion…).
+  const conTerminados = buenas.filter((f) => f.terminados !== null);
+  totales.terminados = conTerminados.length ? conTerminados.reduce((s, f) => s + f.terminados, 0) : null;
+  totales.cursos_sin_dato_de_terminados = buenas.length - conTerminados.length;
 
   return {
     cursos_consultados: filas.length,
@@ -402,7 +511,7 @@ export async function moodleAlumnos(ambito, a, { signal } = {}) {
     totales_suma_de_matriculas: totales,
     campus_con_error: errores,
     nota: `«Activos» = matrícula activa y acceso al curso en los últimos ${dias} días. Un alumno matriculado en dos cursos cuenta en cada uno. `
-      + '«Terminados» no se puede dar: Moodle solo lo informa alumno por alumno y esta herramienta no lo hace; finalizacion_activada dice si el curso tiene finalización.',
+      + '«Terminados» = alumnos que Moodle da por completado el curso; solo hay dato si el curso tiene finalización activada Y criterios definidos (criterios_de_finalizacion), y cuesta una llamada por alumno (terminados: false la evita). Si no hay dato sale null con su motivo en «avisos», no 0.',
   };
 }
 
@@ -591,8 +700,59 @@ async function cargarCategorias(cred, signal) {
   })).sort((x, y) => x.ruta.localeCompare(y.ruta));
 }
 
+/** Las secciones y actividades de UN curso (core_course_get_contents), sin contenidos ni enlaces. */
+async function estructuraDeCurso(campus, cursoId, a, ahoraS, signal) {
+  const { datos: cursos } = await cursosDelCampus(campus, a.refrescar === true, signal);
+  const curso = cursos.find((c) => c.id === Number(cursoId));
+  if (!curso) {
+    throw new ErrorMoodle('curso_no_encontrado',
+      `el curso ${cursoId} no existe en ese Moodle o el token no lo ve (si es nuevo, prueba con refrescar: true)`);
+  }
+  const r = await llamarMoodle(campus.cred, 'core_course_get_contents', { courseid: curso.id }, { signal });
+  if (!Array.isArray(r)) {
+    throw new ErrorMoodle('respuesta_no_valida', 'Moodle no devolvió el contenido del curso con el formato esperado');
+  }
+  const porTipo = {};
+  const secciones = r.map((s, i) => {
+    const actividades = (Array.isArray(s.modules) ? s.modules : []).map((m) => {
+      const tipo = String(m.modname || 'otro');
+      porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+      return { nombre: String(m.name ?? ''), tipo, visible: m.visible === undefined ? true : Number(m.visible) === 1 || m.visible === true };
+    });
+    return {
+      numero: Number.isInteger(Number(s.section)) ? Number(s.section) : i,
+      nombre: String(s.name || '').trim() || (i === 0 ? 'General' : `Sección ${i}`),
+      visible: s.visible === undefined ? true : Number(s.visible) === 1 || s.visible === true,
+      total_actividades: actividades.length,
+      actividades,
+    };
+  });
+  return {
+    curso: { curso_id: curso.id, nombre: curso.nombre, categoria: curso.categoria, estado: estadoDelCurso(curso, ahoraS), visible: curso.visible, inicio: fechaIso(curso.inicio_s), fin: fechaIso(curso.fin_s) },
+    total_secciones: secciones.length,
+    total_actividades: secciones.reduce((n, s) => n + s.total_actividades, 0),
+    por_tipo: porTipo,
+    secciones,
+  };
+}
+
 export async function moodleEstructura(ambito, a, { signal } = {}) {
   const projectIds = acotarProyectos(ambito, a);
+  if (a.curso_id != null) {
+    if (projectIds.length > 1) {
+      throw new AppError(
+        'Un curso es de un Moodle concreto: indica el campus con proyecto_id (los ids de curso se repiten entre campus).',
+        400, 'MCP_FALTA_CAMPUS'
+      );
+    }
+    const ahoraS = Math.floor(Date.now() / 1000);
+    const { bien, errores } = await porCampus(ambito, projectIds, (campus) => estructuraDeCurso(campus, a.curso_id, a, ahoraS, signal));
+    return {
+      campus: bien.map((b) => ({ campus_id: b.campus.id, campus: b.campus.nombre, ...b.datos })),
+      campus_con_error: errores,
+      nota: 'Las secciones y actividades del curso tal y como las ve el token (nombre, tipo y si están visibles; sin el contenido). Una sección vacía es una sección sin actividades.',
+    };
+  }
   const { bien, errores } = await porCampus(ambito, projectIds, async (campus) => {
     const r = await conCache(`categorias:${campus.id}:${huellaDeCredencial(campus.cred)}`, a.refrescar === true,
       () => cargarCategorias(campus.cred, signal));
