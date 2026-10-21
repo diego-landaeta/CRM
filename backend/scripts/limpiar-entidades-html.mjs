@@ -59,9 +59,9 @@ try {
       console.log('  Ojo con las de cuerpos HTML (plantillas de correo, mensajes): ahí la entidad es correcta.\n');
     }
   } else {
-    const { cambios, porColumna } = await limpiar(cli, columnas);
     const fichero = `limpieza-entidades-${new Date().toISOString().slice(0, 10)}.json`;
-    fs.writeFileSync(fichero, JSON.stringify(cambios, null, 2));
+    // La copia se escribe ANTES de confirmar: si no se puede guardar, no se cambia nada.
+    const { porColumna } = await limpiar(cli, columnas, { guardarCopia: (cambios) => fs.writeFileSync(fichero, JSON.stringify(cambios, null, 2)) });
     for (const [col, n] of Object.entries(porColumna)) console.log(`  ${col.padEnd(44)} ${String(n).padStart(6)} filas limpiadas`);
     console.log(`\n  Hecho en una transacción. Los valores de antes están en ${fichero}.\n`);
   }

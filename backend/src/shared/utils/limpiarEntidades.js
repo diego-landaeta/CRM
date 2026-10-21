@@ -18,6 +18,13 @@ import { decodificarEntidades } from './entidadesHtml.js';
  * `limpiar` va en UNA transacción: o se cambian todas las filas pedidas o ninguna.
  * Si dos nombres acaban iguales y chocan con un índice único, se deshace todo y se dice cuál.
  *
+ * Las filas se BLOQUEAN al leerlas (`FOR UPDATE`): con la aplicación en marcha, nadie puede
+ * cambiarlas entre que se leen y se escriben. Sin eso, la fila se localiza por `ctid`, que
+ * puede cambiar —o reutilizarse tras un vacuum— y se acabaría pisando OTRA fila.
+ *
+ * La copia de lo de antes se entrega ANTES de confirmar (`guardarCopia`): si no se puede
+ * guardar, se deshace todo. Nada se cambia sin copia.
+ *
  * Recibe un cliente de `pg` (algo con `.query`), no la conexión del CRM, para poder
  * usarse desde un script suelto y desde las pruebas.
  */
@@ -66,11 +73,12 @@ export async function buscar(cli, { esquema = 'public' } = {}) {
 /**
  * Decodifica las columnas pedidas (`['products.nombre', …]`). Devuelve
  * `{ cambios: [{ tabla, columna, antes, despues }], porColumna: { 'tabla.col': n } }`:
- * los valores de antes, para poder deshacerlo.
+ * los valores de antes, para poder deshacerlo. `guardarCopia(cambios)` se llama con ellos
+ * justo antes de confirmar; si lanza un error, no se confirma nada.
  *
  * Una columna que no existe o no es de texto es un error ANTES de tocar nada.
  */
-export async function limpiar(cli, columnas, { esquema = 'public' } = {}) {
+export async function limpiar(cli, columnas, { esquema = 'public', guardarCopia = null } = {}) {
   const pedidas = columnas.map((x) => ({ texto: x, ...(partirColumna(x) || {}) }));
   const malas = pedidas.filter((p) => !p.tabla);
   if (malas.length) throw new Error(`Columna con formato raro: ${malas.map((m) => m.texto).join(', ')} (tiene que ser «tabla.columna»)`);
@@ -83,7 +91,7 @@ export async function limpiar(cli, columnas, { esquema = 'public' } = {}) {
   try {
     for (const { tabla, columna } of pedidas) {
       const t = `${ident(esquema)}.${ident(tabla)}`; const c = ident(columna);
-      const { rows } = await cli.query(`SELECT ctid::text AS fila, ${c} AS valor FROM ${t} WHERE ${c} ~ $1`, [HAY_ENTIDAD]);
+      const { rows } = await cli.query(`SELECT ctid::text AS fila, ${c} AS valor FROM ${t} WHERE ${c} ~ $1 FOR UPDATE`, [HAY_ENTIDAD]);
       let n = 0;
       for (const { fila, valor } of rows) {
         const despues = decodificarEntidades(valor);
@@ -98,6 +106,7 @@ export async function limpiar(cli, columnas, { esquema = 'public' } = {}) {
       }
       porColumna[`${tabla}.${columna}`] = n;
     }
+    if (guardarCopia) await guardarCopia(cambios);
     await cli.query('COMMIT');
   } catch (err) {
     await cli.query('ROLLBACK');

@@ -81,6 +81,37 @@ describe('limpiar: solo lo que se nombra', () => {
     expect((await cli.query(`SELECT unico FROM ${T} ORDER BY id`)).rows.map((r) => r.unico)).toEqual(['M &amp; M', 'M & M']);
   });
 
+  it('la copia de lo de antes se entrega antes de confirmar; si no se puede guardar, NO se cambia nada', async () => {
+    await poner([['X &amp; Y', null, null], ['Z &amp; W', null, null]]);
+    let recibido;
+    await limpiar(cli, [`${T}.nombre`], { guardarCopia: (c) => { recibido = c; } });
+    expect(recibido.map((c) => c.antes)).toEqual(['X &amp; Y', 'Z &amp; W']);
+    await poner([['X &amp; Y', null, null]]);
+    await expect(limpiar(cli, [`${T}.nombre`], { guardarCopia: () => { throw new Error('disco lleno'); } })).rejects.toThrow('disco lleno');
+    expect(await nombres()).toEqual(['X &amp; Y']);
+  });
+
+  it('bloquea las filas al leerlas, ANTES de escribir: otra conexión no puede cambiarlas entre medias', async () => {
+    await poner([['Curso &amp; A', null, null]]);
+    const otra = await pool.connect();
+    const intentos = [];
+    // Un cliente que, justo antes de cada UPDATE, intenta desde otra conexión coger la misma fila.
+    const espia = {
+      query: async (sql, params) => {
+        if (/^s*UPDATE/.test(sql)) {
+          await otra.query('BEGIN');
+          intentos.push(await otra.query(`SELECT 1 FROM ${T} FOR UPDATE NOWAIT`).then(() => 'libre', (e) => e.code));
+          await otra.query('ROLLBACK');
+        }
+        return cli.query(sql, params);
+      },
+    };
+    try {
+      await limpiar(espia, [`${T}.nombre`]);
+      expect(intentos).toEqual(['55P03']); // lock_not_available: la fila ya estaba cogida
+    } finally { otra.release(); }
+  });
+
   it('una columna que no existe o no es de texto es un error ANTES de tocar nada', async () => {
     await poner([['X &amp; Y', null, null]]);
     await expect(limpiar(cli, [`${T}.nombre`, `${T}.no_existe`])).rejects.toThrow(/No es una columna de texto/);
