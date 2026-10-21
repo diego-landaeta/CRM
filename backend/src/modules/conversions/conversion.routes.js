@@ -3,10 +3,18 @@ import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.
 import * as ctrl from './conversion.controller.js';
 import * as refundsCtrl from './refunds.controller.js';
 import * as repartoCtrl from './reparto.controller.js';
+import { ventaPorId, cuotaPorId, pagoPorId, devolucionPorId, prospectoPorId, puedeCrearEn } from './conversion.acceso.js';
 
 const router = Router();
 
 router.use(verifyToken);
+
+// Quién puede tocar cada venta: por campus y, la gestora, solo las suyas. Ver conversion.acceso.js.
+router.param('id', ventaPorId);
+router.param('instId', cuotaPorId);
+router.param('paymentId', pagoPorId);
+router.param('refundId', devolucionPorId);
+router.param('leadId', prospectoPorId);
 
 // Listado y detalle
 router.get('/', ctrl.list);
@@ -18,7 +26,7 @@ router.get('/by-lead/:leadId', ctrl.listByLead);
 router.get('/:id', ctrl.getById);
 
 // Creacion
-router.post('/', ctrl.create);
+router.post('/', puedeCrearEn, ctrl.create);
 
 // Edicion
 router.patch('/:id', ctrl.update);
