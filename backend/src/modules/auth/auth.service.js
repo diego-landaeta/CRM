@@ -148,8 +148,54 @@ export async function setPassword(token, newPassword) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  // Las sesiones abiertas se cierran ANTES de cambiar la clave (#37). Quien
+  // recupera una cuenta suele hacerlo porque no se fia de ella: si alguien ya
+  // tenia sesion, poner una contraseña nueva no le echaba y seguia dentro.
+  // Va primero a proposito: si el cambio fallara despues, lo peor que pasa es
+  // que la persona tiene que volver a entrar; al reves, quedaria la clave
+  // cambiada y la sesion ajena viva.
+  await authModel.revokeAllUserTokens(user.id);
   await authModel.updatePassword(user.id, passwordHash);
   await authModel.logActivity(user.id, 'set_password', null, null);
 
   return { message: 'Contrasena establecida correctamente' };
+}
+
+/** Lo que dura el enlace de recuperacion. El mismo que el del alta. */
+const RECOVERY_EXPIRY_HOURS = 24;
+
+/**
+ * «He olvidado la contraseña» (#37).
+ *
+ * NO DICE SI EL CORREO EXISTE, y por eso esta funcion no devuelve nada ni
+ * lanza cuando no lo encuentra. Lo pide el ticket con su motivo escrito: «si lo
+ * dice, sirve para averiguar quien trabaja aqui». Un 404 aqui convierte la
+ * pantalla de entrar en un listado de empleados a base de probar correos.
+ *
+ * De ahi tres cosas que parecen descuidos y no lo son:
+ *
+ *   - se sale en silencio con un correo desconocido, y el controlador contesta
+ *     lo mismo que si hubiera mandado el enlace;
+ *   - un fallo al enviar tampoco cambia la respuesta —se registra y ya—, que si
+ *     no, el error del correo delata que la cuenta si existia;
+ *   - una cuenta dada de baja se trata como inexistente.
+ *
+ * El envio va sin esperar, como el del alta: contestar rapido importa, y el
+ * usuario ya tiene la instruccion de mirar su bandeja.
+ */
+export async function pedirRecuperacion(email, baseUrl) {
+  const user = await authModel.findActiveUserByEmail(String(email || '').trim());
+  if (!user) return;
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const expires = new Date();
+  expires.setHours(expires.getHours() + RECOVERY_EXPIRY_HOURS);
+
+  // Pisa cualquier enlace anterior: pedirlo dos veces deja valido el ultimo y
+  // solo el ultimo. Si no, cada peticion dejaria una llave mas rodando.
+  await authModel.setRecoveryToken(user.id, hashToken(rawToken), expires);
+  await authModel.logActivity(user.id, 'password_reset_requested', null, null);
+
+  return { user, rawToken, baseUrl };
 }
