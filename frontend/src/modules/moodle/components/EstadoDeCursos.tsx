@@ -22,7 +22,7 @@ export default function EstadoDeCursos({ valor, cursos, onChange }: {
   onChange: (estado: FiltroEstado) => void;
 }) {
   return (
-    <div role="tablist" aria-label="Estado de los cursos" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="estado-cursos">
+    <div role="tablist" aria-label="Estado de los cursos" className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-5" data-testid="estado-cursos">
       {OPCIONES.map((o) => {
         const activa = o.clave === valor;
         return (
@@ -33,11 +33,11 @@ export default function EstadoDeCursos({ valor, cursos, onChange }: {
             aria-selected={activa}
             onClick={() => onChange(o.clave)}
             className={cn(
-              'rounded-lg border bg-card px-4 py-3.5 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40',
+              'rounded-lg border bg-card px-3 py-2.5 text-left sm:px-4 sm:py-3.5 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40',
               activa ? 'border-primary bg-primary/5 ring-1 ring-primary/30' : 'border-border hover:border-foreground/25 hover:bg-muted/40',
             )}
           >
-            <span className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:gap-2 sm:text-xs">
               <span aria-hidden="true" className={cn('h-2 w-2 rounded-full', o.punto)} />
               {o.etiqueta}
             </span>

@@ -88,8 +88,8 @@ export default function Paginacion({
           </label>
         )}
         {paginas > 1 && (
-          <div className="flex items-center gap-1">
-            <button type="button" aria-label="Primera página" disabled={pagina <= 1} onClick={() => onPagina(1)} className={BOTON}><CaretDoubleLeft size={13} weight="bold" /></button>
+          <div className="flex flex-wrap items-center gap-1">
+            <button type="button" aria-label="Primera página" disabled={pagina <= 1} onClick={() => onPagina(1)} className={cn(BOTON, 'hidden sm:inline-flex')}><CaretDoubleLeft size={13} weight="bold" /></button>
             <button type="button" aria-label="Página anterior" disabled={pagina <= 1} onClick={() => onPagina(pagina - 1)} className={BOTON}><CaretLeft size={13} weight="bold" /></button>
             {paginasVisibles(pagina, paginas).map((n, i) => (n === '…' ? (
               <span key={`p${i}`} className="px-1 text-muted-foreground" aria-hidden="true">…</span>
@@ -106,7 +106,7 @@ export default function Paginacion({
               </button>
             )))}
             <button type="button" aria-label="Página siguiente" disabled={pagina >= paginas} onClick={() => onPagina(pagina + 1)} className={BOTON}><CaretRight size={13} weight="bold" /></button>
-            <button type="button" aria-label="Última página" disabled={pagina >= paginas} onClick={() => onPagina(paginas)} className={BOTON}><CaretDoubleRight size={13} weight="bold" /></button>
+            <button type="button" aria-label="Última página" disabled={pagina >= paginas} onClick={() => onPagina(paginas)} className={cn(BOTON, 'hidden sm:inline-flex')}><CaretDoubleRight size={13} weight="bold" /></button>
           </div>
         )}
       </div>

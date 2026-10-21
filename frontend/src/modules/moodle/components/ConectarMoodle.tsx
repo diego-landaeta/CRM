@@ -58,8 +58,8 @@ function AyudaToken({ funciones }: { funciones: string[] }) {
           </div>
           <ul className="mt-2 space-y-1 rounded-md border border-border bg-card p-3 font-mono text-xs">
             {funciones.map((f) => (
-              <li key={f} className="flex items-center justify-between gap-2">
-                <span className="truncate">{f}</span>
+              <li key={f} className="flex flex-wrap items-center justify-between gap-x-2">
+                <span className="break-all">{f}</span>
                 {f === OPCIONAL && <span className="shrink-0 font-sans text-[11px] text-muted-foreground">opcional: saber quién terminó</span>}
               </li>
             ))}
@@ -203,7 +203,7 @@ export default function ConectarMoodle({ campus, funciones, modo = 'primera', on
 
   // ─── Primera conexión: formulario y ayuda al lado ───
   return (
-    <div className="grid gap-8 lg:grid-cols-2" data-testid="conectar-moodle">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2" data-testid="conectar-moodle">
       <form onSubmit={enviar} className="space-y-5">
         <div>
           <h2 className="text-base font-semibold">Conectar el Moodle de {campus.nombre}</h2>

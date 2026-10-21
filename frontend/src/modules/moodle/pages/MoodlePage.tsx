@@ -73,7 +73,20 @@ export default function MoodlePage() {
         <EmptyState icon={GraduationCap} title="No tienes campus asignados" description="Cuando tengas un campus, aquí verás su Moodle." />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          {/* En el móvil, las tres cifras en una sola fila; las tarjetas grandes, en pantallas más anchas. */}
+          <dl className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border bg-card py-3 text-center sm:hidden" data-testid="cifras-movil">
+            {[
+              ['Conectados', `${conectados.length}/${cifras.campus}`],
+              ['Activos', String(cifras.activos)],
+              ['En total', String(cifras.total)],
+            ].map(([etiqueta, valor]) => (
+              <div key={etiqueta} className="px-2">
+                <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
+                <dd className="mt-0.5 text-xl font-bold tabular-nums">{valor}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="hidden gap-4 sm:grid sm:grid-cols-3">
             <KpiCard icon={PlugsConnected} label="Campus con Moodle conectado" value={`${conectados.length} de ${cifras.campus}`} />
             <KpiCard icon={GraduationCap} label="Cursos activos" value={String(cifras.activos)} />
             <KpiCard icon={Books} label="Cursos en total" value={String(cifras.total)} />

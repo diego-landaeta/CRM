@@ -17,7 +17,29 @@ function Estado({ c }: { c: CampusMoodle }) {
 
 export default function ListaDeCampus({ campus }: { campus: CampusMoodle[] }) {
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* En el móvil no cabe una tabla de cuatro columnas: una fila por campus, con las cifras debajo. */}
+      <ul className="divide-y divide-border sm:hidden" data-testid="lista-campus-movil">
+        {campus.map((c) => (
+          <li key={c.id}>
+            <Link
+              to={`/conexion/moodle/${c.id}`}
+              className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40"
+            >
+              <span className="min-w-0 space-y-1">
+                <span className={cn('block truncate text-sm font-medium', c.configurado ? 'text-foreground' : 'text-muted-foreground')}>{c.nombre}</span>
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <Estado c={c} />
+                  {c.cursos && <span className="tabular-nums">{c.cursos.activos} activos · {c.cursos.total} en total</span>}
+                </span>
+              </span>
+              <CaretRight size={14} weight="bold" className="shrink-0 text-muted-foreground" aria-hidden="true" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <div className="relative hidden overflow-x-auto sm:block">
       <table className="w-full text-sm" data-testid="lista-campus">
         <thead className="bg-muted/40">
           <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -49,6 +71,7 @@ export default function ListaDeCampus({ campus }: { campus: CampusMoodle[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }

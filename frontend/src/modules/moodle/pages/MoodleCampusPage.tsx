@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowsClockwise, GearSix, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import { cn } from '@/shared/lib/utils';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Card from '@/shared/components/ui/Card';
@@ -166,22 +167,25 @@ export default function MoodleCampusPage() {
   const tras = async () => { setAjustes(false); setVersion((v) => v + 1); await cargarCampus(true); await cargarCursos(true); };
   const pedirBaja = () => { setAjustes(false); setConfirmarBaja(true); };
 
+  /** Conexión y Actualizar. En el móvil la barra de arriba no tiene sitio para ellos: salen en la pantalla. */
+  const acciones = (clase: string) => (
+    <>
+      {puedeConectar && (
+        <button type="button" onClick={() => setAjustes((a) => !a)} aria-expanded={ajustes} className={cn('h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted', clase)}>
+          <GearSix size={15} weight="bold" /> Conexión
+        </button>
+      )}
+      <button type="button" onClick={actualizar} className={cn('h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted', clase)}>
+        <ArrowsClockwise size={15} weight="bold" /> Actualizar
+      </button>
+    </>
+  );
+
   const cabecera = (
     <PageHeader
       title={campus?.nombre ?? 'Moodle'}
       subtitle="Cursos de su Moodle · solo lectura"
-      actions={conectado && (
-        <>
-          {puedeConectar && (
-            <button type="button" onClick={() => setAjustes((a) => !a)} aria-expanded={ajustes} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
-              <GearSix size={15} weight="bold" /> Conexión
-            </button>
-          )}
-          <button type="button" onClick={actualizar} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
-            <ArrowsClockwise size={15} weight="bold" /> Actualizar
-          </button>
-        </>
-      )}
+      actions={conectado && acciones('hidden sm:inline-flex')}
     />
   );
 
@@ -221,8 +225,11 @@ export default function MoodleCampusPage() {
     <div className="space-y-6">
       {cabecera}
 
+      <p className="truncate text-base font-semibold sm:hidden">{campus.nombre}</p>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Volver />
+        <div className="flex items-center gap-2 sm:hidden">{acciones('inline-flex')}</div>
         {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
       </div>
 
