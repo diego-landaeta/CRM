@@ -32,7 +32,7 @@ const ORIGEN = `https://${MARCA.toLowerCase()}.moodle.test`;
 const TOKEN = `tok${MARCA}0123456789abcdef`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], credenciales: [] };
-let CON; let SIN; let OTRO; let REV; let ADMIN; let ADMIN_OTRO; let GESTORA;
+let CON; let SIN; let OTRO; let REV; let IA; let ADMIN; let ADMIN_OTRO; let GESTORA;
 
 // El rol sale del token: así se prueba «solo super admin» sin crear superadmins en la base compartida.
 const comoSuper = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: 'superadmin' }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
@@ -106,6 +106,9 @@ beforeAll(async () => {
     return p.id;
   };
   CON = await proy('con'); SIN = await proy('sin'); OTRO = await proy('otro'); REV = await proy('rev');
+  // Una plataforma de IA no es un campus: no tiene Moodle y no debe salir en la lista.
+  IA = await proy('ia');
+  await q(`UPDATE projects SET type = 'ia' WHERE id = $1`, [IA]);
   const persona = async (n, role, campus) => {
     const [u] = await q(`INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id, role`,
       [`${MARCA} ${n}`, `${n.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]);
@@ -113,7 +116,7 @@ beforeAll(async () => {
     for (const c of campus) await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [u.id, c]);
     return u;
   };
-  ADMIN = await persona('ADMIN', 'admin', [CON, SIN, REV]);
+  ADMIN = await persona('ADMIN', 'admin', [CON, SIN, REV, IA]);
   ADMIN_OTRO = await persona('ADMINOTRO', 'admin', [OTRO]);
   GESTORA = await persona('GESTORA', 'gestor', [CON]);
   const cred = await credenciales.upsert({ project_id: CON, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN, token: TOKEN }) });
@@ -155,6 +158,12 @@ describe('el panel de Moodle', () => {
     // Los conectados, primero.
     const orden = r.body.data.campus.map((c) => c.configurado);
     expect(orden).toEqual([...orden].sort((x, y) => Number(y) - Number(x)));
+  });
+
+  it('las plataformas de IA no son campus: no salen en la lista ni se pueden consultar', async () => {
+    const r = await request.get('/api/moodle/campus').set(como(ADMIN));
+    expect(r.body.data.campus.map((c) => c.id)).not.toContain(IA);
+    expect((await request.get(`/api/moodle/campus?proyecto_id=${IA}`).set(como(ADMIN))).status).toBe(403);
   });
 
   it('con proyecto_id solo ese campus, y uno ajeno es un 403', async () => {

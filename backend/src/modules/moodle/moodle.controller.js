@@ -33,7 +33,9 @@ function validar(schema, datos) {
 async function ambitoDe(req) {
   const user = await mcpModel.findUserById(req.user.userId);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
-  return construirAmbito(user, await mcpModel.proyectosDeLaPersona(user));
+  // Un campus es un proyecto de educación: las plataformas de IA (tipo «ia») no tienen Moodle.
+  const proyectos = (await mcpModel.proyectosDeLaPersona(user)).filter((p) => p.tipo !== 'ia');
+  return construirAmbito(user, proyectos);
 }
 
 const conTope = (trabajo) => trabajo({ signal: AbortSignal.timeout(TOPE_MS) });
