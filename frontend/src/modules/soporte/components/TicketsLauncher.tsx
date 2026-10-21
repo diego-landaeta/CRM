@@ -8,7 +8,8 @@ import {
   Ticket, Plus, X, Bug, Lightning, Question, Trash, ClockCounterClockwise, ArrowLeft,
 } from '@phosphor-icons/react';
 import {
-  listTickets, updateTicketStatus, deleteTicket,
+  listTickets, updateTicketStatus, deleteTicket, ticketsViejos,
+  type Ticket as TicketDato,
   TICKET_STATUS, TICKET_SEVERITY, TICKET_KIND,
 } from '../lib/tickets';
 
@@ -26,16 +27,27 @@ const KIND_ICON = { bug: Bug, feature: Lightning, question: Question };
 export default function TicketsLauncher() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'create'
-  const [tickets, setTickets] = useState(() => listTickets());
+  // Arranca vacio y se carga en el efecto: los tickets ya no estan en el
+  // navegador, vienen del servidor (#38). El evento `crm:tickets-changed` que
+  // ya existia sigue siendo lo que dispara la recarga, asi que nada mas de
+  // este componente cambia.
+  const [tickets, setTickets] = useState<TicketDato[]>([]);
+  // Los que quedaron en el localStorage de esta maquina. No se migran —desde
+  // el servidor no se alcanzan— y la pantalla lo dice en vez de que
+  // desaparezcan sin explicacion.
+  const [viejos] = useState(() => ticketsViejos());
 
   useEffect(() => {
-    function onChange() { setTickets(listTickets()); }
+    let vivo = true;
+    function onChange() { listTickets().then((t) => { if (vivo) setTickets(t); }); }
+    onChange();
     function onOpen() { setOpen(true); setView('list'); }
     function onOpenCreate() { setOpen(true); setView('create'); }
     window.addEventListener('crm:tickets-changed', onChange);
     window.addEventListener('crm:open-tickets', onOpen);
     window.addEventListener('crm:open-ticket-create', onOpenCreate);
     return () => {
+      vivo = false;
       window.removeEventListener('crm:tickets-changed', onChange);
       window.removeEventListener('crm:open-tickets', onOpen);
       window.removeEventListener('crm:open-ticket-create', onOpenCreate);
