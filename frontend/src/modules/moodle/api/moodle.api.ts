@@ -125,8 +125,8 @@ export const moodleApi = {
         ...(p.refrescar ? { refrescar: 1 } : {}),
       },
     }),
-  /** Prueba la conexión y, si vale, la guarda (solo super admin). Si no vale, no guarda nada y lanza el motivo. */
-  conectar: (proyectoId: number, datos: { url: string; token: string }) => client.post(`/moodle/campus/${proyectoId}/conexion`, datos),
+  /** Prueba la conexión y, si vale, la guarda (solo super admin). Sin `url` se reutiliza la guardada. Si no vale, no guarda nada y lanza el motivo. */
+  conectar: (proyectoId: number, datos: { url?: string; token: string }) => client.post(`/moodle/campus/${proyectoId}/conexion`, datos),
   desconectar: (proyectoId: number) => client.delete(`/moodle/campus/${proyectoId}/conexion`),
   categorias: (proyectoId: number) => client.get('/moodle/categorias', { params: proyecto(proyectoId) }),
   alumnos: (proyectoId: number, cursoId: number) => client.get(`/moodle/cursos/${cursoId}/alumnos`, { params: proyecto(proyectoId) }),

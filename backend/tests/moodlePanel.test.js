@@ -234,6 +234,15 @@ describe('conectar el Moodle de un campus', () => {
     expect(await estaConectado(SIN)).toBe(true);
   });
 
+  it('cambiar solo el token: no se pide la dirección, se reutiliza la guardada', async () => {
+    // SIN está conectado al Moodle «limitado»: su token solo vale allí, así que si pasa la
+    // prueba es porque se usó la dirección que ya había.
+    const r = await conectar(comoSuper(ADMIN), SIN, { token: TOKEN_LIMITADO });
+    expect(r.status).toBe(201);
+    expect(r.body.data.cursos).toBe(2);
+    expect((await conectar(comoSuper(ADMIN), SIN, { token: TOKEN })).status).toBe(400); // ese token no es de ese Moodle
+  });
+
   it('una dirección que no vale, o sin token, es un 400', async () => {
     for (const cuerpo of [{ url: 'ftp://moodle.test', token: TOKEN }, { url: 'https://usuario:clave@moodle.test', token: TOKEN }, { url: ORIGEN, token: '' }]) {
       expect((await conectar(comoSuper(ADMIN), SIN, cuerpo)).status).toBe(400);
@@ -262,5 +271,11 @@ describe('conectar el Moodle de un campus', () => {
     expect(r.status).toBe(200);
     expect(r.body.data.desconectados).toBeGreaterThanOrEqual(1);
     expect(await estaConectado(SIN)).toBe(false);
+  });
+
+  it('sin Moodle conectado y sin dirección, se pide la dirección', async () => {
+    const r = await conectar(comoSuper(ADMIN), SIN, { token: TOKEN });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/dirección/);
   });
 });

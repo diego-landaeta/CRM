@@ -14,6 +14,7 @@ import {
   moodleApi, type CampusMoodle, type CategoriaMoodle, type CursoMoodle, type FiltroEstado, type ListaCursos, type RespuestaCampus,
 } from '../api/moodle.api';
 import ConectarMoodle from '../components/ConectarMoodle';
+import AjustesConexion from '../components/AjustesConexion';
 import EstadoDeCursos from '../components/EstadoDeCursos';
 import TablaCursos from '../components/TablaCursos';
 import DetalleCurso from '../components/DetalleCurso';
@@ -30,7 +31,7 @@ import DetalleCurso from '../components/DetalleCurso';
 const hace = (s: number | undefined) => {
   if (s === undefined || s < 45) return 'Datos recién leídos de Moodle';
   const min = Math.round(s / 60);
-  return `Datos de hace ${min} min (se guardan unos minutos)`;
+  return `Datos de hace ${min} min`;
 };
 
 function Volver() {
@@ -132,7 +133,8 @@ export default function MoodleCampusPage() {
       toast({ title: 'No se pudo desconectar', description: (e as Error).message, variant: 'destructive' });
     } finally { setDandoDeBaja(false); }
   };
-  const tras = async () => { setAjustes(false); await cargarCampus(true); };
+  const tras = async () => { setAjustes(false); await cargarCampus(true); await cargarCursos(true); };
+  const pedirBaja = () => { setAjustes(false); setConfirmarBaja(true); };
 
   const cabecera = (
     <PageHeader
@@ -193,18 +195,6 @@ export default function MoodleCampusPage() {
         <Volver />
         {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
       </div>
-
-      {ajustes && puedeConectar && (
-        <Card padding="md" data-testid="ajustes-conexion">
-          <ConectarMoodle campus={campus} funciones={funciones} cambiando onConectado={tras} />
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="text-xs text-muted-foreground">Desconectar borra el token guardado; el Moodle no se toca.</p>
-            <button type="button" onClick={() => setConfirmarBaja(true)} className="inline-flex h-9 items-center rounded-md border border-destructive/40 px-3.5 text-sm font-semibold text-destructive hover:bg-destructive-soft">
-              Desconectar este Moodle
-            </button>
-          </div>
-        </Card>
-      )}
 
       <EstadoDeCursos valor={estado} cursos={campus.cursos} onChange={(e) => { setEstado(e); setPagina(1); }} />
 
@@ -267,6 +257,10 @@ export default function MoodleCampusPage() {
       </Card>
 
       {curso && <DetalleCurso curso={curso} proyectoId={id} onCerrar={() => setCurso(null)} />}
+
+      {ajustes && puedeConectar && (
+        <AjustesConexion campus={campus} funciones={funciones} onCerrar={() => setAjustes(false)} onCambiado={tras} onDesconectar={pedirBaja} />
+      )}
 
       <ConfirmDialog
         open={confirmarBaja}

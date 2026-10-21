@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as mcpModel from '../mcp/mcp.model.js';
 import { construirAmbito } from '../mcp/mcp.acceso.js';
-import { campusConMoodle, ErrorMoodle, FUNCIONES_MOODLE, normalizarUrlMoodle } from '../mcp/mcp.moodle.cliente.js';
+import { campusConMoodle, credencialesMoodle, ErrorMoodle, FUNCIONES_MOODLE, normalizarUrlMoodle } from '../mcp/mcp.moodle.cliente.js';
 import * as moodle from '../mcp/mcp.moodle.js';
 import * as credenciales from '../credentials/credentials.model.js';
 import { anotar, ACCIONES } from '../credentials/credentials.registro.js';
@@ -141,7 +141,8 @@ export async function recursos(req, res, next) {
 // ─── Conectar el Moodle de un campus (solo super admin) ──────────────────────
 
 const conexionB = z.object({
-  url: z.string().trim().min(8, 'Escribe la dirección de su Moodle').max(300),
+  // Sin dirección se reutiliza la ya guardada: así se cambia solo el token.
+  url: z.string().trim().max(300).optional(),
   token: z.string().trim().min(8, 'Escribe el token').max(200),
 });
 
@@ -151,7 +152,8 @@ function campusPropio(ambito, id) {
 }
 
 /**
- * POST /api/moodle/campus/:id/conexion { url, token } — conecta (o cambia) el Moodle de un campus.
+ * POST /api/moodle/campus/:id/conexion { url?, token } — conecta (o cambia) el Moodle de un campus.
+ * Sin `url` se reutiliza la guardada, para cambiar solo el token.
  *
  * Primero PRUEBA contra el Moodle; si no vale, no se guarda nada y se dice por qué. Si vale,
  * se guarda cifrado (el mismo sitio que Configuración → Claves, servicio «moodle») y se
@@ -164,9 +166,19 @@ export async function conectar(req, res, next) {
     const { id } = validar(z.object({ id: num }), req.params);
     campusPropio(ambito, id);
     const b = validar(conexionB, req.body);
-    const url = normalizarUrlMoodle(b.url);
-    if (!url) {
-      throw new AppError('La dirección del Moodle no es válida: tiene que empezar por https:// y no llevar usuario ni contraseña.', 400, 'VALIDATION_ERROR');
+    let url;
+    if (b.url) {
+      url = normalizarUrlMoodle(b.url);
+      if (!url) {
+        throw new AppError('La dirección del Moodle no es válida: tiene que empezar por https:// y no llevar usuario ni contraseña.', 400, 'VALIDATION_ERROR');
+      }
+    } else {
+      // Cambiar solo el token: la dirección es la que ya había.
+      const guardada = (await credencialesMoodle([id])).get(id);
+      if (!guardada || guardada instanceof ErrorMoodle) {
+        throw new AppError('Escribe la dirección de su Moodle.', 400, 'VALIDATION_ERROR');
+      }
+      url = guardada.url;
     }
 
     let prueba;
