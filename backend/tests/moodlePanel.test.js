@@ -114,6 +114,13 @@ describe('el panel de Moodle', () => {
     expect(segundo.cursos).toBeUndefined();
   });
 
+  it('con proyecto_id solo ese campus, y uno ajeno es un 403', async () => {
+    const uno = await request.get(`/api/moodle/campus?proyecto_id=${CON}`).set(como(ADMIN));
+    expect(uno.body.data.campus).toHaveLength(1);
+    expect(uno.body.data.campus[0]).toMatchObject({ id: CON, configurado: true, cursos: { activos: 1 } });
+    expect((await request.get(`/api/moodle/campus?proyecto_id=${CON}`).set(como(ADMIN_OTRO))).status).toBe(403);
+  });
+
   it('los cursos de un campus, con su número de alumnos', async () => {
     const r = await request.get(`/api/moodle/cursos?proyecto_id=${CON}&estado=todos`).set(como(ADMIN));
     expect(r.status).toBe(200);

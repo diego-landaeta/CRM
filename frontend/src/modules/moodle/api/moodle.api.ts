@@ -97,7 +97,9 @@ export interface RecursosDelCurso {
 const proyecto = (proyectoId: number) => ({ proyecto_id: proyectoId });
 
 export const moodleApi = {
-  campus: (refrescar = false) => client.get('/moodle/campus', { params: refrescar ? { refrescar: 1 } : {} }),
+  /** Todos los campus, o solo uno con `proyectoId` (la pantalla de un campus no pregunta a los demás Moodle). */
+  campus: (p: { proyectoId?: number; refrescar?: boolean } = {}) =>
+    client.get('/moodle/campus', { params: { ...(p.proyectoId ? { proyecto_id: p.proyectoId } : {}), ...(p.refrescar ? { refrescar: 1 } : {}) } }),
   cursos: (p: { proyectoId: number; estado: FiltroEstado; texto?: string; categoriaId?: number | null; pagina: number; limite?: number; refrescar?: boolean }) =>
     client.get('/moodle/cursos', {
       params: {

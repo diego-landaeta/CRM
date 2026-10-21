@@ -45,12 +45,19 @@ const cursosQ = campusQ.extend({
 });
 const cursoP = z.object({ id: num });
 
-/** GET /api/moodle/campus — cada campus, si tiene Moodle conectado y cómo está. */
+/**
+ * GET /api/moodle/campus — cada campus, si tiene Moodle conectado y cómo está.
+ * Con `?proyecto_id=` solo ese campus (la pantalla de un campus no necesita preguntarle
+ * a los demás Moodle); uno que no es suyo es un 403.
+ */
 export async function campus(req, res, next) {
   try {
     const ambito = await ambitoDe(req);
-    const con = await campusConMoodle(ambito.projectIds);
-    const filas = await Promise.all(ambito.proyectos.map(async (p) => {
+    const { proyecto_id: elegido } = validar(z.object({ proyecto_id: num.optional() }), req.query);
+    const proyectos = elegido ? ambito.proyectos.filter((p) => Number(p.id) === elegido) : ambito.proyectos;
+    if (elegido && !proyectos.length) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+    const con = await campusConMoodle(proyectos.map((p) => Number(p.id)));
+    const filas = await Promise.all(proyectos.map(async (p) => {
       const base = { id: Number(p.id), nombre: p.nombre, configurado: con.has(Number(p.id)) };
       if (!base.configurado) return base;
       try {
