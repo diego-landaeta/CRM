@@ -168,6 +168,13 @@ export async function paises(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/informes/canales  -> de donde vienen los prospectos y las ventas (#48)
+export async function canales(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.origenDeLosProspectos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/informes/formaciones  -> ranking de formaciones
 export async function formaciones(req, res, next) {
   try {

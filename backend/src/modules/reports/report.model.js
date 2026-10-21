@@ -1511,6 +1511,91 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
   return rows;
 }
 
+// De dónde vienen los prospectos y las ventas (#48).
+//
+// El canal sale de `lead_utms.canal_detectado`, que lo rellena el alta con la
+// regla de leads/canal.js (o el script que la aplica hacia atrás). Un prospecto
+// del que no se sabe nada NO se reparte entre los demás ni se llama «directo»:
+// sale aparte como `sin_origen`, porque su porcentaje es lo que dice si la
+// tubería (la web, Make) está trayendo el origen o no. Es la misma idea que los
+// «sin teléfono» de países.
+//
+// «Sin origen»: no hay fila de origen, o la fila no trae ninguna pista (ni UTM,
+// ni referrer, ni dirección) y su canal es «directo» o nulo. Un «directo» con
+// la dirección guardada y sin referrer SÍ es un directo de verdad.
+//
+// Dos fechas distintas, como en países: los prospectos por su fecha de entrada
+// y las ventas por su fecha de venta. Una venta cuenta en el canal del
+// prospecto del que salió; sin prospecto (cliente cargado a mano), en `sin_origen`.
+const CANAL_DE_ORIGEN = `CASE
+    WHEN lu.lead_id IS NULL THEN 'sin_origen'
+    WHEN (lu.canal_detectado IS NULL OR lu.canal_detectado = 'directo')
+         AND COALESCE(lu.utm_source, '') = '' AND COALESCE(lu.utm_medium, '') = ''
+         AND COALESCE(lu.utm_campaign, '') = '' AND COALESCE(lu.landing_url, '') = ''
+         AND COALESCE(lu.referrer, '') = '' THEN 'sin_origen'
+    ELSE COALESCE(lu.canal_detectado::text, 'directo')
+  END`;
+
+export async function origenDeLosProspectos({ projectId, projectIds, from, to, asesoraId }) {
+  const fv = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const off = fv.params.length;
+  const wl = fl.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
+
+  const { rows } = await query(
+    `WITH ventas AS (
+       SELECT ${CANAL_DE_ORIGEN} AS canal,
+              COUNT(*)::int AS ventas,
+              COUNT(DISTINCT c.lead_id)::int AS clientes,
+              ROUND(COALESCE(SUM(c.importe_total), 0), 2) AS vendido,
+              ROUND(COALESCE(SUM(
+                (SELECT COALESCE(SUM(cp.importe), 0)
+                   FROM conversion_payments cp WHERE cp.conversion_id = c.id)), 0), 2) AS cobrado
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         LEFT JOIN lead_utms lu ON lu.lead_id = c.lead_id
+         ${fv.where}
+          AND NOT c.es_mensualidad
+        GROUP BY 1
+     ),
+     lds AS (
+       SELECT ${CANAL_DE_ORIGEN} AS canal,
+              COUNT(*)::int AS leads,
+              COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM conversions cvx
+                                              WHERE cvx.lead_id = l.id
+                                                AND cvx.fecha_conversion >= ${ENTRY}::date))::int AS leads_convertidos
+         FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
+         LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+         ${wl}
+        GROUP BY 1
+     )
+     SELECT COALESCE(ventas.canal, lds.canal) AS canal,
+            COALESCE(lds.leads, 0) AS leads,
+            COALESCE(lds.leads_convertidos, 0) AS leads_convertidos,
+            CASE WHEN COALESCE(lds.leads, 0) > 0
+                 THEN ROUND(COALESCE(lds.leads_convertidos, 0)::numeric * 100 / lds.leads, 1)
+                 ELSE 0 END AS tasa_conversion,
+            COALESCE(ventas.ventas, 0) AS ventas,
+            COALESCE(ventas.clientes, 0) AS clientes,
+            COALESCE(ventas.vendido, 0) AS vendido,
+            COALESCE(ventas.cobrado, 0) AS cobrado
+       FROM ventas
+       FULL OUTER JOIN lds ON lds.canal = ventas.canal
+      ORDER BY vendido DESC, leads DESC`,
+    [...fv.params, ...fl.params]
+  );
+  const totalLeads = rows.reduce((s, r) => s + Number(r.leads || 0), 0);
+  return rows.map((r) => ({
+    ...r,
+    tasa_conversion: Number(r.tasa_conversion),
+    vendido: Number(r.vendido),
+    cobrado: Number(r.cobrado),
+    // Qué parte de los prospectos del rango es de este canal. En `sin_origen`
+    // es EL porcentaje que dice si la tubería funciona.
+    pct_prospectos: totalLeads > 0 ? Number(((Number(r.leads || 0) * 100) / totalLeads).toFixed(1)) : 0,
+  }));
+}
+
 // Formacion de una venta, en tres niveles. El texto libre viene sucio: se le
 // quitan los prefijos de 'servicio academico' y de 'pago de mensualidad'.
 const FORMACION = `COALESCE(
