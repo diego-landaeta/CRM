@@ -49,6 +49,9 @@ router.get('/usuarios', chat.usuarios);
 router.get('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.formaDeAvisos);
 router.delete('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.olvidarFormaDeAvisos);
 
+// Voz frente a texto en lo que sale (#128). Lo puede mirar cualquiera con
+// acceso: es como trabaja el equipo, no el contenido de nadie.
+router.get('/voz-o-texto', chat.vozOTextoCtrl);
 router.get('/banco', chat.banco);
 router.get('/banco/numeros', chat.bancoNumeros);
 
