@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowsClockwise, GraduationCap, MagnifyingGlass, WarningCircle } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowsClockwise, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Card from '@/shared/components/ui/Card';
 import Select from '@/shared/components/ui/Select';
+import Paginacion from '@/shared/components/ui/Paginacion';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -18,13 +19,28 @@ import DetalleCurso from '../components/DetalleCurso';
 /**
  * Conexión → Moodle → un campus (#335): sus cursos.
  *
- *   estado de los cursos (con su recuento) → buscador y categoría → tabla → detalle de un
- *   curso en un panel lateral.
+ *   volver · estado de los cursos (cinco tarjetas con su recuento) · buscador y categoría
+ *   · tabla paginada · detalle de un curso en un panel lateral.
  *
- * Se llega desde la lista de campus (`/conexion/moodle`), y la cabecera lleva de vuelta.
+ * Se llega desde la lista de campus (`/conexion/moodle`).
  */
 
-const LIMITE = 25;
+const hace = (s: number | undefined) => {
+  if (s === undefined || s < 45) return 'Datos recién leídos de Moodle';
+  const min = Math.round(s / 60);
+  return `Datos de hace ${min} min (se guardan unos minutos)`;
+};
+
+function Volver() {
+  return (
+    <Link
+      to="/conexion/moodle"
+      className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+    >
+      <ArrowLeft size={15} weight="bold" /> Todos los campus
+    </Link>
+  );
+}
 
 export default function MoodleCampusPage() {
   const { campusId } = useParams();
@@ -38,6 +54,7 @@ export default function MoodleCampusPage() {
   const [categoria, setCategoria] = useState<number | null>(null);
   const [categorias, setCategorias] = useState<CategoriaMoodle[]>([]);
   const [pagina, setPagina] = useState(1);
+  const [limite, setLimite] = useState(25);
   const [lista, setLista] = useState<ListaCursos | null>(null);
   const [cargando, setCargando] = useState(false);
   const [errorMoodle, setErrorMoodle] = useState<string | null>(null);
@@ -76,13 +93,13 @@ export default function MoodleCampusPage() {
     setCargando(true);
     setErrorMoodle(null);
     try {
-      const r = await moodleApi.cursos({ proyectoId: id, estado, texto: busqueda, categoriaId: categoria, pagina, limite: LIMITE, refrescar });
+      const r = await moodleApi.cursos({ proyectoId: id, estado, texto: busqueda, categoriaId: categoria, pagina, limite, refrescar });
       setLista(r.data as ListaCursos);
     } catch (e) {
       setLista(null);
       setErrorMoodle((e as Error).message || 'El Moodle de este campus no responde');
     } finally { setCargando(false); }
-  }, [id, conectado, estado, busqueda, categoria, pagina]);
+  }, [id, conectado, estado, busqueda, categoria, pagina, limite]);
   useEffect(() => { cargarCursos(); }, [cargarCursos]);
 
   const opcionesCategoria = useMemo(() => [
@@ -90,14 +107,14 @@ export default function MoodleCampusPage() {
     ...categorias.map((c) => ({ value: c.id as number | null, label: `${'· '.repeat(Math.max(0, c.profundidad - 1))}${c.nombre} (${c.cursos})` })),
   ], [categorias]);
 
+  const hayFiltros = texto !== '' || categoria !== null;
+  const limpiar = () => { setTexto(''); setBusqueda(''); setCategoria(null); setPagina(1); };
   const actualizar = async () => { await cargarCampus(true); await cargarCursos(true); };
 
   const cabecera = (
     <PageHeader
       title={campus?.nombre ?? 'Moodle'}
       subtitle="Cursos de su Moodle · solo lectura"
-      backTo="/conexion/moodle"
-      backLabel="Moodle"
       actions={conectado && (
         <button type="button" onClick={actualizar} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
           <ArrowsClockwise size={15} weight="bold" /> Actualizar
@@ -106,21 +123,23 @@ export default function MoodleCampusPage() {
     />
   );
 
-  if (campus === undefined) return <div className="space-y-4">{cabecera}<SkeletonTable rows={6} columns={5} /></div>;
+  if (campus === undefined) return <div className="space-y-6">{cabecera}<Volver /><SkeletonTable rows={6} columns={5} /></div>;
 
   if (campus === null || !Number.isInteger(id)) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         {cabecera}
-        <Card><EmptyState icon={GraduationCap} title="Este campus no existe o no tienes acceso" description="Elige uno de la lista de campus." action={<Link to="/conexion/moodle" className="text-sm font-semibold text-primary hover:underline">Volver a los campus</Link>} /></Card>
+        <Volver />
+        <Card><EmptyState icon={GraduationCap} title="Este campus no existe o no tienes acceso" description="Elige uno de la lista de campus." /></Card>
       </div>
     );
   }
 
   if (!campus.configurado) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         {cabecera}
+        <Volver />
         <Card>
           <EmptyState
             icon={GraduationCap}
@@ -136,44 +155,70 @@ export default function MoodleCampusPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {cabecera}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Volver />
+        {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
+      </div>
+
       <EstadoDeCursos valor={estado} cursos={campus.cursos} onChange={(e) => { setEstado(e); setPagina(1); }} />
 
       <Card padding="none" overflowHidden>
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <div className="relative min-w-[14rem] flex-1">
-            <MagnifyingGlass size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3.5">
+          <div className="relative min-w-[16rem] flex-1">
+            <MagnifyingGlass size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               placeholder="Buscar un curso por su nombre…"
               aria-label="Buscar un curso"
-              className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
           </div>
           {categorias.length > 0 && (
-            <Select<number | null> ariaLabel="Categoría" value={categoria} onChange={(v) => { setCategoria(v); setPagina(1); }} options={opcionesCategoria} size="sm" />
+            <Select<number | null> ariaLabel="Categoría" value={categoria} onChange={(v) => { setCategoria(v); setPagina(1); }} options={opcionesCategoria} />
           )}
+          {hayFiltros && (
+            <button type="button" onClick={limpiar} className="inline-flex h-10 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+              <X size={14} weight="bold" /> Limpiar
+            </button>
+          )}
+          {lista && <Paginacion variante="compacta" pagina={lista.pagina} limite={lista.limite} total={lista.total} unidad="cursos" onPagina={setPagina} className="ml-auto" />}
         </div>
 
         {errorMoodle ? (
-          <div role="alert" className="m-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
-            <WarningCircle size={18} weight="fill" className="mt-0.5 shrink-0" />
+          <div role="alert" className="m-5 flex items-start gap-3 rounded-lg border border-warning/40 bg-warning-soft p-4 text-sm text-warning-soft-foreground">
+            <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0" />
             <div>
               <p className="font-semibold">El Moodle de {campus.nombre} no ha respondido</p>
-              <p className="text-xs">{errorMoodle}</p>
-              <button type="button" onClick={() => cargarCursos(true)} className="mt-1.5 text-xs font-semibold underline">Reintentar</button>
+              <p className="mt-0.5 text-xs">{errorMoodle}</p>
+              <button type="button" onClick={() => cargarCursos(true)} className="mt-2 text-xs font-semibold underline">Reintentar</button>
             </div>
           </div>
         ) : cargando && !lista ? (
           <SkeletonTable rows={6} columns={5} className="border-0" />
         ) : lista && lista.total === 0 ? (
-          <EmptyState icon={GraduationCap} title="Ningún curso con ese filtro" description="Cambia el estado, la categoría o la búsqueda." />
+          <EmptyState
+            icon={GraduationCap}
+            title="Ningún curso con ese filtro"
+            description="Cambia el estado, la categoría o la búsqueda."
+            action={hayFiltros ? <button type="button" onClick={limpiar} className="text-sm font-semibold text-primary hover:underline">Limpiar los filtros</button> : null}
+          />
         ) : lista ? (
           <div className={cargando ? 'opacity-60 transition-opacity' : undefined}>
-            <TablaCursos cursos={lista.cursos} total={lista.total} pagina={lista.pagina} limite={lista.limite} elegido={curso?.curso_id ?? null} onElegir={setCurso} onPagina={setPagina} />
+            <TablaCursos cursos={lista.cursos} elegido={curso?.curso_id ?? null} onElegir={setCurso} />
+            <Paginacion
+              className="border-t border-border bg-muted/20"
+              pagina={lista.pagina}
+              limite={lista.limite}
+              total={lista.total}
+              unidad="cursos"
+              onPagina={setPagina}
+              onLimite={(n) => { setLimite(n); setPagina(1); }}
+            />
           </div>
         ) : null}
       </Card>

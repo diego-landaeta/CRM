@@ -43,7 +43,7 @@ export default function MoodlePage() {
   }, [campus]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
         title="Moodle"
         subtitle="El Moodle de cada campus · solo lectura"
