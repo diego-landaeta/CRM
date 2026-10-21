@@ -6,7 +6,6 @@ import {
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
 import { HERRAMIENTAS, GRUPO_DE_CONSULTA } from './mcp.tools.js';
-import { campusConMoodle } from './mcp.moodle.cliente.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
 import { accesoSchema, actividadSchema, crearTokenSchema, decisionSchema, idSchema, interruptorSchema } from './mcp.validation.js';
 import * as conexiones from './mcp.conexiones.js';
@@ -29,12 +28,6 @@ async function personaActual(req) {
   const user = await model.findUserById(req.user.userId);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
   return user;
-}
-
-/** Para cada campus de la persona: ¿tiene Moodle conectado? Solo la existencia de la credencial. */
-async function moodleDeLosCampus(proyectos) {
-  const con = await campusConMoodle(proyectos.map((p) => p.id));
-  return proyectos.map((p) => ({ id: p.id, nombre: p.nombre, configurado: con.has(Number(p.id)) }));
 }
 
 /** GET /api/mcp/panel — lo que necesita la pantalla para pintarse. */
@@ -60,8 +53,6 @@ export async function estado(req, res, next) {
         diasSinUso: configRotacion().diasSinUso,
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion, grupo: GRUPO_DE_CONSULTA[h.nombre] || 'Otras' })),
-        // En que campus puede Claude consultar Moodle (hay credencial guardada); sin descifrarla.
-        moodle: await moodleDeLosCampus(proyectos),
         tokens: tokens.map((t) => ({ ...t, codigo: estados.get(t.id) || null })),
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),

@@ -413,7 +413,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           </div>
 
           {/* Que puede consultar */}
-          <ConsultasDisponibles herramientas={estado.herramientas} moodle={estado.moodle ?? []} puedeAdministrar={estado.puedeAdministrar} />
+          <ConsultasDisponibles herramientas={estado.herramientas} verMoodle={estado.puedeAdministrar} />
         </>
       )}
 
