@@ -70,6 +70,7 @@ const primera = async (sql, id, columna = 'conversion_id') => {
 export const ventaPorId = guardia(async (id) => id, 'Venta no encontrada', 'CONVERSION_NOT_FOUND');
 export const cuotaPorId = guardia((id) => primera('SELECT conversion_id FROM conversion_installments WHERE id = $1', id), 'Cuota no encontrada');
 export const pagoPorId = guardia((id) => primera('SELECT conversion_id FROM conversion_payments WHERE id = $1', id), 'Pago no encontrado');
+export const comisionPorId = guardia((id) => primera('SELECT conversion_id FROM commissions WHERE id = $1', id), 'Comisión no encontrada');
 export const devolucionPorId = guardia((id) => primera('SELECT conversion_id FROM conversion_refunds WHERE id = $1', id), 'Devolución no encontrada');
 
 /** `/by-lead/:leadId`: el prospecto ha de ser de sus campus y, si es gestora, suyo. */

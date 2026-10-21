@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as ctrl from './commission.controller.js';
+import { comisionPorId, ventaPorId } from '../conversions/conversion.acceso.js';
+
+// Pagar o recalcular es escribir sobre la venta de alguien: solo de sus campus (como en ventas).
+const deSuCampus = (guardia, param) => (req, res, next) => guardia(req, res, next, req.params[param]);
 
 const router = Router();
 router.use(verifyToken);
@@ -20,9 +24,9 @@ router.get('/', roleGuard('admin', 'superadmin'), ctrl.listAll);
 router.get('/stats', roleGuard('admin', 'superadmin'), ctrl.statsAll);
 
 // Pagar comision (admin/superadmin)
-router.patch('/:id/pay', roleGuard('admin', 'superadmin'), ctrl.pay);
+router.patch('/:id/pay', roleGuard('admin', 'superadmin'), deSuCampus(comisionPorId, 'id'), ctrl.pay);
 
 // Recalcular comision desde conversion (admin/superadmin)
-router.post('/recalculate/:conversionId', roleGuard('admin', 'superadmin'), ctrl.recalculate);
+router.post('/recalculate/:conversionId', roleGuard('admin', 'superadmin'), deSuCampus(ventaPorId, 'conversionId'), ctrl.recalculate);
 
 export default router;
