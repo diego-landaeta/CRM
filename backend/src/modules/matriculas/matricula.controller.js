@@ -4,11 +4,13 @@ import { createSchema, updateSchema, setEstadoSchema } from './matricula.validat
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { urlFirmada, firmaValida } from '../../shared/utils/firmaDeDocumento.js';
+import { exigirCampus } from './matricula.acceso.js';
 
 export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    await exigirCampus(req.user, projectId);
     const data = await model.findAll({
       projectId,
       estado: req.query.estado,
@@ -33,6 +35,7 @@ export async function create(req, res, next) {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    await exigirCampus(req.user, parsed.data.project_id);
     if (parsed.data.conversion_id) {
       const exists = await model.findByConversion(parsed.data.conversion_id);
       if (exists) throw new AppError('Ya existe matricula para esta conversion', 409, 'DUPLICATE');

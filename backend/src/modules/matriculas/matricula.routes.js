@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import { uploadDoc as uploadDocMiddleware } from '../../shared/middleware/upload.js';
 import * as ctrl from './matricula.controller.js';
+import { matriculaPorId } from './matricula.acceso.js';
 
 const router = Router();
+
+// Cada matrícula, solo para su campus (ver matricula.acceso.js). La descarga firmada, sin sesión, pasa.
+router.param('id', matriculaPorId);
 
 /*
   Fuera de `verifyToken`, y ahora con motivo.
