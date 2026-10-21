@@ -32,13 +32,15 @@ const ORIGEN = `https://${MARCA.toLowerCase()}.moodle.test`;
 const TOKEN = `tok${MARCA}0123456789abcdef`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], credenciales: [] };
-let CON; let SIN; let OTRO; let ADMIN; let ADMIN_OTRO; let GESTORA;
+let CON; let SIN; let OTRO; let REV; let ADMIN; let ADMIN_OTRO; let GESTORA;
 
 // El rol sale del token: así se prueba «solo super admin» sin crear superadmins en la base compartida.
 const comoSuper = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: 'superadmin' }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const json = (c) => new Response(JSON.stringify(c), { status: 200, headers: { 'content-type': 'application/json' } });
 const AHORA = () => Math.floor(Date.now() / 1000);
+const ORIGEN_REV = `https://${MARCA.toLowerCase()}.revision.moodle.test`;
+const TOKEN_REV = `rev${MARCA}0123456789abcdef`;
 const ORIGEN_LIMITADO = `https://${MARCA.toLowerCase()}.limitado.moodle.test`;
 const TOKEN_LIMITADO = `lim${MARCA}0123456789abcdef`;
 
@@ -55,6 +57,33 @@ const FUNCIONES = {
   core_course_get_contents: () => [{ id: 1, section: 0, name: '', visible: 1, modules: [{ id: 5, name: 'Bienvenida', modname: 'forum', visible: 1 }] }],
   mod_url_get_urls_by_courses: () => ({ urls: [] }),
   core_completion_get_course_completion_status: () => ({ exception: 'moodle_exception', errorcode: 'nocriteriaset', message: 'No hay criterios' }),
+};
+
+// Un Moodle con 7 cursos activos, uno de cada caso de «Para revisar».
+const HACE_1_DIA = () => AHORA() - 86400;
+const HACE_90_DIAS = () => AHORA() - 90 * 86400;
+const estudiante = (id, ultimo) => ({ id, roles: ALUMNO, lastcourseaccess: ultimo, lastaccess: ultimo });
+const CURSOS_REV = [21, 22, 23, 24, 25, 26, 27].map((id) => ({ id, fullname: `Curso ${id}`, displayname: `Curso ${id}`, shortname: `C${id}`, categoryid: 5, categoryname: 'Másteres', startdate: AHORA() - 100 * 86400, enddate: 0, visible: 1, enablecompletion: 0, format: 'topics' }));
+const MATRICULADOS_REV = {
+  21: [estudiante(1, HACE_1_DIA()), estudiante(2, 0), estudiante(3, 0)], // hay actividad, pero a dos no se les ha visto nunca
+  22: [],                                                                // sin alumnos
+  23: [estudiante(4, HACE_90_DIAS()), estudiante(5, HACE_90_DIAS())],    // dormido: nadie ha entrado en 30 días
+  24: [estudiante(6, HACE_1_DIA()), estudiante(7, HACE_1_DIA())],        // en orden
+  26: [estudiante(8, HACE_1_DIA())],
+  27: [estudiante(9, HACE_1_DIA())],
+};
+let lecturasRev = 0;
+/** true: el Moodle responde «Database connection failed» a las lecturas de alumnos. */
+let sobrecargaRev = false;
+const FUNCIONES_REV = {
+  core_course_get_courses_by_field: () => ({ courses: CURSOS_REV }),
+  core_enrol_get_enrolled_users: async ({ courseid, opciones }) => {
+    lecturasRev += 1;
+    await new Promise((r) => setTimeout(r, 40));
+    if (sobrecargaRev) return { exception: 'dml_connection_exception', errorcode: 'dbconnectionfailed', message: 'Database connection failed' };
+    if (courseid === 25) return { exception: 'moodle_exception', errorcode: 'invalidrecord', message: 'curso raro' }; // este curso falla
+    return Number(opciones.limitfrom || 0) ? [] : (MATRICULADOS_REV[courseid] ?? []);
+  },
 };
 
 // El mismo Moodle, pero al servicio del token le faltan dos funciones.
@@ -76,7 +105,7 @@ beforeAll(async () => {
     ids.projects.push(p.id);
     return p.id;
   };
-  CON = await proy('con'); SIN = await proy('sin'); OTRO = await proy('otro');
+  CON = await proy('con'); SIN = await proy('sin'); OTRO = await proy('otro'); REV = await proy('rev');
   const persona = async (n, role, campus) => {
     const [u] = await q(`INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id, role`,
       [`${MARCA} ${n}`, `${n.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]);
@@ -84,11 +113,13 @@ beforeAll(async () => {
     for (const c of campus) await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [u.id, c]);
     return u;
   };
-  ADMIN = await persona('ADMIN', 'admin', [CON, SIN]);
+  ADMIN = await persona('ADMIN', 'admin', [CON, SIN, REV]);
   ADMIN_OTRO = await persona('ADMINOTRO', 'admin', [OTRO]);
   GESTORA = await persona('GESTORA', 'gestor', [CON]);
   const cred = await credenciales.upsert({ project_id: CON, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN, token: TOKEN }) });
   ids.credenciales.push(cred.id);
+  const credRev = await credenciales.upsert({ project_id: REV, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN_REV, token: TOKEN_REV }) });
+  ids.credenciales.push(credRev.id);
 }, 60000);
 
 afterAll(async () => {
@@ -103,13 +134,13 @@ beforeEach(() => {
   moodleMod.vaciarCacheMoodle();
   const original = globalThis.fetch;
   vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
-    const mundo = { [ORIGEN]: { token: TOKEN, f: FUNCIONES }, [ORIGEN_LIMITADO]: { token: TOKEN_LIMITADO, f: FUNCIONES_LIMITADAS } };
+    const mundo = { [ORIGEN]: { token: TOKEN, f: FUNCIONES }, [ORIGEN_LIMITADO]: { token: TOKEN_LIMITADO, f: FUNCIONES_LIMITADAS }, [ORIGEN_REV]: { token: TOKEN_REV, f: FUNCIONES_REV } };
     const m = Object.entries(mundo).find(([o]) => String(url) === `${o}/webservice/rest/server.php`);
     if (!m) return original(url, init);
     const p = new URLSearchParams(init.body);
     if (p.get('wstoken') !== m[1].token) return json({ exception: 'moodle_exception', errorcode: 'invalidtoken', message: 'x' });
     const f = m[1].f[p.get('wsfunction')];
-    return f ? json(f(parametros(p))) : json({ exception: 'webservice_access_exception', errorcode: 'accessexception', message: 'x' });
+    return f ? json(await f(parametros(p))) : json({ exception: 'webservice_access_exception', errorcode: 'accessexception', message: 'x' });
   }));
 });
 
@@ -117,10 +148,13 @@ describe('el panel de Moodle', () => {
   it('cada campus con su estado: el conectado trae sus cifras y el otro, nada inventado', async () => {
     const r = await request.get('/api/moodle/campus').set(como(ADMIN));
     expect(r.status).toBe(200);
-    const [primero, segundo] = r.body.data.campus;
-    expect(primero).toMatchObject({ id: CON, configurado: true, cursos: { total: 2, activos: 1, ocultos: 1 } });
-    expect(segundo).toMatchObject({ id: SIN, configurado: false });
-    expect(segundo.cursos).toBeUndefined();
+    const por = Object.fromEntries(r.body.data.campus.map((c) => [c.id, c]));
+    expect(por[CON]).toMatchObject({ configurado: true, cursos: { total: 2, activos: 1, ocultos: 1 } });
+    expect(por[SIN]).toMatchObject({ configurado: false });
+    expect(por[SIN].cursos).toBeUndefined();
+    // Los conectados, primero.
+    const orden = r.body.data.campus.map((c) => c.configurado);
+    expect(orden).toEqual([...orden].sort((x, y) => Number(y) - Number(x)));
   });
 
   it('con proyecto_id solo ese campus, y uno ajeno es un 403', async () => {
@@ -277,5 +311,94 @@ describe('conectar el Moodle de un campus', () => {
     const r = await conectar(comoSuper(ADMIN), SIN, { token: TOKEN });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/dirección/);
+  });
+});
+
+describe('«Para revisar»: los cursos activos que conviene mirar', () => {
+  const revisar = (u, id, q = '') => request.get(`/api/moodle/campus/${id}/revision${q}`).set(u);
+  beforeEach(() => { lecturasRev = 0; sobrecargaRev = false; delete process.env.MCP_MOODLE_REVISION_MS; delete process.env.MCP_MOODLE_REVISION_ESPERA_MS; });
+
+  it('cada curso cae en UN caso: sin alumnos, dormido, o con alumnos que nunca han entrado', async () => {
+    const r = await revisar(como(ADMIN), REV);
+    expect(r.status).toBe(200);
+    const d = r.body.data;
+    expect(d).toMatchObject({ total: 7, revisados: 6, no_leidos: 1, pendientes: 0 });
+    expect(d.hallazgos.sin_alumnos.map((c) => c.curso_id)).toEqual([22]);
+    expect(d.hallazgos.dormidos.map((c) => [c.curso_id, c.alumnos])).toEqual([[23, 2]]);
+    expect(d.hallazgos.con_nunca_entraron.map((c) => [c.curso_id, c.alumnos, c.nunca_han_entrado])).toEqual([[21, 3, 2]]);
+    // El curso en orden (24) y los de un alumno activo (26, 27) no salen en ninguna lista.
+    const todos = Object.values(d.hallazgos).flat().map((c) => c.curso_id);
+    expect(todos).not.toEqual(expect.arrayContaining([24]));
+  });
+
+  it('un curso que falla se cuenta aparte: ni bloquea la revisión ni se disfraza de «sin alumnos»', async () => {
+    const d = (await revisar(como(ADMIN), REV)).body.data;
+    expect(d.no_leidos).toBe(1);
+    expect(d.hallazgos.sin_alumnos.map((c) => c.curso_id)).not.toContain(25);
+  });
+
+  it('por tandas: con poco tiempo devuelve lo que lleve, y lo ya leído no se vuelve a leer', async () => {
+    process.env.MCP_MOODLE_REVISION_MS = '1';
+    const primera = (await revisar(como(ADMIN), REV)).body.data;
+    expect(primera.pendientes).toBeGreaterThan(0);
+    expect(primera.revisados).toBeLessThan(6);
+    const leidasAntes = lecturasRev;
+    delete process.env.MCP_MOODLE_REVISION_MS;
+    const segunda = (await revisar(como(ADMIN), REV)).body.data;
+    expect(segunda).toMatchObject({ pendientes: 0, revisados: 6, no_leidos: 1 });
+    // La segunda solo leyó los cursos que faltaban.
+    expect(lecturasRev - leidasAntes).toBe(7 - primera.revisados - primera.no_leidos);
+  });
+
+  it('si Moodle dice que va justo de carga, la revisión PARA y espera: no insiste, no lo da por fallo del curso', async () => {
+    process.env.MCP_MOODLE_REVISION_ESPERA_MS = '300';
+    sobrecargaRev = true;
+    const primera = (await revisar(como(ADMIN), REV)).body.data;
+    expect(primera.saturado).toBe(true);
+    expect(primera.espera_s).toBeGreaterThan(0);
+    expect(primera.no_leidos).toBe(0); // los que fallaron por carga no se dan por «no leídos»
+    expect(primera.pendientes).toBeGreaterThan(0);
+    // Mientras dura la espera no se le pide NADA más a ese Moodle.
+    const antes = lecturasRev;
+    const seguida = (await revisar(como(ADMIN), REV)).body.data;
+    expect(lecturasRev).toBe(antes);
+    expect(seguida.saturado).toBe(true);
+    // Pasada la espera y recuperado el Moodle, se acaba la revisión.
+    sobrecargaRev = false;
+    await new Promise((r) => setTimeout(r, 400));
+    const final = (await revisar(como(ADMIN), REV)).body.data;
+    expect(final).toMatchObject({ saturado: false, pendientes: 0, revisados: 6, no_leidos: 1 });
+  });
+
+  it('lee pocos cursos a la vez, no todos de golpe', async () => {
+    let maximo = 0; let ahora = 0;
+    const original = FUNCIONES_REV.core_enrol_get_enrolled_users;
+    FUNCIONES_REV.core_enrol_get_enrolled_users = async (...a) => { ahora += 1; maximo = Math.max(maximo, ahora); try { return await original(...a); } finally { ahora -= 1; } };
+    try {
+      await revisar(como(ADMIN), REV);
+      expect(maximo).toBeLessThanOrEqual(2);
+    } finally { FUNCIONES_REV.core_enrol_get_enrolled_users = original; }
+  });
+
+  it('con la caché caliente no vuelve a preguntar a Moodle; con refrescar, sí', async () => {
+    await revisar(como(ADMIN), REV);
+    const antes = lecturasRev;
+    await revisar(como(ADMIN), REV);
+    expect(lecturasRev).toBe(antes);
+    await revisar(como(ADMIN), REV, '?refrescar=1');
+    expect(lecturasRev).toBeGreaterThan(antes);
+  });
+
+  it('un campus sin Moodle: error claro; uno ajeno: 403; una gestora, fuera', async () => {
+    expect((await revisar(como(ADMIN), SIN)).status).toBe(409);
+    expect((await revisar(como(ADMIN_OTRO), REV)).status).toBe(403);
+    expect((await revisar(como(GESTORA), REV)).status).toBe(403);
+  });
+
+  it('solo recuentos: ni un nombre de persona ni el token ni la dirección', async () => {
+    const texto = JSON.stringify((await revisar(como(ADMIN), REV)).body);
+    expect(texto).not.toContain(TOKEN_REV);
+    expect(texto).not.toContain(ORIGEN_REV);
+    expect(texto).not.toMatch(/email|fullname|@/);
   });
 });

@@ -410,6 +410,8 @@ export const HERRAMIENTAS = [
       estado: z.enum(['activos', 'proximos', 'terminados', 'ocultos', 'todos']).default('activos'),
       texto: z.string().max(100).optional().describe('Parte del nombre del curso'),
       categoria_id: z.number().int().positive().optional().describe('Una categoría de Moodle (id de «moodle_estructura»)'),
+      orden: z.enum(['nombre', 'inicio', 'fin', 'categoria']).default('nombre').describe('Por qué se ordenan los cursos (los que no tienen ese dato van al final)'),
+      sentido: z.enum(['asc', 'desc']).default('asc').describe('desc: de mayor a menor (p. ej. orden inicio + desc = los más recientes primero)'),
       con_alumnos: z.boolean().default(true).describe('false: no cuenta los alumnos de cada curso (más rápido)'),
       refrescar: z.boolean().optional().describe('true: salta la caché y pregunta a Moodle ahora'),
       ...PAGINA,

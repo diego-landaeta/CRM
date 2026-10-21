@@ -47,7 +47,7 @@ const cache = new Map();
 const ttlMs = () => enteroEnv('MCP_MOODLE_CACHE_MIN', 5, { cero: true }) * 60_000;
 const maxEntradasCache = () => enteroEnv('MCP_MOODLE_CACHE_MAX', 50);
 
-export const vaciarCacheMoodle = () => cache.clear();
+export const vaciarCacheMoodle = () => { cache.clear(); revisiones.clear(); };
 export const entradasEnCacheMoodle = () => cache.size;
 
 const huellaDeCredencial = (cred) => crypto.createHash('sha256').update(`${cred.url}\0${cred.token}`).digest('hex').slice(0, 16);
@@ -145,6 +145,24 @@ async function categoriasDe(campus, a, signal) {
     }
   }
   return dentro;
+}
+
+/** Cómo se pueden ordenar los cursos. Los que no tienen la fecha o la categoría van siempre al final. */
+export const ORDENES_DE_CURSOS = ['nombre', 'inicio', 'fin', 'categoria'];
+
+function comparadorDeCursos(orden = 'nombre', sentido = 'asc') {
+  const dir = sentido === 'desc' ? -1 : 1;
+  const porNombre = (x, y) => x.nombre.localeCompare(y.nombre);
+  if (orden === 'nombre') return (x, y) => dir * porNombre(x, y);
+  const campo = orden === 'categoria' ? 'categoria' : orden === 'fin' ? 'fin' : 'inicio';
+  return (x, y) => {
+    const vx = x[campo] ?? '';
+    const vy = y[campo] ?? '';
+    if (!vx && !vy) return porNombre(x, y);
+    if (!vx) return 1; // sin dato: al final, ordene como ordene
+    if (!vy) return -1;
+    return dir * vx.localeCompare(vy) || porNombre(x, y);
+  };
 }
 
 const filaDeCurso = (c, campus, ahoraS) => ({
@@ -270,7 +288,7 @@ export async function moodleCursos(ambito, a, { signal } = {}) {
 
   const filas = bien
     .flatMap((b) => b.datos.filtrados.map((c) => filaDeCurso(c, b.campus, ahoraS)))
-    .sort((x, y) => x.campus.localeCompare(y.campus) || x.nombre.localeCompare(y.nombre));
+    .sort((x, y) => x.campus.localeCompare(y.campus) || comparadorDeCursos(a.orden, a.sentido)(x, y));
   const pagina = a.pagina ?? 1;
   const limite = a.limite ?? 25;
   const pag = filas.slice((pagina - 1) * limite, pagina * limite);
@@ -770,4 +788,130 @@ export async function moodleEstructura(ambito, a, { signal } = {}) {
     campus_con_error: errores,
     nota: 'Las categorías de cursos de cada Moodle, con cuántos cursos tiene cada una (los que cuenta Moodle, incluidos los ocultos que el token pueda ver).',
   };
+}
+
+// ─── La revisión de un campus: lo que conviene mirar (#335) ───────────────
+
+/**
+ * Lo leído de cada curso activo en la última revisión, por campus. Va aparte de la caché de
+ * arriba, que tiene tope de entradas (50): un campus tiene cientos de cursos y se perdería.
+ * Solo guarda recuentos, nunca personas.
+ */
+const revisiones = new Map();
+const MAX_CAMPUS_REVISADOS = 20;
+const ttlRevisionMs = () => enteroEnv('MCP_MOODLE_REVISION_MIN', 10, { cero: true }) * 60_000;
+/** Cuánto trabaja UNA petición antes de devolver lo que lleve (la pantalla vuelve a pedir el resto). */
+const presupuestoDeRevisionMs = () => enteroEnv('MCP_MOODLE_REVISION_MS', 12000);
+
+/**
+ * CUIDADO CON EL MOODLE DE VERDAD. Revisar un campus son cientos de lecturas a un Moodle en
+ * producción, con alumnos dentro. Con cinco a la vez, el de Psiko contestó «Database connection
+ * failed» a una de cada seis. Por eso: pocas a la vez, una pausa corta entre cursos y, si Moodle
+ * dice que va justo de carga, la revisión PARA y espera (no insiste ni lo da por fallo del curso).
+ */
+const concurrenciaDeRevision = () => Math.max(1, enteroEnv('MCP_MOODLE_REVISION_CONCURRENCIA', 2));
+const pausaEntreCursosMs = () => enteroEnv('MCP_MOODLE_REVISION_PAUSA_MS', 150, { cero: true });
+const esperaSiSaturadoMs = () => enteroEnv('MCP_MOODLE_REVISION_ESPERA_MS', 30_000);
+const esSobrecarga = (err) => err instanceof ErrorMoodle && err.moodle === 'dbconnectionfailed';
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function resumenDeUnCurso(campus, cursoId, ahoraS, signal) {
+  const { lista, truncado } = await leerMatriculados(campus.cred, cursoId, { campos: 'id,roles,lastaccess,lastcourseaccess', signal });
+  const alumnos = lista.filter(esAlumno);
+  const desdeS = ahoraS - 30 * SEGUNDOS_DIA;
+  const ultimo = (u) => Number(u.lastcourseaccess !== undefined ? u.lastcourseaccess : u.lastaccess) || 0;
+  return {
+    matriculados: alumnos.length,
+    nunca: alumnos.filter((u) => !ultimo(u)).length,
+    activos: alumnos.filter((u) => ultimo(u) >= desdeS).length,
+    truncado,
+  };
+}
+
+/** Un fallo de TODO el campus (no de un curso): se corta la revisión en vez de apuntarlo curso a curso. */
+export const FALLOS_DEL_CAMPUS = ['token_no_valido', 'sin_respuesta', 'servicios_web_apagados', 'redireccion', 'http'];
+
+/**
+ * Qué cursos ACTIVOS de un campus conviene mirar, sin entrar a Moodle a abrirlos uno a uno:
+ *
+ *   · sin alumnos: ninguna persona matriculada;
+ *   · dormidos: tienen alumnos y ninguno ha entrado en 30 días;
+ *   · con alumnos que nunca han entrado: hay actividad, pero a algunos no se les ha visto
+ *     nunca (cada curso cae en UNA sola de las tres, por ese orden).
+ *
+ * Revisar un campus es una lectura por curso, así que se hace por tandas: cada petición
+ * trabaja hasta MCP_MOODLE_REVISION_MS y devuelve lo que lleve con `pendientes`; quien llama
+ * vuelve a pedir hasta que sea 0. Lo ya leído se guarda MCP_MOODLE_REVISION_MIN minutos.
+ * Un curso que falla no se reintenta en esa ventana y cuenta en `no_leidos`: ni bloquea la
+ * revisión ni se disfraza de «sin alumnos».
+ */
+export async function revisarCampus(ambito, a, { signal } = {}) {
+  const projectIds = acotarProyectos(ambito, a);
+  if (projectIds.length !== 1) {
+    throw new AppError('La revisión es de un campus: indica proyecto_id.', 400, 'MCP_FALTA_CAMPUS');
+  }
+  const ahoraS = Math.floor(Date.now() / 1000);
+  const { bien, errores } = await porCampus(ambito, projectIds, async (campus) => {
+    const { datos: cursos } = await cursosDelCampus(campus, a.refrescar === true, signal);
+    const activos = cursos.filter((c) => estadoDelCurso(c, ahoraS) === 'activo');
+
+    const clave = `${campus.id}:${huellaDeCredencial(campus.cred)}`;
+    let entrada = revisiones.get(clave);
+    if (!entrada || a.refrescar === true || Date.now() - entrada.en > ttlRevisionMs()) {
+      entrada = { en: Date.now(), cursos: new Map(), fallidos: new Set(), pausaHasta: 0 };
+      revisiones.delete(clave);
+      revisiones.set(clave, entrada);
+      while (revisiones.size > MAX_CAMPUS_REVISADOS) revisiones.delete(revisiones.keys().next().value);
+    }
+
+    const porLeer = activos.filter((c) => !entrada.cursos.has(c.id) && !entrada.fallidos.has(c.id));
+    const fin = Date.now() + presupuestoDeRevisionMs();
+    // Si hace nada Moodle dijo que iba justo, no se le pide nada hasta que pase la espera.
+    if (Date.now() >= entrada.pausaHasta) {
+      await mapConLimite(porLeer, concurrenciaDeRevision(), async (c) => {
+        if (Date.now() > fin || Date.now() < entrada.pausaHasta || signal?.aborted) return;
+        try {
+          entrada.cursos.set(c.id, await resumenDeUnCurso(campus, c.id, ahoraS, signal));
+        } catch (err) {
+          if (signal?.aborted) throw err;
+          if (esSobrecarga(err)) {
+            // Va justo de carga: se para todo y se reintenta luego. NO es un fallo de este curso.
+            entrada.pausaHasta = Date.now() + esperaSiSaturadoMs();
+            return;
+          }
+          if (err instanceof ErrorMoodle && FALLOS_DEL_CAMPUS.includes(err.codigo)) throw err;
+          entrada.fallidos.add(c.id);
+        }
+        await dormir(pausaEntreCursosMs());
+      });
+    }
+
+    const leidos = activos.filter((c) => entrada.cursos.has(c.id));
+    const noLeidos = activos.filter((c) => entrada.fallidos.has(c.id)).length;
+    const hallazgos = { sin_alumnos: [], dormidos: [], con_nunca_entraron: [] };
+    for (const c of leidos) {
+      const r = entrada.cursos.get(c.id);
+      const fila = { ...filaDeCurso(c, campus, ahoraS), alumnos: r.matriculados };
+      if (r.matriculados === 0) hallazgos.sin_alumnos.push(fila);
+      else if (r.activos === 0) hallazgos.dormidos.push(fila);
+      else if (r.nunca > 0) hallazgos.con_nunca_entraron.push({ ...fila, nunca_han_entrado: r.nunca });
+    }
+    hallazgos.dormidos.sort((x, y) => y.alumnos - x.alumnos || x.nombre.localeCompare(y.nombre));
+    hallazgos.con_nunca_entraron.sort((x, y) => y.nunca_han_entrado - x.nunca_han_entrado || x.nombre.localeCompare(y.nombre));
+    hallazgos.sin_alumnos.sort((x, y) => x.nombre.localeCompare(y.nombre));
+
+    const espera = Math.max(0, entrada.pausaHasta - Date.now());
+    return {
+      total: activos.length,
+      revisados: leidos.length,
+      no_leidos: noLeidos,
+      pendientes: activos.length - leidos.length - noLeidos,
+      // Moodle dijo que iba justo de carga: la pantalla espera estos segundos antes de volver a pedir.
+      saturado: espera > 0,
+      espera_s: Math.ceil(espera / 1000),
+      hallazgos,
+    };
+  });
+  if (!bien.length) throw todosFallaron(errores);
+  return bien[0].datos;
 }

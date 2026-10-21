@@ -1,30 +1,60 @@
+import { CaretDown, CaretUp, CaretUpDown } from '@phosphor-icons/react';
 import StatusDot from '@/shared/components/ui/StatusDot';
 import { cn } from '@/shared/lib/utils';
-import type { CursoMoodle } from '../api/moodle.api';
+import type { CursoMoodle, OrdenCursos, SentidoOrden } from '../api/moodle.api';
 import { ESTADO_DEL_CURSO, fecha } from '../lib/formato';
 
 /**
- * Los cursos de un campus. Pulsar uno abre su detalle (alumnos, contenido y recursos).
+ * Los cursos de un campus. Pulsar uno abre su detalle (alumnos, contenido y recursos); pulsar
+ * una cabecera (Curso, Categoría, Inicio, Fin) los ordena, y otra vez, al revés.
  * Solo la tabla: la paginación va fuera, para poder ponerla arriba y abajo.
  */
 const TH = 'px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground';
 
-export default function TablaCursos({ cursos, elegido, onElegir }: {
+function Cabecera({ campo, etiqueta, orden, sentido, onOrden, alineada = 'izquierda' }: {
+  campo: OrdenCursos;
+  etiqueta: string;
+  orden: OrdenCursos;
+  sentido: SentidoOrden;
+  onOrden: (campo: OrdenCursos) => void;
+  alineada?: 'izquierda' | 'derecha';
+}) {
+  const activa = orden === campo;
+  const Icono = !activa ? CaretUpDown : sentido === 'asc' ? CaretUp : CaretDown;
+  return (
+    <th scope="col" className={cn(TH, alineada === 'derecha' && 'text-right')} aria-sort={activa ? (sentido === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={() => onOrden(campo)}
+        className={cn('inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground focus:outline-none focus-visible:underline', activa && 'text-foreground')}
+      >
+        {etiqueta}
+        <Icono size={12} weight={activa ? 'bold' : 'regular'} aria-hidden="true" className={cn(!activa && 'opacity-50')} />
+      </button>
+    </th>
+  );
+}
+
+export default function TablaCursos({ cursos, elegido, onElegir, orden, sentido, onOrden }: {
   cursos: CursoMoodle[];
   elegido: number | null;
   onElegir: (curso: CursoMoodle) => void;
+  orden: OrdenCursos;
+  sentido: SentidoOrden;
+  onOrden: (campo: OrdenCursos) => void;
 }) {
+  const cab = { orden, sentido, onOrden };
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm" data-testid="tabla-cursos">
         <thead className="bg-muted/40">
           <tr className="border-b border-border">
-            <th scope="col" className={TH}>Curso</th>
-            <th scope="col" className={TH}>Categoría</th>
+            <Cabecera campo="nombre" etiqueta="Curso" {...cab} />
+            <Cabecera campo="categoria" etiqueta="Categoría" {...cab} />
             <th scope="col" className={TH}>Estado</th>
             <th scope="col" className={cn(TH, 'text-right')}>Alumnos</th>
-            <th scope="col" className={TH}>Inicio</th>
-            <th scope="col" className={TH}>Fin</th>
+            <Cabecera campo="inicio" etiqueta="Inicio" {...cab} />
+            <Cabecera campo="fin" etiqueta="Fin" {...cab} />
           </tr>
         </thead>
         <tbody className="divide-y divide-border">

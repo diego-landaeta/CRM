@@ -138,6 +138,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Claude pide conectarse', agrupa: false,
     descripcion: 'Un Claude se ha conectado con tu URL del MCP y espera a que lo autorices',
   },
+  // Moodle (#335): el de un campus ha dejado de responder o su token ya no vale. Lo arregla un
+  // super admin (nuevo token en Conexión → Moodle, o revisar el servidor del campus).
+  moodle_campus_caido: {
+    clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
+    descripcion: 'El Moodle de un campus no responde o su token ya no vale',
+  },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
     descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',

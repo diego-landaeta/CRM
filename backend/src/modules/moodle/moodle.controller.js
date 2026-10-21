@@ -43,6 +43,8 @@ const cursosQ = campusQ.extend({
   estado: z.enum(ESTADOS).default('activos'),
   texto: z.string().max(100).optional(),
   categoria_id: num.optional(),
+  orden: z.enum(['nombre', 'inicio', 'fin', 'categoria']).default('nombre'),
+  sentido: z.enum(['asc', 'desc']).default('asc'),
   pagina: num.default(1),
   limite: z.coerce.number().int().min(1).max(100).default(25),
 });
@@ -86,6 +88,20 @@ export async function cursos(req, res, next) {
     const q = validar(cursosQ, req.query);
     const r = await conTope((o) => moodle.moodleCursos(ambito, { ...q, refrescar: refrescar(req.query) }, o));
     res.json({ success: true, data: { total: r.total, pagina: r.pagina, limite: r.limite, cursos: r.cursos, resumen: r.por_campus[0] } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/moodle/campus/:id/revision — los cursos activos que conviene mirar: sin alumnos, dormidos,
+ * o con alumnos que nunca han entrado. Por tandas: mientras `pendientes` > 0, la pantalla vuelve a pedirla.
+ */
+export async function revision(req, res, next) {
+  try {
+    const ambito = await ambitoDe(req);
+    const { id } = validar(z.object({ id: num }), req.params);
+    campusPropio(ambito, id);
+    const r = await conTope((o) => moodle.revisarCampus(ambito, { proyecto_id: id, refrescar: refrescar(req.query) }, o));
+    res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
 

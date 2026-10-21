@@ -5,6 +5,8 @@ import client from '@/shared/api/client';
 
 export type EstadoCurso = 'activo' | 'proximo' | 'terminado' | 'oculto';
 export type FiltroEstado = 'activos' | 'proximos' | 'terminados' | 'ocultos' | 'todos';
+export type OrdenCursos = 'nombre' | 'inicio' | 'fin' | 'categoria';
+export type SentidoOrden = 'asc' | 'desc';
 
 export interface CampusMoodle {
   id: number;
@@ -38,6 +40,30 @@ export interface ListaCursos {
   limite: number;
   cursos: CursoMoodle[];
   resumen: { cursos_en_moodle: number; de_cache: boolean; actualizado_hace_s: number };
+}
+
+/** Un curso que sale en «Para revisar»: los datos de siempre más lo que lo hace salir. */
+export interface CursoParaRevisar extends CursoMoodle {
+  alumnos: number;
+  /** Solo en «con alumnos que nunca han entrado». */
+  nunca_han_entrado?: number;
+}
+
+/** Qué cursos activos de un campus conviene mirar. Se calcula por tandas: mientras `pendientes` > 0, se vuelve a pedir. */
+export interface RevisionCampus {
+  total: number;
+  revisados: number;
+  /** Cursos que no se pudieron leer: ni salen como «sin alumnos» ni se cuentan como revisados. */
+  no_leidos: number;
+  pendientes: number;
+  /** Moodle dijo que iba justo de carga: hay que esperar `espera_s` segundos antes de volver a pedir. */
+  saturado: boolean;
+  espera_s: number;
+  hallazgos: {
+    sin_alumnos: CursoParaRevisar[];
+    dormidos: CursoParaRevisar[];
+    con_nunca_entraron: CursoParaRevisar[];
+  };
 }
 
 export interface CategoriaMoodle {
@@ -113,13 +139,17 @@ export const moodleApi = {
   /** Todos los campus, o solo uno con `proyectoId` (la pantalla de un campus no pregunta a los demás Moodle). */
   campus: (p: { proyectoId?: number; refrescar?: boolean } = {}) =>
     client.get('/moodle/campus', { params: { ...(p.proyectoId ? { proyecto_id: p.proyectoId } : {}), ...(p.refrescar ? { refrescar: 1 } : {}) } }),
-  cursos: (p: { proyectoId: number; estado: FiltroEstado; texto?: string; categoriaId?: number | null; pagina: number; limite?: number; refrescar?: boolean }) =>
+  revision: (proyectoId: number, refrescar = false) =>
+    client.get(`/moodle/campus/${proyectoId}/revision`, { params: refrescar ? { refrescar: 1 } : {} }),
+  cursos: (p: { proyectoId: number; estado: FiltroEstado; texto?: string; categoriaId?: number | null; pagina: number; limite?: number; orden?: OrdenCursos; sentido?: SentidoOrden; refrescar?: boolean }) =>
     client.get('/moodle/cursos', {
       params: {
         proyecto_id: p.proyectoId,
         estado: p.estado,
         pagina: p.pagina,
         limite: p.limite ?? 25,
+        orden: p.orden ?? 'nombre',
+        sentido: p.sentido ?? 'asc',
         ...(p.texto ? { texto: p.texto } : {}),
         ...(p.categoriaId ? { categoria_id: p.categoriaId } : {}),
         ...(p.refrescar ? { refrescar: 1 } : {}),

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowsClockwise, GearSix, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -11,22 +11,31 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  moodleApi, type CampusMoodle, type CategoriaMoodle, type CursoMoodle, type FiltroEstado, type ListaCursos, type RespuestaCampus,
+  moodleApi, type CampusMoodle, type CategoriaMoodle, type CursoMoodle, type FiltroEstado, type ListaCursos, type OrdenCursos, type RespuestaCampus, type SentidoOrden,
 } from '../api/moodle.api';
 import ConectarMoodle from '../components/ConectarMoodle';
 import AjustesConexion from '../components/AjustesConexion';
 import EstadoDeCursos from '../components/EstadoDeCursos';
 import TablaCursos from '../components/TablaCursos';
 import DetalleCurso from '../components/DetalleCurso';
+import ParaRevisar from '../components/ParaRevisar';
 
 /**
  * Conexión → Moodle → un campus (#335): sus cursos.
  *
- *   volver · estado de los cursos (cinco tarjetas con su recuento) · buscador y categoría
- *   · tabla paginada · detalle de un curso en un panel lateral.
+ *   volver · estado de los cursos (cinco tarjetas con su recuento) · «Para revisar» · buscador y
+ *   categoría · tabla ordenable y paginada · detalle de un curso en un panel lateral.
  *
+ * Lo que se está viendo (estado, búsqueda, categoría, orden, página y filas) vive en la
+ * DIRECCIÓN: recargar, volver atrás o pasar el enlace a otra persona deja la pantalla como estaba.
  * Se llega desde la lista de campus (`/conexion/moodle`).
  */
+
+const ESTADOS: FiltroEstado[] = ['activos', 'proximos', 'terminados', 'ocultos', 'todos'];
+const ORDENES: OrdenCursos[] = ['nombre', 'categoria', 'inicio', 'fin'];
+const FILAS = [10, 25, 50, 100];
+/** Lo que NO se escribe en la dirección: es lo de siempre. */
+const POR_DEFECTO: Record<string, string> = { estado: 'activos', orden: 'nombre', sentido: 'asc', filas: '25', pagina: '1' };
 
 const hace = (s: number | undefined) => {
   if (s === undefined || s < 45) return 'Datos recién leídos de Moodle';
@@ -51,13 +60,31 @@ export default function MoodleCampusPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
 
   const [campus, setCampus] = useState<CampusMoodle | null | undefined>(undefined); // undefined = cargando; null = no existe
-  const [estado, setEstado] = useState<FiltroEstado>('activos');
-  const [texto, setTexto] = useState('');
-  const [busqueda, setBusqueda] = useState('');
-  const [categoria, setCategoria] = useState<number | null>(null);
+  const [params, setParams] = useSearchParams();
+  const estadoUrl = params.get('estado') as FiltroEstado;
+  const estado: FiltroEstado = ESTADOS.includes(estadoUrl) ? estadoUrl : 'activos';
+  const busqueda = params.get('q') ?? '';
+  const categoria = Number(params.get('cat')) > 0 ? Number(params.get('cat')) : null;
+  const pagina = Math.max(1, Number(params.get('pagina')) || 1);
+  const limiteUrl = Number(params.get('filas'));
+  const limite = FILAS.includes(limiteUrl) ? limiteUrl : 25;
+  const ordenUrl = params.get('orden') as OrdenCursos;
+  const orden: OrdenCursos = ORDENES.includes(ordenUrl) ? ordenUrl : 'nombre';
+  const sentido: SentidoOrden = params.get('sentido') === 'desc' ? 'desc' : 'asc';
+  /** Cambia lo que se ve: lo escribe en la dirección (sin añadir una entrada al historial por cada tecla). */
+  const cambiar = useCallback((cambios: Record<string, string | number | null>) => {
+    setParams((previos) => {
+      const nuevos = new URLSearchParams(previos);
+      for (const [k, v] of Object.entries(cambios)) {
+        if (v === null || v === '' || String(v) === POR_DEFECTO[k]) nuevos.delete(k);
+        else nuevos.set(k, String(v));
+      }
+      return nuevos;
+    }, { replace: true });
+  }, [setParams]);
+  const [texto, setTexto] = useState(busqueda);
   const [categorias, setCategorias] = useState<CategoriaMoodle[]>([]);
-  const [pagina, setPagina] = useState(1);
-  const [limite, setLimite] = useState(25);
+  const [version, setVersion] = useState(0);
   const [lista, setLista] = useState<ListaCursos | null>(null);
   const [cargando, setCargando] = useState(false);
   const [errorMoodle, setErrorMoodle] = useState<string | null>(null);
@@ -82,16 +109,17 @@ export default function MoodleCampusPage() {
   }, [id]);
   useEffect(() => { setCampus(undefined); cargarCampus(); }, [cargarCampus]);
 
-  // Medio segundo después de dejar de escribir.
+  // Medio segundo después de dejar de escribir, la búsqueda pasa a la dirección.
   useEffect(() => {
-    const t = setTimeout(() => { setBusqueda(texto.trim()); setPagina(1); }, 400);
+    if (texto.trim() === busqueda) return undefined;
+    const t = setTimeout(() => cambiar({ q: texto.trim(), pagina: null }), 400);
     return () => clearTimeout(t);
-  }, [texto]);
+  }, [texto, busqueda, cambiar]);
 
   const conectado = !!campus?.configurado;
 
   useEffect(() => {
-    setCategorias([]); setCategoria(null); setCurso(null); setLista(null); setErrorMoodle(null); setPagina(1);
+    setCategorias([]); setCurso(null); setLista(null); setErrorMoodle(null);
     if (!conectado) return;
     moodleApi.categorias(id)
       .then((r) => setCategorias((r.data as { categorias: CategoriaMoodle[] }).categorias))
@@ -103,13 +131,13 @@ export default function MoodleCampusPage() {
     setCargando(true);
     setErrorMoodle(null);
     try {
-      const r = await moodleApi.cursos({ proyectoId: id, estado, texto: busqueda, categoriaId: categoria, pagina, limite, refrescar });
+      const r = await moodleApi.cursos({ proyectoId: id, estado, texto: busqueda, categoriaId: categoria, pagina, limite, orden, sentido, refrescar });
       setLista(r.data as ListaCursos);
     } catch (e) {
       setLista(null);
       setErrorMoodle((e as Error).message || 'El Moodle de este campus no responde');
     } finally { setCargando(false); }
-  }, [id, conectado, estado, busqueda, categoria, pagina, limite]);
+  }, [id, conectado, estado, busqueda, categoria, pagina, limite, orden, sentido]);
   useEffect(() => { cargarCursos(); }, [cargarCursos]);
 
   const opcionesCategoria = useMemo(() => [
@@ -118,8 +146,10 @@ export default function MoodleCampusPage() {
   ], [categorias]);
 
   const hayFiltros = texto !== '' || categoria !== null;
-  const limpiar = () => { setTexto(''); setBusqueda(''); setCategoria(null); setPagina(1); };
-  const actualizar = async () => { await cargarCampus(true); await cargarCursos(true); };
+  const limpiar = () => { setTexto(''); cambiar({ q: null, cat: null, pagina: null }); };
+  const actualizar = async () => { setVersion((v) => v + 1); await cargarCampus(true); await cargarCursos(true); };
+  /** Pulsar la cabecera ordenada la invierte; pulsar otra, la ordena de la A a la Z. */
+  const ordenarPor = (campo: OrdenCursos) => cambiar({ orden: campo, sentido: campo === orden && sentido === 'asc' ? 'desc' : 'asc', pagina: null });
 
   const desconectar = async () => {
     setDandoDeBaja(true);
@@ -133,7 +163,7 @@ export default function MoodleCampusPage() {
       toast({ title: 'No se pudo desconectar', description: (e as Error).message, variant: 'destructive' });
     } finally { setDandoDeBaja(false); }
   };
-  const tras = async () => { setAjustes(false); await cargarCampus(true); await cargarCursos(true); };
+  const tras = async () => { setAjustes(false); setVersion((v) => v + 1); await cargarCampus(true); await cargarCursos(true); };
   const pedirBaja = () => { setAjustes(false); setConfirmarBaja(true); };
 
   const cabecera = (
@@ -196,7 +226,9 @@ export default function MoodleCampusPage() {
         {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
       </div>
 
-      <EstadoDeCursos valor={estado} cursos={campus.cursos} onChange={(e) => { setEstado(e); setPagina(1); }} />
+      <EstadoDeCursos valor={estado} cursos={campus.cursos} onChange={(e) => cambiar({ estado: e, pagina: null })} />
+
+      <ParaRevisar proyectoId={id} version={version} onVer={setCurso} />
 
       <Card padding="none" overflowHidden>
         <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3.5">
@@ -212,14 +244,14 @@ export default function MoodleCampusPage() {
             />
           </div>
           {categorias.length > 0 && (
-            <Select<number | null> ariaLabel="Categoría" value={categoria} onChange={(v) => { setCategoria(v); setPagina(1); }} options={opcionesCategoria} />
+            <Select<number | null> ariaLabel="Categoría" value={categoria} onChange={(v) => cambiar({ cat: v, pagina: null })} options={opcionesCategoria} />
           )}
           {hayFiltros && (
             <button type="button" onClick={limpiar} className="inline-flex h-10 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
               <X size={14} weight="bold" /> Limpiar
             </button>
           )}
-          {lista && <Paginacion variante="compacta" pagina={lista.pagina} limite={lista.limite} total={lista.total} unidad="cursos" onPagina={setPagina} className="ml-auto" />}
+          {lista && <Paginacion variante="compacta" pagina={lista.pagina} limite={lista.limite} total={lista.total} unidad="cursos" onPagina={(n) => cambiar({ pagina: n })} className="ml-auto" />}
         </div>
 
         {errorMoodle ? (
@@ -242,15 +274,15 @@ export default function MoodleCampusPage() {
           />
         ) : lista ? (
           <div className={cargando ? 'opacity-60 transition-opacity' : undefined}>
-            <TablaCursos cursos={lista.cursos} elegido={curso?.curso_id ?? null} onElegir={setCurso} />
+            <TablaCursos cursos={lista.cursos} elegido={curso?.curso_id ?? null} onElegir={setCurso} orden={orden} sentido={sentido} onOrden={ordenarPor} />
             <Paginacion
               className="border-t border-border bg-muted/20"
               pagina={lista.pagina}
               limite={lista.limite}
               total={lista.total}
               unidad="cursos"
-              onPagina={setPagina}
-              onLimite={(n) => { setLimite(n); setPagina(1); }}
+              onPagina={(n) => cambiar({ pagina: n })}
+              onLimite={(n) => cambiar({ filas: n, pagina: null })}
             />
           </div>
         ) : null}

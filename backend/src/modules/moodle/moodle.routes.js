@@ -14,6 +14,7 @@ router.use(verifyToken);
 
 router.get('/campus', verPanel, ctrl.campus);
 router.get('/cursos', verPanel, ctrl.cursos);
+router.get('/campus/:id/revision', verPanel, ctrl.revision);
 router.get('/categorias', verPanel, ctrl.categorias);
 router.get('/cursos/:id/alumnos', verPanel, ctrl.alumnos);
 router.get('/cursos/:id/estructura', verPanel, ctrl.estructura);

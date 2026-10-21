@@ -452,6 +452,20 @@ describe('moodle_cursos', () => {
     expect((await T('moodle_cursos').ejecutar(a(), { estado: 'todos', categoria_id: 6 })).cursos.map((c) => c.curso_id)).toEqual([12]);
   });
 
+  it('ordena por nombre, inicio, fin o categoría, en los dos sentidos, con los que no tienen el dato al final', async () => {
+    const nombres = async (extra) => (await T('moodle_cursos').ejecutar(a(), { estado: 'todos', con_alumnos: false, ...extra })).cursos.map((c) => c.curso_id);
+    // Inicio: 11, 12 y 14 empezaron el mismo día (empatan: se desempata por nombre, siempre de la A a la Z); el 13 empieza dentro de un mes.
+    expect(await nombres({ orden: 'inicio', sentido: 'desc' })).toEqual([13, 12, 14, 11]);
+    expect(await nombres({ orden: 'inicio', sentido: 'asc' })).toEqual([12, 14, 11, 13]);
+    // Fin: solo el 12 tiene; los demás, al final y por nombre, ordene como ordene.
+    expect(await nombres({ orden: 'fin', sentido: 'asc' })).toEqual([12, 14, 13, 11]);
+    expect(await nombres({ orden: 'fin', sentido: 'desc' })).toEqual([12, 14, 13, 11]);
+    expect(await nombres({ orden: 'nombre', sentido: 'asc' })).toEqual([12, 14, 13, 11]);
+    expect(await nombres({ orden: 'nombre', sentido: 'desc' })).toEqual([11, 13, 14, 12]);
+    // Categoría: «Cursos» (12) antes que «Másteres» (11, 13, 14).
+    expect((await nombres({ orden: 'categoria', sentido: 'asc' }))[0]).toBe(12);
+  });
+
   it('pagina', async () => {
     const r = await T('moodle_cursos').ejecutar(a(), { estado: 'todos', pagina: 2, limite: 3 });
     expect(r).toMatchObject({ total: 4, pagina: 2, limite: 3 });
