@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './invoices.controller.js';
+import { facturaDeSuCampus, campusDelCuerpo } from './invoices.acceso.js';
+import { ventaPorId, prospectoPorId } from '../conversions/conversion.acceso.js';
 
 const router = Router();
 
@@ -14,8 +16,8 @@ router.use(verifyToken);
 // cualquiera; moverlo solo quien gestiona la facturacion (se comprueba dentro).
 router.get('/facturacion-al-dia',     ctrl.facturacionAlDia);
 router.put('/facturacion-al-dia',     ctrl.setFacturacionAlDia);
-router.post('/cola/generar',          ctrl.generarDeCola);
-router.post('/cola/emitir-hasta',     ctrl.emitirColaHasta);
+router.post('/cola/generar',          campusDelCuerpo, ctrl.generarDeCola);
+router.post('/cola/emitir-hasta',     campusDelCuerpo, ctrl.emitirColaHasta);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
 // Que numero tocaria ahora. Va ANTES de '/:id' para que «siguiente-numero» no
@@ -42,37 +44,37 @@ router.get('/config',                 ctrl.getConfig);
 router.patch('/config',               ctrl.updateConfig);
 router.get('/sequences',              ctrl.listSequences);
 router.post('/sequences',             ctrl.setSequence);
-router.get('/lead-fiscal/:leadId',    ctrl.leadFiscalData);
-router.get('/by-conversion/:conversionId', ctrl.byConversion);
-router.get('/:id',                    ctrl.getOne);
-router.post('/',                      ctrl.create);
+router.get('/lead-fiscal/:leadId',    (req, res, next) => prospectoPorId(req, res, next, req.params.leadId), ctrl.leadFiscalData);
+router.get('/by-conversion/:conversionId', (req, res, next) => ventaPorId(req, res, next, req.params.conversionId), ctrl.byConversion);
+router.get('/:id',                    facturaDeSuCampus, ctrl.getOne);
+router.post('/',                      campusDelCuerpo, ctrl.create);
 // Editar una factura en borrador: SOLO admin/superadmin.
-router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.update);
+router.patch('/:id',                  facturaDeSuCampus, roleGuard('admin', 'superadmin'), ctrl.update);
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): admin/superadmin
 // o gestora con permiso factura_manager (el controller valida que sea suya).
-router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor'), ctrl.corregir);
+router.patch('/:id/corregir',         facturaDeSuCampus, roleGuard('admin', 'superadmin', 'gestor'), ctrl.corregir);
 // Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
 // editar_fechas_factura (admins y usuarios acotados a "solo fechas").
-router.patch('/:id/fechas',           ctrl.updateFechas);
+router.patch('/:id/fechas',           facturaDeSuCampus, ctrl.updateFechas);
 // Apuntar que una factura ya se le paso al cliente. NO manda correo: es una
 // marca, y las facturas salen por donde cada uno las mande.
-router.patch('/:id/entregada',        ctrl.marcarEntregada);
+router.patch('/:id/entregada',        facturaDeSuCampus, ctrl.marcarEntregada);
 // Opción B: asociar una factura existente a una venta del cliente.
-router.patch('/:id/asociar',          roleGuard('admin', 'superadmin', 'gestor'), ctrl.asociarVenta);
-router.get('/:id/pdf',                ctrl.pdf);
-router.post('/:id/send',              ctrl.send);
-router.post('/:id/mark-paid',         ctrl.markPaid);
+router.patch('/:id/asociar',          facturaDeSuCampus, roleGuard('admin', 'superadmin', 'gestor'), ctrl.asociarVenta);
+router.get('/:id/pdf',                facturaDeSuCampus, ctrl.pdf);
+router.post('/:id/send',              facturaDeSuCampus, ctrl.send);
+router.post('/:id/mark-paid',         facturaDeSuCampus, ctrl.markPaid);
 // «Cobrada» en una proforma: apunta el cobro y la pasa a factura. El servicio
 // deja solo a quien lleva la facturacion, y a una gestora, con las suyas.
-router.post('/:id/cobrar-proforma',   roleGuard('admin', 'superadmin', 'gestor'), ctrl.cobrarProforma);
-router.post('/:id/cancel',            ctrl.cancel);
+router.post('/:id/cobrar-proforma',   facturaDeSuCampus, roleGuard('admin', 'superadmin', 'gestor'), ctrl.cobrarProforma);
+router.post('/:id/cancel',            facturaDeSuCampus, ctrl.cancel);
 // Eliminar factura + liberar número: admin/superadmin o gestora factura_manager
 // (el controller valida que la factura sea suya).
-router.delete('/:id',                 roleGuard('admin', 'superadmin', 'gestor'), ctrl.destroy);
+router.delete('/:id',                 facturaDeSuCampus, roleGuard('admin', 'superadmin', 'gestor'), ctrl.destroy);
 // Emitir factura de abono (rectificativa): admin/superadmin o gestora factura_manager
 // (el controller valida que la base sea suya).
-router.post('/:id/rectificar',        roleGuard('admin', 'superadmin', 'gestor'), ctrl.rectificar);
-router.post('/:id/emitir',            ctrl.emitir);
-router.post('/:id/completar-datos',   ctrl.completarDatos);
+router.post('/:id/rectificar',        facturaDeSuCampus, roleGuard('admin', 'superadmin', 'gestor'), ctrl.rectificar);
+router.post('/:id/emitir',            facturaDeSuCampus, ctrl.emitir);
+router.post('/:id/completar-datos',   facturaDeSuCampus, ctrl.completarDatos);
 
 export default router;
