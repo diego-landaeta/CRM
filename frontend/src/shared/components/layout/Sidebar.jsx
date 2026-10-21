@@ -230,7 +230,7 @@ export const NAV_SECTIONS = [
     icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Vendidos sin fecha', icon: Clock, roles: ['superadmin', 'admin'], module: 'products' },
+      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Por campus, con tutora y fecha', icon: Clock, roles: ['superadmin', 'admin', 'gestor', 'tutor'], module: 'products' },
       { label: 'WooCommerce', to: '/productos/woocommerce', detail: 'Sincronía de tienda', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce' },
       // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
       // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
