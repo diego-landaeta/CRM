@@ -50,6 +50,8 @@ export function crearServidor({ ambito, tokenId, conexion = null, origen = {}, a
         'CRM del ecosistema ISEIE/ISEIH. Solo consulta: no se puede crear, cambiar ni borrar nada. '
         + 'Empieza por «mis_proyectos» para saber a qué campus y empresas tienes acceso. '
         + 'Importes en euros salvo que se indique moneda. Fechas en formato AAAA-MM-DD. '
+        + 'Las herramientas «moodle_*» consultan el Moodle de cada campus: si un campus sale en «campus_con_error» (sin Moodle, token no válido o sin respuesta), '
+        + 'díselo a la persona; nunca lo cuentes como cero cursos o cero alumnos. '
         + 'Los correos y teléfonos salen enmascarados y, en los listados, los clientes con nombre abreviado: '
         + 'pide datos_completos: true solo si la persona necesita contactar a alguien (queda registrado).',
     }

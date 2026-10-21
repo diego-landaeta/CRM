@@ -12,6 +12,7 @@ import CodigoParaClaude from '../components/CodigoParaClaude';
 import EstadoCodigoUrl, { FilaConexion } from '../components/EstadoCodigoUrl';
 import ActividadMcp from '../components/ActividadMcp';
 import InterruptorMcp from '../components/InterruptorMcp';
+import ConsultasDisponibles from '../components/ConsultasDisponibles';
 
 /**
  * Conexión → MCP.
@@ -412,17 +413,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           </div>
 
           {/* Que puede consultar */}
-          <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-            <h2 className="font-semibold text-sm">Consultas disponibles</h2>
-            <ul className="grid md:grid-cols-2 gap-2">
-              {estado.herramientas.map((h) => (
-                <li key={h.nombre} className="text-sm">
-                  <span className="font-semibold">{h.titulo}</span>
-                  <span className="text-muted-foreground"> — {h.descripcion.split('. ')[0].replace(/\.$/, '')}.</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ConsultasDisponibles herramientas={estado.herramientas} verMoodle={estado.puedeAdministrar} />
         </>
       )}
 

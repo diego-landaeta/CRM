@@ -63,6 +63,7 @@ import changeRequestsModule from './modules/change-requests/index.js';
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
 import mcpModule from './modules/mcp/index.js';
+import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
@@ -80,6 +81,7 @@ import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMoodleAvisosScheduler } from './jobs/moodleAvisosScheduler.js';
 import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
@@ -270,6 +272,7 @@ const ALL_MODULES = [
   { name: 'correos', mod: correosModule },
   // Conexion de Claude por MCP: solo consulta, con token personal.
   { name: 'mcp', mod: mcpModule },
+  { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
@@ -419,6 +422,7 @@ if (process.env.NODE_ENV !== 'test') {
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
     startMcpRotacionScheduler();
+    startMoodleAvisosScheduler();
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();
