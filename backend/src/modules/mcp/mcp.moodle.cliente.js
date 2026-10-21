@@ -112,6 +112,29 @@ export function leerValorMoodle(valor) {
 }
 
 /**
+ * Qué campus tienen una credencial `moodle` activa de produccion. Solo EXISTENCIA:
+ * no se descifra nada. Es lo que enseña la pantalla Conexion → MCP para que se vea,
+ * de un vistazo, en cuales puede Claude consultar Moodle.
+ */
+export async function campusConMoodle(projectIds) {
+  if (!projectIds?.length) return new Set();
+  try {
+    const { rows } = await query(
+      `SELECT DISTINCT project_id
+         FROM api_credentials
+        WHERE service = $1 AND project_id = ANY($2::int[]) AND active = true
+          AND COALESCE(metadata->>'entorno', 'produccion') = 'produccion'`,
+      [SERVICIO_MOODLE, projectIds]
+    );
+    return new Set(rows.map((r) => Number(r.project_id)));
+  } catch (err) {
+    // 22P02: el enum aun no tiene «moodle» (falta la migracion 220): ninguno.
+    if (err?.code === '22P02') return new Set();
+    throw err;
+  }
+}
+
+/**
  * Las credenciales `moodle` de varios campus de una vez, en UNA consulta de
  * lectura, solo las de produccion. Devuelve Map(project_id → {url, token} |
  * ErrorMoodle). Un campus sin credencial no esta en el mapa.

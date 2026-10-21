@@ -65,6 +65,15 @@ export interface McpHerramienta {
   nombre: string;
   titulo: string;
   descripcion: string;
+  /** El apartado de «Consultas disponibles» en que se enseña. */
+  grupo: string;
+}
+
+/** Un campus y si tiene Moodle conectado (hay credencial guardada). */
+export interface McpMoodleCampus {
+  id: number;
+  nombre: string;
+  configurado: boolean;
 }
 
 export interface McpEstado {
@@ -77,6 +86,8 @@ export interface McpEstado {
   diasSinUso?: number | null;
   proyectos: McpProyecto[];
   herramientas: McpHerramienta[];
+  /** En qué campus puede Claude consultar Moodle. */
+  moodle?: McpMoodleCampus[];
   tokens: McpToken[];
   /** Interruptor de emergencia (#196). */
   interruptor?: McpInterruptor;

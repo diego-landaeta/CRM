@@ -153,6 +153,33 @@ async function moodleConTope(nombre, trabajo) {
   }
 }
 
+/**
+ * A que apartado de la pantalla Conexion → MCP pertenece cada consulta. El orden de los
+ * apartados es el de la primera consulta de cada uno. Una consulta sin grupo sale en «Otras».
+ */
+export const GRUPO_DE_CONSULTA = Object.freeze({
+  mis_proyectos: 'Campus y prospectos',
+  buscar_prospectos: 'Campus y prospectos',
+  ver_prospecto: 'Campus y prospectos',
+  resumen_prospectos: 'Campus y prospectos',
+  listar_ventas: 'Ventas, facturas y cobros',
+  resumen_ventas: 'Ventas, facturas y cobros',
+  listar_facturas: 'Ventas, facturas y cobros',
+  resumen_facturas: 'Ventas, facturas y cobros',
+  cobros_pendientes: 'Ventas, facturas y cobros',
+  listar_tutores: 'Tutores',
+  comisiones_tutores: 'Tutores',
+  formaciones_sin_tutor: 'Tutores',
+  listar_formaciones: 'Catálogo de formaciones',
+  resumen_catalogo: 'Catálogo de formaciones',
+  ver_formacion: 'Catálogo de formaciones',
+  moodle_cursos: 'Moodle de los campus',
+  moodle_alumnos: 'Moodle de los campus',
+  moodle_recursos_externos: 'Moodle de los campus',
+  moodle_estructura: 'Moodle de los campus',
+  informe: 'Informes',
+});
+
 export const HERRAMIENTAS = [
   {
     nombre: 'mis_proyectos',
