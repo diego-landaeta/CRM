@@ -1020,7 +1020,7 @@ export default function TutoresPage() {
                   className={`mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
                 <p className="text-[11px] text-muted-foreground mt-1">
                   {esSuperadmin
-                    ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior y se cierran sus sesiones.'
+                    ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
                     : 'Solo un superadmin puede cambiar el correo.'}
                 </p>
                 {esSuperadmin && !sinCorreos && (

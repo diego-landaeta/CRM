@@ -880,7 +880,7 @@ export default function InvoiceCreatePage() {
       <div className="flex justify-end gap-2">
         <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
         {esRect ? (
-          <button onClick={emitirAbono} disabled={saving || !rectOriginalId || !rectMotivo.trim()} className="h-10 px-5 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          <button onClick={emitirAbono} disabled={saving || !rectOriginalId || !rectMotivo.trim()} className="h-10 px-5 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo abono…' : 'Emitir abono'}
           </button>
         ) : (
