@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.js';
 import * as salesController from './sales.controller.js';
 
 const router = Router();
@@ -38,9 +38,10 @@ router.get('/serie', salesController.serieVentas);
 router.get('/my-stats', salesController.myStats);
 
 // POST /api/sales/goals — UPSERT meta (gestor solo la suya, admin cualquiera)
-router.post('/goals', salesController.setGoal);
+// `soloRoles` y no `roleGuard`: este último deja pasar a soporte antes de mirar la lista.
+router.post('/goals', soloRoles('gestor', 'admin', 'superadmin'), salesController.setGoal);
 
 // DELETE /api/sales/goals/:id
-router.delete('/goals/:id', salesController.deleteGoal);
+router.delete('/goals/:id', soloRoles('gestor', 'admin', 'superadmin'), salesController.deleteGoal);
 
 export default router;
