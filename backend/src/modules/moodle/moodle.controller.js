@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as mcpModel from '../mcp/mcp.model.js';
 import { construirAmbito } from '../mcp/mcp.acceso.js';
-import { campusConMoodle } from '../mcp/mcp.moodle.cliente.js';
+import { campusConMoodle, ErrorMoodle, FUNCIONES_MOODLE, normalizarUrlMoodle } from '../mcp/mcp.moodle.cliente.js';
 import * as moodle from '../mcp/mcp.moodle.js';
+import * as credenciales from '../credentials/credentials.model.js';
+import { anotar, ACCIONES } from '../credentials/credentials.registro.js';
+import { probarConexion } from './moodle.conexion.js';
 
 /**
  * El panel de Moodle del CRM (#335): lo mismo que Claude puede preguntar por el MCP,
@@ -71,7 +74,8 @@ export async function campus(req, res, next) {
     }));
     // Primero los conectados, luego el resto, cada grupo por nombre.
     filas.sort((a, b) => Number(b.configurado) - Number(a.configurado) || a.nombre.localeCompare(b.nombre));
-    res.json({ success: true, data: { campus: filas } });
+    // `funciones`: las que tiene que tener el servicio del token (la pantalla las enseña al conectar).
+    res.json({ success: true, data: { campus: filas, funciones: FUNCIONES_MOODLE } });
   } catch (err) { next(err); }
 }
 
@@ -131,5 +135,71 @@ export async function recursos(req, res, next) {
     if (!curso) throw new AppError('Curso no encontrado', 404, 'NOT_FOUND');
     if (curso.error) throw new AppError(curso.error, 502, 'MOODLE_NO_DISPONIBLE');
     res.json({ success: true, data: { ...curso, resumen: r.resumen } });
+  } catch (err) { next(err); }
+}
+
+// ─── Conectar el Moodle de un campus (solo super admin) ──────────────────────
+
+const conexionB = z.object({
+  url: z.string().trim().min(8, 'Escribe la dirección de su Moodle').max(300),
+  token: z.string().trim().min(8, 'Escribe el token').max(200),
+});
+
+/** El campus ha de ser de quien lo pide: uno ajeno es un 403, como en las lecturas. */
+function campusPropio(ambito, id) {
+  if (!ambito.proyectos.some((p) => Number(p.id) === id)) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+}
+
+/**
+ * POST /api/moodle/campus/:id/conexion { url, token } — conecta (o cambia) el Moodle de un campus.
+ *
+ * Primero PRUEBA contra el Moodle; si no vale, no se guarda nada y se dice por qué. Si vale,
+ * se guarda cifrado (el mismo sitio que Configuración → Claves, servicio «moodle») y se
+ * contesta cuántos cursos hay y qué funciones le faltan al token. Queda anotado en el
+ * registro de claves, sin el valor.
+ */
+export async function conectar(req, res, next) {
+  try {
+    const ambito = await ambitoDe(req);
+    const { id } = validar(z.object({ id: num }), req.params);
+    campusPropio(ambito, id);
+    const b = validar(conexionB, req.body);
+    const url = normalizarUrlMoodle(b.url);
+    if (!url) {
+      throw new AppError('La dirección del Moodle no es válida: tiene que empezar por https:// y no llevar usuario ni contraseña.', 400, 'VALIDATION_ERROR');
+    }
+
+    let prueba;
+    try {
+      prueba = await conTope((o) => probarConexion({ url, token: b.token }, o));
+    } catch (err) {
+      if (err instanceof ErrorMoodle) throw new AppError(`No se pudo conectar: ${err.message}.`, 400, 'MOODLE_NO_CONECTA');
+      throw err;
+    }
+
+    const previas = await credenciales.list({ projectId: id, service: 'moodle' });
+    const cred = await credenciales.upsert({
+      project_id: id, service: 'moodle', entorno: 'produccion', userId: req.user.userId,
+      value: JSON.stringify({ url, token: b.token }),
+    });
+    await anotar(req, previas.length ? ACCIONES.CAMBIAR : ACCIONES.CREAR, { id: cred.id, servicio: 'moodle', projectId: id, entorno: 'produccion' });
+    moodle.vaciarCacheMoodle();
+    res.status(201).json({ success: true, data: prueba });
+  } catch (err) { next(err); }
+}
+
+/** DELETE /api/moodle/campus/:id/conexion — desconecta el Moodle de un campus. */
+export async function desconectar(req, res, next) {
+  try {
+    const ambito = await ambitoDe(req);
+    const { id } = validar(z.object({ id: num }), req.params);
+    campusPropio(ambito, id);
+    const previas = await credenciales.list({ projectId: id, service: 'moodle' });
+    for (const c of previas) {
+      await credenciales.remove(c.id);
+      await anotar(req, ACCIONES.BORRAR, { id: c.id, servicio: 'moodle', projectId: id, entorno: c.metadata?.entorno ?? 'produccion' });
+    }
+    moodle.vaciarCacheMoodle();
+    res.json({ success: true, data: { desconectados: previas.length } });
   } catch (err) { next(err); }
 }

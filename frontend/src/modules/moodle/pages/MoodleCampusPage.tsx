@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowsClockwise, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowsClockwise, GearSix, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Card from '@/shared/components/ui/Card';
 import Select from '@/shared/components/ui/Select';
 import Paginacion from '@/shared/components/ui/Paginacion';
+import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
-  moodleApi, type CampusMoodle, type CategoriaMoodle, type CursoMoodle, type FiltroEstado, type ListaCursos,
+  moodleApi, type CampusMoodle, type CategoriaMoodle, type CursoMoodle, type FiltroEstado, type ListaCursos, type RespuestaCampus,
 } from '../api/moodle.api';
+import ConectarMoodle from '../components/ConectarMoodle';
 import EstadoDeCursos from '../components/EstadoDeCursos';
 import TablaCursos from '../components/TablaCursos';
 import DetalleCurso from '../components/DetalleCurso';
@@ -59,11 +61,18 @@ export default function MoodleCampusPage() {
   const [cargando, setCargando] = useState(false);
   const [errorMoodle, setErrorMoodle] = useState<string | null>(null);
   const [curso, setCurso] = useState<CursoMoodle | null>(null);
+  const [funciones, setFunciones] = useState<string[]>([]);
+  const [ajustes, setAjustes] = useState(false);
+  const [confirmarBaja, setConfirmarBaja] = useState(false);
+  const [dandoDeBaja, setDandoDeBaja] = useState(false);
+  const puedeConectar = user?.role === 'superadmin';
 
   const cargarCampus = useCallback(async (refrescar = false) => {
     try {
       const r = await moodleApi.campus({ proyectoId: id, refrescar });
-      setCampus((r.data as { campus: CampusMoodle[] }).campus[0] ?? null);
+      const d = r.data as RespuestaCampus;
+      setCampus(d.campus[0] ?? null);
+      setFunciones(d.funciones ?? []);
     } catch (e) {
       // 403: el campus no es suyo (o no existe). No se distingue: no se le dice cuáles hay.
       setCampus(null);
@@ -111,14 +120,35 @@ export default function MoodleCampusPage() {
   const limpiar = () => { setTexto(''); setBusqueda(''); setCategoria(null); setPagina(1); };
   const actualizar = async () => { await cargarCampus(true); await cargarCursos(true); };
 
+  const desconectar = async () => {
+    setDandoDeBaja(true);
+    try {
+      await moodleApi.desconectar(id);
+      toast({ title: 'Moodle desconectado', description: 'Este campus vuelve a estar pendiente de conectar.' });
+      setConfirmarBaja(false);
+      setAjustes(false);
+      await cargarCampus(true);
+    } catch (e) {
+      toast({ title: 'No se pudo desconectar', description: (e as Error).message, variant: 'destructive' });
+    } finally { setDandoDeBaja(false); }
+  };
+  const tras = async () => { setAjustes(false); await cargarCampus(true); };
+
   const cabecera = (
     <PageHeader
       title={campus?.nombre ?? 'Moodle'}
       subtitle="Cursos de su Moodle · solo lectura"
       actions={conectado && (
-        <button type="button" onClick={actualizar} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
-          <ArrowsClockwise size={15} weight="bold" /> Actualizar
-        </button>
+        <>
+          {puedeConectar && (
+            <button type="button" onClick={() => setAjustes((a) => !a)} aria-expanded={ajustes} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
+              <GearSix size={15} weight="bold" /> Conexión
+            </button>
+          )}
+          <button type="button" onClick={actualizar} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted">
+            <ArrowsClockwise size={15} weight="bold" /> Actualizar
+          </button>
+        </>
       )}
     />
   );
@@ -140,15 +170,16 @@ export default function MoodleCampusPage() {
       <div className="space-y-6">
         {cabecera}
         <Volver />
-        <Card>
-          <EmptyState
-            icon={GraduationCap}
-            title={`${campus.nombre} no tiene Moodle conectado`}
-            description="Se conecta guardando un token de Moodle de solo lectura en Configuración → Claves, con el servicio «Moodle del campus»."
-            action={user?.role === 'superadmin' || user?.role === 'soporte'
-              ? <Link to="/configuracion/claves" className="text-sm font-semibold text-primary hover:underline">Ir a Claves</Link>
-              : <span className="text-xs text-muted-foreground">Pídeselo a un super admin.</span>}
-          />
+        <Card padding="md">
+          {puedeConectar ? (
+            <ConectarMoodle campus={campus} funciones={funciones} onConectado={tras} />
+          ) : (
+            <EmptyState
+              icon={GraduationCap}
+              title={`${campus.nombre} no tiene Moodle conectado`}
+              description="Lo conecta un super admin desde esta misma pantalla, con un token de solo lectura de su Moodle."
+            />
+          )}
         </Card>
       </div>
     );
@@ -162,6 +193,18 @@ export default function MoodleCampusPage() {
         <Volver />
         {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
       </div>
+
+      {ajustes && puedeConectar && (
+        <Card padding="md" data-testid="ajustes-conexion">
+          <ConectarMoodle campus={campus} funciones={funciones} cambiando onConectado={tras} />
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground">Desconectar borra el token guardado; el Moodle no se toca.</p>
+            <button type="button" onClick={() => setConfirmarBaja(true)} className="inline-flex h-9 items-center rounded-md border border-destructive/40 px-3.5 text-sm font-semibold text-destructive hover:bg-destructive-soft">
+              Desconectar este Moodle
+            </button>
+          </div>
+        </Card>
+      )}
 
       <EstadoDeCursos valor={estado} cursos={campus.cursos} onChange={(e) => { setEstado(e); setPagina(1); }} />
 
@@ -224,6 +267,17 @@ export default function MoodleCampusPage() {
       </Card>
 
       {curso && <DetalleCurso curso={curso} proyectoId={id} onCerrar={() => setCurso(null)} />}
+
+      <ConfirmDialog
+        open={confirmarBaja}
+        tone="destructive"
+        title={`Desconectar el Moodle de ${campus.nombre}`}
+        message="Se borra el token guardado: dejarán de verse sus cursos aquí y Claude no podrá consultarlos. El Moodle no se toca, y se puede volver a conectar cuando quieras."
+        confirmLabel="Desconectar"
+        loading={dandoDeBaja}
+        onConfirm={desconectar}
+        onCancel={() => setConfirmarBaja(false)}
+      />
     </div>
   );
 }

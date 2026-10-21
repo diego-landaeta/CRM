@@ -183,7 +183,7 @@ function todosFallaron(errores) {
   const sinConfigurar = errores.every((e) => e.codigo === 'sin_configurar');
   return new AppError(
     `No se pudo consultar Moodle. ${errores.map((e) => e.error).join('; ')}.`
-    + (sinConfigurar ? ' (La credencial «moodle» de cada campus se configura en Configuración → Claves.)' : ''),
+    + (sinConfigurar ? ' (El Moodle de cada campus se conecta en el CRM → Conexión → Moodle.)' : ''),
     sinConfigurar ? 409 : 502,
     'MOODLE_NO_DISPONIBLE'
   );

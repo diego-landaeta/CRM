@@ -34,9 +34,13 @@ const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], credenciales: [] };
 let CON; let SIN; let OTRO; let ADMIN; let ADMIN_OTRO; let GESTORA;
 
+// El rol sale del token: así se prueba «solo super admin» sin crear superadmins en la base compartida.
+const comoSuper = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: 'superadmin' }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const json = (c) => new Response(JSON.stringify(c), { status: 200, headers: { 'content-type': 'application/json' } });
 const AHORA = () => Math.floor(Date.now() / 1000);
+const ORIGEN_LIMITADO = `https://${MARCA.toLowerCase()}.limitado.moodle.test`;
+const TOKEN_LIMITADO = `lim${MARCA}0123456789abcdef`;
 
 const ALUMNO = [{ shortname: 'student' }];
 const FUNCIONES = {
@@ -52,6 +56,9 @@ const FUNCIONES = {
   mod_url_get_urls_by_courses: () => ({ urls: [] }),
   core_completion_get_course_completion_status: () => ({ exception: 'moodle_exception', errorcode: 'nocriteriaset', message: 'No hay criterios' }),
 };
+
+// El mismo Moodle, pero al servicio del token le faltan dos funciones.
+const { core_enrol_get_enrolled_users: _sinAlumnos, core_course_get_contents: _sinContenido, ...FUNCIONES_LIMITADAS } = FUNCIONES;
 
 function parametros(p) {
   const opciones = {};
@@ -85,7 +92,7 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  await q(`DELETE FROM api_credentials WHERE id = ANY($1::int[])`, [ids.credenciales]);
+  await q(`DELETE FROM api_credentials WHERE id = ANY($1::int[]) OR project_id = ANY($2::int[])`, [ids.credenciales, ids.projects]);
   await q(`DELETE FROM user_projects WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM users WHERE id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM projects WHERE id = ANY($1::int[])`, [ids.projects]);
@@ -96,10 +103,12 @@ beforeEach(() => {
   moodleMod.vaciarCacheMoodle();
   const original = globalThis.fetch;
   vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
-    if (String(url) !== `${ORIGEN}/webservice/rest/server.php`) return original(url, init);
+    const mundo = { [ORIGEN]: { token: TOKEN, f: FUNCIONES }, [ORIGEN_LIMITADO]: { token: TOKEN_LIMITADO, f: FUNCIONES_LIMITADAS } };
+    const m = Object.entries(mundo).find(([o]) => String(url) === `${o}/webservice/rest/server.php`);
+    if (!m) return original(url, init);
     const p = new URLSearchParams(init.body);
-    if (p.get('wstoken') !== TOKEN) return json({ exception: 'moodle_exception', errorcode: 'invalidtoken', message: 'x' });
-    const f = FUNCIONES[p.get('wsfunction')];
+    if (p.get('wstoken') !== m[1].token) return json({ exception: 'moodle_exception', errorcode: 'invalidtoken', message: 'x' });
+    const f = m[1].f[p.get('wsfunction')];
     return f ? json(f(parametros(p))) : json({ exception: 'webservice_access_exception', errorcode: 'accessexception', message: 'x' });
   }));
 });
@@ -174,5 +183,84 @@ describe('quién puede', () => {
     const texto = todo.join('\n');
     expect(texto).not.toContain(TOKEN);
     expect(texto).not.toContain(ORIGEN);
+  });
+});
+
+describe('conectar el Moodle de un campus', () => {
+  const conectar = (u, id, cuerpo) => request.post(`/api/moodle/campus/${id}/conexion`).set(u).send(cuerpo);
+  const estaConectado = async (id) => (await request.get(`/api/moodle/campus?proyecto_id=${id}`).set(como(ADMIN))).body.data.campus[0].configurado;
+
+  it('solo super admin: un admin, ni en su campus', async () => {
+    const r = await conectar(como(ADMIN), SIN, { url: ORIGEN, token: TOKEN });
+    expect(r.status).toBe(403);
+    expect(await estaConectado(SIN)).toBe(false);
+  });
+
+  it('un token que vale: se prueba, se guarda cifrado y dice cuántos cursos hay', async () => {
+    const r = await conectar(comoSuper(ADMIN), SIN, { url: `${ORIGEN}/`, token: TOKEN });
+    expect(r.status).toBe(201);
+    expect(r.body.data).toEqual({ cursos: 2, faltan: [] });
+    expect(await estaConectado(SIN)).toBe(true);
+    const [fila] = await q(`SELECT encrypted_value, metadata FROM api_credentials WHERE project_id = $1 AND service = 'moodle' AND active`, [SIN]);
+    expect(fila.encrypted_value).not.toContain(TOKEN);
+    expect(JSON.stringify(fila.metadata)).not.toContain(TOKEN);
+  });
+
+  it('un token que no vale: error claro y NO se toca lo que había', async () => {
+    const r = await conectar(comoSuper(ADMIN), CON, { url: ORIGEN, token: 'token-que-no-existe-0000' });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('MOODLE_NO_CONECTA');
+    expect(r.body.error).toMatch(/token no válido o caducado/);
+    expect(JSON.stringify(r.body)).not.toContain('token-que-no-existe');
+    // El campus seguía conectado con su token bueno.
+    const c = await request.get(`/api/moodle/campus?proyecto_id=${CON}`).set(como(ADMIN));
+    expect(c.body.data.campus[0]).toMatchObject({ configurado: true, cursos: { total: 2 } });
+  });
+
+  it('un Moodle que no responde: error claro', async () => {
+    const r = await conectar(comoSuper(ADMIN), SIN, { url: `https://${MARCA.toLowerCase()}.apagado.moodle.test`, token: TOKEN });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('MOODLE_NO_CONECTA');
+  });
+
+  it('un token al que le faltan funciones: se guarda y dice qué se pierde con cada una', async () => {
+    const r = await conectar(comoSuper(ADMIN), SIN, { url: ORIGEN_LIMITADO, token: TOKEN_LIMITADO });
+    expect(r.status).toBe(201);
+    expect(r.body.data.cursos).toBe(2);
+    expect(r.body.data.faltan).toEqual([
+      { funcion: 'core_enrol_get_enrolled_users', consecuencia: 'no se contarán los alumnos' },
+      { funcion: 'core_course_get_contents', consecuencia: 'no se verá el contenido de los cursos ni sus recursos externos' },
+    ]);
+    expect(await estaConectado(SIN)).toBe(true);
+  });
+
+  it('una dirección que no vale, o sin token, es un 400', async () => {
+    for (const cuerpo of [{ url: 'ftp://moodle.test', token: TOKEN }, { url: 'https://usuario:clave@moodle.test', token: TOKEN }, { url: ORIGEN, token: '' }]) {
+      expect((await conectar(comoSuper(ADMIN), SIN, cuerpo)).status).toBe(400);
+    }
+  });
+
+  it('un campus que no es suyo: 403', async () => {
+    expect((await conectar(comoSuper(ADMIN_OTRO), CON, { url: ORIGEN, token: TOKEN })).status).toBe(403);
+  });
+
+  it('ni el token ni la dirección salen en ninguna respuesta', async () => {
+    const r = await conectar(comoSuper(ADMIN), SIN, { url: ORIGEN, token: TOKEN });
+    const texto = JSON.stringify(r.body);
+    expect(texto).not.toContain(TOKEN);
+    expect(texto).not.toContain(ORIGEN);
+  });
+
+  it('el panel lista las funciones que ha de tener el servicio del token', async () => {
+    const r = await request.get('/api/moodle/campus').set(como(ADMIN));
+    expect(r.body.data.funciones).toEqual(expect.arrayContaining(['core_course_get_courses_by_field', 'core_enrol_get_enrolled_users']));
+  });
+
+  it('desconectar: solo super admin, y el campus vuelve a «sin conectar»', async () => {
+    expect((await request.delete(`/api/moodle/campus/${SIN}/conexion`).set(como(ADMIN))).status).toBe(403);
+    const r = await request.delete(`/api/moodle/campus/${SIN}/conexion`).set(comoSuper(ADMIN));
+    expect(r.status).toBe(200);
+    expect(r.body.data.desconectados).toBeGreaterThanOrEqual(1);
+    expect(await estaConectado(SIN)).toBe(false);
   });
 });

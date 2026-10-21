@@ -5,26 +5,31 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import Card from '@/shared/components/ui/Card';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
-import { moodleApi, type CampusMoodle } from '../api/moodle.api';
+import { moodleApi, type CampusMoodle, type RespuestaCampus } from '../api/moodle.api';
 import ListaDeCampus from '../components/ListaDeCampus';
+import CampusPendientes from '../components/CampusPendientes';
 
 /**
- * Conexión → Moodle (#335): los campus y si cada uno tiene su Moodle conectado.
+ * Conexión → Moodle (#335): los campus.
  *
- * Es solo la puerta de entrada: cada fila lleva a la pantalla del campus
- * (`/conexion/moodle/:id`), donde están sus cursos. Los campus y los cursos son cosas
- * distintas y cada una tiene su pantalla.
+ * Dos bloques, lo que funciona y lo que falta:
+ *   · Campus conectados: su estado y sus cursos; cada fila entra al campus.
+ *   · Pendientes de conectar: una lista corta, cada uno con su botón «Conectar», que lleva
+ *     a la pantalla del campus, donde está el formulario.
  */
 export default function MoodlePage() {
+  const { user } = useAuth() as { user: { role?: string } | null };
   const [campus, setCampus] = useState<CampusMoodle[] | null>(null);
   const [actualizando, setActualizando] = useState(false);
+  const puedeConectar = user?.role === 'superadmin';
 
   const cargar = useCallback(async (refrescar = false) => {
     setActualizando(true);
     try {
       const r = await moodleApi.campus({ refrescar });
-      setCampus((r.data as { campus: CampusMoodle[] }).campus);
+      setCampus((r.data as RespuestaCampus).campus);
     } catch (e) {
       setCampus([]);
       toast({ title: 'No se pudo cargar Moodle', description: (e as Error).message, variant: 'destructive' });
@@ -32,13 +37,16 @@ export default function MoodlePage() {
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
 
-  const cifras = useMemo(() => {
-    const conectados = (campus ?? []).filter((c) => c.configurado);
+  const { conectados, pendientes, cifras } = useMemo(() => {
+    const con = (campus ?? []).filter((c) => c.configurado);
     return {
-      campus: campus?.length ?? 0,
-      conectados: conectados.length,
-      activos: conectados.reduce((n, c) => n + (c.cursos?.activos ?? 0), 0),
-      total: conectados.reduce((n, c) => n + (c.cursos?.total ?? 0), 0),
+      conectados: con,
+      pendientes: (campus ?? []).filter((c) => !c.configurado),
+      cifras: {
+        campus: campus?.length ?? 0,
+        activos: con.reduce((n, c) => n + (c.cursos?.activos ?? 0), 0),
+        total: con.reduce((n, c) => n + (c.cursos?.total ?? 0), 0),
+      },
     };
   }, [campus]);
 
@@ -66,13 +74,39 @@ export default function MoodlePage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <KpiCard icon={PlugsConnected} label="Campus con Moodle conectado" value={`${cifras.conectados} de ${cifras.campus}`} />
+            <KpiCard icon={PlugsConnected} label="Campus con Moodle conectado" value={`${conectados.length} de ${cifras.campus}`} />
             <KpiCard icon={GraduationCap} label="Cursos activos" value={String(cifras.activos)} />
             <KpiCard icon={Books} label="Cursos en total" value={String(cifras.total)} />
           </div>
-          <Card padding="none" overflowHidden>
-            <ListaDeCampus campus={campus} />
-          </Card>
+
+          <section aria-labelledby="titulo-conectados" className="space-y-3">
+            <h2 id="titulo-conectados" className="text-sm font-semibold">Campus conectados</h2>
+            <Card padding="none" overflowHidden>
+              {conectados.length > 0 ? (
+                <ListaDeCampus campus={conectados} />
+              ) : (
+                <EmptyState
+                  icon={PlugsConnected}
+                  title="Ningún campus tiene Moodle conectado todavía"
+                  description={pendientes.length
+                    ? `Elige un campus de la lista de abajo y pulsa «Conectar»: hace falta un token de solo lectura de su Moodle y se hace en pocos minutos.`
+                    : 'Cuando haya un campus, podrás conectar su Moodle aquí.'}
+                />
+              )}
+            </Card>
+          </section>
+
+          {pendientes.length > 0 && (
+            <section aria-labelledby="titulo-pendientes" className="space-y-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="titulo-pendientes" className="text-sm font-semibold">Pendientes de conectar <span className="font-normal text-muted-foreground">· {pendientes.length}</span></h2>
+                {!puedeConectar && <p className="text-xs text-muted-foreground">Solo un super admin puede conectar un Moodle.</p>}
+              </div>
+              <Card padding="none" overflowHidden>
+                <CampusPendientes campus={pendientes} puedeConectar={puedeConectar} />
+              </Card>
+            </section>
+          )}
         </>
       )}
     </div>

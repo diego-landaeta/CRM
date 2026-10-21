@@ -94,6 +94,19 @@ export interface RecursosDelCurso {
   recursos: RecursoExterno[];
 }
 
+/** Lo que dice el CRM tras probar y guardar una conexión. */
+export interface ResultadoConexion {
+  cursos: number;
+  /** Funciones que le faltan al servicio del token y qué se pierde con cada una. */
+  faltan: { funcion: string; consecuencia: string }[];
+}
+
+export interface RespuestaCampus {
+  campus: CampusMoodle[];
+  /** Las funciones que ha de tener el servicio del token. */
+  funciones: string[];
+}
+
 const proyecto = (proyectoId: number) => ({ proyecto_id: proyectoId });
 
 export const moodleApi = {
@@ -112,6 +125,9 @@ export const moodleApi = {
         ...(p.refrescar ? { refrescar: 1 } : {}),
       },
     }),
+  /** Prueba la conexión y, si vale, la guarda (solo super admin). Si no vale, no guarda nada y lanza el motivo. */
+  conectar: (proyectoId: number, datos: { url: string; token: string }) => client.post(`/moodle/campus/${proyectoId}/conexion`, datos),
+  desconectar: (proyectoId: number) => client.delete(`/moodle/campus/${proyectoId}/conexion`),
   categorias: (proyectoId: number) => client.get('/moodle/categorias', { params: proyecto(proyectoId) }),
   alumnos: (proyectoId: number, cursoId: number) => client.get(`/moodle/cursos/${cursoId}/alumnos`, { params: proyecto(proyectoId) }),
   estructura: (proyectoId: number, cursoId: number) => client.get(`/moodle/cursos/${cursoId}/estructura`, { params: proyecto(proyectoId) }),
