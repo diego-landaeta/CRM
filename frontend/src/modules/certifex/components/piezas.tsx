@@ -69,7 +69,9 @@ export function LogoCampus({ c, size = 44 }: { c: Pick<CampusCertifex, 'codigo' 
     return (
       <span
         className={cn('grid flex-none place-items-center overflow-hidden rounded-md border border-border p-1.5',
-          logo.tono === 'claro' ? 'bg-zinc-800' : 'bg-white')}
+          /* Contraste FIJO del logo, no del tema: un logo claro necesita fondo
+             oscuro en claro Y en oscuro. Por eso valor fijo, no un token que vire. */
+          logo.tono === 'claro' ? 'bg-[#27272a]' : 'bg-white')}
         style={{ width: size, height: size }}
       >
         <img src={logo.url} alt="" className="max-h-full max-w-full object-contain" />

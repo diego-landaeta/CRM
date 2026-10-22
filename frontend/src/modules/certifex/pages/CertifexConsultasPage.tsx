@@ -26,10 +26,10 @@ const PESTANAS: { clave: 'todas' | EstadoConsulta; rotulo: string }[] = [
 ];
 
 const ESTADO: Record<EstadoConsulta, { rotulo: string; color: string }> = {
-  nueva: { rotulo: 'Nueva', color: 'text-sky-600 dark:text-sky-400' },
-  en_curso: { rotulo: 'En curso', color: 'text-amber-600 dark:text-amber-400' },
-  resuelta: { rotulo: 'Resuelta', color: 'text-emerald-600 dark:text-emerald-400' },
-  spam: { rotulo: 'Spam', color: 'text-red-600 dark:text-red-400' },
+  nueva: { rotulo: 'Nueva', color: 'text-info' },
+  en_curso: { rotulo: 'En curso', color: 'text-warning' },
+  resuelta: { rotulo: 'Resuelta', color: 'text-success' },
+  spam: { rotulo: 'Spam', color: 'text-destructive' },
 };
 
 const cuando = (iso: string) => {
