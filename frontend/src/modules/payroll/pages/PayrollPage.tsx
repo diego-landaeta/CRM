@@ -206,7 +206,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 text-center">{p.modo_comisiones ? '✓' : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-xs font-bold mr-1">Editar</button>
-                      <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-softtext-xs font-bold">Eliminar</button>
+                      <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-xs font-bold">Eliminar</button>
                     </td>
                   </tr>
                 ))}
@@ -229,7 +229,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-[11px] font-bold w-full">Editar</button>
-                  <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-softtext-[11px] font-bold w-full">Eliminar</button>
+                  <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-[11px] font-bold w-full">Eliminar</button>
                 </div>
               </div>
             ))}
@@ -369,8 +369,8 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' : p.estado === 'cerrado' ? 'bg-info-soft text-info-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>{p.estado}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foregroundtext-xs font-bold mr-1">Cerrar</button>}
-                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foregroundtext-xs font-bold">Pagar</button>}
+                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-xs font-bold mr-1">Cerrar</button>}
+                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-xs font-bold">Pagar</button>}
                     </td>
                   </tr>
                 ))}
@@ -396,8 +396,8 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-sm font-bold tabular-nums">{Number(p.total).toFixed(2)} €</span>
-                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foregroundtext-[11px] font-bold w-full">Cerrar</button>}
-                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foregroundtext-[11px] font-bold w-full">Pagar</button>}
+                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-[11px] font-bold w-full">Cerrar</button>}
+                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-[11px] font-bold w-full">Pagar</button>}
                 </div>
               </div>
             ))}
@@ -481,7 +481,7 @@ function HoursTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 font-semibold">{h.user_nombre}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{Number(h.horas).toFixed(2)}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{h.notas || ''}</td>
-                    <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-softtext-xs font-bold">Eliminar</button></td>
+                    <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-xs font-bold">Eliminar</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -501,7 +501,7 @@ function HoursTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-sm font-bold tabular-nums">{Number(h.horas).toFixed(2)} h</span>
-                  <button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-softtext-[11px] font-bold">Eliminar</button>
+                  <button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-[11px] font-bold">Eliminar</button>
                 </div>
               </div>
             ))}
