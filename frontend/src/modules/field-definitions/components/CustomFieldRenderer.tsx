@@ -23,7 +23,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
   return (
     <div>
       <label htmlFor={id} className="text-xs font-medium text-muted-foreground mb-1 block">
-        {field.label}{field.required && <span className="text-red-500"> *</span>}
+        {field.label}{field.required && <span className="text-destructive"> *</span>}
       </label>
       {renderInput()}
     </div>
