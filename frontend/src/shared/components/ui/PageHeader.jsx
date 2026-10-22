@@ -77,7 +77,9 @@ export default function PageHeader({
           )}
         </div>
         {actions && (
-          <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
+          // En el móvil, si no caben junto al título bajan debajo y se reparten en
+          // líneas (Feedback: los atajos de fecha ensanchaban la página a 703px).
+          <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2 max-sm:max-w-full max-sm:justify-start">
             {actions}
           </div>
         )}
