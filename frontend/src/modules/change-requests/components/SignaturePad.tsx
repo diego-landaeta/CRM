@@ -127,11 +127,11 @@ export default function SignaturePad({ value, onChange, height = 160, readOnly =
         onPointerUp={end}
         onPointerCancel={end}
         onPointerLeave={end}
-        className={`w-full block border-2 border-dashed rounded-md bg-white touch-none ${readOnly ? 'border-border cursor-default' : empty ? 'border-zinc-300 cursor-crosshair' : 'border-emerald-400 cursor-crosshair'}`}
+        className={`w-full block border-2 border-dashed rounded-md bg-white touch-none ${readOnly ? 'border-border cursor-default' : empty ? 'border-muted-foreground/40 cursor-crosshair' : 'border-success cursor-crosshair'}`}
         style={{ height, width: '100%' }}
       />
       {empty && !readOnly && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-zinc-400">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-black/40">
           Firma aquí con el ratón o el dedo
         </div>
       )}
