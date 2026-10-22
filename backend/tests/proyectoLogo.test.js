@@ -44,18 +44,23 @@ beforeAll(async () => {
     `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
     [`${MARCA} Sin logo`, `${MARCA.toLowerCase()}-sin`, `${MARCA}-sin`]
   );
+  // Un admin de estos dos campus, no un superadmin: un superadmin activo en la
+  // base compartida entra en los avisos que calculan otras pruebas a la vez
+  // (certifexDiplomas cuenta todos los superadmin activos) y las rompe.
   [superadmin] = await q(
-    `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'superadmin') RETURNING id, email`,
-    [`${MARCA} super`, `super_${MARCA.toLowerCase()}@test.local`]
+    `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'admin') RETURNING id, email`,
+    [`${MARCA} admin`, `admin_${MARCA.toLowerCase()}@test.local`]
   );
+  await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2), ($1, $3)`, [superadmin.id, proyecto.id, sinLogo.id]);
   token = jwt.sign(
-    { userId: superadmin.id, email: superadmin.email, role: 'superadmin', roles_extra: [], customRoleId: null },
+    { userId: superadmin.id, email: superadmin.email, role: 'admin', roles_extra: [], customRoleId: null },
     process.env.JWT_SECRET,
     { expiresIn: '1h' }
   );
 });
 
 afterAll(async () => {
+  await q('DELETE FROM user_projects WHERE user_id = $1', [superadmin.id]);
   await q('DELETE FROM projects WHERE id = ANY($1::int[])', [[proyecto.id, sinLogo.id]]);
   await q('DELETE FROM users WHERE id = $1', [superadmin.id]);
   await pool.end();
