@@ -35,9 +35,9 @@ interface CategoryFormState {
 }
 
 function badgeStyleFor(source: string) {
-  if (source === 'wp_menu') return 'bg-purple-500/15 text-purple-400';
-  if (source === 'wc') return 'bg-blue-500/15 text-blue-400';
-  return 'bg-emerald-500/15 text-emerald-400';
+  if (source === 'wp_menu') return 'bg-primary/15 text-primary';
+  if (source === 'wc') return 'bg-info/15 text-info';
+  return 'bg-success/15 text-success';
 }
 
 function NodeRow({
@@ -115,7 +115,7 @@ function NodeRow({
             type="button"
             title="Editar"
             onClick={() => onEdit(node)}
-            className="p-1 hover:bg-amber-500/10 rounded text-amber-500"
+            className="p-1 hover:bg-warning/10 rounded text-warning"
           >
             <Pencil size={14} />
           </button>
@@ -384,12 +384,12 @@ export default function CategoriesTreePage() {
       {/* Banner de progreso del sync */}
       {sync && (
         <div className={`mb-4 p-3 rounded-lg border text-sm flex items-center gap-3 ${
-          sync.status === 'running' ? 'bg-blue-500/10 border-blue-500/30' :
-          sync.status === 'success' ? 'bg-emerald-500/10 border-emerald-500/30' :
+          sync.status === 'running' ? 'bg-info/10 border-info/30' :
+          sync.status === 'success' ? 'bg-success/10 border-success/30' :
           'bg-destructive/10 border-destructive/30'
         }`}>
-          {sync.status === 'running' && <ArrowsClockwise size={18} className="animate-spin text-blue-500" />}
-          {sync.status === 'success' && <CheckCircle size={18} className="text-emerald-500" />}
+          {sync.status === 'running' && <ArrowsClockwise size={18} className="animate-spin text-info" />}
+          {sync.status === 'success' && <CheckCircle size={18} className="text-success" />}
           {sync.status === 'error' && <WarningCircle size={18} className="text-destructive" />}
           <div className="flex-1">
             {sync.status === 'running' && (
