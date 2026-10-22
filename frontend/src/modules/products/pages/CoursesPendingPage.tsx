@@ -157,7 +157,7 @@ export default function CoursesPendingPage() {
               className="bg-card border border-border rounded-lg p-4 flex flex-col gap-3 hover:border-primary/40 transition-colors"
             >
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-md bg-warning-soft text-warning-soft-foreground flex items-center justify-center flex-shrink-0">
                   <Clock size={18} weight="duotone" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -192,12 +192,12 @@ export default function CoursesPendingPage() {
               </div>
 
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/60">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300 font-bold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-foreground font-bold">
                   Pendiente
                 </span>
                 <button
                   onClick={() => setMarking(item)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-success text-success-foreground text-xs font-bold hover:bg-success/90"
                 >
                   <CheckCircle size={12} weight="bold" /> Marcar creado
                 </button>

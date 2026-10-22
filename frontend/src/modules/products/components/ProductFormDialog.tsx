@@ -340,7 +340,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                         type="button"
                         disabled={imageUploading}
                         onClick={handleImageRemove}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-card text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-card text-xs font-medium text-destructive hover:bg-destructive-soft disabled:opacity-50"
                       >
                         <Trash size={12} weight="regular" /> Eliminar
                       </button>
@@ -537,13 +537,13 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }) 
                         type="button"
                         onClick={() => removePaymentLink(idx)}
                         aria-label="Eliminar enlace"
-                        className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500"
+                        className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-destructive-soft text-destructive"
                       >
                         <Trash size={14} weight="regular" />
                       </button>
                     </div>
                     {linkErrors[idx] && (
-                      <p className="text-xs text-red-500">{linkErrors[idx]}</p>
+                      <p className="text-xs text-destructive">{linkErrors[idx]}</p>
                     )}
                   </div>
                 ))}
