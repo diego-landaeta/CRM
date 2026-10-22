@@ -450,7 +450,7 @@ export default function UserFormDialog({
                   </span>
                 </label>
                 {faltaMigracionWhatsapp && (
-                  <p className="text-secundario text-amber-600 dark:text-amber-500 mt-1.5 px-1">
+                  <p className="text-secundario text-warning mt-1.5 px-1">
                     Falta aplicar la migración 156. Hasta entonces esto no se
                     puede guardar y el panel sigue enseñando a todo el que puede.
                   </p>
