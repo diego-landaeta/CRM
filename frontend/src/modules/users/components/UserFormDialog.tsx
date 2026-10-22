@@ -282,7 +282,7 @@ export default function UserFormDialog({
                 />
                 <p className="text-secundario text-muted-foreground mt-1 px-1 flex items-start gap-1">
                   <Info size={11} className="mt-px flex-shrink-0" />
-                  Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones.
+                  Es con lo que entra: al cambiarlo, con el viejo ya no podrá entrar; una sesión que ya tenga abierta puede seguir hasta 8 horas.
                   Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.
                 </p>
                 {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
@@ -523,7 +523,7 @@ export default function UserFormDialog({
                 </div>
                 <p className="text-secundario text-muted-foreground mt-1 px-1">
                   Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario.
-                  Al cambiarla se cierran sus sesiones activas.
+                  Al cambiarla no podrá entrar con la anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.
                 </p>
               </div>
             )}

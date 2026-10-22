@@ -414,6 +414,14 @@ describe('«Desbloquear desde aquí» (opción 3 de Diego)', () => {
     expect((await llamar(TOK, 'mis_proyectos')).ok).toBe(true);
   });
 
+  it('no borra los fallos de código: ese contador solo lo vacía un código bueno (#262)', async () => {
+    await q(`UPDATE mcp_tokens SET fallos_codigo = 3 WHERE id = $1`, [ID]);
+    expect((await desbloquearDesdeAqui(U, ID)).status).toBe(200);
+    const [t] = await q(`SELECT fallos_codigo FROM mcp_tokens WHERE id = $1`, [ID]);
+    expect(t.fallos_codigo).toBe(3);
+    await q(`UPDATE mcp_tokens SET fallos_codigo = 0 WHERE id = $1`, [ID]);
+  });
+
   it('desbloquea sin código y sin caducidad (#326)', async () => {
     const [c] = await q(`SELECT desbloqueada_at, codigo_id FROM mcp_conexiones WHERE token_id = $1 AND estado = 'autorizada'`, [ID]);
     expect(c.desbloqueada_at).toBeTruthy();
