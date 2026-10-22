@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AVATAR_COLORS, ROLE_COLORS, EXPENSE_CATEGORY_COLORS } from '@/shared/lib/ui';
+import { AVATAR_COLORS, ROLE_COLORS, EXPENSE_CATEGORY_COLORS, TASK_BOARD_COLORS, TASK_TAG_COLORS } from '@/shared/lib/ui';
 
 /*
   Las paletas de identidad tienen que seguir siendo distinguibles (#32 · #34).
@@ -24,6 +24,11 @@ const paletas = {
   'avatares': AVATAR_COLORS,
   'roles a medida': ROLE_COLORS,
   'categorías de gasto': EXPENSE_CATEGORY_COLORS,
+  // Las del tablero de tareas son objetos: lo que tiene que distinguirse es lo que se pinta.
+  'columnas y áreas del tablero (cabecera)': Object.values(TASK_BOARD_COLORS).map((c) => c.head),
+  'columnas y áreas del tablero (punto)': Object.values(TASK_BOARD_COLORS).map((c) => c.dot),
+  'columnas y áreas del tablero (chip)': Object.values(TASK_BOARD_COLORS).map((c) => c.chip),
+  'etiquetas de tareas': Object.values(TASK_TAG_COLORS).map((c) => c.chip),
 };
 
 describe('las paletas de identidad no colapsan', () => {

@@ -323,10 +323,10 @@ export function TaskModal({
               {/* Acciones de Revisión si la tarea está en revisión */}
               {editando && task?.status === 'en_revision' && tienePermisoCierre && (
                 <div className="flex items-center gap-1.5 mr-2">
-                  <Button type="button" size="sm" variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs h-7.5 px-2" onClick={() => setMostrarDialogoDevolver(true)}>
+                  <Button type="button" size="sm" variant="outline" className="text-warning border-warning/30 hover:bg-warning/20 text-xs h-7.5 px-2" onClick={() => setMostrarDialogoDevolver(true)}>
                     <ArrowUUpLeft size={13} className="mr-1" /> Devolver
                   </Button>
-                  <Button type="button" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7.5 px-2.5" onClick={aprobarTarea}>
+                  <Button type="button" size="sm" className="bg-success hover:bg-success/90 text-success-foreground text-xs h-7.5 px-2.5" onClick={aprobarTarea}>
                     <Check size={13} className="mr-1" /> Aprobar
                   </Button>
                 </div>
@@ -834,7 +834,7 @@ export function TaskModal({
                   size="sm"
                   disabled={!motivoDevolucion.trim() || devolviendo}
                   onClick={devolverTarea}
-                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  className="bg-warning hover:bg-warning/90 text-warning-foreground"
                 >
                   {devolviendo ? 'Devolviendo…' : 'Devolver tarea'}
                 </Button>
