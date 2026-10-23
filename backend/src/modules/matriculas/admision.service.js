@@ -28,8 +28,17 @@ import { obtenerArchivo, conArchivos } from './admision.archivos.js';
  *   4. El mismo envío dos veces no crea dos matrículas (`envio_huella`).
  *
  * Un documento que no vale (no es imagen ni PDF, pasa de 10 MB, la URL no
- * responde…) no pierde la solicitud: se guarda sin él y la respuesta dice cuál y
- * por qué, para que quien conecta el formulario lo vea.
+ * responde…) no pierde la solicitud: se guarda sin él, y cuál y por qué va al
+ * registro del servidor.
+ *
+ * LA RESPUESTA PÚBLICA SOLO DICE «RECIBIDO» (QA de Diego, 22/10). El token va en
+ * el formulario de la web, así que lo tiene cualquiera: si la respuesta trajera el
+ * prospecto, la venta o si la solicitud ya existía, bastaría con mandar un correo
+ * para saber si esa persona es prospecto o ha comprado. Por eso es la misma —200,
+ * `{ recibido: true, envio_id }`— sea nueva, repetida o con documentos rechazados.
+ * `envio_id` es la huella del envío, no un número de la base. Lo de dentro (la
+ * matrícula, el prospecto, la venta, los documentos) va en `interno`, que el
+ * controlador no manda.
  */
 
 /** Los datos del CRM a los que se mapea, con el nombre del contrato de la #198. */
@@ -161,10 +170,14 @@ async function guardarDocumento(matricula, tipo, archivo) {
   }
 }
 
+/** Lo que contesta el webhook: lo mismo pase lo que pase (ver arriba). */
+const respuesta = (huella, interno) => ({ status: 200, data: { recibido: true, envio_id: huella }, interno });
+
 /**
  * Una solicitud de admisión que llega por el webhook de matrículas de un campus.
  * `archivos`: los del multipart (multer). `opcionesArchivo`: para las pruebas.
- * Devuelve lo que contesta el webhook.
+ * Devuelve `{ status, data }`, lo que contesta el webhook, e `interno`, lo que
+ * pasó (no se manda).
  */
 export async function recibirAdmision(token, body, archivos = [], opcionesArchivo = {}) {
   const projectId = token.project_id;
@@ -174,7 +187,7 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   const huella = huellaDelEnvio(body, archivos);
 
   const repetido = await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella]);
-  if (repetido.rows[0]) return { status: 200, data: { matricula_id: repetido.rows[0].id, action: 'duplicate_skipped' } };
+  if (repetido.rows[0]) return respuesta(huella, { matriculaId: repetido.rows[0].id, accion: 'duplicate_skipped' });
 
   // El contrato de Diego (01/10) llama `titulo` al ARCHIVO del título y `documento`
   // al número; el CRM ya usaba `titulo` para el texto «Título / Programa» y `dni`
@@ -195,7 +208,7 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   const dedupe = persona.dni || persona.email || null;
   if (dedupe) {
     const existente = await model.findByDedupe(projectId, dedupe);
-    if (existente) return { status: 200, data: { matricula_id: existente.id, action: 'duplicate_skipped' } };
+    if (existente) return respuesta(huella, { matriculaId: existente.id, accion: 'duplicate_skipped' });
   }
 
   let prospecto = { leadId: null, creado: false };
@@ -237,7 +250,7 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
       const otra = (await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella])).rows[0]
         || (dedupe ? await model.findByDedupe(projectId, dedupe) : null);
       if (!otra) throw err;
-      return { status: 200, data: { matricula_id: otra.id, action: 'duplicate_skipped' } };
+      return respuesta(huella, { matriculaId: otra.id, accion: 'duplicate_skipped' });
     }
   }
 
@@ -263,16 +276,14 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
       rechazados.push({ documento: destino, motivo });
     }
   }
+  if (rechazados.length) logger.warn({ matriculaId: matricula.id, projectId, rechazados }, 'Admisión: documentos rechazados');
 
-  return {
-    status: 201,
-    data: {
-      matricula_id: matricula.id,
-      action: 'created',
-      lead_id: prospecto.leadId,
-      lead_creado: prospecto.creado,
-      conversion_id: conversionId,
-      documentos: { guardados, rechazados },
-    },
-  };
+  return respuesta(huella, {
+    matriculaId: matricula.id,
+    accion: 'created',
+    leadId: prospecto.leadId,
+    leadCreado: prospecto.creado,
+    conversionId,
+    documentos: { guardados, rechazados },
+  });
 }
