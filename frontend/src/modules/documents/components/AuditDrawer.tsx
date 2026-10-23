@@ -16,7 +16,7 @@ const ACTION_META: Record<AuditEntry['action'], { label: string; Icon: Icon; col
   generated:         { label: 'Generado',         Icon: FilePlus,         color: 'text-success bg-success-soft' },
   downloaded:        { label: 'Descargado',       Icon: FileArrowDown,    color: 'text-info bg-info-soft' },
   regenerated:       { label: 'Regenerado',       Icon: ArrowsClockwise,  color: 'text-warning bg-warning-soft' },
-  deleted:           { label: 'Eliminado',        Icon: Trash,            color: 'text-destructive bg-destructive-soft' },
+  deleted:           { label: 'Eliminado',        Icon: Trash,            color: 'text-destructive-soft-foreground bg-destructive-soft' },
   number_overridden: { label: 'Número editado',   Icon: Hash,             color: 'text-muted-foreground bg-muted' },
   emailed:           { label: 'Email enviado',    Icon: EnvelopeSimple,   color: 'text-primary bg-primary/10' },
 };
@@ -85,7 +85,7 @@ export default function AuditDrawer({ doc, projectId, onClose }: AuditDrawerProp
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {error && (
-            <div className="text-xs text-destructive bg-destructive-soft border border-destructive/30 rounded-md p-3">
+            <div className="text-xs text-destructive-soft-foreground bg-destructive-soft border border-destructive/30 rounded-md p-3">
               {error}
             </div>
           )}

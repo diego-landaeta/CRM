@@ -572,7 +572,7 @@ export default function WooCommercePage() {
             <div className="p-3 rounded-lg bg-info-soft border border-info/30 text-xs">
               <div className="font-bold text-info-soft-foreground uppercase mb-1">SEO page detectada (recomendada para url_info)</div>
               <code className="text-info-soft-foreground break-all">{previewData.scraped.url_used}</code>
-              <p className="mt-1 text-info-soft-foreground/80">
+              <p className="mt-1 text-info-soft-foreground">
                 Para que el CRM use ESTE link en vez del de WC (que tiene sufijo numérico tipo <code>-2105-2</code>),
                 mapea <strong>URL de la landing</strong> → <code className="bg-info/15 px-1 rounded">scraper.url_used</code>.
               </p>

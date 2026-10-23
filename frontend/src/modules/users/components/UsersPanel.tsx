@@ -211,7 +211,7 @@ export default function UsersPanel() {
         <p className="text-sm font-semibold mb-1 text-destructive-soft-foreground">
           No se pudieron cargar los usuarios
         </p>
-        <p className="text-secundario text-destructive-soft-foreground/80 mb-4">{lista.error.mensaje}</p>
+        <p className="text-secundario text-destructive-soft-foreground mb-4">{lista.error.mensaje}</p>
         <button
           onClick={lista.recargar}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/30 text-secundario font-semibold text-destructive-soft-foreground hover:bg-destructive/10 transition-colors focus:outline-none focus:ring-2 focus:ring-destructive/40"

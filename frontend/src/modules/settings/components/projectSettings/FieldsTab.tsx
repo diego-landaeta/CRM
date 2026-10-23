@@ -241,7 +241,7 @@ export default function FieldsTab({ project, onSaved }) {
                             <span className="font-semibold text-sm">{f.label}</span>
                             <span className="font-mono text-secundario text-muted-foreground">{f.field_key}</span>
                             <span className="px-1.5 py-0.5 rounded text-secundario font-medium bg-primary/10 text-primary">{FIELD_TYPES.find(t => t.v === f.type)?.label || f.type}</span>
-                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-destructive-soft text-destructive">REQ</span>}
+                            {f.required && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-destructive-soft text-destructive-soft-foreground">REQ</span>}
                             {f.grupo && <span className="px-1.5 py-0.5 rounded text-secundario font-bold bg-warning-soft text-warning-soft-foreground">{f.grupo}</span>}
                           </div>
                           {Array.isArray(f.options) && f.options.length > 0 && (

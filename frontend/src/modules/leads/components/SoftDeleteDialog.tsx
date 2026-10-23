@@ -69,7 +69,7 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
       <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-start gap-3">
-          <div className="w-9 h-9 rounded-md bg-destructive-soft text-destructive flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-md bg-destructive-soft text-destructive-soft-foreground flex items-center justify-center flex-shrink-0">
             <Trash size={18} weight="regular" />
           </div>
           <div className="min-w-0 flex-1">

@@ -275,7 +275,7 @@ export default function CreateTicketForm({ onSubmitted }: { onSubmitted?: () => 
 
 function KindSelector({ value, onChange }: { value: TicketKind; onChange: (k: TicketKind) => void }) {
   const KINDS: Array<{ k: TicketKind; label: string; Icon: any; color: string }> = [
-    { k: 'bug', label: 'Bug', Icon: Bug, color: 'text-destructive bg-destructive-soft' },
+    { k: 'bug', label: 'Bug', Icon: Bug, color: 'text-destructive-soft-foreground bg-destructive-soft' },
     { k: 'feature', label: 'Mejora', Icon: Lightning, color: 'text-warning bg-warning-soft' },
     { k: 'question', label: 'Pregunta', Icon: Question, color: 'text-info bg-info-soft' },
   ];

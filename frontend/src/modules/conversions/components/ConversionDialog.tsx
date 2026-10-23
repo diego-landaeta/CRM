@@ -1030,7 +1030,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                   </div>
                 )}
                 {productLinks.length === 0 && form.producto_contratado && (
-                  <p className="text-[10px] text-info-soft-foreground/70 italic">
+                  <p className="text-[10px] text-info-soft-foreground italic">
                     Este producto no tiene enlaces configurados. Añádelos editando el producto.
                   </p>
                 )}

@@ -118,7 +118,7 @@ const TUTORIALES: Tutorial[] = [
     titulo: 'Por qué una venta no tiene factura',
     resumen: 'Tres motivos distintos, y solo uno es un problema.',
     icono: Receipt,
-    color: 'text-destructive bg-destructive-soft',
+    color: 'text-destructive-soft-foreground bg-destructive-soft',
     pasos: [
       { que: 'No la requiere', detalle: 'Marcada como que no lleva factura. Es lo normal en ventas antiguas o facturadas por otra vía.' },
       { que: 'Importe cero', detalle: 'Una ficha sin importe: no hay nada que facturar.' },

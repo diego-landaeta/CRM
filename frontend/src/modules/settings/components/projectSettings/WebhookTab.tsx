@@ -64,7 +64,7 @@ export default function WebhookTab({ project }) {
             <button onClick={() => doCopy(apiKey, 'key')} className="h-10 px-3 rounded-lg border border-border bg-card text-xs font-semibold hover:bg-muted flex items-center gap-1">
               {copied === 'key' ? <CheckCircle size={12} weight="bold" className="text-success" /> : <Copy size={12} />} Copiar
             </button>
-            <button onClick={regenerate} className="h-10 px-3 rounded-lg bg-destructive-soft text-destructive text-xs font-semibold hover:bg-destructive-soft flex items-center gap-1">
+            <button onClick={regenerate} className="h-10 px-3 rounded-lg bg-destructive-soft text-destructive-soft-foreground text-xs font-semibold hover:bg-destructive/20 flex items-center gap-1">
               <ArrowsClockwise size={14} weight="bold" /> Regenerar
             </button>
           </div>

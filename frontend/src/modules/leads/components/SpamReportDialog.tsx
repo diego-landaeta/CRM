@@ -46,7 +46,7 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
       <div className="bg-card border border-border rounded-2xl shadow-dialog w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-5 py-4 border-b border-border">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-destructive-soft text-destructive flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-destructive-soft text-destructive-soft-foreground flex items-center justify-center flex-shrink-0">
               <WarningOctagon size={20} weight="duotone" />
             </div>
             <div>

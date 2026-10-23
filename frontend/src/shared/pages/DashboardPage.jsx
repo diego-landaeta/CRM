@@ -97,7 +97,7 @@ function SaasMonitor({ projectId }) {
         {[
           { icon: CurrencyEur, label: 'MRR actual', value: fmtMoney(metrics.mrr), delta: mrrDelta, color: 'text-primary bg-primary/10' },
           { icon: Users, label: 'Suscripciones activas', value: fmtNum(metrics.activeSubs), delta: subsDelta, color: 'text-info bg-info-soft' },
-          { icon: TrendDown, label: 'Churn rate', value: fmtPct(metrics.churnRate), tone: metrics.churnRate > 5 ? 'red' : 'emerald', color: metrics.churnRate > 5 ? 'text-destructive bg-destructive-soft' : 'text-success bg-success-soft' },
+          { icon: TrendDown, label: 'Churn rate', value: fmtPct(metrics.churnRate), tone: metrics.churnRate > 5 ? 'red' : 'emerald', color: metrics.churnRate > 5 ? 'text-destructive-soft-foreground bg-destructive-soft' : 'text-success bg-success-soft' },
           { icon: WarningCircle, label: 'Cobros fallidos', value: fmtNum(metrics.failedPayments), color: metrics.failedPayments > 0 ? 'text-warning bg-warning-soft' : 'text-muted-foreground bg-muted' },
         ].map(({ icon: Icon, label, value, delta, color }) => (
           <div key={label} className="bg-card border border-border rounded-lg p-4 space-y-2">
@@ -179,7 +179,7 @@ export default function DashboardPage() {
         <div className="bg-destructive-soft border border-destructive/30 rounded-lg p-8 text-center">
           <WarningCircle size={40} className="text-destructive mx-auto mb-3" weight="regular" />
           <p className="text-sm text-destructive font-semibold mb-1">No se pudieron cargar los datos</p>
-          <p className="text-xs text-destructive/80 mb-4">{error}</p>
+          <p className="text-xs text-destructive mb-4">{error}</p>
           <button
             onClick={() => refetch()}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive-soft-foreground bg-destructive-soft hover:bg-destructive-soft/70 transition-colors px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-destructive/50 focus:ring-offset-2"

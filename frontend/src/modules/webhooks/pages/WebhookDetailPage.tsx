@@ -355,7 +355,7 @@ export default function WebhookDetailPage() {
       <section className="flex justify-end pt-2">
         <button
           onClick={remove}
-          className="flex items-center gap-1 h-9 px-3 rounded-lg border border-destructive/30 bg-destructive-soft text-destructive text-xs font-bold hover:bg-destructive/15 transition-colors"
+          className="flex items-center gap-1 h-9 px-3 rounded-lg border border-destructive/30 bg-destructive-soft text-destructive-soft-foreground text-xs font-bold hover:bg-destructive/15 transition-colors"
         >
           <Trash size={12} weight="bold" /> Eliminar webhook
         </button>

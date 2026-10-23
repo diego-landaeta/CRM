@@ -61,7 +61,7 @@ interface Comprobacion {
 const PINTA: Record<Estado, { texto: string; icono: typeof CheckCircle; clase: string; borde: string }> = {
   bien:           { texto: 'Funciona',         icono: CheckCircle,   clase: 'text-success bg-success-soft border-success/30', borde: 'border-success/30' },
   atencion:       { texto: 'Atención',         icono: WarningCircle, clase: 'text-warning bg-warning-soft border-warning/30',           borde: 'border-warning/30' },
-  caida:          { texto: 'Caída',            icono: XCircle,       clase: 'text-destructive bg-destructive-soft border-destructive/30',                       borde: 'border-destructive/30' },
+  caida:          { texto: 'Caída',            icono: XCircle,       clase: 'text-destructive-soft-foreground bg-destructive-soft border-destructive/30',                       borde: 'border-destructive/30' },
   sin_datos:      { texto: 'Sin datos',        icono: Question,      clase: 'text-muted-foreground bg-muted border-border',                                                                                borde: 'border-border' },
   sin_configurar: { texto: 'Sin configurar',   icono: Question,      clase: 'text-muted-foreground bg-muted border-border',                                                                                borde: 'border-border' },
 };
@@ -119,7 +119,7 @@ function Tareas({ tareas }: { tareas: Tarea[] }) {
                     {t.titulo}
                   </span>
                   {t.detalle && mal && (
-                    <span className="block text-destructive/80 break-words">{t.detalle}</span>
+                    <span className="block text-destructive break-words">{t.detalle}</span>
                   )}
                 </span>
                 <span className="text-muted-foreground shrink-0 tabular-nums">
@@ -225,7 +225,7 @@ export default function PiezasDelSistema() {
                   {/* El motivo, entero y sin recortar: si algo está roto, lo que
                       hace falta es saber qué, no un «error» a secas. */}
                   {p.detalle && (
-                    <p className="text-xs text-destructive break-words bg-destructive-soft rounded-md px-2 py-1.5">
+                    <p className="text-xs text-destructive-soft-foreground break-words bg-destructive-soft rounded-md px-2 py-1.5">
                       {p.detalle}
                     </p>
                   )}

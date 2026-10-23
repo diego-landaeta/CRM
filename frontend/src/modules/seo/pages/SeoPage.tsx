@@ -60,7 +60,7 @@ export default function SeoPage() {
             Datos con retraso de 2-3 dias respecto a la actividad real (limitacion de Google Search Console).
           </p>
           {seo.metrics.lastUpdate && (
-            <p className="text-xs text-warning-soft-foreground/80 mt-0.5">
+            <p className="text-xs text-warning-soft-foreground mt-0.5">
               Ultima actualizacion: <span className="font-semibold">{fmtDate(seo.metrics.lastUpdate)}</span>
             </p>
           )}
