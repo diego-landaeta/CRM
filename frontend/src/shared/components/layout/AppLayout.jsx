@@ -29,6 +29,9 @@ const ALL_PROJECTS_OK = [
   /^\/tutores$/,
   /^\/tutores\/sin-tutor$/,
   /^\/tutores\/comisiones$/,
+  // Consultas de alumnos (#188, #189): cada fila dice de qué campus es, y el
+  // tutor ve lo suyo sin mirar la cabecera.
+  /^\/consultas(?:\/.*)?$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto
@@ -127,6 +130,10 @@ const CON_SOCIEDAD_OK = [
   /^\/prospectos\/\d+$/,
   /^\/clientes$/,
   /^\/clientes\/\d+$/,
+  // Matrículas (#199): «por empresa y con "Todos los proyectos", como el resto
+  // del CRM». El listado manda issuerId y el servidor lo resuelve con
+  // proyectosDelAmbito; la pestaña de webhooks pide elegir un campus.
+  /^\/clientes\/matriculas$/,
   // Facturas es la pantalla que Diego pone de ejemplo: sabia filtrar por
   // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
   // campus» justo a la unica que no lo necesitaba.
@@ -164,6 +171,9 @@ const CON_SOCIEDAD_OK = [
   /^\/tutores$/,
   /^\/tutores\/comisiones$/,
   /^\/tutores\/sin-tutor$/,
+  // Consultas de alumnos (#188, #189): el servidor acota a los campus de la
+  // empresa con `proyectosDelAmbito`; sin esto el muro tapaba la bandeja.
+  /^\/consultas(?:\/.*)?$/,
   // «Mis cursos» es lo del propio tutor: no filtra por proyecto NI por empresa,
   // asi que pedirle que elija un campus no significaba nada.
   /^\/mis-cursos$/,
