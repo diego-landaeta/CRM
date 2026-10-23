@@ -141,7 +141,9 @@ export default function FeedbackEncuestaPage() {
         </header>
         <div className="p-6 sm:p-8">
           {vista && (
-            <p className="mb-5 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+            /* Colores fijos, como el resto de esta página: es pública y siempre clara.
+               Con los del tema, quien tiene el sistema en oscuro veía este aviso marrón. */
+            <p className="mb-5 rounded-md border border-[#fcd34d] bg-[#fffbeb] px-3 py-2 text-sm text-[#78350f]">
               Vista previa: así la verá la persona. Lo que marques aquí no se guarda.
             </p>
           )}
@@ -270,7 +272,7 @@ export default function FeedbackEncuestaPage() {
                 })}
               </div>
 
-              {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+              {error && <p className="mt-4 text-sm text-[#b91c1c]">{error}</p>}
 
               <button type="button" onClick={enviar} disabled={faltaObligatoria || enviando || vista}
                 className="mt-7 w-full rounded-lg px-5 py-3 text-base font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-40"

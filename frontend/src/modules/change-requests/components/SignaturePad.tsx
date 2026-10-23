@@ -139,7 +139,9 @@ export default function SignaturePad({ value, onChange, height = 160, readOnly =
         <button
           type="button"
           onClick={clear}
-          className="absolute top-2 right-2 px-2 py-1 text-[11px] rounded-md bg-white border border-border hover:bg-muted shadow-sm flex items-center gap-1"
+          /* El lienzo es blanco también en oscuro, así que el botón lleva tinta fija:
+             con la del tema, en oscuro salía letra blanca sobre blanco. */
+          className="absolute top-2 right-2 px-2 py-1 text-[11px] rounded-md bg-white text-[#334155] border border-[#e2e8f0] hover:bg-[#f1f5f9] shadow-sm flex items-center gap-1"
         >
           <Trash size={11} /> Borrar
         </button>

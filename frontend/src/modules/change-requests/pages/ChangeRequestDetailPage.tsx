@@ -234,7 +234,7 @@ export default function ChangeRequestDetailPage() {
               <h2 className="text-base font-bold text-info-soft-foreground mb-1">
                 🖋️ Esta RFC espera tu firma como CEO
               </h2>
-              <p className="text-sm text-info-soft-foreground/80">
+              <p className="text-sm text-info-soft-foreground">
                 Revisa el análisis del PM y la propuesta. Cuando firmes, el RFC queda <strong>Aprobado / Rechazado / Diferido</strong> según tu decisión.
               </p>
             </div>

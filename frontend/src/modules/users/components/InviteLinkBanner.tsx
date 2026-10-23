@@ -25,12 +25,12 @@ export default function InviteLinkBanner({ email, url, onClose }: Props) {
       <div className="flex items-start justify-between gap-2">
         <div className="text-xs">
           <p className="font-semibold text-warning-soft-foreground">Invitación pendiente para {email}</p>
-          <p className="text-warning-soft-foreground/80 mt-0.5">
+          <p className="text-warning-soft-foreground mt-0.5">
             Si el envío por email no está activo, copia este link y pásaselo. Caduca en 24h.
             Al abrirlo el usuario define su propia contraseña.
           </p>
         </div>
-        <button onClick={onClose} aria-label="Cerrar" className="text-warning-soft-foreground/60 hover:text-warning-soft-foreground">
+        <button onClick={onClose} aria-label="Cerrar" className="text-warning-soft-foreground/80 hover:text-warning-soft-foreground">
           <X size={14} weight="bold" />
         </button>
       </div>
