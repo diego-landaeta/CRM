@@ -25,6 +25,11 @@ import { AppError } from '../../shared/utils/AppError.js';
  */
 
 export const MAX_BYTES = 10 * 1024 * 1024;
+// El envío entero (datos y documentos), POR DEBAJO de los 20 MB de Nginx (nginx/crm.conf;
+// QA de Diego, 22/10): así lo rechaza la aplicación, que dice por qué, y no Nginx con su
+// 413 mudo. Antes la aplicación aceptaba 25 MB en JSON y 8 archivos de 10 MB en multipart,
+// y todo lo que pasaba de 20 MB se perdía sin explicación.
+export const MAX_ENVIO_BYTES = 19 * 1024 * 1024;
 // Sin datos durante este tiempo, se corta (el `timeout` del GET, que es de inactividad).
 const TIEMPO_MAX_MS = 10_000;
 // Y la descarga entera, con sus redirecciones, nunca pasa de este (QA de Diego, 22/10):

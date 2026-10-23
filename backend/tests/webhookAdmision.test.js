@@ -284,14 +284,14 @@ describe('el contrato de Diego (01/10), tal cual, y formularios de verdad', () =
       .png({ compressionLevel: 0 }).toBuffer();
     expect(grande.length).toBeGreaterThan(4 * 1024 * 1024);
     const uri = `data:image/png;base64,${grande.toString('base64')}`;
+    // Una sola imagen (~10 MB en texto): dos eran ~20 MB, más que el tope del envío (19 MB).
+    expect(uri.length).toBeGreaterThan(5 * 1024 * 1024);
     // La app de verdad, con su tope por ruta (app.js).
     const { default: appReal } = await import('../src/app.js');
     const r = await supertest(appReal).post(`/api/webhook-tokens/receive/${TOKEN.token}`)
-      .send({ email: correo('json-grande'), dni_frente: uri, dni_dorso: uri });
+      .send({ email: correo('json-grande'), dni_frente: uri });
     expect(r.status).toBe(200);
-    const m = await enviada(r);
-    expect(m.dni_doc_key).toBeTruthy();
-    expect(m.dni_dorso_key).toBeTruthy();
+    expect((await enviada(r)).dni_doc_key).toBeTruthy();
   }, 60000);
 });
 
@@ -536,6 +536,56 @@ describe('la descarga desde una URL tiene un plazo total (QA de Diego, 22/10)', 
       s.cerrar();
     }
   });
+});
+
+describe('el tope del envío entero, por debajo de los 20 MB de Nginx (QA de Diego, 22/10)', () => {
+  // Un «JPG» del tamaño pedido: la cabecera de verdad y relleno (el tipo se mira por los primeros bytes).
+  const jpgDe = (bytes) => Buffer.concat([JPG, Buffer.alloc(bytes - JPG.length, 0x20)]);
+  const MB = 1024 * 1024;
+  let appReal;
+  beforeAll(async () => { ({ default: appReal } = await import('../src/app.js')); });
+
+  it('tres archivos de 7 MB (cada uno vale, juntos 21 MB): 413 con el motivo, sin llegar a Nginx', async () => {
+    const r = await supertest(appReal).post(`/api/webhook-tokens/receive/${TOKEN.token}`)
+      .field('email', correo('tres-de-7'))
+      .attach('dni_frente', jpgDe(7 * MB), 'a.jpg').attach('dni_dorso', jpgDe(7 * MB), 'b.jpg').attach('foto', jpgDe(7 * MB), 'c.jpg');
+    expect(r.status).toBe(413);
+    expect(r.body).toMatchObject({ success: false, error: 'El envío pasa de 19 MB en total.', code: 'ENVIO_DEMASIADO_GRANDE' });
+    expect((await q('SELECT count(*)::int AS n FROM matriculas WHERE project_id = $1 AND email = $2', [PROYECTO.id, correo('tres-de-7')]))[0].n).toBe(0);
+  }, 60000);
+
+  it('un JSON de más de 19 MB por trozos (sin Content-Length): lo corta el lector, con el mismo motivo', async () => {
+    const srv = http.createServer(appReal);
+    await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
+    try {
+      const r = await new Promise((ok, mal) => {
+        const req = http.request({
+          host: '127.0.0.1', port: srv.address().port, method: 'POST', path: `/api/webhook-tokens/receive/${TOKEN.token}`,
+          headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+        }, (res) => { let b = ''; res.on('data', (d) => { b += d; }); res.on('end', () => ok({ status: res.statusCode, body: JSON.parse(b) })); });
+        req.on('error', (e) => (e.code === 'EPIPE' || e.code === 'ECONNRESET' ? null : mal(e)));
+        req.write(`{"email":"${correo('trozos')}","relleno":"`);
+        const trozo = 'x'.repeat(MB);
+        for (let i = 0; i < 20; i++) req.write(trozo);
+        req.end('"}');
+      });
+      expect(r.status).toBe(413);
+      expect(r.body).toMatchObject({ error: 'El envío pasa de 19 MB en total.', code: 'ENVIO_DEMASIADO_GRANDE' });
+    } finally {
+      srv.closeAllConnections();
+      srv.close();
+    }
+  }, 60000);
+
+  it('justo por debajo (dos archivos de 8 MB, unos 16 MB): entra, con sus documentos', async () => {
+    const r = await supertest(appReal).post(`/api/webhook-tokens/receive/${TOKEN.token}`)
+      .field('email', correo('dos-de-8'))
+      .attach('dni_frente', jpgDe(8 * MB), 'a.jpg').attach('dni_dorso', jpgDe(8 * MB), 'b.jpg');
+    expect(r.status).toBe(200);
+    const m = await enviada(r);
+    expect(m.dni_doc_key).toMatch(/\.jpg$/);
+    expect(m.dni_dorso_key).toMatch(/\.jpg$/);
+  }, 60000);
 });
 
 describe('el contrato de la lista y la ficha (Diego, 01/10)', () => {
