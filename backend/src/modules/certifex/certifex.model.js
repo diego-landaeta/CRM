@@ -309,7 +309,8 @@ export async function firmasSubidasDe(matriculaIds) {
  * admision no tienen ficha ni venta (solo `dedupe_key` y `datos_admision`), asi que el
  * correo se busca en las cuatro. Map matriculaId → { key, matriculaCrm }.
  *
- * SOLO DE UNA ADMISIÓN ACEPTADA (QA de Diego, 22/10): «Datos validados» o «Validada».
+ * SOLO DE UNA ADMISIÓN ACEPTADA/EN VIGOR (QA de Diego, 22/10): «Validada». «Datos
+ * validados» es el paso de en medio (aún falta «Validar matrícula»), así que no vale.
  * El formulario es público: con cualquier solicitud —o una ya rechazada— a nombre del
  * correo de otro, su firma acabaría en el diploma de esa persona.
  */
@@ -326,7 +327,7 @@ export async function firmasDeAdmision(pares) {
            LEFT JOIN leads lc ON lc.id = cv.lead_id
           WHERE m.project_id = x.project_id
             AND m.firma_key IS NOT NULL
-            AND m.estado IN ('datos_validados', 'validada')
+            AND m.estado = 'validada'
             -- m.email: el correo del formulario ya mapeado (#198); el de datos_admision
             -- solo vale si el formulario lo manda con el nombre «email».
             AND x.email IN (lower(l.email), lower(lc.email), lower(m.dedupe_key), lower(m.email), lower(m.datos_admision->>'email'))

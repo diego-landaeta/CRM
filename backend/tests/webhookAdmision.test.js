@@ -352,17 +352,20 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     const t = await tokenModel.create({ project_id: PROYECTO.id, kind: 'matriculas', field_mapping: { email: 'your-email', firma: 'your-signature' } });
     const r = await recibir(t.token).field('your-email', correo('diploma')).attach('your-signature', FIRMA_BLANCA, 'f.png');
     const m = await enviada(r);
-    await q(`UPDATE matriculas SET estado = 'datos_validados' WHERE id = $1`, [m.id]);
+    await q(`UPDATE matriculas SET estado = 'validada' WHERE id = $1`, [m.id]);
     const firmas = await certifexModel.firmasDeAdmision([{ matriculaId: 999001, projectId: PROYECTO.id, email: correo('diploma') }]);
     expect(firmas.get(999001)?.matriculaCrm).toBe(m.id);
   });
 
-  it('la firma solo sale de una admisión aceptada: ni de una solicitud ni de una rechazada (QA de Diego, 22/10)', async () => {
+  it('la firma solo sale de una admisión aceptada/en vigor («Validada»): ni de una solicitud, ni con los datos validados, ni de una rechazada (QA de Diego, 22/10)', async () => {
     const buscar = async () => (await certifexModel.firmasDeAdmision([{ matriculaId: 999002, projectId: PROYECTO.id, email: correo('suplantada') }])).get(999002);
     const conFirma = (curso) => recibir().field('email', correo('suplantada')).field('curso_solicitado', curso).attach('firma', FIRMA_BLANCA, 'f.png');
     // Alguien manda el formulario con el correo de otra persona: queda en «Solicitud».
     const solicitud = await enviada(await conFirma('Curso 1'));
     expect(solicitud.estado).toBe('solicitud_admision');
+    expect(await buscar()).toBeUndefined();
+    // «Validar datos» es el paso de en medio: todavía no está aceptada.
+    await q(`UPDATE matriculas SET estado = 'datos_validados' WHERE id = $1`, [solicitud.id]);
     expect(await buscar()).toBeUndefined();
     await q(`UPDATE matriculas SET estado = 'rechazada' WHERE id = $1`, [solicitud.id]);
     expect(await buscar()).toBeUndefined();

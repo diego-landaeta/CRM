@@ -18,7 +18,7 @@ import { proyectoDeCentro } from './certifex.programa.js';
  *      migración 207), ya procesada.
  *   2. La de la matrícula de admisión del mismo correo en ese campus (matriculas.firma_key),
  *      que se procesa al leerla: puede ser una foto o un escaneo con fondo blanco. Solo
- *      de una admisión aceptada («Datos validados» o «Validada»; QA de Diego, 22/10).
+ *      de una admisión aceptada/en vigor, «Validada» (QA de Diego, 22/10).
  * Sin ninguna, el diploma sale como hasta ahora, con el nombre impreso.
  */
 
