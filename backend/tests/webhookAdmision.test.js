@@ -351,8 +351,24 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
   it('Certifex encuentra su firma por el correo mapeado (aunque el formulario no lo llame «email»)', async () => {
     const t = await tokenModel.create({ project_id: PROYECTO.id, kind: 'matriculas', field_mapping: { email: 'your-email', firma: 'your-signature' } });
     const r = await recibir(t.token).field('your-email', correo('diploma')).attach('your-signature', FIRMA_BLANCA, 'f.png');
+    const m = await enviada(r);
+    await q(`UPDATE matriculas SET estado = 'datos_validados' WHERE id = $1`, [m.id]);
     const firmas = await certifexModel.firmasDeAdmision([{ matriculaId: 999001, projectId: PROYECTO.id, email: correo('diploma') }]);
-    expect(firmas.get(999001)?.matriculaCrm).toBe((await enviada(r)).id);
+    expect(firmas.get(999001)?.matriculaCrm).toBe(m.id);
+  });
+
+  it('la firma solo sale de una admisión aceptada: ni de una solicitud ni de una rechazada (QA de Diego, 22/10)', async () => {
+    const buscar = async () => (await certifexModel.firmasDeAdmision([{ matriculaId: 999002, projectId: PROYECTO.id, email: correo('suplantada') }])).get(999002);
+    const conFirma = (curso) => recibir().field('email', correo('suplantada')).field('curso_solicitado', curso).attach('firma', FIRMA_BLANCA, 'f.png');
+    // Alguien manda el formulario con el correo de otra persona: queda en «Solicitud».
+    const solicitud = await enviada(await conFirma('Curso 1'));
+    expect(solicitud.estado).toBe('solicitud_admision');
+    expect(await buscar()).toBeUndefined();
+    await q(`UPDATE matriculas SET estado = 'rechazada' WHERE id = $1`, [solicitud.id]);
+    expect(await buscar()).toBeUndefined();
+    // Validada, sí.
+    await q(`UPDATE matriculas SET estado = 'validada' WHERE id = $1`, [solicitud.id]);
+    expect((await buscar())?.matriculaCrm).toBe(solicitud.id);
   });
 });
 
