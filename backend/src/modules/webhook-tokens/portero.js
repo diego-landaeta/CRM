@@ -38,8 +38,9 @@ const demasiadoGrande = () => new AppError('El envío pasa de 19 MB en total.', 
 export function topeDelEnvio(req, _res, next) {
   if (!(Number(req.headers['content-length']) > MAX_ENVIO_BYTES)) return next();
   // Se contesta DESPUÉS de vaciar lo que llega (sin guardarlo), como hacen express.json y
-  // urlencoded al pasarse: contestar a mitad corta la conexión, y quien manda —o Nginx,
-  // que pasa el envío entero— se encuentra un ECONNRESET o un 502 en vez del 413.
+  // urlencoded al pasarse: contestar a mitad corta la conexión, y quien manda directamente
+  // a la aplicación se encuentra un ECONNRESET en vez del 413. Detrás de Nginx el 413
+  // llegaba igual (probado el 23/10), pero así sale bien en los dos casos.
   req.once('end', () => next(demasiadoGrande()));
   req.resume();
 }
