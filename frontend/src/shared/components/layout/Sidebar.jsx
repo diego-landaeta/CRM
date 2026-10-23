@@ -64,17 +64,16 @@ import {
   Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
-import { rolesDe, soloEsColaborador } from '@/shared/lib/roles';
+import { rolesDe, soloEsColaborador, soloEsTutor } from '@/shared/lib/roles';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
-import { avatarColorForName } from '@/shared/lib/ui';
 import { lazy, Suspense } from 'react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
+import { ProjectAvatar } from '@/shared/components/ui/ProjectAvatar';
 import { isFloatingDockHidden, setFloatingDockHidden } from './FloatingDock';
 import { toast } from '@/shared/hooks/useToast';
-import { getLocalLogo } from '@/shared/lib/projectLogos';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
@@ -248,6 +247,8 @@ export const NAV_SECTIONS = [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { label: 'Mis cursos', to: '/mis-cursos', detail: 'Tus cursos y tu parte', icon: GraduationCap, roles: ['tutor'] },
+      // Consultas de alumnos (#188): el tutor, su bandeja; administración, todas.
+      { label: 'Consultas', to: '/consultas', detail: 'Las dudas de los alumnos', icon: ChatCircleText, roles: ['superadmin', 'admin', 'tutor'], module: 'tutores', statusTag: 'Pruebas' },
       { label: 'Sin tutor', to: '/tutores/sin-tutor', detail: 'Formaciones sin asignar', icon: Warning, roles: ['superadmin', 'admin'], module: 'tutores' },
       { label: 'Comisiones', to: '/tutores/comisiones', detail: 'Lo que se les debe', icon: Coins, roles: ['superadmin', 'admin'], module: 'tutores' },
     ],
@@ -301,9 +302,10 @@ export const NAV_SECTIONS = [
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Los mismos roles que la API (`soloRoles` admin/superadmin),
       // y además, para VERLO en solo lectura, quien tenga `diplomas.view` (#384,
-      // `oPermiso`). Se enciende por configuración, como Certificaciones
-      // (VITE_CERTIFEX_PANEL).
-      ...(CERTIFEX_PANEL ? [{ label: 'Diplomas', to: '/clientes/matriculas/diplomas', detail: 'Solicitudes y enviados', icon: Certificate, roles: ['superadmin', 'admin'], oPermiso: 'diplomas.view' }] : []),
+      // `oPermiso`), y para emitir, quien tenga `diplomas.emit` (Diego, 22/10/2026:
+      // «que Dayana pueda emitir»). Se enciende por configuración, como
+      // Certificaciones (VITE_CERTIFEX_PANEL).
+      ...(CERTIFEX_PANEL ? [{ label: 'Diplomas', to: '/clientes/matriculas/diplomas', detail: 'Solicitudes y enviados', icon: Certificate, roles: ['superadmin', 'admin'], oPermiso: ['diplomas.view', 'diplomas.emit'] }] : []),
     ],
   },
   // Conexión (MCP de Claude). Diego: «estará en el menú en la sección de
@@ -452,7 +454,9 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   const es = (...r) => r.some((x) => suyos.includes(x));
   // «Por su rol o porque se le ha dado»: quien tiene el permiso la ve aunque su
   // rol no esté en `roles`. Lo que ve dentro lo recorta la pantalla (y la API).
-  const porPermiso = Boolean(item.oPermiso && typeof can === 'function' && can(item.oPermiso) === true);
+  // `oPermiso` puede ser una lista: basta con uno (Diplomas: ver O emitir).
+  const porPermiso = Boolean(item.oPermiso && typeof can === 'function'
+    && [].concat(item.oPermiso).some((p) => can(p) === true));
   if (item.apagable && moduloApagado(item.apagable)) return false;
   if (item.previewOnly && !IS_REDESIGN_NAV_ENABLED) return false;
   // projectType filter (e.g. solo proyectos IA): aplica a todos los roles
@@ -848,93 +852,6 @@ export function NavItem({ to, href, icon: Icon, label, detail, badge, labelOverr
   );
 }
 
-// Las iniciales con las que se reconoce una marca sin logo.
-//
-// Casi todas empiezan por «IS» —ISECD, ISEF, ISSLOGG, ISAEG, ISEIH—, asi que
-// coger las dos primeras letras las deja a todas igual: «IS, IS, IS». Se quita
-// ese prefijo comun y se cogen las dos siguientes: EC, EF, SL, AE, EI. Cada una
-// distinta, y siguen siendo su nombre.
-function inicialesDe(nombre = '') {
-  const limpio = String(nombre).trim();
-  if (!limpio) return '··';
-  const palabras = limpio.split(/\s+/).filter(Boolean);
-  if (palabras.length > 1) {
-    return (palabras[0][0] + palabras[1][0]).toUpperCase();
-  }
-  const sola = palabras[0].toUpperCase();
-  const sinPrefijo = sola.length > 4 && sola.startsWith('IS') ? sola.slice(2) : sola;
-  return sinPrefijo.slice(0, 2);
-}
-
-// La paleta vive en shared/lib/ui.ts, que es el unico sitio donde puede vivir.
-// Aqui habia una copia; era la QUINTA del CRM, y la unica que llevaba variante
-// oscura — las otras cuatro pintaban un parche claro sobre fondo negro.
-const tonoDe = avatarColorForName;
-
-export function ProjectAvatar({ project, size = 'md' }) {
-  const { theme } = useTheme();
-  const [falloImagen, setFalloImagen] = useState(false);
-  const dim = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
-
-  // «Todos los proyectos» va primero: no es una marca, es una vista.
-  if (project?.isAll) {
-    return (
-      <div className={`${dim} rounded-lg bg-info-soft text-info-soft-foreground flex items-center justify-center flex-shrink-0 font-bold text-[11px]`}>
-        ALL
-      </div>
-    );
-  }
-
-  const externo = project?.logo_url && /^https?:\/\//i.test(project.logo_url);
-  const src = project?.logo_url
-    ? (externo
-        ? project.logo_url
-        : `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/projects/${project.id}/logo`)
-    : getLocalLogo(project?.slug, theme);
-
-  if (src && !falloImagen) {
-    return (
-      // Fondo claro SIEMPRE, tambien en modo oscuro: estos logos vienen de las
-      // webs y muchos son de tinta oscura sobre transparente. Sin el fondo
-      // desaparecen en el panel oscuro y queda un cuadro vacio.
-      <span className={`${dim} rounded-lg bg-white ring-1 ring-black/5 dark:ring-white/10 flex items-center justify-center overflow-hidden flex-shrink-0`}>
-        <img
-          src={src}
-          alt=""
-          width={24}
-          height={24}
-          loading="lazy"
-          decoding="async"
-          className="w-full h-full object-contain p-[3px]"
-          // Si el logo no carga —una web caida, una direccion cambiada— se
-          // enseñan las iniciales. Antes se escondia la imagen y quedaba un
-          // hueco, que parece que la pantalla esta rota.
-          onError={() => setFalloImagen(true)}
-        />
-      </span>
-    );
-  }
-
-  if (project?.emoji) {
-    return (
-      <div className={`${dim} rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 ${size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-lg'}`}>
-        {project.emoji}
-      </div>
-    );
-  }
-
-  // Sin logo y sin emoji: iniciales con su color. Antes las tres marcas sin
-  // logo compartian el mismo icono de cajita y no habia forma de distinguirlas
-  // de un vistazo, que es justo para lo que sirve un icono.
-  return (
-    <div
-      className={`${dim} rounded-lg ${tonoDe(project?.nombre)} flex items-center justify-center flex-shrink-0 font-bold ${size === 'lg' ? 'text-base' : size === 'sm' ? 'text-[10px]' : 'text-[11px]'} tracking-tight`}
-      title={project?.nombre || ''}
-    >
-      {inicialesDe(project?.nombre)}
-    </div>
-  );
-}
 
 export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
   const navigate = useNavigate();
@@ -1066,7 +983,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   useEffect(() => { setUserMenuOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    if (!activeProject?.id || soloEsColaborador(user)) return;
+    // El tutor tampoco: no ve prospectos y el servidor se los niega (#187).
+    if (!activeProject?.id || soloEsColaborador(user) || soloEsTutor(user)) return;
     let cancelled = false;
     let interval = null;
 
