@@ -139,8 +139,10 @@ function pedir(u, permitirRedLocal, fin) {
     const mal = (e) => { clearTimeout(reloj); rechazar(e); };
     const req = cliente.get(u, { lookup: resolverPublica(permitirRedLocal), timeout: TIEMPO_MAX_MS, headers: { 'User-Agent': 'CRM-Admision/1.0' } }, (res) => {
       const status = res.statusCode || 0;
-      if (status >= 300 && status < 400) { res.resume(); return ok({ status, location: res.headers.location }); }
-      if (status < 200 || status >= 300) { res.resume(); return ok({ status }); }
+      // De una redirección o un error no hace falta el cuerpo: se corta. Leerlo hasta el
+      // final (`resume`) dejaba la conexión abierta sin plazo si el servidor no acababa nunca.
+      if (status >= 300 && status < 400) { ok({ status, location: res.headers.location }); return req.destroy(); }
+      if (status < 200 || status >= 300) { ok({ status }); return req.destroy(); }
       if (Number(res.headers['content-length']) > MAX_BYTES) { res.destroy(); return mal(rechazo('El archivo pasa de 10 MB.')); }
       const partes = [];
       let total = 0;

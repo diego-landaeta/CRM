@@ -536,6 +536,28 @@ describe('la descarga desde una URL tiene un plazo total (QA de Diego, 22/10)', 
       s.cerrar();
     }
   });
+
+  it('la conexión de una redirección o un error se cierra: su cuerpo, aunque no acabe nunca, no se sigue leyendo', async () => {
+    let abiertas = 0;
+    const s = await servidor((req, res) => {
+      if (req.url === '/dni.jpg') { res.writeHead(200, { 'content-type': 'image/jpeg' }); return res.end(JPG); }
+      // Un 302 o un 500 con el cuerpo a goteo, sin acabar.
+      abiertas += 1;
+      req.socket.on('close', () => { abiertas -= 1; });
+      res.writeHead(req.url === '/salta' ? 302 : 500, req.url === '/salta' ? { location: '/dni.jpg' } : {});
+      res.write('x');
+      const t = setInterval(() => res.write('x'), 50);
+      res.on('close', () => clearInterval(t));
+    });
+    try {
+      expect((await desdeUrl(`${s.base}/salta`, { permitirRedLocal: true, plazoMs: 5000 })).equals(JPG)).toBe(true);
+      await expect(desdeUrl(`${s.base}/falla`, { permitirRedLocal: true, plazoMs: 5000 })).rejects.toThrow('contestó 500');
+      await new Promise((ok) => setTimeout(ok, 300));
+      expect(abiertas).toBe(0);
+    } finally {
+      s.cerrar();
+    }
+  });
 });
 
 describe('el tope del envío entero, por debajo de los 20 MB de Nginx (QA de Diego, 22/10)', () => {
