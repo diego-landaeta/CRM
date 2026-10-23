@@ -489,6 +489,55 @@ describe('lo que salió en la auditoría (22/10)', () => {
   });
 });
 
+describe('la descarga desde una URL tiene un plazo total (QA de Diego, 22/10)', () => {
+  // Un servidor de prueba que contesta según la ruta. Al acabar, cierra lo que quede abierto.
+  async function servidor(manejar) {
+    const srv = http.createServer(manejar);
+    await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
+    return { base: `http://127.0.0.1:${srv.address().port}`, cerrar: () => { srv.closeAllConnections(); srv.close(); } };
+  }
+
+  it('un servidor que manda un byte cada poco (nunca 10 s callado) se corta al llegar al plazo', async () => {
+    const goteos = [];
+    const s = await servidor((req, res) => {
+      res.writeHead(200, { 'content-type': 'image/jpeg' });
+      res.write(JPG.subarray(0, 3));
+      const t = setInterval(() => res.write(Buffer.from([0])), 100);
+      goteos.push(t);
+      req.on('close', () => clearInterval(t));
+    });
+    const antes = Date.now();
+    try {
+      await expect(desdeUrl(`${s.base}/lento.jpg`, { permitirRedLocal: true, plazoMs: 800 }))
+        .rejects.toThrow('El archivo tarda demasiado en descargarse.');
+      expect(Date.now() - antes).toBeLessThan(3000);
+    } finally {
+      goteos.forEach(clearInterval);
+      s.cerrar();
+    }
+  });
+
+  it('el plazo es para la descarga entera: cada redirección no vuelve a empezar de cero', async () => {
+    // Cada salto tarda 300 ms (menos que el plazo), pero tres seguidos, no.
+    const s = await servidor((req, res) => {
+      const n = Number(req.url.slice(1)) || 0;
+      setTimeout(() => {
+        if (n < 3) { res.writeHead(302, { location: `/${n + 1}` }); return res.end(); }
+        res.writeHead(200, { 'content-type': 'image/jpeg' }); res.end(JPG);
+      }, 300);
+    });
+    try {
+      await expect(desdeUrl(`${s.base}/0`, { permitirRedLocal: true, plazoMs: 700 }))
+        .rejects.toThrow('El archivo tarda demasiado en descargarse.');
+      // Con plazo de sobra, la misma cadena llega al archivo.
+      const cuerpo = await desdeUrl(`${s.base}/0`, { permitirRedLocal: true, plazoMs: 5000 });
+      expect(cuerpo.equals(JPG)).toBe(true);
+    } finally {
+      s.cerrar();
+    }
+  });
+});
+
 describe('el contrato de la lista y la ficha (Diego, 01/10)', () => {
   const ADMIN_ID = { id: null };
   const como = () => ({ Authorization: `Bearer ${jwt.sign({ userId: ADMIN_ID.id, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '5m' })}` });
