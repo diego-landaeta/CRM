@@ -223,4 +223,30 @@ describe('colores sueltos escritos a mano (#32)', () => {
       );
     }
   });
+
+  it('y lo que quedaba fuera de los bloques, también a cero (#34 terminada)', () => {
+    // La prueba de arriba solo LISTA los módulos fuera de bloque: servía para ver
+    // la deuda mientras se pagaba. Ya está pagada, y si nada la exige, el
+    // siguiente `bg-emerald-50` vuelve a entrar sin que falle nada.
+    // Fuera quedan: WhatsApp (de Ángel, #79 punto 1), las maquetas de referencia
+    // —existen para enseñar de dónde salen los tokens— y las paletas de identidad
+    // de `shared/lib/ui.ts`, que son la excepción a propósito.
+    const FUERA = /^modules\/(whatsapp|suitedash-preview|ui-preview|dev)$/;
+    const modulos = fs.readdirSync(path.join(RAIZ, 'modules'), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => `modules/${e.name}`)
+      .filter((d) => !FUERA.test(d));
+    // Las piezas compartidas que no son primitivas ni marco: los widgets del
+    // Dashboard y compañía, que no estaban en ningún bloque ni en ningún módulo.
+    // El aviso de llamada es de WhatsApp (de Ángel): fuera, como en el marco.
+    const compartidas = ['shared/components', 'shared/pages', 'contexts'];
+    const sucios = [
+      ...modulos.map((d) => ({ d, ...contar(d) })),
+      ...compartidas.map((d) => ({ d, ...contar(d, /AvisoDeLlamada/) })),
+    ].filter((x) => x.total > 0);
+    expect(
+      sucios.map((x) => `  ${x.d}: ${x.porFichero.map((f) => `${f.f} (${f.n})`).join(', ')}`).join('\n'),
+      'han vuelto colores sueltos. Usa los tokens de index.css; si es una paleta de identidad, va en shared/lib/ui.ts.',
+    ).toBe('');
+  });
 });

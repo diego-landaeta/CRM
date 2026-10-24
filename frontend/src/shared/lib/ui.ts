@@ -170,3 +170,27 @@ export const TASK_TAG_COLORS = {
   violet: { label: 'Violeta', chip: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 border border-violet-200 dark:border-violet-800' },
   slate: { label: 'Gris', chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700' },
 } as const;
+
+/**
+ * El color de cada cifra del resumen y de cada grupo de informes: Prospectos,
+ * Ventas, Ingresos y Tasa de conversión.
+ *
+ * **Quinta excepción:** es el mismo color que la línea de esa cifra en el
+ * gráfico de al lado (`PanelResumen`). Pasarlo a tokens rompería ese enlace:
+ * «Ventas» saldría en el verde de «va bien» y su línea en otro verde. Estaba
+ * copiado en `PanelResumen` y en `ReportesDisponibles`; ahora está aquí una vez.
+ */
+export const ACCENT_COLORS = {
+  sky: { bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-600 dark:text-sky-400' },
+  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
+  violet: { bg: 'bg-violet-50 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
+  amber: { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-600 dark:text-amber-400' },
+} as const;
+
+/**
+ * El color de la «Tasa de conversión» del embudo del Dashboard: el violeta de la
+ * barra «Convertido» que tiene encima, para que se lean como la misma cosa. Es
+ * identidad (esa etapa), no significado; un poco más oscuro en claro y más claro
+ * en oscuro que la barra, para que la cifra se lea.
+ */
+export const FUNNEL_CONVERTED_TEXT = 'text-violet-600 dark:text-violet-400';

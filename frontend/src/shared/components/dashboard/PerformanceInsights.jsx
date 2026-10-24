@@ -114,17 +114,17 @@ function buildInsights({ stats, today, recentLeads }) {
 }
 
 const TONE_STYLES = {
-  info: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 text-blue-900 dark:text-blue-200',
-  success: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-200',
-  warning: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200',
-  destructive: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-900 dark:text-red-200',
+  info: 'bg-info-soft border-info/30 text-info-soft-foreground',
+  success: 'bg-success-soft border-success/30 text-success-soft-foreground',
+  warning: 'bg-warning-soft border-warning/30 text-warning-soft-foreground',
+  destructive: 'bg-destructive-soft border-destructive/30 text-destructive-soft-foreground',
 };
 
 const ICON_TONE = {
-  info: 'text-blue-600 dark:text-blue-400',
-  success: 'text-emerald-600 dark:text-emerald-400',
-  warning: 'text-amber-600 dark:text-amber-400',
-  destructive: 'text-red-600 dark:text-red-400',
+  info: 'text-info',
+  success: 'text-success',
+  warning: 'text-warning',
+  destructive: 'text-destructive',
 };
 
 export default function PerformanceInsights({ stats, today, recentLeads }) {
@@ -133,7 +133,7 @@ export default function PerformanceInsights({ stats, today, recentLeads }) {
   return (
     <div className="bg-card border border-border rounded-lg p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Lightbulb size={18} weight="duotone" className="text-amber-500" />
+        <Lightbulb size={18} weight="duotone" className="text-warning" />
         <h3 className="font-semibold">Insights</h3>
       </div>
       <ul className="space-y-2.5">

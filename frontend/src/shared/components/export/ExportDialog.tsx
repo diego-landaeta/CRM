@@ -229,7 +229,7 @@ export default function ExportDialog<T>({
                         type="button"
                         aria-label={`Eliminar plantilla ${tpl.name}`}
                         onClick={() => handleDeleteTemplate(tpl.id)}
-                        className="p-1 rounded text-muted-foreground hover:text-red-600"
+                        className="p-1 rounded text-muted-foreground hover:text-destructive"
                       >
                         <Trash size={11} />
                       </button>

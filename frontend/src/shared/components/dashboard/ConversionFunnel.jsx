@@ -1,4 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react';
+import { FUNNEL_CONVERTED_TEXT } from '@/shared/lib/ui';
 
 const STAGES = [
   { key: 'nuevo',          label: 'Nuevo',          color: '#3b82f6' },
@@ -71,7 +72,7 @@ export default function ConversionFunnel({ stats, total }) {
 
       <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Tasa de conversión</span>
-        <span className="font-bold tabular-nums text-violet-600 dark:text-violet-400">
+        <span className={`font-bold tabular-nums ${FUNNEL_CONVERTED_TEXT}`}>
           {total > 0 ? Math.round((Number(stats?.convertido || 0) / total) * 100) : 0}%
           <ArrowRight size={10} weight="bold" className="inline ml-1 opacity-60" />
         </span>

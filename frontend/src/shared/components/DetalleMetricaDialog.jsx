@@ -239,7 +239,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                   <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                     {cols.map((c) => (
                       <td key={c.k}
-                        className={`px-3 py-1.5 ${ES_CIFRA.has(c.t) ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''} ${c.t === 'pagos' && Number(f[c.k] || 0) > 1 ? 'text-sky-600 dark:text-sky-400 font-semibold' : ''}`}>
+                        className={`px-3 py-1.5 ${ES_CIFRA.has(c.t) ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-warning font-semibold' : ''} ${c.t === 'pagos' && Number(f[c.k] || 0) > 1 ? 'text-info font-semibold' : ''}`}>
                         <span className="block max-w-[240px] truncate" title={titulo(c, f)}>
                           {celda(c, f)}
                           {/* Cual de las filas es la compartida. El importe que
@@ -247,7 +247,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                           {c.k === 'cliente' && f.compartida && (
                             <span
                               title={f.asesora ? `Compartida con ${f.asesora} · aquí se ve su parte` : 'Venta compartida'}
-                              className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold align-middle bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                              className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold align-middle bg-primary/10 text-primary"
                             >
                               COMPARTIDO
                             </span>

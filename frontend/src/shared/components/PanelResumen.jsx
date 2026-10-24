@@ -11,13 +11,10 @@ import {
 import { Users, Receipt, CurrencyEur, ChartLineUp, TrendUp, TrendDown } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
+import { ACCENT_COLORS } from '@/shared/lib/ui';
 
-const ACCENT = {
-  sky: { bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-600 dark:text-sky-400' },
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
-  violet: { bg: 'bg-violet-50 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
-  amber: { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-600 dark:text-amber-400' },
-};
+// Los colores de cada cifra viven con las demás paletas de identidad (shared/lib/ui).
+const ACCENT = ACCENT_COLORS;
 
 const fmt = (n) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(Number(n || 0));
 const fmtMoney = (n) => new Intl.NumberFormat('es-ES', {
@@ -40,8 +37,8 @@ function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
   const c = ACCENT[accent];
   const TrendIcon = trend >= 0 ? TrendUp : TrendDown;
   const trendCls = trend >= 0
-    ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
-    : 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400';
+    ? 'text-success bg-success-soft'
+    : 'text-destructive bg-destructive-soft';
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-2">
@@ -76,7 +73,7 @@ function HeroTooltip({ active, payload, label, formatea, color, prevValue }) {
       <div className="flex items-baseline gap-2">
         <span className="text-base font-semibold tabular-nums tracking-tight" style={{ color }}>{formatea(v)}</span>
         {delta != null && delta !== 0 && (
-          <span className={`text-[10px] font-bold tabular-nums ${delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+          <span className={`text-[10px] font-bold tabular-nums ${delta >= 0 ? 'text-success' : 'text-destructive'}`}>
             {delta >= 0 ? '+' : ''}{delta}%
           </span>
         )}
@@ -175,8 +172,8 @@ export default function PanelResumen({ projectId, issuerId, projectName, from, t
 
   const TrendIcon = (trendRango ?? 0) >= 0 ? TrendUp : TrendDown;
   const deltaCls = (trendRango ?? 0) >= 0
-    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/60'
-    : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/60';
+    ? 'text-success-soft-foreground bg-success-soft border-success/30'
+    : 'text-destructive-soft-foreground bg-destructive-soft border-destructive/30';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">

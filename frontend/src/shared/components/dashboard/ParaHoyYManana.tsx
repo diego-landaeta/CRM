@@ -86,7 +86,7 @@ export default function ParaHoyYManana(
               aria-label={`${rotulo}: ${n}. Abrir la cola en este tramo`}
               className={`rounded-md p-3 border text-left transition-colors ${
                 urge && n > 0
-                  ? 'border-orange-300 dark:border-orange-900 bg-orange-50/40 dark:bg-orange-950/20 hover:bg-orange-100/60 dark:hover:bg-orange-950/40'
+                  ? 'border-warning/30 bg-warning-soft/40 hover:bg-warning-soft'
                   : 'border-border hover:bg-muted/50'
               }`}
             >
@@ -96,7 +96,7 @@ export default function ParaHoyYManana(
               </div>
               <div
                 className={`text-2xl font-semibold tabular-nums ${
-                  urge && n > 0 ? 'text-orange-600 dark:text-orange-400' : ''
+                  urge && n > 0 ? 'text-warning' : ''
                 }`}
               >
                 {n}

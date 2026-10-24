@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AVATAR_COLORS, ROLE_COLORS, EXPENSE_CATEGORY_COLORS, TASK_BOARD_COLORS, TASK_TAG_COLORS } from '@/shared/lib/ui';
+import { AVATAR_COLORS, ROLE_COLORS, EXPENSE_CATEGORY_COLORS, TASK_BOARD_COLORS, TASK_TAG_COLORS, ACCENT_COLORS } from '@/shared/lib/ui';
 
 /*
   Las paletas de identidad tienen que seguir siendo distinguibles (#32 · #34).
@@ -29,6 +29,8 @@ const paletas = {
   'columnas y áreas del tablero (punto)': Object.values(TASK_BOARD_COLORS).map((c) => c.dot),
   'columnas y áreas del tablero (chip)': Object.values(TASK_BOARD_COLORS).map((c) => c.chip),
   'etiquetas de tareas': Object.values(TASK_TAG_COLORS).map((c) => c.chip),
+  'cifras del resumen (fondo)': Object.values(ACCENT_COLORS).map((c) => c.bg),
+  'cifras del resumen (letra)': Object.values(ACCENT_COLORS).map((c) => c.text),
 };
 
 describe('las paletas de identidad no colapsan', () => {

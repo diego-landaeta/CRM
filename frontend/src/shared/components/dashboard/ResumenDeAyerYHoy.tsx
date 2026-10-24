@@ -68,7 +68,7 @@ export default function ResumenDeAyerYHoy({ projectIds }: { projectIds: number[]
                 </td>
                 <td
                   className={`text-right tabular-nums py-1.5 font-medium ${
-                    duele && hoy > 0 ? 'text-orange-600 dark:text-orange-400' : ''
+                    duele && hoy > 0 ? 'text-warning' : ''
                   }`}
                 >
                   {hoy}

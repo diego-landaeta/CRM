@@ -319,7 +319,9 @@ export default function ManualPage() {
             { role: 'Gestor', color: 'gray', desc: 'Solo ve sus proyectos asignados. En prospectos, gestiona únicamente los leads asignados a él.', icon: Users },
           ].map(r => {
             const borderColors = { violet: 'border-primary/30', blue: 'border-info/30', gray: 'border-border' };
-            const bgColors = { violet: 'bg-primary/5', blue: 'bg-info-soft', gray: 'bg-muted/40' };
+            // Superadmin sin tinte de fondo: con él, su insignia (primary sobre primary)
+            // bajaba a 4,4:1. El borde ya la distingue.
+            const bgColors = { violet: 'bg-card', blue: 'bg-info-soft', gray: 'bg-muted/40' };
             return (
               <div key={r.role} className={`rounded-xl border p-4 ${borderColors[r.color]} ${bgColors[r.color]}`}>
                 <div className="flex items-center gap-2 mb-2">

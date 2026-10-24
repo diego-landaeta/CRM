@@ -4,6 +4,7 @@
 // descargan en la sección de arriba; estos marcan lo que viene y sirven para
 // que nadie tenga que preguntar qué se puede sacar del CRM.
 import { Users, Receipt, CurrencyEur, ChartBar, ChartLineUp, ChartPie, ChartDonut, ArrowsClockwise } from '@phosphor-icons/react';
+import { ACCENT_COLORS } from '@/shared/lib/ui';
 
 const CATEGORIAS = [
   {
@@ -40,12 +41,8 @@ const CATEGORIAS = [
   },
 ];
 
-const ACCENT = {
-  sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', text: 'text-sky-600 dark:text-sky-400' },
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-600 dark:text-emerald-400' },
-  violet: { bg: 'bg-violet-50 dark:bg-violet-950/30', text: 'text-violet-600 dark:text-violet-400' },
-  amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-600 dark:text-amber-400' },
-};
+// Los colores de cada cifra viven con las demás paletas de identidad (shared/lib/ui).
+const ACCENT = ACCENT_COLORS;
 
 export default function ReportesDisponibles() {
   return (
