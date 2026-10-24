@@ -21,9 +21,12 @@ describe('a quién le corresponde WhatsApp', () => {
     expect(tieneWhatsapp({ role: 'tutor', roles_extra: ['gestor'] })).toBe(false);
   });
 
-  it('ni al colaborador (QA del 07/10), ni a quien lleva colaboraciones', () => {
+  it('ni al colaborador (QA del 07/10)', () => {
     expect(tieneWhatsapp({ role: 'colaborador' })).toBe(false);
-    expect(tieneWhatsapp({ role: 'gestor', gestor_colaboraciones: true })).toBe(false);
+  });
+
+  it('a quien lleva colaboraciones, como al resto de su rol: el servidor le contesta (no le da 403)', () => {
+    expect(tieneWhatsapp({ role: 'gestor', gestor_colaboraciones: true })).toBe(true);
   });
 
   it('sí a la gestora que además da clase, y a admin, super admin y soporte', () => {
