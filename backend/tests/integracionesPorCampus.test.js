@@ -103,6 +103,20 @@ describe('un admin, en el campus de otra empresa', () => {
   });
 });
 
+describe('un projectId que no es un número', () => {
+  it('da 400, como antes, en vez de llegar a la base (allí se quedaba sin respuesta)', async () => {
+    const db = await import('../src/shared/config/db.js');
+    for (const r of [
+      api.get('/api/integrations?projectId=abc').set(ANA),
+      api.get('/api/integrations/moodle?projectId=99999999999').set(ANA),
+      api.put('/api/integrations').set(ANA).send({ projectId: 'abc', provider: 'brevo', active: true }),
+    ]) {
+      expect((await r).status).toBe(400);
+    }
+    expect(db.query).not.toHaveBeenCalled();
+  });
+});
+
 describe('el super admin', () => {
   it('sigue entrando en cualquier campus', async () => {
     expect((await api.get('/api/integrations/moodle?projectId=20').set(MANUEL)).status).toBe(200);
