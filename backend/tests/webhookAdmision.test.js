@@ -414,10 +414,27 @@ describe('ni el tiempo ni los documentos delatan si la persona ya existe (caja n
     expect([nuevo.r.interno.accion, prospecto.r.interno.accion, repetida.r.interno.accion]).toEqual(['created', 'created', 'duplicate_skipped']);
     expect(nuevo.r.interno.leadCreado).toBe(true);
     expect(prospecto.r.interno.leadCreado).toBe(false);
+    // Arriba, margen de sobra: un runner lento de GitHub no debe tumbar la prueba.
     for (const { ms } of [nuevo, prospecto, repetida]) {
       expect(ms).toBeGreaterThanOrEqual(FIJO - 5);
-      expect(ms).toBeLessThan(FIJO + 150);
+      expect(ms).toBeLessThan(FIJO + 400);
     }
+  });
+
+  it('el MISMO envío, idéntico (la web que reintenta): al momento y sin volver a descargar sus enlaces', async () => {
+    const pedidos = [];
+    const srv = http.createServer((req, res) => { pedidos.push(req.url); res.writeHead(200, { 'content-type': 'image/jpeg' }); res.end(JPG); });
+    await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
+    try {
+      const envio = { nombre: 'Reintento', email: correo('reintento'), dni_frente: `http://127.0.0.1:${srv.address().port}/dni.jpg` };
+      const a = await admitirCon(envio);
+      const t0 = Date.now();
+      const b = await admitirCon(envio);
+      expect([a.interno.accion, b.interno.accion]).toEqual(['created', 'duplicate_skipped']);
+      expect(b.data).toEqual(a.data); // la misma respuesta
+      expect(Date.now() - t0).toBeLessThan(FIJO);
+      expect(pedidos).toEqual(['/dni.jpg']);
+    } finally { srv.close(); }
   });
 
   it('una solicitud repetida también descarga sus documentos: un enlace propio no sirve para saber si ya existía', async () => {

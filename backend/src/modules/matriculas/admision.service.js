@@ -185,8 +185,15 @@ const respuesta = (huella, interno) => ({ status: 200, data: { recibido: true, e
  * sale a los RESPUESTA_FIJA_MS: lo que depende de si la persona existe (buscarla,
  * crearla, guardar la solicitud) pasa dentro de ese tiempo. Todo sigue en el momento:
  * si la base falla, la web recibe el error y puede reenviar, como antes.
+ *
+ * 500 ms y no 300: guardar una solicitud nueva con documentos grandes (2 × 9 MB) tardó
+ * de mediana 146 ms, pero alguna vez 437 ms; con 300 se pasaba y volvía a notarse.
+ *
+ * La única excepción es EL MISMO ENVÍO, idéntico (la web que reintenta): se mira antes
+ * de descargar nada y se contesta al momento, sin volver a bajar los enlaces. No
+ * delata a nadie: que ese envío exacto ya llegó solo lo sabe quien lo mandó.
  */
-const RESPUESTA_FIJA_MS = 300;
+const RESPUESTA_FIJA_MS = 500;
 const esperarHasta = (momento) => new Promise((ok) => setTimeout(ok, Math.max(0, momento - Date.now())));
 
 /**
@@ -202,6 +209,10 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   // Copia: sin mapeo, applyMapping devuelve el mismo objeto, y abajo se le añaden alias.
   const mapeado = { ...applyMapping(envio, token.field_mapping || {}) };
   const huella = huellaDelEnvio(body, archivos);
+
+  // El mismo envío, idéntico: al momento y sin descargar nada (ver RESPUESTA_FIJA_MS).
+  const repetido = await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella]);
+  if (repetido.rows[0]) return respuesta(huella, { matriculaId: repetido.rows[0].id, accion: 'duplicate_skipped' });
 
   // El contrato de Diego (01/10) llama `titulo` al ARCHIVO del título y `documento`
   // al número; el CRM ya usaba `titulo` para el texto «Título / Programa» y `dni`
@@ -228,9 +239,6 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
 
   const salida = Date.now() + (opcionesArchivo.respuestaMs ?? RESPUESTA_FIJA_MS);
   const responder = async (interno) => { await esperarHasta(salida); return respuesta(huella, interno); };
-
-  const repetido = await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella]);
-  if (repetido.rows[0]) return responder({ matriculaId: repetido.rows[0].id, accion: 'duplicate_skipped' });
 
   // Lo de antes (#198, ya en marcha): no repetir la de la misma persona por su DNI o correo.
   const dedupe = persona.dni || persona.email || null;
