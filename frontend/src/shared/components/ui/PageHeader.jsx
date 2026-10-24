@@ -64,7 +64,10 @@ export default function PageHeader({
 
     return createPortal(
       <>
-        <div className="min-w-0 flex-1">
+        {/* En el móvil el título no baja de 160px: si con los botones al lado
+            quedaría más estrecho, son los botones los que bajan (Ingresos se
+            quedaba en «Ingr…»). */}
+        <div className="min-w-0 flex-1 max-sm:min-w-40">
           {(volver || breadcrumbs) && (
             <div className="flex items-center gap-2 leading-none">
               {volver}
