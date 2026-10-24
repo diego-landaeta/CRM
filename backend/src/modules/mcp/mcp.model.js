@@ -1006,7 +1006,9 @@ async function metricasDeCampanas({ projectIds, desde, hasta }) {
        SELECT d.campaign_id, SUM(d.spend) AS gasto, SUM(d.impressions) AS impresiones,
               SUM(d.clicks) AS clics, SUM(d.leads) AS leads_segun_meta
          FROM meta_campaigns_daily d
-         JOIN camp ON camp.campaign_id = d.campaign_id
+         -- Y el campus de la FILA DIARIA, no solo el de la campaña (QA de Diego,
+         -- 22/10, punto 10): un día apuntado a otro campus no es gasto de este.
+         JOIN camp ON camp.campaign_id = d.campaign_id AND d.project_id = camp.project_id
         WHERE TRUE${enGasto}
         GROUP BY d.campaign_id
      ),
