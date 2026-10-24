@@ -393,6 +393,49 @@ describe('la respuesta pública no dice nada de la persona (QA de Diego, 22/10)'
   });
 });
 
+describe('ni el tiempo ni los documentos delatan si la persona ya existe (caja negra, 24/10)', () => {
+  const FIJO = 400;
+  const cronometrar = async (body) => {
+    const t0 = Date.now();
+    const r = await admitirCon(body);
+    return { ms: Date.now() - t0, r };
+  };
+  const admitirCon = async (body) => {
+    const { recibirAdmision } = await import('../src/modules/matriculas/admision.service.js');
+    return recibirAdmision(TOKEN, body, [], { respuestaMs: FIJO, permitirRedLocal: true });
+  };
+
+  it('correo nuevo, prospecto que ya existe y solicitud repetida: tardan lo mismo (el tiempo fijo)', async () => {
+    await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Ya Prospecto', $2)`, [PROYECTO.id, correo('ya-prospecto')]);
+    await admitirCon({ nombre: 'Ya Pidió', email: correo('ya-pidio') });
+    const nuevo = await cronometrar({ nombre: 'Nuevo Del Todo', email: correo('nuevo-del-todo') });
+    const prospecto = await cronometrar({ nombre: 'Ya Prospecto', email: correo('ya-prospecto') });
+    const repetida = await cronometrar({ nombre: 'Ya Pidió', email: correo('ya-pidio'), curso_solicitado: 'Otro' });
+    expect([nuevo.r.interno.accion, prospecto.r.interno.accion, repetida.r.interno.accion]).toEqual(['created', 'created', 'duplicate_skipped']);
+    expect(nuevo.r.interno.leadCreado).toBe(true);
+    expect(prospecto.r.interno.leadCreado).toBe(false);
+    for (const { ms } of [nuevo, prospecto, repetida]) {
+      expect(ms).toBeGreaterThanOrEqual(FIJO - 5);
+      expect(ms).toBeLessThan(FIJO + 150);
+    }
+  });
+
+  it('una solicitud repetida también descarga sus documentos: un enlace propio no sirve para saber si ya existía', async () => {
+    const pedidos = [];
+    const srv = http.createServer((req, res) => { pedidos.push(req.url); res.writeHead(200, { 'content-type': 'image/jpeg' }); res.end(JPG); });
+    await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    try {
+      const a = await admitirCon({ nombre: 'Con Enlace', email: correo('con-enlace'), dni_frente: `${base}/primera.jpg` });
+      const b = await admitirCon({ nombre: 'Con Enlace', email: correo('con-enlace'), dni_frente: `${base}/segunda.jpg` });
+      expect([a.interno.accion, b.interno.accion]).toEqual(['created', 'duplicate_skipped']);
+      expect(pedidos).toEqual(['/primera.jpg', '/segunda.jpg']);
+      // Lo de la repetida no se guarda: la primera sigue con su documento.
+      expect((await matricula(a.interno.matriculaId)).dni_doc_key).toMatch(/\.jpg$/);
+    } finally { srv.close(); }
+  });
+});
+
 describe('idempotente y con su llave', () => {
   it('el mismo envío dos veces no crea dos matrículas', async () => {
     const envio = { nombre: 'Doble', email: correo('doble'), curso_solicitado: 'Curso A' };

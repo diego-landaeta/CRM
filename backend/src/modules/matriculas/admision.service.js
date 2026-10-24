@@ -149,14 +149,16 @@ async function ventaDe(projectId, leadId) {
   return rows[0]?.id ?? null;
 }
 
-/** Guarda un documento de la matrícula, como la subida a mano (uploadDoc), con su línea del historial. */
+/** Un documento listo para guardar: la firma, en imagen, transparente y recortada (#349). */
+async function prepararDocumento(tipo, archivo) {
+  if (tipo !== 'firma') return archivo;
+  if (archivo.ext === 'pdf') throw Object.assign(new Error('La firma tiene que ser una imagen, no un PDF.'), { isOperational: true });
+  return { ...archivo, buffer: await firmaTransparente(archivo.buffer), ext: 'png' };
+}
+
+/** Guarda un documento ya preparado, como la subida a mano (uploadDoc), con su línea del historial. */
 async function guardarDocumento(matricula, tipo, archivo) {
-  let { buffer, ext } = archivo;
-  if (tipo === 'firma') {
-    if (ext === 'pdf') throw Object.assign(new Error('La firma tiene que ser una imagen, no un PDF.'), { isOperational: true });
-    buffer = await firmaTransparente(buffer);
-    ext = 'png';
-  }
+  const { buffer, ext } = archivo;
   const key = `matriculas/${matricula.project_id}/m-${matricula.id}-${tipo}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
   await saveLocal(key, buffer);
   try {
@@ -174,8 +176,23 @@ async function guardarDocumento(matricula, tipo, archivo) {
 const respuesta = (huella, interno) => ({ status: 200, data: { recibido: true, envio_id: huella }, interno });
 
 /**
+ * Y TARDA LO MISMO PASE LO QUE PASE. La respuesta ya no decía nada, pero el tiempo
+ * sí (prueba de caja negra, 24/10): un correo nuevo tardaba unos 10 ms más que uno
+ * que ya era prospecto (se crea el prospecto), y una solicitud repetida volvía antes
+ * de descargar sus documentos, así que poniendo de documento un enlace propio se
+ * sabía si esa persona ya había mandado la suya. Por eso los documentos se descargan
+ * y preparan SIEMPRE, antes de mirar nada de la persona, y desde ahí la respuesta
+ * sale a los RESPUESTA_FIJA_MS: lo que depende de si la persona existe (buscarla,
+ * crearla, guardar la solicitud) pasa dentro de ese tiempo. Todo sigue en el momento:
+ * si la base falla, la web recibe el error y puede reenviar, como antes.
+ */
+const RESPUESTA_FIJA_MS = 300;
+const esperarHasta = (momento) => new Promise((ok) => setTimeout(ok, Math.max(0, momento - Date.now())));
+
+/**
  * Una solicitud de admisión que llega por el webhook de matrículas de un campus.
- * `archivos`: los del multipart (multer). `opcionesArchivo`: para las pruebas.
+ * `archivos`: los del multipart (multer). `opcionesArchivo`: para las pruebas
+ * (`permitirRedLocal`, y `respuestaMs` en vez de RESPUESTA_FIJA_MS).
  * Devuelve `{ status, data }`, lo que contesta el webhook, e `interno`, lo que
  * pasó (no se manda).
  */
@@ -185,9 +202,6 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   // Copia: sin mapeo, applyMapping devuelve el mismo objeto, y abajo se le añaden alias.
   const mapeado = { ...applyMapping(envio, token.field_mapping || {}) };
   const huella = huellaDelEnvio(body, archivos);
-
-  const repetido = await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella]);
-  if (repetido.rows[0]) return respuesta(huella, { matriculaId: repetido.rows[0].id, accion: 'duplicate_skipped' });
 
   // El contrato de Diego (01/10) llama `titulo` al ARCHIVO del título y `documento`
   // al número; el CRM ya usaba `titulo` para el texto «Título / Programa» y `dni`
@@ -204,11 +218,25 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   if (persona.email) persona.email = persona.email.toLowerCase();
   persona.fecha_nacimiento = fechaDeNacimiento(mapeado.fecha_nacimiento);
 
+  // Los documentos, ANTES de mirar si la persona ya existe (ver RESPUESTA_FIJA_MS), a la
+  // vez (un formulario puede mandar cinco enlaces: uno detrás de otro, la web daba el
+  // envío por fallido esperando) y ya preparados; se guardan después, de uno en uno.
+  const pendientes = Object.entries(DOCUMENTOS).filter(([destino]) => mapeado[destino] != null && mapeado[destino] !== '');
+  const obtenidos = await Promise.all(pendientes.map(([destino, tipo]) => obtenerArchivo(mapeado[destino], archivos, opcionesArchivo)
+    .then((archivo) => (archivo ? prepararDocumento(tipo, archivo) : null))
+    .then((archivo) => ({ archivo }), (error) => ({ error }))));
+
+  const salida = Date.now() + (opcionesArchivo.respuestaMs ?? RESPUESTA_FIJA_MS);
+  const responder = async (interno) => { await esperarHasta(salida); return respuesta(huella, interno); };
+
+  const repetido = await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella]);
+  if (repetido.rows[0]) return responder({ matriculaId: repetido.rows[0].id, accion: 'duplicate_skipped' });
+
   // Lo de antes (#198, ya en marcha): no repetir la de la misma persona por su DNI o correo.
   const dedupe = persona.dni || persona.email || null;
   if (dedupe) {
     const existente = await model.findByDedupe(projectId, dedupe);
-    if (existente) return respuesta(huella, { matriculaId: existente.id, accion: 'duplicate_skipped' });
+    if (existente) return responder({ matriculaId: existente.id, accion: 'duplicate_skipped' });
   }
 
   let prospecto = { leadId: null, creado: false };
@@ -250,17 +278,11 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
       const otra = (await query('SELECT id FROM matriculas WHERE project_id = $1 AND envio_huella = $2', [projectId, huella])).rows[0]
         || (dedupe ? await model.findByDedupe(projectId, dedupe) : null);
       if (!otra) throw err;
-      return respuesta(huella, { matriculaId: otra.id, accion: 'duplicate_skipped' });
+      return responder({ matriculaId: otra.id, accion: 'duplicate_skipped' });
     }
   }
 
-  // Los documentos se descargan A LA VEZ (un formulario puede mandar cinco
-  // enlaces: uno detrás de otro, la web daba el envío por fallido esperando) y se
-  // guardan después, de uno en uno, cada uno con su línea del historial.
-  const pendientes = Object.entries(DOCUMENTOS).filter(([destino]) => mapeado[destino] != null && mapeado[destino] !== '');
-  const obtenidos = await Promise.all(pendientes.map(([destino]) => obtenerArchivo(mapeado[destino], archivos, opcionesArchivo)
-    .then((archivo) => ({ archivo }), (error) => ({ error }))));
-
+  // Cada documento con su línea del historial.
   const guardados = [];
   const rechazados = [];
   for (let i = 0; i < pendientes.length; i++) {
@@ -278,7 +300,7 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   }
   if (rechazados.length) logger.warn({ matriculaId: matricula.id, projectId, rechazados }, 'Admisión: documentos rechazados');
 
-  return respuesta(huella, {
+  return responder({
     matriculaId: matricula.id,
     accion: 'created',
     leadId: prospecto.leadId,
