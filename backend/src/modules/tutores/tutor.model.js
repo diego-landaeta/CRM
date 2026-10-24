@@ -50,11 +50,23 @@ export const RIGE_HOY = (alias = 'c') => `(
 
 // ── Tutores ─────────────────────────────────────────────────────────────────
 
-/** Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus). */
+/**
+ * Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus).
+ *
+ * También por sus EMPRESAS (QA de Diego, 22/10, punto 7). `tutor_empresas` no
+ * copia filas en `user_projects` —se resuelve al consultar (#187), al revés que
+ * `user_empresas`—, así que mirando solo `user_projects` un tutor dado de alta
+ * por empresa no estaba en ningún campus y su ficha daba «no encontrado».
+ */
 export async function tieneAlgunCampus(tutorId, projectIds) {
   if (!Array.isArray(projectIds) || !projectIds.length) return false;
   const { rows } = await query(
-    'SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[]) LIMIT 1',
+    `SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[])
+     UNION ALL
+     SELECT 1 FROM tutor_empresas te
+       JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
+      WHERE te.tutor_id = $1 AND p.id = ANY($2::int[])
+     LIMIT 1`,
     [tutorId, projectIds.map(Number)]);
   return rows.length > 0;
 }
