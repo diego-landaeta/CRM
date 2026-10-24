@@ -7,6 +7,7 @@ import {
 import { NO_ESCRIBIR_A_TUTORES } from '../shared/config/frenoTutores.js';
 import { sinMensajes } from '../modules/consultas/consultas.alumnos.js';
 import { cargaDe } from '../modules/consultas/consultas.carga.js';
+import { marcaDelTutor } from '../modules/consultas/consultas.plazos.js';
 import { vigilar } from './latido.js';
 
 /**
@@ -50,7 +51,9 @@ export async function enviarResumenes(hoy = new Date()) {
       continue;
     }
     const lista = r.faltan.slice(0, 10).map((a) => `· ${esc(a.alumno_nombre || 'Alumno')} (${esc(a.curso_nombre || a.campus)}), ${a.dias} días`).join('<br>');
+    const marca = await marcaDelTutor(t.id);
     const { htmlContent, textContent } = correo({
+      proyecto: marca.proyecto,
       titulo: 'Tu semana en Consultas',
       saludo: `Hola ${esc(t.nombre || '')},`,
       resumen: `${r.faltan.length} alumnos sin contactar · ${r.abiertas} consultas abiertas`,
@@ -62,8 +65,8 @@ export async function enviarResumenes(hoy = new Date()) {
       ],
     });
     const e = await sendEmail({
-      to: t.email, subject: '[CRM] Tu semana en Consultas', htmlContent, textContent,
-      tags: ['consultas', 'tutor', 'semanal'], clave: `consultas-semana-${t.id}-${lunes}`,
+      to: t.email, subject: `[${marca.campus || 'CRM'}] Tu semana en Consultas`, htmlContent, textContent,
+      tags: ['consultas', 'tutor', 'semanal'], projectId: marca.projectId, clave: `consultas-semana-${t.id}-${lunes}`,
     }).catch((err) => ({ sent: false, error: err.message }));
     if (e?.sent) mandados += 1;
   }
