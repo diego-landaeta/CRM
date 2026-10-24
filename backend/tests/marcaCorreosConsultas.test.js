@@ -51,7 +51,7 @@ async function crearCampus(nombre) {
 async function crearTutor(campus) {
   const { rows } = await query(
     `INSERT INTO users (nombre, email, password_hash, role, active) VALUES ($1, $2, 'x', 'tutor', true) RETURNING id`,
-    [`Tutor ${marca}`, `tutor.${ids.users.length}.${marca}@test.local`]);
+    [`Tutor & ${marca}`, `tutor.${ids.users.length}.${marca}@test.local`]);
   const id = Number(rows[0].id);
   ids.users.push(id);
   for (const p of campus) await query(`INSERT INTO tutor_campus (tutor_id, project_id, estado) VALUES ($1, $2, 'activa')`, [id, p]);
@@ -97,6 +97,9 @@ describe.runIf(hayBase)('la marca en los correos de Consultas', () => {
     expect(c.projectId).toBe(g.uno);
     expect(c.subject).toBe(`[Psiko ${marca}] Actualiza tu carga de trabajo`);
     expect(c.htmlContent).toContain(`Psiko-${marca}.png`);
+    // El saludo lo pone la plantilla: «Hola Nombre,» una vez y el nombre escapado una vez.
+    expect(c.htmlContent).toContain(`Hola Tutor &amp; ${marca},`);
+    expect(c.htmlContent).not.toMatch(/Hola\s+Hola|&amp;amp;|,,/);
   });
 
   it('carga, tutor de varios campus: la marca del CRM, ni Psiko ni Fono', async () => {
@@ -121,8 +124,25 @@ describe.runIf(hayBase)('la marca en los correos de Consultas', () => {
     expect(uno.projectId).toBe(g.uno);
     expect(uno.subject).toBe(`[Psiko ${marca}] Tu semana en Consultas`);
     expect(uno.htmlContent).toContain(`Psiko-${marca}.png`);
+    expect(uno.htmlContent).toContain(`Hola Tutor &amp; ${marca},`);
+    expect(uno.htmlContent).not.toMatch(/Hola\s+Hola|&amp;amp;|,,/);
     expect(dos).toBeTruthy();
     expect(dos.projectId).toBeNull();
     expect(dos.subject).toBe('[CRM] Tu semana en Consultas');
+  });
+});
+
+describe('el saludo de los correos de Consultas', () => {
+  it('ninguno le pasa «Hola» a la plantilla: ella pone el «Hola» y la coma', async () => {
+    const { readFileSync } = await import('node:fs');
+    const ficheros = [
+      'src/modules/consultas/consultas.plazos.js',
+      'src/modules/consultas/consultas.service.js',
+      'src/jobs/consultasResumenScheduler.js',
+    ];
+    for (const f of ficheros) {
+      const codigo = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+      expect(codigo, f).not.toMatch(/saludo:\s*`Hola/);
+    }
   });
 });

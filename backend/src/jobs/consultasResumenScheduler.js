@@ -55,7 +55,7 @@ export async function enviarResumenes(hoy = new Date()) {
     const { htmlContent, textContent } = correo({
       proyecto: marca.proyecto,
       titulo: 'Tu semana en Consultas',
-      saludo: `Hola ${esc(t.nombre || '')},`,
+      saludo: t.nombre || null,
       resumen: `${r.faltan.length} alumnos sin contactar · ${r.abiertas} consultas abiertas`,
       bloques: [
         r.faltan.length ? parrafo(`Tienes <strong>${r.faltan.length}</strong> alumnos a los que aún no has escrito:<br>${lista}${r.faltan.length > 10 ? '<br>…' : ''}`) : '',

@@ -110,7 +110,7 @@ async function recordarAlTutor(c, enviar) {
     const { htmlContent, textContent } = correo({
       proyecto: { nombre: c.campus, logo_url: c.logo_url, emoji: c.emoji },
       titulo: 'Una consulta se acerca al plazo',
-      saludo: `Hola ${esc(c.tutor_nombre || '')},`,
+      saludo: c.tutor_nombre || null,
       resumen: `${c.alumno_nombre || 'Un alumno'} lleva ${horasTexto(horas)} esperando respuesta`,
       bloques: [
         parrafo(`<strong>${esc(c.alumno_nombre || 'Un alumno')}</strong>${c.curso_nombre ? ` (${esc(c.curso_nombre)})` : ''} lleva <strong>${horasTexto(horas)}</strong> esperando tu respuesta. El plazo es de ${PLAZO_HORAS} h.`),
@@ -243,7 +243,7 @@ export async function recordarCargas({ ahora = new Date(), enviar = sendEmail, t
       const { htmlContent, textContent } = correo({
         proyecto: marca.proyecto,
         titulo: 'Actualiza tu carga de trabajo',
-        saludo: `Hola ${esc(t.nombre || '')},`,
+        saludo: t.nombre || null,
         resumen: texto,
         bloques: [
           parrafo(`${texto} Administración la mira antes de asignarte más alumnos o campus.`),
