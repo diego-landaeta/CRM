@@ -65,13 +65,17 @@ export function soloEsColaborador(user: Quien | null | undefined): boolean {
 export const ROLES_CON_WHATSAPP = ['superadmin', 'admin', 'gestor', 'soporte'];
 
 /**
- * Si le corresponde WhatsApp, con el criterio del servidor (`porQueNoPuede`):
- * por el rol PRINCIPAL, y no a quien lleva colaboraciones. A quien no, el
- * servidor le contesta 403, así que los avisos de mensajes y de llamadas no
- * deben preguntar por él (QA de Diego, 22/10, punto 8: el tutor recibía un 403
- * cada pocos segundos en `/api/whatsapp/sin-leer`).
+ * Si tiene WhatsApp, con el criterio del servidor (`porQueNoUsa`): por el rol
+ * PRINCIPAL, no a quien lleva colaboraciones, y con la casilla «usa WhatsApp»
+ * de su ficha encendida. A quien no, el servidor le contesta 403, así que los
+ * avisos de mensajes y de llamadas no deben preguntar por él (QA de Diego,
+ * 22/10, punto 8: el tutor recibía un 403 cada pocos segundos en
+ * `/api/whatsapp/sin-leer`; y también quien tiene la casilla apagada).
+ *
+ * `usa_whatsapp` null es que falta la columna: como en el servidor, no se le
+ * niega a nadie. Solo un `false` de verdad cierra.
  */
-export function tieneWhatsapp(user: (Quien & { gestor_colaboraciones?: boolean | null }) | null | undefined): boolean {
-  if (!user?.role || user.gestor_colaboraciones) return false;
+export function tieneWhatsapp(user: (Quien & { gestor_colaboraciones?: boolean | null; usa_whatsapp?: boolean | null }) | null | undefined): boolean {
+  if (!user?.role || user.gestor_colaboraciones || user.usa_whatsapp === false) return false;
   return ROLES_CON_WHATSAPP.includes(user.role);
 }

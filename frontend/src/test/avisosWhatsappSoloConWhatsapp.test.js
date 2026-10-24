@@ -31,6 +31,16 @@ describe('a quién le corresponde WhatsApp', () => {
     for (const role of ['admin', 'superadmin', 'soporte']) expect(tieneWhatsapp({ role })).toBe(true);
   });
 
+  it('ni a quien tiene la casilla «usa WhatsApp» apagada en su ficha (el 403 de Manuel y Diego en la prueba)', () => {
+    expect(tieneWhatsapp({ role: 'admin', usa_whatsapp: false })).toBe(false);
+    expect(tieneWhatsapp({ role: 'superadmin', usa_whatsapp: false })).toBe(false);
+    expect(tieneWhatsapp({ role: 'gestor', usa_whatsapp: true })).toBe(true);
+  });
+
+  it('sin la columna (null) no se le niega a nadie, como en el servidor', () => {
+    expect(tieneWhatsapp({ role: 'gestor', usa_whatsapp: null })).toBe(true);
+  });
+
   it('sin sesión, no pregunta', () => {
     expect(tieneWhatsapp(null)).toBe(false);
   });
