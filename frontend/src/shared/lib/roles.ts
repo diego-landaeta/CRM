@@ -57,3 +57,21 @@ export function soloEsColaborador(user: Quien | null | undefined): boolean {
   const suyos = rolesDe(user);
   return suyos.length > 0 && suyos.every((r) => r === 'colaborador');
 }
+
+/**
+ * Los roles que llevan WhatsApp: el espejo de `ROLES_CON_WHATSAPP` del servidor
+ * (backend/src/modules/whatsapp/roles.js). Una prueba comprueba que no se separan.
+ */
+export const ROLES_CON_WHATSAPP = ['superadmin', 'admin', 'gestor', 'soporte'];
+
+/**
+ * Si le corresponde WhatsApp, con el criterio del servidor (`porQueNoPuede`):
+ * por el rol PRINCIPAL, y no a quien lleva colaboraciones. A quien no, el
+ * servidor le contesta 403, así que los avisos de mensajes y de llamadas no
+ * deben preguntar por él (QA de Diego, 22/10, punto 8: el tutor recibía un 403
+ * cada pocos segundos en `/api/whatsapp/sin-leer`).
+ */
+export function tieneWhatsapp(user: (Quien & { gestor_colaboraciones?: boolean | null }) | null | undefined): boolean {
+  if (!user?.role || user.gestor_colaboraciones) return false;
+  return ROLES_CON_WHATSAPP.includes(user.role);
+}
