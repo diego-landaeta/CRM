@@ -24,6 +24,11 @@ const ESTADOS = {
 const PRIORIDADES = { baja: 'Baja', media: 'Media', alta: 'Alta' };
 
 const tz = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
+
+// El equipo en el asunto (26/10/2026): «Tarea asignada · Desarrollo y SEO: …».
+const conEquipo = (prefijo, tarea) => (tarea.team_name ? `${prefijo} · ${tarea.team_name}` : prefijo);
+const lineaEquipo = (tarea) => (tarea.team_name
+  ? `Equipo: <strong>${esc(tarea.team_name)}</strong>${tarea.assigned_cargo ? ` · ${esc(tarea.assigned_cargo)}` : ''}` : null);
 const fechaCorta = (d) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', timeZone: tz() });
 
 /**
@@ -78,6 +83,7 @@ export async function marcaDeTarea(tarea) {
 /** El correo «te han asignado una tarea». */
 export function armarCorreoAsignada({ persona, tarea, quien, marca = null }) {
   const datos = [
+    lineaEquipo(tarea),
     `Prioridad: <strong>${esc(PRIORIDADES[tarea.priority] || tarea.priority)}</strong>`,
     tarea.due_date ? `Fecha límite: <strong>${esc(fechaCorta(tarea.due_date))}</strong>` : null,
     tarea.project_name ? `Proyecto: <strong>${esc(tarea.project_name)}</strong>` : null,
@@ -97,7 +103,7 @@ export function armarCorreoAsignada({ persona, tarea, quien, marca = null }) {
     ],
     apagar: { texto: 'Recibes este aviso porque te han asignado una tarea.' },
   });
-  return { asunto: `Tarea asignada: ${tarea.title}`, htmlContent, textContent };
+  return { asunto: `${conEquipo('Tarea asignada', tarea)}: ${tarea.title}`, htmlContent, textContent };
 }
 
 export async function enviarCorreoAsignada({ persona, tarea, quien }) {
@@ -117,6 +123,7 @@ export async function enviarCorreoAsignada({ persona, tarea, quien }) {
 /** Los datos de la tarea, en la nota del correo: quién la lleva, prioridad, fecha y proyecto. */
 function datosDeLaTarea(tarea) {
   return [
+    lineaEquipo(tarea),
     tarea.assigned_to_name ? `La lleva: <strong>${esc(tarea.assigned_to_name)}</strong>` : null,
     `Prioridad: <strong>${esc(PRIORIDADES[tarea.priority] || tarea.priority)}</strong>`,
     tarea.due_date ? `Fecha límite: <strong>${esc(fechaCorta(tarea.due_date))}</strong>` : null,
@@ -142,7 +149,7 @@ export function armarCorreoSupervisor({ persona, tarea, quien, marca = null }) {
     ],
     apagar: { texto: 'Recibes este aviso porque te han puesto de supervisor de una tarea.' },
   });
-  return { asunto: `Supervisas: ${tarea.title}`, htmlContent, textContent };
+  return { asunto: `${conEquipo('Supervisas', tarea)}: ${tarea.title}`, htmlContent, textContent };
 }
 
 export async function enviarCorreoSupervisor({ persona, tarea, quien }) {
@@ -173,7 +180,7 @@ export function armarCorreoParaRevisar({ persona, tarea, quien, marca = null }) 
     ],
     apagar: { texto: 'Recibes este aviso porque supervisas esta tarea.' },
   });
-  return { asunto: `Para revisar: ${tarea.title}`, htmlContent, textContent };
+  return { asunto: `${conEquipo('Para revisar', tarea)}: ${tarea.title}`, htmlContent, textContent };
 }
 
 export async function enviarCorreoParaRevisar({ persona, tarea, quien }) {
