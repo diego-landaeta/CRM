@@ -121,7 +121,8 @@ export default function UserFormDialog({
   function alternarEmpresa(issuerId: number) {
     const entera = empresasEnteras.includes(issuerId);
     setEmpresasEnteras((prev) => (entera ? prev.filter((x) => x !== issuerId) : [...prev, issuerId]));
-    if (!entera) {
+    // Al colaborador, la empresa no le da campus (26/10/2026): no se le marcan.
+    if (!entera && role === 'admin') {
       marcarVarios(projects.filter((p) => Number(p.sociedad_emisora_id) === issuerId).map((p) => p.id), true);
     }
   }
