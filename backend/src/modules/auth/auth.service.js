@@ -24,6 +24,27 @@ function generateAccessToken(user, activeProjectId = null) {
   );
 }
 
+// LO QUE EL FRONTAL SABE DE QUIEN ENTRA, igual que `/auth/me`.
+//
+// El login (y en ISEIE tambien el refresh) mandaban al frontal un usuario SIN
+// `roles_extra`: quien es gestora y ademas tutora —Yolanda, en ICTESS— entraba
+// como «solo gestora» y no le salia lo de tutora (Mis cursos) hasta recargar la
+// pagina, porque solo `/auth/me` lo traia. Diego, 23/10: «a Yolanda no le salen
+// las funciones». Un solo sitio para que las respuestas no vuelvan a diferir.
+export function usuarioParaElFrontal(user) {
+  return {
+    id: user.id, nombre: user.nombre, email: user.email, role: user.role,
+    roles_extra: Array.isArray(user.roles_extra) ? user.roles_extra : [],
+    custom_role_id: user.custom_role_id ?? null,
+    avatar_url: user.avatar_url,
+    factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura,
+    gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp,
+    // La casilla de WhatsApp, también al entrar (QA 22/10, punto 8): sin ella los
+    // avisos no saben si preguntar por /api/whatsapp/sin-leer. null = sin la columna.
+    usa_whatsapp: user.usa_whatsapp ?? null,
+  };
+}
+
 function generateRefreshToken() {
   return crypto.randomBytes(40).toString('hex');
 }
@@ -65,7 +86,7 @@ export async function login(email, password, ipAddress) {
     accessToken,
     refreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
-    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp, usa_whatsapp: user.usa_whatsapp ?? null },
+    user: usuarioParaElFrontal(user),
     projects: sanitizeProjects(projects, user.role),
     activeProjectId,
   };

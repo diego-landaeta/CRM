@@ -449,6 +449,25 @@ export function tieneAccesoMcp(role, permisos) {
  * `can` es el de usePermission: lo usa `oPermiso`, una entrada que se ve por
  * su rol O por un permiso del sistema de Roles (Diplomas, #384).
  */
+/**
+ * El `permiso` de una entrada del menú puede ser dos cosas distintas.
+ *
+ * - Una clave del sistema de Roles, con punto: `tasks.close`, `tasks.manage`.
+ *   Esa la contesta `can`.
+ * - Una casilla de la propia persona, sin punto: `factura_manager`. Esa NO está
+ *   en el mapa de Roles, así que `can('factura_manager')` da siempre false; la
+ *   mira `canSeeItem` en el usuario.
+ *
+ * Desde el 07/10 (#210) las dos pasaban por `can` y la entrada «Facturación»
+ * dejó de salirle a TODA gestora que factura: Yolanda (ICTESS), Ana, Dayana…
+ * Diego, 23/10: «a Yolanda no le salen las funciones de facturación». En ISEIE
+ * no pasaba: allí solo se le pregunta a `can` por las de `tasks.`.
+ */
+export function pasaPermisoDeRoles(item, can) {
+  if (!item?.permiso || !String(item.permiso).includes('.')) return true;
+  return typeof can === 'function' && can(item.permiso) === true;
+}
+
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
   const suyos = Array.isArray(roles) ? roles.filter(Boolean) : [roles].filter(Boolean);
   const es = (...r) => r.some((x) => suyos.includes(x));
@@ -1199,7 +1218,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
           const visibleItems = section.items
-            .filter((item) => !item.permiso || can(item.permiso))
+            .filter((item) => pasaPermisoDeRoles(item, can))
             .filter((item) => canSeeItem(item, rolesDe(user), activeProject?.modules, activeProject?.type, soloColab, user, can));
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
