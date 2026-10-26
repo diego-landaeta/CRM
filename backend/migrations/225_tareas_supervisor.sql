@@ -1,4 +1,4 @@
--- 214 · El supervisor de una tarea (Diego, 26/10/2026)
+-- 225 · El supervisor de una tarea (Diego, 26/10/2026)
 --
 -- «Quienes puedan dar tareas a otros (Diego, Julián, Jesús, Eduardo, Ruth, Ángel
 -- de CEDIA) también pueden ser supervisores de esas tareas entre todos; por
