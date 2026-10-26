@@ -451,14 +451,18 @@ export function tieneAccesoMcp(can) {
  *
  * - Una clave del sistema de Roles, con punto: `tasks.close`, `tasks.manage`.
  *   Esa la contesta `can`.
- * - Una casilla de la propia persona, sin punto: `factura_manager`. Esa NO está
- *   en el mapa de Roles, así que `can('factura_manager')` da siempre false; la
- *   mira `canSeeItem` en el usuario.
+ * - Una casilla de la propia persona, sin punto (antes, la de facturar). Esa NO
+ *   está en el mapa de Roles, así que `can` da siempre false; la mira
+ *   `canSeeItem` en el usuario.
  *
  * Desde el 07/10 (#210) las dos pasaban por `can` y la entrada «Facturación»
  * dejó de salirle a TODA gestora que factura: Yolanda (ICTESS), Ana, Dayana…
  * Diego, 23/10: «a Yolanda no le salen las funciones de facturación». En ISEIE
  * no pasaba: allí solo se le pregunta a `can` por las de `tasks.`.
+ *
+ * Con #423 la casilla de facturar es una excepción de la persona
+ * (`facturas.emitir`, migración 222) y la entrada pide esa clave: ya pasa por
+ * `can`. Esto se queda para que una entrada sin punto no vuelva a esconderse.
  */
 export function pasaPermisoDeRoles(item, can) {
   if (!item?.permiso || !String(item.permiso).includes('.')) return true;
