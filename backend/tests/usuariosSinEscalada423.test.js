@@ -107,10 +107,20 @@ describe('ni al dar de alta (#423, punto 7)', () => {
     expect(await q('SELECT 1 FROM users WHERE email = $1', [`nuevosoporte@${dominio}`])).toEqual([]);
   });
 
-  it('soporte no da de alta a un admin', async () => {
-    const r = await alta(U.soporte, 'admin', 'nuevoadmin');
+  // Diego, 26/10 (decisión 3): «soporte SIGUE pudiendo dar de alta admins,
+  // gestoras y colaboradores, como hasta hoy».
+  it('soporte sí da de alta a un admin, a una gestora y a un colaborador', async () => {
+    for (const [role, nombre] of [['admin', 'nuevoadmin'], ['gestor', 'nuevagestorasop'], ['colaborador', 'nuevocolab']]) {
+      const r = await alta(U.soporte, role, nombre);
+      expect(r.status, `${role}: ${JSON.stringify(r.body)}`).toBe(201);
+      expect((await q('SELECT role::text AS role FROM users WHERE email = $1', [`${nombre}@${dominio}`]))[0]?.role).toBe(role);
+    }
+  });
+
+  it('pero no le cambia el rol a quien ya existe (eso es «Permisos de cada persona»)', async () => {
+    const r = await request.patch(`/api/users/${U.otra.id}`).set(como(U.soporte)).send({ role: 'admin' });
     expect(r.status).toBe(403);
-    expect(await q('SELECT 1 FROM users WHERE email = $1', [`nuevoadmin@${dominio}`])).toEqual([]);
+    expect((await rolDe(U.otra)).role).not.toBe('admin');
   });
 
   it('un admin sí da de alta a una gestora y a un tutor', async () => {

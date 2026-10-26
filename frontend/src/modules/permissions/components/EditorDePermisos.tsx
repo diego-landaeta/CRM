@@ -13,7 +13,7 @@ import { avisosDeDependencias, clavesDeSeccion, estadoDe, filtrar, marcarTodas }
  * deja marcarla con un clic; no lo hace solo, que lo decida quien edita.
  */
 export default function EditorDePermisos({
-  catalogo, valores, onCambiar, soloLectura = false, bloqueadas = [], marca,
+  catalogo, valores, onCambiar, soloLectura = false, bloqueadas = [], sinTenerlo = [], marca,
 }: {
   catalogo: Catalogo;
   valores: PermissionMap;
@@ -21,6 +21,11 @@ export default function EditorDePermisos({
   soloLectura?: boolean;
   /** Las que este rol no puede tener (`nunca`): se ven, pero no se marcan. */
   bloqueadas?: string[];
+  /**
+   * Las que quien edita no tiene y el rol tampoco (Diego, 26/10: nadie le pone
+   * a un rol lo que él no tiene): se ven, pero no se marcan.
+   */
+  sinTenerlo?: string[];
   /** Algo al lado del nombre de un permiso (p. ej. «cambiado»). */
   marca?: (clave: string) => ReactNode;
 }) {
@@ -30,6 +35,7 @@ export default function EditorDePermisos({
   const avisos = useMemo(() => avisosDeDependencias(catalogo, valores), [catalogo, valores]);
   const buscando = texto.trim().length > 0;
   const cambiar = (v: PermissionMap) => { if (!soloLectura) onCambiar?.(v); };
+  const noSeMarcan = useMemo(() => [...bloqueadas, ...sinTenerlo], [bloqueadas, sinTenerlo]);
   const total = useMemo(() => catalogo.secciones.flatMap(clavesDeSeccion), [catalogo]);
   const marcadas = total.filter((k) => valores[k] === true).length;
 
@@ -68,7 +74,7 @@ export default function EditorDePermisos({
               <li key={a.clave} className="flex flex-wrap items-center gap-x-2">
                 <span>«{a.nombre}» necesita {a.faltan.map((f) => `«${f.nombre}»`).join(' y ')}.</span>
                 <button type="button" className="font-semibold underline underline-offset-2"
-                  onClick={() => cambiar(marcarTodas(valores, a.faltan.map((f) => f.clave), true, bloqueadas))}>
+                  onClick={() => cambiar(marcarTodas(valores, a.faltan.map((f) => f.clave), true, noSeMarcan))}>
                   Marcarlo
                 </button>
               </li>
@@ -104,7 +110,7 @@ export default function EditorDePermisos({
                 <Casilla
                   marcada={estado === 'todas'}
                   parcial={estado === 'parcial'}
-                  onCambiar={(m) => cambiar(marcarTodas(valores, claves, m, bloqueadas))}
+                  onCambiar={(m) => cambiar(marcarTodas(valores, claves, m, noSeMarcan))}
                   etiqueta={<span className="text-secundario">Seleccionar todo</span>}
                 />
               )}
@@ -117,11 +123,12 @@ export default function EditorDePermisos({
                     <div className="grid grid-cols-1 gap-x-6 gap-y-2.5 md:grid-cols-2">
                       {r.acciones.map((a) => {
                         const bloqueada = bloqueadas.includes(a.clave);
+                        const noLaTienes = !bloqueada && sinTenerlo.includes(a.clave);
                         return (
                           <Casilla
                             key={a.clave}
                             marcada={valores[a.clave] === true}
-                            deshabilitada={soloLectura || bloqueada}
+                            deshabilitada={soloLectura || bloqueada || noLaTienes}
                             onCambiar={(m) => cambiar({ ...valores, [a.clave]: m })}
                             etiqueta={(
                               <span className="flex flex-wrap items-center gap-1.5">
@@ -130,7 +137,8 @@ export default function EditorDePermisos({
                                 {marca?.(a.clave)}
                               </span>
                             )}
-                            descripcion={bloqueada ? `${a.descripcion} No se le puede dar a este rol.` : a.descripcion}
+                            descripcion={bloqueada ? `${a.descripcion} No se le puede dar a este rol.`
+                              : noLaTienes ? `${a.descripcion} Tú no lo tienes: no se lo puedes poner a un rol.` : a.descripcion}
                           />
                         );
                       })}

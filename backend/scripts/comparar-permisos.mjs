@@ -9,6 +9,11 @@
 //   node scripts/comparar-permisos.mjs --solo-antes [--guardar foto.json]
 //                                                      lo de antes, sin comparar
 //   --detalle                                          cada diferencia, una a una
+//   --guion cambios.sql                                con --simular: además pasa ese
+//                                                      SQL (los cambios de datos del día
+//                                                      de producción, p. ej. la cuenta de
+//                                                      Diego a superadmin) dentro de la
+//                                                      misma transacción, que se deshace
 //
 // «Antes» son las reglas de antes, congeladas (inventario/legado.js) sobre el
 // inventario congelado (inventario/antes-423.json), con los permisos de cada
@@ -126,7 +131,7 @@ export async function comparar({ antes: personasAntes, despues: personas }) {
       const despues = inv.puedeDespues(p, fila, mapa);
       if (antes === despues) continue;
       const porRol = [p.role, ...p.roles_extra].map((r) => cambioPrevisto(fila.id, r)).find(Boolean);
-      const porDatos = porRol ? null : CAMBIOS_POR_DATOS.find((c) => c.explica({ persona: p, fila, antes, despues, despuesSin: despuesSin(fila) }));
+      const porDatos = porRol ? null : CAMBIOS_POR_DATOS.find((c) => c.explica({ persona: p, personaAntes: pa, fila, antes, despues, despuesSin: despuesSin(fila) }));
       diferencias.push({ persona: p, personaAntes: pa, fila, antes, despues, cambio: porRol || porDatos || null });
     }
   }
@@ -186,6 +191,11 @@ if (esPrincipal) {
       antesDeLa222 = await leerPersonas(client);
       for (const m of ['221_permisos_registro.sql', '222_permisos_casillas_a_excepciones.sql']) {
         await client.query(sinTransaccion(fs.readFileSync(path.resolve(aqui, '../migrations', m), 'utf8')));
+      }
+      const guion = opcion('--guion');
+      if (typeof guion === 'string') {
+        await client.query(sinTransaccion(fs.readFileSync(path.resolve(guion), 'utf8')));
+        console.log(`(con el guion ${path.basename(guion)}, también dentro de la transacción)`);
       }
       console.log('(simulación: el «antes» leído ANTES de pasar la 221 y la 222, dentro de una transacción que se deshace al acabar)\n');
     } else {

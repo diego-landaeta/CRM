@@ -5,7 +5,9 @@
  *
  * QUIÉN PUEDE QUÉ (Diego, #423):
  *   - Un rol fijo, un rol a medida, la vista de un rol: valen para todas las
- *     empresas → solo quien tenga `roles.edit` (de serie, solo el superadmin).
+ *     empresas → quien tenga `roles.edit` (de serie, el admin y el superadmin:
+ *     Diego, 26/10, «los admin siguen pudiendo, como hasta hoy»), y nunca
+ *     poniéndole a un rol lo que él mismo no tiene.
  *   - Lo de una persona —sus excepciones y su rol a medida—: quien tenga
  *     `users.excepciones`, y si no es superadmin, solo a gente que comparta
  *     algún campus con él (como #384), nunca a un admin ni a un superadmin, y
@@ -19,6 +21,7 @@ import * as model from './permissions.model.js';
 import { explicarPermisos, olvidarPermisos } from './permissions.service.js';
 import { ACCIONES, CLAVES, POR_CLAVE, ROLES_FIJOS, valoresPorDefecto, vetada } from './catalogo.js';
 import { permisosDelRol, permisosDelRolAMedida, resolverPermisos } from './resolver.js';
+import { tieneRol } from '../../shared/utils/roles.js';
 
 const SERIE = valoresPorDefecto();
 const ROLES_EDITABLES = ROLES_FIJOS.map((r) => r.clave).filter((r) => r !== 'superadmin');
@@ -38,6 +41,22 @@ async function enTransaccion(fn) {
     throw err;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * Nadie le pone a un rol lo que él no tiene (Diego, 26/10: los admin siguen
+ * cambiando roles, «pero se mantiene que nadie puede dar más de lo que tiene»).
+ * Solo cuenta lo que el rol GANA: quitar no es dar, y lo que el rol ya traía se
+ * puede dejar como está aunque quien lo cambia no lo tenga.
+ */
+async function exigirQueElRolNoGaneLoQueNoTienes(quien, antes, despues, db) {
+  if (quien.role === 'superadmin') return;
+  const mios = (await explicarPermisos(quien.userId, db))?.mapa || {};
+  const deMas = ACCIONES.filter((x) => despues[x.clave] === true && antes[x.clave] !== true && mios[x.clave] !== true)
+    .map((x) => x.nombre);
+  if (deMas.length) {
+    throw new AppError(`No puedes ponerle a un rol lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
   }
 }
 
@@ -84,6 +103,8 @@ export async function guardarRolFijo(rol, permisos, quien) {
     const ajustes = await model.ajustesDeRoles(db);
     const antes = permisosDelRol(rol, ajustes);
     const deseado = { ...antes, ...permisos };
+    await exigirQueElRolNoGaneLoQueNoTienes(quien, antes,
+      Object.fromEntries(ACCIONES.map((x) => [x.clave, deseado[x.clave] === true])), db);
     await db.query('DELETE FROM role_permission_overrides WHERE role = $1', [rol]);
     for (const x of ACCIONES) {
       const v = deseado[x.clave] === true;
@@ -108,6 +129,9 @@ export async function crearRolAMedida({ nombre, descripcion = null, base = 'gest
     const ajustes = await model.ajustesDeRoles(db);
     const delBase = permisosDelRol(base, ajustes);
     const diferencias = Object.fromEntries(Object.entries(permisos).filter(([k, v]) => (v === true) !== delBase[k]).map(([k, v]) => [k, v === true]));
+    // Lo que trae de su rol base no es «darlo»: eso ya lo tiene el rol fijo.
+    // Lo que se le marca de más, sí.
+    await exigirQueElRolNoGaneLoQueNoTienes(quien, delBase, { ...delBase, ...diferencias }, db);
     const { rows: [cr] } = await db.query(
       `INSERT INTO custom_roles (label, description, base_role, permissions) VALUES ($1, $2, $3, $4)
        RETURNING id, label, description, base_role, permissions, active`,
@@ -133,6 +157,9 @@ export async function guardarRolAMedida(id, { nombre, descripcion, base, activo,
     const delBase = permisosDelRol(nuevaBase, ajustes);
     const deseado = { ...antes, ...(permisos || {}) };
     const diferencias = Object.fromEntries(ACCIONES.filter((x) => deseado[x.clave] !== delBase[x.clave]).map((x) => [x.clave, deseado[x.clave] === true]));
+    // Con el rol base nuevo incluido: cambiarle la base también le da lo que trae.
+    await exigirQueElRolNoGaneLoQueNoTienes(quien, antes,
+      permisosDelRolAMedida({ ...cr, base_role: nuevaBase, permissions: diferencias }, ajustes), db);
     const { rows: [nuevo] } = await db.query(
       `UPDATE custom_roles SET label = $2, description = $3, base_role = $4, active = $5, permissions = $6, updated_at = NOW()
         WHERE id = $1 RETURNING id, label, description, base_role, permissions, active`,
@@ -181,6 +208,10 @@ export async function exigirQuePuedaTocarA(quien, userId) {
  */
 export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_extra }) {
   if (quien.role === 'superadmin') return;
+  // Diego, 26/10: soporte SIGUE dando de alta admins, gestoras y colaboradores,
+  // como hasta hoy. Solo en el ALTA (userId null) y solo esos roles: cambiarle
+  // el rol a alguien que ya existe sigue las reglas de siempre.
+  if (!userId && puedeDarDeAltaComoSoporte(quien, { role, roles_extra })) return;
   const datos = userId ? await model.datosDePermisos(userId) : null;
   const ajustesRol = datos ? datos.ajustesRol : await model.ajustesDeRoles();
   const comoEs = datos
@@ -195,6 +226,18 @@ export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_
   if (deMas.length) {
     throw new AppError(`Ese rol le daría lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
   }
+}
+
+/**
+ * Las altas que soporte hace aunque el rol nuevo traiga lo que soporte no tiene
+ * (Diego, 26/10, punto 3). Exportada para la prueba.
+ */
+export const ALTAS_DE_SOPORTE = ['admin', 'gestor', 'colaborador'];
+export function puedeDarDeAltaComoSoporte(quien, { role, roles_extra = [] }) {
+  if (!tieneRol(quien, 'soporte')) return false;
+  const pedidos = [role, ...(roles_extra || [])].filter(Boolean);
+  // Lo que no es de la lista (otro soporte, un tutor) sigue la regla general.
+  return pedidos.length > 0 && pedidos.every((r) => ALTAS_DE_SOPORTE.includes(r) || r === 'soporte');
 }
 
 /** Todo lo que puede una persona y de dónde le viene, para su ficha. */

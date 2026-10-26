@@ -52,7 +52,7 @@ export async function saveRolePermissions(req, res, next) {
   try {
     const parsed = rolePermissionsSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const data = await service.saveRoleTaskPermissions(req.params.roleKey, parsed.data.permissions, req.user.userId);
+    const data = await service.saveRoleTaskPermissions(req.params.roleKey, parsed.data.permissions, req.user);
     if (!data) throw new AppError(ROL_NO_EDITABLE, 400, 'ROLE_NOT_EDITABLE');
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -75,7 +75,7 @@ export async function setClaveDeRol(req, res, next) {
     const parsed = claveDeRolSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Di si se le da o no (permitido: sí o no)', 400, 'VALIDATION_ERROR');
     res.json({ success: true, data: await service.setClaveDeRol(
-      req.params.clave, req.params.roleKey, parsed.data.permitido, req.user.userId) });
+      req.params.clave, req.params.roleKey, parsed.data.permitido, req.user) });
   } catch (err) { next(err); }
 }
 
