@@ -82,6 +82,9 @@ export default function UserFormDialog({
   // proyectos futuros, pero de SU empresa: mayormente los admin son por empresa».
   const puedeDarEmpresas = !!empresas && !faltaMigracionEmpresas;
   const [empresasEnteras, setEmpresasEnteras] = useState<number[]>(user?.empresa_ids ?? []);
+  // El colaborador también tiene empresa, sin campus (equipo de desarrollo, 26/10/2026).
+  const esColaborador = role === 'colaborador' || rolesExtra.includes('colaborador' as UserRole);
+  const llevaEmpresa = role === 'admin' || esColaborador;
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
   // Facturación, fechas de facturas y el WhatsApp del CRM ya no son casillas de
   // aquí (#423): son permisos del catálogo y se dan en «Ver permisos», con su
@@ -135,7 +138,7 @@ export default function UserFormDialog({
     // Todo lo que falta o está mal, de una vez (#106).
     // Un admin con una empresa entera ya tiene de dónde le llegan campus,
     // aunque esa empresa aún no tenga ninguno (#220).
-    const conEmpresa = role === 'admin' && puedeDarEmpresas && empresasEnteras.length > 0;
+    const conEmpresa = llevaEmpresa && puedeDarEmpresas && empresasEnteras.length > 0;
     const faltan: Falta[] = [];
     if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre».', que: 'el nombre en «Nombre»' });
     // El backend pide 2 caracteres minimo; validarlo aqui evita el viaje.
@@ -175,9 +178,9 @@ export default function UserFormDialog({
       projects: seleccionados,
       whatsapp_phone: telefono.trim(),
       reenviarEnlace: cambiaCorreo && reenviarEnlace,
-      // Solo si quien edita puede darlas. Para otro rol que no sea admin, se
-      // mandan vacías: una gestora no tiene empresas enteras.
-      ...(puedeDarEmpresas ? { empresaIds: role === 'admin' ? empresasEnteras : [] } : {}),
+      // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
+      // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
+      ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
     });
   }
 
@@ -370,6 +373,7 @@ export default function UserFormDialog({
                 empresasEnteras={empresasEnteras}
                 onToggleEmpresa={empresas ? alternarEmpresa : undefined}
                 faltaMigracionEmpresas={faltaMigracionEmpresas}
+                esColaborador={esColaborador}
               />
             )}
 
