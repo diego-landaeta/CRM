@@ -40,6 +40,12 @@ beforeAll(async () => {
     `INSERT INTO meta_ad_accounts (project_id, ad_account_id, access_token_enc, ad_account_nombre, currency, backfill_done)
      VALUES ($1, $2, 'x', $3, 'EUR', true) RETURNING id`, [C.PSIKO, actId, `Cuenta ${marca}`]);
   ids.cuentas.push(a.id);
+  // La misma cuenta de Meta, conectada también en el otro campus: así puede haber
+  // días de la campaña apuntados a él (la sincronización no cambia el campus).
+  const { rows: [a2] } = await query(
+    `INSERT INTO meta_ad_accounts (project_id, ad_account_id, access_token_enc, ad_account_nombre, currency, backfill_done)
+     VALUES ($1, $2, 'x', $3, 'EUR', true) RETURNING id`, [C.OTRO, actId, `Cuenta ${marca}`]);
+  ids.cuentas.push(a2.id);
   campana = `9${Date.now()}10`;
   await query(
     `INSERT INTO meta_campaigns (campaign_id, project_id, ad_account_id, nombre, objective, status, effective_status, daily_budget)
@@ -76,6 +82,25 @@ describe('el gasto, por el campus de la fila diaria', () => {
   it('sin fechas, igual', async () => {
     const r = await herramienta('campanas_publicitarias').ejecutar(admin('PSIKO'), { limite: 50 });
     expect(r.campanas.find((c) => c.campaign_id === campana).gasto).toBe(100);
+  });
+
+  it('el otro campus SÍ ve los 500 € de su día, como la pantalla Publicidad (no se pierden)', async () => {
+    const r = await herramienta('resumen_publicidad').ejecutar(admin('OTRO'), { ...SEPTIEMBRE });
+    const pantalla = await publicidad.getDashboard({ projectId: C.OTRO, dateFrom: SEPTIEMBRE.desde, dateTo: SEPTIEMBRE.hasta });
+    expect(r.campus.find((c) => c.campus_id === C.OTRO).gasto).toBe(500);
+    expect(pantalla.totals.spend).toBe(500);
+    const camp = await herramienta('campanas_publicitarias').ejecutar(admin('OTRO'), { ...SEPTIEMBRE, limite: 50 });
+    expect(camp.campanas.filter((c) => c.campaign_id === campana).map((c) => c.gasto)).toEqual([500]);
+  });
+
+  it('con los dos campus a la vez: 600 €, la campaña una vez por campus', async () => {
+    const ambos = construirAmbito({ id: 999995, nombre: 'Admin de prueba', role: 'admin', active: true },
+      ['PSIKO', 'OTRO'].map((clave) => ({ id: C[clave], nombre: `${clave} ${marca}`, sociedad_id: null })));
+    const r = await herramienta('resumen_publicidad').ejecutar(ambos, { ...SEPTIEMBRE });
+    expect(r.totales.gasto).toBe(600);
+    const camp = await herramienta('campanas_publicitarias').ejecutar(ambos, { ...SEPTIEMBRE, limite: 50 });
+    const suyas = camp.campanas.filter((c) => c.campaign_id === campana).map((c) => [c.campus, c.gasto]).sort((x, y) => x[1] - y[1]);
+    expect(suyas).toEqual([[`PSIKO ${marca}`, 100], [`OTRO ${marca}`, 500]]);
   });
 });
 
