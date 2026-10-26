@@ -19,6 +19,11 @@ interface Props {
   empresas?: Empresa[];
   empresasEnteras?: number[];
   onToggleEmpresa?: (issuerId: number) => void;
+  /**
+   * El colaborador (rol principal o añadido) también tiene empresa: el equipo de
+   * desarrollo va por empresa en Tareas (26/10/2026). A él NO le da campus.
+   */
+  esColaborador?: boolean;
   /** La migración 203 no está: la casilla se enseña apagada y se dice por qué. */
   faltaMigracionEmpresas?: boolean;
 }
@@ -51,11 +56,12 @@ interface Grupo {
  */
 export default function ProjectSelector({
   projects, selected, role, onToggle, onToggleRecibeLeads, onSetMany, required = false,
-  empresas, empresasEnteras = [], onToggleEmpresa, faltaMigracionEmpresas = false,
+  empresas, empresasEnteras = [], onToggleEmpresa, faltaMigracionEmpresas = false, esColaborador = false,
 }: Props) {
   const mostrarToggle = role === 'admin';
-  // La casilla de empresa entera: solo admin, y solo si quien edita puede darla.
-  const conEmpresas = role === 'admin' && !!onToggleEmpresa && !!empresas;
+  // La casilla de empresa: admin y colaborador, y solo si quien edita puede darla.
+  const paraColaborador = role !== 'admin' && esColaborador;
+  const conEmpresas = (role === 'admin' || paraColaborador) && !!onToggleEmpresa && !!empresas;
 
   // Las empresas con sus campus. Con la casilla, salen también las que todavía
   // no tienen ninguno: el admin puede ir antes que el primer campus.
@@ -137,6 +143,14 @@ export default function ProjectSelector({
                     onChange={() => onToggleEmpresa!(g.id as number)}
                     className="mt-0.5 rounded border-border accent-primary w-4 h-4 flex-shrink-0"
                   />
+                  {paraColaborador ? (
+                  <span className="text-sm">
+                    Es del equipo de esta empresa (Tareas y su factura)
+                    <span className="block text-secundario text-muted-foreground">
+                      Le pueden asignar tareas los encargados de la empresa. No le da ningún campus.
+                    </span>
+                  </span>
+                  ) : (
                   <span className="text-sm">
                     Todos los campus de esta empresa, también los que se creen
                     <span className="block text-secundario text-muted-foreground">
@@ -145,6 +159,7 @@ export default function ProjectSelector({
                         : 'No es superadmin: no ve otras empresas ni gestiona usuarios.'}
                     </span>
                   </span>
+                  )}
                 </label>
               )}
 
