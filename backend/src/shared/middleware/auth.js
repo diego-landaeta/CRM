@@ -3,6 +3,8 @@ import { AppError } from '../utils/AppError.js';
 // Una persona puede tener mas de un rol: el principal y los añadidos. Quien
 // decide cuales son vive en un solo sitio.
 import { tieneRol, rutaDeRolCerrado } from '../utils/roles.js';
+// La sesión se mira contra la base: rol y activo (hotfix del 26/10/2026).
+import { comprobarSesion, sesionVigente } from './sesionViva.js';
 
 /**
  * Pega a un guardia la regla que aplica (#423).
@@ -17,7 +19,7 @@ export function conRegla(fn, regla) {
   return fn;
 }
 
-export function verifyToken(req, _res, next) {
+export async function verifyToken(req, _res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return next(new AppError('Token no proporcionado', 401, 'AUTH_REQUIRED'));
@@ -29,6 +31,18 @@ export function verifyToken(req, _res, next) {
     req.user = decoded;
   } catch {
     return next(new AppError('Token invalido o expirado', 401, 'TOKEN_INVALID'));
+  }
+
+  // Un token de antes de un cambio de rol, o de alguien desactivado, ya no vale
+  // (26/10/2026): el frontal lo renueva con el rol bueno o pide entrar otra vez.
+  if (comprobarSesion()) {
+    try {
+      if (!(await sesionVigente(req.user))) {
+        return next(new AppError('Tu sesión ha cambiado: vuelve a entrar', 401, 'TOKEN_INVALID'));
+      }
+    } catch (err) {
+      return next(err);
+    }
   }
 
   // El colaborador solo ve «Tareas» (#210, fase 5) y el tutor, lo suyo (#187).
