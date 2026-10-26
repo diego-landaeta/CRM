@@ -27,6 +27,8 @@ async function deSusCampus(req, _res, next) {
     next();
   } catch (err) { next(err); }
 }
+// Para el inventario de permisos (#423): acota por campus, no decide quién entra.
+deSusCampus.regla = { tipo: 'alcance', nombre: 'deSusCampus' };
 const ver = [puede('meta_ads.view'), deSusCampus];
 const configurar = [puede('meta_ads.edit'), deSusCampus];
 

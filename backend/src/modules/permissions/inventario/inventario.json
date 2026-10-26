@@ -8280,6 +8280,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8302,6 +8306,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8324,6 +8332,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8434,6 +8446,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8456,6 +8472,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8478,6 +8498,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8500,6 +8524,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8522,6 +8550,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8544,6 +8576,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8566,6 +8602,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8588,6 +8628,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8610,6 +8654,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8632,6 +8680,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -8654,6 +8706,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
