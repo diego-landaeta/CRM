@@ -219,12 +219,13 @@ export async function getRoleTaskPermissions(roleKey) {
  * solo los que se apartan del código (tabla 197); en uno a medida se fusionan
  * en su JSON sin tocar el resto de claves.
  */
-export async function saveRoleTaskPermissions(roleKey, permissions, updatedBy) {
+export async function saveRoleTaskPermissions(roleKey, permissions, quien) {
   const r = rolDeLaClave(roleKey);
   if (!r) return null;
   // Por el mismo camino que la pantalla de Roles (#423): con su registro.
   const editar = await import('./permissions.editar.js');
-  const quien = { userId: updatedBy, role: 'superadmin' };
+  // Quien lo cambia DE VERDAD (Diego, 26/10): desde que el admin cambia roles,
+  // las reglas de «nadie da lo que no tiene» miran a esa persona.
   if (r.custom) {
     const custom = await model.findCustomRoleById(r.custom);
     if (!custom) return null;
@@ -300,12 +301,13 @@ export async function getClaveDeRol(clave, roleKey) {
  * aparta del código (tabla de la 197), sin tocar las demás acciones del recurso;
  * en uno a medida se fusiona en su JSON.
  */
-export async function setClaveDeRol(clave, roleKey, permitido, updatedBy) {
+export async function setClaveDeRol(clave, roleKey, permitido, quien) {
   const conf = laClave(clave);
   const r = elRol(conf, roleKey);
   // Por el mismo camino que la pantalla de Roles (#423): con su registro.
   const editar = await import('./permissions.editar.js');
-  const quien = { userId: updatedBy, role: 'superadmin' };
+  // Quien lo cambia DE VERDAD (Diego, 26/10): desde que el admin cambia roles,
+  // las reglas de «nadie da lo que no tiene» miran a esa persona.
   if (r.custom) {
     if (!(await model.findCustomRoleById(r.custom))) throw new AppError('Ese rol no existe', 404, 'NOT_FOUND');
     await editar.guardarRolAMedida(r.custom, { permisos: { [clave]: permitido === true } }, quien);

@@ -19,7 +19,7 @@ router.get('/system-defaults', ctrl.getSystemDefaults);
 
 // ── Configuración › Roles (#423) ──
 // Lo que trae cada rol, lo ve quien tiene «Ver roles»; cambiarlo vale para
-// todas las empresas y es de «Cambiar roles» (de serie, solo el superadmin).
+// todas las empresas y es de «Cambiar roles» (de serie, admin y superadmin: Diego, 26/10).
 router.get('/roles', puede('roles.view'), pantalla.roles);
 router.put('/roles/fijos/:rol', puede('roles.edit'), pantalla.guardarRolFijo);
 router.post('/roles/a-medida', puede('roles.edit'), pantalla.crearRolAMedida);

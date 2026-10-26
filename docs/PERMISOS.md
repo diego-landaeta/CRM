@@ -1553,7 +1553,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver roles | `roles.view` | Qué trae cada rol y los roles a medida. | Admin |  |
-| Cambiar roles | `roles.edit` | Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas). | solo superadmin | `roles.view` |
+| Cambiar roles | `roles.edit` | Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas), sin darles lo que uno no tiene. | Admin | `roles.view` |
 
 ### Proyectos
 

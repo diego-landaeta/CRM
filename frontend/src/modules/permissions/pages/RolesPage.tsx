@@ -15,8 +15,9 @@ import { accionesDe, cambiadas } from '../lib/permisos';
  * fijos y los a medida—, a la derecha todo lo que trae el elegido, por
  * secciones del menú, con casillas.
  *
- * Cambiar un rol vale para todas las empresas, así que solo quien tiene
- * «Cambiar roles» (de serie, el superadmin). El resto lo ve en solo lectura.
+ * Cambiar un rol vale para todas las empresas: quien tiene «Cambiar roles» (de
+ * serie, el admin y el superadmin; Diego, 26/10), y sin ponerle lo que él no
+ * tiene. El resto lo ve en solo lectura.
  * Lo de una persona suelta se cambia en su ficha (Configuración › Usuarios).
  */
 
@@ -51,7 +52,7 @@ export default function RolesPage() {
 
   const fijo = elegido.tipo === 'fijo' ? roles?.fijos.find((r) => r.clave === elegido.clave) : null;
   const medida = elegido.tipo === 'medida' ? roles?.aMedida.find((r) => r.id === elegido.id) : null;
-  const original = (fijo?.permisos || medida?.permisos || {}) as PermissionMap;
+  const original = useMemo(() => (fijo?.permisos || medida?.permisos || {}) as PermissionMap, [fijo, medida]);
   const valores = borrador || original;
   const editable = puedeCambiar && (medida ? true : !!fijo?.editable);
   const sucio = borrador !== null && cambiadas(original, borrador).length > 0;
@@ -65,6 +66,13 @@ export default function RolesPage() {
       .filter((a) => rol && (a.nunca.includes(rol) || (a.nuncaPrincipal || []).includes(rol)))
       .map((a) => a.clave);
   }, [catalogo, fijo, medida]);
+
+  // Lo que quien edita no tiene y el rol tampoco trae: no se lo puede poner
+  // (el servidor responde 403 NO_LO_TIENES). Al superadmin, nada.
+  const sinTenerlo = useMemo(() => {
+    if (!catalogo) return [];
+    return accionesDe(catalogo).filter((a) => !can(a.clave) && original[a.clave] !== true).map((a) => a.clave);
+  }, [catalogo, can, original]);
 
   function elegir(e: Elegido) {
     if (sucio && !window.confirm('Hay cambios sin guardar en este rol. ¿Descartarlos?')) return;
@@ -204,6 +212,7 @@ export default function RolesPage() {
                     valores={valores}
                     soloLectura={!editable}
                     bloqueadas={bloqueadas}
+                    sinTenerlo={sinTenerlo}
                     onCambiar={setBorrador}
                     marca={(k) => ((fijo?.cambiados || medida?.cambiados || []).includes(k)
                       ? <span className="rounded bg-info-soft px-1.5 text-secundario text-info-soft-foreground" title="Distinto de lo que trae de serie">cambiado</span>

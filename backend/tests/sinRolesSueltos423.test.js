@@ -51,7 +51,7 @@ const DECLARADAS = {
   'tutores/tutor.controller.js': [6, 'alcance: el tutor, lo suyo; fichas de sus campus'],
   'users/user.controller.js': [5, 'alcance: contraseña solo de tutores de su campus; su foto y su vista'],
   'users/user.model.js': [1, 'comportamiento: la lista sin tutores'],
-  'users/user.service.js': [6, 'protección: al superadmin no se le edita; freno de correos a tutores'],
+  'users/user.service.js': [7, 'protección: al superadmin no se le edita y su contraseña solo se la pone otro superadmin; freno de correos a tutores'],
   'users/user.validation.js': [3, 'comportamiento: qué campus pide cada rol al darlo de alta'],
   'users/user.views.controller.js': [1, 'alcance: su vista, o la de cualquiera el superadmin'],
   'webhook-tokens/token.controller.js': [1, 'alcance: el superadmin, los webhooks de todos los campus'],

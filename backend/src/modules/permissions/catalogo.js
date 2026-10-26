@@ -534,7 +534,10 @@ export const SECCIONES = [
       {
         clave: 'roles', nombre: 'Roles y permisos', acciones: [
           a('view', 'Ver roles', 'Qué trae cada rol y los roles a medida.', ADMIN),
-          a('edit', 'Cambiar roles', 'Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas).', NADIE),
+          // Diego, 26/10: el admin SIGUE cambiando lo que trae cada rol y los
+          // roles a medida, como antes de #423; soporte, no. Y nadie le pone a un
+          // rol lo que él mismo no tiene (permissions.editar.js).
+          a('edit', 'Cambiar roles', 'Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas), sin darles lo que uno no tiene.', ADMIN),
         ],
       },
       {
