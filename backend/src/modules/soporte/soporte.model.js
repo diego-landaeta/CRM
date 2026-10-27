@@ -200,6 +200,24 @@ export async function adjuntoPorId(id) {
   return rows[0] || null;
 }
 
+/**
+ * A quien avisar de un ticket nuevo: quien ve todo el CRM (superadmin y
+ * soporte) y los admins con ese campus. Sin campus, solo los primeros: un admin
+ * de campus no ve un ticket ajeno sin proyecto (ver `alcanza` del controlador).
+ */
+export async function destinatariosDelAviso(projectId) {
+  const { rows } = await query(
+    `SELECT u.id FROM users u
+      WHERE u.active = true
+        AND (u.role IN ('superadmin', 'soporte')
+             OR (u.role = 'admin' AND $1::int IS NOT NULL AND EXISTS (
+                   SELECT 1 FROM user_projects up
+                    WHERE up.user_id = u.id AND up.project_id = $1::int AND up.active = true)))
+      ORDER BY u.id`,
+    [projectId ?? null]);
+  return rows.map((r) => r.id);
+}
+
 /** ¿Existe ese proyecto? Para que una clave foranea rota no salga como un 500. */
 export async function proyectoExiste(id) {
   const { rowCount } = await query('SELECT 1 FROM projects WHERE id = $1', [id]);

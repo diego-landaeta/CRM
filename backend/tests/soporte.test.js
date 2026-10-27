@@ -32,6 +32,7 @@ const modelo = {
   adjuntoPorId: vi.fn(),
   tiempos: vi.fn(async () => ({ total: 0 })),
   proyectoExiste: vi.fn(async () => true),
+  destinatariosDelAviso: vi.fn(async () => [1, 2]),
   clavesDeAdjuntos: vi.fn(async () => []),
   borrar: vi.fn(async () => true),
 };
@@ -44,7 +45,7 @@ vi.mock('../src/shared/services/brevo.service.js', () => ({
 }));
 const avisado = vi.fn(async () => {});
 vi.mock('../src/modules/notifications/notifications.service.js', () => ({
-  notifyAdmins: (...a) => avisado(...a),
+  notifyUsers: (...a) => avisado(...a),
 }));
 // Los campus de cada persona. El alcance real lo calcula ambito.js contra la base;
 // aqui se simula su respuesta y se comprueba que el controlador la use.
@@ -261,8 +262,17 @@ describe('abrir un ticket', () => {
     expect(res.codigo).toBe(201);
     expect(modelo.crear).toHaveBeenCalledWith(expect.objectContaining({ abiertoPor: 4 }));
     expect(avisado).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'ticket_nuevo', link_path: '/soporte',
+      type: 'ticket_nuevo', link_path: '/soporte', targetUserIds: [1, 2],
     }));
+  });
+
+  it('sin nadie a quien avisar NO se llama a notifyUsers (vacio significaria «todos»)', async () => {
+    modelo.crear.mockResolvedValue({ id: '7', title: 'Algo' });
+    modelo.destinatariosDelAviso.mockResolvedValueOnce([]);
+    const { res } = await llamar(ctrl.crear, { user: LAURA, body: { title: 'El chat no carga' } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(res.codigo).toBe(201);
+    expect(avisado).not.toHaveBeenCalled();
   });
 
   it('si la campana falla, el ticket queda guardado igual', async () => {

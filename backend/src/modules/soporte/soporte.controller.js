@@ -6,7 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { sendTicketNuevoEmail } from '../../shared/services/brevo.service.js';
-import { notifyAdmins } from '../notifications/notifications.service.js';
+import { notifyUsers } from '../notifications/notifications.service.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 
 /** Quien administra puede responder, cambiar el estado y ver las notas internas. */
@@ -138,14 +138,23 @@ export async function crear(req, res, next) {
     // Entra como ACCION, asi que cuenta para el globo y sale en «lo que toca»
     // del dashboard. Es exactamente lo que es: algo que alguien tiene que
     // atender.
-    notifyAdmins({
-      type: 'ticket_nuevo',
-      title: t.title,
-      message: `${req.user?.nombre || 'Alguien del equipo'} ha abierto un ticket`,
-      link_path: '/soporte',
-      metadata: { ticketId: t.id, kind: t.kind, severity: t.severity, url: t.url },
-      triggered_by_user_id: req.user.userId,
-    }).catch((e) => logger.error({ err: e.message, ticketId: t.id }, 'Aviso de ticket: error'));
+    //
+    // SOLO A QUIEN PUEDE VERLO: superadmin, soporte y los admins del campus del
+    // ticket. `notifyAdmins` lo mandaba a TODOS los admins, y el aviso lleva el
+    // titulo, el autor y la URL: se saltaba el recorte por campus de `listar`.
+    // Sin destinatarios no se avisa a nadie (una lista vacia en `notifyUsers`
+    // significaria «todos»).
+    model.destinatariosDelAviso(t.projectId)
+      .then((targetUserIds) => (targetUserIds.length ? notifyUsers({
+        targetUserIds,
+        type: 'ticket_nuevo',
+        title: t.title,
+        message: `${req.user?.nombre || 'Alguien del equipo'} ha abierto un ticket`,
+        link_path: '/soporte',
+        metadata: { ticketId: t.id, kind: t.kind, severity: t.severity, url: t.url },
+        triggered_by_user_id: req.user.userId,
+      }) : null))
+      .catch((e) => logger.error({ err: e.message, ticketId: t.id }, 'Aviso de ticket: error'));
 
     // Y ADEMAS por correo, SOLO si alguien ha puesto `SOPORTE_EMAIL`. Vacia
     // —que es el caso hoy— no manda nada y no falla. Se deja montado porque el
