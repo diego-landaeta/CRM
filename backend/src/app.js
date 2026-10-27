@@ -94,6 +94,7 @@ import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
+import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook } from './modules/webhook-tokens/portero.js';
@@ -445,6 +446,8 @@ if (process.env.NODE_ENV !== 'test') {
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();
     if (tareasActivas()) startTasksDailySummaryScheduler();
+    // El resumen de la tarde y los correos de cambio de estado (26/10/2026).
+    if (tareasActivas()) startTareasResumenScheduler();
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
