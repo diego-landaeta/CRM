@@ -27,6 +27,11 @@ const DECLARADAS = {
   'auth/auth.model.js': [1, 'alcance: los campus que ve el superadmin'],
   'auth/auth.service.js': [1, 'comportamiento: la clave de webhook solo se enseña a admin'],
   'claude-chat/chat.controller.js': [1, 'no es un rol de persona: el de cada mensaje del chat'],
+  // Cursos pendientes (#336) todavia no tiene claves en el catalogo de #423: quien crea, modifica, publica
+  // y supervisa se decide POR ROL dentro del servicio, no con `puede(...)`. Es deuda declarada, no alcance:
+  // el dia que haya `cursos_pendientes.*` en el catalogo, estas ocho comparaciones se quitan.
+  'cursos-pendientes/cursos-pendientes.controller.js': [1, 'permiso por rol, sin clave en el catalogo todavia: la tutora ve solo lo suyo'],
+  'cursos-pendientes/cursos-pendientes.service.js': [7, 'permiso por rol, sin clave en el catalogo todavia: quien crea, modifica, publica y supervisa'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
   'consultas/consultas.controller.js': [2, 'alcance: lo suyo de Consultas (su carga, sus alumnos, sus métricas) solo existe para un tutor'],
   'conversions/conversion.controller.js': [6, 'alcance: la gestora, sus ventas'],
