@@ -40,7 +40,10 @@ export const cambiarEstadoSchema = z.object({
 export const responderSchema = z.object({
   body: z.string().min(1, 'El mensaje esta vacio').max(20000),
   // Una nota interna no la ve quien abrio el ticket.
-  interna: z.coerce.boolean().optional().default(false),
+  // NO `z.coerce.boolean()`: convierte con Boolean(), asi que la cadena «false»
+  // (o cualquier texto) saldria como true. Solo se aceptan los dos valores.
+  interna: z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')])
+    .optional().default(false),
 });
 
 export const listarSchema = z.object({

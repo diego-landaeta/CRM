@@ -123,11 +123,11 @@ describe('quién ve qué tickets', () => {
     }));
   });
 
-  it('una gestora no abre el ticket de otra', async () => {
+  it('una gestora no abre el ticket de otra (404, como si no existiera)', async () => {
     modelo.porId.mockResolvedValue({ id: '1', autorId: 99 });
     const { error } = await llamar(ctrl.porId, { user: LAURA, params: { id: '1' }, query: {} });
-    expect(error?.statusCode).toBe(403);
-    expect(error?.code).toBe('NO_ES_TUYO');
+    expect(error?.statusCode).toBe(404);
+    expect(error?.code).toBe('NOT_FOUND');
   });
 
   it('un admin abre un ticket de uno de sus campus', async () => {
@@ -142,7 +142,7 @@ describe('quién ve qué tickets', () => {
     for (const t of [{ id: '1', autorId: 99, projectId: 7 }, { id: '1', autorId: 99, projectId: null }]) {
       modelo.porId.mockResolvedValue(t);
       const { error } = await llamar(ctrl.porId, { user: ADMIN, params: { id: '1' }, query: {} });
-      expect(error?.statusCode, JSON.stringify(t)).toBe(403);
+      expect(error?.statusCode, JSON.stringify(t)).toBe(404);
     }
   });
 
@@ -158,8 +158,8 @@ describe('quién ve qué tickets', () => {
     modelo.porId.mockResolvedValue({ id: '1', autorId: 99, projectId: 7 });
     const r = await llamar(ctrl.responder, { user: ADMIN, params: { id: '1' }, body: { body: 'hola' } });
     const e = await llamar(ctrl.cambiarEstado, { user: ADMIN, params: { id: '1' }, body: { status: 'closed' } });
-    expect(r.error?.statusCode).toBe(403);
-    expect(e.error?.statusCode).toBe(403);
+    expect(r.error?.statusCode).toBe(404);
+    expect(e.error?.statusCode).toBe(404);
     expect(modelo.responder).not.toHaveBeenCalled();
     expect(modelo.cambiarEstado).not.toHaveBeenCalled();
   });
@@ -220,7 +220,7 @@ describe('los adjuntos — la puerta que en Matrículas quedó abierta', () => {
     const { error } = await llamar(ctrl.descargarAdjunto, {
       user: LAURA, params: { adjuntoId: '1' },
     });
-    expect(error?.statusCode).toBe(403);
+    expect(error?.statusCode).toBe(404);
   });
 
   it('el del propio ticket sí', async () => {
@@ -245,7 +245,7 @@ describe('los adjuntos — la puerta que en Matrículas quedó abierta', () => {
     const { error } = await llamar(ctrl.subirAdjunto, {
       user: LAURA, params: { id: '1' }, file: { originalname: 'x.png', buffer: Buffer.from('x'), mimetype: 'image/png', size: 1 },
     });
-    expect(error?.statusCode).toBe(403);
+    expect(error?.statusCode).toBe(404);
     expect(modelo.guardarAdjunto).not.toHaveBeenCalled();
   });
 });
@@ -334,7 +334,7 @@ describe('los tiempos y los adjuntos respetan el mismo alcance (#245)', () => {
     campus.mockResolvedValue([1]);
     modelo.adjuntoPorId.mockResolvedValue({ id: 5, clave: 'tickets/1/a.png', nombre: 'a.png', abierto_por: 99, ticket_project_id: 7 });
     const { error } = await llamar(ctrl.descargarAdjunto, { user: ADMIN, params: { adjuntoId: '5' }, query: {} });
-    expect(error?.statusCode).toBe(403);
+    expect(error?.statusCode).toBe(404);
   });
 
   it('el de uno de sus campus sí, y con nosniff', async () => {

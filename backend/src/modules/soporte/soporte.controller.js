@@ -49,14 +49,30 @@ function alcanza(alcance, req, { autorId, projectId }) {
  * captura, que puede tener datos de un cliente. No es una lista publica.
  *
  * Devuelve el ticket ya cargado para no consultarlo dos veces.
+ *
+ * Un ticket que no existe y uno que existe pero no es tuyo dan EL MISMO 404:
+ * con un 403 para el segundo, probando numeros se sabria cuales existen.
  */
 async function exigirAcceso(req, id) {
   const t = await model.porId(id);
-  if (!t) throw new AppError('Ticket no encontrado', 404, 'NOT_FOUND');
-  if (!alcanza(await alcanceDe(req), req, { autorId: t.autorId, projectId: t.projectId })) {
-    throw new AppError('Ese ticket no es tuyo', 403, 'NO_ES_TUYO');
+  if (!t || !alcanza(await alcanceDe(req), req, { autorId: t.autorId, projectId: t.projectId })) {
+    throw new AppError('Ticket no encontrado', 404, 'NOT_FOUND');
   }
   return t;
+}
+
+/**
+ * El id de la URL: un entero positivo que cabe en INTEGER. Cualquier otra cosa
+ * («abc», «1.5», uno enorme) es un 404, como un id que no existe: con
+ * `Number('abc')` llegaba un NaN a la consulta y salia un error de Postgres.
+ */
+function idDe(valor, que = 'Ticket') {
+  const s = String(valor ?? '');
+  const n = /^\d{1,10}$/.test(s) ? Number(s) : NaN;
+  if (!Number.isSafeInteger(n) || n < 1 || n > 2147483647) {
+    throw new AppError(`${que} no encontrado`, 404, 'NOT_FOUND');
+  }
+  return n;
 }
 
 function parsear(schema, datos) {
@@ -89,7 +105,7 @@ export async function listar(req, res, next) {
 
 export async function porId(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = idDe(req.params.id);
     const t = await exigirAcceso(req, id);
     // Las notas internas no las ve quien abrio el ticket. Es lo que permite
     // discutir una averia sin que el comentario salga hacia fuera.
@@ -176,7 +192,7 @@ export async function crear(req, res, next) {
 
 export async function responder(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = idDe(req.params.id);
     await exigirAcceso(req, id);
     const { body, interna } = parsear(responderSchema, req.body);
     // Solo quien administra puede dejar notas internas: si quien abrio el
@@ -195,7 +211,7 @@ export async function cambiarEstado(req, res, next) {
     // y un usuario raso no tiene por que poder cerrar su propio ticket (la
     // issue #38 no lo pide) y dejarlo fuera de lo que el equipo mira.
     if (!administra(req)) throw new AppError('No autorizado', 403, 'FORBIDDEN');
-    const id = Number(req.params.id);
+    const id = idDe(req.params.id);
     await exigirAcceso(req, id);
     const { status } = parsear(cambiarEstadoSchema, req.body);
     res.json({ success: true, data: await model.cambiarEstado(id, status) });
@@ -204,7 +220,7 @@ export async function cambiarEstado(req, res, next) {
 
 export async function subirAdjunto(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const id = idDe(req.params.id);
     await exigirAcceso(req, id);
     if (!req.file) throw new AppError('Archivo requerido', 400, 'FILE_REQUIRED');
 
@@ -233,10 +249,10 @@ export async function subirAdjunto(req, res, next) {
  */
 export async function descargarAdjunto(req, res, next) {
   try {
-    const a = await model.adjuntoPorId(Number(req.params.adjuntoId));
+    const a = await model.adjuntoPorId(idDe(req.params.adjuntoId, 'Adjunto'));
     if (!a) throw new AppError('Adjunto no encontrado', 404, 'NOT_FOUND');
     if (!alcanza(await alcanceDe(req), req, { autorId: a.abierto_por, projectId: a.ticket_project_id })) {
-      throw new AppError('Ese adjunto no es tuyo', 403, 'NO_ES_TUYO');
+      throw new AppError('Adjunto no encontrado', 404, 'NOT_FOUND');
     }
     const { buffer } = await getLocal(a.clave);
     res.setHeader('Content-Type', a.mime || 'application/octet-stream');
@@ -258,7 +274,7 @@ export async function descargarAdjunto(req, res, next) {
 export async function borrar(req, res, next) {
   try {
     if (!administra(req)) throw new AppError('No autorizado', 403, 'FORBIDDEN');
-    const id = Number(req.params.id);
+    const id = idDe(req.params.id);
     await exigirAcceso(req, id);
     const claves = await model.clavesDeAdjuntos(id);
     await model.borrar(id);
