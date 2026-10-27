@@ -109,7 +109,7 @@ export async function findUserBySetPasswordToken(tokenHash) {
   const { rows } = await query(
     `SELECT id, email, nombre, set_password_expires
      FROM users
-     WHERE set_password_token = $1`,
+     WHERE set_password_token = $1 AND active = true`,
     [tokenHash]
   );
   return rows[0] || null;
