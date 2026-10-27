@@ -17,6 +17,12 @@ import jwt from 'jsonwebtoken';
 // ultima lo baja a su valor real con una persona propia.
 process.env.IA_PREGUNTAS_POR_MINUTO = '1000';
 
+// Los permisos de cada persona (#423: `puede('reports_ia.generar')`) salen del
+// resolver de verdad, alimentado con las personas de la prueba: asi no hace falta
+// que estén activas en la base (ver más abajo por qué no lo están).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 const servicio = vi.hoisted(() => ({ preguntar: vi.fn() }));
 vi.mock('../src/modules/ia-analisis/preguntar.service.js', () => servicio);
 
@@ -53,6 +59,7 @@ async function persona(clave, role, campus = []) {
     `INSERT INTO users (nombre, email, password_hash, role, active) VALUES ($1, $2, 'x', $3, FALSE) RETURNING id, role`,
     [`${MARCA} ${clave}`, `${clave.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]);
   ids.users.push(u.id);
+  registrar({ userId: u.id, role });
   for (const c of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, c]);
   U[clave] = u;
 }
@@ -64,6 +71,7 @@ beforeAll(async () => {
   // Sin fila en la base: un superadmin NO se resuelve por `user_projects` (ve todo) y
   // el token basta. Crearlo activo es justo lo que desajustaba a Certifex.
   U.SUPER = { id: 987654321, role: 'superadmin' };
+  registrar({ userId: U.SUPER.id, role: 'superadmin' });
   await persona('LIMITE', 'admin', [1]);
 });
 

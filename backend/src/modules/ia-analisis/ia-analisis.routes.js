@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './ia-analisis.controller.js';
 
 const router = Router();
@@ -24,6 +25,6 @@ const limite = rateLimit({
 
 // Los mismos roles que generan el reporte con IA: quien mira las cifras de la
 // empresa, no cada gestora (que ve lo suyo y no necesita esto).
-router.post('/preguntar', roleGuard('admin', 'superadmin', 'soporte'), limite, ctrl.preguntarCtrl);
+router.post('/preguntar', puede('reports_ia.generar'), limite, ctrl.preguntarCtrl);
 
 export default router;
