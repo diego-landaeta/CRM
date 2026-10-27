@@ -32,6 +32,8 @@ const modelo = {
   adjuntoPorId: vi.fn(),
   tiempos: vi.fn(async () => ({ total: 0 })),
   proyectoExiste: vi.fn(async () => true),
+  clavesDeAdjuntos: vi.fn(async () => []),
+  borrar: vi.fn(async () => true),
 };
 vi.mock('../src/modules/soporte/soporte.model.js', () => modelo);
 

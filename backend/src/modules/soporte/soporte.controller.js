@@ -4,7 +4,7 @@ import {
 } from './soporte.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
+import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { sendTicketNuevoEmail } from '../../shared/services/brevo.service.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
@@ -182,6 +182,10 @@ export async function responder(req, res, next) {
 
 export async function cambiarEstado(req, res, next) {
   try {
+    // Solo quien administra: `exigirAcceso` deja pasar a quien abrio el ticket,
+    // y un usuario raso no tiene por que poder cerrar su propio ticket (la
+    // issue #38 no lo pide) y dejarlo fuera de lo que el equipo mira.
+    if (!administra(req)) throw new AppError('No autorizado', 403, 'FORBIDDEN');
     const id = Number(req.params.id);
     await exigirAcceso(req, id);
     const { status } = parsear(cambiarEstadoSchema, req.body);
@@ -235,16 +239,28 @@ export async function descargarAdjunto(req, res, next) {
 }
 
 /**
- * Borrar. Solo quien lo abrio o quien administra.
+ * Borrar. Solo quien administra (y dentro de su alcance, que lo comprueba
+ * `exigirAcceso`). El borrado es en cascada —mensajes y adjuntos— y no se
+ * deshace, asi que no es cosa de quien abrio el ticket.
  *
- * `exigirAcceso` ya aplica esa regla, asi que no se repite aqui: una segunda
- * comprobacion escrita a mano es una que se olvida de actualizar.
+ * Tambien se borran del disco los ficheros de sus adjuntos: la cascada solo
+ * toca las filas y las capturas quedarian huerfanas.
  */
 export async function borrar(req, res, next) {
   try {
+    if (!administra(req)) throw new AppError('No autorizado', 403, 'FORBIDDEN');
     const id = Number(req.params.id);
     await exigirAcceso(req, id);
+    const claves = await model.clavesDeAdjuntos(id);
     await model.borrar(id);
+    // Primero la fila y luego el disco: si el borrado fallara, no se pierden
+    // capturas de un ticket que sigue ahi. Un fichero que no se deja borrar se
+    // registra y no estropea la respuesta: el ticket ya no existe.
+    for (const clave of claves) {
+      try { await deleteLocal(clave); } catch (e) {
+        logger.warn({ err: e.message, clave, ticketId: id }, 'Adjunto de ticket borrado: no se pudo quitar del disco');
+      }
+    }
     res.json({ success: true, data: { id } });
   } catch (err) { next(err); }
 }

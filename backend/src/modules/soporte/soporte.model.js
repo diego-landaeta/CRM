@@ -186,6 +186,12 @@ export async function guardarAdjunto({ ticketId, mensajeId, nombre, clave, mime,
   return rows[0];
 }
 
+/** Las claves en disco de los adjuntos de un ticket, para borrarlas con el. */
+export async function clavesDeAdjuntos(ticketId) {
+  const { rows } = await query('SELECT clave FROM ticket_adjuntos WHERE ticket_id = $1', [ticketId]);
+  return rows.map((r) => r.clave);
+}
+
 export async function adjuntoPorId(id) {
   const { rows } = await query(
     `SELECT a.*, t.abierto_por, t.project_id AS ticket_project_id FROM ticket_adjuntos a
@@ -242,10 +248,10 @@ export async function tiempos({ projectId = null, projectIds = null } = {}) {
 /**
  * Borrar un ticket.
  *
- * Los mensajes y adjuntos caen en cascada por la migracion. Lo que NO se borra
- * del disco son los ficheros: se quedan huerfanos a proposito, porque perder
- * una captura por un clic es peor que ocupar unos kilobytes. Hay un
- * `documentOrphanScheduler` que ya barre ese tipo de restos.
+ * Los mensajes y adjuntos caen en cascada por la migracion, pero los ficheros
+ * del disco NO: quien llama pide antes `clavesDeAdjuntos` y los borra despues.
+ * (`documentOrphanScheduler` barra otro directorio —los PDF de documentos— y
+ * no los recoge: sin esto se quedaban huerfanos para siempre.)
  */
 export async function borrar(id) {
   const { rowCount } = await query('DELETE FROM tickets WHERE id = $1', [id]);
