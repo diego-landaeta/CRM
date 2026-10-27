@@ -20,6 +20,7 @@ import {
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 import { avisoCambioCorreo } from '@/modules/users/api/users.api';
 import { confirmacionCambioCorreo, problemaDeContrasena } from '@/modules/users/lib/credenciales';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Tutores y sus colaboraciones.
 //
@@ -65,11 +66,13 @@ export default function TutoresPage() {
   // entre los suyos. Diego, 14/09: «puse empresa y tuve que entrar a un campus
   // si o si».
   const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
-  const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
+  // «Gestionar colaboraciones» del catálogo (#423; antes, admin o la casilla).
+  const { can } = usePermission();
+  const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin';
-  const puedeContrasena = esSuperadmin || user?.role === 'admin';
+  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const proyectoFijado = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Con una sociedad elegida se ven sus campus; sin nada, todos. La lista se
   // lee siempre: quien lleva las colaboraciones trabaja con la plantilla
