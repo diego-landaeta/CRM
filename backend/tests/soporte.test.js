@@ -31,6 +31,7 @@ const modelo = {
   guardarAdjunto: vi.fn(async () => ({ id: 1 })),
   adjuntoPorId: vi.fn(),
   tiempos: vi.fn(async () => ({ total: 0 })),
+  proyectoExiste: vi.fn(async () => true),
 };
 vi.mock('../src/modules/soporte/soporte.model.js', () => modelo);
 

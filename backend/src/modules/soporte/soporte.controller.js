@@ -99,9 +99,33 @@ export async function porId(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * El campus en el que se abre un ticket tiene que ser TUYO.
+ *
+ * Sin esto, cualquiera con sesion podia mandar un `projectId` ajeno y meter
+ * tickets en la bandeja de otro campus (donde su admin los lee y los avisos le
+ * llegan). Quien ve todo el CRM puede elegir cualquiera, pero que exista: una
+ * clave foranea rota saldria como un 500. Para el resto, un campus que no es
+ * suyo —exista o no— es el mismo 403, asi no se averigua cuales existen.
+ */
+async function exigirCampusPropio(req, projectId) {
+  if (projectId == null) return;
+  if (veTodoElCrm(req.user)) {
+    if (!(await model.proyectoExiste(projectId))) {
+      throw new AppError('Proyecto no encontrado', 404, 'NOT_FOUND');
+    }
+    return;
+  }
+  const mios = await campusDeLaPersona(req.user.userId);
+  if (!mios.includes(Number(projectId))) {
+    throw new AppError('Ese proyecto no es tuyo', 403, 'NO_ES_TUYO');
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const d = parsear(crearTicketSchema, req.body);
+    await exigirCampusPropio(req, d.projectId);
     const t = await model.crear({ ...d, abiertoPor: req.user.userId });
 
     // EL AVISO VA POR LA CAMPANA, NO POR CORREO.

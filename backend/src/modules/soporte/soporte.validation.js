@@ -29,7 +29,8 @@ export const crearTicketSchema = z.object({
   whyItMatters: textoLargo,
   url: z.string().max(2000).optional().nullable()
     .transform((v) => (v && v.trim() ? v.trim() : null)),
-  projectId: z.coerce.number().int().positive().optional().nullable(),
+  // Tope de INTEGER: mas alla, Postgres contesta con un error en vez de «no existe».
+  projectId: z.coerce.number().int().positive().max(2147483647).optional().nullable(),
 });
 
 export const cambiarEstadoSchema = z.object({

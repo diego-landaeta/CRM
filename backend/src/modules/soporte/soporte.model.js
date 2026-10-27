@@ -194,6 +194,12 @@ export async function adjuntoPorId(id) {
   return rows[0] || null;
 }
 
+/** ¿Existe ese proyecto? Para que una clave foranea rota no salga como un 500. */
+export async function proyectoExiste(id) {
+  const { rowCount } = await query('SELECT 1 FROM projects WHERE id = $1', [id]);
+  return rowCount > 0;
+}
+
 /**
  * Cuanto se tarda en responder y en cerrar (#38, ultima subfase).
  *
