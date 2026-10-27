@@ -14742,6 +14742,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/whatsapp/voz-o-texto",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/voz-o-texto",
+  "relativa": "GET /voz-o-texto",
+  "controlador": "vozOTextoCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "whatsapp.usar",
+     "whatsapp.supervisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/whatsapp/banco",
   "tipo": "ruta",
   "modulo": "whatsapp",
