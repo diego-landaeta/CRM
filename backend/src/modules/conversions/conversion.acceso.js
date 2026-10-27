@@ -45,16 +45,21 @@ async function exigirVenta(req, conversionId) {
   if (!(await puede(req.user, v))) throw PROHIBIDO();
 }
 
-const numero = (valor) => {
-  const n = Number(valor);
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
+/**
+ * Un id solo vale si son DÍGITOS canónicos. `Number()` aceptaba `7.5`, `7e1`, `+7`, `007`…: la
+ * guarda miraba una cosa y el controlador (`parseInt`) otra. `/conversions/7.5` pasaba por la
+ * guarda como «no es entero» y el controlador servía la venta 7; `7e1` era la venta 70 para la
+ * guarda y la 7 para el controlador. Lo que no sea un entero limpio es un 400, no un `next()`.
+ */
+const numero = (valor) => (/^[1-9]\d{0,14}$/.test(String(valor ?? '')) ? Number(valor) : null);
+
+const IDENTIFICADOR_NO_VALIDO = () => new AppError('Identificador no válido', 400, 'INVALID_ID');
 
 /** Para `router.param(nombre, guardia(...))`. */
 const guardia = (buscar, noEncontrada, codigo = 'NOT_FOUND') => async (req, res, next, valor) => {
   try {
     const id = numero(valor);
-    if (id === null) return next();
+    if (id === null) throw IDENTIFICADOR_NO_VALIDO();
     const conversionId = await buscar(id);
     if (conversionId === null) throw new AppError(noEncontrada, 404, codigo);
     await exigirVenta(req, conversionId);
@@ -76,7 +81,7 @@ export const devolucionPorId = guardia((id) => primera('SELECT conversion_id FRO
 export async function prospectoPorId(req, res, next, valor) {
   try {
     const id = numero(valor);
-    if (id === null) return next();
+    if (id === null) throw IDENTIFICADOR_NO_VALIDO();
     const { rows: [l] } = await query('SELECT project_id, responsable_id FROM leads WHERE id = $1', [id]);
     // Un prospecto que no existe devuelve lista vacía, como antes: no se delata nada.
     if (l && !(await puede(req.user, { project_id: l.project_id, responsable_id: l.responsable_id }))) throw PROHIBIDO();
@@ -87,9 +92,14 @@ export async function prospectoPorId(req, res, next, valor) {
 /** `POST /`: no se puede crear una venta en un campus ajeno ni sobre un prospecto ajeno. */
 export async function puedeCrearEn(req, res, next) {
   try {
-    const leadId = numero(req.body?.lead_id);
-    const projectId = numero(req.body?.project_id);
-    if (leadId === null || projectId === null) return next();   // la validación responde 400
+    const crudoLead = req.body?.lead_id;
+    const crudoProyecto = req.body?.project_id;
+    // Si falta alguno, el esquema responde 400. Pero si VIENE y no es un entero limpio no se puede
+    // dejar pasar: el esquema podría interpretarlo (p. ej. «1e0») y la guarda no habría mirado nada.
+    if (crudoLead == null || crudoProyecto == null) return next();
+    const leadId = numero(crudoLead);
+    const projectId = numero(crudoProyecto);
+    if (leadId === null || projectId === null) throw IDENTIFICADOR_NO_VALIDO();
     const { rows: [l] } = await query('SELECT project_id, responsable_id FROM leads WHERE id = $1', [leadId]);
     if (!l) return next();                                       // el servicio responde 404
     // Manda el campus del PROSPECTO. Si la venta dice otro, el servicio responde 400
