@@ -1,4 +1,4 @@
-import { query } from '../../shared/config/db.js';
+import { query, getClient } from '../../shared/config/db.js';
 
 /*
   Los tickets de soporte (#38).
@@ -132,28 +132,34 @@ export async function adjuntosDe(ticketId) {
  * calcularia sobre el mensaje siguiente y saldria mas alto que la realidad.
  */
 export async function responder(ticketId, autorId, cuerpo, interna = false) {
-  await query('BEGIN');
+  // Un cliente DEDICADO: con `query` (pool.query) cada llamada puede salir por
+  // otra conexion, y entonces BEGIN, las escrituras y COMMIT no son la misma
+  // transaccion y no hay atomicidad. Mismo patron que el reparto de leads.
+  const c = await getClient();
   try {
-    const { rows } = await query(
+    await c.query('BEGIN');
+    const { rows } = await c.query(
       `INSERT INTO ticket_mensajes (ticket_id, autor_id, cuerpo, interna)
        VALUES ($1,$2,$3,$4) RETURNING id`,
       [ticketId, autorId, cuerpo, interna]
     );
     // Una nota interna no cuenta como respuesta: no la ve quien pregunto.
     if (!interna) {
-      await query(
+      await c.query(
         `UPDATE tickets
             SET primera_respuesta_at = COALESCE(primera_respuesta_at, NOW())
           WHERE id = $1 AND abierto_por IS DISTINCT FROM $2`,
         [ticketId, autorId]
       );
     }
-    await query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [ticketId]);
-    await query('COMMIT');
+    await c.query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [ticketId]);
+    await c.query('COMMIT');
     return rows[0].id;
   } catch (e) {
-    await query('ROLLBACK');
+    await c.query('ROLLBACK').catch(() => {});
     throw e;
+  } finally {
+    c.release();
   }
 }
 
