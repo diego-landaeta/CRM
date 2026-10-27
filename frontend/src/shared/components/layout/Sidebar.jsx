@@ -217,7 +217,9 @@ export const NAV_SECTIONS = [
     label: 'Publicidad',
     icon: Megaphone,
     items: [
-      { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], permiso: 'meta_ads.view' },
+      // Meta Ads: administración por su rol; y en solo lectura a quien se le da
+      // `meta_ads.view` (26/10/2026: el equipo de desarrollo), también si es solo colaborador.
+      { label: 'Meta Ads', to: '/meta-ads', detail: 'Gasto y resultados', icon: ChartBar, roles: ['superadmin', 'admin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
       // `comingSoon` no hacía nada aquí: el menú solo miraba la lista de la beta,
       // así que fuera de ella Google Ads era un enlace a /google-ads, que no
       // tiene pantalla, y acababa en «Página no encontrada» (#226).
@@ -499,6 +501,9 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   // Lo mismo para quien es SOLO colaborador (#210, fase 5): Tareas y sus
   // preferencias. El servidor le responde 403 en todo lo demas.
   if (suyos.length > 0 && suyos.every((r) => r === 'colaborador')) {
+    // Lo que no es de su rol, solo si se le ha dado a propósito para él (Meta
+    // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
+    if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
   }
   // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
