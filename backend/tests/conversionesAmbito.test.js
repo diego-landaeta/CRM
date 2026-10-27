@@ -155,3 +155,53 @@ describe('quien no', () => {
     expect((await request.get('/api/conversions/abc').set(como(ADMIN))).status).toBe(400);
   });
 });
+
+/**
+ * Un id que NO es un entero limpio no puede colarse. La guarda solo dejaba de actuar con lo que
+ * no era un entero (`next()`, «ya responderá el controlador»), y los controladores hacen
+ * `parseInt`: `/conversions/7.5` pasaba la guarda y el controlador servía la venta 7 a quien no
+ * podía verla. Y `Number('7e1')` es 70 pero `parseInt('7e1')` es 7: la guarda y el controlador
+ * podían mirar ventas distintas. Ahora solo entran dígitos canónicos; todo lo demás es un 400.
+ */
+describe('un id que no es un entero limpio', () => {
+  const sucios = (id) => [`${id}.5`, `${id}.0`, `${id}e0`, `+${id}`, `0${id}`, `${id}%20`];
+
+  it('en lecturas: 400 aunque quien pregunte no tenga acceso (antes devolvía la venta ajena con un 200)', async () => {
+    const quien = como(ADMIN_OTRO);
+    for (const f of sucios(VENTA)) {
+      for (const sufijo of ['', '/installments', '/reparto', '/refunds']) {
+        const r = await request.get(`/api/conversions/${f}${sufijo}`).set(quien);
+        expect(r.status, `GET ${f}${sufijo}`).toBe(400);
+      }
+    }
+    expect((await request.get(`/api/conversions/by-lead/${LEAD}.5`).set(quien)).status).toBe(400);
+  });
+
+  it('en escrituras: 400 y no se toca nada', async () => {
+    const quien = como(ADMIN_OTRO);
+    const intentos = [
+      request.patch(`/api/conversions/${VENTA}.5`).set(quien).send({ importe_total: 1 }),
+      request.delete(`/api/conversions/payments/${PAGO}.5`).set(quien),
+      request.patch(`/api/conversions/installments/${CUOTA}.5`).set(quien).send({ importe_previsto: 1 }),
+      request.delete(`/api/conversions/refunds/${DEVOLUCION}.5`).set(quien),
+    ];
+    for (const r of await Promise.all(intentos)) expect(r.status).toBe(400);
+    const [v] = await q(`SELECT importe_total FROM conversions WHERE id = $1`, [VENTA]);
+    expect(Number(v.importe_total)).toBe(500);
+    expect(await q(`SELECT 1 FROM conversion_payments WHERE id = $1`, [PAGO])).toHaveLength(1);
+    expect(await q(`SELECT 1 FROM conversion_refunds WHERE id = $1`, [DEVOLUCION])).toHaveLength(1);
+  });
+
+  it('en el cuerpo de «crear venta»: lead_id o project_id sucios, 400 (no se salta la guarda)', async () => {
+    const quien = como(ADMIN_OTRO);
+    for (const cuerpo of [{ lead_id: `${LEAD}.5`, project_id: P }, { lead_id: LEAD, project_id: `${P}e0` }, { lead_id: `${LEAD}`, project_id: `+${P}` }]) {
+      const r = await request.post('/api/conversions').set(quien).send({ ...cuerpo, producto_contratado: 'x', importe_total: 10 });
+      expect(r.status, JSON.stringify(cuerpo)).toBe(400);
+    }
+  });
+
+  it('control: con el id limpio, el ajeno sigue en 403 y el dueño entra', async () => {
+    expect((await request.get(`/api/conversions/${VENTA}`).set(como(ADMIN_OTRO))).status).toBe(403);
+    expect((await request.get(`/api/conversions/${VENTA}`).set(como(ADMIN))).status).toBe(200);
+  });
+});

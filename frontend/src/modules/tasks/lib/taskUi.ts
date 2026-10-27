@@ -170,6 +170,27 @@ export function neighboursAt(
  * asignado, también quien la creó. Es la misma regla que aplica el servidor;
  * aquí solo evita ofrecer lo que daría 403.
  */
+/**
+ * Qué tareas enseña el único tablero (Diego, 27/10/2026: «un solo tablero, y ya
+ * con filtros»): «Mis tareas» (lo que llevo, superviso o creé), «Mi equipo»
+ * (eso y lo de mis equipos) o «Todo» (lo que mi permiso me deje ver). El
+ * servidor manda: «Todo» nunca abre más de lo permitido.
+ */
+export type VerTablero = 'mias' | 'equipo' | 'todo';
+export const OPCIONES_VER: ReadonlyArray<{ value: VerTablero; label: string }> = [
+  { value: 'mias', label: 'Mis tareas' },
+  { value: 'equipo', label: 'Mi equipo' },
+  { value: 'todo', label: 'Todo' },
+];
+
+/** Se entra siempre en «Mis tareas», sea quien sea (Diego, 26/10/2026). */
+export const VISTA_INICIAL: VerTablero = 'mias';
+
+/** Lo que pide cada «Ver» al servidor. */
+export function filtroDeVista(ver: VerTablero): { ver: VerTablero } {
+  return { ver };
+}
+
 export function puedeEditarTarea(
   task: { assigned_to: number | null; created_by?: number | null } | null | undefined,
   yo: number,
