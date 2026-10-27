@@ -39,8 +39,3 @@ export async function matriculaPorId(req, res, next, valor) {
     next();
   } catch (err) { next(err); }
 }
-
-/** El campus pedido (listado) o con el que se crea, siempre dentro de los suyos. */
-export async function exigirCampus(user, projectId) {
-  if (!(await puedeEnCampus(user, projectId))) throw PROHIBIDO();
-}

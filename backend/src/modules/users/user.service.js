@@ -4,6 +4,8 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
 import * as empresas from './user.empresas.js';
+import { puedeTenerEmpresa } from './user.validation.js';
+import { comoLista } from '../../shared/utils/roles.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
@@ -258,8 +260,11 @@ export async function update(id, data, { porUserId = null } = {}) {
   // aplicada no es un error: no habia nada que quitar.
   const cambios = { ...data };
   if (cambios.empresaIds?.length) {
-    if ((cambios.role ?? user.role) !== 'admin') {
-      throw new AppError('Solo un admin puede tener una empresa entera', 400, 'VALIDATION_ERROR');
+    // El admin (con sus campus) y el colaborador (solo la empresa, para Tareas).
+    const rolFinal = cambios.role ?? user.role;
+    const extra = comoLista(cambios.roles_extra ?? user.roles_extra ?? []);
+    if (rolFinal !== 'admin' && !puedeTenerEmpresa(rolFinal, extra)) {
+      throw new AppError('Solo un admin o un colaborador pueden tener una empresa entera', 400, 'VALIDATION_ERROR');
     }
     await empresas.comprobarEmpresas(cambios.empresaIds);
   } else if (cambios.empresaIds !== undefined && !(await empresas.existeTablaEmpresas())) {
@@ -275,8 +280,14 @@ export async function update(id, data, { porUserId = null } = {}) {
 export async function setPassword(id, password, { porUserId = null, ip = null } = {}) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  // La de un superadmin, solo otro superadmin: la misma regla que su correo
+  // (#246). Hasta el 26/10 no se podía nunca; desde que Diego es superadmin con
+  // soporte (#423), sin esto nadie podría ponerle contraseña como hasta ahora.
   if (user.role === 'superadmin') {
-    throw new AppError('No se puede cambiar la contraseña de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin' || Number(quien.id) === Number(id)) {
+      throw new AppError('La contraseña de un superadmin solo la cambia otro superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
   }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   await userModel.setPasswordHash(id, passwordHash);
