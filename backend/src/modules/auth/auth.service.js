@@ -164,6 +164,8 @@ export async function setPassword(token, newPassword) {
 
 /** Lo que dura el enlace de recuperacion. El mismo que el del alta. */
 const RECOVERY_EXPIRY_HOURS = 24;
+/** Minutos durante los que un enlace recien emitido impide emitir otro. */
+const RECOVERY_REENVIO_MIN = 5;
 
 /**
  * «He olvidado la contraseña» (#37).
@@ -192,9 +194,16 @@ export async function pedirRecuperacion(email, baseUrl) {
   const expires = new Date();
   expires.setHours(expires.getHours() + RECOVERY_EXPIRY_HOURS);
 
-  // Pisa cualquier enlace anterior: pedirlo dos veces deja valido el ultimo y
-  // solo el ultimo. Si no, cada peticion dejaria una llave mas rodando.
-  await authModel.setRecoveryToken(user.id, hashToken(rawToken), expires);
+  // Un enlace anterior se pisa (pedirlo dos veces deja valido solo el ultimo,
+  // para que no rueden llaves de mas), SALVO que el vigente se haya emitido hace
+  // menos de 5 minutos: entonces no se toca ni se manda otro correo. Si no, con
+  // solo saber el correo de alguien se le puede llenar el buzon e invalidar el
+  // enlace que ya tiene. La respuesta HTTP es la misma en los dos casos.
+  // La caducidad es «emision + 24 h», de ahi se sabe cuando se emitio.
+  const recienteDesde = new Date(
+    Date.now() + RECOVERY_EXPIRY_HOURS * 3_600_000 - RECOVERY_REENVIO_MIN * 60_000);
+  const puesto = await authModel.setRecoveryToken(user.id, hashToken(rawToken), expires, recienteDesde);
+  if (puesto === false) return;
   await authModel.logActivity(user.id, 'password_reset_requested', null, null);
 
   return { user, rawToken, baseUrl };
