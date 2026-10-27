@@ -21,6 +21,7 @@ import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -47,14 +48,15 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
-  // factura_manager (el backend valida además que sean SUS facturas).
-  const canManage = isAdmin || !!user?.factura_manager;
-  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
-  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
-  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
+  // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
+  // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
+  // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
+  // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
+  const { can } = usePermission();
+  const canManage = can('facturas.gestionar');
+  const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -322,7 +324,18 @@ export default function InvoicesPage() {
       <AvisoHuecosFacturas projectId={activeProject?.id} />
 
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
-      {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
+      {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
+          suyo. Antes salía «todo facturado» con 20 cobros esperando en ACADEMIA IA (21/10). */}
+      {!esProformas && !esAbonos && (porSociedad ? (
+        <>
+          {!filterProject && sociedadProjects.length > 1 && (
+            <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
+          )}
+          {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} />
+          ))}
+        </>
+      ) : <FacturacionAlDiaCard projectId={activeProject?.id} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
@@ -436,13 +449,23 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-muted-foreground">{v.producto_contratado || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
                     <td className="px-3 py-2 text-right">
+                      {Number(v.importe_pagado) > 0 ? (
+                        // Ya cobrada: su factura sale de la cola (por pago y en orden de fecha), no de
+                        // una proforma. Diego, 21/10: «todas las que salen en proforma ya están pagadas».
+                        <span className="text-[11px] font-semibold text-success" title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha.">
+                          Cobrada · factúrala desde la cola
+                        </span>
+                      ) : (
                       <InvoiceButton
-                        projectId={pid}
+                        // El campus de la VENTA: con una empresa elegida arriba no hay un
+                        // proyecto en la cabecera y la proforma salía con un 400 (21/10).
+                        projectId={v.project_id ?? pid}
                         leadId={v.lead_id}
                         conversionId={v.conversion_id}
                         items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}
                         onInvoiced={load}
                       />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -676,7 +699,11 @@ export default function InvoicesPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="inline-flex gap-1">
+                    {/* Los botones bajan de línea cuando no caben. Con una fila que
+                        llevaba «Email» y «Pagada», la tabla de Yolanda (ICTESS) se
+                        salía por la derecha y la papelera quedaba fuera de la vista:
+                        parecía que no podía eliminar (Diego, 23/10/2026). */}
+                    <div className="inline-flex flex-wrap justify-end gap-1">
                       <button onClick={() => {
                           const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
                           invoicesApi.openPdf(inv.id, prelim).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
@@ -711,7 +738,7 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
-                      {inv.estado === 'borrador' && isAdmin && (
+                      {inv.estado === 'borrador' && isAdmin && can('facturas.edit') && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar esta factura abierta (solo admin/superadmin)"
                           className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
