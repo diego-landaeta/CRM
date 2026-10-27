@@ -12,8 +12,9 @@ import { inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
 import { agruparPorEmpresa, type CampusDeEmpresa } from '../lib/campusPorEmpresa';
 import {
-  DEFAULT_COLUMNS, TAG_COLORS, armarCambiosDeTarea, fromDateInput, puedeEditarTarea, tagChip, toDateInput,
+  DEFAULT_COLUMNS, TAG_COLORS, ZONA_OFICINA, armarCambiosDeTarea, fromDateInput, puedeEditarTarea, tagChip, toDateInput,
 } from '../lib/taskUi';
+import { fechaYHora } from '../lib/periodo';
 import type {
   Assignee,
   TagColor,
@@ -23,6 +24,8 @@ import type {
   TaskExternalProject,
   TaskPriority,
   TaskStatus,
+  Team,
+  MyTeam,
 } from '../types';
 
 
@@ -49,6 +52,12 @@ interface TaskModalProps {
   areas?: TaskArea[];
   externalProjects?: TaskExternalProject[];
   columns?: TaskColumn[];
+  /** Los equipos que se ven y los de quien mira, con su cargo (26/10/2026). */
+  equipos?: Team[];
+  misEquipos?: MyTeam[];
+  /** El equipo elegido arriba: el de una tarea nueva. */
+  initialTeamId?: number | null;
+  esSuperadmin?: boolean;
 }
 
 // La clase del campo es la de todo el CRM (shared/lib/ui.ts); el área de
@@ -58,7 +67,7 @@ const textareaClass = `${inputClass.replace('h-9', 'min-h-[72px] py-2')} resize-
 export function TaskModal({
   open, taskId, initialStatus = 'por_hacer', initialProjectId = null, defaultAssigneeId = null, onClose, onChanged,
   currentUserId, canClose = false, canAssign, canEdit = true, canViewAll = false, canArchiveAny, assignees, projects,
-  areas = [], externalProjects = [], columns = [],
+  areas = [], externalProjects = [], columns = [], equipos = [], misEquipos = [], initialTeamId = null, esSuperadmin = false,
 }: TaskModalProps) {
   useEscapeKey(onClose, open);
   const editando = taskId != null;
@@ -80,6 +89,14 @@ export function TaskModal({
   const [projectSelection, setProjectSelection] = useState<string>(''); // 'campus:1' o 'ext:2' o ''
   const [areaId, setAreaId] = useState<number | ''>('');
   const [assignedTo, setAssignedTo] = useState<number>(currentUserId);
+  // El supervisor (26/10/2026): lo pone quien puede asignar.
+  const [supervisorId, setSupervisorId] = useState<number | ''>('');
+  // El equipo es el de quien la lleva (27/10/2026); su gente, con cargo y nivel,
+  // sirve para el supervisor.
+  const [teamId, setTeamId] = useState<number | ''>(initialTeamId ?? '');
+  const [genteDelEquipo, setGenteDelEquipo] = useState<Assignee[] | null>(null);
+  // A quién puede dársela quien delega solo en sus equipos: los de cargo menor.
+  const [delegables, setDelegables] = useState<Assignee[] | null>(null);
 
   const [nuevoPaso, setNuevoPaso] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
@@ -91,6 +108,18 @@ export function TaskModal({
   // Lo decide la clave `tasks.close`, no el rol: lo que se cambie en
   // Configuración › Roles manda también aquí.
   const tienePermisoCierre = canClose;
+  // Quien la supervisa la aprueba o la devuelve aunque no tenga la clave.
+  const esSupervisor = !!task && task.supervisor_id === currentUserId;
+  // Lo que dice el servidor de esta tarea (26/10/2026): mover y comentar, el
+  // responsable, el supervisor y el superadmin; editar, quien la creó o delega.
+  const permisosTarea = task?.permisos;
+  const puedeMover = !editando || (permisosTarea ? permisosTarea.mover : true);
+  const puedeComentar = !editando || (permisosTarea ? permisosTarea.comentar : true);
+  const puedeRevisarla = permisosTarea ? permisosTarea.revisar : (tienePermisoCierre || esSupervisor);
+  // Delegar: «Asignar» en todos, o tener a alguien por debajo en alguno de sus equipos.
+  const equiposDondeDelego = misEquipos.filter((m) => m.puede_delegar).map((m) => m.team_id);
+  const puedeDelegarAqui = canAssign || equiposDondeDelego.length > 0;
+  const clavesDelego = equiposDondeDelego.join(',');
   const gruposDeCampus = useMemo(() => agruparPorEmpresa(projects), [projects]);
   // Una tarea ya guardada con un campus de otra empresa no pierde el suyo al abrirla.
   const campusFuera = task?.project_id && !projects.some((p) => p.id === task.project_id)
@@ -109,7 +138,57 @@ export function TaskModal({
     else setProjectSelection('');
     setAreaId(t.area_id ?? '');
     setAssignedTo(t.assigned_to ?? currentUserId);
+    setSupervisorId(t.supervisor_id ?? '');
+    setTeamId(t.team_id ?? '');
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (!open || !teamId) { setGenteDelEquipo(null); return; }
+    let vivo = true;
+    tasksApi.getAssignees({ team_id: Number(teamId) })
+      .then((g) => { if (vivo) setGenteDelEquipo(g); })
+      .catch(() => { if (vivo) setGenteDelEquipo(null); });
+    return () => { vivo = false; };
+  }, [open, teamId]);
+
+  // Los equipos de una persona: de la lista de responsables o, si es quien mira,
+  // los suyos. null si no se sabe (entonces lo decide el servidor al guardar).
+  const gentePosible: Assignee[] = canAssign ? assignees : (delegables ?? []);
+  function equiposDe(personaId: number): NonNullable<Assignee['equipos']> | null {
+    const suyos = [...gentePosible, ...assignees, ...(genteDelEquipo || [])].find((g) => g.id === personaId && g.equipos)?.equipos;
+    if (suyos) return suyos;
+    if (personaId === currentUserId) {
+      return misEquipos.map((m) => ({ team_id: m.team_id, team_name: m.team_name, issuer_id: m.issuer_id, empresa: m.empresa, cargo: m.cargo, nivel: m.nivel }));
+    }
+    return null;
+  }
+  const equiposDelResponsable = equiposDe(assignedTo);
+  const clavesEquiposResp = equiposDelResponsable ? equiposDelResponsable.map((e) => e.team_id).join(',') : null;
+
+  // El equipo sigue al responsable (Diego, 27/10/2026: «el equipo es según la
+  // persona enlazada»): el que ya tenía si también es suyo; si no, el primero.
+  useEffect(() => {
+    if (!open || clavesEquiposResp === null) return;
+    const ids = clavesEquiposResp ? clavesEquiposResp.split(',').map(Number) : [];
+    setTeamId((t) => (t && ids.includes(Number(t)) ? t : (ids[0] ?? '')));
+  }, [open, assignedTo, clavesEquiposResp]);
+
+  // Quien delega solo en sus equipos: la gente de cargo menor de cada uno, juntos.
+  useEffect(() => {
+    if (!open || canAssign || !clavesDelego) { setDelegables(null); return; }
+    let vivo = true;
+    Promise.all(clavesDelego.split(',').map((id) => tasksApi.getAssignees({ team_id: Number(id) }).catch(() => [] as Assignee[])))
+      .then((listas) => {
+        if (!vivo) return;
+        const porId = new Map<number, Assignee>();
+        for (const g of listas.flat()) {
+          const ya = porId.get(g.id);
+          porId.set(g.id, ya ? { ...ya, asignable: ya.asignable !== false || g.asignable !== false } : g);
+        }
+        setDelegables([...porId.values()]);
+      });
+    return () => { vivo = false; };
+  }, [open, canAssign, clavesDelego]);
 
   const recargar = useCallback(async (id: number) => {
     try {
@@ -157,20 +236,35 @@ export function TaskModal({
   }));
 
   const opcionesEstado = columnasDisponibles
-    .filter((c) => tienePermisoCierre || (c.key !== 'hecha' && (!editando || task?.status !== 'hecha')))
+    .filter((c) => (editando && permisosTarea ? permisosTarea.cerrar : tienePermisoCierre)
+      || (c.key !== 'hecha' && (!editando || task?.status !== 'hecha')))
     .map((c) => ({ value: c.key, label: c.name }));
 
-  const estadoBloqueado = editando && task?.status === 'hecha' && !tienePermisoCierre;
+  const estadoBloqueado = editando && ((task?.status === 'hecha' && !(permisosTarea ? permisosTarea.cerrar : tienePermisoCierre)) || !puedeMover);
   // Al crear, todo se puede. Al editar, el admin y la persona asignada (Diego,
   // 08/10 y WhatsApp 09/10): los demás la ven y la comentan con los campos
   // bloqueados, y quien tiene «Asignar» puede reasignarla.
-  const soloLectura = editando && !!task && !puedeEditarTarea(task, currentUserId, { edit: canEdit, viewAll: canViewAll });
+  const soloLectura = editando && !!task && (permisosTarea
+    ? !permisosTarea.editar
+    : !puedeEditarTarea(task, currentUserId, { edit: canEdit, viewAll: canViewAll }));
 
   // Solo la gente a la que se le puede asignar (un colaborador sin campus,
   // solo el superadmin), más quien ya la lleva, para que el desplegable la enseñe.
-  const opcionesResponsable = (assignees.length ? assignees : [{ id: currentUserId, nombre: 'Yo', email: '', role: '' }])
+  // Quien delega en todos, a cualquiera; quien delega en sus equipos, a los de cargo menor.
+  const baseResponsables: Assignee[] = gentePosible;
+  const opcionesResponsable = (baseResponsables.length ? baseResponsables : [{ id: currentUserId, nombre: 'Yo', email: '', role: '' }])
     .filter((a: Assignee) => a.asignable !== false || a.id === (task?.assigned_to ?? currentUserId))
     .map((a) => ({ value: a.id, label: a.id === currentUserId ? `${a.nombre} (yo)` : a.nombre }));
+  // Supervisor: cualquiera del equipo al que se le pueda asignar, menos quien la lleva.
+  // Con equipo: alguien del equipo con nivel igual o mayor que quien la lleva, o un admin.
+  const nivelResponsable = genteDelEquipo?.find((g) => g.id === assignedTo)?.team_nivel ?? null;
+  const opcionesSupervisor = (teamId && genteDelEquipo ? genteDelEquipo.filter((g) => ['admin', 'superadmin'].includes(g.role)
+    || (g.team_nivel != null && (nivelResponsable == null || g.team_nivel >= nivelResponsable))) : assignees)
+    .filter((a: Assignee) => (a.asignable !== false || a.id === task?.supervisor_id || !!teamId) && a.id !== assignedTo)
+    .map((a) => ({ value: a.id, label: a.id === currentUserId ? `${a.nombre} (yo)` : a.nombre }));
+  if (task?.supervisor_id && !opcionesSupervisor.some((o) => o.value === task.supervisor_id)) {
+    opcionesSupervisor.push({ value: task.supervisor_id, label: task.supervisor_name || `Persona ${task.supervisor_id}` });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -202,8 +296,17 @@ export function TaskModal({
     try {
       if (editando) {
         const { mover, actualizar } = armarCambiosDeTarea({
-          base: basePayload, actual: task!, estadoAntes: task!.status, estadoNuevo: status, canAssign, assignedTo,
+          base: basePayload, actual: task!, estadoAntes: task!.status, estadoNuevo: status,
+          canAssign: puedeDelegarAqui && !soloLectura, assignedTo,
         });
+        const supervisorNuevo = supervisorId || null;
+        if (puedeDelegarAqui && !soloLectura && (task!.supervisor_id ?? null) !== supervisorNuevo) {
+          (actualizar as Record<string, unknown>).supervisor_id = supervisorNuevo;
+        }
+        const equipoNuevo = teamId ? Number(teamId) : null;
+        if (!soloLectura && (task!.team_id ?? null) !== equipoNuevo) {
+          (actualizar as Record<string, unknown>).team_id = equipoNuevo;
+        }
         if (mover) await tasksApi.moveTask(task!.id, { status: mover });
         if (Object.keys(actualizar).length > 0) await tasksApi.updateTask(task!.id, actualizar);
         toast({ title: 'Tarea actualizada' });
@@ -211,7 +314,9 @@ export function TaskModal({
         const createPayload = {
           ...basePayload,
           status,
-          assigned_to: canAssign ? (assignedTo || null) : currentUserId,
+          assigned_to: puedeDelegarAqui ? (assignedTo || null) : currentUserId,
+          ...(puedeDelegarAqui && supervisorId ? { supervisor_id: Number(supervisorId) } : {}),
+          ...(teamId ? { team_id: Number(teamId) } : {}),
         };
         await tasksApi.createTask(createPayload);
         toast({ title: 'Tarea creada' });
@@ -321,7 +426,7 @@ export function TaskModal({
 
             <div className="flex items-center gap-1.5">
               {/* Acciones de Revisión si la tarea está en revisión */}
-              {editando && task?.status === 'en_revision' && tienePermisoCierre && (
+              {editando && task?.status === 'en_revision' && puedeRevisarla && (
                 <div className="flex items-center gap-1.5 mr-2">
                   <Button type="button" size="sm" variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs h-7.5 px-2" onClick={() => setMostrarDialogoDevolver(true)}>
                     <ArrowUUpLeft size={13} className="mr-1" /> Devolver
@@ -374,9 +479,35 @@ export function TaskModal({
               </div>
             ) : (
               <form id="task-form" onSubmit={handleSubmit} className="space-y-4">
+                {/* Las fechas de la tarea (Diego, 27/10/2026): creada, terminada y límite. */}
+                {editando && task && (
+                  <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs rounded-md border border-border bg-muted/40 px-3 py-2" data-testid="fechas-tarea">
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Creada</dt>
+                      <dd className="tabular-nums">{fechaYHora(task.created_at)}</dd>
+                      {task.created_by_name && <dd className="text-muted-foreground">por {task.created_by_name}</dd>}
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Terminada</dt>
+                      {task.status === 'hecha' && task.completed_at ? (
+                        <>
+                          <dd className="tabular-nums">{fechaYHora(task.completed_at)}</dd>
+                          {task.completed_by_name && <dd className="text-muted-foreground">por {task.completed_by_name}</dd>}
+                        </>
+                      ) : (
+                        <dd className="text-muted-foreground">Todavía no</dd>
+                      )}
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Fecha límite</dt>
+                      <dd className="tabular-nums">{task.due_date ? new Date(task.due_date).toLocaleDateString('es-ES', { timeZone: ZONA_OFICINA, dateStyle: 'medium' }) : 'Sin fecha'}</dd>
+                    </div>
+                  </dl>
+                )}
                 {soloLectura && (
                   <p className="text-xs rounded-md border border-border bg-muted/50 px-3 py-2 text-muted-foreground">
-                    Solo la editan el admin y la persona asignada. Puedes verla y comentarla{canAssign ? ', y reasignarla' : ''}.
+                    Sus datos los cambia quien la creó, un superadmin o quien delega en su equipo.
+                    {puedeMover ? ' Tú puedes moverla y comentarla.' : ' Solo el responsable, el supervisor o un superadmin pueden moverla o comentarla.'}
                   </p>
                 )}
                 <div>
@@ -458,7 +589,7 @@ export function TaskModal({
                     </label>
                     <select
                       value={assignedTo}
-                      disabled={!canAssign}
+                      disabled={!puedeDelegarAqui || soloLectura}
                       onChange={(e) => setAssignedTo(Number(e.target.value))}
                       className={inputClass}
                     >
@@ -466,11 +597,69 @@ export function TaskModal({
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
-                    {!canAssign && (
+                    {!puedeDelegarAqui && (
                       <p className="text-[11px] text-muted-foreground mt-0.5">Tus tareas son para ti.</p>
+                    )}
+                    {puedeDelegarAqui && !canAssign && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Puedes dársela a quien tiene un cargo por debajo del tuyo en tu equipo.</p>
                     )}
                   </div>
                 </div>
+
+                {/* El equipo es el de quien la lleva (Diego, 27/10/2026): no se elige
+                    aparte. Si esa persona está en varios, se escoge entre los suyos. */}
+                {(equipos.length > 0 || task?.team_id) && (
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                      <User size={12} /> Equipo <span className="font-normal text-muted-foreground">· el de quien la lleva</span>
+                    </label>
+                    {equiposDelResponsable && equiposDelResponsable.length > 1 && !soloLectura ? (
+                      <select
+                        value={teamId}
+                        onChange={(e) => setTeamId(Number(e.target.value))}
+                        className={inputClass}
+                        aria-label="Equipo"
+                      >
+                        {equiposDelResponsable.map((e) => (
+                          <option key={e.team_id} value={e.team_id}>
+                            {e.team_name}{equiposDelResponsable.some((o) => o.team_id !== e.team_id && o.team_name === e.team_name) ? ` (${e.empresa})` : ''}{e.cargo ? ` · ${e.cargo}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/40 text-sm" data-testid="equipo-de-la-tarea">
+                        {(() => {
+                          const e = equiposDelResponsable?.find((x) => x.team_id === Number(teamId)) || equiposDelResponsable?.[0];
+                          if (e) return `${e.team_name}${e.cargo ? ` · ${e.cargo}` : ''}`;
+                          if (equiposDelResponsable) return 'Sin equipo: quien la lleva no está en ninguno';
+                          return task?.team_name || 'El de quien la lleva';
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {(puedeDelegarAqui || task?.supervisor_id) && (
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                      <User size={12} /> Supervisor
+                    </label>
+                    <select
+                      value={supervisorId}
+                      disabled={!puedeDelegarAqui || soloLectura}
+                      onChange={(e) => setSupervisorId(e.target.value ? Number(e.target.value) : '')}
+                      className={inputClass}
+                    >
+                      <option value="">Sin supervisor</option>
+                      {opcionesSupervisor.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      La ve, le llega un correo al ponerla y cuando esté «En revisión», y la aprueba o la devuelve.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -528,7 +717,7 @@ export function TaskModal({
                 {/* Submódulos cuando la tarjeta ya existe */}
                 {editando && task && (
                   <>
-                    <fieldset disabled={soloLectura} className="space-y-0 min-w-0">
+                    <fieldset disabled={!puedeComentar} className="space-y-0 min-w-0">
                     {/* Lista de comprobación */}
                     <section className="pt-4 border-t border-border space-y-2">
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -600,7 +789,9 @@ export function TaskModal({
                       </div>
                     </section>
 
-                    {/* Etiquetas */}
+                    </fieldset>
+                    {/* Etiquetas: como los demás campos, de quien edita la tarea. */}
+                    <fieldset disabled={soloLectura} className="space-y-0 min-w-0">
                     <section className="pt-4 border-t border-border space-y-2">
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <Tag size={14} /> Etiquetas
@@ -653,7 +844,9 @@ export function TaskModal({
                       </div>
                     </section>
 
-                    {/* Enlaces */}
+                    </fieldset>
+                    {/* Enlaces: como los comentarios. */}
+                    <fieldset disabled={!puedeComentar} className="space-y-0 min-w-0">
                     <section className="pt-4 border-t border-border space-y-2">
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <LinkSimple size={14} /> Enlaces
@@ -720,7 +913,7 @@ export function TaskModal({
                               <span className="font-semibold text-foreground">{c.user_name}</span>
                               <span className="flex items-center gap-2 tabular-nums">
                                 {new Date(c.created_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
-                                {(canArchiveAny || c.user_id === currentUserId) && (
+                                {(esSuperadmin || c.user_id === currentUserId) && (
                                   <button
                                     type="button"
                                     onClick={() => cambio(() => tasksApi.deleteComment(task.id, c.id), 'No se pudo borrar el comentario')}
@@ -736,6 +929,11 @@ export function TaskModal({
                           </li>
                         ))}
                       </ul>
+                      {!puedeComentar ? (
+                        <p className="text-xs rounded-md border border-border bg-muted/50 px-3 py-2 text-muted-foreground">
+                          Solo el responsable, el supervisor o un superadmin pueden moverla o comentarla.
+                        </p>
+                      ) : (
                       <div className="flex gap-2 items-end">
                         <textarea
                           value={nuevoComentario}
@@ -759,6 +957,7 @@ export function TaskModal({
                           <PaperPlaneRight size={14} className="mr-1" /> Enviar
                         </Button>
                       </div>
+                      )}
                     </section>
                   </>
                 )}
@@ -779,7 +978,7 @@ export function TaskModal({
               <Button type="button" variant="outline" size="sm" onClick={onClose}>
                 {editando ? 'Cerrar' : 'Cancelar'}
               </Button>
-              {tab === 'detalles' && !cargando && (!soloLectura || canAssign) && (
+              {tab === 'detalles' && !cargando && (!soloLectura || puedeMover) && (
                 <Button type="submit" form="task-form" size="sm" disabled={guardando}>
                   {guardando ? 'Guardando…' : editando ? 'Guardar' : 'Crear tarea'}
                 </Button>
