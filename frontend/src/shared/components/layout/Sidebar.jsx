@@ -467,8 +467,9 @@ export function tieneAccesoMcp(can) {
  * `can`. Esto se queda para que una entrada sin punto no vuelva a esconderse.
  */
 export function pasaPermisoDeRoles(item, can) {
-  if (!item?.permiso || !String(item.permiso).includes('.')) return true;
-  return typeof can === 'function' && can(item.permiso) === true;
+  if (!item?.permiso) return true;
+  // `permiso` puede ser una lista: basta con una.
+  return [].concat(item.permiso).some((p) => !String(p).includes('.') || (typeof can === 'function' && can(p) === true));
 }
 
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {

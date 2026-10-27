@@ -185,7 +185,7 @@ export const CAMBIOS_DE_MENU = [
     perfiles: {
       soporte: [
         '- Captación › Webhooks', '- Clientes › Diplomas', '- Conexión › Conectores', '- Conexión › Webhook de transferencias',
-        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Tablero', '- Finanzas › Facturas de colaboradores',
+        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Mi tablero', '- Finanzas › Facturas de colaboradores',
         '- Tutores › Comisiones', '- Tutores › Mis cursos', '- Tutores › Sin tutor', '- Tutores › Tutores',
       ],
       project_manager: ['- Clientes › Matrículas', '- Principal › WhatsApp › Chat', '- Principal › WhatsApp › Conexión'],
@@ -196,7 +196,7 @@ export const CAMBIOS_DE_MENU = [
       'Conexión › Conectores': 'GET /api/connectors/',
       'Conexión › Webhook de transferencias': 'GET /api/webhooks-salientes/',
       'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias',
-      'Equipo de Desarrollo › Tablero': 'GET /api/tasks/',
+      'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/',
       'Finanzas › Facturas de colaboradores': 'GET /api/facturas-colaborador/facturas',
       'Tutores › Comisiones': 'GET /api/tutores/comisiones',
       'Tutores › Mis cursos': 'GET /api/tutores/colaboraciones',
