@@ -30,7 +30,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'field_defs.view': true, 'field_defs.edit': true,
     'channels.view': true, 'channels.edit': true,
     'roles.view': true, 'roles.edit': false,
-    'tasks.view_all': true, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.close': true, 'tasks.manage': true,
+    'tasks.view_all': true, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.close': true, 'tasks.manage': true, 'tasks.manage_teams': true,
     // Facturas de colaboradores (#202): las de las empresas de sus campus.
     'facturas_colaborador.ver_todas': true, 'facturas_colaborador.gestionar': true, 'facturas_colaborador.anular': true, 'facturas_colaborador.pagar': true, 'facturas_colaborador.subir': false,
     // Diplomas de Certifex (#384): VER la pantalla, en solo lectura. El admin
@@ -75,7 +75,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'channels.view': true, 'channels.edit': false,
     'roles.view': false, 'roles.edit': false,
     // Sin tablero (Diego, 09/10: «las gestoras no tienen tareas»): ni menú ni API.
-    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Facturas de colaboradores (#202): no las ve.
     'facturas_colaborador.ver_todas': false, 'facturas_colaborador.gestionar': false, 'facturas_colaborador.anular': false, 'facturas_colaborador.pagar': false, 'facturas_colaborador.subir': false,
     // Diplomas de Certifex (#384): apagado de serie; se da por rol o por persona
@@ -111,7 +111,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'channels.view': true, 'channels.edit': false,
     'roles.view': false, 'roles.edit': false,
     // Sin tablero (Diego, 09/10: «las gestoras no tienen tareas»): ni menú ni API.
-    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Facturas de colaboradores (#202): no las ve.
     'facturas_colaborador.ver_todas': false, 'facturas_colaborador.gestionar': false, 'facturas_colaborador.anular': false, 'facturas_colaborador.pagar': false, 'facturas_colaborador.subir': false,
     // Diplomas de Certifex (#384): no los ve (como hasta ahora), ni los emite.
@@ -122,7 +122,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
   // es «no»: `resolvePermission` solo da por bueno un `true` explicito, y el
   // servidor le corta el resto de rutas en `verifyToken`.
   colaborador: {
-    'tasks.view_all': false, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': false, 'tasks.edit': true, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': false, 'tasks.edit': true, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Facturas de colaboradores (#202): sube la suya («Mi factura»).
     'facturas_colaborador.ver_todas': false, 'facturas_colaborador.gestionar': false, 'facturas_colaborador.anular': false, 'facturas_colaborador.pagar': false, 'facturas_colaborador.subir': true,
     // Diplomas de Certifex (#384): no.
@@ -155,7 +155,8 @@ export const ALL_RESOURCES = {
   field_defs:       ['view', 'edit'],
   channels:         ['view', 'edit'],
   roles:            ['view', 'edit'],
-  tasks:            ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage'],
+  // manage_teams (26/10/2026): crear y archivar equipos del tablero, sus cargos y sus miembros.
+  tasks:            ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage', 'manage_teams'],
   facturas_colaborador: ['ver_todas', 'gestionar', 'anular', 'pagar', 'subir'],
   // Diplomas de Certifex (#384). `view`: verlos. `emit` (Diego, 22/10/2026):
   // revisar, pasar a Pendientes, aprobar y emitir y enviar el diploma al

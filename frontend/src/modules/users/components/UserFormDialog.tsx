@@ -79,6 +79,9 @@ export default function UserFormDialog({
   // proyectos futuros, pero de SU empresa: mayormente los admin son por empresa».
   const puedeDarEmpresas = !!empresas && !faltaMigracionEmpresas;
   const [empresasEnteras, setEmpresasEnteras] = useState<number[]>(user?.empresa_ids ?? []);
+  // El colaborador también tiene empresa, sin campus (equipo de desarrollo, 26/10/2026).
+  const esColaborador = role === 'colaborador' || rolesExtra.includes('colaborador' as UserRole);
+  const llevaEmpresa = role === 'admin' || esColaborador;
   const [telefono, setTelefono] = useState(user?.whatsapp_phone ?? '');
   const [facturaManager, setFacturaManager] = useState(!!user?.factura_manager);
   const [editarFechas, setEditarFechas] = useState(!!user?.editar_fechas_factura);
@@ -118,7 +121,8 @@ export default function UserFormDialog({
   function alternarEmpresa(issuerId: number) {
     const entera = empresasEnteras.includes(issuerId);
     setEmpresasEnteras((prev) => (entera ? prev.filter((x) => x !== issuerId) : [...prev, issuerId]));
-    if (!entera) {
+    // Al colaborador, la empresa no le da campus (26/10/2026): no se le marcan.
+    if (!entera && role === 'admin') {
       marcarVarios(projects.filter((p) => Number(p.sociedad_emisora_id) === issuerId).map((p) => p.id), true);
     }
   }
@@ -143,7 +147,7 @@ export default function UserFormDialog({
       }
       // Un admin con una empresa entera ya tiene de dónde le llegan campus,
       // aunque esa empresa aún no tenga ninguno (#220).
-      const conEmpresa = role === 'admin' && puedeDarEmpresas && empresasEnteras.length > 0;
+      const conEmpresa = llevaEmpresa && puedeDarEmpresas && empresasEnteras.length > 0;
       if (seleccionados.length === 0 && !conEmpresa) {
         toast({
           title: 'Falta el proyecto',
@@ -180,9 +184,9 @@ export default function UserFormDialog({
       editar_fechas_factura: facturaManager && editarFechas,
       usa_whatsapp: usaWhatsapp,
       reenviarEnlace: cambiaCorreo && reenviarEnlace,
-      // Solo si quien edita puede darlas. Para otro rol que no sea admin, se
-      // mandan vacías: una gestora no tiene empresas enteras.
-      ...(puedeDarEmpresas ? { empresaIds: role === 'admin' ? empresasEnteras : [] } : {}),
+      // Solo si quien edita puede darlas. Para otro rol que no sea admin ni
+      // colaborador, se mandan vacías: una gestora no tiene empresas enteras.
+      ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
     });
   }
 
@@ -386,6 +390,7 @@ export default function UserFormDialog({
                 empresasEnteras={empresasEnteras}
                 onToggleEmpresa={empresas ? alternarEmpresa : undefined}
                 faltaMigracionEmpresas={faltaMigracionEmpresas}
+                esColaborador={esColaborador}
               />
             )}
 
