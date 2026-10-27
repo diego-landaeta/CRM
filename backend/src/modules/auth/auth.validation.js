@@ -62,5 +62,7 @@ export const updateMyEmailSchema = z.object({
  * puede contestar distinto es un correo bien formado que no existe.
  */
 export const olvidoSchema = z.object({
-  email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
+  // trim ANTES de validar (« a@b.com » no es un error) y tope de 254, el maximo
+  // de una direccion: sin el, el cuerpo podia traer un «correo» de megas.
+  email: z.string().trim().max(254, 'Email invalido').email('Email invalido').transform((v) => v.toLowerCase()),
 });
