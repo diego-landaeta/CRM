@@ -1,4 +1,4 @@
--- 212 · Las ventas que guardaron el nombre del cliente como producto (#160)
+-- 231 · (antes 212, que chocó con la de matrículas de staging) Las ventas que guardaron el nombre del cliente como producto (#160)
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- QUÉ PASÓ
