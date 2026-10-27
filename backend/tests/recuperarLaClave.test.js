@@ -177,9 +177,10 @@ describe('el enlace que se manda', () => {
 });
 
 describe('al poner la contraseña con el enlace', () => {
-  it('se cierran las sesiones abiertas, y antes de cambiar la clave', async () => {
-    // Quien recupera una cuenta suele hacerlo porque no se fia de ella. Si
-    // alguien ya tenia sesion, poner una contraseña nueva no le echaba.
+  it('se revocan los refresh tokens, y antes de cambiar la clave', async () => {
+    // Quien recupera una cuenta suele hacerlo porque no se fia de ella. Solo se
+    // revocan los refresh tokens: el access token (JWT) no se consulta en la
+    // base y sigue valiendo hasta que caduca por si solo.
     const orden = [];
     modelo.findUserBySetPasswordToken.mockResolvedValue({
       id: LAURA.id, set_password_expires: new Date(Date.now() + 3_600_000),
@@ -194,7 +195,7 @@ describe('al poner la contraseña con el enlace', () => {
     expect(orden).toEqual(['sesiones', 'clave']);
   });
 
-  it('con un enlace que no vale no se cierra la sesion de nadie', async () => {
+  it('con un enlace que no vale no se revoca ningun refresh token', async () => {
     modelo.findUserBySetPasswordToken.mockResolvedValue(null);
     const service = await import('../src/modules/auth/auth.service.js');
 
