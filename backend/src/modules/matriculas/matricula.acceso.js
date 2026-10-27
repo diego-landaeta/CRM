@@ -28,8 +28,11 @@ export async function puedeEnCampus(user, projectId) {
 export async function matriculaPorId(req, res, next, valor) {
   try {
     if (!req.user) return next();   // la descarga firmada: la protege su firma
+    // Solo dígitos canónicos. Con `Number()` entraban `7.5`, `7e1`, `+7`…: la guarda dejaba pasar lo
+    // que no era un entero («ya responderá el controlador») y el controlador, con `parseInt`, servía
+    // o borraba la matrícula 7 de otro campus. Lo que no sea un entero limpio es un 400.
+    if (!/^[1-9]\d{0,14}$/.test(String(valor ?? ''))) throw new AppError('Identificador no válido', 400, 'INVALID_ID');
     const id = Number(valor);
-    if (!Number.isInteger(id) || id <= 0) return next();   // el controlador responde
     const { rows: [m] } = await query('SELECT project_id FROM matriculas WHERE id = $1', [id]);
     if (!m) throw new AppError('Matricula no encontrada', 404, 'NOT_FOUND');
     if (!(await puedeEnCampus(req.user, m.project_id))) throw PROHIBIDO();

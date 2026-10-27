@@ -110,3 +110,47 @@ describe('quien no', () => {
     expect(r.body.code).not.toBe('UNAUTHORIZED');
   });
 });
+
+/**
+ * Un id que NO es un entero limpio no puede colarse: la guarda hacía `next()` con todo lo que no
+ * era un entero («ya responderá el controlador»), y el controlador usa `parseInt`.
+ * `GET|PATCH /api/matriculas/7.5` devolvía (con el DNI) y cambiaba la matrícula 7 de otro campus
+ * con un 200. Y `Number('7e1')` (70) frente a `parseInt('7e1')` (7) hacía que la guarda y el
+ * controlador miraran matrículas distintas. Solo entran dígitos canónicos; lo demás es un 400.
+ */
+describe('un id que no es un entero limpio', () => {
+  const sucios = (id) => [`${id}.5`, `${id}.0`, `${id}e0`, `+${id}`, `0${id}`, `${id}%20`];
+
+  it('en lecturas: 400 para quien no tiene acceso (antes, 200 con el DNI de la matrícula ajena)', async () => {
+    for (const quien of [ADMIN_OTRO, GESTORA_OTRO]) {
+      for (const f of sucios(MATRICULA)) {
+        const r = await request.get(`/api/matriculas/${f}`).set(como(quien));
+        expect(r.status, `GET ${f}`).toBe(400);
+        expect(JSON.stringify(r.body)).not.toContain('dni');
+      }
+    }
+  });
+
+  it('en escrituras: 400 y no se toca nada', async () => {
+    const h = como(ADMIN_OTRO);
+    const antes = (await q(`SELECT dni, estado FROM matriculas WHERE id = $1`, [MATRICULA]))[0];
+    const intentos = [
+      request.patch(`/api/matriculas/${MATRICULA}.5`).set(h).send({ dni: '00000000T' }),
+      request.post(`/api/matriculas/${MATRICULA}.5/estado`).set(h).send({ estado: 'validada' }),
+      request.delete(`/api/matriculas/${MATRICULA}.5`).set(h),
+    ];
+    for (const r of await Promise.all(intentos)) expect(r.status).toBe(400);
+    expect((await q(`SELECT dni, estado FROM matriculas WHERE id = $1`, [MATRICULA]))[0]).toEqual(antes);
+  });
+
+  it('control: con el id limpio, el ajeno sigue en 403 y el dueño entra', async () => {
+    expect((await request.get(`/api/matriculas/${MATRICULA}`).set(como(ADMIN_OTRO))).status).toBe(403);
+    expect((await request.get(`/api/matriculas/${MATRICULA}`).set(como(ADMIN))).status).toBe(200);
+  });
+
+  it('la descarga firmada no se ve afectada: sin sesión, la protege su firma', async () => {
+    const r = await request.get(`/api/matriculas/${MATRICULA}.5/doc/dni`);
+    expect(r.status).not.toBe(200);
+    expect(r.body.code).not.toBe('UNAUTHORIZED');
+  });
+});
