@@ -27,6 +27,7 @@ const DECLARADAS = {
   'auth/auth.model.js': [1, 'alcance: los campus que ve el superadmin'],
   'auth/auth.service.js': [1, 'comportamiento: la clave de webhook solo se enseña a admin'],
   'claude-chat/chat.controller.js': [1, 'no es un rol de persona: el de cada mensaje del chat'],
+  'conversions/conversion.acceso.js': [1, 'alcance: la gestora, solo las ventas suyas (o en cuyo reparto figura)'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
   'consultas/consultas.controller.js': [2, 'alcance: lo suyo de Consultas (su carga, sus alumnos, sus métricas) solo existe para un tutor'],
   'conversions/conversion.controller.js': [6, 'alcance: la gestora, sus ventas'],
