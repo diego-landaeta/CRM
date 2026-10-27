@@ -18,7 +18,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- EL NÚMERO
 --
--- La 213: `staging` llega a la 207 y las PR abiertas ocupan de la 208 a la 212.
+-- La 230: `staging` llega a la 228 y otras PR abiertas ocupan la 223, la 224 y la 229 (#483, #484, #509). Antes era la 213, que choco con 213_matriculas_datos_de_admision.
 -- Antes de aplicarla, comprobar que sigue libre. Va numerada aparte en cada CRM.
 --
 -- Se aplica como `postgres`, con `psql -v ON_ERROR_STOP=1`, y después hay que
