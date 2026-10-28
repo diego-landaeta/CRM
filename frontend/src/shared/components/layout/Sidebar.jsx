@@ -61,7 +61,7 @@ import {
   // Los de los encabezados de seccion (#105). Ninguno repite el de una
   // entrada de su propia seccion: si el encabezado lleva el mismo dibujo
   // que una de sus filas, deja de ordenar y pasa a confundir.
-  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
+  Flask, House, Funnel, Books, ChalkboardTeacher, Bank, Shuffle, ChartPieSlice, EnvelopeSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import { rolesDe, soloEsColaborador } from '@/shared/lib/roles';
@@ -327,6 +327,7 @@ export const NAV_SECTIONS = [
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
       { label: 'Webhook de transferencias', to: '/conexion/webhook-transferencias', detail: 'Avisar de transferencias y depósitos', icon: Bank, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
+      { label: 'Asignación de leads', to: '/conexion/asignacion-leads', detail: 'A quién va cada formulario', icon: Shuffle, roles: ['superadmin', 'admin'], permiso: 'webhooks_salientes.view' },
     ],
   },
   {
