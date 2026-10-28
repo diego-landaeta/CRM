@@ -490,6 +490,6 @@ describe('Sexologo IA: pagos con tipo', () => {
   it('todo es de solo lectura', async () => {
     conSexologo([suscripcion()], true);
     await previo(1546);
-    for (const c of global.fetch.mock.calls) expect(JSON.parse(c[1].body).query).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
+    for (const c of global.fetch.mock.calls) expect(JSON.parse(c[1].body).query).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
   });
 });
