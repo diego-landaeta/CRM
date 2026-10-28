@@ -203,7 +203,9 @@ describe('cada app guarda sus pagos a su manera', () => {
   function conTablas(tablas, filas) {
     global.fetch = vi.fn(async (_url, init) => {
       const q = JSON.parse(init.body).query;
-      const cuerpo = /information_schema\.tables/.test(q) ? tablas.map((table_name) => ({ table_name })) : filas;
+      let cuerpo = filas;
+      if (q.includes('information_schema.tables')) cuerpo = tablas.map((table_name) => ({ table_name }));
+      else if (q.includes('information_schema.columns') && q.includes("column_name = 'tipo'")) cuerpo = [];
       return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
     });
   }
@@ -418,5 +420,59 @@ describe('Veterinary AI: billing_events sin is_test', () => {
     const r = await previo(1544);
     expect(r.otraMoneda).toBe(1);
     expect(r.importe).toBe(0);
+  });
+});
+
+/**
+ * Sexologo IA: ledger `pagos` con importe en CENTIMOS y `tipo` por fila. Se
+ * distingue del `pagos` de Psicologo PRO por la columna `tipo`.
+ */
+describe('Sexologo IA: pagos con tipo', () => {
+  function conSexologo(filas, conTipo) {
+    global.fetch = vi.fn(async (_url, init) => {
+      const q = JSON.parse(init.body).query;
+      let cuerpo = filas;
+      if (q.includes('information_schema.tables')) cuerpo = [{ table_name: 'pagos' }];
+      else if (q.includes('information_schema.columns') && q.includes("column_name = 'tipo'")) cuerpo = conTipo ? [{ column_name: 'tipo' }] : [];
+      return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
+    });
+  }
+  const sqlDeVentas = () => global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query).find((q) => q.includes('FROM pagos pg') && q.includes('AS amount'));
+
+  it('con la columna tipo se usa el esquema de Sexologo', async () => {
+    conSexologo([suscripcion()], true);
+    await previo(1546);
+    const sql = sqlDeVentas();
+    expect(sql).toContain("pg.tipo IN ('alta', 'renovacion')");
+    expect(sql).toContain("pg.estado = 'paid'");
+  });
+
+  it('sin la columna tipo sigue siendo el de Psicologo PRO', async () => {
+    conSexologo([suscripcion()], false);
+    await previo(4);
+    expect(sqlDeVentas()).toContain("pg.estado = 'completado'");
+  });
+
+  it('el importe se divide entre 100 (guarda centimos) y el reembolso se busca como fila aparte', async () => {
+    conSexologo([suscripcion()], true);
+    await previo(1546);
+    const sql = sqlDeVentas();
+    expect(sql).toContain('pg.importe / 100.0');
+    expect(sql).toContain("r.tipo = 'reembolso'");
+    expect(sql).toContain('r.importe = pg.importe');
+  });
+
+  it('los fallidos no cuentan como venta: van aparte', async () => {
+    conSexologo([suscripcion()], true);
+    await previo(1546);
+    const fuera = global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query).find((q) => q.includes("pg.tipo = 'fallido'"));
+    expect(fuera).toBeTruthy();
+    expect(sqlDeVentas()).not.toContain("'fallido'");
+  });
+
+  it('todo es de solo lectura', async () => {
+    conSexologo([suscripcion()], true);
+    await previo(1546);
+    for (const c of global.fetch.mock.calls) expect(JSON.parse(c[1].body).query).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
   });
 });

@@ -282,6 +282,41 @@ const SQL_VET_PISTAS = `
   SELECT event_type AS clave, count(*)::int AS n, 0 AS con_intent, COALESCE(sum(amount), 0) AS importe
     FROM billing_events GROUP BY 1 ORDER BY 2 DESC`;
 
+/*
+  SEXOLOGO IA lleva un ledger en `pagos` (como el de Psicologo PRO, pero NO es el
+  mismo): el importe va en CENTIMOS --guarda tal cual el de Stripe--, cada fila
+  trae su `tipo` (alta, renovacion, fallido, reembolso) y su `estado`
+  (paid, failed, refunded), y un reembolso es una fila APARTE, sin plan. Cuentan
+  como dinero cobrado `alta` y `renovacion` en estado `paid`. Un reembolso se
+  apunta como devolucion del cobro de la misma persona por el mismo importe.
+*/
+const SQL_SEXO = `
+  SELECT pg.id::text AS id, lower(COALESCE(pg.plan, '')) AS plan_type, 'completed' AS status,
+         (pg.importe / 100.0) AS amount, upper(pg.moneda) AS currency,
+         pg.stripe_ref AS stripe_payment_intent_id, NULL::text AS stripe_subscription_id,
+         pg.creado_en AS created_at, NULL::timestamptz AS cancelled_at,
+         CASE pg.tipo WHEN 'renovacion' THEN 'renovacion' ELSE 'nueva' END AS tipo,
+         (rf.creado_en IS NOT NULL) AS reembolsado, rf.creado_en AS reembolsado_en,
+         pg.email AS email, pg.nombre AS full_name, NULL::text AS country_name, NULL::text AS country_code
+    FROM pagos pg
+    LEFT JOIN LATERAL (
+      SELECT r.creado_en FROM pagos r
+       WHERE r.tipo = 'reembolso' AND r.estado = 'refunded'
+         AND (r.user_id = pg.user_id OR (r.email IS NOT NULL AND r.email = pg.email))
+         AND r.importe = pg.importe AND r.creado_en >= pg.creado_en
+       ORDER BY r.creado_en LIMIT 1
+    ) rf ON TRUE
+   WHERE pg.importe > 0 AND pg.estado = 'paid' AND pg.tipo IN ('alta', 'renovacion')
+   ORDER BY pg.creado_en`;
+const SQL_SEXO_FUERA = `
+  SELECT pg.id::text AS id, (pg.importe / 100.0) AS amount, pg.creado_en AS created_at
+    FROM pagos pg
+   WHERE pg.importe > 0 AND pg.tipo = 'fallido'
+   ORDER BY pg.creado_en`;
+const SQL_SEXO_PISTAS = `
+  SELECT tipo AS clave, count(*)::int AS n, 0 AS con_intent, COALESCE(sum(importe) / 100.0, 0) AS importe
+    FROM pagos GROUP BY 1 ORDER BY 2 DESC`;
+
 const columnasDe = (tabla) => `
   SELECT column_name, data_type FROM information_schema.columns
    WHERE table_schema = 'public' AND table_name = '${tabla}' ORDER BY ordinal_position`;
@@ -295,6 +330,7 @@ const ESQUEMAS = {
   subscriptions: { suscripciones: SQL_SUSCRIPCIONES, dePrueba: SQL_DE_PRUEBA, pistas: SQL_PISTAS_DE_TEST, columnas: SQL_COLUMNAS },
   subscription_payments: { suscripciones: SQL_NUTRI, dePrueba: SQL_NUTRI_FUERA, pistas: pistasDe('subscription_payments'), columnas: columnasDe('subscription_payments') },
   pagos: { suscripciones: SQL_PSICO, dePrueba: SQL_PSICO_FUERA, pistas: pistasDe('pagos'), columnas: columnasDe('pagos') },
+  pagos_sexologo: { suscripciones: SQL_SEXO, dePrueba: SQL_SEXO_FUERA, pistas: SQL_SEXO_PISTAS, columnas: columnasDe('pagos') },
   billing_veterinary: { suscripciones: SQL_VET, dePrueba: SQL_VET_FUERA, pistas: SQL_VET_PISTAS, columnas: columnasDe('billing_events') },
   billing_events: { suscripciones: SQL_BILLING, dePrueba: SQL_BILLING_FUERA, pistas: SQL_BILLING_PISTAS, columnas: columnasDe('billing_events') },
 };
@@ -308,7 +344,13 @@ async function esquemaDe(token, ref) {
   const hay = new Set((Array.isArray(filas) ? filas : []).map((x) => x.table_name));
   if (hay.has('subscriptions') || !hay.size) return ESQUEMAS.subscriptions;
   if (hay.has('subscription_payments')) return ESQUEMAS.subscription_payments;
-  if (hay.has('pagos')) return ESQUEMAS.pagos;
+  if (hay.has('pagos')) {
+    // Dos apps llaman igual a su ledger: la de Sexologo lleva `tipo`, la de Psicologo PRO no.
+    const cols = await consulta(token, ref,
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'pagos' AND column_name = 'tipo'"
+    ).catch(() => []);
+    return Array.isArray(cols) && cols.length ? ESQUEMAS.pagos_sexologo : ESQUEMAS.pagos;
+  }
   if (hay.has('billing_events')) {
     // Dos apps llaman igual a su tabla: la de Psicologo lleva `is_test`, la de Veterinary no.
     const cols = await consulta(token, ref,
