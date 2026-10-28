@@ -192,3 +192,64 @@ describe('importar de verdad', () => {
     expect(r.ventasNuevas).toBe(0);
   });
 });
+
+/**
+ * Cada app de IA guarda sus pagos a su manera: Tarot en `subscriptions`,
+ * Nutricionista en `subscription_payments` y Psicologo en `pagos`. El servicio
+ * mira que tabla hay y usa su consulta; las tres devuelven las mismas columnas.
+ */
+describe('cada app guarda sus pagos a su manera', () => {
+  /** Responde a la consulta de tablas con las que se digan, y al resto con las filas. */
+  function conTablas(tablas, filas) {
+    global.fetch = vi.fn(async (_url, init) => {
+      const q = JSON.parse(init.body).query;
+      const cuerpo = /information_schema.tables/.test(q) ? tablas.map((table_name) => ({ table_name })) : filas;
+      return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
+    });
+  }
+  const consultasEnviadas = () => global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query);
+
+  it('Nutricionista: usa subscription_payments y deja fuera lo reembolsado', async () => {
+    conTablas(['subscription_payments'], [suscripcion({ plan_type: 'monthly', status: 'completed' })]);
+    const r = await previo(5);
+    expect(r.suscripciones).toBe(1);
+    const sql = consultasEnviadas().find((q) => /FROM subscription_payments/.test(q) && /AS amount/.test(q));
+    expect(sql).toContain("payment_status = 'completed'");
+    expect(sql).toContain('amount_cents / 100.0');
+  });
+
+  it('Psicologo: usa pagos, con el correo de la propia fila', async () => {
+    conTablas(['pagos'], [suscripcion({ plan_type: 'mensual', status: 'completado' })]);
+    await previo(4);
+    const sql = consultasEnviadas().find((q) => /FROM pagos pg/.test(q) && /AS amount/.test(q));
+    expect(sql).toContain("pg.estado = 'completado'");
+    expect(sql).toContain('COALESCE(pg.cliente_email, pr.email)');
+  });
+
+  it('con Tarot y sin pista, sigue usando subscriptions', async () => {
+    conTablas(['subscriptions'], [suscripcion()]);
+    await previo(6);
+    expect(consultasEnviadas().some((q) => /FROM subscriptions s/.test(q))).toBe(true);
+  });
+
+  it('si no se puede saber la tabla, se usa la de siempre y no se rompe', async () => {
+    conTablas([], [suscripcion()]);
+    const r = await previo(6);
+    expect(r.suscripciones).toBe(1);
+  });
+
+  it('todas las consultas son de solo lectura', async () => {
+    for (const tablas of [['subscription_payments'], ['pagos'], ['subscriptions']]) {
+      conTablas(tablas, [suscripcion()]);
+      await previo(6);
+      for (const q of consultasEnviadas()) expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
+    }
+  });
+
+  it('un plan «mensual» o «anual» (Psicologo) se llama como el de Tarot', async () => {
+    conTablas(['pagos'], [suscripcion({ id: 'p-1', plan_type: 'mensual' }), suscripcion({ id: 'p-2', plan_type: 'anual' })]);
+    await importar(4);
+    const productos = conversion.create.mock.calls.map((c) => c[0].producto_contratado);
+    expect(productos).toEqual(['Suscripcion mensual', 'Suscripcion anual']);
+  });
+});

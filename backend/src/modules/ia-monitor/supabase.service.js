@@ -136,13 +136,96 @@ const SQL_COLUMNAS = `
    WHERE table_schema = 'public' AND table_name = 'subscriptions'
    ORDER BY ordinal_position`;
 
+/*
+  CADA APP GUARDA SUS PAGOS A SU MANERA.
+
+  Tarot los lleva en `subscriptions` + `user_profiles`; Nutricionista IA en
+  `subscription_payments` (importe en CENTIMOS, correo en `auth.users`) y
+  Psicologo IA en `pagos` (columnas en castellano, con el correo del cliente
+  en la propia fila). Se mira que tabla hay y se usa su consulta; todas
+  devuelven las MISMAS columnas, asi que el resto del servicio no se entera.
+
+  Lo que NO es venta, en todas: un pago reembolsado o fallido, y lo marcado
+  `is_test`. Se cuenta aparte (`dePrueba`) para poder decir cuanto se deja fuera.
+*/
+const SQL_NUTRI = `
+  SELECT sp.id::text AS id, sp.plan_type, sp.payment_status AS status,
+         (sp.amount_cents / 100.0) AS amount, sp.currency,
+         sp.stripe_payment_intent_id, sp.stripe_subscription_id,
+         COALESCE(sp.payment_date, sp.created_at) AS created_at,
+         NULL::timestamptz AS cancelled_at,
+         au.email, p.name AS full_name, NULL::text AS country_name, NULL::text AS country_code
+    FROM subscription_payments sp
+    LEFT JOIN auth.users au ON au.id = sp.user_id
+    LEFT JOIN profiles p ON p.id = sp.user_id
+   WHERE sp.amount_cents > 0
+     AND sp.payment_status = 'completed'
+     AND COALESCE(sp.metadata->>'is_test', 'false') <> 'true'
+   ORDER BY COALESCE(sp.payment_date, sp.created_at)`;
+const SQL_NUTRI_FUERA = `
+  SELECT sp.id::text AS id, (sp.amount_cents / 100.0) AS amount, COALESCE(sp.payment_date, sp.created_at) AS created_at
+    FROM subscription_payments sp
+   WHERE sp.amount_cents > 0
+     AND (sp.payment_status <> 'completed' OR COALESCE(sp.metadata->>'is_test', 'false') = 'true')
+   ORDER BY COALESCE(sp.payment_date, sp.created_at)`;
+
+const SQL_PSICO = `
+  SELECT pg.id::text AS id, pg.plan AS plan_type, pg.estado AS status,
+         pg.monto AS amount, pg.moneda AS currency,
+         pg.stripe_payment_id AS stripe_payment_intent_id, pg.stripe_subscription_id,
+         pg.created_at, NULL::timestamptz AS cancelled_at,
+         COALESCE(pg.cliente_email, pr.email) AS email,
+         COALESCE(pg.cliente_nombre, pr.nombre) AS full_name,
+         NULL::text AS country_name, NULL::text AS country_code
+    FROM pagos pg
+    LEFT JOIN profiles pr ON pr.id = pg.profile_id
+   WHERE pg.monto > 0
+     AND pg.estado = 'completado'
+     AND COALESCE(pg.metadata->>'is_test', 'false') <> 'true'
+   ORDER BY pg.created_at`;
+const SQL_PSICO_FUERA = `
+  SELECT pg.id::text AS id, pg.monto AS amount, pg.created_at
+    FROM pagos pg
+   WHERE pg.monto > 0
+     AND (pg.estado <> 'completado' OR COALESCE(pg.metadata->>'is_test', 'false') = 'true')
+   ORDER BY pg.created_at`;
+
+const columnasDe = (tabla) => `
+  SELECT column_name, data_type FROM information_schema.columns
+   WHERE table_schema = 'public' AND table_name = '${tabla}' ORDER BY ordinal_position`;
+const pistasDe = (tabla) => `
+  SELECT COALESCE(k.clave, '(sin metadata)') AS clave, count(*)::int AS n, 0 AS con_intent, 0 AS importe
+    FROM ${tabla} s
+    LEFT JOIN LATERAL jsonb_object_keys(COALESCE(s.metadata, '{}'::jsonb)) AS k(clave) ON TRUE
+   GROUP BY 1 ORDER BY 2 DESC`;
+
+const ESQUEMAS = {
+  subscriptions: { suscripciones: SQL_SUSCRIPCIONES, dePrueba: SQL_DE_PRUEBA, pistas: SQL_PISTAS_DE_TEST, columnas: SQL_COLUMNAS },
+  subscription_payments: { suscripciones: SQL_NUTRI, dePrueba: SQL_NUTRI_FUERA, pistas: pistasDe('subscription_payments'), columnas: columnasDe('subscription_payments') },
+  pagos: { suscripciones: SQL_PSICO, dePrueba: SQL_PSICO_FUERA, pistas: pistasDe('pagos'), columnas: columnasDe('pagos') },
+};
+
+/** Que tabla de pagos tiene esta app. Sin pista clara, la de Tarot (la de siempre). */
+async function esquemaDe(token, ref) {
+  const filas = await consulta(token, ref,
+    `SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('subscriptions', 'subscription_payments', 'pagos')`
+  ).catch(() => []);
+  const hay = new Set((Array.isArray(filas) ? filas : []).map((x) => x.table_name));
+  if (hay.has('subscriptions') || !hay.size) return ESQUEMAS.subscriptions;
+  if (hay.has('subscription_payments')) return ESQUEMAS.subscription_payments;
+  if (hay.has('pagos')) return ESQUEMAS.pagos;
+  return ESQUEMAS.subscriptions;
+}
+
 /** Un vistazo sin escribir nada: que hay al otro lado. */
 export async function previo(projectId) {
   const { token, ref } = await credenciales(projectId);
-  const filas = await consulta(token, ref, SQL_SUSCRIPCIONES);
-  const columnas = await consulta(token, ref, SQL_COLUMNAS).catch(() => []);
-  const pistas = await consulta(token, ref, SQL_PISTAS_DE_TEST).catch(() => []);
-  const prueba = await consulta(token, ref, SQL_DE_PRUEBA).catch(() => []);
+  const esq = await esquemaDe(token, ref);
+  const filas = await consulta(token, ref, esq.suscripciones);
+  const columnas = await consulta(token, ref, esq.columnas).catch(() => []);
+  const pistas = await consulta(token, ref, esq.pistas).catch(() => []);
+  const prueba = await consulta(token, ref, esq.dePrueba).catch(() => []);
   const conEmail = filas.filter((f) => f.email).length;
   // NO SE SUMAN MONEDAS DISTINTAS. Sumar dolares y euros en la misma cifra da
   // un numero que no es nada. Si aparece otra moneda se cuenta aparte y se
@@ -204,9 +287,9 @@ function reparto(filas, de) {
 
 /** El nombre del plan, como lo entiende el CRM. */
 function producto(plan) {
-  if (plan === 'monthly') return 'Suscripcion mensual';
-  if (plan === 'annual') return 'Suscripcion anual';
-  if (plan === 'single') return 'Consulta suelta';
+  if (plan === 'monthly' || plan === 'mensual') return 'Suscripcion mensual';
+  if (plan === 'annual' || plan === 'anual') return 'Suscripcion anual';
+  if (plan === 'single' || plan === 'unico') return 'Consulta suelta';
   return plan || 'Suscripcion';
 }
 
@@ -221,7 +304,8 @@ function producto(plan) {
  */
 export async function importar(projectId, { soloProbar = false, usuarioId = null } = {}) {
   const { token, ref } = await credenciales(projectId);
-  const filas = await consulta(token, ref, SQL_SUSCRIPCIONES);
+  const esq = await esquemaDe(token, ref);
+  const filas = await consulta(token, ref, esq.suscripciones);
 
   let clientesNuevos = 0;
   let ventasNuevas = 0;
@@ -333,7 +417,8 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
  */
 export async function quitarLasDePrueba(projectId, { soloProbar = false } = {}) {
   const { token, ref } = await credenciales(projectId);
-  const prueba = await consulta(token, ref, SQL_DE_PRUEBA);
+  const esq = await esquemaDe(token, ref);
+  const prueba = await consulta(token, ref, esq.dePrueba);
   if (!prueba.length) return { encontradas: 0, borradas: 0, conFactura: [], soloProbar };
 
   const marcas = prueba.map((f) => `%[supabase:${f.id}]%`);
