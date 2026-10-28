@@ -145,8 +145,10 @@ const SQL_COLUMNAS = `
   en la propia fila). Se mira que tabla hay y se usa su consulta; todas
   devuelven las MISMAS columnas, asi que el resto del servicio no se entera.
 
-  Lo que NO es venta, en todas: un pago reembolsado o fallido, y lo marcado
-  `is_test`. Se cuenta aparte (`dePrueba`) para poder decir cuanto se deja fuera.
+  Lo que NO es venta, en todas: un pago fallido y lo marcado `is_test`. Se cuenta
+  aparte (`dePrueba`) para poder decir cuanto se deja fuera. Un pago REEMBOLSADO
+  si entra: es una venta que existio y se devolvio, y se apunta su devolucion
+  (`conversion_refunds`) para que el neto cuadre y se vea que paso.
 */
 const SQL_NUTRI = `
   SELECT sp.id::text AS id, sp.plan_type, sp.payment_status AS status,
@@ -154,19 +156,22 @@ const SQL_NUTRI = `
          sp.stripe_payment_intent_id, sp.stripe_subscription_id,
          COALESCE(sp.payment_date, sp.created_at) AS created_at,
          NULL::timestamptz AS cancelled_at,
+         sp.transaction_type AS tipo,
+         (sp.payment_status = 'refunded') AS reembolsado,
+         CASE WHEN sp.payment_status = 'refunded' THEN sp.updated_at END AS reembolsado_en,
          au.email, p.name AS full_name, NULL::text AS country_name, NULL::text AS country_code
     FROM subscription_payments sp
     LEFT JOIN auth.users au ON au.id = sp.user_id
     LEFT JOIN profiles p ON p.id = sp.user_id
    WHERE sp.amount_cents > 0
-     AND sp.payment_status = 'completed'
+     AND sp.payment_status IN ('completed', 'refunded')
      AND COALESCE(sp.metadata->>'is_test', 'false') <> 'true'
    ORDER BY COALESCE(sp.payment_date, sp.created_at)`;
 const SQL_NUTRI_FUERA = `
   SELECT sp.id::text AS id, (sp.amount_cents / 100.0) AS amount, COALESCE(sp.payment_date, sp.created_at) AS created_at
     FROM subscription_payments sp
    WHERE sp.amount_cents > 0
-     AND (sp.payment_status <> 'completed' OR COALESCE(sp.metadata->>'is_test', 'false') = 'true')
+     AND (sp.payment_status NOT IN ('completed', 'refunded') OR COALESCE(sp.metadata->>'is_test', 'false') = 'true')
    ORDER BY COALESCE(sp.payment_date, sp.created_at)`;
 
 const SQL_PSICO = `
@@ -238,6 +243,13 @@ export async function previo(projectId) {
     conEmail,
     sinEmail: filas.length - conEmail,
     importe: Number(total.toFixed(2)),
+    // Lo devuelto y lo neto: el importe de arriba es el BRUTO (incluye lo reembolsado).
+    reembolsadas: {
+      n: enEuros.filter((f) => f.reembolsado).length,
+      importe: Number(enEuros.filter((f) => f.reembolsado).reduce((s, f) => s + Number(f.amount || 0), 0).toFixed(2)),
+    },
+    neto: Number((total - enEuros.filter((f) => f.reembolsado).reduce((s, f) => s + Number(f.amount || 0), 0)).toFixed(2)),
+    renovaciones: filas.filter((f) => f.tipo === 'renovacion').length,
     otraMoneda,
     desde: filas[0]?.created_at || null,
     hasta: filas[filas.length - 1]?.created_at || null,
@@ -286,11 +298,33 @@ function reparto(filas, de) {
 }
 
 /** El nombre del plan, como lo entiende el CRM. */
-function producto(plan) {
-  if (plan === 'monthly' || plan === 'mensual') return 'Suscripcion mensual';
-  if (plan === 'annual' || plan === 'anual') return 'Suscripcion anual';
-  if (plan === 'single' || plan === 'unico') return 'Consulta suelta';
-  return plan || 'Suscripcion';
+function producto(plan, tipo) {
+  let nombre = plan || 'Suscripcion';
+  if (plan === 'monthly' || plan === 'mensual') nombre = 'Suscripcion mensual';
+  else if (plan === 'annual' || plan === 'anual') nombre = 'Suscripcion anual';
+  else if (plan === 'single' || plan === 'unico') nombre = 'Consulta suelta';
+  // Una renovacion es otro cobro de la misma suscripcion: se ve como tal.
+  return tipo === 'renovacion' ? nombre + ' (renovacion)' : nombre;
+}
+
+/**
+ * Apuntar la devolucion de un pago que la app ya habia reembolsado.
+ *
+ * Es la misma tabla que usa la pantalla de devoluciones (`conversion_refunds`):
+ * el neto se calcula al leer, asi que la venta sigue entera y se ve lo devuelto.
+ * IDEMPOTENTE: la marca de la suscripcion va en el motivo y se mira antes.
+ */
+async function apuntarDevolucion(conversionId, f, marca, usuarioId = null) {
+  const { rows } = await query(
+    `SELECT id FROM conversion_refunds WHERE conversion_id = $1 AND motivo LIKE $2 LIMIT 1`,
+    [conversionId, `%${marca}%`]
+  );
+  if (rows.length) return;
+  await query(
+    `INSERT INTO conversion_refunds (conversion_id, importe, fecha, motivo, created_by, origen)
+     VALUES ($1, $2, $3, $4, $5, 'manual')`,
+    [conversionId, Number(f.amount || 0), String(f.reembolsado_en || f.created_at).slice(0, 10), `Reembolsado en la app de origen ${marca}`, usuarioId]
+  );
 }
 
 /**
@@ -312,6 +346,7 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
   let yaEstaban = 0;
   let sinEmail = 0;
   let otraMoneda = 0;
+  let devueltas = 0;
 
   for (const f of filas) {
     if (!f.email) { sinEmail++; continue; }
@@ -321,7 +356,12 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
       `SELECT id FROM conversions WHERE project_id = $1 AND notas_pago LIKE $2 LIMIT 1`,
       [projectId, `%${marca}%`]
     );
-    if (repetida.length) { yaEstaban++; continue; }
+    if (repetida.length) {
+      yaEstaban++;
+      // Si el pago se reembolso despues de importarlo, la devolucion se apunta ahora.
+      if (f.reembolsado && !soloProbar) await apuntarDevolucion(repetida[0].id, f, marca);
+      continue;
+    }
     // Otra moneda: no se convierte a euros a ojo. Se cuenta y se deja fuera.
     if (String(f.currency || 'eur').toLowerCase() !== 'eur') { otraMoneda++; continue; }
     if (soloProbar) { ventasNuevas++; continue; }
@@ -366,10 +406,10 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
           Ventas.
     */
     const importe = Number(f.amount || 0);
-    await conversionModel.create({
+    const venta = await conversionModel.create({
       lead_id: leadId,
       project_id: projectId,
-      producto_contratado: producto(f.plan_type),
+      producto_contratado: producto(f.plan_type, f.tipo),
       importe_total: importe,
       importe_pagado: importe,
       metodo_pago: 'tarjeta',
@@ -384,11 +424,12 @@ export async function importar(projectId, { soloProbar = false, usuarioId = null
       changed_by: usuarioId,
     });
     ventasNuevas++;
+    if (f.reembolsado) { await apuntarDevolucion(venta.id, f, marca, usuarioId); devueltas++; }
   }
 
-  logger.info({ projectId, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, soloProbar },
+  logger.info({ projectId, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, devueltas, soloProbar },
     'Supabase IA: importacion');
-  return { suscripciones: filas.length, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, soloProbar };
+  return { suscripciones: filas.length, ventasNuevas, clientesNuevos, yaEstaban, sinEmail, otraMoneda, devueltas, soloProbar };
 }
 
 /**

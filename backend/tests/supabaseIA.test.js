@@ -209,12 +209,12 @@ describe('cada app guarda sus pagos a su manera', () => {
   }
   const consultasEnviadas = () => global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query);
 
-  it('Nutricionista: usa subscription_payments y deja fuera lo reembolsado', async () => {
+  it('Nutricionista: usa subscription_payments, con lo reembolsado dentro y lo fallido fuera', async () => {
     conTablas(['subscription_payments'], [suscripcion({ plan_type: 'monthly', status: 'completed' })]);
     const r = await previo(5);
     expect(r.suscripciones).toBe(1);
     const sql = consultasEnviadas().find((q) => /FROM subscription_payments/.test(q) && /AS amount/.test(q));
-    expect(sql).toContain("payment_status = 'completed'");
+    expect(sql).toContain("payment_status IN ('completed', 'refunded')");
     expect(sql).toContain('amount_cents / 100.0');
   });
 
@@ -251,5 +251,62 @@ describe('cada app guarda sus pagos a su manera', () => {
     await importar(4);
     const productos = conversion.create.mock.calls.map((c) => c[0].producto_contratado);
     expect(productos).toEqual(['Suscripcion mensual', 'Suscripcion anual']);
+  });
+});
+
+/**
+ * Reembolsos y renovaciones: lo que se devolvio tiene que verse, no desaparecer.
+ * La venta entra entera y la devolucion se apunta en `conversion_refunds`; el
+ * neto lo calcula el CRM al leer.
+ */
+describe('reembolsos y renovaciones', () => {
+  it('un pago reembolsado entra como venta y se apunta su devolucion', async () => {
+    respondeSupabase([suscripcion({ id: 'r-1', amount: '9.99', reembolsado: true, reembolsado_en: '2026-06-01 10:00:00+00' })]);
+    const r = await importar(5, { usuarioId: 1 });
+    expect(r.ventasNuevas).toBe(1);
+    expect(r.devueltas).toBe(1);
+    const insercion = consultas.find((c) => /INSERT INTO conversion_refunds/.test(c.sql));
+    expect(insercion).toBeTruthy();
+    expect(insercion.params).toEqual([201, 9.99, '2026-06-01', 'Reembolsado en la app de origen [supabase:r-1]', 1]);
+  });
+
+  it('no apunta dos veces la misma devolucion', async () => {
+    query.mockImplementation(async (sql, params) => {
+      consultas.push({ sql: String(sql).replace(/s+/g, ' ').trim(), params });
+      if (/FROM conversions WHERE project_id/.test(sql)) return { rows: [{ id: 300 }] };
+      if (/FROM conversion_refunds/.test(sql)) return { rows: [{ id: 1 }] };
+      return { rows: [] };
+    });
+    respondeSupabase([suscripcion({ id: 'r-1', reembolsado: true, reembolsado_en: '2026-06-01' })]);
+    const r = await importar(5);
+    expect(r.yaEstaban).toBe(1);
+    expect(consultas.filter((c) => /INSERT INTO conversion_refunds/.test(c.sql))).toHaveLength(0);
+  });
+
+  it('un pago normal no genera ninguna devolucion', async () => {
+    respondeSupabase([suscripcion()]);
+    const r = await importar(6);
+    expect(r.devueltas).toBe(0);
+    expect(consultas.filter((c) => /conversion_refunds/.test(c.sql) && /INSERT/.test(c.sql))).toHaveLength(0);
+  });
+
+  it('una renovacion se llama como tal', async () => {
+    respondeSupabase([suscripcion({ id: 'n-1', tipo: 'nueva' }), suscripcion({ id: 'n-2', tipo: 'renovacion' })]);
+    await importar(5);
+    const productos = conversion.create.mock.calls.map((c) => c[0].producto_contratado);
+    expect(productos).toEqual(['Suscripcion mensual', 'Suscripcion mensual (renovacion)']);
+  });
+
+  it('previo separa el bruto, lo devuelto y el neto, y cuenta las renovaciones', async () => {
+    respondeSupabase([
+      suscripcion({ id: 'a', amount: '9.99', tipo: 'nueva' }),
+      suscripcion({ id: 'b', amount: '9.99', tipo: 'renovacion' }),
+      suscripcion({ id: 'c', amount: '9.99', tipo: 'nueva', reembolsado: true }),
+    ]);
+    const r = await previo(5);
+    expect(r.importe).toBe(29.97);
+    expect(r.reembolsadas).toEqual({ n: 1, importe: 9.99 });
+    expect(r.neto).toBe(19.98);
+    expect(r.renovaciones).toBe(1);
   });
 });
