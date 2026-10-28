@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
-import { soloRoles } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './ia.controller.js';
 
 const router = Router();
 router.use(verifyToken);
-router.get('/metrics/:projectId', ctrl.getMetrics);
-router.get('/gasto', ctrl.getGasto);
+router.get('/metrics/:projectId', puede('ia.view'), ctrl.getMetrics);
+router.get('/gasto', puede('ia.view'), ctrl.getGasto);
 
 /*
   Lo que la app de IA guarda en su Supabase (#44).
@@ -18,11 +18,11 @@ router.get('/gasto', ctrl.getGasto);
   credencial con la que se obtiene vive en un modulo que solo abren los
   administradores.
 
-  Y `soloRoles` en vez de `roleGuard`: el segundo deja pasar a `superadmin` y a
-  `soporte` ANTES de mirar la lista, asi que `roleGuard('admin')` admite
-  ademas a soporte sin decirlo. Donde hay credenciales de por medio se declara
-  quien entra y no entra nadie mas (#80).
+  Piden `integrations.edit`, el mismo permiso que abre las credenciales: quien
+  puede ver o cambiar la clave de Supabase es quien puede leer lo que se saca con
+  ella. Antes iban con un guardia de roles (#80); con el catalogo de permisos
+  (#423) cada ruta lleva su clave.
 */
-router.get('/supabase/previo/:projectId', soloRoles('admin', 'superadmin'), ctrl.previoSupabase);
-router.post('/supabase/importar/:projectId', soloRoles('admin', 'superadmin'), ctrl.importarSupabase);
+router.get('/supabase/previo/:projectId', puede('integrations.edit'), ctrl.previoSupabase);
+router.post('/supabase/importar/:projectId', puede('integrations.edit'), ctrl.importarSupabase);
 export default router;
