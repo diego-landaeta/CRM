@@ -245,6 +245,43 @@ const SQL_BILLING_PISTAS = `
   SELECT CASE WHEN is_test THEN 'is_test' ELSE event_type END AS clave, count(*)::int AS n, 0 AS con_intent, 0 AS importe
     FROM billing_events WHERE amount > 0 GROUP BY 1 ORDER BY 2 DESC`;
 
+/*
+  VETERINARY AI tambien usa `billing_events`, pero NO es la de Psicologo: aqui el
+  importe va en UNIDADES (su webhook ya divide entre 100: `amount: x / 100`), el
+  correo viene en `user_email` o en auth.users por `user_id`, y no hay `is_test`.
+  Dinero cobrado: `invoice_paid_initial` (alta) e `invoice_paid` (renovacion).
+  `checkout_completed` NO se cuenta: es el mismo cobro que la factura, y sumarlo
+  lo duplicaria. `charge_refunded` es una devolucion del cobro.
+*/
+const SQL_VET = `
+  SELECT be.id::text AS id, COALESCE(NULLIF(be.plan, ''), 'suscripcion') AS plan_type,
+         'completed' AS status, be.amount AS amount, upper(be.currency) AS currency,
+         COALESCE(be.stripe_invoice_id, be.stripe_session_id) AS stripe_payment_intent_id,
+         be.stripe_subscription_id, be.created_at, NULL::timestamptz AS cancelled_at,
+         CASE be.event_type WHEN 'invoice_paid' THEN 'renovacion' ELSE 'nueva' END AS tipo,
+         (rf.created_at IS NOT NULL) AS reembolsado, rf.created_at AS reembolsado_en,
+         COALESCE(be.user_email, au.email) AS email,
+         NULL::text AS full_name, NULL::text AS country_name, NULL::text AS country_code
+    FROM billing_events be
+    LEFT JOIN auth.users au ON au.id = be.user_id
+    LEFT JOIN LATERAL (
+      SELECT r.created_at FROM billing_events r
+       WHERE r.event_type = 'charge_refunded' AND r.user_id = be.user_id
+         AND r.amount = be.amount AND r.created_at >= be.created_at
+       ORDER BY r.created_at LIMIT 1
+    ) rf ON TRUE
+   WHERE be.amount > 0 AND be.status = 'completed'
+     AND be.event_type IN ('invoice_paid_initial', 'invoice_paid')
+   ORDER BY be.created_at`;
+const SQL_VET_FUERA = `
+  SELECT be.id::text AS id, be.amount AS amount, be.created_at
+    FROM billing_events be
+   WHERE be.amount > 0 AND be.event_type IN ('invoice_failed', 'checkout_completed')
+   ORDER BY be.created_at`;
+const SQL_VET_PISTAS = `
+  SELECT event_type AS clave, count(*)::int AS n, 0 AS con_intent, COALESCE(sum(amount), 0) AS importe
+    FROM billing_events GROUP BY 1 ORDER BY 2 DESC`;
+
 const columnasDe = (tabla) => `
   SELECT column_name, data_type FROM information_schema.columns
    WHERE table_schema = 'public' AND table_name = '${tabla}' ORDER BY ordinal_position`;
@@ -258,6 +295,7 @@ const ESQUEMAS = {
   subscriptions: { suscripciones: SQL_SUSCRIPCIONES, dePrueba: SQL_DE_PRUEBA, pistas: SQL_PISTAS_DE_TEST, columnas: SQL_COLUMNAS },
   subscription_payments: { suscripciones: SQL_NUTRI, dePrueba: SQL_NUTRI_FUERA, pistas: pistasDe('subscription_payments'), columnas: columnasDe('subscription_payments') },
   pagos: { suscripciones: SQL_PSICO, dePrueba: SQL_PSICO_FUERA, pistas: pistasDe('pagos'), columnas: columnasDe('pagos') },
+  billing_veterinary: { suscripciones: SQL_VET, dePrueba: SQL_VET_FUERA, pistas: SQL_VET_PISTAS, columnas: columnasDe('billing_events') },
   billing_events: { suscripciones: SQL_BILLING, dePrueba: SQL_BILLING_FUERA, pistas: SQL_BILLING_PISTAS, columnas: columnasDe('billing_events') },
 };
 
@@ -271,7 +309,13 @@ async function esquemaDe(token, ref) {
   if (hay.has('subscriptions') || !hay.size) return ESQUEMAS.subscriptions;
   if (hay.has('subscription_payments')) return ESQUEMAS.subscription_payments;
   if (hay.has('pagos')) return ESQUEMAS.pagos;
-  if (hay.has('billing_events')) return ESQUEMAS.billing_events;
+  if (hay.has('billing_events')) {
+    // Dos apps llaman igual a su tabla: la de Psicologo lleva `is_test`, la de Veterinary no.
+    const cols = await consulta(token, ref,
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'billing_events' AND column_name = 'is_test'"
+    ).catch(() => []);
+    return Array.isArray(cols) && cols.length ? ESQUEMAS.billing_events : ESQUEMAS.billing_veterinary;
+  }
   return ESQUEMAS.subscriptions;
 }
 

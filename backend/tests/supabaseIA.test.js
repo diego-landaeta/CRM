@@ -364,3 +364,59 @@ describe('Psicologo IA principal: billing_events', () => {
     for (const q of enviadas()) expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
   });
 });
+
+/**
+ * Veterinary AI llama igual a su tabla (`billing_events`) pero es otra: importe
+ * en UNIDADES, correo en `user_email`, sin `is_test`. Se distingue por esa columna.
+ */
+describe('Veterinary AI: billing_events sin is_test', () => {
+  function conVet(filas, conIsTest) {
+    global.fetch = vi.fn(async (_url, init) => {
+      const q = JSON.parse(init.body).query;
+      let cuerpo = filas;
+      if (q.includes('information_schema.tables')) cuerpo = [{ table_name: 'billing_events' }];
+      else if (q.includes('information_schema.columns') && q.includes("column_name = 'is_test'")) cuerpo = conIsTest ? [{ column_name: 'is_test' }] : [];
+      return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
+    });
+  }
+  const sqlDeVentas = () => global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query).find((q) => q.includes('FROM billing_events be') && q.includes('AS amount'));
+
+  it('sin is_test se usa el esquema de Veterinary', async () => {
+    conVet([suscripcion()], false);
+    await previo(1544);
+    const sql = sqlDeVentas();
+    expect(sql).toContain("be.event_type IN ('invoice_paid_initial', 'invoice_paid')");
+    expect(sql).toContain('be.user_email');
+    expect(sql).not.toContain('is_test');
+  });
+
+  it('con is_test sigue siendo el de Psicologo', async () => {
+    conVet([suscripcion()], true);
+    await previo(4);
+    expect(sqlDeVentas()).toContain('NOT be.is_test');
+  });
+
+  it('el importe NO se divide entre 100 (ya viene en unidades) y checkout_completed no cuenta', async () => {
+    conVet([suscripcion()], false);
+    await previo(1544);
+    const sql = sqlDeVentas();
+    expect(sql).toContain('be.amount AS amount');
+    expect(sql).not.toContain('be.amount / 100');
+    expect(sql).not.toContain("event_type IN ('invoice_paid_initial', 'invoice_paid', 'checkout_completed'");
+  });
+
+  it('una devolucion se busca como charge_refunded del mismo usuario e importe', async () => {
+    conVet([suscripcion()], false);
+    await previo(1544);
+    const sql = sqlDeVentas();
+    expect(sql).toContain("r.event_type = 'charge_refunded'");
+    expect(sql).toContain('r.amount = be.amount');
+  });
+
+  it('en dolares no se mezcla con euros: se cuenta aparte', async () => {
+    conVet([suscripcion({ currency: 'USD', amount: '12' })], false);
+    const r = await previo(1544);
+    expect(r.otraMoneda).toBe(1);
+    expect(r.importe).toBe(0);
+  });
+});
