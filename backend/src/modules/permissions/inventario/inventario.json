@@ -5430,10 +5430,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "puede",
-    "claves": [
-     "integrations.edit"
-    ]
+    "tipo": "roles",
+    "roles": [
+     "admin",
+     "superadmin"
+    ],
+    "atajoSoporte": false
    }
   ],
   "puertas": []
@@ -5452,10 +5454,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "puede",
-    "claves": [
-     "integrations.edit"
-    ]
+    "tipo": "roles",
+    "roles": [
+     "admin",
+     "superadmin"
+    ],
+    "atajoSoporte": false
    }
   ],
   "puertas": []

@@ -407,8 +407,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | getMetrics | `GET /api/ia/metrics/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
 | getGasto | `GET /api/ia/gasto` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
-| previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | `integrations.edit` |
-| importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | `integrations.edit` |
+| previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | ¿sin asignar? |
+| importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | ¿sin asignar? |
 
 ## installation
 
