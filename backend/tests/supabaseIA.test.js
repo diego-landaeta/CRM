@@ -234,9 +234,26 @@ describe('cada app guarda sus pagos a su manera', () => {
     expect(consultasEnviadas().some((q) => /FROM subscriptions s/.test(q))).toBe(true);
   });
 
-  it('si no se puede saber la tabla, se usa la de siempre y no se rompe', async () => {
-    conTablas([], [suscripcion()]);
+  it('una app sin ninguna tabla de cobros (Trabajos Universitarios) se conecta y no trae ventas', async () => {
+    conTablas([], []);
+    const r = await previo(1548);
+    expect(r.suscripciones).toBe(0);
+    expect(r.importe).toBe(0);
+    const i = await importar(1548);
+    expect(i.ventasNuevas).toBe(0);
+    expect(conversion.create).not.toHaveBeenCalled();
+  });
+
+  it('si la consulta de tablas falla, se usa la de siempre y no se rompe', async () => {
+    let n = 0;
+    global.fetch = vi.fn(async (_url, init) => {
+      const q = JSON.parse(init.body).query;
+      if (q.includes('information_schema.tables')) return { ok: false, status: 500, text: async () => 'caido', json: async () => ({}) };
+      n++;
+      return { ok: true, status: 200, text: async () => JSON.stringify([suscripcion()]), json: async () => [suscripcion()] };
+    });
     const r = await previo(6);
+    expect(n).toBeGreaterThan(0);
     expect(r.suscripciones).toBe(1);
   });
 

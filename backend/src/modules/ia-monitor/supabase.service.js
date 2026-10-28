@@ -333,6 +333,17 @@ const ESQUEMAS = {
   pagos_sexologo: { suscripciones: SQL_SEXO, dePrueba: SQL_SEXO_FUERA, pistas: SQL_SEXO_PISTAS, columnas: columnasDe('pagos') },
   billing_veterinary: { suscripciones: SQL_VET, dePrueba: SQL_VET_FUERA, pistas: SQL_VET_PISTAS, columnas: columnasDe('billing_events') },
   billing_events: { suscripciones: SQL_BILLING, dePrueba: SQL_BILLING_FUERA, pistas: SQL_BILLING_PISTAS, columnas: columnasDe('billing_events') },
+  // Sin tabla de cobros: consultas que no devuelven filas, con las mismas columnas.
+  sin_pagos: {
+    suscripciones: `SELECT NULL::text AS id, NULL::text AS plan_type, NULL::text AS status, 0::numeric AS amount,
+      NULL::text AS currency, NULL::text AS stripe_payment_intent_id, NULL::text AS stripe_subscription_id,
+      NULL::timestamptz AS created_at, NULL::timestamptz AS cancelled_at, NULL::text AS tipo,
+      false AS reembolsado, NULL::timestamptz AS reembolsado_en, NULL::text AS email, NULL::text AS full_name,
+      NULL::text AS country_name, NULL::text AS country_code WHERE false`,
+    dePrueba: 'SELECT NULL::text AS id, 0::numeric AS amount, NULL::timestamptz AS created_at WHERE false',
+    pistas: "SELECT NULL::text AS clave, 0 AS n, 0 AS con_intent, 0 AS importe WHERE false",
+    columnas: "SELECT NULL::text AS column_name, NULL::text AS data_type WHERE false",
+  },
 };
 
 /** Que tabla de pagos tiene esta app. Sin pista clara, la de Tarot (la de siempre). */
@@ -340,8 +351,13 @@ async function esquemaDe(token, ref) {
   const filas = await consulta(token, ref,
     `SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name IN ('subscriptions', 'subscription_payments', 'pagos', 'billing_events')`
-  ).catch(() => []);
+  ).catch(() => null);
   const hay = new Set((Array.isArray(filas) ? filas : []).map((x) => x.table_name));
+  // Una app que no guarda sus cobros en su base (Trabajos Universitarios: solo el
+  // estado de la suscripcion en `profiles`; el dinero vive en Stripe) no es un error:
+  // se conecta igual y no trae ventas. Con la consulta fallida (filas indefinidas)
+  // se sigue usando el esquema de siempre.
+  if (Array.isArray(filas) && filas.length === 0 && hay.size === 0) return ESQUEMAS.sin_pagos;
   if (hay.has('subscriptions') || !hay.size) return ESQUEMAS.subscriptions;
   if (hay.has('subscription_payments')) return ESQUEMAS.subscription_payments;
   if (hay.has('pagos')) {
