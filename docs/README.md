@@ -83,6 +83,38 @@ Certifex emite los diplomas; el CRM decide **quién** lo recibe y **cuándo** se
 
 **Ningún correo sale solo:** ni al emitir, ni al revocar, ni al rechazar. Si el correo de Certifex está apagado (`CERTIFEX_EMAIL_ACTIVO`), al «Enviar» el panel lo dice («Aprobado, pero el correo está apagado») y queda registrado para reenviar.
 
+## Asignación de leads por actividad (#513 · gemela CRM-ISEIE#284, 27/10/2026)
+
+Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de leads** (super admin y admin; permisos `webhooks_salientes.*`). El paso a paso y su estado están en la issue #513.
+
+**Flujo.** Web (Brevo o SMTP de Hostinger) → **entrada de Make** (mailhook o webhook por campus) → `POST /api/asignacion/entrada` con la clave de la configuración (`Authorization: Bearer` o `X-API-Key`).
+- **Hay alguna gestora activa:** el CRM crea el lead con ella (`idempotency_key = asignacion-<uid>`) y manda el formulario al **escenario 2**. Ese escenario no rota por HTTP ni crea el lead. Recibe los campos tal cual, más `gestora`, `responsable_*` y `lead_id`.
+- **No hay ninguna, o la asignación está apagada:** el CRM no crea el lead y lo manda al **escenario 1**, el de siempre.
+- **El CRM no contesta en 5 s o da error:** la entrada de Make lo manda al escenario 1 por su cuenta.
+- **Envío a los escenarios:** lo hace el CRM, por mailhook (Brevo, cuenta `crm`) o webhook JSON. Reintenta a 1, 5 y 15 minutos (`jobs/asignacionScheduler.js`; se apaga con `ASIGNACION_DISABLED=1`).
+- **Sin duplicados:** una decisión por campus y `uid`.
+
+**Activa.** Al menos una acción en la ventana, que por defecto son 15 minutos y se configura entre 1 y 240. Todo está en `asignacion.actividad.js`.
+- **Qué cuenta:**
+  - `lead_interactions`: una nota cuenta solo si tiene 20 caracteres o más y no repite otra suya.
+  - `lead_status_history`, sin los cambios deshechos en menos de 10 minutos.
+  - `lead_reminders`, `lead_steps` y `lead_audit_log`.
+  - WhatsApp salientes, también los mandados desde el móvil con el número conectado (instancia `crm-u<id>`). Se mira la hora de WhatsApp para que no cuente el historial; los grupos no cuentan.
+  - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
+- **Candidatas:** las de `gestoresDelReparto` del campus.
+- **A quién le toca entre las activas:**
+  1. menos asignados hoy (día de Valencia, en todos sus campus);
+  2. menos en total;
+  3. la que lleva más rato sin recibir uno;
+  4. el id.
+- **«Hoy» suma también las conversaciones de WhatsApp que le abrió la persona ese día.** Si esa conversación acaba en un lead suyo, cuenta una sola vez.
+
+**WhatsApp (widget).** `/api/w/data/:id.json` y `/api/w/whatsapp/:id.js` le dan a la web solo a la gestora del widget a la que le toca (`asignacion.widget.js`; la decisión se guarda 20 s por campus). La web ya elige al azar entre las que recibe, así que no hay que volver a pegar el código. Si no hay nadie activo, la web recibe todas las gestoras. Pulsar el botón no asigna nada.
+
+**Tablas** (migraciones 230 y 231 aquí; 243 y 244 en ISEIE): `asignacion_destinos` (destinos cifrados y huella de la clave), `asignacion_decisiones` (qué se decidió, por qué y el envío) y `actividad_crm`.
+
+**Probar en un staging:** `cd backend && node scripts/asignacion-e2e.mjs` en el servidor (se niega en las bases de producción). Crea una configuración contra un receptor de pruebas, simula actividad y borra todo al terminar. El 27/10 dio 31/31 en /testeo y en el staging de ISEIE.
+
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
 Lo nuevo, con un botón para ir a cada pantalla, está dentro del CRM en **Novedades** (`backend/src/modules/novedades/versiones.js`) y en la release `v2.0.0` de GitHub. En corto:
