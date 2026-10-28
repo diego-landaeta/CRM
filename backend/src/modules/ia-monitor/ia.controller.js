@@ -175,3 +175,18 @@ export async function quitarPruebasSupabase(req, res, next) {
     res.json({ success: true, data: await supabaseIA.quitarLasDePrueba(idDelProyecto(req), { soloProbar }) });
   } catch (err) { next(err); }
 }
+
+/**
+ * GET /api/ia/cobros/:projectId?tipo=&plan=&q=&desde=&hasta=&page=&limit=
+ *
+ * Los cobros del proyecto con sus devoluciones, filtrados en el servidor.
+ */
+export async function cobros(req, res, next) {
+  try {
+    const q = req.query || {};
+    const data = await model.cobrosDeProyecto(idDelProyecto(req), {
+      tipo: q.tipo, plan: q.plan, q: q.q, desde: q.desde, hasta: q.hasta, page: q.page, limit: q.limit,
+    });
+    res.json({ success: true, ...data });
+  } catch (e) { next(e); }
+}

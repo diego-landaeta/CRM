@@ -48,7 +48,8 @@ const EN_IA = new Set([
 export default function FinanzasLayout() {
   const { activeProject } = useProjectContext() as { activeProject: { type?: string } | null };
   const tabs = activeProject?.type === 'ia'
-    ? TABS.filter((t) => EN_IA.has(t.to))
+    // En IA los cobros no entran por Stripe: la pestaña se llama como lo que enseña.
+    ? TABS.filter((t) => EN_IA.has(t.to)).map((t) => (t.to === '/finanzas/pagos-stripe' ? { ...t, label: 'Cobros' } : t))
     : TABS;
 
   return (

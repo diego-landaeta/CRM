@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import usePermission from '@/shared/hooks/usePermission';
+import CobrosDeIA from '@/modules/ia-dashboard/components/CobrosDeIA';
 
 type Payment = {
   id: number;
@@ -184,6 +185,18 @@ export default function StripePaymentsPage() {
 
   if (!pid) {
     return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
+  }
+
+  if (hayClave === false && porSupabase) {
+    return (
+      <div className="space-y-5 pb-8">
+        <PageHeader
+          title="Cobros"
+          subtitle={`Lo que ha entrado en ${activeProject?.nombre || 'el proyecto'}, con sus renovaciones y devoluciones`}
+        />
+        <CobrosDeIA projectId={activeProject.id} nombre={activeProject?.nombre} />
+      </div>
+    );
   }
 
   return (

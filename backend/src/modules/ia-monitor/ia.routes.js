@@ -7,6 +7,7 @@ const router = Router();
 router.use(verifyToken);
 router.get('/metrics/:projectId', puede('ia.view'), ctrl.getMetrics);
 router.get('/gasto', puede('ia.view'), ctrl.getGasto);
+router.get('/cobros/:projectId', puede('ia.view'), ctrl.cobros);
 
 /*
   Lo que la app de IA guarda en su Supabase (#44).

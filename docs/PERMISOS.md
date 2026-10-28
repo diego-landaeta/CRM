@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-752 rutas en 58 módulos, y 28 acciones con condición dentro de una ruta.
+754 rutas en 58 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -407,8 +407,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | getMetrics | `GET /api/ia/metrics/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
 | getGasto | `GET /api/ia/gasto` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
+| cobros | `GET /api/ia/cobros/:projectId` | (no existía) | (ruta nueva) | `ia.view` |
 | previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | ¿sin asignar? |
 | importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | ¿sin asignar? |
+| quitarPruebasSupabase | `POST /api/ia/supabase/quitar-pruebas/:projectId` | (no existía) | (ruta nueva) | ¿sin asignar? |
 
 ## installation
 
