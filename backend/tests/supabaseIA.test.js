@@ -203,7 +203,7 @@ describe('cada app guarda sus pagos a su manera', () => {
   function conTablas(tablas, filas) {
     global.fetch = vi.fn(async (_url, init) => {
       const q = JSON.parse(init.body).query;
-      const cuerpo = /information_schema.tables/.test(q) ? tablas.map((table_name) => ({ table_name })) : filas;
+      const cuerpo = /information_schema\.tables/.test(q) ? tablas.map((table_name) => ({ table_name })) : filas;
       return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
     });
   }
@@ -308,5 +308,59 @@ describe('reembolsos y renovaciones', () => {
     expect(r.reembolsadas).toEqual({ n: 1, importe: 9.99 });
     expect(r.neto).toBe(19.98);
     expect(r.renovaciones).toBe(1);
+  });
+});
+
+/**
+ * Psicologo IA (la app principal) guarda cada cobro como un evento en
+ * `billing_events`. Solo son venta las altas y las renovaciones de verdad:
+ * las activaciones manuales (sin cobro de Stripe) y las pruebas se quedan fuera,
+ * y una disputa se apunta como devolucion del ultimo cobro de esa persona.
+ */
+describe('Psicologo IA principal: billing_events', () => {
+  function conBilling(filas) {
+    global.fetch = vi.fn(async (_url, init) => {
+      const q = JSON.parse(init.body).query;
+      const cuerpo = /information_schema\.tables/.test(q) ? [{ table_name: 'billing_events' }] : filas;
+      return { ok: true, status: 200, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo };
+    });
+  }
+  const enviadas = () => global.fetch.mock.calls.map((c) => JSON.parse(c[1].body).query);
+
+  it('detecta la tabla y pide solo altas y renovaciones que no sean de prueba', async () => {
+    conBilling([suscripcion({ plan_type: 'monthly', tipo: 'nueva' })]);
+    await previo(4);
+    const sql = enviadas().find((q) => q.includes('FROM billing_events be') && q.includes('AS amount'));
+    expect(sql).toContain("be.event_type IN ('subscription_creation', 'subscription_update')");
+    expect(sql).toContain('NOT be.is_test');
+    expect(sql).not.toContain("'manual_activation'");
+  });
+
+  it('las activaciones manuales y las pruebas se cuentan aparte, no como venta', async () => {
+    conBilling([suscripcion()]);
+    await previo(4);
+    const fuera = enviadas().find((q) => q.includes('FROM billing_events be') && q.includes("'manual_activation'"));
+    expect(fuera).toContain("be.is_test OR be.event_type = 'manual_activation'");
+  });
+
+  it('una disputa marca como devuelto el ultimo cobro de esa persona', async () => {
+    conBilling([suscripcion()]);
+    await previo(4);
+    const sql = enviadas().find((q) => q.includes('FROM billing_events be') && q.includes('AS amount'));
+    expect(sql).toContain("d.event_type = 'dispute'");
+    expect(sql).toContain('ORDER BY p2.created_at DESC LIMIT 1');
+  });
+
+  it('el plan anual se reconoce por la duracion', async () => {
+    conBilling([suscripcion()]);
+    await previo(4);
+    const sql = enviadas().find((q) => q.includes('FROM billing_events be') && q.includes('AS amount'));
+    expect(sql).toContain("be.subscription_duration_days >= 300 THEN 'annual'");
+  });
+
+  it('todo lo que se envia es de solo lectura', async () => {
+    conBilling([suscripcion()]);
+    await previo(4);
+    for (const q of enviadas()) expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
   });
 });

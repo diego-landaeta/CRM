@@ -195,6 +195,56 @@ const SQL_PSICO_FUERA = `
      AND (pg.estado <> 'completado' OR COALESCE(pg.metadata->>'is_test', 'false') = 'true')
    ORDER BY pg.created_at`;
 
+/*
+  PSICOLOGO IA (la app principal, no la PRO) guarda cada cobro como un EVENTO en
+  `billing_events` (importe en CENTIMOS, con `is_test`). De los ocho tipos solo
+  son dinero cobrado dos: `subscription_creation` (alta) y `subscription_update`
+  (renovacion). Quedan fuera:
+    · `manual_activation`: lo activa una persona del equipo, sin factura ni cobro
+      de Stripe detras. No es una venta; se cuenta aparte.
+    · las cancelaciones y `retention_extension`: no mueven dinero.
+  `dispute` es una devolucion forzada: lleva el importe en negativo y se apunta
+  como devolucion del ULTIMO cobro de esa persona por el mismo importe.
+*/
+const SQL_BILLING = `
+  SELECT be.id::text AS id,
+         CASE WHEN be.subscription_duration_days >= 300 THEN 'annual' ELSE 'monthly' END AS plan_type,
+         'completed' AS status,
+         (be.amount / 100.0) AS amount, be.currency,
+         COALESCE(be.stripe_invoice_id, be.stripe_checkout_session_id) AS stripe_payment_intent_id,
+         NULL::text AS stripe_subscription_id,
+         be.created_at, NULL::timestamptz AS cancelled_at,
+         CASE be.event_type WHEN 'subscription_update' THEN 'renovacion' ELSE 'nueva' END AS tipo,
+         (disp.created_at IS NOT NULL) AS reembolsado,
+         disp.created_at AS reembolsado_en,
+         COALESCE(be.stripe_customer_email, au.email) AS email,
+         NULL::text AS full_name, NULL::text AS country_name, NULL::text AS country_code
+    FROM billing_events be
+    LEFT JOIN auth.users au ON au.id = be.profile_id
+    LEFT JOIN LATERAL (
+      SELECT d.created_at FROM billing_events d
+       WHERE d.event_type = 'dispute' AND d.profile_id = be.profile_id
+         AND -d.amount = be.amount AND d.created_at >= be.created_at
+         AND be.id = (SELECT p2.id FROM billing_events p2
+                       WHERE p2.profile_id = d.profile_id AND p2.amount = -d.amount
+                         AND p2.created_at <= d.created_at AND NOT p2.is_test
+                         AND p2.event_type IN ('subscription_creation', 'subscription_update')
+                       ORDER BY p2.created_at DESC LIMIT 1)
+       LIMIT 1
+    ) disp ON TRUE
+   WHERE be.amount > 0 AND NOT be.is_test
+     AND be.event_type IN ('subscription_creation', 'subscription_update')
+   ORDER BY be.created_at`;
+const SQL_BILLING_FUERA = `
+  SELECT be.id::text AS id, (be.amount / 100.0) AS amount, be.created_at
+    FROM billing_events be
+   WHERE be.amount > 0
+     AND (be.is_test OR be.event_type = 'manual_activation')
+   ORDER BY be.created_at`;
+const SQL_BILLING_PISTAS = `
+  SELECT CASE WHEN is_test THEN 'is_test' ELSE event_type END AS clave, count(*)::int AS n, 0 AS con_intent, 0 AS importe
+    FROM billing_events WHERE amount > 0 GROUP BY 1 ORDER BY 2 DESC`;
+
 const columnasDe = (tabla) => `
   SELECT column_name, data_type FROM information_schema.columns
    WHERE table_schema = 'public' AND table_name = '${tabla}' ORDER BY ordinal_position`;
@@ -208,18 +258,20 @@ const ESQUEMAS = {
   subscriptions: { suscripciones: SQL_SUSCRIPCIONES, dePrueba: SQL_DE_PRUEBA, pistas: SQL_PISTAS_DE_TEST, columnas: SQL_COLUMNAS },
   subscription_payments: { suscripciones: SQL_NUTRI, dePrueba: SQL_NUTRI_FUERA, pistas: pistasDe('subscription_payments'), columnas: columnasDe('subscription_payments') },
   pagos: { suscripciones: SQL_PSICO, dePrueba: SQL_PSICO_FUERA, pistas: pistasDe('pagos'), columnas: columnasDe('pagos') },
+  billing_events: { suscripciones: SQL_BILLING, dePrueba: SQL_BILLING_FUERA, pistas: SQL_BILLING_PISTAS, columnas: columnasDe('billing_events') },
 };
 
 /** Que tabla de pagos tiene esta app. Sin pista clara, la de Tarot (la de siempre). */
 async function esquemaDe(token, ref) {
   const filas = await consulta(token, ref,
     `SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name IN ('subscriptions', 'subscription_payments', 'pagos')`
+      WHERE table_schema = 'public' AND table_name IN ('subscriptions', 'subscription_payments', 'pagos', 'billing_events')`
   ).catch(() => []);
   const hay = new Set((Array.isArray(filas) ? filas : []).map((x) => x.table_name));
   if (hay.has('subscriptions') || !hay.size) return ESQUEMAS.subscriptions;
   if (hay.has('subscription_payments')) return ESQUEMAS.subscription_payments;
   if (hay.has('pagos')) return ESQUEMAS.pagos;
+  if (hay.has('billing_events')) return ESQUEMAS.billing_events;
   return ESQUEMAS.subscriptions;
 }
 
