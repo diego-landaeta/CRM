@@ -11867,6 +11867,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/ventas/sin-formacion",
+  "tipo": "ruta",
+  "modulo": "sales",
+  "metodo": "GET",
+  "ruta": "/api/ventas/sin-formacion",
+  "relativa": "GET /sin-formacion",
+  "controlador": "sinFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ventas.view_equipo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ventas/por-cliente",
   "tipo": "ruta",
   "modulo": "sales",
