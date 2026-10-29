@@ -8,7 +8,7 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks'],
     requires: [],
   },
   leads: {
@@ -20,7 +20,7 @@ export const BUNDLES = {
   comercial: {
     label: 'Comercial / Ventas',
     description: 'Productos + conversiones + comisiones + tutores + matriculas + dossiers',
-    modules: ['products', 'product-categories', 'conversions', 'sales', 'commissions', 'tutores', 'matriculas', 'dossiers', 'documents'],
+    modules: ['products', 'product-categories', 'conversions', 'sales', 'commissions', 'tutores', 'consultas', 'matriculas', 'dossiers', 'documents'],
     requires: ['core'],
   },
   accounting: {
