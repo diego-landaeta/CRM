@@ -41,6 +41,7 @@ const DECLARADAS = {
   'mcp/mcp.model.js': [2, 'alcance: personas y campus de quien pregunta'],
   'notifications/notifications.service.js': [1, 'alcance: qué avisos ve cada uno'],
   'proceso/proceso.ambito.js': [1, 'alcance: qué campus entran en la cola'],
+  'sales/sales.goals.js': [1, 'alcance: el superadmin toca la meta de cualquier campus'],
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
   // Equipos (26/10/2026): quién mueve, comenta y aprueba UNA tarea es alcance,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
