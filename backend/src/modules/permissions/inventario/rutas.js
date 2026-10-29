@@ -24,6 +24,8 @@ export const TECNICOS = new Set([
   'recibirArchivoSubido', 'guardarCuerpoCrudo',
   // Subida de archivos (multer) de las consultas y del webhook de admisión.
   'conAdjuntos', 'conArchivos',
+  // El projectId de Integraciones, que sea un número (QA del 22/10, punto 5).
+  'projectIdConFormato',
 ]);
 
 /** El trozo de ruta de un `router.use('/panel', sub)`, sacado de su expresión. */

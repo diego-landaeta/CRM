@@ -5478,6 +5478,10 @@
     "claves": [
      "integrations.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5500,6 +5504,10 @@
     "claves": [
      "integrations.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5522,6 +5530,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5544,6 +5556,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5566,6 +5582,10 @@
     "claves": [
      "integrations.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
