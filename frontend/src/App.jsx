@@ -158,6 +158,8 @@ const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsC
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10): avisa a fuera de los cobros por transferencia o depósito.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
+// Conexión → Asignación de leads por actividad (CRM#513, 27/10/2026).
+const AsignacionLeadsPage = lazy(() => import('./modules/asignacion/pages/AsignacionLeadsPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
@@ -332,6 +334,8 @@ function App() {
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
+          {/* Conexión → Asignación de leads por actividad (CRM#513). Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/asignacion-leads" element={<AsignacionLeadsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/proceso" element={<Navigate to="/prospectos/proceso" replace />} />
