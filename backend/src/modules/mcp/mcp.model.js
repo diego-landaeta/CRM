@@ -41,7 +41,7 @@ export async function findUserById(id) {
  * ventas falsas no es una respuesta.
  */
 export async function proyectosDeLaPersona(user) {
-  const cols = `p.id, p.nombre, p.sociedad_emisora_id AS sociedad_id, s.razon_social AS sociedad_nombre`;
+  const cols = `p.id, p.nombre, p.type AS tipo, p.sociedad_emisora_id AS sociedad_id, s.razon_social AS sociedad_nombre`;
   if (user.role === 'superadmin') {
     const { rows } = await query(
       `SELECT ${cols}

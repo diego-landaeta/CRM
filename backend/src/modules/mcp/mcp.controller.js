@@ -5,7 +5,7 @@ import {
   diasDeVidaToken, configRotacion, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_SIN_MCP,
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
-import { HERRAMIENTAS } from './mcp.tools.js';
+import { HERRAMIENTAS, GRUPO_DE_CONSULTA } from './mcp.tools.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
 import { accesoSchema, actividadSchema, crearTokenSchema, decisionSchema, idSchema, interruptorSchema } from './mcp.validation.js';
 import * as conexiones from './mcp.conexiones.js';
@@ -54,7 +54,7 @@ export async function estado(req, res, next) {
         diasDeVida: diasDeVidaToken(),
         diasSinUso: configRotacion().diasSinUso,
         proyectos,
-        herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
+        herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion, grupo: GRUPO_DE_CONSULTA[h.nombre] || 'Otras' })),
         tokens: tokens.map((t) => ({ ...t, codigo: estados.get(t.id) || null })),
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),

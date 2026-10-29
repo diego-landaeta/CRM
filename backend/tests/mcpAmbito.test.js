@@ -160,6 +160,10 @@ const ARGS = {
   listar_formaciones: { texto: 'máster', pagina: 1, limite: 25 },
   resumen_catalogo: {},
   ver_formacion: { id: 5 },
+  moodle_cursos: { estado: 'todos', texto: 'máster', pagina: 1, limite: 25 },
+  moodle_alumnos: { texto: 'máster', estado: 'activos', limite_cursos: 10 },
+  moodle_recursos_externos: { texto: 'máster', limite_cursos: 10 },
+  moodle_estructura: {},
   cuentas_publicitarias: {},
   resumen_publicidad: { desde: '2026-09-01', hasta: '2026-09-30' },
   campanas_publicitarias: { desde: '2026-09-01', hasta: '2026-09-30', limite: 50 },
@@ -174,7 +178,10 @@ const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
     await h.ejecutar(ambito, { ...ARGS[h.nombre], ...extra }).catch((e) => {
       // ver_formacion, con la base de mentira, recibe una fila sin campus: la
       // rechaza por ajena, que es justo lo que tiene que hacer.
-      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN'
+      // Y las de Moodle, con la base de mentira, no encuentran ninguna
+      // credencial: contestan «sin Moodle configurado» (no hay Moodle de
+      // verdad; lo suyo se prueba en mcpMoodle.test.js).
+      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN' && e.code !== 'MOODLE_NO_DISPONIBLE'
         && !(h.nombre === 'ver_formacion' && e.code === 'MCP_FUERA_DE_AMBITO')) throw e;
     });
   }

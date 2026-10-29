@@ -157,6 +157,8 @@ const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/M
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
+const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
+const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -335,6 +337,9 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           {/* Conexión → MCP. Quién puede usarlo lo decide el servidor; la página lo dice. */}
           <Route path="/conexion/mcp" element={<McpPage />} />
+          {/* Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus. Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/moodle" element={<MoodlePage />} />
+          <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
           {/* Conexión → Conectores (WordPress, tiendas, APIs). Estaba en Captación
               hasta el 29/09; la dirección vieja lleva a la nueva. */}
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />

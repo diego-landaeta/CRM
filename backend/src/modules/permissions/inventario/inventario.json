@@ -9065,6 +9065,204 @@
   "puertas": []
  },
  {
+  "id": "GET /api/moodle/campus",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus",
+  "relativa": "GET /campus",
+  "controlador": "campus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos",
+  "relativa": "GET /cursos",
+  "controlador": "cursos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/revision",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/revision",
+  "relativa": "GET /campus/:id/revision",
+  "controlador": "revision",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/categorias",
+  "relativa": "GET /categorias",
+  "controlador": "categorias",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/alumnos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/alumnos",
+  "relativa": "GET /cursos/:id/alumnos",
+  "controlador": "alumnos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/estructura",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/estructura",
+  "relativa": "GET /cursos/:id/estructura",
+  "controlador": "estructura",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/recursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/recursos",
+  "relativa": "GET /cursos/:id/recursos",
+  "controlador": "recursos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/moodle/campus/:id/conexion",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "POST",
+  "ruta": "/api/moodle/campus/:id/conexion",
+  "relativa": "POST /campus/:id/conexion",
+  "controlador": "conectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/moodle/campus/:id/conexion",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "DELETE",
+  "ruta": "/api/moodle/campus/:id/conexion",
+  "relativa": "DELETE /campus/:id/conexion",
+  "controlador": "desconectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/notifications/",
   "tipo": "ruta",
   "modulo": "notifications",

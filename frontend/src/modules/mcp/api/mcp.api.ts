@@ -65,7 +65,10 @@ export interface McpHerramienta {
   nombre: string;
   titulo: string;
   descripcion: string;
+  /** El apartado de «Consultas disponibles» en que se enseña. */
+  grupo: string;
 }
+
 
 export interface McpEstado {
   tieneAcceso: boolean;
