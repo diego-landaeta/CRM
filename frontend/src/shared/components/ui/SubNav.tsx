@@ -28,10 +28,7 @@ export default function SubNav({ tabs, sectionLabel, sectionIcon: Icon }: Props)
       )}
     >
       {sectionLabel && (
-        // Solo desde `sm`: en el móvil parecía una pestaña más («CLIENTES» no hacía
-        // nada al pulsarlo) y quitaba sitio a las de verdad. El nombre de la
-        // pantalla ya sale en la barra de arriba.
-        <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wide mr-3 flex-shrink-0">
+        <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wide mr-3 flex-shrink-0">
           {Icon && <Icon size={14} weight="bold" />}
           {sectionLabel}
         </span>

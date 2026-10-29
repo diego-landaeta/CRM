@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { SIN_SUBMENU } from './FinanzasLayout';
+import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -85,8 +84,6 @@ function Tipo({ tipo, compartida }: { tipo: string; compartida?: boolean }) {
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
-  // Sin el submenú de Finanzas (Ventas), «Análisis de ventas» solo se alcanza desde aquí.
-  const sinSubmenu = SIN_SUBMENU.includes(useLocation().pathname.replace(/\/$/, ''));
   const { activeProject, activeIssuer, activeIssuerId, projects, switchProject, switchIssuer } = useProjectContext();
   // El ambito: un proyecto, una sociedad entera o todos.
   //
@@ -278,8 +275,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         /* #79 punto 3: estos botones iban en un <div> suelto que caía DEBAJO del
            SubNav de Finanzas (dos barras). Ahora van como acciones del PageHeader,
            que las sube a la barra con el título. En Ventas el SubNav ya no sale
-           (ver SIN_SUBMENU en FinanzasLayout), así que «Análisis» va aquí; en
-           Ingresos sigue el SubNav y el botón sobraría. */
+           (ver SIN_SUBMENU en FinanzasLayout) y «Análisis de ventas» se alcanza
+           desde el botón «Análisis». */
         actions={(
           <>
         {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
@@ -293,15 +290,13 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <GraduationCap size={16} weight="duotone" className="text-primary" />
           Tutoriales
         </button>
-        {sinSubmenu && (
-          <button
-            type="button"
-            onClick={() => navigate('/finanzas/ventas-analisis')}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
-          >
-            Análisis
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => navigate('/finanzas/ventas-analisis')}
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+        >
+          Análisis
+        </button>
         {activeProject?.id && ((puedeSinGestora || puedeDeOtra) ? (
           <div ref={menuVentaRef} className="relative self-start sm:self-auto">
             <button

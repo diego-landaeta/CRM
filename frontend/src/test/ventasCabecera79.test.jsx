@@ -5,10 +5,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 /*
   #79 punto 3: la cabecera de Ventas, pintada de verdad.
 
-  Sin el submenú de Finanzas, «Análisis de ventas» solo se alcanza desde el
-  botón «Análisis» de la cabecera de Ventas; en Ingresos sigue el submenú y el
-  botón sobraría. Y el menú «Nueva venta», ahora en la cabecera, se cierra al
-  pulsar fuera (en la cabecera, una capa `fixed` quedaba encerrada por el
+  Sin el submenú de Finanzas, «Análisis de ventas» se alcanza desde el botón
+  «Análisis» de la cabecera de Ventas. Y el menú «Nueva venta», ahora en la
+  cabecera, se cierra al pulsar fuera (en la cabecera, una capa `fixed` quedaba encerrada por el
   `backdrop-blur` del Topbar y el resto de la pantalla no lo cerraba).
 */
 
@@ -43,11 +42,6 @@ describe('la cabecera de Ventas (#79 punto 3)', () => {
     abrir('/finanzas/ventas');
     fireEvent.click(screen.getByRole('button', { name: 'Análisis' }));
     expect(screen.getByText('pantalla de análisis')).toBeInTheDocument();
-  });
-
-  it('en Ingresos no sale: allí sigue el submenú de Finanzas', () => {
-    abrir('/finanzas/ingresos');
-    expect(screen.queryByRole('button', { name: 'Análisis' })).toBeNull();
   });
 
   it('el menú «Nueva venta» se cierra al pulsar fuera', () => {
