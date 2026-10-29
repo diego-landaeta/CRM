@@ -251,6 +251,8 @@ export async function porCaducarSinAviso(dias) {
        FROM mcp_tokens t JOIN users u ON u.id = t.user_id AND u.active
        LEFT JOIN project_connectors c ON c.id = t.connector_id
       WHERE t.revoked_at IS NULL AND t.aviso_caducidad_at IS NULL
+        -- A un tutor no se le escribe (freno de correos a tutores) ni usa el MCP (#262).
+        AND u.role <> 'tutor'
         AND t.expires_at > NOW()
         AND t.expires_at <= NOW() + make_interval(days => $1::int)
       GROUP BY u.id, u.nombre, u.email`,
