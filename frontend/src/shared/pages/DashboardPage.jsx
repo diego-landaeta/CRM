@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import ResumenDeAyerYHoy from '@/shared/components/dashboard/ResumenDeAyerYHoy';
+import ActividadDeHoy from '@/shared/components/dashboard/ActividadDeHoy';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
@@ -241,6 +242,9 @@ export default function DashboardPage() {
 
       {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
       <ResumenDeAyerYHoy projectIds={idsDelAmbito} />
+
+      {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
+      <ActividadDeHoy projectId={proyectoReal} issuerId={activeIssuerId} mostrarProyecto={!proyectoReal} />
 
       {/* SECCION HOY */}
       {today && (

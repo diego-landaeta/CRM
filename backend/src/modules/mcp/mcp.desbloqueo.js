@@ -245,7 +245,9 @@ export async function desbloquearDesdePanel({ userId, tokenId }) {
   if (t.bloqueado) return { resultado: 'ya_bloqueada', hasta: t.bloqueado_hasta };
   const cuantas = await conexiones.desbloquearAutorizadasDeLaUrl(tokenId);
   if (!cuantas) return { resultado: 'sin_autorizadas' };
-  await query(`UPDATE mcp_tokens SET fallos_codigo = 0 WHERE id = $1`, [tokenId]);
+  // NO se pone `fallos_codigo` a 0 (#262): el contador está para parar a quien prueba
+  // códigos, y un botón que lo borrara sería otra forma de saltárselo. Solo lo vacía
+  // un código bueno.
   return { resultado: 'ok', cuantas };
 }
 

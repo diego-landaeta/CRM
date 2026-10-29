@@ -408,7 +408,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
                 </button>
               )}
               <button onClick={() => onEstado(m, 'rechazada')}
-                className="flex items-center gap-1 h-9 px-3 rounded-lg bg-destructive hover:bg-destructive text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-destructive/40">
+                className="flex items-center gap-1 h-9 px-3 rounded-lg bg-destructive hover:bg-destructive/90 text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-destructive/40">
                 <XCircle size={14} weight="bold" /> Rechazar
               </button>
             </footer>

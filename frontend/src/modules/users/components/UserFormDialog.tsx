@@ -270,7 +270,7 @@ export default function UserFormDialog({
             ) : canChangeEmail ? (
               <div>
                 <Field label="Email" required htmlFor="user-email"
-                  hint="Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.">
+                  hint="Es con lo que entra: al cambiarlo, con el viejo ya no podrá entrar; una sesión que ya tenga abierta puede seguir hasta 8 horas. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.">
                   <input autoComplete="off"
                     id="user-email"
                     value={email}
@@ -424,7 +424,7 @@ export default function UserFormDialog({
 
             {esEdicion && canResetPassword && (
               <Field label="Reiniciar contraseña" htmlFor="user-pass" className="border-t border-border pt-3 mt-1"
-                hint="Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla se cierran sus sesiones activas.">
+                hint="Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla no podrá entrar con la anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     id="user-pass"
