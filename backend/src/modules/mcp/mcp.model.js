@@ -41,7 +41,7 @@ export async function findUserById(id) {
  * ventas falsas no es una respuesta.
  */
 export async function proyectosDeLaPersona(user) {
-  const cols = `p.id, p.nombre, p.sociedad_emisora_id AS sociedad_id, s.razon_social AS sociedad_nombre`;
+  const cols = `p.id, p.nombre, p.type AS tipo, p.sociedad_emisora_id AS sociedad_id, s.razon_social AS sociedad_nombre`;
   if (user.role === 'superadmin') {
     const { rows } = await query(
       `SELECT ${cols}
@@ -161,13 +161,19 @@ export async function tokensDeConectores(userId, connectorIds) {
 
 /**
  * Todas las URLs vivas de la persona (sueltas y de conexiones), para la línea
- * de estado de «Código para Claude» (#192).
+ * de estado de cada URL (#192).
  */
 export async function urlsVivasDeLaPersona(userId) {
   const { rows } = await query(
-    `SELECT t.id, COALESCE(c.label, t.nombre) AS nombre
+    // `ambito` (#260): dónde está la conexión, para decir «cambia arriba a X para verla».
+    `SELECT t.id, COALESCE(c.label, t.nombre) AS nombre,
+            CASE c.alcance WHEN 'sistema' THEN 'Todo el sistema'
+                           WHEN 'empresa' THEN COALESCE(s.razon_social, 'una empresa')
+                           ELSE p.nombre END AS ambito
        FROM mcp_tokens t
        LEFT JOIN project_connectors c ON c.id = t.connector_id
+       LEFT JOIN projects p ON p.id = c.project_id
+       LEFT JOIN invoice_issuers s ON s.id = c.issuer_id
       WHERE t.user_id = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
       ORDER BY t.created_at`,
     [userId]
@@ -346,12 +352,45 @@ const paginado = (pagina = 1, limite = 25) => ({ limit: limite, offset: (pagina 
 
 const fechaLocal = (col) => `(${col} AT TIME ZONE '${TZ}')::date`;
 
+// ─── Equipo (#325) ────────────────────────────────────────────────────────
+
+/**
+ * Quién hay en los campus de la persona, con su rol y sus campus. SIN correos
+ * ni teléfonos: solo el nombre, el rol y a qué campus pertenece. Una persona de
+ * varios campus sale una vez, con los suyos dentro de los pedidos.
+ */
+export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.role AS rol, u.active AS activo,
+            array_agg(DISTINCT p.nombre ORDER BY p.nombre) AS campus
+       FROM users u
+       JOIN user_projects up ON up.user_id = u.id AND up.active
+       JOIN projects p ON p.id = up.project_id
+      WHERE up.project_id = ANY($1::int[]) ${incluirInactivos ? '' : 'AND u.active'}
+      GROUP BY u.id, u.nombre, u.role, u.active
+      ORDER BY u.role, u.nombre`,
+    [projectIds]
+  );
+  const porRol = {};
+  for (const r of rows) porRol[r.rol] = (porRol[r.rol] || 0) + 1;
+  return { total: rows.length, por_rol: porRol, personas: rows };
+}
+
 // ─── Prospectos ───────────────────────────────────────────────────────────
 
-function filtrosProspectos({ projectIds, responsableId, estado, texto, desde, hasta, canal }) {
+function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   if (responsableId) f.add('l.responsable_id = ?', responsableId);
+  // Por gestora y por programa (#325). La gestora la pide quien ve todo el campus;
+  // a quien ve solo lo suyo ya se le impone `responsableId` arriba.
+  if (gestoraId) f.add('l.responsable_id = ?', gestoraId);
+  if (programa) {
+    f.add(`(EXISTS (SELECT 1 FROM products fp WHERE fp.id = l.producto_interes_id AND ${SIN_TILDES('fp.nombre')} LIKE ?)
+            OR EXISTS (SELECT 1 FROM lead_products lp JOIN products fp2 ON fp2.id = lp.product_id
+                        WHERE lp.lead_id = l.id AND ${SIN_TILDES('fp2.nombre')} LIKE ?))`,
+    `%${comoTexto(programa)}%`, `%${comoTexto(programa)}%`);
+  }
   if (estado) f.add('l.status::text = ?', estado);
   if (canal) f.add('EXISTS (SELECT 1 FROM lead_utms cu WHERE cu.lead_id = l.id AND cu.canal_detectado::text = ?)', canal);
   if (texto) f.add(`(l.nombre ILIKE ? OR l.email ILIKE ? OR l.telefono ILIKE ?)`, `%${texto}%`, `%${texto}%`, `%${texto}%`);
@@ -368,7 +407,13 @@ export async function buscarProspectos(filtros) {
             l.fecha_solicitud, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             lu.canal_detectado AS canal,
-            EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente
+            EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente,
+            -- Lo que hace falta para decidir a quién llamar (#325): cuándo se le tocó por última vez,
+            -- cuándo toca la próxima, en qué paso del proceso va y cuánto ha comprado.
+            (SELECT max(li.fecha) FROM lead_interactions li WHERE li.lead_id = l.id AND li.tipo <> 'nota') AS ultimo_contacto,
+            (SELECT min(ls.fecha_prevista) FROM lead_steps ls WHERE ls.lead_id = l.id AND ls.estado = 'pendiente') AS proximo_contacto,
+            (SELECT ls.clave FROM lead_steps ls WHERE ls.lead_id = l.id AND ls.estado = 'pendiente' ORDER BY ls.orden LIMIT 1) AS paso_actual,
+            (SELECT COALESCE(SUM(c.importe_total), 0) FROM conversions c WHERE c.lead_id = l.id AND NOT COALESCE(c.es_mensualidad, false)) AS valor_vendido
        FROM leads l
        JOIN projects p ON p.id = l.project_id
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
@@ -406,7 +451,7 @@ export async function verProspecto({ id, projectIds, responsableId }) {
   const prospecto = rows[0];
   if (!prospecto) return null;
 
-  const [{ rows: interacciones }, { rows: ventas }] = await Promise.all([
+  const [{ rows: interacciones }, { rows: ventas }, { rows: pasos }, { rows: recordatorios }, { rows: programas }] = await Promise.all([
     query(
       `SELECT li.tipo, li.nota, li.fecha, u.nombre AS por
          FROM lead_interactions li
@@ -423,8 +468,34 @@ export async function verProspecto({ id, projectIds, responsableId }) {
         ORDER BY c.fecha_conversion DESC`,
       [id, projectIds]
     ),
+    // El proceso comercial de esta persona (#325): en qué paso va y cuándo toca el siguiente.
+    query(
+      `SELECT ls.orden, ls.clave, ls.estado, ls.fecha_prevista
+         FROM lead_steps ls WHERE ls.lead_id = $1 ORDER BY ls.orden`,
+      [id]
+    ),
+    query(
+      `SELECT lr.fecha_recordatorio, lr.nota
+         FROM lead_reminders lr WHERE lr.lead_id = $1 AND NOT lr.completado
+        ORDER BY lr.fecha_recordatorio LIMIT 10`,
+      [id]
+    ),
+    query(
+      `SELECT pr.id, pr.nombre FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
+        WHERE lp.lead_id = $1 ORDER BY pr.nombre LIMIT 20`,
+      [id]
+    ),
   ]);
-  return { ...prospecto, ultimas_interacciones: interacciones, ventas };
+  const pendiente = pasos.find((p) => p.estado === 'pendiente') || null;
+  return {
+    ...prospecto,
+    ultimas_interacciones: interacciones,
+    ventas,
+    paso_actual: pendiente ? { orden: pendiente.orden, clave: pendiente.clave, fecha_prevista: pendiente.fecha_prevista } : null,
+    pasos_del_proceso: pasos,
+    recordatorios_pendientes: recordatorios,
+    programas_de_interes: programas,
+  };
 }
 
 export async function resumenProspectos(filtros) {
@@ -452,13 +523,25 @@ export async function resumenProspectos(filtros) {
 
 const COBRADO = `COALESCE((SELECT SUM(cp.importe) FROM conversion_payments cp WHERE cp.conversion_id = c.id), 0)`;
 
-function filtrosVentas({ projectIds, responsableId, desde, hasta, texto, pendiente }) {
+function filtrosVentas({ projectIds, responsableId, vendedoraId, facturada, desde, hasta, texto, pendiente }) {
   const f = condiciones('c.project_id', projectIds);
   // Las mensualidades son cuotas de una venta, no ventas: la pantalla de
   // Ventas tampoco las cuenta.
   f.cond.push('NOT COALESCE(c.es_mensualidad, false)');
   if (responsableId) {
     f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', responsableId);
+  }
+  // Una vendedora concreta (#325). Solo la pide quien ve todo el campus: a una gestora
+  // se le impone ella misma arriba (responsableId) y esto no la ensancha.
+  if (vendedoraId) {
+    f.add('EXISTS (SELECT 1 FROM conversion_reparto r2 WHERE r2.conversion_id = c.id AND r2.vendedora_id = ?)', vendedoraId);
+  }
+  // Con factura: la misma regla que «Pendientes de facturar» (la factura puede colgar de la venta o de un cobro suyo;
+  // ni proformas ni canceladas).
+  if (facturada === true || facturada === false) {
+    f.cond.push(`${facturada ? '' : 'NOT '}EXISTS (SELECT 1 FROM invoices i
+       WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+         AND (i.conversion_id = c.id OR i.payment_id IN (SELECT cp2.id FROM conversion_payments cp2 WHERE cp2.conversion_id = c.id)))`);
   }
   if (desde) f.add('c.fecha_conversion >= ?::date', desde);
   if (hasta) f.add('c.fecha_conversion <= ?::date', hasta);
@@ -759,7 +842,8 @@ export async function comisionesDeTutores({ projectIds, periodo = null, desde = 
   const suma = (k) => Math.round(filas.reduce((t, r) => t + Number(r[k] || 0), 0) * 100) / 100;
   return {
     periodo: periodo || (de || a ? `${de || 'el principio'} a ${a || 'hoy'}` : 'todos los meses'),
-    totales: { generado: suma('generado'), por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
+    // La base de cálculo, en los totales: antes había que sumarla fila a fila (#325).
+    totales: { base: suma('base'), generado: suma('generado'), por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
     filas,
   };
 }
@@ -809,14 +893,15 @@ const CON_PRECIO = (col) => `(${col} IS NOT NULL AND ${col} > 0)`;
 /** Por encima de esto, sin texto, se pide acotar: el catálogo entero no cabe en una respuesta. */
 export const AVISO_FORMACIONES = 100;
 
-export async function listarFormaciones({ projectIds, texto, pagina = 1, limite = 25 }) {
+export async function listarFormaciones({ projectIds, texto, incluirInactivas = false, pagina = 1, limite = 25 }) {
   const f = condiciones('p.project_id', projectIds);
-  f.cond.push('p.active = true');
+  // Por defecto solo las activas, como el catálogo; con `incluir_inactivas` también las dadas de baja (#325).
+  if (!incluirInactivas) f.cond.push('p.active = true');
   if (texto) f.add(`${SIN_TILDES('p.nombre')} LIKE ?`, `%${comoTexto(texto)}%`);
   const { limit, offset } = paginado(pagina, limite);
   const { rows } = await query(
     `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
-            p.precio, p.moneda, p.url_info AS enlace, p.modalidad
+            p.precio, p.moneda, p.url_info AS enlace, p.modalidad, p.sku, p.active AS activa
        FROM products p
        JOIN projects pr ON pr.id = p.project_id
       ${f.where()}
