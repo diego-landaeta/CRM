@@ -53,6 +53,8 @@ import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
 import connectorsModule from './modules/connectors/index.js';
 import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
+import asignacionModule from './modules/asignacion/index.js';
+import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
@@ -92,6 +94,7 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
@@ -134,6 +137,8 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, express.json({ 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
 app.use(cookieParser());
+// Lo que hace una gestora y no guarda su autor, para «activa en los últimos 15 min» (CRM#513).
+app.use(registrarActividad);
 
 // API root
 app.get('/api', (_req, res) => {
@@ -281,6 +286,8 @@ const ALL_MODULES = [
   // Conexión → «Webhook de transferencias» (Diego, 15/10): avisa a fuera de
   // los cobros por transferencia o depósito bancario. Migración 206.
   { name: 'webhooks-salientes', mod: webhooksSalientesModule },
+  // Conexión → «Asignación de leads» por actividad (CRM#513, 27/10/2026). Migración 230.
+  { name: 'asignacion', mod: asignacionModule },
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
@@ -445,6 +452,7 @@ if (process.env.NODE_ENV !== 'test') {
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();
+    startAsignacionScheduler();
     if (tareasActivas()) startTasksDailySummaryScheduler();
     // El resumen de la tarde y los correos de cambio de estado (26/10/2026).
     if (tareasActivas()) startTareasResumenScheduler();
