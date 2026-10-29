@@ -45,6 +45,7 @@ import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
 import emailTemplatesModule from './modules/email-templates/index.js';
@@ -62,6 +63,7 @@ import registroModule from './modules/registro/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
@@ -279,6 +281,7 @@ const ALL_MODULES = [
   { name: 'audiences', mod: audiencesModule },
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'ia-analisis', mod: iaAnalisisModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
   { name: 'email-templates', mod: emailTemplatesModule },
@@ -304,6 +307,7 @@ const ALL_MODULES = [
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
+  { name: 'soporte', mod: soporteModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
