@@ -16853,6 +16853,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/woocommerce/orders",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "GET",
+  "ruta": "/api/woocommerce/orders",
+  "relativa": "GET /orders",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.pedidos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/woocommerce/sync/orders",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "POST",
+  "ruta": "/api/woocommerce/sync/orders",
+  "relativa": "POST /sync/orders",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.pedidos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/woocommerce/orders-config",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "PUT",
+  "ruta": "/api/woocommerce/orders-config",
+  "relativa": "PUT /orders-config",
+  "controlador": "configurar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.pedidos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/woocommerce/webhook-secret",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "POST",
+  "ruta": "/api/woocommerce/webhook-secret",
+  "relativa": "POST /webhook-secret",
+  "controlador": "secretoDelAviso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.pedidos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/invoices/ · invoices.rectificativa",
   "tipo": "condicion",
   "modulo": "invoices",
