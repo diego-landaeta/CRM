@@ -152,6 +152,7 @@ const ARGS = {
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
+  equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
   listar_tutores: { texto: 'ana', incluir_retirados: true },
   comisiones_tutores: { desde: '2026-08', hasta: '2026-09', tutor_id: 3 },
