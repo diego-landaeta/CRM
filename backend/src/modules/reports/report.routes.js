@@ -29,6 +29,7 @@ router.get('/panel', puede('reports.mis_informes'), ctrl.panel);
 router.get('/seguimiento', puede('reports.mis_informes'), ctrl.seguimiento);
 router.get('/paises', puede('reports.mis_informes'), ctrl.paises);
 router.get('/formaciones', puede('reports.mis_informes'), ctrl.formaciones);
+router.get('/canales', puede('reports.mis_informes'), ctrl.canales);
 router.get('/detalle', puede('reports.mis_informes'), ctrl.detalle);
 
 // La tasa de cierre, con una sola definicion para todo el CRM.

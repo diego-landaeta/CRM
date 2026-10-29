@@ -4,6 +4,7 @@ import { useProjectContext } from './contexts/ProjectContext';
 import { tituloDeRuta } from './shared/lib/rutasTitulos';
 
 
+import { SOLO_EN_PRUEBAS } from './shared/lib/soloEnPruebas';
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
 const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/');
 const IS_TESTEO2_BASE = APP_BASE_URL.startsWith('/testeo2/');
@@ -85,6 +86,9 @@ const CorreosPage = lazy(() => import('./modules/correos/pages/CorreosPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
+// Preguntarle a los datos en lenguaje natural (#30). Solo en pruebas hasta que Diego
+// ponga la clave y el tope de gasto (#22).
+const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
@@ -131,6 +135,7 @@ const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetail
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const VentasSinFormacionPage = lazy(() => import('./modules/sales/pages/VentasSinFormacionPage'));
 const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
@@ -152,6 +157,8 @@ const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/M
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
+const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
+const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
 const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
@@ -301,6 +308,7 @@ function App() {
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
             <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
+            <Route path="ventas-sin-formacion" element={<VentasSinFormacionPage />} />
             <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             <Route path="ingresos" element={<IncomePage />} />
@@ -329,6 +337,9 @@ function App() {
           <Route path="/configuracion/claves" element={<ClavesPage />} />
           {/* Conexión → MCP. Quién puede usarlo lo decide el servidor; la página lo dice. */}
           <Route path="/conexion/mcp" element={<McpPage />} />
+          {/* Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus. Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/moodle" element={<MoodlePage />} />
+          <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
           {/* Conexión → Conectores (WordPress, tiendas, APIs). Estaba en Captación
               hasta el 29/09; la dirección vieja lleva a la nueva. */}
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
@@ -345,6 +356,7 @@ function App() {
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
           <Route path="/informes/ia" element={<ReportsIAPage />} />
+          <Route path="/informes/preguntar" element={SOLO_EN_PRUEBAS ? <PreguntarPage /> : <Navigate to="/informes" replace />} />
           <Route path="/informes/feedback" element={<FeedbackPanelPage />} />
           <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />

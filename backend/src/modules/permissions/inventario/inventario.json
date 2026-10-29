@@ -536,6 +536,18 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/forgot-password",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/forgot-password",
+  "relativa": "POST /forgot-password",
+  "controlador": "forgotPassword",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "POST /api/auth/set-password",
   "tipo": "ruta",
   "modulo": "auth",
@@ -3428,6 +3440,134 @@
   "puertas": []
  },
  {
+  "id": "GET /api/cursos-pendientes/resumen",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "GET",
+  "ruta": "/api/cursos-pendientes/resumen",
+  "relativa": "GET /resumen",
+  "controlador": "resumen",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cursos-pendientes/",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "GET",
+  "ruta": "/api/cursos-pendientes/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cursos-pendientes/",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "POST",
+  "ruta": "/api/cursos-pendientes/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cursos-pendientes/:id",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "GET",
+  "ruta": "/api/cursos-pendientes/:id",
+  "relativa": "GET /:id",
+  "controlador": "detalle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/cursos-pendientes/:id",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "PATCH",
+  "ruta": "/api/cursos-pendientes/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "modificar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cursos-pendientes/:id/publicar",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "POST",
+  "ruta": "/api/cursos-pendientes/:id/publicar",
+  "relativa": "POST /:id/publicar",
+  "controlador": "publicar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cursos-pendientes/:id/alumnas",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "POST",
+  "ruta": "/api/cursos-pendientes/:id/alumnas",
+  "relativa": "POST /:id/alumnas",
+  "controlador": "sumarAlumna",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "PATCH",
+  "ruta": "/api/cursos-pendientes/:id/alumnas/:alumnaId",
+  "relativa": "PATCH /:id/alumnas/:alumnaId",
+  "controlador": "marcarAlumna",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/documents/",
   "tipo": "ruta",
   "modulo": "documents",
@@ -5367,6 +5507,28 @@
     "tipo": "puede",
     "claves": [
      "forms.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/ia-analisis/preguntar",
+  "tipo": "ruta",
+  "modulo": "ia-analisis",
+  "metodo": "POST",
+  "ruta": "/api/ia-analisis/preguntar",
+  "relativa": "POST /preguntar",
+  "controlador": "preguntarCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.generar"
     ]
    }
   ],
@@ -7897,12 +8059,12 @@
   "puertas": []
  },
  {
-  "id": "POST /api/mcp/panel/codigo",
+  "id": "POST /api/mcp/panel/tokens/:id/codigo",
   "tipo": "ruta",
   "modulo": "mcp",
   "metodo": "POST",
-  "ruta": "/api/mcp/panel/codigo",
-  "relativa": "POST /panel/codigo",
+  "ruta": "/api/mcp/panel/tokens/:id/codigo",
+  "relativa": "POST /panel/tokens/:id/codigo",
   "controlador": "crearCodigo",
   "publica": false,
   "guardias": [
@@ -8898,6 +9060,204 @@
    {
     "tipo": "alcance",
     "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus",
+  "relativa": "GET /campus",
+  "controlador": "campus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos",
+  "relativa": "GET /cursos",
+  "controlador": "cursos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/revision",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/revision",
+  "relativa": "GET /campus/:id/revision",
+  "controlador": "revision",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/categorias",
+  "relativa": "GET /categorias",
+  "controlador": "categorias",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/alumnos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/alumnos",
+  "relativa": "GET /cursos/:id/alumnos",
+  "controlador": "alumnos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/estructura",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/estructura",
+  "relativa": "GET /cursos/:id/estructura",
+  "controlador": "estructura",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/cursos/:id/recursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/cursos/:id/recursos",
+  "relativa": "GET /cursos/:id/recursos",
+  "controlador": "recursos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/moodle/campus/:id/conexion",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "POST",
+  "ruta": "/api/moodle/campus/:id/conexion",
+  "relativa": "POST /campus/:id/conexion",
+  "controlador": "conectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/moodle/campus/:id/conexion",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "DELETE",
+  "ruta": "/api/moodle/campus/:id/conexion",
+  "relativa": "DELETE /campus/:id/conexion",
+  "controlador": "desconectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
    }
   ],
   "puertas": []
@@ -11569,6 +11929,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/canales",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/canales",
+  "relativa": "GET /canales",
+  "controlador": "canales",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/detalle",
   "tipo": "ruta",
   "modulo": "reports",
@@ -11833,6 +12215,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/ventas/sin-formacion",
+  "tipo": "ruta",
+  "modulo": "sales",
+  "metodo": "GET",
+  "ruta": "/api/ventas/sin-formacion",
+  "relativa": "GET /sin-formacion",
+  "controlador": "sinFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ventas.view_equipo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ventas/por-cliente",
   "tipo": "ruta",
   "modulo": "sales",
@@ -12048,6 +12452,150 @@
     "claves": [
      "ventas.metas"
     ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/soporte/",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "POST",
+  "ruta": "/api/soporte/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/tiempos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/tiempos",
+  "relativa": "GET /tiempos",
+  "controlador": "tiempos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/adjuntos/:adjuntoId",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/adjuntos/:adjuntoId",
+  "relativa": "GET /adjuntos/:adjuntoId",
+  "controlador": "descargarAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/:id",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/:id",
+  "relativa": "GET /:id",
+  "controlador": "porId",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/soporte/:id/mensajes",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "POST",
+  "ruta": "/api/soporte/:id/mensajes",
+  "relativa": "POST /:id/mensajes",
+  "controlador": "responder",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/soporte/:id/estado",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "PATCH",
+  "ruta": "/api/soporte/:id/estado",
+  "relativa": "PATCH /:id/estado",
+  "controlador": "cambiarEstado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/soporte/:id/adjuntos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "POST",
+  "ruta": "/api/soporte/:id/adjuntos",
+  "relativa": "POST /:id/adjuntos",
+  "controlador": "subirAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/soporte/:id",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "DELETE",
+  "ruta": "/api/soporte/:id",
+  "relativa": "DELETE /:id",
+  "controlador": "borrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
    }
   ],
   "puertas": []
@@ -15290,6 +15838,29 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.forma_avisos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/whatsapp/voz-o-texto",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/voz-o-texto",
+  "relativa": "GET /voz-o-texto",
+  "controlador": "vozOTextoCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "whatsapp.usar",
+     "whatsapp.supervisar"
     ]
    }
   ],

@@ -77,6 +77,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -231,7 +232,7 @@ export const NAV_SECTIONS = [
     icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Vendidos sin fecha', icon: Clock, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
+      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Por campus, con tutora y fecha', icon: Clock, roles: ['superadmin', 'admin', 'gestor', 'tutor'], module: 'products', permiso: 'products.view' },
       { label: 'WooCommerce', to: '/productos/woocommerce', detail: 'Sincronía de tienda', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce', permiso: 'woocommerce.view' },
       // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
       // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
@@ -284,6 +285,10 @@ export const NAV_SECTIONS = [
       // Por que no compran: enviados, respondidos y motivos (#170).
       { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
       { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'reports_ia.view' },
+      // Preguntarle a los datos (#30): solo en pruebas hasta que haya clave y tope (#22).
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+        : []),
       // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
       // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
       // probado—, pero no se ofrece en el menu: enseñar una puerta que no
@@ -324,6 +329,8 @@ export const NAV_SECTIONS = [
     icon: PlugsConnected,
     items: [
       { label: 'MCP', to: '/conexion/mcp', detail: 'Consultar desde Claude', icon: Robot, accesoMcp: true },
+      // #335: los cursos, alumnos y recursos de los Moodle de cada campus.
+      { label: 'Moodle', to: '/conexion/moodle', detail: 'Cursos y alumnos de cada campus', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.view' },
       { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors', permiso: 'connectors.view' },
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
