@@ -60,6 +60,7 @@ import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
+import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
@@ -298,6 +299,8 @@ const ALL_MODULES = [
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  // «Qué ha pasado hoy», para cada gestora con lo suyo (#13). El Registro es para admin.
+  { name: 'actividad', mod: actividadModule },
   // Cursos pendientes para las tutoras, por campus (#336).
   { name: 'cursos-pendientes', mod: cursosPendientesModule },
   { name: 'correos', mod: correosModule },

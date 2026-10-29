@@ -198,6 +198,22 @@
   "puertas": []
  },
  {
+  "id": "GET /api/actividad/",
+  "tipo": "ruta",
+  "modulo": "actividad",
+  "metodo": "GET",
+  "ruta": "/api/actividad/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/asignacion/entrada",
   "tipo": "ruta",
   "modulo": "asignacion",
