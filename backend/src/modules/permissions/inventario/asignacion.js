@@ -34,6 +34,11 @@ export const PROPIAS = {
   // La ficha del tutor: la suya, cualquier tutor; la de otro, con «Gestionar
   // colaboraciones» (condición `tutores.ficha_ajena`).
   tutores: ['GET /:id', 'PATCH /:id/perfil', 'GET /:id/campus'],
+  // Soporte (#38): cualquiera con sesión abre un ticket y ve LOS SUYOS; quien administra (admin, soporte,
+  // superadmin) responde, cambia el estado y ve los de su alcance. Lo recorta el controlador (`alcanceDe`),
+  // como en Consultas: no hay una clave de catálogo por detrás, el comportamiento es el de antes de #423.
+  soporte: ['GET /', 'POST /', 'GET /tiempos', 'GET /adjuntos/:adjuntoId', 'GET /:id', 'POST /:id/mensajes',
+    'PATCH /:id/estado', 'POST /:id/adjuntos', 'DELETE /:id'],
   users: ['POST /:id/avatar', 'DELETE /:id/avatar', 'GET /:id/views', 'PATCH /:id/views', 'GET /mis-avisos', 'PATCH /mis-avisos'],
   whatsapp: ['GET /usuarios', 'GET /sonando'],
 };

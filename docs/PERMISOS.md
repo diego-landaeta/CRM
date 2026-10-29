@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-754 rutas en 59 módulos, y 28 acciones con condición dentro de una ruta.
+763 rutas en 60 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -837,6 +837,20 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | setGoal | `POST /api/ventas/goals` | sesión | superadmin, admin, gestor, soporte, project_manager | `ventas.metas` |
 | deleteGoal | `DELETE /api/ventas/goals/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `ventas.metas` |
 | create · registrar una venta que no es de nadie («sin gestora») | `POST /api/ventas/` | cuando registrar una venta que no es de nadie («sin gestora»): a mano, sales.controller.js · resolvePermission(conversions.sin_gestora) | superadmin, admin | `conversions.sin_gestora` |
+
+## soporte
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
+| crear | `POST /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
+| tiempos | `GET /api/soporte/tiempos` | (no existía) | (ruta nueva) | lo de cada uno |
+| descargarAdjunto | `GET /api/soporte/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | lo de cada uno |
+| porId | `GET /api/soporte/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| responder | `POST /api/soporte/:id/mensajes` | (no existía) | (ruta nueva) | lo de cada uno |
+| cambiarEstado | `PATCH /api/soporte/:id/estado` | (no existía) | (ruta nueva) | lo de cada uno |
+| subirAdjunto | `POST /api/soporte/:id/adjuntos` | (no existía) | (ruta nueva) | lo de cada uno |
+| borrar | `DELETE /api/soporte/:id` | (no existía) | (ruta nueva) | lo de cada uno |
 
 ## status
 

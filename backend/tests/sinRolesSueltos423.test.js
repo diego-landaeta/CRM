@@ -48,6 +48,7 @@ const DECLARADAS = {
   'sales/sales.controller.js': [4, 'alcance: la gestora, sus ventas'],
   'sales/sales.goals.js': [3, 'alcance: la gestora, su meta; el superadmin, la de cualquier campus'],
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
+  'soporte/soporte.controller.js': [1, 'alcance: quien administra (admin, soporte, superadmin) responde y ve los tickets de su alcance; el resto, los suyos'],
   // Diego, 26/10/2026: sobre CADA tarea, mover, comentar, aprobar y devolver son del superadmin, del supervisor y de
   // quien la lleva; el superadmin edita y borra comentarios de cualquiera. Es quién actúa sobre una tarea concreta,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
