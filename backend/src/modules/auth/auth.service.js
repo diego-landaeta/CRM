@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as authModel from './auth.model.js';
+import { buildPermissionsMap } from '../permissions/permissions.service.js';
 
 const BCRYPT_ROUNDS = 12;
 // Access token de 8h: el usuario aguanta una jornada completa sin necesitar
@@ -22,6 +23,24 @@ function generateAccessToken(user, activeProjectId = null) {
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
+}
+
+// LO QUE EL FRONTAL SABE DE QUIEN ENTRA, igual que `/auth/me`.
+//
+// El login (y en ISEIE tambien el refresh) mandaban al frontal un usuario SIN
+// `roles_extra`: quien es gestora y ademas tutora —Yolanda, en ICTESS— entraba
+// como «solo gestora» y no le salia lo de tutora (Mis cursos) hasta recargar la
+// pagina, porque solo `/auth/me` lo traia. Diego, 23/10: «a Yolanda no le salen
+// las funciones». Un solo sitio para que las respuestas no vuelvan a diferir.
+export function usuarioParaElFrontal(user) {
+  return {
+    id: user.id, nombre: user.nombre, email: user.email, role: user.role,
+    roles_extra: Array.isArray(user.roles_extra) ? user.roles_extra : [],
+    custom_role_id: user.custom_role_id ?? null,
+    avatar_url: user.avatar_url,
+    factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura,
+    gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp,
+  };
 }
 
 function generateRefreshToken() {
@@ -49,6 +68,10 @@ export async function login(email, password, ipAddress) {
 
   const projects = await authModel.getUserProjects(user.id, user.role);
   const activeProjectId = projects.length > 0 ? projects[0].id : null;
+  // El mapa de permisos viaja ya con el login (#423): el frontal no tiene copia
+  // de los valores de cada rol, y sin esto la pantalla se pintaría sin botones
+  // hasta que llegara /auth/me.
+  const permissions = await buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra);
 
   const accessToken = generateAccessToken(user, activeProjectId);
   const refreshToken = generateRefreshToken();
@@ -65,9 +88,10 @@ export async function login(email, password, ipAddress) {
     accessToken,
     refreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
-    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp },
+    user: usuarioParaElFrontal(user),
     projects: sanitizeProjects(projects, user.role),
     activeProjectId,
+    permissions,
   };
 }
 
