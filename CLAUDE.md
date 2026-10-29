@@ -142,7 +142,15 @@ scripts/    # backup.sh, deploy.sh
 - Contraseñas con **bcrypt cost factor 12**
 - JWT access token: **15 minutos** en header `Authorization: Bearer`
 - Refresh token: **30 dias** en **httpOnly cookie**
-- Middleware chain: `verifyToken` → `roleGuard` → `projectAccess`
+- Middleware chain: `verifyToken` → `puede('recurso.accion')` → `projectAccess`
+- **Permisos (#423):** cada ruta pide su permiso del catalogo con `puede('clave')`
+  (`shared/middleware/permissions.js`); dentro de un controlador,
+  `await tienePermiso(req, 'clave')`. Un permiso nuevo se registra SOLO en
+  `backend/src/modules/permissions/catalogo.js` (clave, nombre, una frase y los
+  roles que lo traen) y sale solo en Roles, en la ficha y en `/auth/me`. Nada de
+  `roleGuard`/`soloRoles` ni de `role === 'admin'` para decidir quien entra (una
+  prueba lo impide); el rol solo vale para el ALCANCE (que datos ve cada uno).
+  Tras tocar rutas: `npm run permisos:inventario` (regenera `docs/PERMISOS.md`).
 
 ### Roles
 - **Superadmin**: acceso total, unico que crea/desactiva usuarios
@@ -205,6 +213,7 @@ Esto es lo que hay de verdad en `docs/`:
 
 - `README.md` — indice del directorio
 - `10-whatsapp.md` — el modulo de WhatsApp, que es el mas grande
+- `PERMISOS.md` — cada ruta y cada accion, que la protege y quien puede (#423). Generado: `npm run permisos:inventario`
 - `TAREAS-EQUIPO.md` — reparto de trabajo y estado
 - `ESTADO-Y-PENDIENTES.md` — lo que queda abierto
 - `PARIDAD-ENTRE-CRMS.md` — que hay en MultiCRM y no en ISEIE, y al reves

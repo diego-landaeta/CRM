@@ -10,6 +10,7 @@ import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
+import usePermission from '@/shared/hooks/usePermission';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion, type AvisoAlTutor,
@@ -68,7 +69,9 @@ export default function ComisionesTutoresPage() {
   const [soloCampus, setSoloCampus] = useState<number | null>(null);
   useEffect(() => { setSoloCampus(null); }, [activeIssuerId, activeProject?.id]);
   const esAdmin = ['admin', 'superadmin'].includes(user?.role || '');
-  const puede = esAdmin || user?.gestor_colaboraciones === true;
+  // «Gestionar colaboraciones» del catálogo (#423; antes, admin o la casilla).
+  const { can } = usePermission();
+  const puede = can('tutores.gestionar');
   const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const projectId = elegido ?? soloCampus;
   // Con la empresa puesta y sin campus concreto, el servidor traduce `issuerId`
@@ -386,7 +389,7 @@ export default function ComisionesTutoresPage() {
 
                     <span className="text-base font-bold tabular-nums shrink-0">{euros(r.pendiente)}</span>
 
-                    {esAdmin && Number(r.pendiente) > 0 && (
+                    {esAdmin && can('tutores.liquidar') && Number(r.pendiente) > 0 && (
                       <Button size="sm" disabled={trabajando} onClick={() => pagar(r)}>
                         <CheckCircle size={14} weight="bold" className="mr-1.5" /> Marcar pagado
                       </Button>
@@ -394,7 +397,7 @@ export default function ComisionesTutoresPage() {
 
                     {/* «Avisar tutor». Va junto a pagar y no dentro del
                         desplegable: es la otra cosa que se hace con una fila. */}
-                    {esAdmin && Number(r.pendiente) > 0 && (
+                    {esAdmin && can('tutores.liquidar') && Number(r.pendiente) > 0 && (
                       <Button size="sm" variant="outline" disabled={preparando === r.tutor_id}
                         title={r.tutor_email ? `Escribir a ${r.tutor_email}` : 'Este tutor no tiene correo en su ficha'}
                         onClick={() => verElAviso(r)}>
@@ -486,7 +489,7 @@ export default function ComisionesTutoresPage() {
                                 )}
                               </td>
                               <td className="py-1.5 pl-3 text-right">
-                                {esAdmin && l.estado !== 'revertida' && (
+                                {esAdmin && can('tutores.liquidar') && l.estado !== 'revertida' && (
                                   <button type="button" onClick={() => revertir(l)}
                                     title="Revertir esta comisión"
                                     className="text-muted-foreground hover:text-destructive">
