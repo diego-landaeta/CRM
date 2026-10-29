@@ -9,9 +9,9 @@
 // aparece en la cola ni suma en los totales.
 import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -41,9 +41,16 @@ function fecha(d: unknown) {
   return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 }
 
-export default function FacturacionAlDiaCard({ projectId }: { projectId?: number | null }) {
-  const { user } = useAuth() as { user?: { role?: string; factura_manager?: boolean } };
-  const puedeFacturar = !!user?.factura_manager || user?.role === 'superadmin';
+export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia = false }: {
+  projectId?: number | null;
+  /** El campus, cuando hay una cola por campus (empresa elegida arriba). */
+  titulo?: string;
+  /** Con varias colas, la que no tiene nada por facturar no se pinta. */
+  ocultarSiVacia?: boolean;
+}) {
+  // «Emitir desde la cola» del catálogo (#423; antes, la casilla factura_manager).
+  const { can } = usePermission();
+  const puedeFacturar = can('facturas.cola');
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);
@@ -134,6 +141,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
 
   if (!estado) return null;
   const cola = estado.cola || [];
+  if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
 
   // El cuadro que pide el numero. Va antes que nada: mientras esta abierto,
 
@@ -216,7 +224,7 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
-            <Receipt size={16} weight="bold" /> Cola de facturación
+            <Receipt size={16} weight="bold" /> Cola de facturación{titulo ? ` · ${titulo}` : ''}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-[52ch]">
             Todo cobro sin factura sale aquí por orden de fecha, venga de Stripe o
