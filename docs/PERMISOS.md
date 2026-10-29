@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-783 rutas en 62 módulos, y 28 acciones con condición dentro de una ruta.
+788 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -35,6 +35,12 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | update | `PATCH /api/accounts-payable/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `accounts_payable.edit` |
 | remove | `DELETE /api/accounts-payable/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `accounts_payable.delete` |
 | addPayment | `POST /api/accounts-payable/:id/payments` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `accounts_payable.edit` |
+
+## actividad
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/actividad/` | (no existía) | (ruta nueva) | lo de cada uno |
 
 ## asignacion
 
@@ -1137,6 +1143,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | previewWc | `GET /api/woocommerce/preview` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
 | saveMapping | `PUT /api/woocommerce/mapping` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.edit` |
 | scrapePreview | `POST /api/woocommerce/scrape-preview` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.sync` |
+| listar | `GET /api/woocommerce/orders` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
+| sincronizar | `POST /api/woocommerce/sync/orders` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
+| configurar | `PUT /api/woocommerce/orders-config` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
+| secretoDelAviso | `POST /api/woocommerce/webhook-secret` | (no existía) | (ruta nueva) | `woocommerce.pedidos` |
 
 # Catálogo de permisos
 
@@ -1316,6 +1326,7 @@ lo que pide para tener sentido (editar pide ver).
 | Ver WooCommerce | `woocommerce.view` | La conexión, el mapeo y las importaciones. | Admin, Soporte |  |
 | Configurar WooCommerce | `woocommerce.edit` | Credenciales y mapeo de campos. | Admin, Soporte | `woocommerce.view` |
 | Importar de WooCommerce | `woocommerce.sync` | Lanzar una importación de productos. | Admin, Soporte | `woocommerce.view` |
+| Pedidos de WooCommerce | `woocommerce.pedidos` | Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14). | Admin | `woocommerce.view` |
 
 ## Tutores
 

@@ -60,6 +60,8 @@ import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
+import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
@@ -139,6 +141,9 @@ app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
 // Antes de leerlo, el portero: el token tiene que existir (si no, se leían 25 MB
 // para nada con cualquier token inventado).
 app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, express.json({ limit: '25mb' }), express.urlencoded({ extended: true, limit: '25mb' }));
+
+// El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
+app.use('/api/woocommerce/webhook', wcWebhook);
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
@@ -298,6 +303,8 @@ const ALL_MODULES = [
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  // «Qué ha pasado hoy», para cada gestora con lo suyo (#13). El Registro es para admin.
+  { name: 'actividad', mod: actividadModule },
   // Cursos pendientes para las tutoras, por campus (#336).
   { name: 'cursos-pendientes', mod: cursosPendientesModule },
   { name: 'correos', mod: correosModule },

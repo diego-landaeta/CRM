@@ -459,7 +459,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   <button
                     onClick={handleSaveTotal}
                     disabled={savingTotal || Number(totalDraft) === Number(conversion.importe_total)}
-                    className="h-9 px-3 rounded-md bg-warning text-warning-foreground text-xs font-semibold hover:bg-warning disabled:opacity-50"
+                    className="h-9 px-3 rounded-md bg-warning text-warning-foreground text-xs font-semibold hover:bg-warning/90 disabled:opacity-50"
                   >
                     {savingTotal ? '...' : 'Actualizar total'}
                   </button>

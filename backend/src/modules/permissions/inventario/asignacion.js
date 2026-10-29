@@ -18,6 +18,8 @@
 export const PROPIA = 'propia';
 
 export const PROPIAS = {
+  // «Qué ha pasado hoy» (#13): cualquiera con sesión, cada uno con lo suyo; el recorte lo pone el servidor.
+  actividad: ['GET /'],
   auth: ['POST /logout', 'GET /me', 'POST /change-password', 'PATCH /me'],
   commissions: ['GET /me', 'GET /me/stats'],
   // Una consulta, su tutor o administración de su campus (exigirVer); la
