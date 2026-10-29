@@ -1,6 +1,7 @@
 import * as model from './report.model.js';
 import { resumenDelDia } from './resumenDelDia.js';
 import { query } from '../../shared/config/db.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // A que proyectos se acota el informe.
 //
@@ -119,7 +120,7 @@ export async function asesorasMes(req, res, next) {
  */
 export async function miPuesto(req, res, next) {
   try {
-    const esJefe = req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'soporte';
+    const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
     const userId = esJefe && pedido ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
@@ -165,6 +166,13 @@ export async function seguimiento(req, res, next) {
 export async function paises(req, res, next) {
   try {
     res.json({ success: true, data: await model.paisesMasVendidos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/canales  -> de donde vienen los prospectos y las ventas (#48)
+export async function canales(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.origenDeLosProspectos(await rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 

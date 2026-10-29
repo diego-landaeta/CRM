@@ -73,6 +73,8 @@ async function crearPersona(clave, role, proyectos = [], { usaMcp = false } = {}
      VALUES ($1, $2, 'x', $3, $4) RETURNING id`,
     [`${MARCA} ${clave}`, `${clave.toLowerCase()}@${MARCA.toLowerCase()}.test`, role, usaMcp]
   )).id;
+  // La casilla de antes es la excepción «Usar el MCP» (#423, migración 222).
+  if (usaMcp) await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [U[clave]]);
   for (const p of proyectos) {
     await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [U[clave], P[p]]);
   }
@@ -248,7 +250,11 @@ describe('el protocolo, con la base de verdad', () => {
     const list = await rpc(TOKENS.ANA, 'tools/list');
     // 13 desde el 01/10: «listar_tutores», «comisiones_tutores» y «formaciones_sin_tutor».
     // 16 desde el 06/10 (#215): «listar_formaciones», «resumen_catalogo» y «ver_formacion».
-    expect(list.body.result.tools.length).toBe(16);
+    // 19 desde #235: «cuentas_publicitarias», «resumen_publicidad» y «campanas_publicitarias».
+    // 20 desde #203 (parte A): «actividad_por_comercial».
+    // 21 desde el 20/10 (#325): «equipo». Las demás consultas nuevas entran como tipos de «informe».
+    expect(list.body.result.tools.length).toBe(21);
+    expect(list.body.result.tools.map((t) => t.name)).toContain('equipo');
     expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
 

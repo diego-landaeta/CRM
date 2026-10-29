@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar, conPermisos } = await import('./helpers/permisosSinBase.js');
+
 /**
  * MCP de Claude: solo consulta y solo lo de cada uno.
  *
@@ -42,24 +47,24 @@ const ambitoDe = (role, proyectos = PROYECTOS) => construirAmbito(persona(role),
 beforeEach(() => { consultas.length = 0; });
 
 describe('quien entra', () => {
-  it('super admin y admin entran por su rol', () => {
-    expect(puedeUsarMcp(persona('superadmin'))).toBe(true);
-    expect(puedeUsarMcp(persona('admin'))).toBe(true);
+  it('super admin y admin entran por su rol', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin')))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('admin')))).toBe(true);
   });
 
-  it('el resto solo si se le ha puesto la casilla', () => {
-    expect(puedeUsarMcp(persona('gestor'))).toBe(false);
-    expect(puedeUsarMcp(persona('gestor', { usa_mcp: true }))).toBe(true);
-    expect(puedeUsarMcp(persona('soporte'))).toBe(false);
+  it('el resto solo si se le ha dado «Usar el MCP» (antes, la casilla)', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('gestor')))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(persona('gestor', { usa_mcp: true })))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('soporte')))).toBe(false);
   });
 
-  it('un tutor no entra ni con la casilla puesta', () => {
-    expect(puedeUsarMcp(persona('tutor', { usa_mcp: true }))).toBe(false);
+  it('un tutor no entra ni con el permiso dado: su rol no puede tenerlo', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('tutor', { usa_mcp: true })))).toBe(false);
   });
 
-  it('un usuario desactivado no entra, sea quien sea', () => {
-    expect(puedeUsarMcp(persona('superadmin', { active: false }))).toBe(false);
-    expect(puedeUsarMcp(null)).toBe(false);
+  it('un usuario desactivado no entra, sea quien sea', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin', { active: false })))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(null))).toBe(false);
   });
 });
 
@@ -147,6 +152,7 @@ const ARGS = {
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
+  equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
   listar_tutores: { texto: 'ana', incluir_retirados: true },
   comisiones_tutores: { desde: '2026-08', hasta: '2026-09', tutor_id: 3 },
@@ -154,6 +160,10 @@ const ARGS = {
   listar_formaciones: { texto: 'máster', pagina: 1, limite: 25 },
   resumen_catalogo: {},
   ver_formacion: { id: 5 },
+  cuentas_publicitarias: {},
+  resumen_publicidad: { desde: '2026-09-01', hasta: '2026-09-30' },
+  campanas_publicitarias: { desde: '2026-09-01', hasta: '2026-09-30', limite: 50 },
+  actividad_por_comercial: { desde: '2026-09-30', hasta: '2026-09-30' },
 };
 
 const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
@@ -246,6 +256,18 @@ describe('cada consulta va acotada a los campus de la persona', () => {
         expect(consultas.length).toBeGreaterThan(0);
         for (const { params } of consultas) expect(params).toContain(7);
       }
+    }
+  });
+
+  it('actividad_por_comercial: a una gestora se le impone su id en los contactos y en los WhatsApp', async () => {
+    // La prueba de arriba deja fuera las consultas de `lead_interactions`;
+    // esta mira las de la actividad (#203).
+    consultas.length = 0;
+    await HERRAMIENTAS.find((h) => h.nombre === 'actividad_por_comercial').ejecutar(ambitoDe('gestor'), ARGS.actividad_por_comercial);
+    expect(consultas.length).toBe(3);
+    for (const { sql, params } of consultas) {
+      expect(sql).toMatch(/li\.created_by = \$\d|m\.enviado_por = \$\d/);
+      expect(params).toContain(7);
     }
   });
 
@@ -365,6 +387,51 @@ describe('el catálogo (#215: «¿cuánto cuesta el Máster X en Psiko?»)', () 
     expect(consultas.length).toBeGreaterThan(2);
     for (const { sql } of consultas) {
       expect(sql).not.toMatch(/stripe_link|conversions|invoices|importe|pct|tutor_commission|iban|[a-z]+.*/i);
+    }
+  });
+});
+
+describe('la publicidad (#235: «¿cuánto hemos gastado en Meta y cuánto ha vendido?»)', () => {
+  const PUBLICIDAD = ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias'];
+
+  it('a una gestora se le niega sin llegar a la base', async () => {
+    for (const n of PUBLICIDAD) {
+      consultas.length = 0;
+      const r = await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('gestor'), ARGS[n]).catch((e) => e);
+      expect(r?.code, n).toBe('MCP_SOLO_ADMIN');
+      expect(r?.statusCode, n).toBe(403);
+      expect(consultas, n).toEqual([]);
+    }
+  });
+
+  it('un admin no ve las cuentas de un campus que no es suyo', async () => {
+    const soloIseih = ambitoDe('admin', [PROYECTOS[0]]);
+    for (const n of PUBLICIDAD) {
+      consultas.length = 0;
+      const r = await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(soloIseih, { ...ARGS[n], proyecto_id: 20 }).catch((e) => e);
+      expect(r?.code, n).toBe('MCP_FUERA_DE_AMBITO');
+      expect(consultas, n).toEqual([]);
+    }
+  });
+
+  it('a un admin, cada consulta va solo con los campus pedidos', async () => {
+    for (const n of PUBLICIDAD) {
+      consultas.length = 0;
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), { ...ARGS[n], proyecto_id: 11 });
+      expect(consultas.length, n).toBeGreaterThan(0);
+      for (const { sql, params } of consultas) {
+        expect(sql).toMatch(/project_id = ANY\(\$1::int\[\]\)|pr\.id = ANY\(\$1::int\[\]\)/);
+        expect(params[0], n).toEqual([11]);
+      }
+    }
+  });
+
+  it('nunca pide el token de la cuenta ni el error que devolvió Meta', async () => {
+    consultas.length = 0;
+    for (const n of PUBLICIDAD) await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), ARGS[n]);
+    expect(consultas.length).toBeGreaterThan(2);
+    for (const { sql } of consultas) {
+      expect(sql).not.toMatch(/token|last_sync_error|created_by_user_id|\b[a-z]+\.\*/i);
     }
   });
 });

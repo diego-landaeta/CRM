@@ -13,7 +13,8 @@ const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() 
 // Esto es el recorte de la barra de direcciones. El de verdad esta en el
 // servidor, que le fuerza su propio identificador; aqui solo se evita que vea
 // pantallas que no son suyas.
-const RUTAS_DEL_TUTOR = ['/mis-cursos', '/preferencias', '/perfil', '/set-password'];
+// /consultas: su bandeja de consultas de alumnos (#188).
+const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/preferencias', '/perfil', '/set-password'];
 
 function tutorPuede(pathname) {
   return RUTAS_DEL_TUTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -22,7 +23,9 @@ function tutorPuede(pathname) {
 // Lo unico que abre un colaborador (#210, fase 5). El corte de verdad esta en
 // el servidor (`verifyToken`), que le responde 403 en todo lo demas.
 // «Mi factura» (#202): su factura del mes, y nada más de Finanzas.
-const RUTAS_DEL_COLABORADOR = ['/tareas', '/mi-factura', '/preferencias', '/perfil', '/set-password'];
+// /meta-ads (26/10/2026): solo a quien se le da `meta_ads.view`; el servidor le
+// responde 403 si no lo tiene, y el menú no se la enseña.
+const RUTAS_DEL_COLABORADOR = ['/tareas', '/mi-factura', '/meta-ads', '/preferencias', '/perfil', '/set-password'];
 
 function colaboradorPuede(pathname) {
   return RUTAS_DEL_COLABORADOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
