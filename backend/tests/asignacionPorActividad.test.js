@@ -357,25 +357,15 @@ describe('la entrada como formulario codificado, con el correo original (28/10)'
   });
 });
 
-describe('freno de pruebas: los formularios @ejemplo.com (28/10)', () => {
-  it('con una activa: se decide el escenario 2 pero no se crea el lead', async () => {
+describe('sin freno de pruebas (Diego, 28/10: «quita el freno»)', () => {
+  it('un formulario @ejemplo.com ya es como cualquier otro: con una activa, crea el lead', async () => {
     await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
     await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.ana.id]);
-    const r = await entrar('freno-activa', { email: `freno_${MARCA.toLowerCase()}@ejemplo.com` });
-    expect(r.body.data).toMatchObject({ escenario: 2, lead_id: null });
-    expect(await q('SELECT 1 FROM leads WHERE email = $1', [`freno_${MARCA.toLowerCase()}@ejemplo.com`])).toHaveLength(0);
-  });
-  it('sin nadie activa: escenario 1, pero no se le manda', async () => {
-    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
-    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
-    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
-    sendEmail.mockClear();
-    const r = await entrar('freno-nadie', { email: `freno2_${MARCA.toLowerCase()}@ejemplo.com` });
-    expect(r.body.data.escenario).toBe(1);
-    await esperar();
-    expect(correosA(MAIL1)).toHaveLength(0);
-    const d = await one('SELECT estado, respuesta FROM asignacion_decisiones WHERE id = $1', [r.body.data.decision_id]);
-    expect(d.respuesta).toMatch(/PRUEBA/);
+    const correo = `sinfreno_${MARCA.toLowerCase()}@ejemplo.com`;
+    const r = await entrar('sin-freno', { email: correo });
+    expect(r.body.data.escenario).toBe(2);
+    expect(r.body.data.lead_id).toBeTruthy();
+    expect(await q('SELECT 1 FROM leads WHERE email = $1', [correo])).toHaveLength(1);
   });
 });
 
@@ -398,5 +388,18 @@ describe('con una sola persona en el reparto (Diego, 28/10)', () => {
     await q('DELETE FROM asignacion_destinos WHERE project_id = $1', [solo.id]);
     await q('DELETE FROM user_projects WHERE project_id = $1', [solo.id]);
     await q('DELETE FROM projects WHERE id = $1', [solo.id]);
+  });
+});
+
+describe('el registro por empresa (Diego, 28/10: «tengo que verlo por empresa y campus»)', () => {
+  it('con issuer_id salen las decisiones de sus campus; con otra empresa, ninguna', async () => {
+    const r = await request.get(`/api/asignacion/decisiones?issuer_id=${ids.issuer}`).set(como('superadmin'));
+    expect(r.status).toBe(200);
+    expect(r.body.data.length).toBeGreaterThan(0);
+    expect(r.body.data.every((d) => d.project_id === ids.project || d.project_id === ids.otro)).toBe(true);
+    const otra = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id', [`${MARCA} OTRA`, `${MARCA}-O`]);
+    const vacia = await request.get(`/api/asignacion/decisiones?issuer_id=${otra.id}`).set(como('superadmin'));
+    expect(vacia.body.data).toHaveLength(0);
+    await q('DELETE FROM invoice_issuers WHERE id = $1', [otra.id]);
   });
 });
