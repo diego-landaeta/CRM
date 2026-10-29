@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SIN_SUBMENU } from './FinanzasLayout';
 import client from '@/shared/api/client';
@@ -111,6 +111,18 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const puedeDeOtra = can('leads.assign');
   const [modoVenta, setModoVenta] = useState<'existing' | 'otra_gestora' | 'sin_gestora'>('existing');
   const [menuVenta, setMenuVenta] = useState(false);
+  // Pulsar fuera lo cierra. Con un clic en el documento y no con una capa
+  // `fixed` encima: en la cabecera (#79 punto 3) el `backdrop-blur` del Topbar
+  // encierra esa capa en la propia cabecera y el resto de la pantalla no la toca.
+  const menuVentaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuVenta) return undefined;
+    function fuera(e: MouseEvent) {
+      if (!menuVentaRef.current?.contains(e.target as Node)) setMenuVenta(false);
+    }
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [menuVenta]);
   function abrirVenta(modo: 'existing' | 'otra_gestora' | 'sin_gestora') {
     setModoVenta(modo);
     setMenuVenta(false);
@@ -291,7 +303,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           </button>
         )}
         {activeProject?.id && ((puedeSinGestora || puedeDeOtra) ? (
-          <div className="relative self-start sm:self-auto">
+          <div ref={menuVentaRef} className="relative self-start sm:self-auto">
             <button
               type="button"
               onClick={() => setMenuVenta((v) => !v)}
@@ -305,8 +317,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             </button>
             {menuVenta && (
               <>
-                {/* Pulsar fuera lo cierra. */}
-                <div className="fixed inset-0 z-10" onClick={() => setMenuVenta(false)} aria-hidden="true" />
                 <div role="menu" className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-md border border-border bg-card shadow-lg">
                   <button
                     type="button" role="menuitem" onClick={() => abrirVenta('existing')}
