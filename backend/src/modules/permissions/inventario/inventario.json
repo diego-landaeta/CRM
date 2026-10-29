@@ -536,6 +536,18 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/forgot-password",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/forgot-password",
+  "relativa": "POST /forgot-password",
+  "controlador": "forgotPassword",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "POST /api/auth/set-password",
   "tipo": "ruta",
   "modulo": "auth",
@@ -5367,6 +5379,28 @@
     "tipo": "puede",
     "claves": [
      "forms.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/ia-analisis/preguntar",
+  "tipo": "ruta",
+  "modulo": "ia-analisis",
+  "metodo": "POST",
+  "ruta": "/api/ia-analisis/preguntar",
+  "relativa": "POST /preguntar",
+  "controlador": "preguntarCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.generar"
     ]
    }
   ],
@@ -15290,6 +15324,29 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.forma_avisos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/whatsapp/voz-o-texto",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/voz-o-texto",
+  "relativa": "GET /voz-o-texto",
+  "controlador": "vozOTextoCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "whatsapp.usar",
+     "whatsapp.supervisar"
     ]
    }
   ],
