@@ -78,6 +78,16 @@ export const CAMBIOS = [
     aprobadoPor: DIEGO,
   },
   {
+    id: 'metas-sin-soporte-ni-pm',
+    que: 'Poner o borrar una meta de ventas: admin (la de la gente de sus campus), gestora (la suya) y superadmin. Soporte y project manager, no.',
+    motivo: 'Las dos rutas de metas no pedían ningún rol: cualquier sesión que llegara, soporte y project manager incluidos, fijaba o borraba la meta de cualquiera (IDOR, PR #434). Lo hacían por un descuido de la ruta, no porque alguien se lo diera.',
+    filas: ['POST /api/ventas/goals', 'DELETE /api/ventas/goals/:id'],
+    roles: ['soporte', 'project_manager'],
+    sentido: 'pierde',
+    // Pendiente: hay que aprobarlo en la #423 (lo cierra un agujero, pero cambia el acceso de tres roles).
+    aprobadoPor: null,
+  },
+  {
     id: 'superadmin-su-correo',
     que: 'El superadmin también puede cambiar su propio correo desde «Mi perfil».',
     motivo: 'Hoy esa ruta es solo del tutor. En el catálogo el superadmin lo tiene todo, sin excepciones; el resto de roles sigue igual.',
