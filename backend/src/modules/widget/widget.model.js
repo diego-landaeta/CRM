@@ -66,7 +66,14 @@ export async function upsertConfig(projectId, fields) {
   return await getConfig(projectId);
 }
 
-// Lista usuarios candidatos al widget = SOLO los del proyecto activos
+// QUIEN PUEDE SALIR EN EL WHATSAPP DE LA WEB: gestoras y admin, nadie mas (#238).
+// El widget manda a un visitante a escribirle a esa persona; un tutor, soporte
+// o superadmin no atiende leads. Las dos consultas de abajo lo comparten: si la
+// lista del panel lo dijera y la rotacion publica no, marcar a un tutor por
+// error le mandaria los leads de la web.
+const ROLES_DEL_WIDGET = `u.role IN ('gestor', 'admin')`;
+
+// Lista usuarios candidatos al widget = gestoras y admin del proyecto, activos
 export async function listCandidateUsers(projectId) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active,
@@ -75,6 +82,7 @@ export async function listCandidateUsers(projectId) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
      ORDER BY u.whatsapp_widget_active DESC, u.nombre ASC`,
     [projectId]
   );
@@ -92,6 +100,7 @@ export async function listActiveWidgetUsers(projectId, excludedIds = []) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
        AND u.whatsapp_widget_active = true
        AND u.whatsapp_phone IS NOT NULL
        AND u.whatsapp_phone != ''

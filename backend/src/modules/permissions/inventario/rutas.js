@@ -24,6 +24,9 @@ export const TECNICOS = new Set([
   'recibirArchivoSubido', 'guardarCuerpoCrudo',
   // Subida de archivos (multer) de las consultas y del webhook de admisión.
   'conAdjuntos', 'conArchivos',
+  // Guardas de ALCANCE POR CAMPUS (IDOR): no deciden quien tiene el permiso (eso lo dice el `puede(...)`
+  // de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
+  'puedeCrearEn',
 ]);
 
 /** El trozo de ruta de un `router.use('/panel', sub)`, sacado de su expresión. */
