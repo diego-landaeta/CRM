@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
-import { ROLES_TAREAS } from './tasks.model.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './tasks.controller.js';
 
 const router = Router();
 
 router.use(verifyToken);
-router.use(soloRoles(...ROLES_TAREAS));
+// A la puerta del tablero basta con poder ver alguno (#423); cada acción mira
+// su clave dentro del servicio (tasks.service.js · permisosDe).
+router.use(puede('tasks.view_own', 'tasks.view_all'));
 
 // Rutas fijas antes que /:id, para no chocar
 router.get('/metrics', ctrl.teamMetrics);
@@ -17,6 +19,19 @@ router.get('/tags', ctrl.tagNames);
 // Vista por revisar
 router.get('/review', ctrl.reviewTasks);
 router.get('/review/count', ctrl.reviewCount);
+
+// Equipos (26/10/2026): ver los suyos; gestionarlos, con «Gestionar equipos».
+router.get('/teams', ctrl.listTeams);
+router.get('/teams/mine', ctrl.myTeams);
+router.get('/teams/empresas', ctrl.teamEmpresas);
+router.post('/teams', ctrl.createTeam);
+router.get('/teams/:teamId', ctrl.getTeam);
+router.patch('/teams/:teamId', ctrl.updateTeam);
+router.post('/teams/:teamId/roles', ctrl.createTeamRole);
+router.patch('/teams/:teamId/roles/:roleId', ctrl.updateTeamRole);
+router.get('/teams/:teamId/candidates', ctrl.teamCandidates);
+router.put('/teams/:teamId/members/:userId', ctrl.setTeamMember);
+router.delete('/teams/:teamId/members/:userId', ctrl.removeTeamMember);
 
 // Configuración de columnas
 router.get('/columns', ctrl.listColumns);

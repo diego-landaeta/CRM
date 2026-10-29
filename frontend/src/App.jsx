@@ -112,6 +112,14 @@ const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
+// Consultas de alumnos (#188): la bandeja del tutor y el panel de administración.
+const ConsultasPage = lazy(() => import('./modules/consultas/pages/ConsultasPage'));
+const ConsultaPage = lazy(() => import('./modules/consultas/pages/ConsultaPage'));
+// Fase 3 (#189): alumnos sin mensajes, carga de trabajo, panel de tutores y métricas.
+const AlumnosSinMensajesPage = lazy(() => import('./modules/consultas/pages/AlumnosSinMensajesPage'));
+const MiCargaPage = lazy(() => import('./modules/consultas/pages/MiCargaPage'));
+const TutoresConsultasPage = lazy(() => import('./modules/consultas/pages/TutoresConsultasPage'));
+const MetricasConsultasPage = lazy(() => import('./modules/consultas/pages/MetricasConsultasPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -150,6 +158,8 @@ const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsC
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10): avisa a fuera de los cobros por transferencia o depósito.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
+// Conexión → Asignación de leads por actividad (CRM#513, 27/10/2026).
+const AsignacionLeadsPage = lazy(() => import('./modules/asignacion/pages/AsignacionLeadsPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
@@ -247,6 +257,12 @@ function App() {
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
+          <Route path="/consultas" element={<ConsultasPage />} />
+          <Route path="/consultas/alumnos" element={<AlumnosSinMensajesPage />} />
+          <Route path="/consultas/carga" element={<MiCargaPage />} />
+          <Route path="/consultas/tutores" element={<TutoresConsultasPage />} />
+          <Route path="/consultas/metricas" element={<MetricasConsultasPage />} />
+          <Route path="/consultas/:id" element={<ConsultaPage />} />
 
           {/* Captación — tabs */}
           <Route path="/captacion" element={<CaptacionLayout />}>
@@ -318,6 +334,8 @@ function App() {
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
+          {/* Conexión → Asignación de leads por actividad (CRM#513). Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/asignacion-leads" element={<AsignacionLeadsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/proceso" element={<Navigate to="/prospectos/proceso" replace />} />
