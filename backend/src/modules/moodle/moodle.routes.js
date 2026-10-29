@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './moodle.controller.js';
 
 const router = Router();
 
-// `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte, y el panel es de super
-// admin y admin (mismo criterio que la gestión del MCP).
-const verPanel = soloRoles('superadmin', 'admin');
-// Conectar un Moodle es guardar una credencial: solo super admin, como en Configuración → Claves.
-const conectarMoodle = soloRoles('superadmin');
+// Permisos del catalogo (#423): `moodle.view` (administracion) y `moodle.conectar` (solo super admin:
+// conectar un Moodle es guardar una credencial, como en Configuracion → Claves).
+const verPanel = puede('moodle.view');
+const conectarMoodle = puede('moodle.conectar');
 
 router.use(verifyToken);
 

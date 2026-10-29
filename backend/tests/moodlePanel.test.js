@@ -32,10 +32,10 @@ const ORIGEN = `https://${MARCA.toLowerCase()}.moodle.test`;
 const TOKEN = `tok${MARCA}0123456789abcdef`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], credenciales: [] };
-let CON; let SIN; let OTRO; let REV; let IA; let ADMIN; let ADMIN_OTRO; let GESTORA;
+let CON; let SIN; let OTRO; let REV; let IA; let ADMIN; let ADMIN_OTRO; let GESTORA; let SUPER;
 
-// El rol sale del token: así se prueba «solo super admin» sin crear superadmins en la base compartida.
-const comoSuper = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: 'superadmin' }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
+// Los permisos salen de la base, no del token (#423): «solo super admin» se prueba con un super admin de verdad (se borra al acabar).
+const comoSuper = () => como(SUPER);
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const json = (c) => new Response(JSON.stringify(c), { status: 200, headers: { 'content-type': 'application/json' } });
 const AHORA = () => Math.floor(Date.now() / 1000);
@@ -119,6 +119,7 @@ beforeAll(async () => {
   ADMIN = await persona('ADMIN', 'admin', [CON, SIN, REV, IA]);
   ADMIN_OTRO = await persona('ADMINOTRO', 'admin', [OTRO]);
   GESTORA = await persona('GESTORA', 'gestor', [CON]);
+  SUPER = await persona('SUPER', 'superadmin', []);
   const cred = await credenciales.upsert({ project_id: CON, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN, token: TOKEN }) });
   ids.credenciales.push(cred.id);
   const credRev = await credenciales.upsert({ project_id: REV, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN_REV, token: TOKEN_REV }) });
@@ -240,7 +241,7 @@ describe('conectar el Moodle de un campus', () => {
   });
 
   it('un token que vale: se prueba, se guarda cifrado y dice cuántos cursos hay', async () => {
-    const r = await conectar(comoSuper(ADMIN), SIN, { url: `${ORIGEN}/`, token: TOKEN });
+    const r = await conectar(comoSuper(), SIN, { url: `${ORIGEN}/`, token: TOKEN });
     expect(r.status).toBe(201);
     expect(r.body.data).toEqual({ cursos: 2, faltan: [] });
     expect(await estaConectado(SIN)).toBe(true);
@@ -250,7 +251,7 @@ describe('conectar el Moodle de un campus', () => {
   });
 
   it('un token que no vale: error claro y NO se toca lo que había', async () => {
-    const r = await conectar(comoSuper(ADMIN), CON, { url: ORIGEN, token: 'token-que-no-existe-0000' });
+    const r = await conectar(comoSuper(), CON, { url: ORIGEN, token: 'token-que-no-existe-0000' });
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('MOODLE_NO_CONECTA');
     expect(r.body.error).toMatch(/token no válido o caducado/);
@@ -261,13 +262,13 @@ describe('conectar el Moodle de un campus', () => {
   });
 
   it('un Moodle que no responde: error claro', async () => {
-    const r = await conectar(comoSuper(ADMIN), SIN, { url: `https://${MARCA.toLowerCase()}.apagado.moodle.test`, token: TOKEN });
+    const r = await conectar(comoSuper(), SIN, { url: `https://${MARCA.toLowerCase()}.apagado.moodle.test`, token: TOKEN });
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('MOODLE_NO_CONECTA');
   });
 
   it('un token al que le faltan funciones: se guarda y dice qué se pierde con cada una', async () => {
-    const r = await conectar(comoSuper(ADMIN), SIN, { url: ORIGEN_LIMITADO, token: TOKEN_LIMITADO });
+    const r = await conectar(comoSuper(), SIN, { url: ORIGEN_LIMITADO, token: TOKEN_LIMITADO });
     expect(r.status).toBe(201);
     expect(r.body.data.cursos).toBe(2);
     expect(r.body.data.faltan).toEqual([
@@ -280,24 +281,24 @@ describe('conectar el Moodle de un campus', () => {
   it('cambiar solo el token: no se pide la dirección, se reutiliza la guardada', async () => {
     // SIN está conectado al Moodle «limitado»: su token solo vale allí, así que si pasa la
     // prueba es porque se usó la dirección que ya había.
-    const r = await conectar(comoSuper(ADMIN), SIN, { token: TOKEN_LIMITADO });
+    const r = await conectar(comoSuper(), SIN, { token: TOKEN_LIMITADO });
     expect(r.status).toBe(201);
     expect(r.body.data.cursos).toBe(2);
-    expect((await conectar(comoSuper(ADMIN), SIN, { token: TOKEN })).status).toBe(400); // ese token no es de ese Moodle
+    expect((await conectar(comoSuper(), SIN, { token: TOKEN })).status).toBe(400); // ese token no es de ese Moodle
   });
 
   it('una dirección que no vale, o sin token, es un 400', async () => {
     for (const cuerpo of [{ url: 'ftp://moodle.test', token: TOKEN }, { url: 'https://usuario:clave@moodle.test', token: TOKEN }, { url: ORIGEN, token: '' }]) {
-      expect((await conectar(comoSuper(ADMIN), SIN, cuerpo)).status).toBe(400);
+      expect((await conectar(comoSuper(), SIN, cuerpo)).status).toBe(400);
     }
   });
 
-  it('un campus que no es suyo: 403', async () => {
-    expect((await conectar(comoSuper(ADMIN_OTRO), CON, { url: ORIGEN, token: TOKEN })).status).toBe(403);
+  it('un admin no conecta, ni siquiera un campus suyo: 403', async () => {
+    expect((await conectar(como(ADMIN), CON, { url: ORIGEN, token: TOKEN })).status).toBe(403);
   });
 
   it('ni el token ni la dirección salen en ninguna respuesta', async () => {
-    const r = await conectar(comoSuper(ADMIN), SIN, { url: ORIGEN, token: TOKEN });
+    const r = await conectar(comoSuper(), SIN, { url: ORIGEN, token: TOKEN });
     const texto = JSON.stringify(r.body);
     expect(texto).not.toContain(TOKEN);
     expect(texto).not.toContain(ORIGEN);
@@ -310,14 +311,14 @@ describe('conectar el Moodle de un campus', () => {
 
   it('desconectar: solo super admin, y el campus vuelve a «sin conectar»', async () => {
     expect((await request.delete(`/api/moodle/campus/${SIN}/conexion`).set(como(ADMIN))).status).toBe(403);
-    const r = await request.delete(`/api/moodle/campus/${SIN}/conexion`).set(comoSuper(ADMIN));
+    const r = await request.delete(`/api/moodle/campus/${SIN}/conexion`).set(comoSuper());
     expect(r.status).toBe(200);
     expect(r.body.data.desconectados).toBeGreaterThanOrEqual(1);
     expect(await estaConectado(SIN)).toBe(false);
   });
 
   it('sin Moodle conectado y sin dirección, se pide la dirección', async () => {
-    const r = await conectar(comoSuper(ADMIN), SIN, { token: TOKEN });
+    const r = await conectar(comoSuper(), SIN, { token: TOKEN });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/dirección/);
   });

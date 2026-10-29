@@ -9078,12 +9078,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9102,12 +9100,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9126,12 +9122,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9150,12 +9144,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9174,12 +9166,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9198,12 +9188,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9222,12 +9210,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin",
-     "admin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.view"
+    ]
    }
   ],
   "puertas": []
@@ -9246,11 +9232,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
    }
   ],
   "puertas": []
@@ -9269,11 +9254,10 @@
     "tipo": "token"
    },
    {
-    "tipo": "roles",
-    "roles": [
-     "superadmin"
-    ],
-    "atajoSoporte": false
+    "tipo": "puede",
+    "claves": [
+     "moodle.conectar"
+    ]
    }
   ],
   "puertas": []

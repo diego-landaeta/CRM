@@ -450,6 +450,14 @@ export const SECCIONES = [
         ],
       },
       {
+        clave: 'moodle', nombre: 'Moodle', acciones: [
+          // Cursos, alumnos y recursos del Moodle de cada campus (#335). Antes: soloRoles('superadmin', 'admin').
+          a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', ADMIN),
+          // Conectar un Moodle es guardar una credencial: antes soloRoles('superadmin'); NADIE = solo superadmin.
+          a('conectar', 'Conectar un Moodle', 'Guardar o quitar el token de un campus.', NADIE),
+        ],
+      },
+      {
         clave: 'webhooks_salientes', nombre: 'Webhooks de salida', acciones: [
           a('view', 'Ver webhooks de salida', 'Los avisos que el CRM manda a otros sistemas y sus envíos.', ADMIN),
           a('create', 'Crear webhooks de salida', 'Uno nuevo.', ADMIN),

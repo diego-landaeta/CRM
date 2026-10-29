@@ -643,15 +643,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
-| campus | `GET /api/moodle/campus` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| cursos | `GET /api/moodle/cursos` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| revision | `GET /api/moodle/campus/:id/revision` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| categorias | `GET /api/moodle/categorias` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| alumnos | `GET /api/moodle/cursos/:id/alumnos` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| estructura | `GET /api/moodle/cursos/:id/estructura` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| recursos | `GET /api/moodle/cursos/:id/recursos` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| conectar | `POST /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | ¿sin asignar? |
-| desconectar | `DELETE /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | ¿sin asignar? |
+| campus | `GET /api/moodle/campus` | (no existía) | (ruta nueva) | `moodle.view` |
+| cursos | `GET /api/moodle/cursos` | (no existía) | (ruta nueva) | `moodle.view` |
+| revision | `GET /api/moodle/campus/:id/revision` | (no existía) | (ruta nueva) | `moodle.view` |
+| categorias | `GET /api/moodle/categorias` | (no existía) | (ruta nueva) | `moodle.view` |
+| alumnos | `GET /api/moodle/cursos/:id/alumnos` | (no existía) | (ruta nueva) | `moodle.view` |
+| estructura | `GET /api/moodle/cursos/:id/estructura` | (no existía) | (ruta nueva) | `moodle.view` |
+| recursos | `GET /api/moodle/cursos/:id/recursos` | (no existía) | (ruta nueva) | `moodle.view` |
+| conectar | `POST /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
+| desconectar | `DELETE /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
 
 ## notifications
 
@@ -1533,6 +1533,13 @@ lo que pide para tener sentido (editar pide ver).
 | Editar conectores | `connectors.edit` | Cambiarlo, probarlo e importar. | Admin | `connectors.view` |
 | Borrar conectores | `connectors.delete` | Quitar un conector. | Admin | `connectors.view` |
 | Conectores de todo el sistema | `connectors.sistema` | Conectores que valen para todas las empresas. | solo superadmin | `connectors.view` |
+
+### Moodle
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin |  |
+| Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
 
 ### Webhooks de salida
 

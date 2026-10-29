@@ -258,6 +258,12 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   listar_formaciones: 'Catálogo de formaciones',
   resumen_catalogo: 'Catálogo de formaciones',
   ver_formacion: 'Catálogo de formaciones',
+  // Consultas que entraron por staging (#235, #203, #325) y no tenian apartado en el panel.
+  cuentas_publicitarias: 'Publicidad',
+  resumen_publicidad: 'Publicidad',
+  campanas_publicitarias: 'Publicidad',
+  actividad_por_comercial: 'Equipo y actividad',
+  equipo: 'Equipo y actividad',
   moodle_cursos: 'Moodle de los campus',
   moodle_alumnos: 'Moodle de los campus',
   moodle_recursos_externos: 'Moodle de los campus',
