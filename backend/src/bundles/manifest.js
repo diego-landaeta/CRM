@@ -38,7 +38,7 @@ export const BUNDLES = {
   ia: {
     label: 'IA & Insights',
     description: 'Stripe IA dashboard + Reportes IA + Chat IA',
-    modules: ['ia-monitor', 'reports-ia', 'claude-chat'],
+    modules: ['ia-monitor', 'reports-ia', 'ia-analisis', 'claude-chat'],
     requires: ['core'],
   },
   marketing: {
