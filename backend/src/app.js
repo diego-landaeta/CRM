@@ -16,6 +16,7 @@ import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
 import tutoresModule from './modules/tutores/index.js';
+import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import accountingModule from './modules/accounting/index.js';
@@ -52,6 +53,8 @@ import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
 import connectorsModule from './modules/connectors/index.js';
 import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
+import asignacionModule from './modules/asignacion/index.js';
+import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
@@ -76,6 +79,12 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
+import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
+import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
+import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
+import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
@@ -86,10 +95,13 @@ import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js'
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
+import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+import { porteroDelWebhook } from './modules/webhook-tokens/portero.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -116,6 +128,12 @@ app.use(cors({
 // los mismos que deja pasar Nginx, para que no se rechace en dos sitios
 // distintos con dos mensajes distintos.
 app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+// El webhook de admisión (#198): el formulario puede mandar los documentos como
+// imagen en texto (DNI por las dos caras, foto, título, firma), y con 5 MB se
+// perdía la solicitud entera. Solo esta ruta, y los mismos 25 MB que Nginx.
+// Antes de leerlo, el portero: el token tiene que existir (si no, se leían 25 MB
+// para nada con cualquier token inventado).
+app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, express.json({ limit: '25mb' }), express.urlencoded({ extended: true, limit: '25mb' }));
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
@@ -123,6 +141,8 @@ app.use('/api/woocommerce/webhook', wcWebhook);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
 app.use(cookieParser());
+// Lo que hace una gestora y no guarda su autor, para «activa en los últimos 15 min» (CRM#513).
+app.use(registrarActividad);
 
 // API root
 app.get('/api', (_req, res) => {
@@ -231,6 +251,8 @@ const ALL_MODULES = [
   { name: 'sales', mod: salesModule },
   { name: 'whatsapp', mod: whatsappModule },
   { name: 'tutores', mod: tutoresModule },
+  // Consultas de alumnos (#188): la bandeja del tutor y el panel.
+  { name: 'consultas', mod: consultasModule },
   { name: 'notifications', mod: notificationsModule },
   { name: 'meta-ads', mod: metaAdsModule },
   { name: 'accounting', mod: accountingModule },
@@ -268,6 +290,8 @@ const ALL_MODULES = [
   // Conexión → «Webhook de transferencias» (Diego, 15/10): avisa a fuera de
   // los cobros por transferencia o depósito bancario. Migración 206.
   { name: 'webhooks-salientes', mod: webhooksSalientesModule },
+  // Conexión → «Asignación de leads» por actividad (CRM#513, 27/10/2026). Migración 230.
+  { name: 'asignacion', mod: asignacionModule },
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
@@ -415,6 +439,12 @@ if (process.env.NODE_ENV !== 'test') {
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
     startTutorCommissionsScheduler();
+    startTutoresCampusScheduler();
+    startConsultasCampusScheduler();
+    startConsultasAlumnosScheduler();
+    startConsultasResumenScheduler();
+    startConsultasPlazoScheduler();
+    startConsultasCargaScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
     startPasoVencidoScheduler();
@@ -426,7 +456,10 @@ if (process.env.NODE_ENV !== 'test') {
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();
+    startAsignacionScheduler();
     if (tareasActivas()) startTasksDailySummaryScheduler();
+    // El resumen de la tarde y los correos de cambio de estado (26/10/2026).
+    if (tareasActivas()) startTareasResumenScheduler();
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     recuperarAdjuntosDeWhatsapp();
   });
