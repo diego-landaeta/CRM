@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './ia.controller.js';
 
@@ -18,11 +18,9 @@ router.get('/gasto', puede('ia.view'), ctrl.getGasto);
   credencial con la que se obtiene vive en un modulo que solo abren los
   administradores.
 
-  Y `soloRoles` en vez de `roleGuard`: el segundo deja pasar a `superadmin` y a
-  `soporte` ANTES de mirar la lista, asi que `roleGuard('admin')` admite
-  ademas a soporte sin decirlo. Donde hay credenciales de por medio se declara
-  quien entra y no entra nadie mas (#80).
+  Las dos piden `ia.importar` (solo administracion, #423): el catalogo dice quien
+  entra y no entra nadie mas (#80).
 */
-router.get('/supabase/previo/:projectId', soloRoles('admin', 'superadmin'), ctrl.previoSupabase);
-router.post('/supabase/importar/:projectId', soloRoles('admin', 'superadmin'), ctrl.importarSupabase);
+router.get('/supabase/previo/:projectId', puede('ia.importar'), ctrl.previoSupabase);
+router.post('/supabase/importar/:projectId', puede('ia.importar'), ctrl.importarSupabase);
 export default router;
