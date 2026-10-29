@@ -4,6 +4,7 @@ import * as goalsService from './sales.goals.js';
 import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 export async function create(req, res, next) {
   try {
@@ -17,12 +18,7 @@ export async function create(req, res, next) {
     // impedir: la peticion se puede mandar a mano. Quien no tenga el permiso y
     // lo pida se lleva un 403, no una venta de nadie.
     if (parsed.data.sin_gestora) {
-      const { resolvePermission } = await import('../permissions/permissions.service.js');
-      const puede = await resolvePermission(
-        req.user.userId, req.user.role, req.user.customRoleId ?? null,
-        'conversions', 'sin_gestora',
-      );
-      if (!puede) {
+      if (!(await tienePermiso(req, 'conversions.sin_gestora'))) {
         throw new AppError('No tienes permiso para registrar una venta sin gestora', 403, 'FORBIDDEN');
       }
     }
@@ -162,6 +158,26 @@ export async function resumenVentas(req, res, next) {
 }
 
 // GET /api/sales/por-asesora
+/**
+ * Las ventas sin formacion del catalogo (#41).
+ *
+ * Solo admin: es la lista de lo que no cuadra de un proyecto entero, con
+ * nombre y correo de cada alumno.
+ */
+export async function sinFormacion(req, res, next) {
+  try {
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    res.json({
+      success: true,
+      data: await salesService.ventasSinFormacion({
+        projectId, projectIds,
+        from: req.query.from || null,
+        to: req.query.to || null,
+      }),
+    });
+  } catch (err) { next(err); }
+}
+
 export async function ventasPorAsesora(req, res, next) {
   try {
     res.json({ success: true, data: await salesService.getVentasPorAsesora(await filtrosDeQuery(req)) });

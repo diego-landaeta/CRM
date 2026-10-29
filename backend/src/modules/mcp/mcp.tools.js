@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as reportes from '../reports/report.model.js';
+import { resumenDelDia } from '../reports/resumenDelDia.js';
+import * as proceso from '../proceso/proceso.model.js';
+import * as feedback from '../feedback/feedback.model.js';
+import * as metas from '../sales/sales.goals.js';
+import * as egresos from '../expenses/expense.model.js';
+import * as porPagar from '../accounts-payable/payable.model.js';
+import * as stripe from '../stripe-payments/stripe-payments.model.js';
+import * as comisiones from '../commissions/commission.model.js';
+import * as duplicados from '../leads/dup-queue.service.js';
 import * as model from './mcp.model.js';
 import { acotarProyectos, responsableImpuesto } from './mcp.acceso.js';
 import { enteroEnv } from './mcp.config.js';
@@ -94,6 +103,75 @@ export const INFORMES = {
     descripcion: 'Formaciones (productos) más vendidas.',
     ejecutar: reportes.formacionesMasVendidas,
   },
+  // ── Lo comercial del día a día (#325) ─────────────────────────────────────
+  // Las MISMAS funciones que las pantallas de origen, para que las cifras
+  // cuadren. Todas devuelven números agregados: ningún nombre ni contacto de
+  // cliente, salvo el `cliente` de «pendientes_de_facturar», que sale abreviado.
+  dashboard_hoy: {
+    descripcion: 'Ayer y hoy, como el Dashboard: prospectos que entraron, contactados, ventas y prospectos sin tocar.',
+    ejecutar: ({ projectIds, asesoraId }) => resumenDelDia({ projectIds, asesoraId }),
+  },
+  cola_del_dia: {
+    descripcion: 'La cola del proceso comercial en cifras, como «La cola del día»: atrasados, para hoy, para mañana y esta semana.',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeLaCola({ projectIds, asesoraId }),
+  },
+  proceso_comercial: {
+    descripcion: 'El proceso comercial en cifras: cuántos prospectos hay en cada paso (1–4 y los que se añaden a mano), cuántos van atrasados y la fecha del siguiente. '
+      + 'Los mismos prospectos que «cola_del_dia», repartidos por paso.',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenPorPaso({ projectIds, asesoraId }),
+  },
+  seguimiento_fin_de_mes: {
+    descripcion: 'Prospectos por antigüedad (este mes, 1–3, 3–6 y más de 6 meses) y cuántos no se han contactado nunca, como «Seguimiento de fin de mes».',
+    ejecutar: ({ projectIds, asesoraId }) => proceso.resumenDeSeguimiento({ projectIds, asesoraId }),
+  },
+  feedback: {
+    descripcion: 'Encuestas de feedback de Reportes: enviadas y respondidas, motivos de no compra, por disparador, campus, gestora y mes. Acepta desde y hasta.',
+    ejecutar: ({ projectIds, asesoraId, from, to }) => feedback.panel({ projectIds, gestoraId: asesoraId, desde: from, hasta: to }),
+  },
+  pendientes_de_facturar: {
+    descripcion: 'Cobros que todavía no tienen factura (cliente abreviado, curso, último cobro e importe), como «Pendientes de facturar». Acepta desde y hasta (por fecha de cobro).',
+    ejecutar: ({ projectIds, from, to }) => reportes.ventasSinFacturaEnRango({ projectIds, from, to }),
+    // La pantalla es de administración: una gestora no la ve, y aquí tampoco.
+    soloAdmin: true,
+  },
+  metas_gestoras: {
+    descripcion: 'La meta de ventas y de facturación de cada gestora y su avance en el periodo (solo super admin y admin). Acepta desde y hasta.',
+    ejecutar: ({ projectIds, from, to }) => metas.getGestoresStats({ projectIds, from: from || null, to: to || null }),
+    soloAdmin: true,
+  },
+  // ── Administración y dinero (#325): solo super admin y admin ───────────────
+  egresos: {
+    descripcion: 'Los gastos por categoría y periodo, como «Egresos» (incluye los de la empresa y los generales). Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => egresos.resumenExpenses({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  cuentas_por_pagar: {
+    descripcion: 'Facturas de proveedores: total facturado, pagado, pendiente y vencidas, como «Cuentas por pagar». Acepta desde y hasta, por fecha de factura (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => porPagar.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  pagos_stripe: {
+    descripcion: 'Los cobros de Stripe del periodo: correctos y fallidos, disputados, reembolsados, cuántos no están asociados a un cliente y el total cobrado, como «Pagos Stripe». Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => stripe.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  comisiones_gestoras: {
+    descripcion: 'Las comisiones de las gestoras por ventas: total, pagadas y pendientes del periodo (solo super admin y admin). Las de los tutores van en «comisiones_tutores».',
+    ejecutar: ({ projectIds, from, to }) => comisiones.getStats({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  duplicados: {
+    descripcion: 'La cola de prospectos duplicados: pendientes de revisar, aprobados, fusionados y descartados, de tus campus (solo super admin y admin).',
+    ejecutar: async ({ projectIds }) => {
+      const total = { pending: 0, approved: 0, merged: 0, rejected: 0 };
+      for (const id of projectIds) {
+        const c = await duplicados.counts(id);
+        for (const k of Object.keys(total)) total[k] += Number(c[k] || 0);
+      }
+      return { pendientes: total.pending, aprobados: total.approved, fusionados: total.merged, descartados: total.rejected };
+    },
+    soloAdmin: true,
+  },
   // Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado» (antes, del 30/09 al 08/10, por lo facturado).
   // El mismo calculo que «Cómo voy» (`miPuesto`), para que
   // Claude no conteste «la mejor comercial» con otra medida.
@@ -118,6 +196,13 @@ export const INFORMES = {
 function soloAdministracion(ambito, herramienta) {
   if (ambito.soloLoSuyo) {
     throw new AppError(`«${herramienta}» es de administración: solo la ven super admin y admin.`, 403, 'MCP_SOLO_ADMIN');
+  }
+}
+
+/** Un periodo al revés no da «0 de todo»: se le dice a Claude que lo corrija. */
+function periodoEnOrden({ desde, hasta }) {
+  if (desde && hasta && desde > hasta) {
+    throw new AppError(`«desde» (${desde}) es posterior a «hasta» (${hasta}).`, 400, 'MCP_PERIODO_AL_REVES');
   }
 }
 
@@ -205,16 +290,24 @@ export const HERRAMIENTAS = [
     // En esta lista, «nombre» es el de un cliente: sale abreviado (#196).
     listasDeClientes: ['prospectos'],
     titulo: 'Buscar prospectos',
-    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono) y fechas de solicitud. Devuelve una página de resultados y el total.',
+    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono), gestora, programa de interés y fechas de solicitud. Cada fila trae el último contacto, el próximo (según el proceso comercial), el paso en el que va y lo vendido. Devuelve una página de resultados y el total.',
     entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       estado: z.string().max(40).optional().describe('nuevo, por_contactar, contactado, en_seguimiento, convertido, no_interesado…'),
       canal: z.string().max(40).optional().describe('Canal de captación (meta, google, organico…)'),
       texto: z.string().max(100).optional().describe('Busca en nombre, email o teléfono'),
+      gestora_id: z.number().int().positive().optional().describe('Solo los de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
+      programa: z.string().max(100).optional().describe('Parte del nombre del programa de interés, sin tildes ni mayúsculas (por ejemplo «coaching»)'),
       ...PERIODO,
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.buscarProspectos({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { gestora_id: gestoraId, ...resto } = a;
+      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propios prospectos: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return model.buscarProspectos({ ...resto, gestoraId, ...acotar(ambito, a) });
+    },
   },
   {
     nombre: 'ver_prospecto',
@@ -244,9 +337,18 @@ export const HERRAMIENTAS = [
       ...PERIODO,
       texto: z.string().max(100).optional().describe('Busca en producto o nombre del cliente'),
       pendiente: z.boolean().optional().describe('true: solo con cobro pendiente; false: solo cobradas'),
+      facturada: z.boolean().optional().describe('true: solo con factura (ni proformas ni canceladas); false: solo sin facturar'),
+      vendedora_id: z.number().int().positive().optional().describe('Solo las de una vendedora (su id sale del informe «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir las de otra.'),
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.listarVentas({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { vendedora_id: vendedoraId, ...resto } = a;
+      // Una gestora ve solo lo suyo: pedir otra vendedora no ensancha nada, y se le dice.
+      if (vendedoraId && ambito.soloLoSuyo && vendedoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propias ventas: no puedes pedir las de otra vendedora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return model.listarVentas({ ...resto, vendedoraId, ...acotar(ambito, a) });
+    },
   },
   {
     nombre: 'resumen_ventas',
@@ -288,8 +390,17 @@ export const HERRAMIENTAS = [
       ...PERIODO,
       // 100 como máximo: es el tope de filas de cualquier respuesta (#196).
       limite: z.number().int().min(1).max(100).default(50).describe('Máximo de filas de detalle (hasta 100)'),
+      gestora_id: z.number().int().positive().optional().describe('Solo los cobros de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
     },
-    ejecutar: (ambito, a) => model.cobrosPendientes({ ...a, ...acotar(ambito, a) }),
+    ejecutar: async (ambito, a) => {
+      const { gestora_id: gestoraId, ...resto } = a;
+      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propios cobros: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      const dondeVa = acotar(ambito, a);
+      // A quien ve solo lo suyo se le impone ella misma; quien ve todo el campus puede acotar a una gestora.
+      return model.cobrosPendientes({ ...resto, ...dondeVa, responsableId: dondeVa.responsableId || gestoraId || null });
+    },
   },
   {
     nombre: 'listar_tutores',
@@ -355,15 +466,19 @@ export const HERRAMIENTAS = [
   {
     nombre: 'listar_formaciones',
     titulo: 'Formaciones y precios',
-    descripcion: 'El catálogo de tus campus: cada formación activa con su precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
+    descripcion: 'El catálogo de tus campus: cada formación activa (o también las inactivas con incluir_inactivas) con su SKU, precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
       + 'Busca por nombre sin distinguir mayúsculas ni tildes. Devuelve una página y el total: con muchas, pide un nombre o usa «resumen_catalogo». '
       + 'Si una formación no tiene precio, contesta que en el CRM no consta; no lo deduzcas ni lo inventes. No da ventas.',
     entrada: {
       ...AMBITO,
       texto: z.string().max(100).optional().describe('Parte del nombre de la formación, por ejemplo «psicología clínica»'),
+      incluir_inactivas: z.boolean().optional().describe('true: también las formaciones dadas de baja (cada fila dice si está «activa»). Por defecto, solo las activas.'),
       ...PAGINA,
     },
-    ejecutar: (ambito, a) => model.listarFormaciones({ ...a, projectIds: acotar(ambito, a).projectIds }),
+    ejecutar: (ambito, a) => {
+      const { incluir_inactivas: incluirInactivas, ...resto } = a;
+      return model.listarFormaciones({ ...resto, incluirInactivas: incluirInactivas === true, projectIds: acotar(ambito, a).projectIds });
+    },
   },
   {
     nombre: 'resumen_catalogo',
@@ -481,6 +596,104 @@ export const HERRAMIENTAS = [
       refrescar: z.boolean().optional().describe('true: salta la caché'),
     },
     ejecutar: (ambito, a) => moodleConTope('moodle_estructura', (signal) => moodle.moodleEstructura(ambito, a, { signal })),
+  },
+  // Publicidad (#235, ficha de Diego del 05/10 y respuesta del 07/10): lo que
+  // ya guarda el CRM de Meta. Solo super admin y admin: el gasto publicitario
+  // no lo ve una gestora. Primero `acotar` (un campus ajeno se rechaza por
+  // ajeno) y luego `soloAdministracion`, como las de tutores.
+  {
+    nombre: 'cuentas_publicitarias',
+    titulo: 'Cuentas publicitarias',
+    descripcion: 'Las cuentas de Meta conectadas en Publicidad: campus, nombre, moneda, cómo va la sincronización (estado y última vez) '
+      + 'y si tiene el histórico cargado. Contesta a «¿qué cuentas tenemos conectadas?» (solo super admin y admin).',
+    entrada: { ...AMBITO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'cuentas_publicitarias');
+      return model.cuentasPublicitarias({ projectIds });
+    },
+  },
+  {
+    nombre: 'resumen_publicidad',
+    titulo: 'Resumen de publicidad',
+    descripcion: 'Por campus, en un periodo: gasto en Meta (el mismo que la pantalla Publicidad), impresiones, clics, los «leads» que da Meta '
+      + 'y lo que vende la publicidad: prospectos que llegaron por una campaña, cuántos compraron, lo facturado y el coste por venta. '
+      + 'De los prospectos que entraron en el periodo, cuenta los que compraron (en cualquier fecha) y lo facturado. Sin fechas, todo el histórico. '
+      + '«atribucion» dice qué se puede saber de cada campus: «por_campaña» (las cifras son un MÍNIMO: solo cuentan los prospectos que traen la campaña; '
+      + 'una campaña con 0 puede haber traído prospectos sin ella, así que no digas que no vende); '
+      + '«no_disponible» o «solo_total_del_campus» (no se puede saber qué vende la publicidad: explica el «motivo» y NUNCA digas que vende 0). '
+      + 'En «solo_total_del_campus» compara el gasto con las ventas de todo el campus y dilo así. '
+      + 'Si citas los «leads_segun_meta», di siempre que no son fiables (#48) (solo super admin y admin).',
+    entrada: { ...AMBITO, ...PERIODO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'resumen_publicidad');
+      periodoEnOrden(a);
+      return model.resumenPublicidad({ projectIds, desde: a.desde, hasta: a.hasta });
+    },
+  },
+  {
+    nombre: 'campanas_publicitarias',
+    titulo: 'Campañas publicitarias',
+    descripcion: 'Cada campaña de Meta con gasto o prospectos en el periodo, de la que más gasta a la que menos: estado, objetivo, presupuesto diario, '
+      + 'gasto, los «leads» que da Meta, prospectos atribuidos, ventas atribuidas y coste por venta. Sirve para «¿qué campaña funciona mejor?». '
+      + 'Los atribuidos son un MÍNIMO: solo cuentan los prospectos que traen la campaña. Sin fechas, todo el histórico. '
+      + 'Con «atribucion» distinta de «por_campaña», ese campus no se puede atribuir por campaña: explica el «motivo», no digas que vende 0. '
+      + 'Si citas los «leads_segun_meta», di siempre que no son fiables (#48) (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      // 100 como máximo: es el tope de filas de cualquier respuesta (#196).
+      limite: z.number().int().min(1).max(100).default(50).describe('Máximo de campañas (hasta 100)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'campanas_publicitarias');
+      periodoEnOrden(a);
+      return model.campanasPublicitarias({ projectIds, desde: a.desde, hasta: a.hasta, limite: a.limite });
+    },
+  },
+  // Actividad por comercial (#203, parte A; ficha de Diego del 07/10). La usan
+  // todos los roles con MCP: a quien solo ve lo suyo se le impone su id y se
+  // ve a sí misma.
+  {
+    nombre: 'actividad_por_comercial',
+    titulo: 'Actividad por comercial',
+    descripcion: 'Llamadas, WhatsApp y correos registrados en el CRM por cada comercial en un periodo, contados por quien los registró '
+      + '(también en fichas de otra), con el día de Madrid. «personas» son las distintas que contactó y «toques», los contactos. '
+      + 'Las notas internas no son contactos: van aparte y no cuentan en «toques» ni en «personas». '
+      + '«whatsapp» son los WhatsApp apuntados como contacto (los que suman en «toques»); «whatsapp_texto» y «whatsapp_voz» son los mensajes '
+      + 'que salieron por WhatsApp, escritos y en nota de voz; los que no tienen autora salen en «Sin asignar». '
+      + 'Sin fechas, el día de ayer. Las llamadas son las REGISTRADAS en el CRM: las apuntadas a mano y las que entraron por WhatsApp '
+      + 'a su línea (también perdidas o rechazadas); las del móvil que no se apuntan no están. Dilo así («llamadas registradas»), '
+      + 'no como que las hizo ella. '
+      + 'Ejemplo: «Ayer, Victoria hizo 4 llamadas, Malena 3 y el resto ninguna registrada». '
+      + 'Quien no es super admin ni admin solo se ve a sí misma.',
+    entrada: { ...AMBITO, ...PERIODO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds, responsableId } = acotar(ambito, a);
+      const desde = a.desde || a.hasta || model.ayerEnMadrid();
+      const hasta = a.hasta || (a.desde ? model.hoyEnMadrid() : desde);
+      if (desde > hasta) {
+        throw new AppError(`«desde» (${desde}) es posterior a «hasta» (${hasta}).`, 400, 'MCP_PERIODO_AL_REVES');
+      }
+      return model.actividadPorComercial({ projectIds, responsableId, desde, hasta });
+    },
+  },
+  {
+    nombre: 'equipo',
+    titulo: 'Equipo',
+    descripcion: 'Quién hay en tus campus: nombre, rol y campus de cada persona, y cuántas hay por rol. Sin correos ni teléfonos. '
+      + 'Por defecto solo las activas (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      incluir_inactivos: z.boolean().optional().describe('true: también las personas desactivadas'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'equipo');
+      return model.equipoDeLosCampus({ projectIds, incluirInactivos: a.incluir_inactivos === true });
+    },
   },
   {
     nombre: 'informe',

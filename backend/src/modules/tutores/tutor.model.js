@@ -83,7 +83,11 @@ export async function listar({ projectId, projectIds = null, activos = true }) {
                     AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            u.set_password_token IS NOT NULL AS pendiente_de_entrar,
+            -- «Aun no ha entrado»: tiene un enlace pendiente Y nunca ha iniciado
+            -- sesion. Lo segundo es lo que distingue la invitacion real (caducada o
+            -- no, sigue sin haber entrado) de «he olvidado mi clave» (#37), que deja
+            -- un token en un tutor que ya entraba, y que nadie limpia al caducar.
+            (u.set_password_token IS NOT NULL AND u.last_login_at IS NULL) AS pendiente_de_entrar,
             perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c
@@ -215,9 +219,11 @@ export async function guardarPerfil(tutorId, datos = {}) {
 
 // ── Colaboraciones ──────────────────────────────────────────────────────────
 
-export async function colaboraciones({ tutorId, productId, soloActivas = false }) {
+export async function colaboraciones({ tutorId, productId, soloActivas = false, projectIds = null }) {
   const cond = [];
   const params = [];
+  // Solo las de esos campus (la formación manda): quien no lo ve todo no ve las de otra empresa.
+  if (Array.isArray(projectIds)) { params.push(projectIds.map(Number)); cond.push(`p.project_id = ANY($${params.length}::int[])`); }
   if (tutorId) { params.push(tutorId); cond.push(`c.tutor_id = $${params.length}`); }
   if (productId) { params.push(productId); cond.push(`c.product_id = $${params.length}`); }
   if (soloActivas) cond.push('c.activa');
@@ -369,6 +375,71 @@ export async function crearColaboracion({ tutorId, productId, pct, desde, hasta,
   return c;
 }
 
+/**
+ * Dar de alta al tutor en el campus de la formacion y asignarsela, de una vez
+ * (#384). Diego: «si no está en ese campus debe de salir "¿deseas añadirla a
+ * este campus?"». Hasta hoy el CRM contestaba «añádelo a ese proyecto primero»
+ * y no habia desde donde: quien lleva las colaboraciones no da de alta usuarios.
+ *
+ * Es el mismo alta en un campus que la de un tutor nuevo con `projectIds`
+ * (`user_projects` activo, sin recibir prospectos), y si ya tuvo ese campus y
+ * se le quito, se le vuelve a activar.
+ *
+ * Todo en una transaccion: si la colaboracion no se puede crear —se solapa con
+ * otro tramo suyo, o falla la base— el tutor NO se queda en el campus.
+ *
+ * Solo un TUTOR (rol principal, el mismo criterio que la lista de Tutores): por
+ * aqui no se mete a una gestora ni a un admin en un campus ajeno. Devuelve null
+ * si ese id no es un tutor.
+ */
+export async function crearColaboracionEnOtroCampus({
+  tutorId, projectId, productId, pct, desde, hasta, notas, createdBy,
+}) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [tutor] } = await client.query(
+      `SELECT id FROM users WHERE id = $1 AND role = 'tutor' FOR UPDATE`, [tutorId]);
+    if (!tutor) { await client.query('ROLLBACK'); return null; }
+
+    await client.query(
+      `INSERT INTO user_projects (user_id, project_id, orden_cola, recibe_leads)
+       VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2), false)
+       ON CONFLICT (user_id, project_id) DO UPDATE SET active = true`,
+      [tutorId, projectId]
+    );
+
+    // Dentro de la transaccion: lo que se comprueba es lo que se va a escribir.
+    const choques = await haySolape({ tutorId, productId, desde, hasta },
+      (sql, params) => client.query(sql, params));
+    if (choques.length) {
+      const c = choques[0];
+      throw new AppError(
+        `Ya hay una colaboracion suya en esa formacion del ${String(c.vigente_desde).slice(0, 10)}`
+        + `${c.vigente_hasta ? ' al ' + String(c.vigente_hasta).slice(0, 10) : ' en adelante'}.`
+        + ' Ciérrala antes de abrir otra.',
+        409, 'SOLAPE'
+      );
+    }
+
+    const { rows: [colab] } = await client.query(
+      `INSERT INTO tutor_collaborations
+         (tutor_id, product_id, pct, vigente_desde, vigente_hasta, notas, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [tutorId, productId, pct, desde, hasta || null, notas || null, createdBy]
+    );
+    await client.query('COMMIT');
+    return colab;
+  } catch (e) {
+    // Tambien el solape: el alta en el campus se deshace con la colaboracion.
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function actualizarColaboracion(id, datos = {}) {
   // Lo que NO viene no se toca. Antes `vigente_hasta = $4` iba siempre, asi que
   // una llamada que solo cambiaba el porcentaje --o ahora una casilla de
@@ -511,17 +582,29 @@ export async function simular({ desde, hasta, tutorId = null, projectId = null }
 // comprobar "un" proyecto: se mira si el de la formacion esta entre los suyos.
 // Sin esto se le podia colgar a un tutor de ISEIH un curso de ICTESS, y cobraria
 // de una marca en la que no da clase.
+//
+// Devuelve tambien de QUE campus es la formacion (`projectId`, `proyecto`): si
+// el tutor no esta ahi, la pantalla ofrece añadirlo a ese campus (#384). Un
+// `projectId` nulo es que la formacion no existe.
+//
+// Cuenta solo un campus ACTIVO: si se le quito, no se le cuelgan cursos de ahi
+// sin preguntar —se ofrece volver a añadirlo, que lo reactiva—.
 export async function formacionEsDeSuProyecto(tutorId, productId) {
   const { rows } = await query(
     `SELECT EXISTS (
        SELECT 1 FROM products p
         WHERE p.id = $2
           AND EXISTS (SELECT 1 FROM user_projects up
-                       WHERE up.user_id = $1 AND up.project_id = p.project_id)) AS ok,
-       (SELECT pr.nombre FROM products p JOIN projects pr ON pr.id = p.project_id WHERE p.id = $2) AS proyecto`,
+                       WHERE up.user_id = $1 AND up.project_id = p.project_id AND up.active)) AS ok,
+       (SELECT pr.nombre FROM products p JOIN projects pr ON pr.id = p.project_id WHERE p.id = $2) AS proyecto,
+       (SELECT p.project_id FROM products p WHERE p.id = $2) AS project_id`,
     [tutorId, productId]
   );
-  return { ok: rows[0]?.ok === true, proyecto: rows[0]?.proyecto || null };
+  return {
+    ok: rows[0]?.ok === true,
+    proyecto: rows[0]?.proyecto || null,
+    projectId: rows[0]?.project_id != null ? Number(rows[0].project_id) : null,
+  };
 }
 
 // ── El dinero de verdad ─────────────────────────────────────────────────────
@@ -661,7 +744,7 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
 //
 // Solo pasan de 'pendiente' a 'pagada'. Una revertida no se paga por descuido, y
 // una ya pagada no se paga dos veces aunque se pulse el boton dos veces.
-export async function liquidar({ ids = null, periodo = null, tutorId = null, userId }) {
+export async function liquidar({ ids = null, periodo = null, tutorId = null, userId, projectIds = null }) {
   const { rows } = await query(
     `UPDATE tutor_commissions
         SET estado = 'pagada',
@@ -675,8 +758,16 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
+        -- Solo las de mis campus: un tutor que da clase en varias empresas no se paga entero
+        -- por quien lleva solo una de ellas.
+        AND ($5::int[] IS NULL OR id IN (
+          SELECT tc.id FROM tutor_commissions tc
+            LEFT JOIN products p ON p.id = tc.product_id
+            LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
+            LEFT JOIN conversions cv ON cv.id = cp.conversion_id
+           WHERE COALESCE(p.project_id, cv.project_id) = ANY($5::int[])))
       RETURNING id, importe, tutor_id`,
-    [userId, ids && ids.length ? ids : null, periodo, tutorId]
+    [userId, ids && ids.length ? ids : null, periodo, tutorId, Array.isArray(projectIds) ? projectIds.map(Number) : null]
   );
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
 }

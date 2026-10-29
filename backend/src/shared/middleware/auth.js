@@ -2,9 +2,24 @@ import jwt from 'jsonwebtoken';
 import { AppError } from '../utils/AppError.js';
 // Una persona puede tener mas de un rol: el principal y los añadidos. Quien
 // decide cuales son vive en un solo sitio.
-import { tieneRol, soloEsColaborador, colaboradorPuede } from '../utils/roles.js';
+import { tieneRol, rutaDeRolCerrado } from '../utils/roles.js';
+// La sesión se mira contra la base: rol y activo (hotfix del 26/10/2026).
+import { comprobarSesion, sesionVigente } from './sesionViva.js';
 
-export function verifyToken(req, _res, next) {
+/**
+ * Pega a un guardia la regla que aplica (#423).
+ *
+ * No cambia lo que hace: solo deja escrito, en la propia función, a quién deja
+ * pasar. El inventario de permisos (`modules/permissions/inventario`) recorre
+ * las rutas y lee esto; así la tabla sale del código y no de una lista a mano
+ * que se queda vieja.
+ */
+export function conRegla(fn, regla) {
+  fn.regla = regla;
+  return fn;
+}
+
+export async function verifyToken(req, _res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return next(new AppError('Token no proporcionado', 401, 'AUTH_REQUIRED'));
@@ -18,14 +33,28 @@ export function verifyToken(req, _res, next) {
     return next(new AppError('Token invalido o expirado', 401, 'TOKEN_INVALID'));
   }
 
-  // El colaborador solo ve «Tareas» (#210, fase 5). Se corta aqui y no en cada
-  // modulo porque muchas rutas solo piden token —/api/leads entre ellas— y un
-  // roleGuard olvidado le abriria prospectos, ventas o finanzas.
-  if (soloEsColaborador(req.user) && !colaboradorPuede(req.originalUrl)) {
+  // Un token de antes de un cambio de rol, o de alguien desactivado, ya no vale
+  // (26/10/2026): el frontal lo renueva con el rol bueno o pide entrar otra vez.
+  if (comprobarSesion()) {
+    try {
+      if (!(await sesionVigente(req.user))) {
+        return next(new AppError('Tu sesión ha cambiado: vuelve a entrar', 401, 'TOKEN_INVALID'));
+      }
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  // El colaborador solo ve «Tareas» (#210, fase 5) y el tutor, lo suyo (#187).
+  // Se corta aqui y no en cada modulo porque muchas rutas solo piden token
+  // —/api/leads entre ellas— y un roleGuard olvidado les abriria prospectos,
+  // ventas o finanzas. Quien ademas tiene otro rol (gestora, admin…) no se toca.
+  if (rutaDeRolCerrado(req.user, req.originalUrl) === false) {
     return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
   }
   next();
 }
+verifyToken.regla = { tipo: 'token' };
 
 /**
  * Como `roleGuard`, pero SIN el atajo.
@@ -43,7 +72,7 @@ export function verifyToken(req, _res, next) {
  * hace que añadir un rol nuevo el año que viene no le regale el acceso.
  */
 export function soloRoles(...rolesPermitidos) {
-  return (req, _res, next) => {
+  return conRegla((req, _res, next) => {
     if (!req.user) {
       return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
     }
@@ -51,11 +80,11 @@ export function soloRoles(...rolesPermitidos) {
       return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
     }
     next();
-  };
+  }, { tipo: 'roles', roles: rolesPermitidos, atajoSoporte: false });
 }
 
 export function roleGuard(...allowedRoles) {
-  return (req, _res, next) => {
+  return conRegla((req, _res, next) => {
     if (!req.user) {
       return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
     }
@@ -64,5 +93,5 @@ export function roleGuard(...allowedRoles) {
       return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
     }
     next();
-  };
+  }, { tipo: 'roles', roles: allowedRoles, atajoSoporte: true });
 }
