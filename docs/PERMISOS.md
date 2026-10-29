@@ -1026,6 +1026,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | usuarios | `GET /api/whatsapp/usuarios` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
 | formaDeAvisos | `GET /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | olvidarFormaDeAvisos | `DELETE /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
+| vozOTextoCtrl | `GET /api/whatsapp/voz-o-texto` | (no existía) | (ruta nueva) | `whatsapp.usar` |
 | banco | `GET /api/whatsapp/banco` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
 | bancoNumeros | `GET /api/whatsapp/banco/numeros` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
 | etiquetasDeWhatsapp | `GET /api/whatsapp/etiquetas` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
