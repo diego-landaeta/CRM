@@ -153,8 +153,13 @@ export default function InvoicesPage() {
       .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
   }
 
+  // Las tarjetas y «Ventas sin factura» con las mismas fechas y estado que la
+  // lista (#233): con septiembre puesto enseñaban el acumulado de siempre.
+  const hayFechas = Boolean(filters.from || filters.to);
+
   const load = useCallback(async () => {
     if (!pid) return;
+    const periodo = { from: filters.from, to: filters.to, estado: filters.estado };
     setLoading(true);
     try {
       // Modo sociedad (admin): facturas globales de esa empresa emisora. Las
@@ -166,15 +171,15 @@ export default function InvoicesPage() {
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
-          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
-          : invoicesApi.stats({ projectId: pid }),
+          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null, ...periodo })
+          : invoicesApi.stats({ projectId: pid, ...periodo }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         // Con una sociedad elegida se piden las de TODOS sus campus: es la
         // pantalla que dice que falta por facturar, y acotarla a un proyecto
         // dejaba fuera justo lo que se estaba mirando.
         invoicesApi.ventasSinFactura(porSociedad
           ? { issuerId: Number(filterIssuer) }
-          : { projectId: pid }).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+          : { projectId: pid }, periodo).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -350,7 +355,7 @@ export default function InvoicesPage() {
       {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-info-soft text-info-soft-foreground"
-            label="Total facturas" numericValue={stats.total} />
+            label={hayFechas ? 'Facturas del periodo' : 'Total facturas'} numericValue={stats.total} />
           <KpiCard icon={Receipt} iconBg="bg-success-soft text-success-soft-foreground"
             label="Facturado" numericValue={Number(stats.total_facturado)} format={(n) => fmt(Number(n))} />
           <KpiCard icon={CheckCircle} iconBg="bg-primary/10 text-primary"
