@@ -22,11 +22,11 @@ import { TaskModal } from '../components/TaskModal';
 import { TeamAreaMetrics, TeamTasksMetrics } from '../components/TeamTasksMetrics';
 import { TasksReviewView } from '../components/TasksReviewView';
 import {
-  DEFAULT_COLUMNS, OPCIONES_VER, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea,
+  DEFAULT_COLUMNS, OPCIONES_VER, PRIORITY, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea, vistaInicialDe,
   type VerTablero,
 } from '../lib/taskUi';
 import {
-  etiquetaDePeriodo, hoyEnOficina, moverReferencia, rangoDePeriodo, textoDelPeriodo, type TipoPeriodo,
+  etiquetaDePeriodo, hoyEnOficina, moverReferencia, rangoDePeriodo, textoDelPeriodo, vieneDeAntes, type TipoPeriodo,
 } from '../lib/periodo';
 import type {
   AreaMetric,
@@ -105,13 +105,15 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => JSON.parse(ambitoClave), [ambitoClave]);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  // Se entra siempre en «Mis tareas» (Diego, 26/10/2026); no se recuerda la última.
-  const [ver, setVer] = useState<VerTablero>(VISTA_INICIAL);
+  // Al entrar: «Mis tareas» (Diego, 26/10/2026); admin y superadmin, «Todo» del
+  // mes en curso (27/10/2026). No se recuerda la última elección.
+  const [inicio] = useState(() => vistaInicialDe(user));
+  const [ver, setVer] = useState<VerTablero>(inicio.ver);
 
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
   const [busqueda, setBusqueda] = useState('');
-  // El periodo: «Todo» por defecto; Hoy, Esta semana o Este mes, y moverse.
-  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('todo');
+  // El periodo: el de entrada (arriba); Hoy, Esta semana, Este mes o Todo, y moverse.
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>(inicio.periodo);
   const [referencia, setReferencia] = useState<string>(() => hoyEnOficina());
   const rango = useMemo(() => rangoDePeriodo(tipoPeriodo, referencia), [tipoPeriodo, referencia]);
 
@@ -334,11 +336,17 @@ export default function TasksPage() {
     }
   }
 
+  // Con una ficha abierta, el recorrido NO se abre solo, y si estaba abierto se cierra
+  // (27/10/2026): su capa quedaba encima de la ficha y se tragaba «Crear tarea».
+  const fichaAbierta = abiertaId != null || nueva != null;
   useEffect(() => {
-    if (cargando || enRevisar || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
+    if (cargando || enRevisar || fichaAbierta || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
     const t = setTimeout(() => setRecorrido(true), 800);
     return () => clearTimeout(t);
-  }, [cargando, enRevisar]);
+  }, [cargando, enRevisar, fichaAbierta]);
+  useEffect(() => {
+    if (fichaAbierta) setRecorrido(false);
+  }, [fichaAbierta]);
 
   // Las opciones de cada filtro.
   const opcionesPersona = useMemo(() => {
@@ -637,6 +645,7 @@ export default function TasksPage() {
                       canDragTask={puedeArrastrar}
                       showAssignee
                       conEquipos={equipos.length > 0}
+                      vieneDe={(t) => vieneDeAntes(t, rango)}
                       onOpen={(t) => abrir(t.id)}
                       onAdd={(status) => setNueva({ status })}
                       onDragStart={empezarArrastre}
