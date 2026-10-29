@@ -571,6 +571,39 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
   };
 }
 
+// ─── De dónde llegan los prospectos de cada gestora ──────────────────────────
+//
+// Diego, 29/10: «WhatsApp es que toquen el widget, y tocan y ellas cargan». La
+// columna «Prospectos» lo sumaba todo, y «15» no decía si se los había dado el
+// reparto o si los había dado de alta ella (Carlos: «¿esto tiene sentido en
+// base a la regla?»). Se separan:
+//   · formulario — entraron solos (webhook, Make o la asignación por actividad);
+//   · WhatsApp  — la persona pulsó el botón de la web y la gestora lo dio de alta;
+//   · a mano    — el resto de altas a mano.
+
+/** Si el lead entró solo (formulario, Make o asignación), no dado de alta a mano. */
+const ENTRA_SOLO = (l) => `(${l}.idempotency_key IS NOT NULL
+  OR EXISTS (SELECT 1 FROM make_webhook_deliveries m WHERE m.lead_id = ${l}.id)
+  OR EXISTS (SELECT 1 FROM asignacion_decisiones d WHERE d.lead_id = ${l}.id))`;
+const POR_WHATSAPP = (l) => `EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = ${l}.id AND lu.canal_detectado::text = 'whatsapp')`;
+/** Las dos columnas que se añaden al contar los prospectos de cada gestora. */
+const ORIGEN_DE_LOS_LEADS = (l = 'l') => `count(*) FILTER (WHERE ${ENTRA_SOLO(l)})::int AS formularios,
+            count(*) FILTER (WHERE NOT ${ENTRA_SOLO(l)} AND ${POR_WHATSAPP(l)})::int AS whatsapp`;
+
+/** La celda «Prospectos»: el total y, debajo, de dónde llegaron. */
+export function prospectosConOrigen(g) {
+  const formularios = n(g.formularios);
+  const whatsapp = n(g.whatsapp);
+  const aMano = Math.max(0, n(g.leads) - formularios - whatsapp);
+  const partes = [[formularios, 'formulario'], [whatsapp, 'WhatsApp'], [aMano, 'a mano']]
+    .filter(([c]) => c > 0)
+    .map(([c, que]) => `<div style="font-size:11px;line-height:1.35;color:${GRIS}">${entero(c)} ${que}</div>`);
+  return `${entero(g.leads)}${partes.join('')}`;
+}
+
+/** Lo que significa cada origen, debajo de la tabla. */
+export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-top:6px">Formulario: lo reparte la regla o Make. WhatsApp: pulsó el botón de la web y la gestora lo dio de alta. A mano: el resto de altas.</div>`;
+
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
 
 /**
@@ -591,7 +624,8 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
 export async function actividadPorGestora(ids, from, to) {
   const [{ rows: leads }, contactos, ventas] = await Promise.all([
     query(
-      `SELECT u.nombre, count(*)::int AS leads
+      `SELECT u.nombre, count(*)::int AS leads,
+            ${ORIGEN_DE_LOS_LEADS('l')}
          FROM leads l JOIN users u ON u.id = l.responsable_id
         WHERE l.deleted_at IS NULL AND l.project_id = ANY($1::int[])
           AND l.created_at::date >= $2::date AND l.created_at::date <= $3::date
@@ -603,10 +637,13 @@ export async function actividadPorGestora(ids, from, to) {
   const porNombre = new Map();
   const fila = (nombre) => {
     const clave = String(nombre || '').trim();
-    if (!porNombre.has(clave)) porNombre.set(clave, { nombre: clave, leads: 0, contactos: 0, ventas: 0, sinGestora: clave === SIN });
+    if (!porNombre.has(clave)) porNombre.set(clave, { nombre: clave, leads: 0, formularios: 0, whatsapp: 0, contactos: 0, ventas: 0, sinGestora: clave === SIN });
     return porNombre.get(clave);
   };
-  for (const r of leads) fila(r.nombre).leads += n(r.leads);
+  for (const r of leads) {
+    const f = fila(r.nombre);
+    f.leads += n(r.leads); f.formularios += n(r.formularios); f.whatsapp += n(r.whatsapp);
+  }
   for (const r of contactos) fila(r.nombre).contactos += n(r.contactos);
   for (const v of ventas) { if (v.vendedora) fila(v.vendedora).ventas += n(v.ventas); }
   return [...porNombre.values()]
@@ -619,7 +656,7 @@ const CABECERAS_ACTIVIDAD = ['Gestora', 'Prospectos', 'Contactos', 'Ventas'];
 
 /** La fila de una persona en «Por gestora». «Sin gestora» va en cursiva y gris. */
 export function filaDeGestora(g) {
-  const celdas = [g.sinGestora ? '<em>Sin gestora</em>' : esc(g.nombre), entero(g.leads), entero(g.contactos), entero(g.ventas)];
+  const celdas = [g.sinGestora ? '<em>Sin gestora</em>' : esc(g.nombre), prospectosConOrigen(g), entero(g.contactos), entero(g.ventas)];
   return g.sinGestora ? { celdas, estilo: `;color:${GRIS}` } : celdas;
 }
 
@@ -711,7 +748,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado hoy', valor: eur(cobradoHoy) },
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
       porCampus,
     ].join(''));
   }
@@ -782,7 +819,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       porCampus = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus · con la semana anterior</div>${tablaPorCampus(filasCampus, { conAnterior: true })}`;
     }
     const porGestora = gestoras.length
-      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora))}`
+      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora))}${LEYENDA_ORIGEN}`
       : '';
 
     // LA LECTURA DE LA SEMANA, escrita por IA (#30). Apagada por defecto:
