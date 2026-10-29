@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { revisarUrl } from '../webhooks-salientes/webhooks-salientes.validation.js';
 
@@ -64,6 +65,8 @@ export const pruebaSchema = z.object({
 export const listarDecisionesSchema = z.object({
   destino_id: id.optional(),
   project_id: id.optional(),
+  // La empresa de la cabecera: las decisiones de sus campus (Diego, 28/10: «tengo que verlo por empresa y campus»).
+  issuer_id: id.optional(),
   escenario: z.coerce.number().int().refine((n) => n === 1 || n === 2).optional(),
   estado: z.enum(['pendiente', 'enviando', 'enviado', 'fallido']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -95,5 +98,59 @@ export function motivoDelFallo(issue) {
   return campo ? `El campo «${campo}» no es válido: ${issue?.message || 'revísalo'}` : (issue?.message || 'Datos no válidos');
 }
 
+/*
+  EL JSON QUE YA SACA MAKE (28/10/2026). Los escenarios «Contestación automática»
+  de cada campus sacan del correo, con OpenAI, un JSON con `full_name`, `email`,
+  `phone_complete`, `course`, `message`, `page_url`… y hoy lo mandan tal cual al
+  CRM. La entrada lo acepta igual, para que en Make baste un HTTP con ese mismo
+  JSON (escribir los campos a mano rompe el envío en cuanto un nombre trae comillas):
+    · los nombres de ese JSON se copian a los del CRM si faltan (`full_name` →
+      `nombre`, `phone_complete` → `telefono`, `course` → `producto_interes`,
+      `page_url` → `landing_url`, `message` → `notas`); los originales siguen y
+      llegan igual al escenario;
+    · sin `uid`, se toma la huella del propio JSON: si Make reenvía el mismo
+      formulario, es el mismo uid y no se duplica.
+*/
+const ALIAS = [['nombre', ['full_name', 'name']], ['telefono', ['phone_complete', 'phone']],
+  ['producto_interes', ['course']], ['landing_url', ['page_url']], ['notas', ['message']]];
+const vacio = (v) => v == null || String(v).trim() === '';
+const ordenado = (v) => (Array.isArray(v) ? v.map(ordenado)
+  : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordenado(v[k])])) : v);
+
+/*
+  Y CON EL CORREO ORIGINAL. Para que el escenario 1 reciba el formulario tal cual
+  llegó de la web, la entrada de Make lo manda como formulario codificado (Make
+  escapa los valores; meterlos a mano en un JSON se rompe con comillas o saltos):
+    json   = el JSON de OpenAI          asunto / texto / html = el correo original
+*/
+function desenvolver(cuerpo) {
+  if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return {};
+  const { json, asunto, texto, html, remitente, ...resto } = cuerpo;
+  let base = resto;
+  if (typeof json === 'string' && json.trim()) {
+    try {
+      const dentro = JSON.parse(json);
+      if (dentro && typeof dentro === 'object' && !Array.isArray(dentro)) base = { ...dentro, ...resto };
+    } catch { /* no era JSON: se queda como estaba y la validación dirá qué falta */ }
+  }
+  const original = { ...(base.original || {}) };
+  for (const [k, v] of Object.entries({ asunto, texto, html, remitente })) if (!vacio(v)) original[k] = String(v);
+  return Object.keys(original).length ? { ...base, original } : base;
+}
+
+export function prepararEntrada(entrada) {
+  const cuerpo = desenvolver(entrada);
+  const d = { ...cuerpo };
+  for (const [campo, alias] of ALIAS) {
+    if (!vacio(d[campo])) continue;
+    const de = alias.find((a) => !vacio(d[a]));
+    if (de) d[campo] = String(d[de]).trim();
+  }
+  if (vacio(d.uid)) {
+    d.uid = 'auto-' + crypto.createHash('sha256').update(JSON.stringify(ordenado(cuerpo || {}))).digest('hex').slice(0, 32);
+  }
+  return d;
+}
+
 /** Lo que la entrada nunca puede decidir: la gestora y la clave la pone el CRM. */
-export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'idempotency_key'];
+export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'responsable_whatsapp', 'idempotency_key'];
