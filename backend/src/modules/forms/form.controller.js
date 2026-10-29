@@ -2,6 +2,8 @@ import { z } from 'zod';
 import * as model from './form.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from '../leads/lead.model.js';
+import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
+import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.service.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
 import { autoMap } from './field-aliases.js';
 import { parseInboundEmail } from './mail-parser.js';
@@ -489,13 +491,31 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       productoMatchSource = 'default_product';
     }
 
+    // ¿Ya está en el campus? Un reenvío del mismo formulario no crea otro lead; un
+    // duplicado se crea enlazado al anterior (Diego, 29/10: duplicados de ISECD).
+    const dup = await duplicadoParaAlta({ projectId: f.project_id, email: final.email, telefono: final.telefono, productoInteresId });
+    if (dup.reenvio) {
+      const ya = await apuntarReenvio(dup, { notas: final.notas, origen: 'formulario' });
+      await model.incrementSubmissions(f.id);
+      await model.logEvent({
+        form_template_id: f.id, source, payload: body, status: 'success',
+        result_type: 'lead', result_id: ya.id, ip_address: req.ip,
+      });
+      return res.json({ success: true, data: { lead_id: ya.id, source, reenvio: true, producto_interes_id: productoInteresId } });
+    }
+
+    // Con la asignación encendida y alguien trabajando, el lead es para ella; si no, el turno (29/10).
+    const porActividad = await decidirFormulario(f.project_id);
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
+      forcedResponsableId: porActividad?.elegida?.id || null,
       nombre: fallbackNombre,
       email: final.email,
       telefono: final.telefono || null,
       productoInteresId,
       notas: final.notas || null,
+      duplicadoDe: dup.duplicadoDe,
+      reincidente: dup.reincidente,
       landingUrl: final.landing_url || body.landing_url || req.headers?.referer || null,
       utms: {
         utm_source: final.utm_source || source,
@@ -504,6 +524,8 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       },
       customFields,
     });
+    avisarDuplicado(lead, dup, { origen: 'formulario', productoInteresId });
+    await apuntarFormulario(porActividad, lead, { email: final.email, origen: 'formulario' });
     await planificarAgenda(lead.id);
     await model.incrementSubmissions(f.id);
     await model.logEvent({
@@ -557,13 +579,24 @@ export async function publicSubmit(req, res, next) {
     if (!f) throw new AppError('Form no disponible', 404, 'NOT_FOUND');
     const body = req.body || {};
     if (!body.nombre || !body.email) throw new AppError('Nombre y email requeridos', 400, 'VALIDATION_ERROR');
+    const productoInteresId = body.producto_interes_id ? parseInt(body.producto_interes_id) : null;
+    const dup = await duplicadoParaAlta({ projectId: f.project_id, email: body.email, telefono: body.telefono, productoInteresId });
+    if (dup.reenvio) {
+      const ya = await apuntarReenvio(dup, { notas: body.notas, origen: 'formulario' });
+      await model.incrementSubmissions(f.id);
+      return res.json({ success: true, data: { lead_id: ya.id, redirect_url: f.config?.redirect_url || null } });
+    }
+    const porActividad = await decidirFormulario(f.project_id);
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
+      forcedResponsableId: porActividad?.elegida?.id || null,
       nombre: body.nombre,
       email: body.email,
       telefono: body.telefono || null,
-      productoInteresId: body.producto_interes_id ? parseInt(body.producto_interes_id) : null,
+      productoInteresId,
       notas: body.notas || null,
+      duplicadoDe: dup.duplicadoDe,
+      reincidente: dup.reincidente,
       landingUrl: body.landing_url || null,
       utms: {
         utm_source: body.utm_source || 'form',
@@ -572,6 +605,8 @@ export async function publicSubmit(req, res, next) {
       },
       customFields: body.custom_fields || {},
     });
+    avisarDuplicado(lead, dup, { origen: 'formulario', productoInteresId });
+    await apuntarFormulario(porActividad, lead, { email: body.email, origen: 'formulario' });
     await planificarAgenda(lead.id);
     await model.incrementSubmissions(f.id);
     res.json({ success: true, data: { lead_id: lead.id, redirect_url: f.config?.redirect_url || null } });
