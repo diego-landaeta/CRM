@@ -227,18 +227,24 @@ export const invoicesApi = {
     Object.entries(params).forEach(([k, v]) => v != null && v !== '' && qs.set(k, String(v)));
     return client.get<Invoice[]>(`/invoices?${qs}`);
   },
-  stats: (params: { projectId?: number | null; issuerId?: number | null }) => {
+  /** Con los mismos filtros de fecha y estado que la lista (#233). */
+  stats: (params: { projectId?: number | null; issuerId?: number | null; from?: string; to?: string; estado?: string }) => {
     const qs = new URLSearchParams();
     if (params.projectId) qs.set('projectId', String(params.projectId));
     if (params.issuerId) qs.set('issuerId', String(params.issuerId));
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.estado) qs.set('estado', params.estado);
     return client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?${qs}`);
   },
-  ventasSinFactura: (scope: { projectId?: number | null; issuerId?: number | null }) =>
+  ventasSinFactura: (scope: { projectId?: number | null; issuerId?: number | null }, periodo: { from?: string; to?: string } = {}) =>
     client.get<VentaSinFactura[]>('/invoices/ventas-sin-factura?'
-      + new URLSearchParams(
-          scope.issuerId ? { issuerId: String(scope.issuerId) }
-            : scope.projectId ? { projectId: String(scope.projectId) } : {}
-        ).toString()),
+      + new URLSearchParams({
+          ...(scope.issuerId ? { issuerId: String(scope.issuerId) }
+            : scope.projectId ? { projectId: String(scope.projectId) } : {}),
+          ...(periodo.from ? { from: periodo.from } : {}),
+          ...(periodo.to ? { to: periodo.to } : {}),
+        }).toString()),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
