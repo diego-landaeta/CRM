@@ -10,12 +10,21 @@ import jwt from 'jsonwebtoken';
  * podría cambiar la URL de un campus y quedarse con el token de administrador
  * del Moodle. Antes de conectar un Moodle real.»
  *
- * Pasa por las rutas de verdad (token, rol y campus), no solo por el
+ * Pasa por las rutas de verdad (token, permiso y campus), no solo por el
  * controlador: lo que se fija es que la puerta esté puesta.
  */
 
-// Ana es admin del campus 10 (CEDIA). El 20 es de otra empresa.
-const CAMPUS_DE = { 2: [10] };
+// Ana es admin del campus 10 (CEDIA). El 20 es de otra empresa. Laura es
+// gestora del 10.
+const CAMPUS_DE = { 2: [10], 3: [10] };
+
+// Desde #423 cada ruta pide su permiso (`puede`), que sale de la base: aquí,
+// el mapa de cada persona. Integraciones es de admin y soporte (catálogo).
+const INTEGRACIONES = { 'integrations.view': true, 'integrations.edit': true };
+const MAPAS = { 1: INTEGRACIONES, 2: INTEGRACIONES, 3: {} };
+vi.mock('../src/modules/permissions/permissions.service.js', () => ({
+  explicarPermisos: vi.fn(async (id) => (MAPAS[id] ? { mapa: MAPAS[id] } : null)),
+}));
 
 vi.mock('../src/shared/config/db.js', () => ({
   getClient: vi.fn(),
@@ -50,6 +59,7 @@ const api = supertest(app);
 const como = (userId, role) => ({ Authorization: `Bearer ${jwt.sign({ userId, role }, process.env.JWT_SECRET, { expiresIn: '5m' })}` });
 const ANA = como(2, 'admin');
 const MANUEL = como(1, 'superadmin');
+const LAURA = como(3, 'gestor');
 
 /** Ninguna llamada al modelo con el campus 20. */
 function noTocoElCampus20() {
@@ -114,6 +124,14 @@ describe('un projectId que no es un número', () => {
       expect((await r).status).toBe(400);
     }
     expect(db.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('una gestora, sin el permiso de Integraciones', () => {
+  it('no entra ni en su propio campus', async () => {
+    expect((await api.get('/api/integrations?projectId=10').set(LAURA)).status).toBe(403);
+    expect((await api.put('/api/integrations').set(LAURA).send({ projectId: 10, provider: 'brevo', active: true })).status).toBe(403);
+    expect(model.upsert).not.toHaveBeenCalled();
   });
 });
 

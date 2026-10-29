@@ -4,6 +4,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { Eye, Sliders } from '@phosphor-icons/react';
 import AvisosPorCorreo from '../components/AvisosPorCorreo';
 import MiVista from '../components/MiVista';
+import MisEquipos from '../components/MisEquipos';
 
 export default function PreferencesPage() {
   const { activeProject } = useProjectContext();
@@ -20,6 +21,8 @@ export default function PreferencesPage() {
             pantalla que cambia lo que le LLEGA a alguien, y por tanto lo
             que de verdad se viene a buscar aqui. El resto es como se ve. */}
         <AvisosPorCorreo />
+
+      <MisEquipos />
 
       <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-2">

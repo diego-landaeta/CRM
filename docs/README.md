@@ -29,6 +29,8 @@ VPS `187.124.128.126`. PM2 corre como el usuario **claude** (`export PATH=~/.nvm
 **El tablero de tareas, solo en pruebas** (#210, Diego 07/10): igual que la pantalla se esconde en /crm con `SOLO_EN_PRUEBAS`, el servidor no monta `/api/tasks` ni programa el correo de cada mañana en producción. Con `NODE_ENV=production` solo se montan si `CRM_BASE_URL` apunta a `/testeo` —**el servidor de /testeo tiene que tenerla así**, o su tablero dejaría de responder— o si se aprueba con `TAREAS_EN_PRODUCCION=1` (`backend/src/shared/config/soloEnPruebas.js`).
 **Frontal:** `VITE_BETA_MODE=true` en producción (lo que no está en `BETA_ROUTES` sale como «Próximamente»); `VITE_FACTURACION_V2` solo en pruebas (la emisión automática de facturas no va a producción).
 **Paridad:** ISEIE (https://crm.iseie.com, repo `CRM-ISEIE`) tiene las mismas funciones; los módulos se copian, la navegación no (ISEIE usa `/leads` donde aquí es `/prospectos`). Las personas de fuera (Diana, Hugo) trabajan solo aquí; el paso a ISEIE lo hace el equipo de Diego. Lo que todavía es distinto entre los dos, con su decisión o su pregunta: `docs/PARIDAD-ENTRE-CRMS.md` (al día el 15/10).
+**Permisos** (#423): cada ruta pide un permiso del catálogo (`backend/src/modules/permissions/catalogo.js`, la única lista; se reparte en Configuración › Roles y en «Ver permisos» de cada usuario). `docs/PERMISOS.md` es el inventario de cada ruta —qué la protegía antes, quién podía y qué permiso pide ahora— y el catálogo entero, **generado** con `npm run permisos:inventario` (backend); no se edita a mano.
+**Al desplegar #423 (migraciones 221 y 222):** 1) antes de migrar, `node scripts/comparar-permisos.mjs --simular` contra la base del entorno: aplica la 221 y la 222 dentro de una transacción, compara a cada persona activa acción por acción (antes ↔ después) y lo deshace todo; tiene que acabar con **0 sin explicar** (las diferencias explicadas son los cambios de `inventario/cambios-aprobados.js`). 2) Migrar la 221 y la 222 (se pueden pasar dos veces). 3) `node scripts/comparar-permisos.mjs` (solo lee): otra vez 0 sin explicar. `--detalle` lista cada diferencia. Lo que la 222 archiva (valores guardados que antes no surtían efecto) queda en `permisos_inertes_archivo`; cada cambio de permisos, en `permisos_registro`.
 **nginx** (#193, 07/10): el registro de accesos tapa la llave del MCP (`crm_mcp_***`) con el formato `crm_seguro` (`/etc/nginx/conf.d/crm-registro-seguro.conf`). Las copias del sitio van a la carpeta de copias, **nunca** dentro de `sites-enabled`: nginx carga todo lo que hay ahí.
 
 **Versiones y arreglos urgentes** (09/10). `v2.1.0` en producción desde el 07/10 (etiqueta en `main`). Un arreglo que tiene que llegar a producción sin esperar a la versión siguiente va **solo**: rama `hotfix/<nombre>` sacada de `origin/main`, `git cherry-pick -x` del commit que ya entró en `staging`, pull request a `main` y despliegue desde `main`. Así no se arrastra lo que está en pruebas (el 08 y el 09/10: el ranking por lo cobrado, la paginación de Facturas de ISEIE y la checklist manual). `staging` siempre lleva todo lo de `main` y algo más; nunca al revés.
@@ -99,6 +101,39 @@ Las dudas que los alumnos escriben en el campus (mensajería privada de Moodle) 
 | Recordatorio de carga de trabajo desactualizada (#190) | 1 vez al día (como mucho uno por semana a cada tutor) | `CONSULTAS_CARGA_RECORDATORIO_DISABLED=1` |
 
 Los **correos al tutor** respetan el freno `NO_ESCRIBIR_A_TUTORES` (`backend/src/shared/config/frenoTutores.js`): con él puesto no sale ninguno y se apunta en el registro. Los avisos de la **campana** sí llegan. El aviso de fuera de plazo va a los super admin y a los admin de ese campus; la reasignación es manual, desde la consulta.
+
+## Asignación de leads por actividad (#513 · gemela CRM-ISEIE#284, 27/10/2026)
+
+Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de leads** (super admin y admin; permisos `webhooks_salientes.*`). El paso a paso y su estado están en la issue #513.
+
+**Flujo.** Web (Brevo o SMTP de Hostinger) → **entrada de Make** (mailhook o webhook por campus) → `POST /api/asignacion/entrada` con la clave de la configuración (`Authorization: Bearer` o `X-API-Key`).
+- **Hay alguna gestora activa:** el CRM crea el lead con ella (`idempotency_key = asignacion-<uid>`) y manda el formulario al **escenario 2**. Ese escenario no rota por HTTP ni crea el lead. Recibe los campos tal cual, más `gestora`, `responsable_*` y `lead_id`.
+- **No hay ninguna, o la asignación está apagada:** el CRM no crea el lead y lo manda al **escenario 1**, el de siempre.
+- **El CRM no contesta en 5 s o da error:** la entrada de Make lo manda al escenario 1 por su cuenta.
+- **Envío a los escenarios:** lo hace el CRM, por mailhook (Brevo, cuenta `crm`) o webhook JSON. Reintenta a 1, 5 y 15 minutos (`jobs/asignacionScheduler.js`; se apaga con `ASIGNACION_DISABLED=1`).
+- **Sin duplicados:** una decisión por campus y `uid`.
+
+**Activa.** Al menos una acción en la ventana, que por defecto son 15 minutos y se configura entre 1 y 240. Todo está en `asignacion.actividad.js`.
+- **Qué cuenta:**
+  - `lead_interactions`: una nota cuenta solo si tiene 20 caracteres o más y no repite otra suya.
+  - `lead_status_history`, sin los cambios deshechos en menos de 10 minutos.
+  - `lead_reminders`, `lead_steps` y `lead_audit_log`.
+  - WhatsApp salientes, también los mandados desde el móvil con el número conectado (instancia `crm-u<id>`). Se mira la hora de WhatsApp para que no cuente el historial; los grupos no cuentan.
+  - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
+- **Candidatas:** las de `gestoresDelReparto` del campus. Con menos de dos, no se elige por actividad: va al escenario 1 (Diego, 28/10).
+- **Freno de pruebas (temporal):** un formulario con correo @ejemplo.com se decide pero no crea lead ni se manda al escenario 1.
+- **A quién le toca entre las activas:**
+  1. menos asignados hoy en ese campus (día de Valencia; cada campus reparte aparte, Diego 28/10);
+  2. menos en total en ese campus;
+  3. la que lleva más rato sin recibir uno;
+  4. el id.
+- **«Hoy» suma también las conversaciones de WhatsApp que le abrió la persona ese día.** Si esa conversación acaba en un lead suyo, cuenta una sola vez.
+
+**WhatsApp (widget).** `/api/w/data/:id.json` y `/api/w/whatsapp/:id.js` le dan a la web solo a la gestora del widget a la que le toca (`asignacion.widget.js`; la decisión se guarda 20 s por campus). La web ya elige al azar entre las que recibe, así que no hay que volver a pegar el código. Si no hay nadie activo, la web recibe todas las gestoras. Pulsar el botón no asigna nada.
+
+**Tablas** (migraciones 230 y 231 aquí; 243 y 244 en ISEIE): `asignacion_destinos` (destinos cifrados y huella de la clave), `asignacion_decisiones` (qué se decidió, por qué y el envío) y `actividad_crm`.
+
+**Probar en un staging:** `cd backend && node scripts/asignacion-e2e.mjs` en el servidor (se niega en las bases de producción). Crea una configuración contra un receptor de pruebas, simula actividad y borra todo al terminar. El 27/10 dio 31/31 en /testeo y en el staging de ISEIE.
 
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
