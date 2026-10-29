@@ -120,7 +120,7 @@ export async function existeEmpresa(id) {
 export async function personas(ids) {
   const lista = [...new Set((ids || []).map(Number).filter(Boolean))];
   if (!lista.length) return new Map();
-  const { rows } = await query('SELECT id, nombre, email FROM users WHERE id = ANY($1::int[])', [lista]);
+  const { rows } = await query(`SELECT id, nombre, email, NULLIF(TRIM(whatsapp_phone), '') AS whatsapp FROM users WHERE id = ANY($1::int[])`, [lista]);
   return new Map(rows.map((r) => [Number(r.id), r]));
 }
 
@@ -131,15 +131,21 @@ export async function decisionPorUid(projectId, uid) {
   return rows[0] || null;
 }
 
-/** Apunta una decisión. Si ya hay una con ese uid en el campus, devuelve null (la decide quien llegó primero). */
-export async function crearDecision({ destinoId, projectId, uid, prueba = false, escenario, responsableId = null, leadId = null, motivo, datos, destinoTipo }) {
+/**
+ * Apunta una decisión. Si ya hay una con ese uid en el campus, devuelve null (la decide quien llegó primero).
+ * `sinEnvio`: por qué no va a ningún escenario de Make (un formulario que entró directo al CRM); nace ya
+ * cerrada, para que el reenviador no la mande.
+ */
+export async function crearDecision({ destinoId, projectId, uid, prueba = false, escenario, responsableId = null, leadId = null, motivo, datos, destinoTipo, sinEnvio = null }) {
   const { rows } = await query(
     `INSERT INTO asignacion_decisiones
-       (destino_id, project_id, uid, prueba, escenario, responsable_id, lead_id, motivo, datos, destino_tipo, estado, proximo_intento_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pendiente', NOW())
+       (destino_id, project_id, uid, prueba, escenario, responsable_id, lead_id, motivo, datos, destino_tipo, estado, proximo_intento_at, respuesta, enviado_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+             CASE WHEN $11::text IS NULL THEN 'pendiente' ELSE 'enviado' END,
+             CASE WHEN $11::text IS NULL THEN NOW() END, $11::text, CASE WHEN $11::text IS NOT NULL THEN NOW() END)
      ON CONFLICT (project_id, uid) DO NOTHING
      RETURNING *`,
-    [destinoId, projectId, uid, prueba, escenario, responsableId, leadId, JSON.stringify(motivo || {}), JSON.stringify(datos || {}), destinoTipo]
+    [destinoId, projectId, uid, prueba, escenario, responsableId, leadId, JSON.stringify(motivo || {}), JSON.stringify(datos || {}), destinoTipo, sinEnvio]
   );
   return rows[0] || null;
 }
@@ -217,13 +223,14 @@ export async function rescatarAtascados(maxIntentos) {
 }
 
 /** El registro de decisiones, para la pantalla. `misCampus` null = todas. */
-export async function listarDecisiones({ misCampus = null, destinoId = null, projectId = null, escenario = null, estado = null, limit = 50 } = {}) {
+export async function listarDecisiones({ misCampus = null, destinoId = null, projectId = null, issuerId = null, escenario = null, estado = null, limit = 50 } = {}) {
   const cond = [];
   const params = [];
   const add = (sql, v) => { params.push(v); cond.push(sql.replace('$?', `$${params.length}`)); };
   if (misCampus) add('x.project_id = ANY($?::int[])', misCampus);
   if (destinoId) add('x.destino_id = $?', destinoId);
   if (projectId) add('x.project_id = $?', projectId);
+  if (issuerId) add('x.project_id IN (SELECT id FROM projects WHERE sociedad_emisora_id = $?)', issuerId);
   if (escenario) add('x.escenario = $?', escenario);
   if (estado) add('x.estado = $?', estado);
   params.push(limit);

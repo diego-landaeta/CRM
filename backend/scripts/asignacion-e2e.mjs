@@ -50,7 +50,7 @@ const entrada = (clave, cuerpo) => pedir('POST', '/asignacion/entrada', cuerpo, 
 const formulario = (letra) => ({
   uid: `asig-e2e-${SELLO}-${letra}`,
   nombre: `[E2E] Cliente ${letra}`,
-  email: `asig-e2e-${SELLO}-${letra.toLowerCase()}@ejemplo.com`,
+  email: `asig-e2e-${SELLO}-${letra.toLowerCase()}@e2e.test`,
   telefono: `+3460000${String(SELLO).slice(-4)}${letra.charCodeAt(0) % 10}`,
   notas: 'Formulario de prueba de la asignación por actividad',
   landing_url: 'https://ejemplo.com/curso-prueba?utm_source=e2e',
@@ -104,7 +104,7 @@ try {
 
   // ── B · Lo que NO cuenta: una nota corta, una nota repetida, un cambio de estado deshecho.
   const { rows: [lp] } = await query(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, '[E2E] lead para actividad', $2) RETURNING id`,
-    [campus.id, `asig-e2e-${SELLO}-actividad@ejemplo.com`]);
+    [campus.id, `asig-e2e-${SELLO}-actividad@e2e.test`]);
   limpiar.lead_prueba = lp.id; limpiar.leads.add(lp.id);
   const nota = async (uid, texto, haceMin = 0) => {
     const { rows: [r] } = await query(`INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, created_at)
@@ -142,7 +142,9 @@ try {
   ok(eC.estado === 'enviado' && eC.http_status === 200, `C · entregado al escenario 2 (${eC.estado} · http ${eC.http_status} ${eC.error || ''})`);
   ok(eC.crudo.includes('"escenario":2') && eC.crudo.includes(`"lead_id":${lC?.id}`) && eC.crudo.includes(`"gestora":{"id":${G1.id},`)
     , 'C · el escenario 2 recibe el lead y la gestora');  // los planos (responsable_*) van detrás y el eco los corta; los cubre la prueba de construirPayload
-  ok(eC.crudo.includes(`"nombre":"${fC.nombre}"`) && eC.crudo.includes(`"telefono":"${fC.telefono}"`), 'C · y los campos del formulario tal cual');
+  // El eco del receptor se corta a 1000 caracteres: el teléfono puede quedar fuera; el nombre va antes.
+  ok(eC.crudo.includes(`"nombre":"${fC.nombre}"`), 'C · y los campos del formulario tal cual');
+  ok(/"gestora":\{[^}]*"whatsapp":/.test(eC.crudo), 'C · con el WhatsApp de la gestora (para la plantilla del escenario)');
   R(`C · así le llega: ${eC.crudo.slice(0, 420)}…`);
 
   // ── D · Make reintenta el mismo formulario → la misma respuesta, ni lead ni envío nuevos.
@@ -154,7 +156,7 @@ try {
 
   // ── E · Las dos activas → le toca a quien tenga menos hoy, luego menos en total, luego el turno.
   await actividad(G2.id);
-  const cuentas = await cuentasDe([G1.id, G2.id]);
+  const cuentas = await cuentasDe([G1.id, G2.id], campus.id);
   const esperada = elegir([G1.id, G2.id], cuentas).elegida;
   const fE = formulario('E');
   const e = await entrada(clave, fE);
@@ -163,7 +165,7 @@ try {
   R(`E · cuentas: ${[G1, G2].map((g) => `${g.nombre} ${cuentas.get(g.id).hoy} hoy / ${cuentas.get(g.id).total} total`).join(' · ')}`);
   ok(e.j.data?.escenario === 2 && e.j.data?.gestora?.id === esperada.id, `E · desempate → ${nom(esperada.id)} (${e.j.data?.motivo})`);
   // Y el siguiente, ya con ese lead contado.
-  const cuentas2 = await cuentasDe([G1.id, G2.id]);
+  const cuentas2 = await cuentasDe([G1.id, G2.id], campus.id);
   const esperada2 = elegir([G1.id, G2.id], cuentas2).elegida;
   const f = await entrada(clave, formulario('F'));
   if (f.j.data?.lead_id) limpiar.leads.add(f.j.data.lead_id);
@@ -184,9 +186,14 @@ try {
   ok(k1.s === 401, `G · clave mala → ${k1.s}`);
   const k2 = await pedir('POST', '/asignacion/entrada', formulario('I'), { 'Content-Type': 'application/json' });
   ok(k2.s === 401, `G · sin clave → ${k2.s}`);
-  const sinUid = formulario('J'); delete sinUid.uid;
-  const k3 = await entrada(clave, sinUid);
-  ok(k3.s === 400, `G · sin uid → ${k3.s} (${k3.j.error})`);
+  // El JSON tal cual lo saca Make (full_name, phone_complete, course…), sin uid: se acepta y no se duplica.
+  const deMake = { full_name: '[E2E] Cliente de Make', email: `asig-e2e-${SELLO}-make@e2e.test`, phone_complete: '+34600000077',
+    course: 'Curso de prueba', message: 'Quiero información', page_url: 'https://ejemplo.com/curso', date: '28 de octubre de 2026' };
+  const k3 = await entrada(clave, deMake);
+  const k3b = await entrada(clave, deMake);
+  ok(k3.s === 200 && k3b.j.data?.decision_id === k3.j.data?.decision_id, `G · JSON de Make sin uid → ${k3.s}, y repetido → la misma decisión`);
+  const { rows: [dm] } = await query(`SELECT uid, datos->>'nombre' AS nombre, datos->>'telefono' AS tel FROM asignacion_decisiones WHERE id = $1`, [k3.j.data?.decision_id]);
+  ok(String(dm?.uid).startsWith('auto-') && dm?.nombre === deMake.full_name && dm?.tel === deMake.phone_complete, 'G · uid automático y full_name/phone_complete pasan a nombre/teléfono');
   const sinNombre = formulario('K'); delete sinNombre.nombre;
   const k4 = await entrada(clave, sinNombre);
   R(`G · sin nombre → ${k4.s} (${k4.j.error || 'escenario ' + k4.j.data?.escenario})`);
@@ -201,8 +208,8 @@ try {
   await query(`DELETE FROM actividad_crm WHERE id = ANY($1::bigint[])`, [limpiar.actividad]);
   await query(`DELETE FROM lead_interactions WHERE id = ANY($1::int[])`, [limpiar.interacciones]);
   ok((await activasEntre([G1.id, G2.id], 15)).size === 0, 'W · sin actividad otra vez');
-  const conv = async (uid, jid) => (await query(`INSERT INTO wa_conversaciones (instancia, jid, telefono) VALUES ($1, $2, $3) RETURNING id`,
-    [`e2e-u${uid}`, jid, '+34699' + String(SELLO).slice(-6)])).rows[0].id;
+  const conv = async (uid, jid) => (await query(`INSERT INTO wa_conversaciones (instancia, jid, telefono, project_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`e2e-u${uid}`, jid, '+34699' + String(SELLO).slice(-6), campus.id])).rows[0].id;
   const historial = await conv(G1.id, `e2e${SELLO}h@s.whatsapp.net`);
   await query(`INSERT INTO wa_mensajes (conversacion_id, direccion, texto, ts) VALUES ($1, 'saliente', 'hola', NOW() - INTERVAL '3 days')`, [historial]);
   ok((await entrada(clave, formulario('W'))).j.data?.escenario === 1, 'W · el historial al emparejar no la hace activa');
@@ -211,10 +218,10 @@ try {
   const w = await entrada(clave, formulario('X'));
   if (w.j.data?.lead_id) limpiar.leads.add(w.j.data.lead_id);
   ok(w.j.data?.escenario === 2 && w.j.data?.gestora?.id === G2.id, `W · un WhatsApp desde su móvil → ${G2.nombre} (${w.j.data?.motivo})`);
-  const antes = (await cuentasDe([G1.id])).get(G1.id).hoy;
+  const antes = (await cuentasDe([G1.id], campus.id)).get(G1.id).hoy;
   const abierta = await conv(G1.id, `e2e${SELLO}a@s.whatsapp.net`);
   await query(`INSERT INTO wa_mensajes (conversacion_id, direccion, texto, ts) VALUES ($1, 'entrante', 'Hola, quiero información', NOW())`, [abierta]);
-  const desp = (await cuentasDe([G1.id])).get(G1.id);
+  const desp = (await cuentasDe([G1.id], campus.id)).get(G1.id);
   ok(desp.hoy === antes + 1 && desp.whatsapp === 1, `W · una conversación que le abren hoy cuenta (${antes} → ${desp.hoy} hoy, ${desp.whatsapp} por WhatsApp)`);
   const wd = await fetch(`${API}/w/data/${campus.id}.json`).then((r) => r.json()).catch(() => ({}));
   R(`W · widget del campus: ${wd.enabled ? `encendido, da ${wd.gestoras?.length} gestora(s)` : 'apagado en este campus'}`);
@@ -242,7 +249,7 @@ try {
       R(`limpieza: ${ids.length} leads, ${limpiar.actividad.length} acciones, configuración ${b.s}`);
     }
     const { rows: [resto] } = await query(`SELECT (SELECT COUNT(*) FROM leads WHERE email LIKE $1)::int AS leads,
-      (SELECT COUNT(*) FROM asignacion_decisiones WHERE uid LIKE $2)::int AS decisiones`, [`asig-e2e-${SELLO}-%`, `asig-e2e-${SELLO}-%`]);
+      (SELECT COUNT(*) FROM asignacion_decisiones WHERE uid LIKE $2 OR datos->>'email' LIKE $1)::int AS decisiones`, [`asig-e2e-${SELLO}-%`, `asig-e2e-${SELLO}-%`]);
     ok(resto.leads === 0 && resto.decisiones === 0, `limpio (quedan ${resto.leads} leads y ${resto.decisiones} decisiones de la prueba)`);
   } catch (err) { R('AVISO limpieza: ' + err.message); }
   R(`RESULTADO ${bien} bien · ${mal} mal`);
