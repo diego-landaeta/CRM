@@ -41,13 +41,14 @@ const ICONO: Record<string, { Icon: typeof Key; color: string; que: string }> = 
   r2:          { Icon: Cloud,          color: 'bg-info-soft text-info-soft-foreground',             que: 'Almacenamiento' },
   make:        { Icon: Lightning,      color: 'bg-info-soft text-info-soft-foreground',         que: 'Automatizaciones' },
   claude:      { Icon: Robot,          color: 'bg-primary/10 text-primary', que: 'Análisis con IA' },
+  moodle:      { Icon: Key,            color: 'bg-info-soft text-info-soft-foreground',         que: 'Moodle del campus (MCP de Claude)' },
 };
 const deServicio = (s: string) => ICONO[s] || { Icon: Key, color: 'bg-muted text-muted-foreground', que: '' };
 
 const NOMBRE: Record<string, string> = {
   brevo: 'Brevo', stripe: 'Stripe', meta: 'Meta Ads', google_ads: 'Google Ads',
   gsc: 'Search Console', woocommerce: 'WooCommerce', evolution: 'Evolution',
-  r2: 'Cloudflare R2', make: 'Make', claude: 'Claude',
+  r2: 'Cloudflare R2', make: 'Make', claude: 'Claude', moodle: 'Moodle',
 };
 
 /** «hace 12 min», «hace 5 meses», «nunca». */
