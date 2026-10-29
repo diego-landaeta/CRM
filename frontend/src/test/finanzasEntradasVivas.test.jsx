@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { isValidElement } from 'react';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { Routes, Navigate, createRoutesFromChildren, matchRoutes } from 'react-router-dom';
 import App from '@/App';
 import { NAV_SECTIONS } from '@/shared/components/layout/Sidebar';
@@ -42,7 +40,6 @@ function tienePantalla(camino, saltos = 0) {
 }
 
 const enElMenu = new Set(NAV_SECTIONS.flatMap((s) => s.items.flatMap((it) => it.children || [it])).map((e) => e.to));
-const cabeceraDeVentas = readFileSync(resolve(process.cwd(), 'src/modules/accounting/pages/IncomePage.tsx'), 'utf8');
 
 describe('el submenú de Finanzas, quitado de Ventas sin perder nada', () => {
   it('hay entradas que mirar (si esto falla, la prueba no está mirando nada)', () => {
@@ -55,10 +52,10 @@ describe('el submenú de Finanzas, quitado de Ventas sin perder nada', () => {
     expect(muertas).toEqual([]);
   });
 
-  it('desde Ventas, cada entrada sigue a un clic: en el menú lateral o en la cabecera', () => {
-    const perdidas = TABS
-      .filter((t) => !enElMenu.has(t.to) && !cabeceraDeVentas.includes(`navigate('${t.to}')`))
-      .map((t) => `${t.label} (${t.to})`);
-    expect(perdidas).toEqual([]);
+  it('desde Ventas, cada entrada sigue a un clic: en el menú lateral o, la que no está, en la cabecera', () => {
+    // La de la cabecera la comprueba ventasCabecera79.test.jsx pintando la
+    // pantalla: aquí solo se fija cuál es, para que no se cuele otra.
+    const fueraDelMenu = TABS.filter((t) => !enElMenu.has(t.to)).map((t) => t.to);
+    expect(fueraDelMenu).toEqual(['/finanzas/ventas-analisis']);
   });
 });
