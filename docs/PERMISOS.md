@@ -1148,7 +1148,7 @@ lo que pide para tener sentido (editar pide ver).
 | Ver sus ventas | `ventas.view` | Sus cifras: por cliente, por producto, facturado y su evolución. | Admin, Gestora, Soporte, Project manager, Tutor |  |
 | Registrar una venta | `ventas.registrar` | Apuntar una venta nueva desde Ventas. | Admin, Gestora, Soporte | `ventas.view` |
 | Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte | `ventas.view` |
-| Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya). | Admin, Gestora, Soporte, Project manager, Tutor | `ventas.view` |
+| Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente). · nunca: Tutor, Soporte, Project manager, Colaborador | Admin, Gestora | `ventas.view` |
 
 ## Tareas
 
