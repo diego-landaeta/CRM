@@ -47,16 +47,36 @@ interface FilaGestora {
   hoy: number;
   semana: number;
   mes: number;
+  /** Si ha hecho algo en el CRM dentro de la ventana de la asignación (CRM#524). */
+  activa?: { hace_min: number; que: string } | null;
 }
 
 interface Respuesta {
   gestoras: FilaGestora[];
   sin_responsable: number;
+  ventana_min?: number;
   nota?: string;
 }
 
 /** A partir de aquí llama la atención: dos días sin un lead ya es raro. */
 const HORAS_LLAMATIVAS = 48;
+
+/*
+  QUIÉN ESTÁ ACTIVA AHORA (CRM#524; Carlos, 28/10: «para saber quién está activa,
+  que me haga un sombreado»). La fila de la gestora que ha hecho algo en el CRM en
+  los últimos minutos de la ventana de la asignación va sombreada, con un punto y
+  el porqué al pasar el ratón. Se refresca sola cada minuto.
+*/
+const QUE: Record<string, string> = {
+  nota: 'nota', contacto: 'contacto', estado: 'cambio de estado', recordatorio: 'recordatorio', paso: 'paso del proceso',
+  edicion: 'edición', whatsapp: 'WhatsApp', crear_lead: 'creó un lead', email: 'correo', producto: 'producto',
+  venta: 'venta', matricula: 'matrícula', factura: 'factura', proceso: 'proceso',
+};
+export function textoActiva(a: { hace_min: number; que: string }): string {
+  const cuando = a.hace_min <= 0 ? 'activa ahora mismo' : `activa hace ${a.hace_min} min`;
+  return `${cuando} (${QUE[a.que] || a.que})`;
+}
+const REFRESCO_MS = 60_000;
 
 function cuantoHace(horas: number | null): string {
   if (horas == null) return 'nunca ha recibido';
@@ -84,6 +104,7 @@ export default function UltimoLeadAsignado(
         setDatos({
           gestoras: lista(r.data?.gestoras),
           sin_responsable: Number(r.data?.sin_responsable ?? 0),
+          ventana_min: r.data?.ventana_min,
           nota: r.data?.nota,
         });
       }
@@ -95,10 +116,16 @@ export default function UltimoLeadAsignado(
   }, [projectId, issuerId]);
 
   useEffect(() => { traer(); }, [traer]);
+  // Quién está activa cambia de minuto en minuto: se refresca sola.
+  useEffect(() => {
+    const t = setInterval(() => { traer(); }, REFRESCO_MS);
+    return () => clearInterval(t);
+  }, [traer]);
 
   if (!datos && !cargando) return null;
 
   const filas = datos?.gestoras ?? [];
+  const activas = filas.filter((f) => f.activa);
   const paradas = filas.filter(
     (f) => f.horas_sin_recibir == null || f.horas_sin_recibir >= HORAS_LLAMATIVAS,
   );
@@ -111,6 +138,12 @@ export default function UltimoLeadAsignado(
         {datos && datos.sin_responsable > 0 && (
           <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning-soft text-warning-soft-foreground">
             {datos.sin_responsable} sin gestora
+          </span>
+        )}
+        {datos && (
+          <span className={`text-[11px] px-2 py-0.5 rounded-full ${activas.length ? 'bg-success-soft text-success-soft-foreground' : 'bg-muted text-muted-foreground'}`}
+            title={`Han hecho algo en el CRM en los últimos ${datos.ventana_min ?? 5} min`}>
+            {activas.length ? `${activas.length} ${activas.length === 1 ? 'activa' : 'activas'} ahora` : 'Ninguna activa ahora'}
           </span>
         )}
         <button
@@ -151,8 +184,15 @@ export default function UltimoLeadAsignado(
             {filas.map((f) => {
               const parada = f.horas_sin_recibir == null || f.horas_sin_recibir >= HORAS_LLAMATIVAS;
               return (
-                <tr key={f.id} className="border-b border-border last:border-0">
-                  <td className="py-2 pr-3 font-medium">{f.gestora}</td>
+                <tr key={f.id} className={`border-b border-border last:border-0 ${f.activa ? 'bg-success-soft' : ''}`}
+                  data-activa={f.activa ? 'si' : undefined}>
+                  <td className="py-2 pr-3 font-medium" title={f.activa ? textoActiva(f.activa) : undefined}>
+                    {f.activa && (
+                      <span className="inline-block w-2 h-2 rounded-full bg-success mr-1.5 align-middle" aria-label={textoActiva(f.activa)} />
+                    )}
+                    {f.gestora}
+                    {f.activa && <span className="block text-[10px] font-normal text-success-soft-foreground">{textoActiva(f.activa)}</span>}
+                  </td>
                   <td className="py-2 pr-3 text-muted-foreground">
                     {f.lead_nombre || <span className="italic">—</span>}
                     {f.lead_producto && (
