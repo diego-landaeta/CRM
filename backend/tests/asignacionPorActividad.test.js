@@ -14,6 +14,7 @@ const pool = (await import('../src/shared/config/db.js')).default;
 const { cuentasDe } = await import('../src/modules/asignacion/asignacion.actividad.js');
 const { _memoria: memoriaDelWidget } = await import('../src/modules/asignacion/asignacion.widget.js');
 const { upsertConfig: configDelWidget } = await import('../src/modules/widget/widget.model.js');
+const service = await import('../src/modules/asignacion/asignacion.service.js');
 
 /**
  * Asignación de leads por actividad, de punta a punta (CRM#513; Carlos y Diego, 27/10/2026).
@@ -215,8 +216,8 @@ describe('WhatsApp (fase 5)', () => {
   // Cada conversación, en el número conectado de la gestora (instancia `crm-u<id>`).
   let n = 0;
   const conversacion = async (c, { grupo = false } = {}) => (await one(
-    `INSERT INTO wa_conversaciones (instancia, jid, telefono) VALUES ($1, $2, $3) RETURNING id`,
-    [`crm-u${U[c].id}`, `34611${String(++n).padStart(6, '0')}@${grupo ? 'g.us' : 's.whatsapp.net'}`, `+34611${String(n).padStart(6, '0')}`])).id;
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, project_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`crm-u${U[c].id}`, `34611${String(++n).padStart(6, '0')}@${grupo ? 'g.us' : 's.whatsapp.net'}`, `+34611${String(n).padStart(6, '0')}`, ids.project])).id;
   const mensaje = (conv, direccion, { haceMin = 0, enviadoPor = null } = {}) => q(
     `INSERT INTO wa_mensajes (conversacion_id, direccion, texto, enviado_por, ts) VALUES ($1, $2, 'hola', $3, NOW() - make_interval(mins => $4::int))`,
     [conv, direccion, enviadoPor, haceMin]);
@@ -248,29 +249,29 @@ describe('WhatsApp (fase 5)', () => {
 
   it('una conversación que le abre la persona hoy cuenta como asignada; si luego es su lead, cuenta una vez', async () => {
     await limpiarTodo();
-    const antes = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const antes = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     const conv = await conversacion('ana');
     await mensaje(conv, 'entrante', { haceMin: 2 });
     await mensaje(conv, 'saliente', { haceMin: 1 });
-    const despues = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const despues = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     expect(despues.hoy).toBe(antes.hoy + 1);
     expect(despues.whatsapp).toBe(1);
     // La gestora registra el lead de esa conversación: sigue contando uno.
     const lead = await one('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id',
       [ids.project, `${MARCA} de WhatsApp`, `wa_${MARCA.toLowerCase()}@x.test`, U.ana.id]);
     await q('UPDATE wa_conversaciones SET lead_id = $1 WHERE id = $2', [lead.id, conv]);
-    const registrado = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const registrado = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     expect(registrado.hoy).toBe(antes.hoy + 1);
     expect(registrado.whatsapp).toBe(0);
   });
 
   it('la conversación que empieza la gestora no cuenta como asignada', async () => {
     await limpiarTodo();
-    const antes = (await cuentasDe([U.bea.id])).get(U.bea.id);
+    const antes = (await cuentasDe([U.bea.id], ids.project)).get(U.bea.id);
     const conv = await conversacion('bea');
     await mensaje(conv, 'saliente', { haceMin: 5 });
     await mensaje(conv, 'entrante', { haceMin: 1 });
-    expect((await cuentasDe([U.bea.id])).get(U.bea.id).hoy).toBe(antes.hoy);
+    expect((await cuentasDe([U.bea.id], ids.project)).get(U.bea.id).hoy).toBe(antes.hoy);
   });
 
   it('el widget de la web: con alguien activo, solo ella; sin nadie, todas (y sigue al azar)', async () => {
@@ -288,5 +289,140 @@ describe('WhatsApp (fase 5)', () => {
     await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: false });
     expect((await datos()).gestoras).toHaveLength(2);
     await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: true });
+  });
+});
+
+describe('cada campus reparte aparte (Diego, 28/10)', () => {
+  it('los leads que una gestora recibe en otro campus no cuentan para el «menos hoy» de este', async () => {
+    const antes = (await cuentasDe([U.bea.id], ids.project)).get(U.bea.id);
+    for (let i = 0; i < 3; i++) {
+      await q('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4)',
+        [ids.otro, `${MARCA} otro campus ${i}`, `otro${i}_${MARCA.toLowerCase()}@x.test`, U.bea.id]);
+    }
+    expect((await cuentasDe([U.bea.id], ids.project)).get(U.bea.id).hoy).toBe(antes.hoy);
+    expect((await cuentasDe([U.bea.id], ids.otro)).get(U.bea.id).hoy).toBe(3);
+  });
+  it('el escenario recibe también el WhatsApp de la gestora (para la plantilla de Wasapi)', async () => {
+    await q(`UPDATE users SET whatsapp_phone = '34600111222' WHERE id = $1`, [U.cris.id]);
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.cris.id]);
+    sendEmail.mockClear();
+    const r = await entrar('wa-de-la-gestora');
+    expect(r.body.data.gestora).toMatchObject({ id: U.cris.id, whatsapp: '34600111222' });
+    await esperar();
+    const [correo] = correosA(MAIL2);
+    expect(correo).toBeTruthy();
+  });
+});
+
+describe('«Probar escenario 2» (visto probando la pantalla, 28/10)', () => {
+  it('lleva una gestora de ejemplo, para poder enlazar sus campos en Make', async () => {
+    sendEmail.mockClear();
+    const r = await request.post(`/api/asignacion/${ids.config}/prueba`).set(como('admin')).send({ escenario: 2 });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const [correo] = correosA(MAIL2);
+    expect(correo.textContent).toContain('GESTORA ASIGNADA: Gestora de prueba');
+  });
+  it('la del escenario 1 sigue sin gestora', async () => {
+    sendEmail.mockClear();
+    await request.post(`/api/asignacion/${ids.config}/prueba`).set(como('admin')).send({ escenario: 1 });
+    const [correo] = correosA(MAIL1);
+    expect(correo.textContent).not.toContain('GESTORA ASIGNADA');
+  });
+});
+
+describe('la entrada con el JSON de Make (28/10)', () => {
+  it('sin uid y con full_name/phone_complete: entra, y repetido no duplica', async () => {
+    const cuerpo = { full_name: `${MARCA} de Make`, email: `make_${MARCA.toLowerCase()}@cliente.test`, phone_complete: '+34600000088', course: 'Curso X' };
+    const a = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).send(cuerpo);
+    expect(a.status, JSON.stringify(a.body)).toBe(200);
+    const b = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).send(cuerpo);
+    expect(b.body.data.decision_id).toBe(a.body.data.decision_id);
+    const d = await one('SELECT uid, datos FROM asignacion_decisiones WHERE id = $1', [a.body.data.decision_id]);
+    expect(d.uid).toMatch(/^auto-/);
+    expect(d.datos).toMatchObject({ nombre: cuerpo.full_name, telefono: cuerpo.phone_complete, full_name: cuerpo.full_name });
+  });
+});
+
+describe('la entrada como formulario codificado, con el correo original (28/10)', () => {
+  it('entra y el escenario recibe el correo tal cual', async () => {
+    const r = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).type('form').send({
+      json: JSON.stringify({ full_name: `${MARCA} codificado`, email: `cod_${MARCA.toLowerCase()}@cliente.test` }),
+      asunto: 'Nuevo formulario del Curso X', texto: 'Nombre: codificado', html: '<p>codificado</p>',
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const d = await one('SELECT datos FROM asignacion_decisiones WHERE id = $1', [r.body.data.decision_id]);
+    expect(d.datos.original).toMatchObject({ asunto: 'Nuevo formulario del Curso X', texto: 'Nombre: codificado' });
+  });
+});
+
+describe('sin freno de pruebas (Diego, 28/10: «quita el freno»)', () => {
+  it('un formulario @ejemplo.com ya es como cualquier otro: con una activa, crea el lead', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.ana.id]);
+    const correo = `sinfreno_${MARCA.toLowerCase()}@ejemplo.com`;
+    const r = await entrar('sin-freno', { email: correo });
+    expect(r.body.data.escenario).toBe(2);
+    expect(r.body.data.lead_id).toBeTruthy();
+    expect(await q('SELECT 1 FROM leads WHERE email = $1', [correo])).toHaveLength(1);
+  });
+});
+
+describe('con una sola persona en el reparto (Diego, 28/10)', () => {
+  it('va al escenario 1 aunque esté activa, hasta que sean dos', async () => {
+    const solo = await one('INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [`${MARCA} solo`, `${MARCA.toLowerCase()}-solo`, `${MARCA}-solo`, ids.issuer]);
+    await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [U.ana.id, solo.id]);
+    const c = await request.post('/api/asignacion').set(como('superadmin')).send({
+      nombre: `${MARCA} solo`, ambito: 'campus', project_id: solo.id, ventana_min: 15,
+      escenario1: { tipo: 'mailhook', valor: MAIL1 }, escenario2: { tipo: 'mailhook', valor: MAIL2 },
+    });
+    expect(c.status, JSON.stringify(c.body)).toBe(201);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.ana.id]);
+    const r = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${c.body.data.clave}`)
+      .send({ uid: `${MARCA}-solo`, nombre: 'Uno solo', email: `solo_${MARCA.toLowerCase()}@cliente.test` });
+    expect(r.body.data).toMatchObject({ escenario: 1, gestora: null, lead_id: null });
+    expect(r.body.data.motivo).toMatch(/Solo una persona/);
+    await q('DELETE FROM asignacion_decisiones WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM asignacion_destinos WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM user_projects WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM projects WHERE id = $1', [solo.id]);
+  });
+});
+
+describe('el registro por empresa (Diego, 28/10: «tengo que verlo por empresa y campus»)', () => {
+  it('con issuer_id salen las decisiones de sus campus; con otra empresa, ninguna', async () => {
+    const r = await request.get(`/api/asignacion/decisiones?issuer_id=${ids.issuer}`).set(como('superadmin'));
+    expect(r.status).toBe(200);
+    expect(r.body.data.length).toBeGreaterThan(0);
+    expect(r.body.data.every((d) => d.project_id === ids.project || d.project_id === ids.otro)).toBe(true);
+    const otra = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id', [`${MARCA} OTRA`, `${MARCA}-O`]);
+    const vacia = await request.get(`/api/asignacion/decisiones?issuer_id=${otra.id}`).set(como('superadmin'));
+    expect(vacia.body.data).toHaveLength(0);
+    await q('DELETE FROM invoice_issuers WHERE id = $1', [otra.id]);
+  });
+});
+
+describe('formularios que entran directos al CRM (Diego, 29/10: «arregla todo»)', () => {
+  it('con alguien activa: la elige; la decisión queda en el registro ya cerrada, sin envío a Make', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.bea.id]);
+    const decision = await service.decidirFormulario(ids.project);
+    expect(decision?.elegida?.id).toBe(U.bea.id);
+    const lead = await one('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id, project_id, nombre, responsable_id',
+      [ids.project, `${MARCA} por formulario`, `formulario_${MARCA.toLowerCase()}@cliente.test`, U.bea.id]);
+    await service.apuntarFormulario(decision, lead, { email: `formulario_${MARCA.toLowerCase()}@cliente.test` });
+    const d = await one('SELECT escenario, estado, responsable_id, lead_id, respuesta, proximo_intento_at FROM asignacion_decisiones WHERE uid = $1', [`formulario-${lead.id}`]);
+    expect(d).toMatchObject({ escenario: 2, estado: 'enviado', responsable_id: U.bea.id, lead_id: lead.id, proximo_intento_at: null });
+    expect(d.respuesta).toMatch(/directo al CRM/);
+  });
+  it('sin nadie activa: no elige (sigue el turno)', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+    const decision = await service.decidirFormulario(ids.project);
+    expect(decision?.elegida ?? null).toBeNull();
   });
 });

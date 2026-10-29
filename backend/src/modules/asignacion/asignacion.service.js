@@ -30,6 +30,10 @@ import { CAMPOS_QUE_PONE_EL_CRM, motivoDelFallo } from './asignacion.validation.
 */
 
 export const MAX_INTENTOS = 4;
+/** Por debajo de dos personas en el reparto no se elige por actividad. */
+export const MINIMO_EN_EL_REPARTO = 2;
+/** La gestora que lleva «Probar escenario 2». Inventada: no es nadie del equipo. */
+export const GESTORA_DE_PRUEBA = Object.freeze({ id: 0, nombre: 'Gestora de prueba', email: 'gestora.prueba@ejemplo.com', whatsapp: '34600000001' });
 export const ESPERAS_MS = [60_000, 5 * 60_000, 15 * 60_000];
 const TIMEOUT_MS = parseInt(process.env.ASIGNACION_TIMEOUT_MS || '10000', 10);
 const RESPUESTA_MAX = 1000;
@@ -80,7 +84,8 @@ function camposDelLead(datos) {
  *
  * Devuelve lo que contesta la entrada a Make: { escenario, gestora?, lead_id?, decision_id }.
  */
-export async function decidir(config, datos, { prueba = false } = {}) {
+export async function decidir(config, datos, opciones = {}) {
+  const prueba = Boolean(opciones.prueba);
   // El campus: el de la configuración; si es de una empresa o de todas, el que diga el formulario.
   let campus;
   if (config.ambito === 'campus') {
@@ -105,8 +110,10 @@ export async function decidir(config, datos, { prueba = false } = {}) {
     if (ya) return respuestaDe(ya, await model.personas([ya.responsable_id]));
 
     const candidatas = config.activo ? await gestoresDelReparto((sql, p) => query(sql, p), campus.id) : [];
-    const activas = candidatas.length ? await activasEntre(candidatas.map((g) => g.id), config.ventana_min) : new Map();
-    const cuentas = activas.size ? await cuentasDe([...activas.keys()]) : new Map();
+    // Con una sola persona en el reparto no hay a quién elegir: va al escenario 1, el de siempre,
+    // hasta que sean dos (Diego, 28/10: «para las empresas de 1 gestora eso no funciona hasta que sean dos»).
+    const activas = candidatas.length >= MINIMO_EN_EL_REPARTO ? await activasEntre(candidatas.map((g) => g.id), config.ventana_min) : new Map();
+    const cuentas = activas.size ? await cuentasDe([...activas.keys()], campus.id) : new Map();
     const { elegida, orden } = elegir(activas.keys(), cuentas);
 
     const motivo = {
@@ -116,6 +123,7 @@ export async function decidir(config, datos, { prueba = false } = {}) {
       activas: orden.map((f) => ({ ...f, ...(activas.get(f.id) || {}) })),
       texto: !config.activo ? 'La asignación por actividad está apagada en este campus'
         : !candidatas.length ? 'Nadie recibe leads en este campus'
+          : candidatas.length < MINIMO_EN_EL_REPARTO ? 'Solo una persona recibe leads en este campus: va al escenario de siempre'
           : !elegida ? `Ninguna gestora activa en los últimos ${config.ventana_min} min`
             : porQue(elegida, activas.get(elegida.id)),
     };
@@ -156,10 +164,68 @@ function respuestaDe(dec, personas) {
   return {
     decision_id: dec?.id ?? null,
     escenario: dec?.escenario ?? 1,
-    gestora: g ? { id: Number(g.id), nombre: g.nombre, email: g.email } : null,
+    gestora: g ? { id: Number(g.id), nombre: g.nombre, email: g.email, whatsapp: g.whatsapp || null } : null,
     lead_id: dec?.lead_id ?? null,
     motivo: dec?.motivo?.texto || null,
   };
+}
+
+/*
+  FORMULARIOS QUE ENTRAN DIRECTOS AL CRM (Diego, 29/10: «arregla todo en producción»).
+  ISECD, ISEF e ISSLOGG mandan su formulario al webhook de formularios del CRM, sin
+  pasar por Make, y se repartían por el turno de siempre aunque hubiera alguien
+  trabajando. Con la asignación encendida en el campus (y dos o más en el reparto),
+  la misma regla: si alguien ha hecho algo en la ventana, el lead es para la que
+  toca; si no, sigue el turno. Queda en el registro con su porqué, sin envío a Make
+  (esos campus no tienen escenario: el CRM ya avisa a la gestora del lead nuevo).
+*/
+
+/** Antes de crear el lead: a quién le toca por actividad en ese campus, o null (sigue el turno). Nunca falla. */
+export async function decidirFormulario(projectId) {
+  try {
+    const config = await model.paraCampus(projectId);
+    if (!config?.activo) return null;
+    const candidatas = await gestoresDelReparto((sql, p) => query(sql, p), projectId);
+    if (candidatas.length < MINIMO_EN_EL_REPARTO) return null;
+    const activas = await activasEntre(candidatas.map((g) => g.id), config.ventana_min);
+    const cuentas = activas.size ? await cuentasDe([...activas.keys()], projectId) : new Map();
+    const { elegida, orden } = elegir(activas.keys(), cuentas);
+    return {
+      config,
+      elegida: elegida || null,
+      motivo: {
+        ventana_min: config.ventana_min,
+        candidatas: candidatas.map((g) => ({ id: Number(g.id), nombre: g.nombre })),
+        activas: orden.map((f) => ({ ...f, ...(activas.get(f.id) || {}) })),
+        texto: elegida ? porQue(elegida, activas.get(elegida.id))
+          : `Ninguna gestora activa en los últimos ${config.ventana_min} min: sigue el turno de siempre`,
+      },
+    };
+  } catch (err) {
+    logger.warn({ err: err.message, projectId }, 'asignación: no se pudo decidir el formulario; sigue el turno');
+    return null;
+  }
+}
+
+/** Después de crear el lead: lo apunta en el registro de la asignación (sin envío a Make). Nunca falla. */
+export async function apuntarFormulario(decision, lead, datos = {}) {
+  if (!decision || !lead?.id) return;
+  try {
+    await model.crearDecision({
+      destinoId: decision.config.id,
+      projectId: lead.project_id,
+      uid: `formulario-${lead.id}`,
+      escenario: decision.elegida ? 2 : 1,
+      responsableId: lead.responsable_id || null,
+      leadId: lead.id,
+      motivo: decision.motivo,
+      datos: { nombre: lead.nombre || datos.nombre || null, email: datos.email || null, origen: datos.origen || 'formulario' },
+      destinoTipo: decision.elegida ? decision.config.destino2_tipo : decision.config.destino1_tipo,
+      sinEnvio: 'Formulario directo al CRM: no pasa por Make',
+    });
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'asignación: no se pudo apuntar el formulario en el registro');
+  }
 }
 
 /* ─── El envío al escenario ─── */
@@ -174,10 +240,11 @@ export function construirPayload(dec, campus, gestora) {
     prueba: Boolean(dec.prueba),
     campus: campus ? { id: Number(campus.id), nombre: campus.nombre, slug: campus.slug } : null,
     lead_id: dec.lead_id ?? null,
-    gestora: gestora ? { id: Number(gestora.id), nombre: gestora.nombre, email: gestora.email } : null,
+    gestora: gestora ? { id: Number(gestora.id), nombre: gestora.nombre, email: gestora.email, whatsapp: gestora.whatsapp || null } : null,
     // Planos, como los espera un escenario de Make.
     ...campos,
-    ...(gestora ? { responsable_id: Number(gestora.id), responsable_email: gestora.email, responsable_nombre: gestora.nombre } : {}),
+    // `responsable_whatsapp`: para la plantilla de WhatsApp que manda el escenario (Wasapi en Psiko).
+    ...(gestora ? { responsable_id: Number(gestora.id), responsable_email: gestora.email, responsable_nombre: gestora.nombre, responsable_whatsapp: gestora.whatsapp || null } : {}),
     datos: campos,
     original: dec.datos?.original || null,
   };
@@ -226,7 +293,11 @@ export async function procesarEnvio(decisionId) {
     if (!config) return fallo({ error: 'La configuración de la asignación ya no existe', permanente: true });
     const destino = destinoDe(config, dec.escenario);
     const campus = await model.campus(dec.project_id);
-    const gestora = dec.responsable_id ? (await model.personas([dec.responsable_id])).get(Number(dec.responsable_id)) : null;
+    // «Probar escenario 2» lleva una gestora de ejemplo: sin ella, quien monta el
+    // escenario en Make no tiene `gestora` ni `responsable_*` para enlazarlos
+    // (visto probando la pantalla el 28/10).
+    const gestora = dec.responsable_id ? (await model.personas([dec.responsable_id])).get(Number(dec.responsable_id))
+      : (dec.prueba && Number(dec.escenario) === 2 ? GESTORA_DE_PRUEBA : null);
     const payload = construirPayload(dec, campus, gestora);
 
     if (destino.tipo === 'mailhook') {
