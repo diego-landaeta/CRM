@@ -4,6 +4,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import * as model from './cursos-pendientes.model.js';
+import { notificar } from './cursos-pendientes.correos.js';
 
 /**
  * Cursos pendientes (#336): las reglas.
@@ -412,7 +413,8 @@ const enlace = (id) => `/productos/pendientes?curso=${id}`;
 
 async function avisarTutora(tipo, curso, tutorId, user) {
   if (tipo !== 'asignado') return;
-  await notifyUsers({
+  await notificar({
+    clave: `cp-asignado-${curso.id}-${tutorId}`, project_id: curso.project_id,
     targetUserIds: [tutorId], type: 'curso_pendiente_asignado',
     title: `Te han asignado un curso: ${curso.nombre}`,
     message: `${curso.campus}${curso.alumnas_esperando ? ` · ${curso.alumnas_esperando} alumna${curso.alumnas_esperando === 1 ? '' : 's'} esperando` : ''}. Pon la fecha comprometida.`,
@@ -470,12 +472,12 @@ export async function avisarVencimientos() {
     const admins = async () => model.adminsDelCampus(c.project_id);
     const dest = async () => [...new Set([...(c.tutor_id ? [c.tutor_id] : []), ...(await admins())])];
     if (['asignado', 'en_desarrollo'].includes(c.estado) && c.fecha && c.dias === 3 && c.tutor_id && await unaVez(c.id, 'vence_3d', c.fecha)) {
-      await notifyUsers({ targetUserIds: [c.tutor_id], type: 'curso_pendiente_vence', title: `Faltan 3 días: ${c.nombre}`,
+      await notificar({ clave: `cp-vence_3d-${c.id}-${c.fecha}`, project_id: c.project_id, targetUserIds: [c.tutor_id], type: 'curso_pendiente_vence', title: `Faltan 3 días: ${c.nombre}`,
         message: `${c.campus}. Fecha comprometida: ${c.fecha}.`, link_path: enlace(c.id) }).catch(() => {});
       enviados += 1;
     }
     if (['pendiente_asignar', 'asignado', 'en_desarrollo'].includes(c.estado) && c.fecha && c.dias < 0 && await unaVez(c.id, 'retrasado', c.fecha)) {
-      await notifyUsers({ targetUserIds: await dest(), type: 'curso_pendiente_retrasado', title: `Retrasado: ${c.nombre}`,
+      await notificar({ clave: `cp-retrasado-${c.id}-${c.fecha}`, project_id: c.project_id, targetUserIds: await dest(), type: 'curso_pendiente_retrasado', title: `Retrasado: ${c.nombre}`,
         message: `${c.campus}. Tenía que estar el ${c.fecha}${c.esperando ? ` y hay ${c.esperando} alumna${c.esperando === 1 ? '' : 's'} esperando` : ''}.`,
         link_path: enlace(c.id) }).catch(() => {});
       enviados += 1;
@@ -483,14 +485,14 @@ export async function avisarVencimientos() {
     if (c.estado === 'pendiente_asignar' && c.lleva_48h && await unaVez(c.id, 'sin_tutora', c.solicitada)) {
       const a = await admins();
       if (a.length) {
-        await notifyUsers({ targetUserIds: a, type: 'curso_pendiente_sin_tutora', title: `Más de 48 h sin tutora: ${c.nombre}`,
+        await notificar({ clave: `cp-sin_tutora-${c.id}-${c.solicitada}`, project_id: c.project_id, targetUserIds: a, type: 'curso_pendiente_sin_tutora', title: `Más de 48 h sin tutora: ${c.nombre}`,
           message: `${c.campus}${c.esperando ? ` · ${c.esperando} alumna${c.esperando === 1 ? '' : 's'} esperando` : ''}.`, link_path: enlace(c.id) }).catch(() => {});
         enviados += 1;
       }
     }
     if (c.estado === 'publicado' && c.esperando > 0 && c.publicada
       && c.publicada <= new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10) && await unaVez(c.id, 'sin_habilitar', c.publicada)) {
-      await notifyUsers({ targetUserIds: await dest(), type: 'curso_pendiente_sin_habilitar', title: `Publicado y con alumnas sin habilitar: ${c.nombre}`,
+      await notificar({ clave: `cp-sin_habilitar-${c.id}-${c.publicada}`, project_id: c.project_id, targetUserIds: await dest(), type: 'curso_pendiente_sin_habilitar', title: `Publicado y con alumnas sin habilitar: ${c.nombre}`,
         message: `${c.campus} · ${c.esperando} sin habilitar desde hace más de 48 h.`, link_path: enlace(c.id) }).catch(() => {});
       enviados += 1;
     }
@@ -532,7 +534,8 @@ export async function resumenDeLaSemana({ ahora = new Date() } = {}) {
   const tutoras = carga.slice(0, 5).map((t) => `${t.tutora} (${t.abiertos}${t.retrasados ? `, ${t.retrasados} retrasados` : ''})`);
   const { rows: supers } = await query(`SELECT id FROM users WHERE role = 'superadmin' AND active`);
   if (!supers.length) return { enviado: false, motivo: 'sin super admin' };
-  await notifyUsers({
+  await notificar({
+    clave: `cp-semana-${desde}`,
     targetUserIds: supers.map((u) => u.id), type: 'curso_pendiente_semana',
     title: `Cursos pendientes: ${total} abiertos, ${campus.reduce((s, c) => s + c.retrasados, 0)} retrasados`,
     message: [...lineas, alDia.length ? `Al día: ${alDia.join(', ')}.` : null, tutoras.length ? `Carga: ${tutoras.join('; ')}.` : null].filter(Boolean).join(' · '),
