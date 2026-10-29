@@ -303,6 +303,7 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   campanas_publicitarias: 'Publicidad',
   actividad_por_comercial: 'Equipo y actividad',
   equipo: 'Equipo y actividad',
+  clientes: 'Campus y prospectos',
   moodle_cursos: 'Moodle de los campus',
   moodle_alumnos: 'Moodle de los campus',
   moodle_recursos_externos: 'Moodle de los campus',

@@ -163,7 +163,7 @@ describe('matriculas: altas por producto, estado y campus', () => {
   it('las cifras son las del campus pedido y los cuatro números de la pantalla (getStats) cuadran', async () => {
     const { datos } = await ver(ADMIN, 'matriculas');
     expect(datos).toMatchObject({ total: 3, validadas: 1, pendientes: 1, rechazadas: 0, solicitudes_de_admision: 1 });
-    const pantalla = await matriculaModel.getStats(P);
+    const pantalla = await matriculaModel.getStats({ projectId: P });
     expect([datos.total, datos.pendientes, datos.validadas, datos.rechazadas])
       .toEqual([Number(pantalla.total), Number(pantalla.pendientes), Number(pantalla.validadas), Number(pantalla.rechazadas)]);
     // La rechazada del otro campus no entra.
