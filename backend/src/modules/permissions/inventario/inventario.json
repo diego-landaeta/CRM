@@ -536,6 +536,18 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/forgot-password",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/forgot-password",
+  "relativa": "POST /forgot-password",
+  "controlador": "forgotPassword",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "POST /api/auth/set-password",
   "tipo": "ruta",
   "modulo": "auth",
@@ -5373,6 +5385,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/ia-analisis/preguntar",
+  "tipo": "ruta",
+  "modulo": "ia-analisis",
+  "metodo": "POST",
+  "ruta": "/api/ia-analisis/preguntar",
+  "relativa": "POST /preguntar",
+  "controlador": "preguntarCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.generar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ia/metrics/:projectId",
   "tipo": "ruta",
   "modulo": "ia-monitor",
@@ -7897,12 +7931,12 @@
   "puertas": []
  },
  {
-  "id": "POST /api/mcp/panel/codigo",
+  "id": "POST /api/mcp/panel/tokens/:id/codigo",
   "tipo": "ruta",
   "modulo": "mcp",
   "metodo": "POST",
-  "ruta": "/api/mcp/panel/codigo",
-  "relativa": "POST /panel/codigo",
+  "ruta": "/api/mcp/panel/tokens/:id/codigo",
+  "relativa": "POST /panel/tokens/:id/codigo",
   "controlador": "crearCodigo",
   "publica": false,
   "guardias": [
@@ -11855,6 +11889,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/ventas/sin-formacion",
+  "tipo": "ruta",
+  "modulo": "sales",
+  "metodo": "GET",
+  "ruta": "/api/ventas/sin-formacion",
+  "relativa": "GET /sin-formacion",
+  "controlador": "sinFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ventas.view_equipo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ventas/por-cliente",
   "tipo": "ruta",
   "modulo": "sales",
@@ -15312,6 +15368,29 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.forma_avisos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/whatsapp/voz-o-texto",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/voz-o-texto",
+  "relativa": "GET /voz-o-texto",
+  "controlador": "vozOTextoCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "whatsapp.usar",
+     "whatsapp.supervisar"
     ]
    }
   ],
