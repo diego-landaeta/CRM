@@ -6,6 +6,7 @@ import {
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 import { campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /*
   QUIÉN PUEDE (Diego, 15/10: solo super admin y admin).
@@ -17,8 +18,8 @@ import { campusDeLaPersona } from '../../shared/utils/ambito.js';
     con nombre, correo y DNI de cada cliente: quien no ve uno de esos campus no
     puede ni verlo ni ponerlo. La misma regla que «tocar» en Conectores.
 
-  Las rutas ya cortan a soporte y al resto con `soloRoles('admin',
-  'superadmin')`. No va `projectAccess`: ese mira UN campus de la petición, y un
+  Quién entra lo dicen las rutas, con sus permisos del catálogo
+  (`webhooks_salientes.*`, #423; de serie, admin). No va `projectAccess`: ese mira UN campus de la petición, y un
   webhook puede ser de una empresa o de todas. La comprobación equivalente se
   hace aquí, con el ámbito del propio webhook.
 */
@@ -52,7 +53,7 @@ function normalizarAmbito({ ambito, issuer_id, project_id }) {
 
 /** Si esta persona puede tener un webhook con ese ámbito. Lanza si no. */
 async function comprobarAmbito(req, { ambito, issuer_id, project_id }) {
-  if (ambito === 'todas' && !esSuperadmin(req)) {
+  if (ambito === 'todas' && !(await tienePermiso(req, 'webhooks_salientes.todas'))) {
     throw prohibido('Un webhook de todas las empresas solo lo puede crear, ver o cambiar un super admin.');
   }
   if (ambito === 'empresa' && !(await model.existeEmpresa(issuer_id))) {
@@ -192,23 +193,33 @@ export async function borrar(req, res, next) {
 export async function prueba(req, res, next) {
   try {
     const w = await elWebhook(req, idDe(req.params.id));
-    const envio = await service.enviarPrueba(w);
+    const envio = await service.enviarPrueba(w, req.user?.userId ?? null);
     res.json({ success: true, data: envio });
   } catch (err) { next(err); }
 }
 
-/** GET /envios?webhookId=&estado=&limit= — los últimos, solo de los webhooks que puede ver. */
+/**
+ * GET /envios?webhookId=&estado=&limit=&projectId=&issuerId= — los últimos, solo de los webhooks
+ * que puede ver y, con una empresa o un campus elegidos arriba, solo de los de ese ámbito: los
+ * mismos que enseña la pantalla. Diego, 21/10: con ICTESS elegido salían los de Academia IA.
+ */
 export async function envios(req, res, next) {
   try {
     const f = validar(listarEnviosSchema, req.query);
+    const mios = await misCampus(req);
+    if (mios && !mios.length) return res.json({ success: true, data: [] });
+    const ambito = { projectId: f.projectId ?? null, issuerId: f.projectId ? null : (f.issuerId ?? null) };
+    const conAmbito = Boolean(ambito.projectId || ambito.issuerId);
     let webhookIds = null;
-    if (!esSuperadmin(req)) {
-      const mios = await misCampus(req);
-      webhookIds = mios.length ? (await model.listar({ misCampus: mios })).map((w) => w.id) : [];
+    if (mios || conAmbito) {
+      webhookIds = (await model.listar({ misCampus: mios, ...ambito })).map((w) => w.id);
       if (!webhookIds.length) return res.json({ success: true, data: [] });
     }
+    const campusContexto = conAmbito ? await model.campusDeContexto(ambito) : null;
     if (f.webhookId) await elWebhook(req, f.webhookId);
-    res.json({ success: true, data: await model.listarEnvios({ webhookIds, ...f }) });
+    res.json({ success: true, data: await model.listarEnvios({
+      webhookIds, campusContexto, webhookId: f.webhookId, estado: f.estado, limit: f.limit,
+    }) });
   } catch (err) { next(err); }
 }
 

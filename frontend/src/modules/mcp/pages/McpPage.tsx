@@ -8,7 +8,6 @@ import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } from '../api/mcp.api';
 import { nombreDelCliente } from '../lib/cliente';
 import ConexionesClaude from '../components/ConexionesClaude';
-import CodigoParaClaude from '../components/CodigoParaClaude';
 import EstadoCodigoUrl, { FilaConexion } from '../components/EstadoCodigoUrl';
 import ActividadMcp from '../components/ActividadMcp';
 import InterruptorMcp from '../components/InterruptorMcp';
@@ -155,7 +154,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
     try {
       await mcpApi.cambiarAcceso(p.id, valor);
       setPersonas((lista) => lista.map((x) => (x.id === p.id
-        ? { ...x, usa_mcp: valor, tieneAcceso: valor } : x)));
+        ? { ...x, tieneAcceso: valor } : x)));
       toast({ title: valor ? `Acceso dado a ${p.nombre}` : `Acceso pausado a ${p.nombre}` });
     } catch (e) {
       toast({ title: 'No se pudo cambiar el acceso', description: (e as Error).message, variant: 'destructive' });
@@ -188,7 +187,13 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
       )}
 
       {/* Las conexiones por campus, empresa o todo el sistema: quien administra. */}
-      {estado?.tieneAcceso && estado.puedeAdministrar && <ConexionesClaude onCambio={cargar} />}
+      {estado?.tieneAcceso && estado.puedeAdministrar && (
+        <ConexionesClaude
+          onCambio={cargar}
+          todasSusUrls={estado.codigo?.obligatorio ? estado.codigo.urls : undefined}
+          urlsSueltas={estado.tokens.filter((t) => t.vivo).map((t) => t.id)}
+        />
+      )}
 
       {!estado?.tieneAcceso ? (
         <div className="bg-card border border-border rounded-lg">
@@ -229,9 +234,6 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               </div>
             )}
           </div>
-
-          {/* Segundo factor (#192): solo con el interruptor encendido. */}
-          {estado.codigo?.obligatorio && <CodigoParaClaude config={estado.codigo} onCambio={cargar} />}
 
           {/* #326: el super admin puede rechazar cualquier Claude conectado, por si una URL se cuela. */}
           {!!estado.conexionesDelEquipo?.length && (
@@ -393,9 +395,10 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                   pulsa <strong>Rechazar</strong>: alguien tiene tu URL.
                 </li>
                 <li>
-                  Cuando Claude te pida el código, pulsa <strong>Sacar código para Claude</strong> arriba y díselo. Solo la primera vez:
-                  después no lo vuelve a pedir. Si tu Claude dice que no tiene la herramienta «desbloquear», pulsa
-                  <strong> Desbloquear desde aquí</strong> junto a tu URL y pídele que vuelva a consultar.
+                  Cuando Claude te pida el código, pulsa <strong>Sacar código</strong> en la fila de <strong>esa misma URL</strong> y díselo:
+                  el código solo vale para la URL donde lo sacas. Solo la primera vez: después no lo vuelve a pedir.
+                  Si tu Claude dice que no tiene la herramienta «desbloquear», pulsa
+                  <strong> Desbloquear desde aquí</strong> en esa fila y pídele que vuelva a consultar.
                 </li>
               </>) : (
                 <li>
@@ -463,12 +466,12 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                       <label className="inline-flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={p.usa_mcp}
+                          checked={p.tieneAcceso}
                           onChange={(e) => cambiarAcceso(p, e.target.checked)}
                           className="h-4 w-4 accent-primary"
                           aria-label={`Acceso MCP de ${p.nombre}`}
                         />
-                        <span className="text-xs">{p.usa_mcp ? 'Sí' : 'No'}</span>
+                        <span className="text-xs">{p.tieneAcceso ? 'Sí' : 'No'}</span>
                       </label>
                     )}
                   </td>

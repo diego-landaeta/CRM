@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as authModel from './auth.model.js';
+import { buildPermissionsMap } from '../permissions/permissions.service.js';
 
 const BCRYPT_ROUNDS = 12;
 // Access token de 8h: el usuario aguanta una jornada completa sin necesitar
@@ -22,6 +23,24 @@ function generateAccessToken(user, activeProjectId = null) {
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
+}
+
+// LO QUE EL FRONTAL SABE DE QUIEN ENTRA, igual que `/auth/me`.
+//
+// El login (y en ISEIE tambien el refresh) mandaban al frontal un usuario SIN
+// `roles_extra`: quien es gestora y ademas tutora —Yolanda, en ICTESS— entraba
+// como «solo gestora» y no le salia lo de tutora (Mis cursos) hasta recargar la
+// pagina, porque solo `/auth/me` lo traia. Diego, 23/10: «a Yolanda no le salen
+// las funciones». Un solo sitio para que las respuestas no vuelvan a diferir.
+export function usuarioParaElFrontal(user) {
+  return {
+    id: user.id, nombre: user.nombre, email: user.email, role: user.role,
+    roles_extra: Array.isArray(user.roles_extra) ? user.roles_extra : [],
+    custom_role_id: user.custom_role_id ?? null,
+    avatar_url: user.avatar_url,
+    factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura,
+    gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp,
+  };
 }
 
 function generateRefreshToken() {
@@ -49,6 +68,10 @@ export async function login(email, password, ipAddress) {
 
   const projects = await authModel.getUserProjects(user.id, user.role);
   const activeProjectId = projects.length > 0 ? projects[0].id : null;
+  // El mapa de permisos viaja ya con el login (#423): el frontal no tiene copia
+  // de los valores de cada rol, y sin esto la pantalla se pintaría sin botones
+  // hasta que llegara /auth/me.
+  const permissions = await buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra);
 
   const accessToken = generateAccessToken(user, activeProjectId);
   const refreshToken = generateRefreshToken();
@@ -65,9 +88,10 @@ export async function login(email, password, ipAddress) {
     accessToken,
     refreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
-    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp },
+    user: usuarioParaElFrontal(user),
     projects: sanitizeProjects(projects, user.role),
     activeProjectId,
+    permissions,
   };
 }
 
@@ -148,8 +172,65 @@ export async function setPassword(token, newPassword) {
   }
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  // Se REVOCAN LOS REFRESH TOKENS ANTES de cambiar la clave (#37): nadie puede
+  // renovar una sesion ya abierta con el enlace de recuperacion en la mano.
+  // OJO, no es un cierre inmediato: el access token (JWT, ACCESS_TOKEN_EXPIRY)
+  // no se consulta en la base en cada peticion y sigue valiendo hasta que
+  // caduca por si solo. Una sesion robada vive, como mucho, ese tiempo.
+  // Va primero a proposito: si el cambio fallara despues, lo peor que pasa es
+  // que la persona tiene que volver a entrar; al reves, quedaria la clave
+  // cambiada y los refresh tokens ajenos vivos.
+  await authModel.revokeAllUserTokens(user.id);
   await authModel.updatePassword(user.id, passwordHash);
   await authModel.logActivity(user.id, 'set_password', null, null);
 
   return { message: 'Contrasena establecida correctamente' };
+}
+
+/** Lo que dura el enlace de recuperacion. El mismo que el del alta. */
+const RECOVERY_EXPIRY_HOURS = 24;
+/** Minutos durante los que un enlace recien emitido impide emitir otro. */
+const RECOVERY_REENVIO_MIN = 5;
+
+/**
+ * «He olvidado la contraseña» (#37).
+ *
+ * NO DICE SI EL CORREO EXISTE, y por eso esta funcion no devuelve nada ni
+ * lanza cuando no lo encuentra. Lo pide el ticket con su motivo escrito: «si lo
+ * dice, sirve para averiguar quien trabaja aqui». Un 404 aqui convierte la
+ * pantalla de entrar en un listado de empleados a base de probar correos.
+ *
+ * De ahi tres cosas que parecen descuidos y no lo son:
+ *
+ *   - se sale en silencio con un correo desconocido, y el controlador contesta
+ *     lo mismo que si hubiera mandado el enlace;
+ *   - un fallo al enviar tampoco cambia la respuesta —se registra y ya—, que si
+ *     no, el error del correo delata que la cuenta si existia;
+ *   - una cuenta dada de baja se trata como inexistente.
+ *
+ * El envio va sin esperar, como el del alta: contestar rapido importa, y el
+ * usuario ya tiene la instruccion de mirar su bandeja.
+ */
+export async function pedirRecuperacion(email, baseUrl) {
+  const user = await authModel.findActiveUserByEmail(String(email || '').trim());
+  if (!user) return;
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const expires = new Date();
+  expires.setHours(expires.getHours() + RECOVERY_EXPIRY_HOURS);
+
+  // Un enlace anterior se pisa (pedirlo dos veces deja valido solo el ultimo,
+  // para que no rueden llaves de mas), SALVO que el vigente se haya emitido hace
+  // menos de 5 minutos: entonces no se toca ni se manda otro correo. Si no, con
+  // solo saber el correo de alguien se le puede llenar el buzon e invalidar el
+  // enlace que ya tiene. La respuesta HTTP es la misma en los dos casos.
+  // La caducidad es «emision + 24 h», de ahi se sabe cuando se emitio.
+  const recienteDesde = new Date(
+    Date.now() + RECOVERY_EXPIRY_HOURS * 3_600_000 - RECOVERY_REENVIO_MIN * 60_000);
+  const puesto = await authModel.setRecoveryToken(user.id, hashToken(rawToken), expires, recienteDesde);
+  if (puesto === false) return;
+  await authModel.logActivity(user.id, 'password_reset_requested', null, null);
+
+  return { user, rawToken, baseUrl };
 }

@@ -6,6 +6,7 @@ import { listarEmisionesSchema, decisionesSchema, emitirSchema, cursosSchema, me
 import { config, urlPublica, direccionPublica, certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, centrosPermitidos, acotar, exigirCentro, exigirMatriculas, exigirExpedientes } from './certifex.alcance.js';
 import { datosPara, emitirMatriculas } from './certifex.emision.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 export { certifex };
 
@@ -218,6 +219,11 @@ export async function diploma(req, res, next) {
     // El A3 de imprenta (#95 de Certifex) NO es publico: se pide con la clave del CRM.
     const formato = req.query.formato == null || req.query.formato === '' ? 'digital' : String(req.query.formato);
     if (formato !== 'digital' && formato !== 'imprenta') throw new AppError('Formato desconocido: usa «digital» o «imprenta».', 400, 'VALIDATION_ERROR');
+    // Quien solo VE Diplomas (`diplomas.view`, #384) ve el digital, el que le llega al
+    // alumno. El A3 es para mandarlo a imprenta: eso lo hace administracion.
+    if (formato === 'imprenta' && !(await tienePermiso(req, 'diplomas.imprenta'))) {
+      throw new AppError('El PDF de imprenta (A3) lo descarga administración.', 403, 'FORBIDDEN');
+    }
     if (formato === 'imprenta') return await enviarImprenta(res, nexp);
     let r;
     try {

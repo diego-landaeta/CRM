@@ -9,9 +9,16 @@ import {
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
   cobraDesdeSchema,
   busquedaDeTutorSchema,
+  empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
 } from './tutor.validation.js';
+import * as campusTutor from './tutor.campus.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import {
+  misCampus, exigirTutorDeMisCampus, exigirFormacionMia, exigirProyectoMio, exigirColaboracionMia,
+  exigirComisionesMias, recortarProyectos,
+} from './tutor.acceso.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // Quien manda aqui.
 //
@@ -27,8 +34,9 @@ import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 // solo lleva el rol, asi que si viajara ahi, quitarle el permiso a alguien no
 // surtiria efecto hasta que caducara su sesion.
 async function puedeGestionar(req) {
-  if (['admin', 'superadmin'].includes(req.user.role)) return true;
-  return model.esGestorColaboraciones(req.user.userId);
+  // «Gestionar colaboraciones» del catálogo (#423). Antes: admin/superadmin o
+  // la casilla; la casilla pasa a ser una excepción con la migración 222.
+  return tienePermiso(req, 'tutores.gestionar');
 }
 
 async function exigirGestion(req) {
@@ -37,19 +45,9 @@ async function exigirGestion(req) {
   }
 }
 
-/**
- * La ficha de un tutor, solo si comparte algún campus con quien la pide (#245).
- * Gestionar colaboraciones no basta: Mireia (CEDIA) podía abrir la de un
- * profesor de ICTESS cambiando el id. Se contesta «no encontrado», como si no
- * existiera, para no confirmar que ese id es un tutor de otra empresa.
- */
-async function exigirTutorDeMisCampus(req, tutorId) {
-  if (req.user.userId === tutorId || veTodoElCrm(req.user)) return;
-  const mios = await campusDeLaPersona(req.user.userId);
-  if (!(await model.tieneAlgunCampus(tutorId, mios))) {
-    throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
-  }
-}
+// Las guardas de «solo lo de tus campus» (#245) viven en `tutor.acceso.js`: la ficha de un
+// tutor, una formación, una colaboración, unas comisiones. `exigirGestion` dice QUIÉN gestiona;
+// ellas dicen DE QUÉ CAMPUS.
 
 function valida(schema, datos) {
   const r = schema.safeParse(datos);
@@ -111,11 +109,22 @@ export async function alta(req, res, next) {
     if (d.password) await model.ponerContrasena(usuario.id, d.password);
 
     const perfil = await model.guardarPerfil(usuario.id, d);
+
+    // #187: al asignarle campus, se comprueba en cada uno que su correo es
+    // usuario del campus. Si no lo es, queda pendiente de matrícula y se avisa.
+    // Que el campus no conteste no puede tumbar el alta: ya está dado de alta.
+    let avisosDelCampus = [];
+    try {
+      const { resultados } = await campusTutor.comprobarTutor(usuario.id);
+      avisosDelCampus = avisosDeLaComprobacion(resultados, await campusTutor.campusDelTutor(usuario.id));
+    } catch { /* se comprueba luego desde la ficha o en la vuelta diaria */ }
+
     res.status(201).json({ success: true, data: {
       ...usuario,
       perfil,
       // Que el frontal sepa si hay que enseñar el aviso del correo o no.
       entraYa: Boolean(d.password),
+      avisosDelCampus,
     }});
   } catch (err) { next(err); }
 }
@@ -137,7 +146,7 @@ export async function guardarPerfil(req, res, next) {
     // cualquier usuario, super admin incluido, con su identificador.
     let correo = null;
     if (d.email) {
-      if (req.user.role !== 'superadmin') {
+      if (!(await tienePermiso(req, 'tutores.cambiar_correo'))) {
         throw new AppError('Solo un superadmin puede cambiar el correo', 403, 'FORBIDDEN');
       }
       if (!(await model.ficha(id))) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
@@ -166,6 +175,8 @@ export async function colaboraciones(req, res, next) {
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
       productId: req.query.productId ? parseInt(req.query.productId) : null,
       soloActivas: req.query.activas === '1',
+      // Quien gestiona ve las de SUS campus; el tutor, las suyas (ya filtradas por su id).
+      projectIds: esTutor ? null : await misCampus(req),
     })});
   } catch (err) { next(err); }
 }
@@ -180,13 +191,44 @@ export async function crearColaboracion(req, res, next) {
     // Puede estar en varias —eso es lo normal en el MultiCRM— pero no en una
     // que no es suya: cobraria de un proyecto donde no ha dado ni una clase.
     const suyo = await model.formacionEsDeSuProyecto(d.tutorId, d.productId);
+    if (!suyo.projectId) throw new AppError('Esa formación no existe', 404, 'NOT_FOUND');
     if (!suyo.ok) {
-      throw new AppError(
-        `Esa formacion es de ${suyo.proyecto || 'otro proyecto'} y el tutor no está dado de alta ahí.`
-        + ' Añádelo a ese proyecto primero.',
-        409, 'OTRO_PROYECTO'
-      );
+      const campus = { projectId: suyo.projectId, proyecto: suyo.proyecto };
+      // Antes esto era un «no» sin salida: «añádelo a ese proyecto primero», y
+      // quien lleva las colaboraciones no puede dar de alta a nadie en un
+      // campus. Diego (#384): «a Vanessa no le deja agregar formaciones de otro
+      // campus a una tutora [...] debe de salir "¿deseas añadirla a este
+      // campus?"». El 409 lleva el campus para que la pantalla lo pregunte.
+      if (!d.anadirAlCampus) {
+        throw new AppError(
+          `Esa formación es de ${suyo.proyecto || 'otro campus'} y el tutor no está dado de alta ahí.`
+          + ' Puedes añadirlo a ese campus al asignársela.',
+          409, 'OTRO_PROYECTO', campus
+        );
+      }
+      // Con la respuesta, solo sobre un campus que vea quien lo pide: el mismo
+      // ámbito que el resto del CRM (#245). Y solo a un tutor que ya comparta
+      // algún campus con él, el que ve en su lista.
+      if (!veTodoElCrm(req.user) && !(await campusDeLaPersona(req.user.userId)).includes(suyo.projectId)) {
+        throw new AppError(
+          `Esa formación es de ${suyo.proyecto || 'otro campus'}, y tú no tienes acceso a ese campus:`
+          + ' no puedes dar de alta a nadie ahí. Pídeselo a quien lleve ese campus.',
+          403, 'CAMPUS_AJENO', campus
+        );
+      }
+      await exigirTutorDeMisCampus(req, d.tutorId);
+      const colab = await model.crearColaboracionEnOtroCampus({
+        ...d, projectId: suyo.projectId, createdBy: req.user.userId,
+      });
+      if (!colab) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
+      return res.status(201).json({ success: true, data: { ...colab, campusAnadido: campus } });
     }
+
+    // Camino normal: la formación es del campus del tutor. Y ese campus, y ese tutor, tienen
+    // que ser de quien lo pide: sin esto, un admin de otra empresa le abría una colaboración
+    // —un porcentaje de comisión— a un tutor ajeno.
+    await exigirProyectoMio(req, suyo.projectId);
+    await exigirTutorDeMisCampus(req, d.tutorId);
 
     // Dos tramos del mismo tutor y formacion no pueden solaparse: no habria
     // forma de saber que porcentaje aplicar a un pago de esas fechas.
@@ -214,8 +256,7 @@ export async function editarColaboracion(req, res, next) {
     const id = parseInt(req.params.id);
     const d = valida(editarColaboracionSchema, req.body);
 
-    const actual = await model.colaboracionPorId(id);
-    if (!actual) throw new AppError('Colaboracion no encontrada', 404, 'NOT_FOUND');
+    const actual = await exigirColaboracionMia(req, id);
 
     // Si se mueven las fechas, hay que volver a comprobar el solape con las
     // demas de ese tutor en esa formacion —excluyendo esta, que si no choca
@@ -262,7 +303,9 @@ export async function cambiarCobraDesde(req, res, next) {
 export async function borrarColaboracion(req, res, next) {
   try {
     await exigirGestion(req);
-    const r = await model.borrarColaboracion(parseInt(req.params.id));
+    const id = parseInt(req.params.id);
+    await exigirColaboracionMia(req, id);
+    const r = await model.borrarColaboracion(id);
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
@@ -283,7 +326,7 @@ export async function guardarAjustes(req, res, next) {
   try {
     // Mover la fecha desde la que se paga cambia lo que cobra todo el mundo.
     // Eso no lo toca quien organiza colaboraciones: solo un administrador.
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.ajustes'))) {
       throw new AppError('Solo un administrador cambia estos ajustes', 403, 'FORBIDDEN');
     }
     const d = valida(ajustesSchema, req.body);
@@ -325,11 +368,15 @@ export async function calcular(req, res, next) {
   try {
     await exigirGestion(req);
     const d = valida(calcularSchema, req.body || {});
+    // Recortado a mis campus: «calcular» sin campus era calcular los de todas las empresas.
+    const ambito = await recortarProyectos(req, {
+      projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
+    });
     const r = await model.reconciliar({
       desde: d.desde || null,
       hasta: d.hasta || null,
-      projectId: d.projectId || null,
-      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
+      ...ambito,
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -346,7 +393,9 @@ export async function listarComisiones(req, res, next) {
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
       estado: model.ESTADOS_COMISION.includes(req.query.estado) ? req.query.estado : null,
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // El ámbito de siempre (campus, empresa o todos) recortado a los campus de quien pide:
+      // antes, `?projectId=` cualquiera enseñaba las comisiones de otra empresa.
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -372,15 +421,20 @@ export async function resumenComisiones(req, res, next) {
 // un administrador. Es la misma linea que separa organizar de pagar.
 export async function liquidar(req, res, next) {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.liquidar'))) {
       throw new AppError('Solo un administrador marca comisiones como pagadas', 403, 'FORBIDDEN');
     }
     const d = valida(liquidarSchema, req.body || {});
     if (!d.ids?.length && !(d.periodo && d.tutorId)) {
       throw new AppError('Dime qué liquidar: unas líneas concretas, o un tutor y un mes.', 400, 'NADA_QUE_LIQUIDAR');
     }
+    // Unas líneas concretas: todas de mis campus. Un tutor y un mes: un tutor mío, y solo sus
+    // líneas de mis campus (si da clase en varias empresas, no se le paga entero).
+    if (d.ids?.length) await exigirComisionesMias(req, d.ids);
+    if (d.tutorId) await exigirTutorDeMisCampus(req, d.tutorId);
     const r = await model.liquidar({
       ids: d.ids || null, periodo: d.periodo || null, tutorId: d.tutorId || null, userId: req.user.userId,
+      projectIds: await misCampus(req),
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -389,9 +443,10 @@ export async function liquidar(req, res, next) {
 // POST /api/tutores/comisiones/:id/revertir
 export async function revertirComision(req, res, next) {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.liquidar'))) {
       throw new AppError('Solo un administrador revierte una comisión', 403, 'FORBIDDEN');
     }
+    await exigirComisionesMias(req, [parseInt(req.params.id)]);
     const c = await model.revertirComision(parseInt(req.params.id), {
       userId: req.user.userId, motivo: String(req.body?.motivo || '').slice(0, 200),
     });
@@ -428,6 +483,7 @@ export async function marcarBusqueda(req, res, next) {
     await exigirGestion(req);
     const productId = parseInt(req.params.productId, 10);
     if (!Number.isInteger(productId)) throw new AppError('Formacion no valida', 400, 'VALIDATION_ERROR');
+    await exigirFormacionMia(req, productId);
     const d = valida(busquedaDeTutorSchema, req.body || {});
     const b = await model.marcarBusquedaDeTutor({
       productId,
@@ -479,6 +535,7 @@ export async function cursoDetalle(req, res, next) {
       }
     } else {
       await exigirGestion(req);
+      await exigirFormacionMia(req, productId);
     }
     const c = await model.cursoDetalle(productId);
     if (!c) throw new AppError('Curso no encontrado', 404, 'NOT_FOUND');
@@ -502,6 +559,7 @@ export async function brochureDelCurso(req, res, next) {
       }
     } else {
       await exigirGestion(req);
+      await exigirFormacionMia(req, productId);
     }
     const d = await model.brochureDelCurso(productId);
     if (!d) throw new AppError('Este curso todavía no tiene brochure subido', 404, 'SIN_BROCHURE');
@@ -525,7 +583,7 @@ export async function brochureDelCurso(req, res, next) {
 // admin»). Quien solo gestiona colaboraciones, no.
 export async function cambiarContrasena(req, res, next) {
   try {
-    if (!['superadmin', 'admin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.contrasena'))) {
       throw new AppError('Solo un superadmin o un admin puede cambiar la contraseña', 403, 'FORBIDDEN');
     }
     const id = parseInt(req.params.id);
@@ -548,6 +606,7 @@ export async function retirarTutor(req, res, next) {
   try {
     await exigirGestion(req);
     const id = parseInt(req.params.id);
+    await exigirTutorDeMisCampus(req, id);
     const r = await model.retirarTutor(id);
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
@@ -558,7 +617,9 @@ export async function retirarTutor(req, res, next) {
 export async function reactivarTutor(req, res, next) {
   try {
     await exigirGestion(req);
-    const r = await model.reactivarTutor(parseInt(req.params.id));
+    const id = parseInt(req.params.id);
+    await exigirTutorDeMisCampus(req, id);
+    const r = await model.reactivarTutor(id);
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -578,8 +639,11 @@ function periodoDe(req) {
  */
 export async function previoDelAviso(req, res, next) {
   try {
+    // Antes bastaba con estar autenticado: cualquiera veía lo que se le debe a un tutor.
+    await exigirGestion(req);
     const periodo = periodoDe(req);
     if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    await exigirTutorDeMisCampus(req, Number(req.query.tutorId));
     const datos = await previsualizar({ tutorId: Number(req.query.tutorId), periodo });
     res.json({ success: true, data: datos });
   } catch (e) { next(e); }
@@ -588,8 +652,11 @@ export async function previoDelAviso(req, res, next) {
 /** POST /api/tutores/comisiones/avisar — lo manda y anota cuando y quien. */
 export async function avisarTutor(req, res, next) {
   try {
+    // Antes bastaba con estar autenticado: cualquiera mandaba el correo de facturación a un tutor.
+    await exigirGestion(req);
     const periodo = periodoDe(req);
     if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    await exigirTutorDeMisCampus(req, Number(req.body?.tutorId));
     const r = await avisar({
       tutorId: Number(req.body?.tutorId),
       periodo,
@@ -613,8 +680,146 @@ export async function avisarTutor(req, res, next) {
 export async function cambiarEstadoComision(req, res, next) {
   try {
     await exigirGestion(req);
+    await exigirComisionesMias(req, [Number(req.params.id)]);
     const r = await model.cambiarEstadoComision(
       Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
     res.json({ success: true, data: r });
   } catch (e) { next(e); }
+}
+
+// ─── Consultas de alumnos, fase 1 (#187): campus, empresas y matrícula ──────
+
+/**
+ * Lo que pasó al comprobar, dicho para la pantalla: un aviso por cada campus en
+ * el que el tutor no está matriculado o que no se ha podido comprobar.
+ */
+export function avisosDeLaComprobacion(resultados, campus) {
+  const nombre = (id) => campus.find((c) => c.project_id === id)?.campus || `el campus ${id}`;
+  const avisos = [];
+  for (const r of resultados || []) {
+    if (r.error) {
+      avisos.push(`${nombre(r.project_id)}: no se ha podido comprobar. ${r.error}`);
+    } else if (r.estado === 'pendiente') {
+      avisos.push(`${nombre(r.project_id)}: su correo no es usuario del campus. Queda pendiente de matrícula y no recibirá consultas de ese campus hasta que lo den de alta allí.`);
+    } else if (r.estado === 'baja') {
+      avisos.push(`${nombre(r.project_id)}: está de baja en el campus. No recibirá consultas de ese campus.`);
+    }
+  }
+  return avisos;
+}
+
+/** Lo que enseña la ficha: campus, empresas, disponibilidad y avisos. */
+async function panelDelTutor(id, avisos = []) {
+  const [campus, empresas, disp] = await Promise.all([
+    campusTutor.campusDelTutor(id),
+    campusTutor.empresasDelTutor(id),
+    campusTutor.disponibilidad(id),
+  ]);
+  return {
+    campus,
+    empresas,
+    disponible: disp ? disp.is_available !== false : true,
+    motivo_no_disponible: disp?.unavailable_reason || null,
+    no_disponible_desde: disp?.unavailable_since || null,
+    avisos,
+  };
+}
+
+/** Lo común a todo lo de abajo: gestionar tutores, que sea de mis campus y que sea tutor. */
+async function exigirTutorGestionable(req) {
+  const id = parseInt(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
+  await exigirGestion(req);
+  await exigirTutorDeMisCampus(req, id);
+  if (!(await campusTutor.esTutor(id))) throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
+  return id;
+}
+
+// GET /api/tutores/:id/campus
+export async function campusDelTutor(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    // Como la ficha: el tutor ve lo suyo; el resto necesita gestionar.
+    if (req.user.userId !== id) {
+      await exigirTutorGestionable(req);
+    }
+    // Lo de ahora, sin pulsar el botón: si la última comprobación es vieja, se
+    // repite. Si el campus no contesta, se enseña lo guardado (no falla la ficha).
+    const { resultados, campus } = await campusTutor.comprobarSiHaceFalta(id)
+      .catch(() => ({ resultados: [], campus: null }));
+    res.json({ success: true, data: await panelDelTutor(id, campus ? avisosDeLaComprobacion(resultados, campus) : []) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/:id/empresas  { issuerId }
+export async function asignarEmpresa(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const { issuerId } = valida(empresaDelTutorSchema, req.body);
+    if (!(await campusTutor.existeEmpresa(issuerId))) throw new AppError('Esa empresa no existe', 404, 'NOT_FOUND');
+    const deLaEmpresa = await campusTutor.campusDeLaEmpresa(issuerId);
+    // Una empresa entera da también sus campus futuros: solo quien ve todo el
+    // CRM, o quien ya lleva todos los campus de esa empresa, puede darla. Si no,
+    // se estaría dando acceso a campus que quien asigna no tiene (#245).
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user.userId);
+      if (!deLaEmpresa.length || deLaEmpresa.some((p) => !mios.includes(p))) {
+        throw new AppError('Solo puedes dar una empresa entera si llevas todos sus campus. Asígnale los campus uno a uno.', 403, 'FORBIDDEN');
+      }
+    }
+    await campusTutor.asignarEmpresa(id, issuerId, req.user.userId);
+    const { resultados, campus } = await campusTutor.comprobarTutor(id, { soloProyectos: deLaEmpresa });
+    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/tutores/:id/empresas/:issuerId
+export async function quitarEmpresa(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const { issuerId } = valida(empresaDelTutorSchema, { issuerId: req.params.issuerId });
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user.userId);
+      const deLaEmpresa = await campusTutor.campusDeLaEmpresa(issuerId);
+      if (deLaEmpresa.some((p) => !mios.includes(p))) {
+        throw new AppError('Solo puede quitar la empresa entera quien lleva todos sus campus.', 403, 'FORBIDDEN');
+      }
+    }
+    await campusTutor.quitarEmpresa(id, issuerId);
+    res.json({ success: true, data: await panelDelTutor(id) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/:id/campus  { projectId }
+export async function asignarCampus(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const { projectId } = valida(campusDelTutorSchema, req.body);
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user.userId);
+      if (!mios.includes(projectId)) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+    }
+    await campusTutor.asignarCampus(id, projectId);
+    const { resultados, campus } = await campusTutor.comprobarTutor(id, { soloProyectos: [projectId] });
+    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/:id/campus/comprobar
+export async function comprobarCampus(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const { resultados, campus } = await campusTutor.comprobarTutor(id);
+    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// PATCH /api/tutores/:id/disponible  { disponible, motivo }
+export async function cambiarDisponible(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const { disponible, motivo } = valida(disponibleSchema, req.body);
+    await campusTutor.ponerDisponible(id, disponible, motivo);
+    res.json({ success: true, data: await panelDelTutor(id) });
+  } catch (err) { next(err); }
 }

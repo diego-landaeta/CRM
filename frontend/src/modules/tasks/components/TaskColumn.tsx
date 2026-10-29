@@ -14,6 +14,10 @@ interface TaskColumnProps {
   canCreate: boolean;
   canDragTask: (task: Task) => boolean;
   showAssignee: boolean;
+  /** Si hay equipos: la tarjeta enseña «Equipo · Cargo» o «Sin equipo». */
+  conEquipos?: boolean;
+  /** El mes de donde viene una tarea sin cerrar de antes del periodo, o null. */
+  vieneDe?: (task: Task) => string | null;
   onOpen: (task: Task) => void;
   onAdd: (status: TaskStatus) => void;
   onDragStart: (e: DragEvent<HTMLDivElement>, task: Task) => void;
@@ -28,7 +32,7 @@ interface TaskColumnProps {
  * se calcula por la mitad de la tarjeta que hay debajo del cursor.
  */
 export function TaskColumn({
-  status, label, dot, head, tasks, dragging, canCreate, canDragTask, showAssignee,
+  status, label, dot, head, tasks, dragging, canCreate, canDragTask, showAssignee, conEquipos = false, vieneDe,
   onOpen, onAdd, onDragStart, onDragEnd, onDropAt,
 }: TaskColumnProps) {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -105,6 +109,8 @@ export function TaskColumn({
               task={task}
               draggable={canDragTask(task)}
               showAssignee={showAssignee}
+              conEquipos={conEquipos}
+              vieneDe={vieneDe ? vieneDe(task) : null}
               onOpen={onOpen}
               onDragStart={onDragStart}
               onDragEnd={() => { setDropIndex(null); onDragEnd(); }}
