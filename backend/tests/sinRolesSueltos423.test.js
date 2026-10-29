@@ -27,6 +27,12 @@ const DECLARADAS = {
   'auth/auth.model.js': [1, 'alcance: los campus que ve el superadmin'],
   'auth/auth.service.js': [1, 'comportamiento: la clave de webhook solo se enseña a admin'],
   'claude-chat/chat.controller.js': [1, 'no es un rol de persona: el de cada mensaje del chat'],
+  // Cursos pendientes (#336) todavia no tiene claves en el catalogo de #423: quien crea, modifica, publica
+  // y supervisa se decide POR ROL dentro del servicio, no con `puede(...)`. Es deuda declarada, no alcance:
+  // el dia que haya `cursos_pendientes.*` en el catalogo, estas ocho comparaciones se quitan.
+  'cursos-pendientes/cursos-pendientes.controller.js': [1, 'permiso por rol, sin clave en el catalogo todavia: la tutora ve solo lo suyo'],
+  'cursos-pendientes/cursos-pendientes.service.js': [7, 'permiso por rol, sin clave en el catalogo todavia: quien crea, modifica, publica y supervisa'],
+  'conversions/conversion.acceso.js': [1, 'alcance: la gestora, solo las ventas suyas (o en cuyo reparto figura)'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
   'consultas/consultas.controller.js': [2, 'alcance: lo suyo de Consultas (su carga, sus alumnos, sus métricas) solo existe para un tutor'],
   'conversions/conversion.controller.js': [6, 'alcance: la gestora, sus ventas'],
@@ -45,8 +51,9 @@ const DECLARADAS = {
   'notifications/notifications.service.js': [1, 'alcance: qué avisos ve cada uno'],
   'proceso/proceso.ambito.js': [1, 'alcance: qué campus entran en la cola'],
   'sales/sales.controller.js': [4, 'alcance: la gestora, sus ventas'],
-  'sales/sales.goals.js': [2, 'alcance: la gestora, su meta'],
+  'sales/sales.goals.js': [3, 'alcance: la gestora, su meta; el superadmin, la de cualquier campus'],
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
+  'soporte/soporte.controller.js': [1, 'alcance: quien administra (admin, soporte, superadmin) responde y ve los tickets de su alcance; el resto, los suyos'],
   // Diego, 26/10/2026: sobre CADA tarea, mover, comentar, aprobar y devolver son del superadmin, del supervisor y de
   // quien la lleva; el superadmin edita y borra comentarios de cualquiera. Es quién actúa sobre una tarea concreta,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
@@ -65,6 +72,7 @@ const DECLARADAS = {
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
   'whatsapp/whatsapp.controller.js': [1, 'alcance: la gestora, su cola'],
+  'whatsapp/vozOTexto.js': [1, 'alcance: admin, superadmin y soporte ven a todas las gestoras; la gestora, solo a si misma'],
 };
 
 function ficheros(dir) {

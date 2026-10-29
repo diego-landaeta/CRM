@@ -45,6 +45,7 @@ import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
 import emailTemplatesModule from './modules/email-templates/index.js';
@@ -60,13 +61,16 @@ import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
 import mcpModule from './modules/mcp/index.js';
+import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
@@ -87,9 +91,11 @@ import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js'
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMoodleAvisosScheduler } from './jobs/moodleAvisosScheduler.js';
 import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
@@ -281,6 +287,7 @@ const ALL_MODULES = [
   { name: 'audiences', mod: audiencesModule },
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'ia-analisis', mod: iaAnalisisModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
   { name: 'email-templates', mod: emailTemplatesModule },
@@ -295,15 +302,19 @@ const ALL_MODULES = [
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  // Cursos pendientes para las tutoras, por campus (#336).
+  { name: 'cursos-pendientes', mod: cursosPendientesModule },
   { name: 'correos', mod: correosModule },
   // Conexion de Claude por MCP: solo consulta, con token personal.
   { name: 'mcp', mod: mcpModule },
+  { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
+  { name: 'soporte', mod: soporteModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
@@ -447,12 +458,14 @@ if (process.env.NODE_ENV !== 'test') {
     startConsultasCargaScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
+    startCursosPendientesScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
     startMcpRotacionScheduler();
+    startMoodleAvisosScheduler();
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();

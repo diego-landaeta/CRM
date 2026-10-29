@@ -111,7 +111,9 @@ export const SECCIONES = [
           a('view', 'Ver sus ventas', 'Sus cifras: por cliente, por producto, facturado y su evolución.', TODOS),
           a('registrar', 'Registrar una venta', 'Apuntar una venta nueva desde Ventas.', COMERCIAL),
           a('view_equipo', 'Ver las ventas del equipo', 'El resumen y las ventas por asesora de todo el equipo.', ADMIN_SOPORTE, { requiere: ['ventas.view'] }),
-          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya).', TODOS),
+          // Solo admin y gestora (IDOR de las metas): antes la ruta no pedía rol y un tutor, soporte o project
+          // manager podía fijar o borrar la meta de cualquiera. Cambio pendiente de aprobar: `metas-sin-soporte-ni-pm`.
+          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente).', ['admin', 'gestor'], { nunca: ['tutor', 'soporte', 'project_manager', 'colaborador'] }),
         ],
       },
     ],
@@ -229,6 +231,7 @@ export const SECCIONES = [
           a('view', 'Ver WooCommerce', 'La conexión, el mapeo y las importaciones.', ADMIN_SOPORTE),
           a('edit', 'Configurar WooCommerce', 'Credenciales y mapeo de campos.', ADMIN_SOPORTE),
           a('sync', 'Importar de WooCommerce', 'Lanzar una importación de productos.', ADMIN_SOPORTE),
+          a('pedidos', 'Pedidos de WooCommerce', 'Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14).', ADMIN),
         ],
       },
     ],
@@ -445,6 +448,14 @@ export const SECCIONES = [
           a('edit', 'Editar conectores', 'Cambiarlo, probarlo e importar.', ADMIN),
           a('delete', 'Borrar conectores', 'Quitar un conector.', ADMIN),
           a('sistema', 'Conectores de todo el sistema', 'Conectores que valen para todas las empresas.', NADIE),
+        ],
+      },
+      {
+        clave: 'moodle', nombre: 'Moodle', acciones: [
+          // Cursos, alumnos y recursos del Moodle de cada campus (#335). Antes: soloRoles('superadmin', 'admin').
+          a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', ADMIN),
+          // Conectar un Moodle es guardar una credencial: antes soloRoles('superadmin'); NADIE = solo superadmin.
+          a('conectar', 'Conectar un Moodle', 'Guardar o quitar el token de un campus.', NADIE),
         ],
       },
       {

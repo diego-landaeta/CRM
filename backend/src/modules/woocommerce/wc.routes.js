@@ -23,9 +23,9 @@ router.put('/mapping', puede('woocommerce.edit'), ctrl.saveMapping);
 router.post('/scrape-preview', puede('woocommerce.sync'), ctrl.scrapePreview);
 
 // Pedidos (#14). El aviso de WooCommerce entra por wc.webhook.js (sin sesión, con firma).
-router.get('/orders', pedidos.listar);
-router.post('/sync/orders', pedidos.sincronizar);
-router.put('/orders-config', pedidos.configurar);
-router.post('/webhook-secret', pedidos.secretoDelAviso);
+router.get('/orders', puede('woocommerce.pedidos'), pedidos.listar);
+router.post('/sync/orders', puede('woocommerce.pedidos'), pedidos.sincronizar);
+router.put('/orders-config', puede('woocommerce.pedidos'), pedidos.configurar);
+router.post('/webhook-secret', puede('woocommerce.pedidos'), pedidos.secretoDelAviso);
 
 export default router;
