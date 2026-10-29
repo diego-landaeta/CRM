@@ -34,6 +34,9 @@ vi.mock('../src/modules/reports/report.model.js', () => ({
     ...FILA, tabla: [FILA], sin_gestora: { ...FILA, anteriores_grandes: [] }, total: { ...FILA, anteriores_grandes: [] },
   })),
   ventasVendedora: vi.fn(async () => []),
+  // #270: el correo ahora desglosa por campus y por gestora; aqui no importan los contactos.
+  contactosPorCampus: vi.fn(async () => []),
+  contactosPorGestora: vi.fn(async () => []),
 }));
 vi.mock('../src/modules/proceso/proceso.model.js', () => ({
   resumenDeLaCola: vi.fn(async () => ({ esta_semana: 0, atrasados: 0, hoy: 0, manana: 0 })),

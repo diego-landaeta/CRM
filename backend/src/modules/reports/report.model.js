@@ -2151,3 +2151,61 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
     mejor_ventas: tabla.length ? tabla[0].ventas : 0,
   };
 }
+
+// ─── Contactos por campus y por gestora (#270) ──────────────────────────────
+//
+// Los correos de dirección piden «prospectos, CONTACTOS y ventas» por campus y
+// por gestora. Prospectos y ventas ya salían de `overview` y `ventasVendedora`;
+// los contactos no tenían dónde.
+//
+// LA MISMA REGLA QUE «TRABAJO HECHO» DE REPORTES (la consulta `act` de
+// `seguimiento`): cada fila de `lead_interactions`, por su fecha en la zona
+// horaria de la aplicación, sobre prospectos no borrados. «Las cifras, las
+// mismas que en Reportes con esa empresa elegida» es literal del ticket: si aquí
+// se contara de otra forma, el correo diría 40 y la pantalla 43.
+//
+// Un contacto se atribuye al campus del PROSPECTO y a quien lo lleva ahora
+// (`responsable_id`), como el filtro por asesora de Reportes.
+
+/** Contactos de cada campus en un rango (fechas incluidas). */
+export async function contactosPorCampus({ projectIds, from, to }) {
+  const ids = (projectIds || []).map(Number).filter(Number.isInteger);
+  if (!ids.length) return [];
+  const { rows } = await query(
+    `SELECT l.project_id,
+            count(*)::int AS contactos,
+            count(DISTINCT li.lead_id)::int AS personas
+       FROM lead_interactions li
+       JOIN leads l ON l.id = li.lead_id
+      WHERE l.deleted_at IS NULL
+        AND l.project_id = ANY($1::int[])
+        AND (li.fecha AT TIME ZONE '${TZ}')::date >= $2::date
+        AND (li.fecha AT TIME ZONE '${TZ}')::date <= $3::date
+      GROUP BY l.project_id`,
+    [ids, from, to]
+  );
+  return rows.map((r) => ({ project_id: r.project_id, contactos: Number(r.contactos), personas: Number(r.personas) }));
+}
+
+/**
+ * Contactos de cada persona que lleva los prospectos, en esos campus y en un
+ * rango. Sin mirar el rol: el que lleva prospectos y los contacta cuenta, sea
+ * gestora, admin o superadmin (#270: «aunque su rol principal sea admin»).
+ */
+export async function contactosPorGestora({ projectIds, from, to }) {
+  const ids = (projectIds || []).map(Number).filter(Number.isInteger);
+  if (!ids.length) return [];
+  const { rows } = await query(
+    `SELECT u.id AS user_id, u.nombre, count(*)::int AS contactos
+       FROM lead_interactions li
+       JOIN leads l ON l.id = li.lead_id
+       JOIN users u ON u.id = l.responsable_id
+      WHERE l.deleted_at IS NULL
+        AND l.project_id = ANY($1::int[])
+        AND (li.fecha AT TIME ZONE '${TZ}')::date >= $2::date
+        AND (li.fecha AT TIME ZONE '${TZ}')::date <= $3::date
+      GROUP BY u.id, u.nombre`,
+    [ids, from, to]
+  );
+  return rows.map((r) => ({ user_id: r.user_id, nombre: r.nombre, contactos: Number(r.contactos) }));
+}
