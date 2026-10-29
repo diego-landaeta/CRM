@@ -565,7 +565,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | estado | `GET /api/mcp/panel/` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
 | crearToken | `POST /api/mcp/panel/tokens` | sesión · a mano: mcp.acceso.js · puedeUsarMcp | superadmin, admin y gestor/soporte/project_manager con «usa_mcp» | `mcp.usar` |
 | revocarToken | `DELETE /api/mcp/panel/tokens/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
-| crearCodigo | `POST /api/mcp/panel/codigo` | sesión · a mano: mcp.acceso.js · puedeUsarMcp | superadmin, admin y gestor/soporte/project_manager con «usa_mcp» | `mcp.usar` |
+| crearCodigo | `POST /api/mcp/panel/tokens/:id/codigo` | (no existía) | (ruta nueva) | `mcp.usar` |
 | desbloquearUrl | `POST /api/mcp/panel/tokens/:id/desbloquear` | sesión · a mano: mcp.acceso.js · puedeUsarMcp | superadmin, admin y gestor/soporte/project_manager con «usa_mcp» | `mcp.usar` |
 | decidirConexion | `PATCH /api/mcp/panel/conexiones/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
 | personas | `GET /api/mcp/panel/personas` | sesión · soloRoles(superadmin, admin) | superadmin, admin | `mcp.administrar` |
