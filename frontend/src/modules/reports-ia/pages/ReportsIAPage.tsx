@@ -6,12 +6,15 @@ import { Sparkle, ChartBar } from '@phosphor-icons/react';
 import ReportsIAView from '../components/ReportsIAView';
 
 /**
- * Página dedicada de Análisis IA. Disponible solo para proyectos type='ia'.
- * Para proyectos CRM tradicional muestra placeholder con CTA hacia /reports.
+ * Página dedicada de Análisis IA, para cualquier campus.
+ *
+ * Antes solo dejaba entrar a los proyectos «de tipo IA» (Psicólogo IA,
+ * Nutricionista IA, Tarot IA), que no están dados de alta, así que nadie podía
+ * generar un informe (#216). El servidor nunca tuvo esa restricción, y el
+ * informe sale de los leads, las ventas y los UTM del campus.
  */
 export default function ReportsIAPage() {
   const { activeProject } = useProjectContext();
-  const isIaProject = activeProject?.type === 'ia';
 
   return (
     <div className="space-y-5 pb-8">
@@ -24,11 +27,11 @@ export default function ReportsIAPage() {
         }
       />
 
-      {!isIaProject ? (
+      {!activeProject ? (
         <EmptyState
           icon={Sparkle}
-          title="Disponible en proyectos IA"
-          description="Los reportes con Claude AI solo se generan para proyectos de tipo IA (Psicólogo IA, Nutricionista IA, Tarot IA). Cambia de proyecto en la barra superior para acceder."
+          title="Elige un campus"
+          description="El informe se hace con los datos de un campus. Elígelo en la barra superior."
           action={
             <Link
               to="/informes"

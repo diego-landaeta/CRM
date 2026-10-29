@@ -72,10 +72,6 @@ const ProductsPage = lazy(() => import('./modules/products/pages/ProductsPage'))
 const ProductsTreePage = lazy(() => import('./modules/products/pages/ProductsTreePage'));
 const ProductDetailPage = lazy(() => import('./modules/products/pages/ProductDetailPage'));
 const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPendingPage'));
-const CampaignsPage = lazy(() => import('./modules/campaigns/pages/CampaignsPage'));
-const MetaCampaignsPage = lazy(() => import('./modules/campaigns/pages/MetaCampaignsPage'));
-const GoogleCampaignsPage = lazy(() => import('./modules/campaigns/pages/GoogleCampaignsPage'));
-const SeoPage = lazy(() => import('./modules/seo/pages/SeoPage'));
 const IADashboardPage = lazy(() => import('./modules/ia-dashboard/pages/IADashboardPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
@@ -184,6 +180,7 @@ const MiFacturaPage = lazy(() => import('./modules/facturas-colaborador/pages/Mi
 const FacturaEnlacePage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaEnlacePage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
+const AunNoConectadoPage = lazy(() => import('./shared/pages/AunNoConectadoPage'));
 const UiPreviewHomePage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/UiPreviewHomePage')) : null;
 const LeadsUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/LeadsUiPreviewPage')) : null;
 const GenericUiPreviewPage = UI_PREVIEW_ENABLED ? lazy(() => import('./modules/ui-preview/pages/GenericUiPreviewPage')) : null;
@@ -282,11 +279,13 @@ function App() {
           </Route>
 
           {/* Campañas — tabs */}
+          {/* #216: Campañas y Tráfico orgánico enseñaban datos de ejemplo. Hasta
+              que haya datos reales, «Aún no conectado»; Meta está en Publicidad. */}
           <Route path="/campanas" element={<CampanasLayout />}>
-            <Route index element={<CampaignsPage />} />
-            <Route path="meta" element={<MetaCampaignsPage />} />
-            <Route path="google" element={<GoogleCampaignsPage />} />
-            <Route path="seo" element={<SeoPage />} />
+            <Route index element={<AunNoConectadoPage titulo="Campañas" />} />
+            <Route path="meta" element={<Navigate to="/meta-ads" replace />} />
+            <Route path="google" element={<AunNoConectadoPage titulo="Google Ads" />} />
+            <Route path="seo" element={<AunNoConectadoPage titulo="Tráfico orgánico" />} />
           </Route>
 
           {/* Productos — tabs */}
