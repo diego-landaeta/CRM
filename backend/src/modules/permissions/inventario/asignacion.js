@@ -24,7 +24,12 @@ export const PROPIAS = {
   // bandeja y escribir a un alumno, lo de cada tutor.
   consultas: ['GET /mias', 'GET /adjuntos/:id', 'POST /mensajes/:mensajeId/reintentar', 'POST /alumnos/:id/escribir',
     'GET /:id', 'POST /:id/responder', 'POST /:id/cerrar'],
-  mcp: ['GET /panel/', 'DELETE /panel/tokens/:id', 'PATCH /panel/conexiones/:id'],
+  // Cursos pendientes (#336): sin roleGuard a propósito, el recorte va en el
+  // servicio (una tutora ve los suyos, una gestora los de sus campus, un admin
+  // los de los suyos). Cuando haya un permiso propio del módulo, aquí se quita.
+  'cursos-pendientes': ['GET /resumen', 'GET /', 'POST /', 'GET /:id', 'PATCH /:id', 'POST /:id/publicar',
+    'POST /:id/alumnas', 'PATCH /:id/alumnas/:alumnaId'],
+  mcp: ['GET /panel/','DELETE /panel/tokens/:id', 'PATCH /panel/conexiones/:id'],
   notifications: ['GET /', 'GET /unread-count', 'GET /preferences', 'PUT /preferences', 'PATCH /read-group',
     'PATCH /:id/read', 'PATCH /mark-all-read'],
   // El catálogo y las vistas los lee la pantalla de cualquiera («Mis

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-763 rutas en 60 módulos, y 28 acciones con condición dentro de una ruta.
+771 rutas en 61 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -265,6 +265,19 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | test | `POST /api/credentials/:id/test` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.edit` |
 | revelar | `GET /api/credentials/:id/revelar` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.revelar` |
 | remove | `DELETE /api/credentials/:id` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `credentials.edit` |
+
+## cursos-pendientes
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| resumen | `GET /api/cursos-pendientes/resumen` | (no existía) | (ruta nueva) | lo de cada uno |
+| listar | `GET /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
+| crear | `POST /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
+| detalle | `GET /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| modificar | `PATCH /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
+| sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
+| marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
 
 ## documents
 

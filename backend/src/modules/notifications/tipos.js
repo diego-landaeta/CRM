@@ -136,6 +136,39 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
   },
+  // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
+  curso_pendiente_asignado: {
+    clase: ACCION, etiqueta: 'Curso pendiente asignado', agrupa: false,
+    descripcion: 'Cuando te asignan un curso por crear',
+  },
+  curso_pendiente_vence: {
+    clase: ACCION, etiqueta: 'Curso pendiente a punto de vencer', agrupa: false,
+    descripcion: 'Faltan 3 días para la fecha comprometida de un curso tuyo',
+  },
+  curso_pendiente_retrasado: {
+    clase: ACCION, etiqueta: 'Curso pendiente retrasado', agrupa: false,
+    descripcion: 'La fecha comprometida ha pasado y el curso no está publicado',
+  },
+  curso_pendiente_sin_tutora: {
+    clase: ACCION, etiqueta: 'Curso pendiente sin tutora', agrupa: false,
+    descripcion: 'Un curso lleva más de 48 horas sin tutora asignada',
+  },
+  curso_pendiente_sin_habilitar: {
+    clase: ACCION, etiqueta: 'Curso publicado con alumnas sin habilitar', agrupa: false,
+    descripcion: 'Un curso publicado lleva más de 48 horas con alumnas sin habilitar',
+  },
+  curso_pendiente_alumna: {
+    clase: AVISO, etiqueta: 'Alumna nueva en un curso pendiente', agrupa: false,
+    descripcion: 'Se suma otra alumna a un curso pendiente tuyo',
+  },
+  curso_pendiente_semana: {
+    clase: AVISO, etiqueta: 'Resumen semanal de cursos pendientes', agrupa: false,
+    descripcion: 'Cada lunes, por campus: cursos abiertos, retrasados, alumnas esperando y carga por tutora (super admin)',
+  },
+  curso_pendiente_fecha_movida: {
+    clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
+    descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.
