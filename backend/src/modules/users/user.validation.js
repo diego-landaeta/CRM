@@ -19,6 +19,14 @@ const empresaIdsSchema = z.array(z.number().int().positive()).max(50).optional()
 
 const tieneCampus = (d) => d.projectIds?.length > 0 || d.projects?.length > 0;
 
+/**
+ * Quién puede tener una empresa entera: el admin (#220, con sus campus) y el
+ * colaborador —rol principal o añadido— (Diego, 26/10/2026: el equipo de
+ * desarrollo va por empresa en Tareas; al colaborador no se le dan campus).
+ */
+export const puedeTenerEmpresa = (role, rolesExtra = []) =>
+  role === 'admin' || role === 'colaborador' || (rolesExtra || []).includes('colaborador');
+
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
@@ -47,9 +55,9 @@ export const createUserSchema = z.object({
     path: ['projectIds'],
   }
 ).refine(
-  (d) => !(d.empresaIds?.length > 0) || d.role === 'admin',
+  (d) => !(d.empresaIds?.length > 0) || puedeTenerEmpresa(d.role, d.roles_extra),
   {
-    message: 'Solo un admin puede tener una empresa entera',
+    message: 'Solo un admin o un colaborador pueden tener una empresa entera',
     path: ['empresaIds'],
   }
 );
@@ -107,12 +115,13 @@ export const updateUserSchema = z.object({
   reenviarEnlace: z.boolean().optional(),
   role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
   roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
-  factura_manager: z.boolean().optional(),
-  editar_fechas_factura: z.boolean().optional(),
+  // «Se dedica solo a colaboraciones»: no da permisos (eso es «Gestionar
+  // colaboraciones»), cambia lo que le toca: no entra en el reparto ni en las
+  // listas de gestoras.
   gestor_colaboraciones: z.boolean().optional(),
-  // Si usa el WhatsApp del CRM (#128). No es lo mismo que poder tenerlo: eso lo
-  // decide el rol. Esto dice si sale en el panel de sesiones y si puede enlazar.
-  usa_whatsapp: z.boolean().optional(),
+  // factura_manager, editar_fechas_factura y usa_whatsapp ya no se guardan
+  // aquí (#423): son permisos del catálogo y se dan en su ficha, con su
+  // registro. Si llegan, se ignoran.
   projectIds: z.array(z.number().int().positive()).optional(),
   projects: z.array(projectAssignmentSchema).optional(),
   // Las empresas enteras (#220). Una lista vacía las quita; sus campus se quedan.

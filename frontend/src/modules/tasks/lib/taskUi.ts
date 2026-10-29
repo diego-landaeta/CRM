@@ -170,6 +170,41 @@ export function neighboursAt(
  * asignado, también quien la creó. Es la misma regla que aplica el servidor;
  * aquí solo evita ofrecer lo que daría 403.
  */
+/**
+ * Qué tareas enseña el único tablero (Diego, 27/10/2026: «un solo tablero, y ya
+ * con filtros»): «Mis tareas» (lo que llevo, superviso o creé), «Mi equipo»
+ * (eso y lo de mis equipos) o «Todo» (lo que mi permiso me deje ver). El
+ * servidor manda: «Todo» nunca abre más de lo permitido.
+ */
+export type VerTablero = 'mias' | 'equipo' | 'todo';
+export const OPCIONES_VER: ReadonlyArray<{ value: VerTablero; label: string }> = [
+  { value: 'mias', label: 'Mis tareas' },
+  { value: 'equipo', label: 'Mi equipo' },
+  { value: 'todo', label: 'Todo' },
+];
+
+/** Se entra en «Mis tareas» (Diego, 26/10/2026)… */
+export const VISTA_INICIAL: VerTablero = 'mias';
+
+/**
+ * …salvo admin y superadmin, que entran en «Todo» del mes en curso (Diego,
+ * 27/10/2026: «admin y super admin ven todos por defecto del mes»). El resto,
+ * «Mis tareas» de todas las fechas. No se recuerda la última elección.
+ */
+export function vistaInicialDe(
+  user: { role?: string | null; roles_extra?: ReadonlyArray<string> | null } | null | undefined
+): { ver: VerTablero; periodo: 'todo' | 'mes' } {
+  const roles = [user?.role, ...(user?.roles_extra || [])];
+  return roles.some((r) => r === 'admin' || r === 'superadmin')
+    ? { ver: 'todo', periodo: 'mes' }
+    : { ver: VISTA_INICIAL, periodo: 'todo' };
+}
+
+/** Lo que pide cada «Ver» al servidor. */
+export function filtroDeVista(ver: VerTablero): { ver: VerTablero } {
+  return { ver };
+}
+
 export function puedeEditarTarea(
   task: { assigned_to: number | null; created_by?: number | null } | null | undefined,
   yo: number,
