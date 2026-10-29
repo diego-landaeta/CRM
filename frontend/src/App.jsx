@@ -4,6 +4,7 @@ import { useProjectContext } from './contexts/ProjectContext';
 import { tituloDeRuta } from './shared/lib/rutasTitulos';
 
 
+import { SOLO_EN_PRUEBAS } from './shared/lib/soloEnPruebas';
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
 const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/');
 const IS_TESTEO2_BASE = APP_BASE_URL.startsWith('/testeo2/');
@@ -85,6 +86,9 @@ const CorreosPage = lazy(() => import('./modules/correos/pages/CorreosPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ReportsPage = lazy(() => import('./modules/reports/pages/ReportsPage'));
 const ReportsIAPage = lazy(() => import('./modules/reports-ia/pages/ReportsIAPage'));
+// Preguntarle a los datos en lenguaje natural (#30). Solo en pruebas hasta que Diego
+// ponga la clave y el tope de gasto (#22).
+const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
@@ -131,6 +135,7 @@ const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetail
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const VentasSinFormacionPage = lazy(() => import('./modules/sales/pages/VentasSinFormacionPage'));
 const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
@@ -158,6 +163,8 @@ const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsC
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10): avisa a fuera de los cobros por transferencia o depósito.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
+// Conexión → Asignación de leads por actividad (CRM#513, 27/10/2026).
+const AsignacionLeadsPage = lazy(() => import('./modules/asignacion/pages/AsignacionLeadsPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/EmailTemplatesPage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
@@ -299,6 +306,7 @@ function App() {
           <Route path="/finanzas" element={<FinanzasLayout />}>
             <Route index element={<AccountingDashboardPage />} />
             <Route path="ventas-analisis" element={<SalesAnalysisPage />} />
+            <Route path="ventas-sin-formacion" element={<VentasSinFormacionPage />} />
             <Route path="ventas/:id" element={<SaleDetailPage />} />
             <Route path="ventas" element={<IncomePage title="Ventas" subtitlePrefix="Todas las ventas registradas" />} />
             <Route path="ingresos" element={<IncomePage />} />
@@ -332,6 +340,8 @@ function App() {
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
+          {/* Conexión → Asignación de leads por actividad (CRM#513). Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/asignacion-leads" element={<AsignacionLeadsPage />} />
           <Route path="/configuracion/roles" element={<RolesPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/proceso" element={<Navigate to="/prospectos/proceso" replace />} />
@@ -341,6 +351,7 @@ function App() {
           <Route path="/configuracion/plantillas-email" element={<EmailTemplatesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
           <Route path="/informes/ia" element={<ReportsIAPage />} />
+          <Route path="/informes/preguntar" element={SOLO_EN_PRUEBAS ? <PreguntarPage /> : <Navigate to="/informes" replace />} />
           <Route path="/informes/feedback" element={<FeedbackPanelPage />} />
           <Route path="/chat-ia" element={<AIChatPage />} />
           <Route path="/soporte" element={<SoportePage />} />

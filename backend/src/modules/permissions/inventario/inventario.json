@@ -198,6 +198,194 @@
   "puertas": []
  },
  {
+  "id": "POST /api/asignacion/entrada",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/entrada",
+  "relativa": "POST /entrada",
+  "controlador": "entrada",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/asignacion/",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "GET",
+  "ruta": "/api/asignacion/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/asignacion/decisiones",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "GET",
+  "ruta": "/api/asignacion/decisiones",
+  "relativa": "GET /decisiones",
+  "controlador": "decisiones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/decisiones/:id/reenviar",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/decisiones/:id/reenviar",
+  "relativa": "POST /decisiones/:id/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/asignacion/:id",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "PATCH",
+  "ruta": "/api/asignacion/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "cambiar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/:id/clave",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/:id/clave",
+  "relativa": "POST /:id/clave",
+  "controlador": "nuevaClave",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/:id/prueba",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/:id/prueba",
+  "relativa": "POST /:id/prueba",
+  "controlador": "prueba",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/asignacion/:id",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "DELETE",
+  "ruta": "/api/asignacion/:id",
+  "relativa": "DELETE /:id",
+  "controlador": "borrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.delete"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/audiences/preview",
   "tipo": "ruta",
   "modulo": "audiences",
@@ -345,6 +533,18 @@
     "tipo": "token"
    }
   ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/auth/forgot-password",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/forgot-password",
+  "relativa": "POST /forgot-password",
+  "controlador": "forgotPassword",
+  "publica": true,
+  "guardias": [],
   "puertas": []
  },
  {
@@ -5185,6 +5385,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/ia-analisis/preguntar",
+  "tipo": "ruta",
+  "modulo": "ia-analisis",
+  "metodo": "POST",
+  "ruta": "/api/ia-analisis/preguntar",
+  "relativa": "POST /preguntar",
+  "controlador": "preguntarCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.generar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ia/metrics/:projectId",
   "tipo": "ruta",
   "modulo": "ia-monitor",
@@ -7709,12 +7931,12 @@
   "puertas": []
  },
  {
-  "id": "POST /api/mcp/panel/codigo",
+  "id": "POST /api/mcp/panel/tokens/:id/codigo",
   "tipo": "ruta",
   "modulo": "mcp",
   "metodo": "POST",
-  "ruta": "/api/mcp/panel/codigo",
-  "relativa": "POST /panel/codigo",
+  "ruta": "/api/mcp/panel/tokens/:id/codigo",
+  "relativa": "POST /panel/tokens/:id/codigo",
   "controlador": "crearCodigo",
   "publica": false,
   "guardias": [
@@ -11381,6 +11603,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/canales",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/canales",
+  "relativa": "GET /canales",
+  "controlador": "canales",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/detalle",
   "tipo": "ruta",
   "modulo": "reports",
@@ -11630,6 +11874,28 @@
   "ruta": "/api/ventas/por-asesora",
   "relativa": "GET /por-asesora",
   "controlador": "ventasPorAsesora",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ventas.view_equipo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/ventas/sin-formacion",
+  "tipo": "ruta",
+  "modulo": "sales",
+  "metodo": "GET",
+  "ruta": "/api/ventas/sin-formacion",
+  "relativa": "GET /sin-formacion",
+  "controlador": "sinFormacion",
   "publica": false,
   "guardias": [
    {
@@ -15102,6 +15368,29 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.forma_avisos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/whatsapp/voz-o-texto",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/voz-o-texto",
+  "relativa": "GET /voz-o-texto",
+  "controlador": "vozOTextoCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "whatsapp.usar",
+     "whatsapp.supervisar"
     ]
    }
   ],
