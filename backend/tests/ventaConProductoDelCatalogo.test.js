@@ -28,7 +28,7 @@ const FECHA = '2026-03-11';
 const CATALOGO = 'Curso Producto Catalogo Test';
 const MIGRACION = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../migrations/231_producto_de_las_ventas_viejas.sql'
+  '../migrations/233_producto_de_las_ventas_viejas.sql'
 );
 
 let token;

@@ -1,4 +1,4 @@
--- 231 · (antes 212, que chocó con la de matrículas de staging) Las ventas que guardaron el nombre del cliente como producto (#160)
+-- 233 · (en staging es la 231; en main la 231 ya es la de asignación por WhatsApp) Las ventas que guardaron el nombre del cliente como producto (#160)
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- QUÉ PASÓ
