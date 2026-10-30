@@ -5595,6 +5595,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/ia/cobros/:projectId",
+  "tipo": "ruta",
+  "modulo": "ia-monitor",
+  "metodo": "GET",
+  "ruta": "/api/ia/cobros/:projectId",
+  "relativa": "GET /cobros/:projectId",
+  "controlador": "cobros",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ia.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ia/supabase/previo/:projectId",
   "tipo": "ruta",
   "modulo": "ia-monitor",
@@ -5624,6 +5646,28 @@
   "ruta": "/api/ia/supabase/importar/:projectId",
   "relativa": "POST /supabase/importar/:projectId",
   "controlador": "importarSupabase",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ia.importar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/ia/supabase/quitar-pruebas/:projectId",
+  "tipo": "ruta",
+  "modulo": "ia-monitor",
+  "metodo": "POST",
+  "ruta": "/api/ia/supabase/quitar-pruebas/:projectId",
+  "relativa": "POST /supabase/quitar-pruebas/:projectId",
+  "controlador": "quitarPruebasSupabase",
   "publica": false,
   "guardias": [
    {

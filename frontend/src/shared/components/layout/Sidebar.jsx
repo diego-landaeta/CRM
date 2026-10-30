@@ -127,6 +127,7 @@ export const NAV_SECTIONS = [
       // propia pantalla y el servidor.
       {
         label: 'Prospectos',
+        salvoTipo: ['ia'],
         icon: Users,
         module: 'leads',
         defaultOpen: true,
@@ -148,6 +149,7 @@ export const NAV_SECTIONS = [
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
         label: 'WhatsApp',
+        salvoTipo: ['ia'],
         icon: WhatsappLogo,
         module: 'whatsapp',
         apagable: 'whatsapp',
@@ -205,6 +207,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Captación',
+    salvoTipo: ['ia'],
     icon: Funnel,
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
@@ -219,6 +222,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Publicidad',
+    salvoTipo: ['ia'],
     icon: Megaphone,
     items: [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
@@ -232,6 +236,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Catálogo',
+    salvoTipo: ['ia'],
     icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
@@ -248,6 +253,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Tutores',
+    salvoTipo: ['ia'],
     icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
@@ -260,7 +266,35 @@ export const NAV_SECTIONS = [
     ],
   },
   {
+    // EL APARTADO DE LOS PROYECTOS IA.
+    //
+    // Angel: «deberias hacer un apartado especifico para los proyectos IA,
+    // estos no estan muy cargados, por ende la cantidad de apartados son
+    // menores». Un proyecto IA es una suscripcion: quien paga, cuanto entra
+    // y por que se va. No hay embudo, ni equipo, ni catalogo.
+    //
+    // Cuatro entradas y se acabo. El resto del menu se esconde solo, porque
+    // sus secciones no aplican a este tipo.
+    label: 'Proyecto IA',
+    icon: Robot,
+    items: [
+      // Lleva al panel de Contabilidad, que en IA YA trae lo suyo: MRR,
+      // activas, altas, bajas y por que se van, ademas de cobrado, gastos y
+      // balance. Antes eran dos pantallas de resumen del mismo proyecto, que
+      // es como se llega a que digan cifras distintas.
+      { label: 'Resumen', to: '/finanzas', detail: 'Lo que entra y lo que se va', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'accounting.view' },
+      { label: 'Cobros', to: '/finanzas/pagos-stripe', detail: 'Lo que ha entrado', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'stripe.view' },
+      { label: 'Suscriptores', to: '/clientes', detail: 'Quien paga', icon: UserCheck, projectType: 'ia', permiso: 'clients.view' },
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
+      { label: 'Conexión', to: '/finanzas/integraciones', detail: 'Stripe y Supabase', icon: PlugsConnected, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'integrations.view' },
+    ],
+  },
+  {
     label: 'Finanzas',
+    // En IA no: sus doce entradas se resumen en las cinco de «Proyecto IA»,
+    // que estan justo encima. Doce apartados para un proyecto que solo
+    // cobra suscripciones es lo que hacia que no se encontrara ninguno.
+    salvoTipo: ['ia'],
     icon: Bank,
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'accounting.view' },
@@ -270,8 +304,8 @@ export const NAV_SECTIONS = [
       { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas', permiso: 'expenses.view' },
       { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
-      { label: 'Comisiones', to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas', permiso: 'commissions.view' },
-      { label: 'Nóminas', to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
+      { label: 'Comisiones', salvoTipo: ['ia'], to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas', permiso: 'commissions.view' },
+      { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.view' },
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
@@ -503,6 +537,14 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   // `permiso` también puede ser una lista: basta con uno (Diplomas: ver O emitir).
   const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
   if (!tienePermisoDeLaPantalla) return false;
+  // Y al reves: lo que en un tipo de proyecto NO EXISTE.
+  //
+  // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas
+  // ni catalogo de veinte cursos: tiene suscriptores y cobros. Enseñarle ocho
+  // apartados vacios es lo que hace que no encuentre los dos que si tienen
+  // algo. Angel, mirando Tarot: «estos no estan muy cargados, por ende la
+  // cantidad de apartados son menores».
+  if (Array.isArray(item.salvoTipo) && item.salvoTipo.includes(projectType)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
@@ -1258,7 +1300,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab });
+          // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
+          // campañas, ni catalogo, ni tutores).
+          const seccionAplica = !(Array.isArray(section.salvoTipo)
+            && section.salvoTipo.includes(activeProject?.type));
+          const visibleItems = seccionAplica
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab })
+            : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];
