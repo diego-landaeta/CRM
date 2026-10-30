@@ -11967,6 +11967,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/canales/dinero",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/canales/dinero",
+  "relativa": "GET /canales/dinero",
+  "controlador": "dondePonerElDinero",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.dinero"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/detalle",
   "tipo": "ruta",
   "modulo": "reports",

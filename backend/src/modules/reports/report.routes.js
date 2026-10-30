@@ -30,6 +30,8 @@ router.get('/seguimiento', puede('reports.mis_informes'), ctrl.seguimiento);
 router.get('/paises', puede('reports.mis_informes'), ctrl.paises);
 router.get('/formaciones', puede('reports.mis_informes'), ctrl.formaciones);
 router.get('/canales', puede('reports.mis_informes'), ctrl.canales);
+// Con el gasto de publicidad: solo administracion.
+router.get('/canales/dinero', puede('reports.dinero'), ctrl.dondePonerElDinero);
 router.get('/detalle', puede('reports.mis_informes'), ctrl.detalle);
 
 // La tasa de cierre, con una sola definicion para todo el CRM.

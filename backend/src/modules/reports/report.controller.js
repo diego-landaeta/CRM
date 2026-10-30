@@ -4,6 +4,7 @@ import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { dineroPorCanal } from './dondePonerElDinero.js';
 import { tramosPara, lecturaDe, guardarTramos, quitarTramos } from './tasaBaremo.js';
 
 // A que proyectos se acota el informe.
@@ -176,6 +177,24 @@ export async function paises(req, res, next) {
 export async function canales(req, res, next) {
   try {
     res.json({ success: true, data: await model.origenDeLosProspectos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/canales/dinero  -> dónde poner el dinero (#56): por canal y campaña, contra el periodo anterior.
+// Solo admin y super admin (lleva el gasto), y recortado a SUS campus.
+export async function dondePonerElDinero(req, res, next) {
+  try {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const hoy = new Date();
+    const dia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const from = req.query.from || dia(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    const to = req.query.to || dia(hoy);
+    if (!re.test(from) || !re.test(to) || Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) {
+      throw new AppError('from y to tienen que ser fechas AAAA-MM-DD', 400, 'INVALID_DATE');
+    }
+    if (from > to) throw new AppError('from no puede ser posterior a to', 400, 'INVALID_RANGE');
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 366) throw new AppError('El rango no puede pasar de un año', 400, 'INVALID_RANGE');
+    res.json({ success: true, data: await dineroPorCanal({ ...(await proyectosDelAmbito(req)), from, to }) });
   } catch (err) { next(err); }
 }
 
