@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-787 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
+788 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1078,6 +1078,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateTemplate | `PATCH /api/whatsapp/templates/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.plantillas` |
 | deleteTemplate | `DELETE /api/whatsapp/templates/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.plantillas` |
 | cola | `GET /api/whatsapp/cola` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.cola` |
+| actividad | `GET /api/whatsapp/actividad` | (no existía) | (ruta nueva) | `reports.view` |
 | usuarios | `GET /api/whatsapp/usuarios` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
 | formaDeAvisos | `GET /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | olvidarFormaDeAvisos | `DELETE /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
