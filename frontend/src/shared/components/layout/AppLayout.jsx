@@ -54,6 +54,10 @@ const ALL_PROJECTS_OK = [
   /^\/conexion\/webhook-transferencias$/,
   // Asignación de leads: con «todos», todas las configuraciones y decisiones que ve cada uno.
   /^\/conexion\/asignacion-leads$/,
+  // El botón de WhatsApp de la web: con una empresa o «Todos», sus pulsaciones
+  // sumadas; el botón se sigue configurando en cada campus. Diego, 30/10: «sigue
+  // sin tener la vista de empresa».
+  /^\/captacion\/whatsapp$/,
   /^\/profile$/,
   /^\/preferences$/,
   // Las de verdad. Solo estaban las rutas viejas en ingles (/profile,
@@ -119,6 +123,10 @@ const CON_SOCIEDAD_OK = [
   // decisiones de sus campus, con un filtro de campus. Diego, 28/10: «tengo que
   // verlo por empresa y campus».
   /^\/conexion\/asignacion-leads$/,
+  // El botón de WhatsApp de la web: con una empresa o «Todos», sus pulsaciones
+  // sumadas; el botón se sigue configurando en cada campus. Diego, 30/10: «sigue
+  // sin tener la vista de empresa».
+  /^\/captacion\/whatsapp$/,
   // Feedback suma los campus de la empresa (Diego, 28/09: «tiene que ser campus
   // y no empresas… lo hemos dicho»): la pantalla ya manda issuerId y el
   // backend lo resuelve con proyectosDelAmbito. Solo faltaba esta línea.
