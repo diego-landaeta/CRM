@@ -12055,6 +12055,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "GET /tasa-cierre/baremo",
+  "controlador": "baremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "PUT",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "PUT /tasa-cierre/baremo",
+  "controlador": "guardarBaremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.editar_baremo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "DELETE",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "DELETE /tasa-cierre/baremo",
+  "controlador": "quitarBaremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.editar_baremo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/resumen-del-dia",
   "tipo": "ruta",
   "modulo": "reports",

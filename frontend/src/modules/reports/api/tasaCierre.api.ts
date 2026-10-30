@@ -29,6 +29,12 @@ export interface TasaDeCierre {
   tasa: number;
   meses: MesDeCierre[];
   definicion: string;
+  /** Los tramos que aplican a este ámbito (#39). */
+  baremo?: BaremoAplicado;
+  /** En qué tramo cae la tasa; null si no hay baremo. */
+  lectura?: { etiqueta: string; tono: TonoDeTramo; desde_pct: number } | null;
+  /** La tasa del equipo, solo cuando lo que se ve es de UNA gestora. */
+  equipo?: number | null;
 }
 
 export interface PersonaDelDesglose {
@@ -85,4 +91,29 @@ export async function traerDesglose(
   p.set('lado', params.lado);
   const r = await client.get(`/informes/tasa-cierre/detalle?${p}`);
   return r?.success ? (r.data || []) : [];
+}
+
+// ── El baremo (#39): qué significa «un 8,2 %» ──────────────────────────────
+
+export type TonoDeTramo = 'flojo' | 'normal' | 'bueno';
+
+export interface TramoDelBaremo { desde_pct: number; etiqueta: string; tono: TonoDeTramo }
+
+export interface BaremoAplicado {
+  /** `campus` (el propio), `general` (el de todos) o `ninguno`. */
+  ambito: 'campus' | 'general' | 'ninguno';
+  tramos: TramoDelBaremo[];
+}
+
+export async function guardarBaremo(cuerpo: { project_id?: number; general?: boolean; tramos: TramoDelBaremo[] }) {
+  const r = await client.put('/informes/tasa-cierre/baremo', cuerpo);
+  return r?.success === true;
+}
+
+export async function quitarBaremo(destino: { project_id?: number; general?: boolean }) {
+  const p = new URLSearchParams();
+  if (destino.general) p.set('general', 'true');
+  else if (destino.project_id) p.set('projectId', String(destino.project_id));
+  const r = await client.delete(`/informes/tasa-cierre/baremo?${p}`);
+  return r?.success === true;
 }
