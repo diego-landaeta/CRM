@@ -29,7 +29,7 @@ export const TECNICOS = new Set([
   'conAdjuntos', 'conArchivos',
   // Guardas de ALCANCE POR CAMPUS (IDOR): no deciden quien tiene el permiso (eso lo dice el `puede(...)`
   // de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
-  'puedeCrearEn',
+  'puedeCrearEn', 'deSuCampus',
 ]);
 
 /** El trozo de ruta de un `router.use('/panel', sub)`, sacado de su expresión. */
