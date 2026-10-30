@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CaretDown, Target, Info } from '@phosphor-icons/react';
+import { useAuth } from '@/contexts/AuthContext';
+import BaremoDeLaTasa, { CLASE_DEL_TONO } from './BaremoDeLaTasa';
 import {
   traerTasaDeCierre, traerDesglose,
   type TasaDeCierre as Tasa, type PersonaDelDesglose, type AmbitoDeLaTasa,
@@ -33,13 +35,16 @@ export default function TasaDeCierre({
   activeProject, activeIssuerId = null, from, to, asesoraId = null,
 }: AmbitoDeLaTasa) {
   const ambito: AmbitoDeLaTasa = { activeProject, activeIssuerId, from, to, asesoraId };
+  const { user } = useAuth() as { user: { role?: string } | null };
+  const puedeCambiarElBaremo = user?.role === 'admin' || user?.role === 'superadmin';
+  const [version, setVersion] = useState(0);
   const [tasa, setTasa] = useState<Tasa | null>(null);
   const [fallo, setFallo] = useState(false);
   const [abierto, setAbierto] = useState<null | 'cerrados' | 'todos'>(null);
   const [gente, setGente] = useState<PersonaDelDesglose[]>([]);
   const [cargandoGente, setCargandoGente] = useState(false);
 
-  const clave = [activeProject?.id, activeIssuerId, from, to, asesoraId].join('|');
+  const clave = [activeProject?.id, activeIssuerId, from, to, asesoraId, version].join('|');
 
   useEffect(() => {
     let vivo = true;
@@ -82,6 +87,17 @@ export default function TasaDeCierre({
         <div className="text-right">
           <div className="text-3xl font-semibold tabular-nums">{tasa.tasa}%</div>
           <p className="text-[11px] text-muted-foreground">del periodo</p>
+          {/* Qué significa (#39): el tramo del baremo, si lo hay; y, para una gestora, frente al equipo. */}
+          {tasa.lectura && (
+            <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${CLASE_DEL_TONO[tasa.lectura.tono]}`}>
+              {tasa.lectura.etiqueta}
+            </span>
+          )}
+          {tasa.equipo != null && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              frente al <strong className="tabular-nums">{tasa.equipo}%</strong> del equipo
+            </p>
+          )}
         </div>
       </div>
 
@@ -146,6 +162,17 @@ export default function TasaDeCierre({
             </div>
           )}
         </div>
+      )}
+
+      {puedeCambiarElBaremo && (
+        <BaremoDeLaTasa
+          // Con otro baremo guardado se rehace el editor con los tramos nuevos.
+          key={`${tasa.baremo?.ambito}-${(tasa.baremo?.tramos || []).map((t) => `${t.desde_pct}${t.etiqueta}${t.tono}`).join(',')}`}
+          baremo={tasa.baremo}
+          projectId={activeIssuerId ? null : (activeProject?.id && activeProject.id > 0 ? activeProject.id : null)}
+          esSuperadmin={user?.role === 'superadmin'}
+          onCambio={() => setVersion((v) => v + 1)}
+        />
       )}
 
       {tasa.meses.length > 1 && (

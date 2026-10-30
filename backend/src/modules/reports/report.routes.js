@@ -38,6 +38,10 @@ router.get('/detalle', puede('reports.mis_informes'), ctrl.detalle);
 router.get('/aviso-sin-factura', puede('reports.mis_informes'), ctrl.avisoSinFactura);
 router.get('/tasa-cierre', puede('reports.mis_informes'), ctrl.tasaCierre);
 router.get('/tasa-cierre/detalle', puede('reports.mis_informes'), ctrl.tasaCierreDetalle);
+// El baremo (#39): leerlo, cualquiera con informes (va dentro de la propia tasa); cambiarlo, quien tenga `reports.editar_baremo`.
+router.get('/tasa-cierre/baremo', puede('reports.mis_informes'), ctrl.baremo);
+router.put('/tasa-cierre/baremo', puede('reports.editar_baremo'), ctrl.guardarBaremo);
+router.delete('/tasa-cierre/baremo', puede('reports.editar_baremo'), ctrl.quitarBaremo);
 
 // «Ayer y hoy» del dashboard (#130). Sin roleGuard a proposito: una gestora
 // entra y ve lo suyo, que es el caso principal de esta pantalla.
