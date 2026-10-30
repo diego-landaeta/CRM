@@ -46,8 +46,9 @@ const DECLARADAS = {
   'sales/sales.controller.js': [4, 'alcance: la gestora, sus ventas'],
   'sales/sales.goals.js': [2, 'alcance: la gestora, su meta'],
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
-  // Equipos (26/10/2026): quién mueve, comenta y aprueba UNA tarea es alcance,
+  'soporte/soporte.controller.js': [1, 'alcance: quien administra (admin, soporte, superadmin) responde y ve los tickets de su alcance; el resto, los suyos'],
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
+  // Equipos (26/10/2026): quién mueve, comenta y aprueba UNA tarea es alcance,
   'tasks/tasks.reglas.js': [5, 'alcance por tarea: el superadmin (y admin/superadmin como supervisor válido) en todas'],
   'tasks/tasks.service.js': [9, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve, aprueba y borra'],
   'tutores/tutor.controller.js': [6, 'alcance: el tutor, lo suyo; fichas de sus campus'],
