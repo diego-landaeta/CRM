@@ -132,7 +132,9 @@ export default function Tour({
    * bailaria.
    */
   const [pasos] = useState<Paso[]>(() => {
-    if (pasosPropios) return pasosPropios;
+    // Los pasos que señalan algo que no está en esta vista (p. ej. «Nueva», que solo existe al editar) no
+    // se cuentan: si no, el contador saltaba de «2 de 4» a «4 de 4».
+    if (pasosPropios) return pasosPropios.filter((p) => !p.donde || document.querySelector(p.donde));
     const sinNumero = Boolean(document.querySelector('.wa-sin-enlazar'));
     return sinNumero
       ? PASOS.filter((p) => p.enElCorto)
