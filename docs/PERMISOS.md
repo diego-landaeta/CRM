@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-725 rutas en 57 módulos, y 25 acciones con condición dentro de una ruta.
+726 rutas en 57 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -67,6 +67,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | login | `POST /api/auth/login` | nada (pública) | cualquiera, sin sesión | — |
 | refresh | `POST /api/auth/refresh` | nada (pública) | cualquiera, sin sesión | — |
 | logout | `POST /api/auth/logout` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
+| forgotPassword | `POST /api/auth/forgot-password` | (no existía) | (ruta nueva) | — |
 | setPassword | `POST /api/auth/set-password` | nada (pública) | cualquiera, sin sesión | — |
 | me | `GET /api/auth/me` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | changePassword | `POST /api/auth/change-password` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
