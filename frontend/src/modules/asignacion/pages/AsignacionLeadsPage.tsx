@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Plus, ArrowClockwise, Trash, PencilSimple, PaperPlaneTilt, Key, Copy, X, Shuffle, ListBullets,
 } from '@phosphor-icons/react';
@@ -11,6 +11,8 @@ import { inputClass } from '@/shared/lib/ui';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { copyToClipboard } from '@/shared/lib/clipboard';
 import usePermission from '@/shared/hooks/usePermission';
 import {
@@ -48,6 +50,45 @@ function hace(iso: string | null): string {
 
 const fechaHora = (iso: string) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 
+/*
+  LO QUE SE VE SIGUE A LA CABECERA (Diego, 28/10: «tengo que verlo por empresa y
+  campus»). Con una empresa elegida, las configuraciones que tocan a sus campus y
+  las decisiones de todos ellos, con un filtro para quedarse con uno; con un
+  campus, solo lo suyo; con «todos», todo lo que ve cada uno.
+*/
+export type VistaCabecera =
+  | { tipo: 'todo' }
+  | { tipo: 'empresa'; issuerId: number; nombre: string; campus: CampusConEmpresa[] }
+  | { tipo: 'campus'; campus: CampusConEmpresa };
+
+type Cabecera = {
+  activeIssuerId?: number | null;
+  activeIssuer?: { nombre?: string } | null;
+  activeProject?: { id?: number | string | null; nombre?: string } | null;
+  isAllProjects?: boolean;
+};
+
+export function vistaDeCabecera(cab: Cabecera, proyectos: CampusConEmpresa[]): VistaCabecera {
+  if (cab.activeIssuerId) {
+    const issuerId = Number(cab.activeIssuerId);
+    return { tipo: 'empresa', issuerId, nombre: cab.activeIssuer?.nombre || 'la empresa', campus: proyectos.filter((p) => Number(p.sociedad_emisora_id) === issuerId) };
+  }
+  const id = cab.activeProject?.id;
+  if (!cab.isAllProjects && id && id !== TODOS_LOS_PROYECTOS) {
+    return { tipo: 'campus', campus: proyectos.find((p) => Number(p.id) === Number(id)) || { id: Number(id), nombre: cab.activeProject?.nombre || 'Campus' } };
+  }
+  return { tipo: 'todo' };
+}
+
+/** Si una configuración toca lo que se está viendo: la de todas las empresas, siempre. */
+export function configEnVista(c: Pick<ConfigAsignacion, 'ambito' | 'issuer_id' | 'project_id'>, v: VistaCabecera): boolean {
+  if (v.tipo === 'todo' || c.ambito === 'todas') return true;
+  if (v.tipo === 'empresa') {
+    return c.ambito === 'empresa' ? Number(c.issuer_id) === v.issuerId : v.campus.some((p) => Number(p.id) === Number(c.project_id));
+  }
+  return c.ambito === 'empresa' ? Number(c.issuer_id) === Number(v.campus.sociedad_emisora_id) : Number(c.project_id) === Number(v.campus.id);
+}
+
 function ParaQuien({ c }: { c: ConfigAsignacion }) {
   if (c.ambito === 'todas') return <span className="rounded bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info-soft-foreground">Todas las empresas</span>;
   if (c.ambito === 'empresa') return <span className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-semibold text-success-soft-foreground">Toda {c.empresa || 'la empresa'}</span>;
@@ -57,8 +98,11 @@ function ParaQuien({ c }: { c: ConfigAsignacion }) {
 /** La clave recién creada: se enseña una vez, con la dirección de la entrada. */
 function ClaveUnaVez({ nombre, clave, onCerrar }: { nombre: string; clave: string; onCerrar: () => void }) {
   const copiar = async (t: string, que: string) => toast({ title: (await copyToClipboard(t)) ? `${que} copiada` : 'No se pudo copiar' });
+  // Sale debajo de la explicación: con los desplegables abiertos quedaba fuera de la vista y la clave solo se enseña una vez.
+  const caja = useRef<HTMLDivElement>(null);
+  useEffect(() => { caja.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, []);
   return (
-    <div role="status" className="space-y-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
+    <div ref={caja} role="status" className="space-y-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
       <p className="flex items-center gap-2 font-semibold"><Key size={15} /> Clave de la entrada de «{nombre}»: cópiala ahora</p>
       <p className="text-xs">No se vuelve a enseñar. En Make, la entrada hace un <b>POST</b> a esta dirección con la cabecera <code>Authorization: Bearer &lt;clave&gt;</code>.</p>
       {[['Dirección', URL_ENTRADA], ['Clave', clave]].map(([que, v]) => (
@@ -145,7 +189,7 @@ function Dialogo({ config, proyectos, esSuperadmin, onCerrar, onGuardado }: {
           </div>
           <div className="space-y-3 p-5">
             <Field label="Nombre" required htmlFor="asig-nombre" hint="Para reconocerla en la lista.">
-              <input id="asig-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={150} placeholder="ISEIE · formularios de la web" className={inputClass} />
+              <input id="asig-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={150} placeholder="Psiko Aprende · formularios de la web" className={inputClass} />
             </Field>
             {esAlta ? (
               <Field label="Para quién" required hint="Con una de empresa o de todas, la entrada de Make tiene que mandar el campus (project_id o proyecto).">
@@ -184,18 +228,29 @@ const ESTADOS: Record<EstadoEnvio, string> = {
   enviado: 'bg-success-soft text-success-soft-foreground', fallido: 'bg-destructive/10 text-destructive',
 };
 
-function Registro({ configs }: { configs: ConfigAsignacion[] }) {
+function Registro({ configs, version, vista, proyectos }: { configs: ConfigAsignacion[]; version: number; vista: VistaCabecera; proyectos: CampusConEmpresa[] }) {
   const [filas, setFilas] = useState<DecisionAsignacion[]>([]);
-  const [filtro, setFiltro] = useState<{ destinoId: number | null; escenario: 1 | 2 | null; estado: EstadoEnvio | '' }>({ destinoId: null, escenario: null, estado: '' });
+  const [filtro, setFiltro] = useState<{ destinoId: number | null; campusId: number | null; escenario: 1 | 2 | null; estado: EstadoEnvio | '' }>({ destinoId: null, campusId: null, escenario: null, estado: '' });
   const [cargando, setCargando] = useState(true);
+  // Los campus entre los que elegir: los de la empresa de la cabecera o, con «todos», todos los suyos.
+  const campusAElegir = vista.tipo === 'empresa' ? vista.campus : vista.tipo === 'todo' ? proyectos : [];
+  const claveVista = vista.tipo === 'empresa' ? `e${vista.issuerId}` : vista.tipo === 'campus' ? `c${vista.campus.id}` : 'todo';
+  // Al cambiar la cabecera, el campus y la configuración elegidos ya pueden no estar en la lista.
+  useEffect(() => { setFiltro((f) => ({ ...f, campusId: null, destinoId: null })); }, [claveVista]);
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await asignacionApi.decisiones(filtro);
+      const r = await asignacionApi.decisiones({
+        destinoId: filtro.destinoId, escenario: filtro.escenario, estado: filtro.estado,
+        projectId: vista.tipo === 'campus' ? Number(vista.campus.id) : filtro.campusId,
+        issuerId: vista.tipo === 'empresa' ? vista.issuerId : null,
+      });
       setFilas(r.success ? (r.data as DecisionAsignacion[]) : []);
     } finally { setCargando(false); }
-  }, [filtro]);
-  useEffect(() => { cargar(); }, [cargar]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtro, claveVista]);
+  // `version` sube al probar un escenario: así la prueba sale en el registro sin recargar la página.
+  useEffect(() => { cargar(); }, [cargar, version]);
 
   async function reenviar(id: number) {
     try {
@@ -208,7 +263,13 @@ function Registro({ configs }: { configs: ConfigAsignacion[] }) {
   return (
     <section className="space-y-3" aria-labelledby="asig-registro">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 id="asig-registro" className="mr-auto flex items-center gap-2 font-semibold"><ListBullets size={16} /> Registro de decisiones</h2>
+        <h2 id="asig-registro" className="mr-auto flex items-center gap-2 font-semibold"><ListBullets size={16} /> Registro de decisiones
+          {vista.tipo !== 'todo' && <span className="text-xs font-normal text-muted-foreground">· {vista.tipo === 'empresa' ? `${vista.nombre} (${vista.campus.length} campus)` : vista.campus.nombre}</span>}
+        </h2>
+        {campusAElegir.length > 1 && (
+          <Select<number | null> value={filtro.campusId} onChange={(v) => setFiltro((f) => ({ ...f, campusId: v }))} size="sm" ariaLabel="Campus"
+            options={[{ value: null, label: 'Todos los campus' }, ...campusAElegir.map((p) => ({ value: Number(p.id), label: p.nombre }))]} />
+        )}
         <Select<number | null> value={filtro.destinoId} onChange={(v) => setFiltro((f) => ({ ...f, destinoId: v }))} size="sm" ariaLabel="Configuración"
           options={[{ value: null, label: 'Todas las configuraciones' }, ...configs.map((c) => ({ value: c.id, label: c.nombre }))]} />
         <Select<1 | 2 | null> value={filtro.escenario} onChange={(v) => setFiltro((f) => ({ ...f, escenario: v }))} size="sm" ariaLabel="Escenario"
@@ -258,6 +319,10 @@ export default function AsignacionLeadsPage() {
   const [dialogo, setDialogo] = useState<ConfigAsignacion | null | undefined>(undefined);
   const [clave, setClave] = useState<{ nombre: string; clave: string } | null>(null);
   const [probando, setProbando] = useState<string | null>(null);
+  const [versionRegistro, setVersionRegistro] = useState(0);
+  const cabecera = useProjectContext() as Cabecera;
+  const vista = vistaDeCabecera(cabecera, projects || []);
+  const enVista = configs.filter((c) => configEnVista(c, vista));
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -276,7 +341,7 @@ export default function AsignacionLeadsPage() {
       toast({ title: ok ? `Prueba enviada al escenario ${escenario}` : `La prueba al escenario ${escenario} no llegó`, description: ok ? undefined : r.data?.error || undefined, variant: ok ? undefined : 'destructive' });
     } catch (e: any) {
       toast({ title: 'No se pudo probar', description: e?.data?.error || e?.message, variant: 'destructive' });
-    } finally { setProbando(null); }
+    } finally { setProbando(null); setVersionRegistro((v) => v + 1); }
   }
 
   async function nuevaClave(c: ConfigAsignacion) {
@@ -305,7 +370,7 @@ export default function AsignacionLeadsPage() {
         ) : undefined} />
 
       <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-3 text-sm">
-        <p><b>Cómo funciona.</b> La entrada de Make recibe el formulario y lo pasa al CRM. Si alguna gestora que recibe leads en ese campus ha trabajado en el CRM en los últimos minutos, el CRM crea el lead con ella (la que menos lleva hoy; si empatan, la que menos en total) y lo manda al <b>escenario 2</b>. Si no hay ninguna, lo manda al <b>escenario 1</b>, que lo crea como siempre. Si el CRM no contesta, la entrada de Make lo manda al escenario 1 por su cuenta.</p>
+        <p><b>Cómo funciona.</b> La entrada de Make recibe el formulario y lo pasa al CRM. Si alguna gestora que recibe leads en ese campus ha trabajado en el CRM en los últimos minutos, el CRM crea el lead con ella (la que menos lleva hoy en ese campus; si empatan, la que menos en total allí) y lo manda al <b>escenario 2</b>. Si no hay ninguna, lo manda al <b>escenario 1</b>, que lo crea como siempre. Si el CRM no contesta, la entrada de Make lo manda al escenario 1 por su cuenta.</p>
         <p className="text-xs text-muted-foreground">Dirección de la entrada (POST con <code>Authorization: Bearer &lt;clave&gt;</code>): <code className="break-all">{URL_ENTRADA}</code></p>
         <details className="text-xs">
           <summary className="cursor-pointer font-semibold text-foreground">Qué cuenta como «activa»</summary>
@@ -313,7 +378,8 @@ export default function AsignacionLeadsPage() {
             <li>Cualquier acción en el CRM en los últimos minutos de la ventana (15 de serie): llamada, correo o WhatsApp registrado, nota, cambio de estado, recordatorio, paso del proceso, editar un prospecto, crear un lead, una venta, un cobro, una matrícula o una factura.</li>
             <li>También los WhatsApp que manda desde su móvil con el número conectado (no los de grupos ni el historial que baja al conectar el número).</li>
             <li>No cuentan: abrir una ficha, guardar sin cambiar nada, tener la sesión abierta, una nota de menos de 20 caracteres o repetida, ni un cambio de estado deshecho en menos de 10 minutos.</li>
-            <li>Entre varias activas: la que menos leads lleva hoy (hora de Valencia, sumando todos sus campus), luego la que menos en total, y luego la que lleva más rato sin recibir uno.</li>
+            <li>Entre varias activas: la que menos leads lleva hoy en ese campus (hora de Valencia), luego la que menos en total allí, y luego la que lleva más rato sin recibir uno. Cada campus reparte aparte: lo que reciba en otro no cuenta.</li>
+            <li>Si en el campus solo hay una persona que recibe leads, no se elige por actividad: el formulario va al escenario de siempre hasta que sean dos.</li>
             <li>WhatsApp: con esto encendido, el botón de WhatsApp de la web lleva a la gestora activa a la que le toca. Pulsarlo no asigna nada; cuenta cuando la persona le escribe o cuando se registra el lead.</li>
           </ul>
         </details>
@@ -321,21 +387,23 @@ export default function AsignacionLeadsPage() {
           <summary className="cursor-pointer font-semibold text-foreground">Cómo montarlo en Make, paso a paso</summary>
           <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-muted-foreground">
             <li>Aquí: <b>Nueva</b>, elige el campus y pon el mailhook o la URL del <b>escenario 1</b> (el de siempre) y del <b>escenario 2</b> (el nuevo). Copia la clave: solo se enseña una vez.</li>
-            <li>En Make, el <b>escenario 2</b> es una copia del de siempre <b>sin</b> la rotación por HTTP y <b>sin</b> crear el lead (el CRM ya lo ha creado con la gestora). Recibe lo mismo que el formulario y además <code>gestora</code>, <code>responsable_id</code>, <code>responsable_email</code>, <code>responsable_nombre</code> y <code>lead_id</code>.</li>
-            <li>La <b>entrada</b> (mailhook o webhook del formulario) hace un POST a la dirección de arriba con la clave y estos campos: <code>uid</code> (único por formulario: si Make lo reenvía, no se duplica), <code>nombre</code>, <code>email</code> o <code>telefono</code>, y los demás del formulario tal cual. Si es un correo, mándalo en <code>original</code> (<code>asunto</code>, <code>html</code>, <code>texto</code>) y saldrá igual hacia el escenario.</li>
+            <li>En Make, el <b>escenario 2</b> es una copia del de siempre <b>sin</b> la rotación por HTTP y <b>sin</b> crear el lead (el CRM ya lo ha creado con la gestora). Recibe lo mismo que el formulario y además <code>gestora</code>, <code>responsable_id</code>, <code>responsable_email</code>, <code>responsable_nombre</code>, <code>responsable_whatsapp</code> y <code>lead_id</code>.</li>
+            <li>La <b>entrada</b> (mailhook o webhook del formulario) hace un POST a la dirección de arriba con la clave. Vale el mismo JSON que hoy saca OpenAI en Make (<code>full_name</code>, <code>email</code>, <code>phone_complete</code>, <code>course</code>…), tal cual y sin <code>uid</code>: el CRM lo entiende y no duplica si Make lo reenvía. O, si lo prefieres, estos campos: <code>uid</code> (único por formulario: si Make lo reenvía, no se duplica), <code>nombre</code>, <code>email</code> o <code>telefono</code>, y los demás del formulario tal cual. Si es un correo, mándalo en <code>original</code> (<code>asunto</code>, <code>html</code>, <code>texto</code>) y saldrá igual hacia el escenario.</li>
             <li>En ese módulo HTTP de Make pon un tiempo máximo de 5 segundos y una ruta de error: si el CRM no contesta o contesta con error, la entrada manda el formulario al <b>escenario 1</b>. Si contesta bien, no hace nada más: el CRM ya lo ha mandado al escenario que toca.</li>
-            <li>Prueba con <b>Probar escenario 1</b> y <b>Probar escenario 2</b>, y mira abajo el <b>Registro de decisiones</b>: a quién fue cada formulario, por qué y si llegó.</li>
+            <li>Prueba con <b>Probar escenario 1</b> y <b>Probar escenario 2</b> (la del 2 lleva una «Gestora de prueba» inventada, para que en Make puedas enlazar sus campos), y mira abajo el <b>Registro de decisiones</b>: a quién fue cada formulario, por qué y si llegó.</li>
           </ol>
         </details>
       </div>
 
       {clave && <ClaveUnaVez nombre={clave.nombre} clave={clave.clave} onCerrar={() => setClave(null)} />}
 
-      {!cargando && !configs.length ? (
-        <EmptyState icon={Shuffle} title="Ningún campus reparte todavía por actividad" description="Crea una para un campus o una empresa con los destinos de sus escenarios 1 y 2 de Make." />
+      {!cargando && !enVista.length ? (
+        <EmptyState icon={Shuffle}
+          title={vista.tipo === 'todo' ? 'Ningún campus reparte todavía por actividad' : `${vista.tipo === 'empresa' ? `Ningún campus de ${vista.nombre}` : vista.campus.nombre} no reparte todavía por actividad`}
+          description="Crea una para un campus o una empresa con los destinos de sus escenarios 1 y 2 de Make." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {configs.map((c) => (
+          {enVista.map((c) => (
             <article key={c.id} className="space-y-2 rounded-md border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="mr-auto font-semibold">{c.nombre}</h3>
@@ -366,7 +434,7 @@ export default function AsignacionLeadsPage() {
         </div>
       )}
 
-      <Registro configs={configs} />
+      <Registro configs={enVista} version={versionRegistro} vista={vista} proyectos={projects || []} />
 
       {dialogo !== undefined && (
         <Dialogo config={dialogo} proyectos={projects || []} esSuperadmin={esSuperadmin} onCerrar={() => setDialogo(undefined)}
