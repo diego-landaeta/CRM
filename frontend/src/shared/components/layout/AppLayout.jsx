@@ -55,6 +55,8 @@ const ALL_PROJECTS_OK = [
   // sumadas; el botón se sigue configurando en cada campus. Diego, 30/10: «sigue
   // sin tener la vista de empresa».
   /^\/captacion\/whatsapp$/,
+  // Actividad en WhatsApp: suma los campus de la empresa o todos (30/10).
+  /^\/whatsapp\/actividad$/,
   /^\/profile$/,
   /^\/preferences$/,
   // Las de verdad. Solo estaban las rutas viejas en ingles (/profile,
@@ -124,6 +126,8 @@ const CON_SOCIEDAD_OK = [
   // sumadas; el botón se sigue configurando en cada campus. Diego, 30/10: «sigue
   // sin tener la vista de empresa».
   /^\/captacion\/whatsapp$/,
+  // Actividad en WhatsApp: suma los campus de la empresa o todos (30/10).
+  /^\/whatsapp\/actividad$/,
   // Feedback suma los campus de la empresa (Diego, 28/09: «tiene que ser campus
   // y no empresas… lo hemos dicho»): la pantalla ya manda issuerId y el
   // backend lo resuelve con proyectosDelAmbito. Solo faltaba esta línea.

@@ -165,6 +165,8 @@ export const NAV_SECTIONS = [
           // llevarse una copia. El servidor recorta lo que ve cada cual — un
           // admin lo ve entero, una gestora solo su numero.
           { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText },
+          // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
+          { label: 'Actividad', to: '/whatsapp/actividad', detail: 'Quién responde', icon: ChartBar, permiso: 'reports.view' },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
