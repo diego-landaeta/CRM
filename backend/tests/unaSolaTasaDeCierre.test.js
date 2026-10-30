@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { query } from '../src/shared/config/db.js';
 import { tasaDeCierre, seguimientoYTiempos, detalleTasaDeCierre } from '../src/modules/reports/report.model.js';
 
@@ -44,6 +44,16 @@ async function proyectoConDatos() {
 
 const RANGO = { from: '2020-01-01', to: '2099-12-31' };
 
+/**
+ * Las dos cuentas se leen con dos consultas seguidas, y el proyecto con mas
+ * leads es compartido: si OTRA prueba mete un lead justo entre las dos,
+ * salen cifras que difieren en uno sin que ninguna definicion haya cambiado
+ * (en CI, con las pruebas en paralelo, pasaba a menudo). Se repite hasta que
+ * las dos lecturas vean la misma base. Una divergencia de verdad no depende
+ * del momento: falla en todos los intentos y la prueba sigue en rojo.
+ */
+const hastaQueCuadre = (comprobar) => vi.waitFor(comprobar, { timeout: 8000, interval: 150 });
+
 describe('una sola definición de «compraron»', () => {
   it('la tasa de cierre y el panel de seguimiento dicen lo mismo', async () => {
     if (!await hayBase()) {
@@ -53,13 +63,15 @@ describe('una sola definición de «compraron»', () => {
     const projectId = await proyectoConDatos();
     if (!projectId) { console.warn('Sin leads con los que comparar.'); return; }
 
-    const tasa = await tasaDeCierre({ projectId, ...RANGO });
-    const seg = await seguimientoYTiempos({ projectId, ...RANGO });
+    await hastaQueCuadre(async () => {
+      const tasa = await tasaDeCierre({ projectId, ...RANGO });
+      const seg = await seguimientoYTiempos({ projectId, ...RANGO });
 
-    // El mismo universo de personas...
-    expect(seg.cohorte.entraron).toBe(tasa.leads);
-    // ...y el mismo recuento de las que compraron.
-    expect(seg.cohorte.compraron).toBe(tasa.cerrados);
+      // El mismo universo de personas...
+      expect(seg.cohorte.entraron).toBe(tasa.leads);
+      // ...y el mismo recuento de las que compraron.
+      expect(seg.cohorte.compraron).toBe(tasa.cerrados);
+    });
   });
 
   it('el desglose tiene exactamente las personas que dice el número', async () => {
@@ -67,6 +79,7 @@ describe('una sola definición de «compraron»', () => {
     const projectId = await proyectoConDatos();
     if (!projectId) return;
 
+    await hastaQueCuadre(async () => {
     const tasa = await tasaDeCierre({ projectId, ...RANGO });
     const cerrados = await detalleTasaDeCierre({ projectId, ...RANGO, lado: 'cerrados' });
     const todos = await detalleTasaDeCierre({ projectId, ...RANGO, lado: 'todos' });
@@ -76,6 +89,7 @@ describe('una sola definición de «compraron»', () => {
     // creerse el número — que es el problema que el ticket venía a resolver.
     expect(cerrados.length).toBe(tasa.cerrados);
     expect(todos.length).toBe(tasa.leads);
+    });
   });
 
   it('nadie del desglose compró ANTES de entrar', async () => {

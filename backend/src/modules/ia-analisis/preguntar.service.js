@@ -47,7 +47,8 @@ const MAX_FILAS_PANTALLA = 200;
 
 export const SIN_DATO =
   'No tengo ese dato. Las consultas que puedo hacer son el resumen de un periodo, '
-  + 'su evolución mes a mes y las ventas por asesora; con ellas no puedo contestar esa pregunta.';
+  + 'su evolución mes a mes, las ventas por asesora y el rendimiento de las campañas de Meta; '
+  + 'con ellas no puedo contestar esa pregunta.';
 
 /** Clave de Anthropic: la del proyecto, luego la general, luego la del servidor. */
 async function claveDeAnthropic(projectId = null) {
