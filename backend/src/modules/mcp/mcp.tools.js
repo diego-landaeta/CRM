@@ -172,6 +172,45 @@ export const INFORMES = {
     },
     soloAdmin: true,
   },
+  // ── Lo que faltaba, parte 2 (#325) ─────────────────────────────────────────
+  // Todas devuelven cifras y listas cortas. Sin correos, teléfonos ni textos de
+  // mensajes; los clientes que aparecen (solo en «whatsapp») salen abreviados.
+  matriculas: {
+    descripcion: 'La pantalla de Matrículas en cifras: cuántas hay por estado (pendientes, validadas, rechazadas…), por producto, por campus y por mes de alta. '
+      + 'Acepta desde y hasta (por fecha de alta). Una gestora solo cuenta las de sus ventas.',
+    ejecutar: ({ projectIds, asesoraId, from, to }) => model.resumenMatriculas({ projectIds, asesoraId, from, to }),
+  },
+  catalogo_completo: {
+    descripcion: 'El catálogo por dentro, por campus: formaciones activas e inactivas, cuántas no tienen SKU o lo repiten o no tienen precio, el árbol de categorías '
+      + 'con sus formaciones y las últimas importaciones de WooCommerce (solo super admin y admin). Para precios y fichas usa «listar_formaciones» y «resumen_catalogo».',
+    ejecutar: ({ projectIds }) => model.catalogoCompleto({ projectIds }),
+    soloAdmin: true,
+  },
+  correos: {
+    descripcion: 'Los correos del CRM en cifras, como la pantalla Correos: enviados, recibidos, frenados (los que el freno de pruebas no dejó salir) y fallidos, '
+      + 'por campus, tipo y mes, más las secuencias de correo y cómo van. No da asuntos, destinatarios ni textos. Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => model.resumenCorreos({ projectIds, from, to }),
+    soloAdmin: true,
+  },
+  whatsapp: {
+    descripcion: 'WhatsApp en cifras: mensajes enviados y recibidos por gestora, campus, tipo de mensaje, mes y prospecto, y cuántas conversaciones y números distintos hay. '
+      + 'Nunca da el texto de los mensajes ni los números de teléfono; los grupos no cuentan. Acepta desde y hasta. Una gestora solo cuenta su sesión y sus prospectos.',
+    ejecutar: ({ projectIds, asesoraId, from, to }) => model.resumenWhatsapp({ projectIds, asesoraId, from, to }),
+  },
+  solicitudes_y_avisos: {
+    descripcion: 'Las solicitudes de cambio (RFC) por estado y campus con las últimas quince, y los avisos de la campana que TÚ tienes sin leer (los que piden hacer algo y los que solo informan). '
+      + 'Acepta desde y hasta (por fecha de solicitud). Una gestora solo ve las solicitudes que ha pedido ella.',
+    ejecutar: async ({ projectIds, asesoraId, from, to, quien }) => ({
+      solicitudes: await model.resumenSolicitudes({ projectIds, asesoraId, from, to }),
+      avisos_pendientes: await model.avisosPendientes(quien),
+    }),
+  },
+  nominas: {
+    descripcion: 'Las nóminas, como la pantalla de Nóminas: planes de cada persona, periodos mensuales con su total y estado, y horas trabajadas. '
+      + 'Sin fechas, el último año. Acepta desde y hasta (solo super admin y admin).',
+    ejecutar: ({ projectIds, from, to }) => model.nominasDe({ projectIds, from, to }),
+    soloAdmin: true,
+  },
   // Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado» (antes, del 30/09 al 08/10, por lo facturado).
   // El mismo calculo que «Cómo voy» (`miPuesto`), para que
   // Claude no conteste «la mejor comercial» con otra medida.
@@ -264,6 +303,7 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   campanas_publicitarias: 'Publicidad',
   actividad_por_comercial: 'Equipo y actividad',
   equipo: 'Equipo y actividad',
+  clientes: 'Campus y prospectos',
   moodle_cursos: 'Moodle de los campus',
   moodle_alumnos: 'Moodle de los campus',
   moodle_recursos_externos: 'Moodle de los campus',
@@ -409,6 +449,29 @@ export const HERRAMIENTAS = [
     },
   },
   {
+    nombre: 'clientes',
+    titulo: 'Clientes',
+    descripcion: 'La pantalla de Clientes: quien ha comprado (tiene al menos una venta), con sus productos, gestora, compras, facturado, cobrado, pendiente, cuotas, última compra, próximo vencimiento y último contacto. '
+      + 'Arriba van las cuatro cifras de la pantalla (clientes, facturado, cobrado y pendiente de TODOS los que cumplen el filtro) y «cobro»: la salud de cobro y lo que vence hasta mañana, en 7 y en 30 días '
+      + '(de todo el campus o de la gestora; no depende del texto ni de las fechas). Las fechas filtran por la última compra. '
+      + 'Cobrado y pendiente se fían del campo de importe pagado de la venta, como «cobros_pendientes»: si una venta consta como pagada sin pagos registrados, aquí aparece cobrada. '
+      + 'Sin correos ni teléfonos; el cliente sale con nombre abreviado salvo con datos_completos.',
+    entrada: { ...DATOS_COMPLETOS,
+      ...AMBITO,
+      ...PERIODO,
+      texto: z.string().max(100).optional().describe('Busca en nombre, correo o teléfono del cliente'),
+      gestora_id: z.number().int().positive().optional().describe('Solo los clientes de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
+      ...PAGINA,
+    },
+    ejecutar: async (ambito, a) => {
+      const { gestora_id: gestoraId, desde, hasta, ...resto } = a;
+      if (gestoraId && ambito.soloLoSuyo && gestoraId !== ambito.userId) {
+        throw new AppError('Solo ves tus propios clientes: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return model.clientesDe({ ...resto, gestoraId, desde, hasta, ...acotar(ambito, a) });
+    },
+  },
+  {
     nombre: 'listar_tutores',
     titulo: 'Tutores y sus cursos',
     descripcion: 'Los tutores (profesores colaboradores) de tus campus: en qué campus están, qué cursos dan, con qué porcentaje de comisión '
@@ -454,7 +517,9 @@ export const HERRAMIENTAS = [
     nombre: 'formaciones_sin_tutor',
     titulo: 'Formaciones sin tutor',
     descripcion: 'Formaciones que se han vendido y cobrado y que hoy no tiene ningún tutor: lo mismo que la pantalla «Cursos sin tutor». '
-      + 'Por defecto, solo las vendidas desde el arranque de las comisiones (solo super admin y admin).',
+      + 'Por defecto, solo las vendidas desde el arranque de las comisiones. Cada una trae «meta», la columna META de la pantalla: '
+      + 'no_se_busca, buscando (sin anuncio enganchado), anuncio_activo o anuncio_pausado (con el anuncio, su gasto y sus leads, tal como los dejó la última sincronización con Meta) '
+      + 'o anuncio_desaparecido (se apuntó uno y ya no está en Meta). El enganche anuncio-formación lo hace una persona en la pantalla (solo super admin y admin).',
     entrada: {
       ...AMBITO,
       incluir_anteriores_al_corte: z.boolean().default(false).describe('true: también las vendidas antes del arranque de las comisiones'),
@@ -716,7 +781,11 @@ export const HERRAMIENTAS = [
         throw new AppError(`El informe «${a.tipo}» es de todo el campus y solo lo ven super admin y admin. Prueba con «resumen_mensual».`, 403, 'MCP_INFORME_SOLO_ADMIN');
       }
       const { projectIds, responsableId } = acotar(ambito, a);
-      const params = { projectIds, from: a.desde, to: a.hasta, asesoraId: responsableId || undefined };
+      // `quien` es para lo que es de la PERSONA y no del campus (sus avisos sin leer).
+      const params = {
+        projectIds, from: a.desde, to: a.hasta, asesoraId: responsableId || undefined,
+        quien: { userId: ambito.userId, role: ambito.role },
+      };
       const datos = await conTope(INFORMES[a.tipo].ejecutar(params), TOPE_INFORME_MS, a.tipo);
       return { informe: a.tipo, campus: projectIds, desde: a.desde || null, hasta: a.hasta || null, datos };
     },
