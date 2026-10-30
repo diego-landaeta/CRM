@@ -153,8 +153,11 @@ describe('facturas de colaboradores (#202) · preparar el mes', () => {
       const fila = await one('SELECT token_hash, caduca_at FROM facturas_colaborador WHERE id = $1', [p.facturaId]);
       expect(fila.token_hash).toBe(huella(p.token));
       expect(fila.token_hash).not.toContain(p.token);
+      // Septiembre se prepara después del 6 de octubre: vale 6 días enteros desde hoy
+      // (la regla, día a día, en facturasColaboradorCaducidad.test.js).
       const dias = (new Date(fila.caduca_at) - Date.now()) / 86400000;
-      expect(Math.round(dias)).toBe(60);
+      expect(dias).toBeGreaterThan(6);
+      expect(dias).toBeLessThanOrEqual(7);
     }
     expect(Object.keys(enlace).sort()).toEqual(['laura-A', 'laura-B', 'pedro-B']);
   });
@@ -323,6 +326,11 @@ describe('facturas de colaboradores (#202) · administración', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/token/);
     expect((await request.get(`${API}/enlace/${enlace['pedro-B']}`)).status).toBe(404);
     expect((await subir(enlace['pedro-B'])).status).toBe(404);
+    // Reenviado después del 6 de octubre: el enlace nuevo vale 6 días enteros desde hoy.
+    const { caduca_at: caduca } = await one('SELECT caduca_at FROM facturas_colaborador WHERE id = $1', [pedroB]);
+    const dias = (new Date(caduca) - Date.now()) / 86400000;
+    expect(dias).toBeGreaterThan(6);
+    expect(dias).toBeLessThanOrEqual(7);
 
     const reg = await request.get(`${API}/facturas/${pedroB}/registro`).set(como('super'));
     expect(reg.body.data.map((r) => r.evento)).toEqual(['reenviado']);
