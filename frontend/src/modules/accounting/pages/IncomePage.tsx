@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -108,6 +108,18 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const puedeDeOtra = can('leads.assign');
   const [modoVenta, setModoVenta] = useState<'existing' | 'otra_gestora' | 'sin_gestora'>('existing');
   const [menuVenta, setMenuVenta] = useState(false);
+  // Pulsar fuera lo cierra. Con un clic en el documento y no con una capa
+  // `fixed` encima: en la cabecera (#79 punto 3) el `backdrop-blur` del Topbar
+  // encierra esa capa en la propia cabecera y el resto de la pantalla no la toca.
+  const menuVentaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuVenta) return undefined;
+    function fuera(e: MouseEvent) {
+      if (!menuVentaRef.current?.contains(e.target as Node)) setMenuVenta(false);
+    }
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [menuVenta]);
   function abrirVenta(modo: 'existing' | 'otra_gestora' | 'sin_gestora') {
     setModoVenta(modo);
     setMenuVenta(false);
@@ -252,17 +264,21 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   return (
     <div className="space-y-5 pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <PageHeader
-          title={title}
-          /* Con una empresa elegida decia «en Todos los proyectos», que es
-             justo lo contrario de lo que se esta mirando: son los campus de esa
-             empresa y ninguno mas. */
-          subtitle={`${subtitlePrefix}${
-            activeIssuer ? ' en ' + activeIssuer.nombre + ' (todos sus campus)'
-              : activeProject ? ' en ' + activeProject.nombre : ''}`}
-        />
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <PageHeader
+        title={title}
+        /* Con una empresa elegida decia «en Todos los proyectos», que es
+           justo lo contrario de lo que se esta mirando: son los campus de esa
+           empresa y ninguno mas. */
+        subtitle={`${subtitlePrefix}${
+          activeIssuer ? ' en ' + activeIssuer.nombre + ' (todos sus campus)'
+            : activeProject ? ' en ' + activeProject.nombre : ''}`}
+        /* #79 punto 3: estos botones iban en un <div> suelto que caía DEBAJO del
+           SubNav de Finanzas (dos barras). Ahora van como acciones del PageHeader,
+           que las sube a la barra con el título. En Ventas el SubNav ya no sale
+           (ver SIN_SUBMENU en FinanzasLayout) y «Análisis de ventas» se alcanza
+           desde el botón «Análisis». */
+        actions={(
+          <>
         {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
             cifras que cuentan cosas distintas, asi que se explica aqui mismo. */}
         <button
@@ -282,7 +298,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           Análisis
         </button>
         {activeProject?.id && ((puedeSinGestora || puedeDeOtra) ? (
-          <div className="relative self-start sm:self-auto">
+          <div ref={menuVentaRef} className="relative self-start sm:self-auto">
             <button
               type="button"
               onClick={() => setMenuVenta((v) => !v)}
@@ -296,8 +312,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             </button>
             {menuVenta && (
               <>
-                {/* Pulsar fuera lo cierra. */}
-                <div className="fixed inset-0 z-10" onClick={() => setMenuVenta(false)} aria-hidden="true" />
                 <div role="menu" className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-md border border-border bg-card shadow-lg">
                   <button
                     type="button" role="menuitem" onClick={() => abrirVenta('existing')}
@@ -347,8 +361,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             Nueva venta
           </button>
         ))}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <Suspense fallback={null}>
         {tutorialesOpen && <TutorialesVentas onCerrar={() => setTutorialesOpen(false)} />}
