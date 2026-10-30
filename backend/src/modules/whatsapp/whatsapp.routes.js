@@ -60,6 +60,9 @@ router.get('/usuarios', chat.usuarios);
 router.get('/forma-avisos', puede('whatsapp.forma_avisos'), chat.formaDeAvisos);
 router.delete('/forma-avisos', puede('whatsapp.forma_avisos'), chat.olvidarFormaDeAvisos);
 
+// Voz frente a texto en lo que sale (#128). Lo puede mirar cualquiera con
+// acceso: es como trabaja el equipo, no el contenido de nadie.
+router.get('/voz-o-texto', usaOSupervisa, chat.vozOTextoCtrl);
 router.get('/banco', usaOSupervisa, chat.banco);
 router.get('/banco/numeros', usaOSupervisa, chat.bancoNumeros);
 
