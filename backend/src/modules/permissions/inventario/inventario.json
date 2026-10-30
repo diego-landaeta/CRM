@@ -4933,6 +4933,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/ia-analisis/preguntar",
+  "tipo": "ruta",
+  "modulo": "ia-analisis",
+  "metodo": "POST",
+  "ruta": "/api/ia-analisis/preguntar",
+  "relativa": "POST /preguntar",
+  "controlador": "preguntarCtrl",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.generar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/ia/metrics/:projectId",
   "tipo": "ruta",
   "modulo": "ia-monitor",
