@@ -24,6 +24,7 @@ const NOMBRE_DE_LA_CONSULTA: Record<string, string> = {
   resumen_general: 'Resumen del periodo',
   resumen_mensual: 'Mes a mes',
   ventas_por_asesora: 'Ventas por asesora',
+  campana_que_rinde: 'Rendimiento de las campañas',
 };
 
 function Valor({ v }: { v: unknown }) {

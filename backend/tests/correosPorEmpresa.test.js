@@ -26,7 +26,8 @@ const COBRADO = { 1: 700, 2: 0, 3: 300, 4: 500, 5: 0 };
 const suma = (ids, tabla) => ids.reduce((t, id) => t + (tabla[id] || 0), 0);
 
 // Prospectos nuevos y quien los lleva, para `actividadPorGestora`.
-const LEADS_POR_GESTORA = [{ nombre: 'Ana Gestora', leads: 4 }, { nombre: 'Luis Inactivo', leads: 0 }];
+// De los 4 de Ana, 3 entraron por formulario y 1 lo dio de alta ella desde WhatsApp.
+const LEADS_POR_GESTORA = [{ nombre: 'Ana Gestora', leads: 4, formularios: 3, whatsapp: 1 }, { nombre: 'Luis Inactivo', leads: 0 }];
 
 vi.mock('../src/shared/config/db.js', () => ({
   getClient: vi.fn(),
@@ -207,7 +208,8 @@ describe('Resumen del día · Manuel (superadmin, todas las empresas)', () => {
   it('«Por gestora» incluye a quien vende siendo admin, y las ventas sin gestora', async () => {
     const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
     expect(t).toMatch(/Gestora Prospectos Contactos Ventas/);
-    expect(t).toMatch(/Ana Gestora 4 9 1/);
+    // Debajo del total, de dónde llegaron (Diego, 29/10).
+    expect(t).toMatch(/Ana Gestora 4 3 formulario 1 WhatsApp 9 1/);
     expect(t).toMatch(/Diego Admin 0 3 2/);
     expect(t).toMatch(/Sin gestora 0 0 1/);
   });

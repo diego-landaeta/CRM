@@ -5,7 +5,8 @@
 import client, { type ApiResponse } from '@/shared/api/client';
 import { googleCampaignsMock } from '../mocks/google.mock';
 
-const USE_MOCKS = true; // Cambiar a false cuando Diego termine el modulo backend
+// #216: nunca datos inventados en producción. Sin backend, la ruta enseña «Aún no conectado».
+const USE_MOCKS = false;
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 

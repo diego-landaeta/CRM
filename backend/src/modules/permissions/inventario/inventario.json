@@ -12011,6 +12011,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/canales/dinero",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/canales/dinero",
+  "relativa": "GET /canales/dinero",
+  "controlador": "dondePonerElDinero",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.dinero"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/detalle",
   "tipo": "ruta",
   "modulo": "reports",
@@ -12093,6 +12115,72 @@
     "tipo": "puede",
     "claves": [
      "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "GET /tasa-cierre/baremo",
+  "controlador": "baremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "PUT",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "PUT /tasa-cierre/baremo",
+  "controlador": "guardarBaremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.editar_baremo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/informes/tasa-cierre/baremo",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "DELETE",
+  "ruta": "/api/informes/tasa-cierre/baremo",
+  "relativa": "DELETE /tasa-cierre/baremo",
+  "controlador": "quitarBaremo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.editar_baremo"
     ]
    }
   ],
@@ -15866,6 +15954,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/whatsapp/actividad",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/actividad",
+  "relativa": "GET /actividad",
+  "controlador": "actividad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/whatsapp/usuarios",
   "tipo": "ruta",
   "modulo": "whatsapp",
@@ -16587,6 +16697,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/widget/pulsaciones",
+  "tipo": "ruta",
+  "modulo": "widget",
+  "metodo": "GET",
+  "ruta": "/api/widget/pulsaciones",
+  "relativa": "GET /pulsaciones",
+  "controlador": "pulsaciones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "widget.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PATCH /api/widget/config",
   "tipo": "ruta",
   "modulo": "widget",
@@ -16650,6 +16782,18 @@
   "ruta": "/api/w/data/:projectIdJson",
   "relativa": "GET /data/:projectIdJson",
   "controlador": "widgetData",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/w/clic/:projectId",
+  "tipo": "ruta",
+  "modulo": "widget",
+  "metodo": "POST",
+  "ruta": "/api/w/clic/:projectId",
+  "relativa": "POST /clic/:projectId",
+  "controlador": "widgetClic",
   "publica": true,
   "guardias": [],
   "puertas": []

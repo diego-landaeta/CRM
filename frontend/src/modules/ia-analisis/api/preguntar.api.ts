@@ -2,7 +2,7 @@ import client from '@/shared/api/client';
 
 /** Lo que devuelve el servidor al preguntarle a los datos (#30). */
 export interface Desglose {
-  /** Qué consulta se hizo: `resumen_general`, `resumen_mensual`, `ventas_por_asesora`. */
+  /** Qué consulta se hizo: `resumen_general`, `resumen_mensual`, `ventas_por_asesora`, `campana_que_rinde`. */
   consulta: string;
   /** Los parámetros DE VERDAD usados (no los que pidió el modelo): sirve para comprobarlo a mano. */
   parametros: Record<string, unknown>;

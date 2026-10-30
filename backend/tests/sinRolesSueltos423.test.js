@@ -33,6 +33,7 @@ const DECLARADAS = {
   'cursos-pendientes/cursos-pendientes.controller.js': [1, 'permiso por rol, sin clave en el catalogo todavia: la tutora ve solo lo suyo'],
   'cursos-pendientes/cursos-pendientes.service.js': [7, 'permiso por rol, sin clave en el catalogo todavia: quien crea, modifica, publica y supervisa'],
   'conversions/conversion.acceso.js': [1, 'alcance: la gestora, solo las ventas suyas (o en cuyo reparto figura)'],
+  'reports/report.controller.js': [2, 'comportamiento: el baremo general de la tasa de cierre solo lo cambia un super admin'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
   'consultas/consultas.controller.js': [2, 'alcance: lo suyo de Consultas (su carga, sus alumnos, sus métricas) solo existe para un tutor'],
   'conversions/conversion.controller.js': [6, 'alcance: la gestora, sus ventas'],

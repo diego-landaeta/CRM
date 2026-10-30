@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-788 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
+795 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -837,10 +837,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | paises | `GET /api/informes/paises` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | formaciones | `GET /api/informes/formaciones` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | canales | `GET /api/informes/canales` | (no existía) | (ruta nueva) | `reports.mis_informes` |
+| dondePonerElDinero | `GET /api/informes/canales/dinero` | (no existía) | (ruta nueva) | `reports.dinero` |
 | detalle | `GET /api/informes/detalle` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | avisoSinFactura | `GET /api/informes/aviso-sin-factura` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | tasaCierre | `GET /api/informes/tasa-cierre` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | tasaCierreDetalle | `GET /api/informes/tasa-cierre/detalle` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
+| baremo | `GET /api/informes/tasa-cierre/baremo` | (no existía) | (ruta nueva) | `reports.mis_informes` |
+| guardarBaremo | `PUT /api/informes/tasa-cierre/baremo` | (no existía) | (ruta nueva) | `reports.editar_baremo` |
+| quitarBaremo | `DELETE /api/informes/tasa-cierre/baremo` | (no existía) | (ruta nueva) | `reports.editar_baremo` |
 | resumenDia | `GET /api/informes/resumen-del-dia` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports.mis_informes` |
 | miPuesto · ver el puesto de otra gestora (gestoraId) | `GET /api/informes/mi-puesto` | cuando ver el puesto de otra gestora (gestoraId): a mano, report.controller.js · miPuesto | superadmin, admin, soporte | `reports.puesto_ajeno` |
 
@@ -1081,6 +1085,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateTemplate | `PATCH /api/whatsapp/templates/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.plantillas` |
 | deleteTemplate | `DELETE /api/whatsapp/templates/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.plantillas` |
 | cola | `GET /api/whatsapp/cola` | sesión | superadmin, admin, gestor, soporte, project_manager | `whatsapp.cola` |
+| actividad | `GET /api/whatsapp/actividad` | (no existía) | (ruta nueva) | `reports.view` |
 | usuarios | `GET /api/whatsapp/usuarios` | sesión | superadmin, admin, gestor, soporte, project_manager | lo de cada uno |
 | formaDeAvisos | `GET /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | olvidarFormaDeAvisos | `DELETE /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
@@ -1122,10 +1127,12 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | getConfig | `GET /api/widget/config` | sesión | superadmin, admin, gestor, soporte, project_manager | `widget.view` |
+| pulsaciones | `GET /api/widget/pulsaciones` | (no existía) | (ruta nueva) | `widget.view` |
 | updateConfig | `PATCH /api/widget/config` | sesión | superadmin, admin, gestor, soporte, project_manager | `widget.edit` |
 | updateUserPhone | `PATCH /api/widget/users/:userId/phone` | sesión | superadmin, admin, gestor, soporte, project_manager | `widget.edit` |
 | widgetScript | `GET /api/w/whatsapp/:projectIdJs` | nada (pública) | cualquiera, sin sesión | — |
 | widgetData | `GET /api/w/data/:projectIdJson` | nada (pública) | cualquiera, sin sesión | — |
+| widgetClic | `POST /api/w/clic/:projectId` | (no existía) | (ruta nueva) | — |
 
 ## woocommerce
 
@@ -1458,6 +1465,8 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver informes | `reports.mis_informes` | Los informes de ventas, prospectos y seguimiento (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager, Tutor |  |
 | Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte |  |
+| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin | `reports.view` |
+| Cambiar el baremo de la tasa de cierre | `reports.editar_baremo` | Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin. | Admin | `reports.view` |
 | El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte | `reports.mis_informes` |
 
 ### Feedback
