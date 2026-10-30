@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-792 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
+795 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -433,6 +433,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | getMetrics | `GET /api/ia/metrics/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
 | getGasto | `GET /api/ia/gasto` | sesión | superadmin, admin, gestor, soporte, project_manager | `ia.view` |
+| previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
+| importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
 
 ## installation
 
@@ -910,6 +912,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/stripe-payments/` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | stats | `GET /api/stripe-payments/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | sync | `POST /api/stripe-payments/sync` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
+| corte | `GET /api/stripe-payments/corte` | (no existía) | (ruta nueva) | `stripe.view` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
@@ -1485,6 +1488,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver el monitor IA | `ia.view` | Métricas y gasto de los proyectos de IA. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Traer datos de una app de IA | `ia.importar` | Ver lo que hay en el Supabase de una app de IA (cuánto factura y desde cuándo) e importarlo al CRM (#44). | Admin | `ia.view` |
 
 ### Chat IA
 

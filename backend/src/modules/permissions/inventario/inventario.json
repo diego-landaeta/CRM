@@ -5595,6 +5595,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/ia/supabase/previo/:projectId",
+  "tipo": "ruta",
+  "modulo": "ia-monitor",
+  "metodo": "GET",
+  "ruta": "/api/ia/supabase/previo/:projectId",
+  "relativa": "GET /supabase/previo/:projectId",
+  "controlador": "previoSupabase",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ia.importar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/ia/supabase/importar/:projectId",
+  "tipo": "ruta",
+  "modulo": "ia-monitor",
+  "metodo": "POST",
+  "ruta": "/api/ia/supabase/importar/:projectId",
+  "relativa": "POST /supabase/importar/:projectId",
+  "controlador": "importarSupabase",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "ia.importar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/installation/",
   "tipo": "ruta",
   "modulo": "installation",
@@ -12934,6 +12978,28 @@
   "ruta": "/api/stripe-payments/sync",
   "relativa": "POST /sync",
   "controlador": "sync",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/corte",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/corte",
+  "relativa": "GET /corte",
+  "controlador": "corte",
   "publica": false,
   "guardias": [
    {

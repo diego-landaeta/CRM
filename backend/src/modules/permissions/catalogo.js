@@ -380,6 +380,7 @@ export const SECCIONES = [
       {
         clave: 'ia', nombre: 'Monitor IA', acciones: [
           a('view', 'Ver el monitor IA', 'Métricas y gasto de los proyectos de IA.', TODOS),
+          a('importar', 'Traer datos de una app de IA', 'Ver lo que hay en el Supabase de una app de IA (cuánto factura y desde cuándo) e importarlo al CRM (#44).', ADMIN),
         ],
       },
       {
