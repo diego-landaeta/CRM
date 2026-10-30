@@ -104,6 +104,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',
   },
+  // El gasto de IA del mes cruza el 80 % o el 100 % del tope (#30, #22). Solo a los
+  // super admin, una vez por umbral y mes. Pide algo —decidir si se sube
+  // IA_TOPE_MENSUAL_USD—, porque al 100 % la IA se para hasta el día 1.
+  ia_tope_gasto: {
+    clase: ACCION, etiqueta: 'Tope de gasto de IA', agrupa: false,
+    descripcion: 'El gasto de IA del mes llega al 80 % o al 100 % del tope; al 100 % la IA se para hasta el día 1',
+  },
   task_asignada: {
     clase: ACCION, etiqueta: 'Tarea asignada', agrupa: false,
     descripcion: 'Cuando te asignan una tarea del equipo',

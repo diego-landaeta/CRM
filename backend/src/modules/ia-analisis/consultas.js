@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import * as reportes from '../reports/report.model.js';
+import { campanaQueRinde } from './campanas.js';
 
 /**
  * Lo unico que la IA puede preguntarle a la base (#30, primera subfase).
@@ -7,6 +9,11 @@ import * as reportes from '../reports/report.model.js';
  * lo que se le ocurra contra la base de produccion.»
  *
  * NO HAY SQL AQUI, Y ES EL PUNTO ENTERO
+ *
+ * (Una excepcion, y vive aparte: `campana_que_rinde` ejecuta `campanas.js`,
+ * porque ningun informe cruza el gasto de una campaña con las ventas de sus
+ * prospectos. Sigue siendo una consulta PREPARADA, de solo lectura y sin texto
+ * del modelo dentro: el modelo solo elige fechas.)
  *
  * La tentacion evidente es dejar que el modelo escriba la consulta y ejecutarla
  * con un usuario de solo lectura. No se hace, por dos motivos:
@@ -32,9 +39,27 @@ import * as reportes from '../reports/report.model.js';
 /** Ninguna consulta puede tener la base ocupada mas de esto. */
 export const TOPE_MS = 8000;
 
+/** Una fecha YYYY-MM-DD que existe: `2026-13-45` pasaria un regex y rompe en Postgres. */
+const fechaReal = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+});
+
+/**
+ * Parametros de `campana_que_rinde`. Zod trata cada valor como lo que es —texto
+ * de un modelo— y NO lo corrige: `'3; DROP TABLE'` no es un 3, es un descarte.
+ * (`projectId` lo pone el servidor; se admite aqui por si se llama sin alcance.)
+ */
+export const ESQUEMA_CAMPANAS = z.object({
+  projectId: z.coerce.number().int().positive(),
+  from: fechaReal,
+  to: fechaReal,
+});
+
 /**
  * El catalogo. Cada entrada dice que contesta y que parametros admite, en un
- * texto que se le puede dar al modelo tal cual.
+ * texto que se le puede dar al modelo tal cual. Con `esquema` (Zod), cada
+ * parametro se valida con el suyo; sin el, con las reglas generales de abajo.
  */
 export const CONSULTAS = {
   resumen_general: {
@@ -51,6 +76,16 @@ export const CONSULTAS = {
     descripcion: 'Cada venta con su asesora, su fecha y su importe. Para ver quien cerro que.',
     parametros: ['projectId', 'from', 'to', 'asesoraId'],
     ejecutar: (p) => reportes.ventasPorAsesoraReport(p),
+  },
+  campana_que_rinde: {
+    descripcion: 'Qué campaña de Meta rinde: por campaña, gasto, prospectos que llegaron al CRM por ella, '
+      + 'ventas (conversiones con algún cobro, sin mensualidades), lo cobrado de verdad, coste por venta y '
+      + 'retorno, más los totales. Dos lecturas del periodo: retorno = gasto del periodo frente a lo '
+      + 'cobrado hasta hoy por los prospectos captados en él; retorno_en_periodo = lo que ha entrado '
+      + 'dentro del periodo. Dilo así al citar el retorno.',
+    parametros: ['projectId', 'from', 'to'],
+    esquema: ESQUEMA_CAMPANAS,
+    ejecutar: (p) => campanaQueRinde(p),
   },
 };
 
@@ -107,10 +142,17 @@ const esFecha = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
  */
 export function limpiarParametros(nombre, dados = {}) {
   const admite = CONSULTAS[nombre]?.parametros || [];
+  const esquema = CONSULTAS[nombre]?.esquema;
   const limpio = {};
   for (const clave of admite) {
     const v = dados[clave];
     if (v == null || v === '') continue;
+    if (esquema) {
+      // Con esquema Zod manda el: valido o descartado, sin intermedios.
+      const r = esquema.shape[clave]?.safeParse(v);
+      if (r?.success) limpio[clave] = r.data;
+      continue;
+    }
     if (clave === 'projectId' || clave === 'asesoraId') {
       const n = parseInt(v, 10);
       if (Number.isInteger(n) && n > 0) limpio[clave] = n;
