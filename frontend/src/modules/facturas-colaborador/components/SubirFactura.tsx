@@ -7,8 +7,8 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  avisoDelPdf, calcularDesglose, euros, normalizarImporte,
-  type DesgloseEnvio, type FacturaDelColaborador, type LineaForm,
+  avisoDelPdf, calcularDesglose, euros, normalizarImporte, MONEDAS, MONEDA_ES, simbolo,
+  type DesgloseEnvio, type Moneda, type FacturaDelColaborador, type LineaForm,
 } from '../api/facturasColaborador.api';
 
 /*
@@ -41,10 +41,16 @@ const cuando = (iso: string) => {
   return `el ${dos(d.getDate())}/${dos(d.getMonth() + 1)} a las ${dos(d.getHours())}:${dos(d.getMinutes())}`;
 };
 
-export default function SubirFactura({ factura, alSubir }: {
+export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshacerNoFacturar }: {
   factura: FacturaDelColaborador;
   /** Manda el formulario; devuelve la factura ya recibida o lanza el error del servidor. */
   alSubir: (archivo: File, importe: string, numero: string, desglose: DesgloseEnvio) => Promise<void>;
+  /**
+   * «Este mes no facturo a esta empresa» (Diego, 31/10). Solo en la página del enlace:
+   * sin esto no se ofrece.
+   */
+  alNoFacturar?: (motivo: string) => Promise<void>;
+  alDeshacerNoFacturar?: () => Promise<void>;
 }) {
   const f = factura;
   // Ids propios: en «Mi factura» puede haber varios formularios montados a la vez (uno por mes pendiente).
@@ -56,6 +62,22 @@ export default function SubirFactura({ factura, alSubir }: {
     setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, [campo]: valor } : l)));
   const calculo = f.cobro ? calcularDesglose(f.cobro, horas, lineas) : null;
   const [archivo, setArchivo] = useState<File | null>(null);
+  // «Este mes no facturo» (31/10): primero se pregunta, con un motivo opcional.
+  const [noFacturo, setNoFacturo] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [marcando, setMarcando] = useState(false);
+  async function marcarNoFacturo(deshacer = false) {
+    setMarcando(true);
+    try {
+      if (deshacer) await alDeshacerNoFacturar?.();
+      else await alNoFacturar?.(motivo.trim());
+      setNoFacturo(false);
+    } catch (err: any) {
+      toast({ title: 'No se pudo guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally {
+      setMarcando(false);
+    }
+  }
   // El importe sugerido: sin desglose, lo acordado (primera parte, «con el acordado ya
   // sugerido»); con desglose, su total, que sigue a las horas hasta que lo cambie a mano.
   // Lo acordado es la base (el ejemplo de Diego: 600 acordados, 636 de total con IVA e IRPF):
@@ -65,6 +87,8 @@ export default function SubirFactura({ factura, alSubir }: {
   const sugerido = calculo && calculo.total > 0 ? calculo.total.toFixed(2).replace('.', ',') : '';
   const importe = calculo && !tocado ? sugerido : escrito;
   const [numero, setNumero] = useState('');
+  // La moneda de su factura (234, 31/10): sale la de su ficha y la puede cambiar (Andrea factura en dólares).
+  const [moneda, setMoneda] = useState<Moneda>(f.moneda || 'EUR');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
@@ -115,7 +139,7 @@ export default function SubirFactura({ factura, alSubir }: {
     if (!archivo) { setError('Elige el archivo de tu factura.'); return; }
     if (!importe.trim()) { setError('Escribe el importe de tu factura.'); return; }
     if (!numero.trim()) { setError('Escribe el número de tu factura.'); return; }
-    const desglose: DesgloseEnvio = {};
+    const desglose: DesgloseEnvio = { moneda };
     if (f.cobro?.modalidad === 'hora') {
       if (!horas.trim()) { setError('Escribe las horas del mes.'); return; }
       desglose.horas = horas.trim();
@@ -147,7 +171,7 @@ export default function SubirFactura({ factura, alSubir }: {
         {f.importe_acordado !== null && (
           <p className="text-secundario text-muted-foreground">
             {/* Con desglose, lo acordado es la base: que no parezca que su factura (con IVA e IRPF) está mal. */}
-            Importe acordado{f.cobro ? ' (base, sin IVA ni IRPF)' : ''}: <strong className="text-foreground">{euros(f.importe_acordado)}</strong>
+            Importe acordado{f.cobro ? ' (base, sin IVA ni IRPF)' : ''}: <strong className="text-foreground">{euros(f.importe_acordado, f.moneda)}</strong>
           </p>
         )}
       </div>
@@ -157,7 +181,7 @@ export default function SubirFactura({ factura, alSubir }: {
   // ── Estados en los que ya no se sube nada ──
   if (f.estado === 'recibida' && f.recibida) {
     // Lo que dice el PDF frente a lo escrito (13/10): si no cuadra o no se pudo leer, se dice claro.
-    const aviso = avisoDelPdf(f.recibida);
+    const aviso = avisoDelPdf(f.recibida, f.moneda);
     return (
       <div className="space-y-4">
         {cabecera}
@@ -166,11 +190,26 @@ export default function SubirFactura({ factura, alSubir }: {
           <div className="space-y-1">
             <p className="font-semibold">Factura recibida {cuando(f.recibida.subida_at)} · {f.recibida.numero_recepcion}</p>
             <p className="text-secundario">
-              {f.recibida.archivo} · {euros(f.recibida.importe)} · n.º {f.recibida.numero_factura}
+              {f.recibida.archivo} · {euros(f.recibida.importe, f.moneda)} · n.º {f.recibida.numero_factura}
             </p>
           </div>
         </div>
         {aviso && <Aviso neutro={f.recibida.cuadra === null}>{aviso}</Aviso>}
+      </div>
+    );
+  }
+  if (f.estado === 'sin_factura') {
+    return (
+      <div className="space-y-4">
+        {cabecera}
+        <Aviso neutro>
+          Has indicado que este mes no facturas a {f.empresa.razon_social}. No te llegará el recordatorio.
+        </Aviso>
+        {alDeshacerNoFacturar && (
+          <Button type="button" variant="outline" disabled={marcando} onClick={() => marcarNoFacturo(true)}>
+            {marcando ? 'Guardando…' : 'Me equivoqué: sí voy a facturar este mes'}
+          </Button>
+        )}
       </div>
     );
   }
@@ -242,7 +281,7 @@ export default function SubirFactura({ factura, alSubir }: {
           {f.cobro.modalidad === 'fijo' && (
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="min-w-0">{f.cobro.concepto}</span>
-              <span className="tabular-nums font-medium">{euros(f.cobro.importe_fijo)}</span>
+              <span className="tabular-nums font-medium">{euros(f.cobro.importe_fijo, f.moneda)}</span>
             </div>
           )}
 
@@ -252,7 +291,7 @@ export default function SubirFactura({ factura, alSubir }: {
                 <label htmlFor={`${uid}-horas`} className="text-xs text-muted-foreground">Horas del mes</label>
                 <input id={`${uid}-horas`} inputMode="decimal" autoComplete="off" value={horas} onChange={(e) => setHoras(e.target.value)} className={inputClass} />
               </div>
-              <span className="pb-2 text-muted-foreground">× {euros(f.cobro.tarifa_hora)}/h = <strong className="text-foreground tabular-nums">{euros(calculo.base)}</strong></span>
+              <span className="pb-2 text-muted-foreground">× {euros(f.cobro.tarifa_hora, f.moneda)}/h = <strong className="text-foreground tabular-nums">{euros(calculo.base, f.moneda)}</strong></span>
             </div>
           )}
 
@@ -285,23 +324,23 @@ export default function SubirFactura({ factura, alSubir }: {
                 <Button type="button" variant="outline" size="sm" onClick={() => setLineas((ls) => [...ls, { concepto: '', project_id: '', horas: '' }])}>
                   <Plus size={13} className="mr-1.5" /> Añadir encargo
                 </Button>
-                <span className="text-secundario text-muted-foreground">Tu tarifa: {euros(f.cobro.tarifa_hora)}/h</span>
+                <span className="text-secundario text-muted-foreground">Tu tarifa: {euros(f.cobro.tarifa_hora, f.moneda)}/h</span>
               </div>
             </div>
           )}
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border pt-3 text-sm tabular-nums">
-            <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(calculo.base)}</dd>
-            <dt className="text-muted-foreground">IVA ({f.cobro.iva_pct} %)</dt><dd className="text-right">{euros(calculo.iva)}</dd>
+            <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(calculo.base, f.moneda)}</dd>
+            <dt className="text-muted-foreground">IVA ({f.cobro.iva_pct} %)</dt><dd className="text-right">{euros(calculo.iva, f.moneda)}</dd>
             <dt className="text-muted-foreground">IRPF ({f.cobro.irpf_pct} %)</dt>
-            <dd className="text-right">{calculo.irpf ? '−' : ''}{euros(calculo.irpf)}</dd>
-            <dt className="font-semibold">Total</dt><dd className="text-right font-semibold">{euros(calculo.total)}</dd>
+            <dd className="text-right">{calculo.irpf ? '−' : ''}{euros(calculo.irpf, f.moneda)}</dd>
+            <dt className="font-semibold">Total</dt><dd className="text-right font-semibold">{euros(calculo.total, f.moneda)}</dd>
           </dl>
         </div>
       )}
 
       <FilaCampos>
-        <Field label="Importe de tu factura (€)" htmlFor={`${uid}-importe`} required
+        <Field label={`Importe de tu factura (${simbolo(moneda)})`} htmlFor={`${uid}-importe`} required
           // Con desglose y aún sin total (sin horas), no se dice «ya puesto»: no hay nada puesto.
           hint={calculo ? (tocado ? undefined : sugerido
             ? 'Ya está puesto el total de tu desglose: cámbialo si tu factura dice otro importe'
@@ -312,6 +351,10 @@ export default function SubirFactura({ factura, alSubir }: {
             // Texto y no una cifra de ejemplo: el «600,00» gris se leía como si fuera lo acordado.
             placeholder="Escribe el importe de tu factura" className={inputClass} />
         </Field>
+        <Field label="Moneda" htmlFor={`${uid}-moneda`} required>
+          <Select<Moneda> id={`${uid}-moneda`} value={moneda} onChange={setMoneda} ariaLabel="Moneda de tu factura"
+            options={MONEDAS.map((m) => ({ value: m, label: MONEDA_ES[m] }))} />
+        </Field>
         <Field label="Número de tu factura" htmlFor={`${uid}-numero`} required>
           <input autoComplete="off" id={`${uid}-numero`} value={numero} onChange={(e) => setNumero(e.target.value)}
             placeholder="Escribe el número de tu factura" maxLength={60} className={inputClass} />
@@ -321,13 +364,13 @@ export default function SubirFactura({ factura, alSubir }: {
       {noCoincide && (
         <p className="rounded-md bg-warning-soft text-warning-soft-foreground px-3 py-2 text-secundario">
           {calculo
-            ? <>La base de tu desglose ({euros(calculo.base)}) no coincide con lo acordado ({euros(f.importe_acordado)}). Puedes enviarla igual.</>
-            : <>El importe no coincide con lo acordado ({euros(f.importe_acordado)}). Puedes enviarla igual.</>}
+            ? <>La base de tu desglose ({euros(calculo.base, f.moneda)}) no coincide con lo acordado ({euros(f.importe_acordado, f.moneda)}). Puedes enviarla igual.</>
+            : <>El importe no coincide con lo acordado ({euros(f.importe_acordado, f.moneda)}). Puedes enviarla igual.</>}
         </p>
       )}
       {otroQueElDesglose && calculo && (
         <p className="text-secundario text-muted-foreground">
-          Tu desglose da {euros(calculo.total)}. Escribe el total que pone tu factura: es lo que se compara con el PDF.
+          Tu desglose da {euros(calculo.total, f.moneda)}. Escribe el total que pone tu factura: es lo que se compara con el PDF.
         </p>
       )}
       {error && (
@@ -345,6 +388,36 @@ export default function SubirFactura({ factura, alSubir }: {
           {enviando ? 'Enviando…' : 'Enviar factura'}
         </Button>
       </div>
+
+      {/* «Este mes no facturo a esta empresa» (Diego, 31/10): para quien recibe un
+          enlace por empresa y un mes solo trabajó para alguna. */}
+      {alNoFacturar && (
+        <div className="border-t border-border pt-4">
+          {!noFacturo ? (
+            <button type="button" onClick={() => setNoFacturo(true)} className="text-sm text-muted-foreground underline hover:text-foreground">
+              Este mes no facturo a {f.empresa.razon_social}
+            </button>
+          ) : (
+            <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+              <p className="text-sm font-semibold">¿Seguro que este mes no facturas a {f.empresa.razon_social}?</p>
+              <p className="text-sm text-muted-foreground">No te llegará el recordatorio. Si te equivocas, puedes deshacerlo desde este mismo enlace.</p>
+              <input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                maxLength={300}
+                placeholder="Motivo (opcional): no trabajé para esta empresa este mes…"
+                className={inputClass}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setNoFacturo(false)} disabled={marcando}>Cancelar</Button>
+                <Button type="button" onClick={() => marcarNoFacturo(false)} disabled={marcando}>
+                  {marcando ? 'Guardando…' : 'Sí, este mes no facturo'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </form>
   );
 }
