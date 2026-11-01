@@ -36,7 +36,12 @@ export const BETA_ROUTES: readonly string[] = [
   '/secuencias-email',         // Email de seguimiento
   '/documentos',              // Documentos comerciales
   '/solicitudes-cambio',     // RFC — Solicitud de Cambio (todos los roles)
+  '/soporte',                // Soporte: ya tiene backend (#38)
   '/notificaciones',         // Sistema básico
+  // El resumen de un proyecto IA (#44). La pantalla existe desde hace
+  // semanas y salia como «Proximamente»: es la de MRR, altas, bajas y por
+  // que se van, y es la primera que se abre de una marca IA.
+  '/stripe',                 // Proyecto IA › Resumen
   '/manual',                 // Manual de usuario
   '/preferencias',            // Mis preferencias
   '/perfil',                // Perfil

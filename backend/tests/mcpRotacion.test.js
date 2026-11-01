@@ -49,6 +49,8 @@ async function persona(nombre, role, extra = '') {
     [`${MARCA} ${nombre}`, `${nombre.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]
   );
   ids.users.push(u.id);
+  // La casilla de antes es la excepción «Usar el MCP» (#423, migración 222).
+  if (extra) await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [u.id]);
   await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [u.id, ids.projects[0]]);
   return u;
 }
@@ -223,6 +225,21 @@ describe('la vuelta: aviso antes de caducar', () => {
     correos.sendMcpCaducidadEmail.mockResolvedValue({ sent: true });
     await vuelta();
     expect((await fila(u.id)).aviso_caducidad_at).not.toBeNull();
+  });
+});
+
+describe('la vuelta: a un tutor no se le escribe (#262)', () => {
+  it('su URL por caducar no genera correo ni se marca como avisada', async () => {
+    const u = await crearUrl(GESTOR, 'de quien pasa a tutor');
+    await q(`UPDATE mcp_tokens SET expires_at = NOW() + INTERVAL '2 days', last_used_at = NOW() WHERE id = $1`, [u.id]);
+    await q(`UPDATE users SET role = 'tutor' WHERE id = $1`, [GESTOR.id]);
+    try {
+      await vuelta();
+      expect(correos.sendMcpCaducidadEmail.mock.calls.filter(([a]) => a.persona.email === GESTOR.email)).toHaveLength(0);
+      expect((await fila(u.id)).aviso_caducidad_at).toBeNull();
+    } finally {
+      await q(`UPDATE users SET role = 'gestor' WHERE id = $1`, [GESTOR.id]);
+    }
   });
 });
 

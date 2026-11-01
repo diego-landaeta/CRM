@@ -7,12 +7,19 @@ import type { WidgetConfig, CandidateUser } from '../api/widget.api';
 import { toast } from '@/shared/hooks/useToast';
 import { construirSnippet, IDIOMAS_WIDGET, type IdiomaWidget } from '../lib/snippet';
 import { POR_DEFECTO_WIDGET } from '../lib/porDefecto';
+import PulsacionesDelBoton from '../components/PulsacionesDelBoton';
 
 type OtroIdioma = Exclude<IdiomaWidget, 'es'>;
 
 export default function WhatsappWidgetPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } };
-  const pid = activeProject?.id;
+  const { activeProject, activeIssuerId, activeIssuer } = useProjectContext() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    activeIssuerId?: number | null;
+    activeIssuer?: { nombre?: string } | null;
+  };
+  // Con una empresa o «Todos» arriba no hay un campus que configurar: se ven las
+  // cifras sumadas (Diego, 30/10: «sigue sin tener la vista de empresa»).
+  const pid = !activeIssuerId && activeProject?.id && Number(activeProject.id) > 0 ? Number(activeProject.id) : undefined;
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [users, setUsers] = useState<CandidateUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +75,23 @@ export default function WhatsappWidgetPage() {
     }
   }
 
-  if (!pid) return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
+  if (!pid) {
+    return (
+      <div className="space-y-5 pb-8 max-w-4xl">
+        <PageHeader
+          title={(<span className="flex items-center gap-2"><WhatsappLogo size={22} weight="fill" className="text-green-600" /> Widget WhatsApp</span>) as unknown as string}
+          subtitle={activeIssuerId ? `Los campus de ${activeIssuer?.nombre || 'la empresa'}, sumados.` : 'Todos los campus, sumados.'}
+        />
+        <PulsacionesDelBoton
+          ambito={{ issuerId: activeIssuerId ? Number(activeIssuerId) : null }}
+          titulo={activeIssuerId ? activeIssuer?.nombre || 'la empresa' : 'todos los campus'}
+        />
+        <p className="text-xs text-muted-foreground">
+          El botón (gestoras, textos y el código para la web) se configura en cada campus: elígelo en la cabecera.
+        </p>
+      </div>
+    );
+  }
   if (loading || !config) return <div className="p-8 text-muted-foreground">Cargando…</div>;
 
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
@@ -99,6 +122,9 @@ export default function WhatsappWidgetPage() {
           </p>
         </div>
       </div>
+
+      {/* Cuántos pulsan y cuántos pasan a la conversación (29/10). */}
+      <PulsacionesDelBoton ambito={{ projectId: pid }} />
 
       {/* Embed snippet */}
       <div className="bg-card border border-border rounded-lg p-5 space-y-3">
@@ -134,6 +160,8 @@ export default function WhatsappWidgetPage() {
         <p className="text-[10px] text-muted-foreground">
           El botón es HTML inline → aparece <strong>siempre</strong>, fijo abajo-derecha, sin que WP Rocket/LiteSpeed lo bloqueen.
           La rotación de gestoras se actualiza desde el CRM automáticamente.
+          Si en Conexión › Asignación de leads está encendida para este campus, el botón lleva a la gestora activa a la que le toca;
+          si no hay ninguna activa, sigue al azar. Pulsar no asigna nada: cuenta cuando la persona escribe o cuando se registra el lead.
         </p>
         <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
           Ver datos del widget <ArrowSquareOut size={11} />
@@ -217,7 +245,7 @@ export default function WhatsappWidgetPage() {
                   </div>
                 </div>
                 <input value={template} onChange={e => poner('template', e.target.value)}
-                  placeholder={defecto?.template || 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}'} maxLength={1000}
+                  placeholder={defecto?.template || 'Hola {{nombre}} de {{project}}. Quiero información sobre: {{url}}'} maxLength={1000}
                   className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
                 <div className="mt-2 rounded-md border border-border bg-muted/30 p-2 text-[11px]">
                   <div className="text-muted-foreground">Vista previa · {IDIOMAS_WIDGET.find((i) => i.codigo === idiomaTab)?.nombre}</div>
@@ -253,7 +281,7 @@ export default function WhatsappWidgetPage() {
         <div className="p-4 border-b border-border">
           <h3 className="font-semibold text-sm">Gestoras de {config.project_nombre}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Solo aparecen las gestoras asignadas a este proyecto. Activa/desactiva la rotación con los checkboxes.
+            Solo aparecen las gestoras y los admin de este proyecto. Activa/desactiva la rotación con los checkboxes.
           </p>
         </div>
         {users.length === 0 ? (

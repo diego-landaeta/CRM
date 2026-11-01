@@ -3,6 +3,7 @@ import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, Cha
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
+import { tieneRol } from '@/shared/lib/roles';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
@@ -28,8 +29,15 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MetaAdsPage() {
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
+  const { activeProject, user } = useAuth() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    user: { role?: string; roles_extra?: string[] } | null;
+  };
   const projectId = activeProject?.id;
+  // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
+  // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
+  // (el servidor también se lo niega).
+  const soloVer = !tieneRol(user, 'admin', 'superadmin', 'soporte');
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   // ID de la cuenta filtrada en la UI. null = "Todas" (agrega cross-cuentas, default).
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
@@ -129,6 +137,13 @@ export default function MetaAdsPage() {
   if (loading) {
     return <div className="h-40 bg-muted/40 rounded-lg animate-pulse" />;
   }
+  if (soloVer && accounts.length === 0) {
+    return (
+      <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
+        Este campus no tiene ninguna cuenta de Meta conectada todavía.
+      </div>
+    );
+  }
   if (accounts.length === 0 || showAddAccount) {
     return (
       <div className="space-y-3">
@@ -199,6 +214,7 @@ export default function MetaAdsPage() {
             )}
           </div>
         </div>
+        {!soloVer && (
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={handleSync}
             disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
@@ -222,6 +238,7 @@ export default function MetaAdsPage() {
             <Gear size={14} weight="duotone" /> Configuración
           </button>
         </div>
+        )}
       </div>
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
@@ -292,16 +309,18 @@ export default function MetaAdsPage() {
           </button>
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
-            ROI (asociaciones manuales)
+            Del gasto a la venta
           </button>
           <button onClick={() => setTab('manual')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Manual
           </button>
+          {!soloVer && (
           <button onClick={() => setTab('config')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             <Gear size={13} weight="duotone" /> Configuración
           </button>
+          )}
         </div>
 
         {tab === 'campaigns' && (
@@ -338,8 +357,8 @@ export default function MetaAdsPage() {
                       currency={currency}
                       dateFrom={dateFrom}
                       dateTo={dateTo}
-                      onAssociate={() => setAssociateOpen(c)}
-                      onAssociateAdSet={(a) => setAssociateAdSetOpen(a)}
+                      onAssociate={soloVer ? undefined : () => setAssociateOpen(c)}
+                      onAssociateAdSet={soloVer ? undefined : (a) => setAssociateAdSetOpen(a)}
                     />
                   ))}
                 </tbody>
@@ -362,7 +381,7 @@ export default function MetaAdsPage() {
           </Suspense>
         )}
 
-        {tab === 'config' && (
+        {tab === 'config' && !soloVer && (
           <div className="p-4">
             <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
               <MetaSettingsPanel
@@ -454,7 +473,7 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
 // Tabla 3 niveles: Campaign → AdSet → Ad. Click en chevron toggle.
 
 function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, onAssociateAdSet }:
-  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void; onAssociateAdSet: (a: MetaAdSet) => void }) {
+  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void; onAssociateAdSet?: (a: MetaAdSet) => void }) {
   const [open, setOpen] = useState(false);
   const [adsets, setAdSets] = useState<MetaAdSet[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -513,9 +532,11 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
           <span className={c.ventas_crm ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.ventas_crm || 0)}</span>
         </td>
         <td className="px-3 py-2.5 text-right">
+          {onAssociate && (
           <button onClick={onAssociate} className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (
@@ -536,7 +557,7 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
                 <tbody>
                   {(adsets || []).map((a) => (
                     <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo}
-                      onAssociate={() => onAssociateAdSet(a)} />
+                      onAssociate={onAssociateAdSet ? () => onAssociateAdSet(a) : undefined} />
                   ))}
                 </tbody>
               </table>
@@ -549,7 +570,7 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
 }
 
 function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
-  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
+  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void }) {
   const [open, setOpen] = useState(false);
   const [ads, setAds] = useState<MetaAd[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -595,10 +616,12 @@ function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
           {fmtNum(a.total_leads)} <span className="text-muted-foreground">· {a.cpl != null ? fmtMoney(a.cpl, currency) : '—'}</span>
         </td>
         <td className="px-3 py-2 text-right">
+          {onAssociate && (
           <button onClick={(e) => { e.stopPropagation(); onAssociate(); }}
             className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (
@@ -732,54 +755,80 @@ function ProductLinks({ links }: { links: Array<{ scope: string; id: string; nam
   );
 }
 
+/**
+ * Del gasto a la venta, no al lead (#53): por campaña, lo que costó, cuántas
+ * ventas trajo, cuánto se ha cobrado de verdad y qué retorno deja.
+ *
+ * Hay dos lecturas del mismo rango de fechas, y se enseñan las dos porque
+ * responden a cosas distintas: la del retorno mira lo que han cobrado HASTA HOY
+ * los leads captados en el rango (una campaña de hace dos meses sigue cobrando),
+ * y «Entró en el periodo» mira la caja del rango, sea de cuando sea el lead.
+ */
 function RoiTable({ rows, currency }: { rows: MetaRoiRow[]; currency: string }) {
   if (rows.length === 0) {
     return (
       <p className="p-6 text-center text-sm text-muted-foreground">
-        Sin datos de ROI. Asocia productos a las campañas (botón "Asociar" en la tabla de Campañas)
-        para que el CRM cruce el gasto Meta con las ventas registradas.
+        Sin datos en este rango. Aquí salen las campañas con gasto o con prospectos que llegaron por ellas
+        (el CRM lee la campaña de la UTM del prospecto).
       </p>
     );
   }
+  const tono = (n: number | null) => (n == null ? '' : n >= 0 ? 'text-success' : 'text-destructive');
+  const pct = (n: number | null) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
   return (
     <div className="overflow-x-auto">
+      <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+        Una venta es la que ya tiene algún cobro. Lo cobrado sale de los cobros apuntados, no de lo que declara la venta.
+        «Retorno» compara el gasto del rango con lo que han cobrado hasta hoy los prospectos captados en ese rango;
+        «Entró en el periodo» es lo que se ha cobrado dentro del rango, de prospectos de cualquier fecha.
+      </p>
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] text-muted-foreground">
           <tr>
             <th className="text-left px-4 py-2 font-medium">Campaña</th>
-            <th className="text-left px-3 py-2 font-medium">Productos asociados</th>
             <th className="text-right px-3 py-2 font-medium">Gasto</th>
-            <th className="text-right px-3 py-2 font-medium">Ventas · Facturado</th>
-            <th className="text-right px-3 py-2 font-medium">Ganancia</th>
-            <th className="text-right px-3 py-2 font-medium">ROI</th>
+            <th className="text-right px-3 py-2 font-medium">Prospectos · coste</th>
+            <th className="text-right px-3 py-2 font-medium">Ventas · coste por venta</th>
+            <th className="text-right px-3 py-2 font-medium">Vendido · Cobrado</th>
+            <th className="text-right px-3 py-2 font-medium">Retorno</th>
+            <th className="text-right px-3 py-2 font-medium">Entró en el periodo</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-success' : 'text-destructive';
-            return (
-              <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
-                <td className="px-4 py-2.5">
-                  <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.status}</p>
-                </td>
-                <td className="px-3 py-2.5 text-xs">
-                  {r.n_productos_asociados === 0
-                    ? <span className="text-muted-foreground italic">— sin productos asociados —</span>
-                    : <span className="truncate block max-w-md" title={r.productos_nombres || ''}>{r.productos_nombres}</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                  <span className="font-semibold">{r.ventas}</span> · <span>{fmtMoney(r.facturado, currency)}</span><br />
-                  <span className="text-muted-foreground">Cobrado: {fmtMoney(r.cobrado, currency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.ganancia, currency)}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${roiTone}`}>
-                  {r.roi_pct == null ? '—' : `${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(1)}%`}
-                </td>
-              </tr>
-            );
-          })}
+          {rows.map((r) => (
+            <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
+              <td className="px-4 py-2.5">
+                <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
+                <p className="text-[10px] text-muted-foreground">{r.status}</p>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.leads_crm)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_lead != null ? fmtMoney(r.coste_por_lead, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.ventas)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_venta != null ? fmtMoney(r.coste_por_venta, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span>{fmtMoney(r.vendido, currency)}</span>
+                <br />
+                <span className="font-semibold">{fmtMoney(r.cobrado, currency)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${tono(r.roi_pct)}`}>
+                {fmtMoney(r.retorno, currency)}
+                <br />
+                <span className="text-xs">{pct(r.roi_pct)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${tono(r.roi_en_periodo_pct)}`}>
+                {fmtMoney(r.cobrado_en_periodo, currency)}
+                <br />
+                <span>{fmtMoney(r.retorno_en_periodo, currency)} · {pct(r.roi_en_periodo_pct)}</span>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
