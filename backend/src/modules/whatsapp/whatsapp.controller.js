@@ -1,8 +1,10 @@
 import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -11,7 +13,6 @@ function proyecto(req) {
   return n;
 }
 
-const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
 /**
  * De quien son las plantillas PERSONALES que se ven o se guardan aqui.
@@ -83,7 +84,7 @@ export async function createTemplate(req, res, next) {
     const { projectId, label, body, ambito, paso_clave: pasoClave } = parsed.data;
     // Una compartida la ve todo el equipo, asi que la crea quien manda. Las
     // personales, cualquiera: son suyas.
-    if (ambito === 'compartida' && !esAdmin(req)) {
+    if (ambito === 'compartida' && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) {
       throw new AppError('Solo un administrador crea plantillas compartidas', 403, 'FORBIDDEN');
     }
     const row = await model.createTemplate({
@@ -102,7 +103,7 @@ async function permitida(req, id) {
   const t = await model.getTemplate(id);
   if (!t) throw new AppError('Plantilla no encontrada', 404, 'NOT_FOUND');
   const propia = t.ambito === 'personal' && t.owner_id === req.user.userId;
-  if (!propia && !esAdmin(req)) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
+  if (!propia && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
   return t;
 }
 
@@ -131,6 +132,21 @@ export async function deleteTemplate(req, res, next) {
 }
 
 // GET /api/whatsapp/cola?projectId=N&responsableId=&estado=&productoId=&sinContactar=
+// GET /api/whatsapp/actividad?[projectId|issuerId]&from&to (30/10)
+// Por gestora: si responde en WhatsApp (chats, respondidos, sin responder,
+// tiempo de respuesta) y los contactos que apunta. Ver actividad.model.js.
+export async function actividad(req, res, next) {
+  try {
+    const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+    const hasta = fecha(req.query.to) || hoy;
+    const desde = fecha(req.query.from) || hasta;
+    const ambito = await proyectosDelAmbito(req);
+    const projectIds = comoLista(ambito.projectId, ambito.projectIds);
+    res.json({ success: true, data: await actividadEnWhatsapp({ projectIds, desde, hasta }) });
+  } catch (e) { next(e); }
+}
+
 export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede

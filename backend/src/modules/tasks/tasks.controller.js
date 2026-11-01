@@ -1,4 +1,5 @@
 import * as taskService from './tasks.service.js';
+import * as equipos from './tasks.equipos.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
   createTaskSchema,
@@ -22,12 +23,42 @@ import {
   setAreaMembersSchema,
   createExternalProjectSchema,
   updateExternalProjectSchema,
+  assigneesQuerySchema,
+  createTeamSchema,
+  updateTeamSchema,
+  createTeamRoleSchema,
+  updateTeamRoleSchema,
+  setTeamMemberSchema,
+  listTeamsQuerySchema,
 } from './tasks.validation.js';
+
+// Cómo se llama cada campo en la ficha: el aviso dice qué falta o qué está mal
+// («Falta el título», «El responsable no es válido»), no «Expected number» (27/10/2026).
+const CAMPOS = {
+  title: 'el título', description: 'la descripción', status: 'el estado', priority: 'la prioridad',
+  due_date: 'la fecha límite', project_id: 'el campus', external_project_id: 'el proyecto propio',
+  area_id: 'el área de trabajo', assigned_to: 'el responsable', supervisor_id: 'el supervisor',
+  team_id: 'el equipo', content: 'el comentario', name: 'el nombre', url: 'el enlace',
+};
+const mayuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Un aviso en castellano y con el campo: los que ya escribimos se quedan tal cual. */
+export function mensajeDeValidacion(issue) {
+  const campo = CAMPOS[issue?.path?.[0]];
+  const propio = issue?.code === 'custom' || /[áéíóúñ¿]|obligatori|Máximo|Mínimo|inválid/i.test(issue?.message || '');
+  if (propio || !campo) return issue?.message || 'Revisa los datos de la tarea';
+  if (issue.code === 'invalid_type' && (issue.received === 'undefined' || issue.received === 'null')) return `Falta ${campo}`;
+  if (issue.code === 'too_small') return `Falta ${campo}`;
+  const fem = campo.startsWith('la ');
+  if (issue.code === 'too_big') return `${mayuscula(campo)} es demasiado ${fem ? 'larga' : 'largo'}`;
+  if (issue.code === 'invalid_enum_value') return `${mayuscula(campo)} no es ${fem ? 'válida' : 'válido'}: elige una opción de la lista`;
+  return `${mayuscula(campo)} no es ${fem ? 'válida' : 'válido'}`;
+}
 
 function validar(schema, datos) {
   const r = schema.safeParse(datos ?? {});
   if (!r.success) {
-    throw new AppError(r.error.errors[0]?.message || 'Datos inválidos', 400, 'VALIDATION_ERROR');
+    throw new AppError(mensajeDeValidacion(r.error.errors[0]), 400, 'VALIDATION_ERROR');
   }
   return r.data;
 }
@@ -117,7 +148,7 @@ export const reviewCount = accion(async (req, res) => {
 /* --- Personas, Etiquetas y Métricas --- */
 
 export const assignees = accion(async (req, res) => {
-  const data = await taskService.listAssignees(quien(req), validar(ambitoQuerySchema, req.query));
+  const data = await taskService.listAssignees(quien(req), validar(assigneesQuerySchema, req.query));
   res.json({ success: true, data });
 });
 
@@ -306,3 +337,24 @@ export const updateExternalProject = accion(async (req, res) => {
   const data = await taskService.updateExternalProject(id, body, quien(req));
   res.json({ success: true, data });
 });
+
+/* --- Equipos del tablero (26/10/2026) --- */
+
+const responder = (fn) => accion(async (req, res) => {
+  const data = await fn(req);
+  res.status(req.method === 'POST' ? 201 : 200).json({ success: true, data });
+});
+
+export const listTeams = responder((req) => equipos.listar(quien(req), validar(listTeamsQuerySchema, req.query)));
+export const myTeams = responder((req) => equipos.mios(quien(req)));
+export const teamEmpresas = responder((req) => equipos.empresas(quien(req)));
+export const getTeam = responder((req) => equipos.detalle(quien(req), validarId(req.params.teamId)));
+export const createTeam = responder((req) => equipos.crear(quien(req), validar(createTeamSchema, req.body)));
+export const updateTeam = responder((req) => equipos.editar(quien(req), validarId(req.params.teamId), validar(updateTeamSchema, req.body)));
+export const createTeamRole = responder((req) => equipos.crearCargo(quien(req), validarId(req.params.teamId), validar(createTeamRoleSchema, req.body)));
+export const updateTeamRole = responder((req) => equipos.editarCargo(quien(req), validarId(req.params.teamId),
+  validarId(req.params.roleId), validar(updateTeamRoleSchema, req.body)));
+export const teamCandidates = responder((req) => equipos.candidatos(quien(req), validarId(req.params.teamId)));
+export const setTeamMember = responder((req) => equipos.ponerMiembro(quien(req), validarId(req.params.teamId),
+  validarId(req.params.userId), validar(setTeamMemberSchema, req.body)));
+export const removeTeamMember = responder((req) => equipos.quitarMiembro(quien(req), validarId(req.params.teamId), validarId(req.params.userId)));

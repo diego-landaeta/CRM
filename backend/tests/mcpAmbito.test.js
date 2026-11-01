@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar, conPermisos } = await import('./helpers/permisosSinBase.js');
+
 /**
  * MCP de Claude: solo consulta y solo lo de cada uno.
  *
@@ -42,24 +47,24 @@ const ambitoDe = (role, proyectos = PROYECTOS) => construirAmbito(persona(role),
 beforeEach(() => { consultas.length = 0; });
 
 describe('quien entra', () => {
-  it('super admin y admin entran por su rol', () => {
-    expect(puedeUsarMcp(persona('superadmin'))).toBe(true);
-    expect(puedeUsarMcp(persona('admin'))).toBe(true);
+  it('super admin y admin entran por su rol', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin')))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('admin')))).toBe(true);
   });
 
-  it('el resto solo si se le ha puesto la casilla', () => {
-    expect(puedeUsarMcp(persona('gestor'))).toBe(false);
-    expect(puedeUsarMcp(persona('gestor', { usa_mcp: true }))).toBe(true);
-    expect(puedeUsarMcp(persona('soporte'))).toBe(false);
+  it('el resto solo si se le ha dado «Usar el MCP» (antes, la casilla)', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('gestor')))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(persona('gestor', { usa_mcp: true })))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('soporte')))).toBe(false);
   });
 
-  it('un tutor no entra ni con la casilla puesta', () => {
-    expect(puedeUsarMcp(persona('tutor', { usa_mcp: true }))).toBe(false);
+  it('un tutor no entra ni con el permiso dado: su rol no puede tenerlo', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('tutor', { usa_mcp: true })))).toBe(false);
   });
 
-  it('un usuario desactivado no entra, sea quien sea', () => {
-    expect(puedeUsarMcp(persona('superadmin', { active: false }))).toBe(false);
-    expect(puedeUsarMcp(null)).toBe(false);
+  it('un usuario desactivado no entra, sea quien sea', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin', { active: false })))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(null))).toBe(false);
   });
 });
 
@@ -147,6 +152,9 @@ const ARGS = {
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
+  meta_ads: { vista: 'campanas', desde: '2026-01-01', hasta: '2026-09-01', limite: 30 },
+  clientes: { texto: 'ana', desde: '2026-01-01', hasta: '2026-09-01', pagina: 1, limite: 25 },
+  equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
   listar_tutores: { texto: 'ana', incluir_retirados: true },
   comisiones_tutores: { desde: '2026-08', hasta: '2026-09', tutor_id: 3 },
@@ -154,6 +162,10 @@ const ARGS = {
   listar_formaciones: { texto: 'máster', pagina: 1, limite: 25 },
   resumen_catalogo: {},
   ver_formacion: { id: 5 },
+  moodle_cursos: { estado: 'todos', texto: 'máster', pagina: 1, limite: 25 },
+  moodle_alumnos: { texto: 'máster', estado: 'activos', limite_cursos: 10 },
+  moodle_recursos_externos: { texto: 'máster', limite_cursos: 10 },
+  moodle_estructura: {},
   cuentas_publicitarias: {},
   resumen_publicidad: { desde: '2026-09-01', hasta: '2026-09-30' },
   campanas_publicitarias: { desde: '2026-09-01', hasta: '2026-09-30', limite: 50 },
@@ -168,7 +180,10 @@ const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
     await h.ejecutar(ambito, { ...ARGS[h.nombre], ...extra }).catch((e) => {
       // ver_formacion, con la base de mentira, recibe una fila sin campus: la
       // rechaza por ajena, que es justo lo que tiene que hacer.
-      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN'
+      // Y las de Moodle, con la base de mentira, no encuentran ninguna
+      // credencial: contestan «sin Moodle configurado» (no hay Moodle de
+      // verdad; lo suyo se prueba en mcpMoodle.test.js).
+      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN' && e.code !== 'MOODLE_NO_DISPONIBLE'
         && !(h.nombre === 'ver_formacion' && e.code === 'MCP_FUERA_DE_AMBITO')) throw e;
     });
   }

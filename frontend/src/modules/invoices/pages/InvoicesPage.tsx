@@ -21,6 +21,7 @@ import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -47,14 +48,15 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
-  // factura_manager (el backend valida además que sean SUS facturas).
-  const canManage = isAdmin || !!user?.factura_manager;
-  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
-  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
-  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
+  // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
+  // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
+  // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
+  // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
+  const { can } = usePermission();
+  const canManage = can('facturas.gestionar');
+  const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -151,8 +153,13 @@ export default function InvoicesPage() {
       .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
   }
 
+  // Las tarjetas y «Ventas sin factura» con las mismas fechas y estado que la
+  // lista (#233): con septiembre puesto enseñaban el acumulado de siempre.
+  const hayFechas = Boolean(filters.from || filters.to);
+
   const load = useCallback(async () => {
     if (!pid) return;
+    const periodo = { from: filters.from, to: filters.to, estado: filters.estado };
     setLoading(true);
     try {
       // Modo sociedad (admin): facturas globales de esa empresa emisora. Las
@@ -164,15 +171,15 @@ export default function InvoicesPage() {
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
-          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
-          : invoicesApi.stats({ projectId: pid }),
+          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null, ...periodo })
+          : invoicesApi.stats({ projectId: pid, ...periodo }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         // Con una sociedad elegida se piden las de TODOS sus campus: es la
         // pantalla que dice que falta por facturar, y acotarla a un proyecto
         // dejaba fuera justo lo que se estaba mirando.
         invoicesApi.ventasSinFactura(porSociedad
           ? { issuerId: Number(filterIssuer) }
-          : { projectId: pid }).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+          : { projectId: pid }, periodo).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -348,7 +355,7 @@ export default function InvoicesPage() {
       {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-info-soft text-info-soft-foreground"
-            label="Total facturas" numericValue={stats.total} />
+            label={hayFechas ? 'Facturas del periodo' : 'Total facturas'} numericValue={stats.total} />
           <KpiCard icon={Receipt} iconBg="bg-success-soft text-success-soft-foreground"
             label="Facturado" numericValue={Number(stats.total_facturado)} format={(n) => fmt(Number(n))} />
           <KpiCard icon={CheckCircle} iconBg="bg-primary/10 text-primary"
@@ -380,7 +387,7 @@ export default function InvoicesPage() {
               </span>
             </div>
             <Link to="/finanzas/pagos-stripe"
-              className="h-8 px-3 rounded-md bg-destructive text-white text-[11px] font-semibold hover:bg-destructive inline-flex items-center gap-1">
+              className="h-8 px-3 rounded-md bg-destructive text-white text-[11px] font-semibold hover:bg-destructive/90 inline-flex items-center gap-1">
               Asociar en Pagos Stripe →
             </Link>
           </div>
@@ -697,7 +704,11 @@ export default function InvoicesPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="inline-flex gap-1">
+                    {/* Los botones bajan de línea cuando no caben. Con una fila que
+                        llevaba «Email» y «Pagada», la tabla de Yolanda (ICTESS) se
+                        salía por la derecha y la papelera quedaba fuera de la vista:
+                        parecía que no podía eliminar (Diego, 23/10/2026). */}
+                    <div className="inline-flex flex-wrap justify-end gap-1">
                       <button onClick={() => {
                           const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
                           invoicesApi.openPdf(inv.id, prelim).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
@@ -732,7 +743,7 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
-                      {inv.estado === 'borrador' && isAdmin && (
+                      {inv.estado === 'borrador' && isAdmin && can('facturas.edit') && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar esta factura abierta (solo admin/superadmin)"
                           className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
@@ -742,7 +753,7 @@ export default function InvoicesPage() {
                       {inv.estado === 'borrador' && (
                         <button onClick={() => setEmittingInv(inv)}
                           title="Validar los datos y emitir la factura (asigna número fiscal)"
-                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Validar y emitir
                         </button>
                       )}
@@ -758,7 +769,7 @@ export default function InvoicesPage() {
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}
                           title={`Para descargar/enviar debes rellenar: ${invoiceFaltantes(inv).join(', ')}`}
-                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Completar datos
                         </button>
                       )}
@@ -926,7 +937,7 @@ export default function InvoicesPage() {
                     toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
                   } finally { setDeleting(false); }
                 }}
-                className="h-9 px-4 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive inline-flex items-center gap-1.5 disabled:opacity-50">
+                className="h-9 px-4 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 inline-flex items-center gap-1.5 disabled:opacity-50">
                 <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar y liberar número'}
               </button>
             </div>
