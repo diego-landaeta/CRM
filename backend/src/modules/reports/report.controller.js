@@ -1,6 +1,11 @@
 import * as model from './report.model.js';
 import { resumenDelDia } from './resumenDelDia.js';
 import { query } from '../../shared/config/db.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { AppError } from '../../shared/utils/AppError.js';
+import { dineroPorCanal } from './dondePonerElDinero.js';
+import { tramosPara, lecturaDe, guardarTramos, quitarTramos } from './tasaBaremo.js';
 
 // A que proyectos se acota el informe.
 //
@@ -119,7 +124,7 @@ export async function asesorasMes(req, res, next) {
  */
 export async function miPuesto(req, res, next) {
   try {
-    const esJefe = req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'soporte';
+    const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
     const userId = esJefe && pedido ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
@@ -168,6 +173,31 @@ export async function paises(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/informes/canales  -> de donde vienen los prospectos y las ventas (#48)
+export async function canales(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.origenDeLosProspectos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/canales/dinero  -> dónde poner el dinero (#56): por canal y campaña, contra el periodo anterior.
+// Solo admin y super admin (lleva el gasto), y recortado a SUS campus.
+export async function dondePonerElDinero(req, res, next) {
+  try {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const hoy = new Date();
+    const dia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const from = req.query.from || dia(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    const to = req.query.to || dia(hoy);
+    if (!re.test(from) || !re.test(to) || Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) {
+      throw new AppError('from y to tienen que ser fechas AAAA-MM-DD', 400, 'INVALID_DATE');
+    }
+    if (from > to) throw new AppError('from no puede ser posterior a to', 400, 'INVALID_RANGE');
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 366) throw new AppError('El rango no puede pasar de un año', 400, 'INVALID_RANGE');
+    res.json({ success: true, data: await dineroPorCanal({ ...(await proyectosDelAmbito(req)), from, to }) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/informes/formaciones  -> ranking de formaciones
 export async function formaciones(req, res, next) {
   try {
@@ -195,7 +225,55 @@ export async function detalle(req, res, next) {
 // GET /api/informes/tasa-cierre -> el numero unico, con su desglose por meses.
 export async function tasaCierre(req, res, next) {
   try {
-    res.json({ success: true, data: await model.tasaDeCierre(await rangoDeQuery(req)) });
+    const r = await rangoDeQuery(req);
+    const tasa = await model.tasaDeCierre(r);
+    // Qué significa el número (#39): el tramo del baremo, si lo hay; y, para una
+    // gestora, frente al equipo, que no necesita que nadie invente umbrales.
+    const { ambito, tramos } = await tramosPara(r.projectIds || (r.projectId ? [r.projectId] : null));
+    const equipo = r.asesoraId ? (await model.tasaDeCierre({ ...r, asesoraId: null })).tasa : null;
+    res.json({ success: true, data: { ...tasa, baremo: { ambito, tramos }, lectura: lecturaDe(tasa.tasa, tramos), equipo } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/tasa-cierre/baremo — los tramos que aplican a este ámbito.
+export async function baremo(req, res, next) {
+  try {
+    const r = await rangoDeQuery(req);
+    res.json({ success: true, data: await tramosPara(r.projectIds || (r.projectId ? [r.projectId] : null)) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/informes/tasa-cierre/baremo { tramos, general? | project_id } — solo admin y super admin.
+// Un campus suyo, o el general (solo super admin).
+export async function guardarBaremo(req, res, next) {
+  try {
+    let projectId = null;
+    if (req.body?.general === true) {
+      if (req.user.role !== 'superadmin') throw new AppError('El baremo general lo cambia un super admin', 403, 'FORBIDDEN');
+    } else {
+      projectId = Number(req.body?.project_id ?? req.query.projectId);
+      if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Falta el campus (project_id) o general: true', 400, 'PROJECT_REQUIRED');
+      req.query.projectId = String(projectId);
+      await proyectosDelAmbito(req); // 403 si no es uno de sus campus
+    }
+    const tramos = await guardarTramos({ projectId, tramos: req.body?.tramos, userId: req.user.userId });
+    res.json({ success: true, data: { project_id: projectId, tramos } });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/informes/tasa-cierre/baremo?projectId= | general=true — vuelve a no etiquetar.
+export async function quitarBaremo(req, res, next) {
+  try {
+    let projectId = null;
+    if (req.query.general === 'true') {
+      if (req.user.role !== 'superadmin') throw new AppError('El baremo general lo cambia un super admin', 403, 'FORBIDDEN');
+    } else {
+      projectId = Number(req.query.projectId);
+      if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Falta el campus (projectId) o general=true', 400, 'PROJECT_REQUIRED');
+      await proyectosDelAmbito(req);
+    }
+    await quitarTramos(projectId);
+    res.json({ success: true });
   } catch (err) { next(err); }
 }
 

@@ -2,6 +2,10 @@ import * as model from './widget.model.js';
 import * as service from './widget.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { traduccionesSchema, limpiarTraducciones, textosPorIdioma, idiomaDe } from './widget.idiomas.js';
+import { gestorasParaLaWeb } from '../asignacion/asignacion.widget.js';
+import { apuntarPulsacion, resumenDePulsaciones } from './widget.pulsaciones.js';
+import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { createHash } from 'node:crypto';
 
 // Endpoint PUBLICO: GET /api/widget/whatsapp/:projectId.js
 // Sin auth. Devuelve JS para embeber. Cache 5 minutos.
@@ -50,12 +54,52 @@ export async function widgetData(req, res, next) {
       // La burbuja como dice el panel (antes el código ponía 3 s siempre).
       burbuja: config.show_bubble !== false,
       retraso: Number(config.bubble_delay_ms) || 3000,
-      gestoras: users.map((u) => [u.display_name, u.whatsapp_phone]),
+      // Si hay una gestora activa a la que le toca, solo ella; el código de la
+      // web elige al azar entre las que recibe, así que no hay que repegarlo.
+      // El tercero es su id, para avisar de la pulsación (widget.pulsaciones.js).
+      // Los códigos pegados antes solo leen los dos primeros.
+      gestoras: (await gestorasParaLaWeb(projectId, users)).map((u) => [u.display_name, u.whatsapp_phone, u.id]),
     });
   } catch (e) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.json({ enabled: false });
   }
+}
+
+// Endpoint PUBLICO: POST /api/w/clic/:projectId
+// El código de la web avisa de cada pulsación del botón con `sendBeacon`, que
+// manda texto plano: {"g": id de la gestora, "u": la página, "l": el idioma}.
+// Contesta siempre 204 y nunca falla: lo que importa es que la persona llegue
+// al WhatsApp, no que se cuente la pulsación.
+export async function widgetClic(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const m = String(req.params.projectId || '').match(/^(\d+)$/);
+    let datos = req.body;
+    if (typeof datos === 'string') { try { datos = JSON.parse(datos); } catch { datos = null; } }
+    if (m && datos && typeof datos === 'object') {
+      // Quien pulsa, sin guardar su IP: solo para no contar dos veces el mismo doble clic.
+      const quien = createHash('sha256').update(String(req.ip || '')).digest('hex').slice(0, 16);
+      await apuntarPulsacion({ projectId: Number(m[1]), userId: datos.g, pagina: datos.u, idioma: datos.l, quien });
+    }
+  } catch { /* la pulsación no puede romper el botón */ }
+  res.status(204).end();
+}
+
+// Admin: GET /api/widget/pulsaciones?[projectId|issuerId]&from&to (sin ninguno = todos)
+// Por gestora: pulsaciones, altas por WhatsApp y cuántas tienen pulsación.
+export async function pulsaciones(req, res, next) {
+  try {
+    const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const to = fecha(req.query.to) || hoy;
+    const from = fecha(req.query.from) || new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+    // Un campus, una empresa (sus campus) o «Todos» (null: todos menos pruebas).
+    // proyectosDelAmbito ya recorta a los campus de cada persona.
+    const ambito = await proyectosDelAmbito(req);
+    const projectIds = comoLista(ambito.projectId, ambito.projectIds);
+    res.json({ success: true, data: { from, to, ...(await resumenDePulsaciones({ projectIds, from, to })) } });
+  } catch (e) { next(e); }
 }
 
 // Admin endpoints (con auth)

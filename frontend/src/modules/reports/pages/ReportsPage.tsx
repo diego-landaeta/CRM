@@ -16,7 +16,9 @@ import { exportReportPDF } from '../lib/exportPdf';
 import ReportsDownloadSection from '../components/ReportsDownloadSection';
 import AsesorasPanel from '../components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
+import DondePonerElDinero from '../components/DondePonerElDinero';
 import PanelResumen from '@/shared/components/PanelResumen';
+import TasaDeCierre from '../components/TasaDeCierre';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import FeedbackEnReportes, { feedbackEnCsv } from '@/modules/feedback/components/FeedbackEnReportes';
 
@@ -387,6 +389,21 @@ export default function ReportsPage() {
         }
       />
 
+      {/* Qué periodo se está viendo, dicho con palabras (#325): las cifras de esta pantalla
+          no coincidían con «el mes en curso» ni con «los últimos 30 días» porque nadie decía
+          cuál usaba. Arranca en «Este mes» y cada cifra de abajo es de este periodo. */}
+      {range.from && range.to && (
+        <p className="text-xs text-muted-foreground" data-testid="periodo-del-informe">
+          Periodo que estás viendo: <strong className="text-foreground">
+            {new Date(`${range.from}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' – '}
+            {new Date(`${range.to}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </strong>
+          {atajoActivo ? ` (${ATAJOS.find((a) => a.clave === atajoActivo)?.etiqueta})` : ' (a medida)'}.
+          {' '}Al abrir Reportes empieza en «Este mes»; las cifras de abajo son de este periodo, no del histórico.
+        </p>
+      )}
+
       {/* Tabs — solo mostrar Análisis IA si es proyecto IA */}
       {isIaProject && (
         <div className="flex border-b border-border" role="tablist">
@@ -412,10 +429,28 @@ export default function ReportsPage() {
       {tab === 'ia' && isIaProject && <ReportsIAView project={activeProject} />}
 
       {tab === 'crm' && <>
+      {/* La tasa de cierre, primer bloque (#39). Va la primera porque es la
+          pregunta que se hace al abrir Reportes, y porque lleva su propio
+          «¿de dónde sale?»: el número se puede comprobar sin salir de aquí. */}
+      <TasaDeCierre
+        activeProject={proyectoEfectivo}
+        activeIssuerId={issuerEfectivo}
+        from={range.from}
+        to={range.to}
+      />
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
-        <KpiCard icon={TrendUp} label="Tasa conversión" value={`${data.tasa_conversion}%`} tone="success" />
+        {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
+            que es OTRA cuenta: los leads en estado «convertido», un campo que
+            se pone a mano. Al lado de la tasa de cierre daban dos porcentajes
+            distintos de lo que el lector entiende como lo mismo, y el #39 lo
+            señala como la razón de que no se crea ninguno de los dos.
+            Se queda uno solo, el verificado, y aquí va el dato que faltaba:
+            cuántos están marcados como convertidos —que es un recuento, no un
+            porcentaje, y no compite con nada—. */}
+        <KpiCard icon={TrendUp} label="Marcados convertidos" value={data.leads.convertido} tone="success" />
         <KpiCard icon={CurrencyEur} label="Ventas cobradas" value={fmt(data.conversions.cobrado)} tone="success" />
         <KpiCard icon={Wallet} label="Por cobrar" value={fmt(data.conversions.por_cobrar)} tone="warning" />
       </div>
@@ -541,6 +576,9 @@ export default function ReportsPage() {
 
       {/* Paises y formaciones: en pantalla, no solo descargables. */}
       <RankingsPanel from={range.from} to={range.to} />
+
+      {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
+      <DondePonerElDinero from={range.from} to={range.to} />
 
       {/* Por qué no compran: las cifras de «Análisis → Feedback», con este rango y ámbito. */}
       <FeedbackEnReportes from={range.from} to={range.to} issuerId={issuerEfectivo}

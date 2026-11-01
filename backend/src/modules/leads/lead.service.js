@@ -8,7 +8,9 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins, notifyUsers } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
+import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 import { avanzarPorContacto } from '../../shared/services/estado-prospecto.service.js';
 
 // Dispara secuencias de email activas que tengan el trigger indicado
@@ -28,24 +30,11 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
 }
 
 // ============================================================
-// DETECCION DE CANAL POR UTMs
+// DETECCION DE CANAL
 // ============================================================
-
-function detectChannel(utmSource, utmMedium) {
-  if (!utmSource && !utmMedium) return 'directo';
-
-  const source = (utmSource || '').toLowerCase();
-  const medium = (utmMedium || '').toLowerCase();
-
-  if (source.includes('facebook') || source.includes('instagram') || source.includes('fb') || source.includes('meta')) return 'meta_ads';
-  if (source.includes('google') && (medium === 'cpc' || medium === 'ppc')) return 'google_ads';
-  if (source.includes('tiktok')) return 'tiktok_ads';
-  if (source.includes('chatgpt') || source.includes('openai')) return 'chatgpt_ia';
-  if (medium === 'referral' || source.includes('referido')) return 'referido';
-  if (medium === 'organic' || source.includes('google') || source.includes('bing')) return 'organico';
-
-  return 'directo';
-}
+//
+// La regla vive en ./canal.js (#48): una sola para el alta de un prospecto y
+// para el script que la aplica hacia atrás. Aquí solo se llama.
 
 /**
  * Saca las UTM de dentro de la propia direccion.
@@ -198,7 +187,12 @@ async function _createLeadCore(project, leadData) {
   // devuelve, y `const` no se puede leer antes de su linea: daba
   // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
   // sea un 500 cada vez que entraba esa rama.
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
+  const canalDetectado = leadData.canal || deducirCanal({
+    utm_source: leadData.utm_source,
+    utm_medium: leadData.utm_medium,
+    referrer: leadData.referrer,
+    landing_url: leadData.landing_url,
+  });
 
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
@@ -269,6 +263,7 @@ async function _createLeadCore(project, leadData) {
       utm_content: leadData.utm_content || null,
       utm_term: leadData.utm_term || null,
       landing_url: leadData.landing_url || null,
+      referrer: leadData.referrer || null,
       canal_detectado: canalDetectado,
     },
   });
@@ -551,9 +546,47 @@ export async function changeStatus(leadId, newStatus, motivo, userId, opts = {})
   return { previous: lead.status, current: newStatus };
 }
 
+/**
+ * El texto que pone la cola cuando se pulsa «Contactado, al siguiente» sin
+ * escribir nada (ColaDelDiaPage y SeguimientoPage).
+ *
+ * Diego, 29/10: a las gestoras «se les ponen interacciones sin ellas ponerlas».
+ * Salían por dos caminos: la gestora escribía su nota en la ficha y luego
+ * pulsaba el botón para pasar a la siguiente —una «llamada» que nunca hizo—, y
+ * ráfagas de 20 a 40 en unos segundos, una cada 0,2–0,4 s, con el botón
+ * repetido. Se mira aquí y no solo en la pantalla porque el navegador puede
+ * tener guardada la versión de antes.
+ */
+export const NOTA_DE_LA_COLA = /^(Contacto del seguimiento \d+|Seguimiento de fin de mes)$/;
+
+async function contactoDeLaColaSobra(leadId, userId) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT id FROM lead_interactions
+         WHERE lead_id = $1 AND created_by = $2
+           AND created_at > NOW() - INTERVAL '12 hours'
+           AND nota NOT LIKE 'Copiado el mensaje%'
+         ORDER BY created_at DESC LIMIT 1) AS ya_apuntado,
+       EXISTS (SELECT 1 FROM lead_interactions
+         WHERE created_by = $2 AND created_at > NOW() - INTERVAL '2 seconds'
+           AND nota ~ '^(Contacto del seguimiento [0-9]+|Seguimiento de fin de mes)$') AS rafaga`,
+    [leadId, userId]
+  );
+  return rows[0] || {};
+}
+
 export async function addInteraction(leadId, tipo, nota, userId, fecha) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  if (NOTA_DE_LA_COLA.test(nota || '')) {
+    const { ya_apuntado, rafaga } = await contactoDeLaColaSobra(leadId, userId);
+    if (rafaga) {
+      throw new AppError('Más despacio: un contacto por persona. Este no se ha apuntado.', 429, 'DEMASIADO_RAPIDO');
+    }
+    // Ya apuntó algo suyo en esta persona: el botón solo la saca de la cola.
+    if (ya_apuntado) return { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+  }
 
   const interaccion = await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
 
@@ -985,6 +1018,18 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   } catch (err) {
     logger.warn({ err: err.message, leadId: lead.id },
       'No se pudo planificar la agenda del prospecto (alta manual)');
+  }
+
+  // EL BOTÓN DE WHATSAPP DE LA WEB (Diego, 29/10: «tocan y ellas cargan»). Si la
+  // gestora lo da de alta con origen WhatsApp, se le cruza su última pulsación
+  // del botón de las 24 h anteriores: así se mide cuántos de los que pulsan pasan
+  // a la conversación. No puede tumbar el alta.
+  if ((canal || '') === 'whatsapp' && lead.responsableId) {
+    try {
+      await cruzarConPulsacion({ leadId: lead.id, projectId: project_id, userId: lead.responsableId });
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo cruzar el alta con una pulsación del botón');
+    }
   }
 
   return {

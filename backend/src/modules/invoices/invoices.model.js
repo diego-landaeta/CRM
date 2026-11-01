@@ -611,12 +611,18 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
 
 // Stats de la MISMA vista que la lista: por proyecto o por sociedad (issuerId),
 // pudiendo acotar a un proyecto de esa sociedad. Así los KPIs cuadran con la tabla.
-export async function getStats({ projectId, issuerId } = {}) {
+//
+// Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
+// no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
+export async function getStats({ projectId, issuerId, from, to, estado } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
+  if (from)      { conds.push(`fecha_emision >= $${idx++}`); params.push(from); }
+  if (to)        { conds.push(`fecha_emision <= $${idx++}`); params.push(to); }
+  if (estado)    { conds.push(`estado = $${idx++}`); params.push(estado); }
   const { rows } = await query(
     `SELECT
        COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
@@ -783,35 +789,28 @@ export async function cuadreDeVenta(conversionId) {
     : null;
 }
 
-// ¿El usuario tiene el permiso factura_manager? (gestora con poderes de factura).
-export async function esFacturaManager(userId) {
-  const { rows } = await query(`SELECT factura_manager FROM users WHERE id = $1`, [userId]);
-  return !!rows[0]?.factura_manager;
+// ¿Tiene esta persona esta clave del catálogo? (#423) Para donde no hay `req`
+// (servicios). Con `req`, `tienePermiso` de shared/middleware/permissions.js.
+export async function tieneLaClave(userId, clave) {
+  const { explicarPermisos } = await import('../permissions/permissions.service.js');
+  const e = await explicarPermisos(userId);
+  return e?.mapa[clave] === true;
 }
 
-// ¿Puede este usuario poner NUMERO a una factura?
-// Admin y superadmin siempre. Una gestora, solo si tiene factura_manager.
+// ¿Puede este usuario poner NUMERO a una factura? El permiso «Poner número
+// al cobrar» (#423; antes, admin/superadmin o la casilla factura_manager).
 // Sin usuario (sincronía de Stripe, cron) se deja pasar: no hay nadie a quien
 // pedirle los datos, y el cobro ya viene de una pasarela.
 export async function puedeEmitirFactura(userId) {
   if (!userId) return true;
-  const { rows } = await query(
-    `SELECT role, COALESCE(factura_manager, false) AS factura_manager
-       FROM users WHERE id = $1`,
-    [userId]
-  );
-  const u = rows[0];
-  if (!u) return false;
-  return u.role === 'admin' || u.role === 'superadmin' || u.factura_manager === true;
+  return tieneLaClave(userId, 'facturas.emitir');
 }
 
-// ¿Puede este usuario gestionar (editar/corregir/eliminar/abonar) esta factura?
-// Admin/superadmin → cualquiera. Gestor → solo si es factura_manager Y la factura
-// es de un lead del que es responsable (sus propias facturas).
-export async function puedeGestionarFactura(userId, role, invoiceId) {
+// ¿Es una factura que esta persona gestiona? El permiso («Corregir y abonar»)
+// lo pide la ruta; esto es el ALCANCE (#423): admin y superadmin, cualquiera;
+// el resto, solo las de sus prospectos.
+export async function esFacturaQueGestiona(userId, role, invoiceId) {
   if (role === 'admin' || role === 'superadmin') return true;
-  if (role !== 'gestor') return false;
-  if (!(await esFacturaManager(userId))) return false;
   const { rows } = await query(
     `SELECT 1 FROM invoices i
        LEFT JOIN conversions cv ON cv.id = i.conversion_id
@@ -820,18 +819,6 @@ export async function puedeGestionarFactura(userId, role, invoiceId) {
     [invoiceId, userId]
   );
   return rows.length > 0;
-}
-
-// Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de
-// las facturas, sin tocar importes/conceptos. Admin/superadmin siempre pueden.
-export async function esEditorFechas(userId) {
-  const { rows } = await query(`SELECT editar_fechas_factura FROM users WHERE id = $1`, [userId]);
-  return !!rows[0]?.editar_fechas_factura;
-}
-
-export async function puedeEditarFechas(userId, role) {
-  if (role === 'admin' || role === 'superadmin') return true;
-  return esEditorFechas(userId);
 }
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
@@ -1830,7 +1817,7 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura({ projectId = null, projectIds = null } = {}) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null } = {}) {
   /*
     Un proyecto O UNA SOCIEDAD ENTERA.
 
@@ -1855,8 +1842,11 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
         AND c.factura_no_requerida IS NOT TRUE
+        -- El periodo de arriba (#233): con septiembre puesto salían ventas de junio.
+        AND ($2::date IS NULL OR c.fecha_conversion::date >= $2::date)
+        AND ($3::date IS NULL OR c.fecha_conversion::date <= $3::date)
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [lista]
+    [lista, from || null, to || null]
   );
   return rows;
 }

@@ -46,12 +46,32 @@ export async function stats(req, res, next) {
   } catch (e) { next(e); }
 }
 
+/**
+ * De que fecha para adelante se factura, y por que (GET /corte).
+ *
+ * Existe para poder enseñarlo en la pantalla donde se pega la clave, ANTES de
+ * guardarla: guardar la clave es lo que arranca el sondeo. Hasta ahora este
+ * dato solo se podia mirar con un SELECT a mano.
+ */
+export async function corte(req, res, next) {
+  try {
+    const data = await model.escalonesDelCorte(projectId(req));
+    if (!data) throw new AppError('Proyecto no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data });
+  } catch (e) { next(e); }
+}
+
 export async function sync(req, res, next) {
   try {
     const pid = projectId(req);
     const fullHistory = req.body?.fullHistory === true || req.query?.fullHistory === 'true';
+    // El historico ABSOLUTO: se salta el corte para TRAER, no para facturar.
+    // Solo si se pide explicitamente; ni el cron ni el boton normal lo mandan.
+    const desdeElPrincipio = req.body?.desdeElPrincipio === true || req.query?.desdeElPrincipio === 'true';
     // Sincronizar a mano reintenta ademas los cargos que quedaron sin asociar.
-    const result = await service.syncStripePayments(pid, { fullHistory, retryPending: true });
+    const result = await service.syncStripePayments(pid, {
+      fullHistory: fullHistory || desdeElPrincipio, desdeElPrincipio, retryPending: true,
+    });
     res.json({ success: true, data: result });
   } catch (e) {
     logger.error({ e: e.message }, 'sync stripe failed');

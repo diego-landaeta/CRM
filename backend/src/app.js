@@ -45,6 +45,7 @@ import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
 import emailTemplatesModule from './modules/email-templates/index.js';
@@ -53,17 +54,24 @@ import projectChannelsModule from './modules/project-channels/index.js';
 import permissionsModule from './modules/permissions/index.js';
 import connectorsModule from './modules/connectors/index.js';
 import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
+import asignacionModule from './modules/asignacion/index.js';
+import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
+import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import actividadModule from './modules/actividad/index.js';
+import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
 import mcpModule from './modules/mcp/index.js';
+import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
@@ -84,16 +92,20 @@ import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js'
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMoodleAvisosScheduler } from './jobs/moodleAvisosScheduler.js';
 import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
+import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
@@ -134,9 +146,14 @@ app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
 app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
   express.json({ limit: MAX_ENVIO_BYTES }), express.urlencoded({ extended: true, limit: MAX_ENVIO_BYTES }), traducirTope);
 
+// El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
+app.use('/api/woocommerce/webhook', wcWebhook);
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
 app.use(cookieParser());
+// Lo que hace una gestora y no guarda su autor, para «activa en los últimos 15 min» (CRM#513).
+app.use(registrarActividad);
 
 // API root
 app.get('/api', (_req, res) => {
@@ -275,6 +292,7 @@ const ALL_MODULES = [
   { name: 'audiences', mod: audiencesModule },
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'ia-analisis', mod: iaAnalisisModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
   { name: 'email-templates', mod: emailTemplatesModule },
@@ -284,18 +302,26 @@ const ALL_MODULES = [
   // Conexión → «Webhook de transferencias» (Diego, 15/10): avisa a fuera de
   // los cobros por transferencia o depósito bancario. Migración 206.
   { name: 'webhooks-salientes', mod: webhooksSalientesModule },
+  // Conexión → «Asignación de leads» por actividad (CRM#513, 27/10/2026). Migración 230.
+  { name: 'asignacion', mod: asignacionModule },
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  // «Qué ha pasado hoy», para cada gestora con lo suyo (#13). El Registro es para admin.
+  { name: 'actividad', mod: actividadModule },
+  // Cursos pendientes para las tutoras, por campus (#336).
+  { name: 'cursos-pendientes', mod: cursosPendientesModule },
   { name: 'correos', mod: correosModule },
   // Conexion de Claude por MCP: solo consulta, con token personal.
   { name: 'mcp', mod: mcpModule },
+  { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
+  { name: 'soporte', mod: soporteModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
@@ -439,16 +465,21 @@ if (process.env.NODE_ENV !== 'test') {
     startConsultasCargaScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
+    startCursosPendientesScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
     startMcpRotacionScheduler();
+    startMoodleAvisosScheduler();
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();
+    startAsignacionScheduler();
     if (tareasActivas()) startTasksDailySummaryScheduler();
+    // El resumen de la tarde y los correos de cambio de estado (26/10/2026).
+    if (tareasActivas()) startTareasResumenScheduler();
     if (facturasColaboradorActivas()) startFacturasColaboradorScheduler();
     recuperarAdjuntosDeWhatsapp();
   });

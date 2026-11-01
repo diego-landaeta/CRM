@@ -67,6 +67,9 @@ export const RUTAS_DEL_COLABORADOR = [
   // «Mi factura» (#202): solo lo suyo. Lo de administración, nunca.
   /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
+  // Meta Ads, solo ver y solo con su permiso (`meta_ads.view`, 26/10/2026): la
+  // guardia de la ruta lo mira; sin él, 403 igual.
+  /^\/api\/meta-ads(?:\/|$)/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
@@ -92,6 +95,8 @@ export const RUTAS_DEL_TUTOR = [
   /^\/api\/tutores(?:\/|$)/,
   // Sus consultas de alumnos (#188): el controlador le deja solo las suyas.
   /^\/api\/consultas(?:\/|$)/,
+  // Sus cursos pendientes (#336): el servicio le deja solo los que tiene asignados.
+  /^\/api\/cursos-pendientes(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
   /^\/api\/novedades(?:\/|$)/,
   // Los mensajes internos entre usuarios del CRM (la campana de «Mensajes»).

@@ -148,6 +148,7 @@ afterAll(async () => {
   await q(`DELETE FROM mcp_codigos WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM mcp_tokens WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM user_projects WHERE user_id = ANY($1::int[])`, [ids.users]);
+  await q(`DELETE FROM user_permission_overrides WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM users WHERE id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM projects WHERE id = ANY($1::int[])`, [ids.projects]);
   await pool.end();
@@ -186,7 +187,7 @@ describe('un Claude que se conecta se valida UNA vez y no caduca por horas', () 
       .set('Authorization', `Bearer ${jwtDe(ANA)}`).send({ decision: 'autorizar' });
     expect(d.status).toBe(200);
 
-    const codigo = (await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(ANA)}`).send({})).body.data.codigo;
+    const codigo = (await request.post(`/api/mcp/panel/tokens/${URL_ANA.id}/codigo`).set('Authorization', `Bearer ${jwtDe(ANA)}`).send({})).body.data.codigo;
     const des = await llamar(URL_ANA.token, CLAUDE.access_token, 'desbloquear', { codigo });
     expect(des.ok).toBe(true);
     expect(des.texto).toMatch(/No volverá a pedir el código/);
@@ -274,7 +275,7 @@ describe('un Claude conectado a la manera de antes (la URL sola): su dueño se e
     const claude = await conectarClaude(URL_LUIS.token);
     const [c] = await q(`SELECT id FROM mcp_conexiones WHERE token_id = $1`, [URL_LUIS.id]);
     await request.patch(`/api/mcp/panel/conexiones/${c.id}`).set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({ decision: 'autorizar' });
-    const codigo = (await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({})).body.data.codigo;
+    const codigo = (await request.post(`/api/mcp/panel/tokens/${URL_LUIS.id}/codigo`).set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({})).body.data.codigo;
     expect((await llamar(URL_LUIS.token, claude.access_token, 'desbloquear', { codigo })).ok).toBe(true);
     expect((await llamar(URL_LUIS.token, claude.access_token, 'mis_proyectos')).ok).toBe(true);
     expect(await textoDeLaUrl(LUIS, URL_LUIS.id)).toBe('1 Claude autorizado y desbloqueado');
@@ -292,7 +293,10 @@ describe('un Claude conectado a la manera de antes (la URL sola): su dueño se e
 
   it('el aviso sale solo, sin que nadie lo llame, pasada la espera', async () => {
     const PEPA = await persona('PEPA', 'gestor');
+    // Desde #423 la casilla `usa_mcp` es un permiso suyo: «Usar el MCP» (lo que
+    // hace la migración 222 con quien la tenía marcada).
     await q(`UPDATE users SET usa_mcp = true WHERE id = $1`, [PEPA.id]);
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [PEPA.id]);
     const t = await urlDeAntes(PEPA, 'Claude de Pepa');
     expect(conexiones.avisarConectorAntiguo({ token_id: t.id }, { esperaMs: 10 })).toBe(true);
     await vi.waitFor(async () => expect(await avisosDe(PEPA)).toHaveLength(1), { timeout: 5000, interval: 50 });
