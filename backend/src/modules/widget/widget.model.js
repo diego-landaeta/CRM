@@ -3,7 +3,10 @@ import { query } from '../../shared/config/db.js';
 const DEFAULT_CONFIG = {
   enabled: true,
   welcome_text: '¿Hablamos? 👋',
-  message_template: 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
+  // Lo manda la persona que entra en la web: {{nombre}} es la GESTORA de la burbuja,
+  // así que se la saluda. «Hola, soy {{nombre}}» ponía a la persona a presentarse con
+  // el nombre de la gestora (Diego, 29/10).
+  message_template: 'Hola {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
   excluded_user_ids: [],
   show_bubble: true,
   bubble_delay_ms: 3000,
@@ -66,7 +69,14 @@ export async function upsertConfig(projectId, fields) {
   return await getConfig(projectId);
 }
 
-// Lista usuarios candidatos al widget = SOLO los del proyecto activos
+// QUIEN PUEDE SALIR EN EL WHATSAPP DE LA WEB: gestoras y admin, nadie mas (#238).
+// El widget manda a un visitante a escribirle a esa persona; un tutor, soporte
+// o superadmin no atiende leads. Las dos consultas de abajo lo comparten: si la
+// lista del panel lo dijera y la rotacion publica no, marcar a un tutor por
+// error le mandaria los leads de la web.
+const ROLES_DEL_WIDGET = `u.role IN ('gestor', 'admin')`;
+
+// Lista usuarios candidatos al widget = gestoras y admin del proyecto, activos
 export async function listCandidateUsers(projectId) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active,
@@ -75,6 +85,7 @@ export async function listCandidateUsers(projectId) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
      ORDER BY u.whatsapp_widget_active DESC, u.nombre ASC`,
     [projectId]
   );
@@ -92,6 +103,7 @@ export async function listActiveWidgetUsers(projectId, excludedIds = []) {
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
+       AND ${ROLES_DEL_WIDGET}
        AND u.whatsapp_widget_active = true
        AND u.whatsapp_phone IS NOT NULL
        AND u.whatsapp_phone != ''

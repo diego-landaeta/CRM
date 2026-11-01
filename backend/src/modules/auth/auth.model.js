@@ -109,7 +109,7 @@ export async function findUserBySetPasswordToken(tokenHash) {
   const { rows } = await query(
     `SELECT id, email, nombre, set_password_expires
      FROM users
-     WHERE set_password_token = $1`,
+     WHERE set_password_token = $1 AND active = true`,
     [tokenHash]
   );
   return rows[0] || null;
@@ -133,4 +133,51 @@ export async function logActivity(userId, action, details, ipAddress) {
      VALUES ($1, $2, $3, $4)`,
     [userId, action, details ? JSON.stringify(details) : null, ipAddress]
   );
+}
+
+/**
+ * El usuario de ese correo, si lo hay y sigue de alta (#37).
+ *
+ * Solo lo que hace falta para mandarle el enlace. Una baja no recupera
+ * contraseña: se le cerro la puerta a proposito y esto seria una rendija.
+ */
+export async function findActiveUserByEmail(email) {
+  const { rows } = await query(
+    `SELECT id, email, nombre
+     FROM users
+     WHERE LOWER(email) = LOWER($1) AND active = true`,
+    [email]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Deja puesto el token del enlace de recuperacion (#37).
+ *
+ * Es la MISMA pareja de columnas que usa la invitacion del alta, y eso es
+ * deliberado: son el mismo camino —un enlace de un solo uso que lleva a
+ * `/set-password`— y tener dos juegos de columnas para lo mismo acaba con dos
+ * caducidades distintas y una de las dos sin revisar.
+ *
+ * Al usarse, `updatePassword` las pone a NULL, asi que el enlace muere solo.
+ *
+ * NO PISA un enlace vigente emitido hace poco: `recienteDesde` es la caducidad
+ * a partir de la cual un enlace se considera recien emitido (la caducidad es
+ * «emision + 24 h», asi que no hace falta columna nueva). Sin esto, quien conozca
+ * el correo de otro podria inundarle el buzon e invalidarle el enlace que tiene
+ * pendiente. Va en el propio UPDATE para que dos peticiones a la vez no se cuelen.
+ * Devuelve true si lo dejo puesto, false si habia uno reciente y no toco nada.
+ */
+export async function setRecoveryToken(userId, tokenHash, expires, recienteDesde = null) {
+  const { rowCount } = await query(
+    `UPDATE users
+     SET set_password_token = $2, set_password_expires = $3, updated_at = NOW()
+     WHERE id = $1
+       AND ($4::timestamptz IS NULL
+            OR set_password_token IS NULL
+            OR set_password_expires IS NULL
+            OR set_password_expires <= $4::timestamptz)`,
+    [userId, tokenHash, expires, recienteDesde]
+  );
+  return rowCount > 0;
 }

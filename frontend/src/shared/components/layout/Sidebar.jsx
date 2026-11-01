@@ -77,6 +77,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -126,6 +127,7 @@ export const NAV_SECTIONS = [
       // propia pantalla y el servidor.
       {
         label: 'Prospectos',
+        salvoTipo: ['ia'],
         icon: Users,
         module: 'leads',
         defaultOpen: true,
@@ -147,6 +149,7 @@ export const NAV_SECTIONS = [
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
         label: 'WhatsApp',
+        salvoTipo: ['ia'],
         icon: WhatsappLogo,
         module: 'whatsapp',
         apagable: 'whatsapp',
@@ -164,6 +167,8 @@ export const NAV_SECTIONS = [
           // llevarse una copia. El servidor recorta lo que ve cada cual — un
           // admin lo ve entero, una gestora solo su numero.
           { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText },
+          // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
+          { label: 'Actividad', to: '/whatsapp/actividad', detail: 'Quién responde', icon: ChartBar, permiso: 'reports.view' },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
           // a traves del navegador remoto, y ese metodo se retiro. Su pantalla y
           // su codigo de servidor se borraron el 21/08/2026 — no quedaba ni una
@@ -202,6 +207,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Captación',
+    salvoTipo: ['ia'],
     icon: Funnel,
     items: [
       { label: 'Email', to: '/secuencias-email', detail: 'Correos automáticos', icon: Envelope, roles: ['superadmin', 'admin'], module: 'email_sequences', permiso: 'email_sequences.view' },
@@ -209,12 +215,14 @@ export const NAV_SECTIONS = [
       { label: 'Make', to: '/captacion/make', detail: 'Escenarios de Make', icon: Lightning, roles: ['superadmin', 'admin'], module: 'make', permiso: 'make.view' },
       { label: 'Webhooks', to: '/captacion/webhooks', detail: 'Entradas de fuera', icon: WebhooksLogo, roles: ['superadmin', 'admin'], module: 'webhooks', permiso: 'webhooks.view' },
       { label: 'Widget web', to: '/captacion/whatsapp', detail: 'El botón de la web', icon: WhatsappLogo, roles: ['superadmin', 'admin', 'soporte'], permiso: 'widget.view' },
-      { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'] },
-      { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'] },
+      // Próximamente (#216): enseñaban datos de ejemplo. El gasto real de Meta, en Publicidad.
+      { label: 'Campañas', to: '/campanas', detail: 'Campañas y resultados', icon: Megaphone, roles: ['superadmin', 'admin'], comingSoon: true },
+      { label: 'Tráfico orgánico', to: '/campanas/seo', detail: 'Búsquedas en Google', icon: MagnifyingGlass, roles: ['superadmin', 'admin'], comingSoon: true },
     ],
   },
   {
     label: 'Publicidad',
+    salvoTipo: ['ia'],
     icon: Megaphone,
     items: [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
@@ -228,10 +236,11 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Catálogo',
+    salvoTipo: ['ia'],
     icon: Books,
     items: [
       { label: 'Productos', to: '/productos', detail: 'Cursos a la venta', icon: Package, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
-      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Vendidos sin fecha', icon: Clock, roles: ['superadmin', 'admin'], module: 'products', permiso: 'products.view' },
+      { label: 'Cursos pendientes', to: '/productos/pendientes', detail: 'Por campus, con tutora y fecha', icon: Clock, roles: ['superadmin', 'admin', 'gestor', 'tutor'], module: 'products', permiso: 'products.view' },
       { label: 'WooCommerce', to: '/productos/woocommerce', detail: 'Sincronía de tienda', icon: ShoppingBag, roles: ['superadmin', 'admin'], module: 'woocommerce', permiso: 'woocommerce.view' },
       // Cada entrada se llama como la pantalla que abre (#79). «Árbol de
       // categorías» apuntaba a /productos/arbol, que es OTRA pantalla, y el
@@ -244,6 +253,7 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Tutores',
+    salvoTipo: ['ia'],
     icon: ChalkboardTeacher,
     items: [
       { label: 'Tutores', to: '/tutores', detail: 'Quién imparte qué', icon: GraduationCap, roles: ['superadmin', 'admin'], module: 'tutores', permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
@@ -256,7 +266,35 @@ export const NAV_SECTIONS = [
     ],
   },
   {
+    // EL APARTADO DE LOS PROYECTOS IA.
+    //
+    // Angel: «deberias hacer un apartado especifico para los proyectos IA,
+    // estos no estan muy cargados, por ende la cantidad de apartados son
+    // menores». Un proyecto IA es una suscripcion: quien paga, cuanto entra
+    // y por que se va. No hay embudo, ni equipo, ni catalogo.
+    //
+    // Cuatro entradas y se acabo. El resto del menu se esconde solo, porque
+    // sus secciones no aplican a este tipo.
+    label: 'Proyecto IA',
+    icon: Robot,
+    items: [
+      // Lleva al panel de Contabilidad, que en IA YA trae lo suyo: MRR,
+      // activas, altas, bajas y por que se van, ademas de cobrado, gastos y
+      // balance. Antes eran dos pantallas de resumen del mismo proyecto, que
+      // es como se llega a que digan cifras distintas.
+      { label: 'Resumen', to: '/finanzas', detail: 'Lo que entra y lo que se va', icon: ChartBar, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'accounting.view' },
+      { label: 'Cobros', to: '/finanzas/pagos-stripe', detail: 'Lo que ha entrado', icon: CreditCard, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'stripe.view' },
+      { label: 'Suscriptores', to: '/clientes', detail: 'Quien paga', icon: UserCheck, projectType: 'ia', permiso: 'clients.view' },
+      { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
+      { label: 'Conexión', to: '/finanzas/integraciones', detail: 'Stripe y Supabase', icon: PlugsConnected, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'integrations.view' },
+    ],
+  },
+  {
     label: 'Finanzas',
+    // En IA no: sus doce entradas se resumen en las cinco de «Proyecto IA»,
+    // que estan justo encima. Doce apartados para un proyecto que solo
+    // cobra suscripciones es lo que hacia que no se encontrara ninguno.
+    salvoTipo: ['ia'],
     icon: Bank,
     items: [
       { label: 'Dashboard', to: '/finanzas', detail: 'Caja del mes', icon: ChartBar, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'accounting.view' },
@@ -266,8 +304,8 @@ export const NAV_SECTIONS = [
       { label: 'Egresos', to: '/finanzas/egresos', detail: 'Gastos y salidas', icon: TrendDown, roles: ['superadmin', 'admin'], module: 'accounting_expenses', statusTag: 'Pruebas', permiso: 'expenses.view' },
       { label: 'Cuentas por cobrar', to: '/finanzas/por-cobrar', detail: 'Pendiente de cobro', icon: Wallet, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
       { label: 'Cuentas por pagar', to: '/finanzas/por-pagar', detail: 'Pendiente de pago', icon: Receipt, roles: ['superadmin', 'admin'], module: 'accounting_payable', statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
-      { label: 'Comisiones', to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas', permiso: 'commissions.view' },
-      { label: 'Nóminas', to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
+      { label: 'Comisiones', salvoTipo: ['ia'], to: '/finanzas/comisiones', detail: 'Del equipo comercial', icon: HandCoins, roles: ['superadmin', 'admin'], module: 'commissions', statusTag: 'Pruebas', permiso: 'commissions.view' },
+      { label: 'Nóminas', salvoTipo: ['ia'], to: '/finanzas/nominas', detail: 'Pagos al equipo', icon: Calculator, roles: ['superadmin', 'admin'], module: 'payroll', statusTag: 'Pruebas', permiso: 'payroll.view' },
       { label: 'Pendientes de facturar', to: '/finanzas/pendiente-facturar', detail: 'Ventas sin factura', icon: WarningCircle, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', detail: 'Cobros por Stripe', icon: CreditCard, roles: ['superadmin', 'admin'], statusTag: 'Pruebas', permiso: 'stripe.view' },
       { label: 'Facturación', to: '/finanzas/facturas', detail: 'Facturas y series', icon: Receipt, roles: ['superadmin', 'admin', 'soporte', 'gestor'], permiso: 'facturas.emitir', oPermiso: 'facturas.emitir' },
@@ -283,7 +321,12 @@ export const NAV_SECTIONS = [
       { label: 'Reportes', to: '/informes', detail: 'Números descargables', icon: ChartLineUp, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports.view' },
       // Por que no compran: enviados, respondidos y motivos (#170).
       { label: 'Feedback', to: '/informes/feedback', detail: 'Por qué no compran', icon: ChatCircleText, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'feedback.view' },
-      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], projectType: 'ia', permiso: 'reports_ia.view' },
+      // Para cualquier campus (#216): el informe sale de sus leads, ventas y UTM.
+      { label: 'Análisis IA', to: '/informes/ia', detail: 'Lectura automática', icon: Sparkle, roles: ['superadmin', 'admin'], permiso: 'reports_ia.view' },
+      // Preguntarle a los datos (#30): solo en pruebas hasta que haya clave y tope (#22).
+      ...(SOLO_EN_PRUEBAS
+        ? [{ label: 'Pregunta a tus datos', to: '/informes/preguntar', detail: 'Con IA, sin inventar', icon: Sparkle, roles: ['superadmin', 'admin'], module: 'reports', permiso: 'reports_ia.generar' }]
+        : []),
       // El Chat IA (#30) esta APARCADO hasta la fase 5: no se va a usar la API
       // todavia. La pantalla y la ruta se quedan —el trabajo esta hecho y
       // probado—, pero no se ofrece en el menu: enseñar una puerta que no
@@ -324,6 +367,8 @@ export const NAV_SECTIONS = [
     icon: PlugsConnected,
     items: [
       { label: 'MCP', to: '/conexion/mcp', detail: 'Consultar desde Claude', icon: Robot, accesoMcp: true },
+      // #335: los cursos, alumnos y recursos de los Moodle de cada campus.
+      { label: 'Moodle', to: '/conexion/moodle', detail: 'Cursos y alumnos de cada campus', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.view' },
       { label: 'Conectores', to: '/conexion/conectores', detail: 'WordPress, tiendas y APIs', icon: CloudArrowDown, roles: ['superadmin', 'admin'], module: 'connectors', permiso: 'connectors.view' },
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
@@ -492,6 +537,14 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
   // `permiso` también puede ser una lista: basta con uno (Diplomas: ver O emitir).
   const tienePermisoDeLaPantalla = !item.permiso || (typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true));
   if (!tienePermisoDeLaPantalla) return false;
+  // Y al reves: lo que en un tipo de proyecto NO EXISTE.
+  //
+  // Un proyecto IA no tiene tutores, ni comisiones, ni nominas, ni campañas
+  // ni catalogo de veinte cursos: tiene suscriptores y cobros. Enseñarle ocho
+  // apartados vacios es lo que hace que no encuentre los dos que si tienen
+  // algo. Angel, mirando Tarot: «estos no estan muy cargados, por ende la
+  // cantidad de apartados son menores».
+  if (Array.isArray(item.salvoTipo) && item.salvoTipo.includes(projectType)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
@@ -1247,7 +1300,13 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       )}>
         {NAV_SECTIONS.map((section, sIdx) => {
           // Filtrar items que el usuario puede ver
-          const visibleItems = entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab });
+          // Una seccion entera puede no aplicar a un tipo de proyecto (en IA no hay
+          // campañas, ni catalogo, ni tutores).
+          const seccionAplica = !(Array.isArray(section.salvoTipo)
+            && section.salvoTipo.includes(activeProject?.type));
+          const visibleItems = seccionAplica
+            ? entradasDeSeccion(section, { user, can, modules: activeProject?.modules, projectType: activeProject?.type, soloColab })
+            : [];
           if (visibleItems.length === 0) return null;
           const sectionLabel = applyLabel(section.label, activeProject?.sidebar_labels);
           const isOpen = !!openSections[section.label];

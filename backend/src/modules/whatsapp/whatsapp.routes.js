@@ -36,6 +36,8 @@ router.patch('/templates/:id', puede('whatsapp.plantillas'), ctrl.updateTemplate
 router.delete('/templates/:id', puede('whatsapp.plantillas'), ctrl.deleteTemplate);
 
 router.get('/cola', puede('whatsapp.cola'), ctrl.cola);
+// Si cada gestora responde en WhatsApp y lo que apunta (30/10). Para quien ve Reportes.
+router.get('/actividad', puede('reports.view'), ctrl.actividad);
 
 // Aqui vivian /sala y /equipo: el panel que abria la sesion de cada gestora en
 // un navegador remoto. Ese metodo se retiro —contenedores borrados y servicio
@@ -58,6 +60,9 @@ router.get('/usuarios', chat.usuarios);
 router.get('/forma-avisos', puede('whatsapp.forma_avisos'), chat.formaDeAvisos);
 router.delete('/forma-avisos', puede('whatsapp.forma_avisos'), chat.olvidarFormaDeAvisos);
 
+// Voz frente a texto en lo que sale (#128). Como el banco: quien usa o supervisa
+// WhatsApp. Lo que ve lo recorta el servicio (una gestora, solo su fila).
+router.get('/voz-o-texto', usaOSupervisa, chat.vozOTextoCtrl);
 router.get('/banco', usaOSupervisa, chat.banco);
 router.get('/banco/numeros', usaOSupervisa, chat.bancoNumeros);
 

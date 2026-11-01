@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { PencilSimple, X, Check, PhoneCall, WhatsappLogo } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
-import { telefonoParaWhatsapp } from '@/shared/lib/telefono';
+import { telefonoParaWhatsapp, telefonoImposible } from '@/shared/lib/telefono';
 import { toast } from '@/shared/hooks/useToast';
 import InfoField, { inputClass } from './InfoField';
 import Field from '@/shared/components/ui/Field';
@@ -202,6 +202,18 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
                 )}
               </span>
             ) : 'Sin teléfono'}
+            {/* Un número que no puede ser de nadie (#42). En producción hay
+                doce así —«+340», «+5823232»—: el chat se abre, no contesta
+                nadie, y la gestora apunta «no responde». Se avisa, no se
+                bloquea: la regla es de longitud y hay países que no
+                conocemos. */}
+            {telefonoImposible(lead.telefono) && (
+              <p className="mt-1 text-[11px] font-medium text-warning" role="status">
+                {telefonoImposible(lead.telefono) === 'corto'
+                  ? 'Este número tiene muy pocos dígitos para ser real. Compruébalo antes de escribirle: el chat se abre igual y no le llega a nadie.'
+                  : 'Este número tiene más dígitos de los que existen. Compruébalo antes de escribirle.'}
+              </p>
+            )}
           </InfoField>
           <InfoField label="Producto de interés">{lead.producto_nombre || lead.producto_interes || 'Sin producto'}</InfoField>
           <InfoField label="Gestor asignado">{lead.responsable_nombre || 'Sin asignar'}</InfoField>

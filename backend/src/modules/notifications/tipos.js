@@ -68,6 +68,10 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Recordatorio', agrupa: false,
     descripcion: 'Un recordatorio que pusiste ha vencido',
   },
+  ticket_nuevo: {
+    clase: ACCION, etiqueta: 'Ticket de soporte', agrupa: false,
+    descripcion: 'Alguien del equipo ha reportado una averia o pedido algo',
+  },
   dup_review_pending: {
     clase: ACCION, etiqueta: 'Duplicados por revisar', agrupa: true,
     descripcion: 'Hay fichas esperando en la cola de revisión',
@@ -99,6 +103,13 @@ export const TIPOS = {
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',
+  },
+  // El gasto de IA del mes cruza el 80 % o el 100 % del tope (#30, #22). Solo a los
+  // super admin, una vez por umbral y mes. Pide algo —decidir si se sube
+  // IA_TOPE_MENSUAL_USD—, porque al 100 % la IA se para hasta el día 1.
+  ia_tope_gasto: {
+    clase: ACCION, etiqueta: 'Tope de gasto de IA', agrupa: false,
+    descripcion: 'El gasto de IA del mes llega al 80 % o al 100 % del tope; al 100 % la IA se para hasta el día 1',
   },
   task_asignada: {
     clase: ACCION, etiqueta: 'Tarea asignada', agrupa: false,
@@ -132,6 +143,39 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
   },
+  // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
+  curso_pendiente_asignado: {
+    clase: ACCION, etiqueta: 'Curso pendiente asignado', agrupa: false,
+    descripcion: 'Cuando te asignan un curso por crear',
+  },
+  curso_pendiente_vence: {
+    clase: ACCION, etiqueta: 'Curso pendiente a punto de vencer', agrupa: false,
+    descripcion: 'Faltan 3 días para la fecha comprometida de un curso tuyo',
+  },
+  curso_pendiente_retrasado: {
+    clase: ACCION, etiqueta: 'Curso pendiente retrasado', agrupa: false,
+    descripcion: 'La fecha comprometida ha pasado y el curso no está publicado',
+  },
+  curso_pendiente_sin_tutora: {
+    clase: ACCION, etiqueta: 'Curso pendiente sin tutora', agrupa: false,
+    descripcion: 'Un curso lleva más de 48 horas sin tutora asignada',
+  },
+  curso_pendiente_sin_habilitar: {
+    clase: ACCION, etiqueta: 'Curso publicado con alumnas sin habilitar', agrupa: false,
+    descripcion: 'Un curso publicado lleva más de 48 horas con alumnas sin habilitar',
+  },
+  curso_pendiente_alumna: {
+    clase: AVISO, etiqueta: 'Alumna nueva en un curso pendiente', agrupa: false,
+    descripcion: 'Se suma otra alumna a un curso pendiente tuyo',
+  },
+  curso_pendiente_semana: {
+    clase: AVISO, etiqueta: 'Resumen semanal de cursos pendientes', agrupa: false,
+    descripcion: 'Cada lunes, por campus: cursos abiertos, retrasados, alumnas esperando y carga por tutora (super admin)',
+  },
+  curso_pendiente_fecha_movida: {
+    clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
+    descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.
@@ -152,6 +196,12 @@ export const TIPOS = {
   mcp_conexion_nueva: {
     clase: ACCION, etiqueta: 'Claude pide conectarse', agrupa: false,
     descripcion: 'Un Claude se ha conectado con tu URL del MCP y espera a que lo autorices',
+  },
+  // Moodle (#335): el de un campus ha dejado de responder o su token ya no vale. Lo arregla un
+  // super admin (nuevo token en Conexión → Moodle, o revisar el servidor del campus).
+  moodle_campus_caido: {
+    clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
+    descripcion: 'El Moodle de un campus no responde o su token ya no vale',
   },
   // MCP (Diego, 22/10): tu Claude consulta con la URL sola, conectado como antes
   // de la #326, y el CRM no le da datos. Hay que conectarlo una vez. Como mucho

@@ -11,8 +11,8 @@ import { TABS, SIN_SUBMENU } from '@/modules/accounting/pages/FinanzasLayout';
 
   Cada entrada del submenú de Finanzas tiene que seguir teniendo su pantalla en
   App.jsx, y desde Ventas —donde ya no sale el submenú— seguir a un clic: en el
-  menú lateral o, la que no está en él («Análisis de ventas»), en la cabecera de
-  Ventas. Las rutas salen del propio App.jsx, como en `menuSinRutasRotas`.
+  menú lateral o, las que no están en él («Análisis de ventas» y «Sin
+  formación», #41), en la cabecera de Ventas. Las rutas salen del propio App.jsx, como en `menuSinRutasRotas`.
 */
 
 function buscarRoutes(el) {
@@ -53,9 +53,9 @@ describe('el submenú de Finanzas, quitado de Ventas sin perder nada', () => {
   });
 
   it('desde Ventas, cada entrada sigue a un clic: en el menú lateral o, la que no está, en la cabecera', () => {
-    // La de la cabecera la comprueba ventasCabecera79.test.jsx pintando la
-    // pantalla: aquí solo se fija cuál es, para que no se cuele otra.
+    // Las de la cabecera las comprueba ventasCabecera79.test.jsx pintando la
+    // pantalla: aquí solo se fija cuáles son, para que no se cuele otra.
     const fueraDelMenu = TABS.filter((t) => !enElMenu.has(t.to)).map((t) => t.to);
-    expect(fueraDelMenu).toEqual(['/finanzas/ventas-analisis']);
+    expect(fueraDelMenu).toEqual(['/finanzas/ventas-analisis', '/finanzas/ventas-sin-formacion']);
   });
 });

@@ -12,7 +12,8 @@ import { describe, it, expect } from 'vitest';
 
 const { NAV_SECTIONS, canSeeItem, pasaPermisoDeRoles } = await import('@/shared/components/layout/Sidebar');
 
-const entrada = (to) => NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.to === to);
+// Hay una entrada solo-IA con la misma ruta (projectType: 'ia'); aquí se prueba la del CRM normal.
+const entrada = (to) => NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.to === to && !i.projectType);
 // Como el `can` de verdad para una gestora: el mapa de Roles no tiene `factura_manager`.
 const can = (lista) => (k) => lista.includes(k);
 const seVe = (item, roles, user, permisos = []) =>

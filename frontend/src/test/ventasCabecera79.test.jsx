@@ -6,7 +6,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
   #79 punto 3: la cabecera de Ventas, pintada de verdad.
 
   Sin el submenú de Finanzas, «Análisis de ventas» se alcanza desde el botón
-  «Análisis» de la cabecera de Ventas. Y el menú «Nueva venta», ahora en la
+  «Análisis» de la cabecera de Ventas, y «Sin formación» (#41) desde el suyo. Y el menú «Nueva venta», ahora en la
   cabecera, se cierra al pulsar fuera (en la cabecera, una capa `fixed` quedaba encerrada por el
   `backdrop-blur` del Topbar y el resto de la pantalla no lo cerraba).
 */
@@ -32,6 +32,7 @@ function abrir(ruta) {
         <Route path="/finanzas/ventas" element={<IncomePage title="Ventas" />} />
         <Route path="/finanzas/ingresos" element={<IncomePage />} />
         <Route path="/finanzas/ventas-analisis" element={<p>pantalla de análisis</p>} />
+        <Route path="/finanzas/ventas-sin-formacion" element={<p>ventas sin formación</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -42,6 +43,12 @@ describe('la cabecera de Ventas (#79 punto 3)', () => {
     abrir('/finanzas/ventas');
     fireEvent.click(screen.getByRole('button', { name: 'Análisis' }));
     expect(screen.getByText('pantalla de análisis')).toBeInTheDocument();
+  });
+
+  it('en Ventas se ve «Sin formación» y lleva a esa pantalla (#41)', () => {
+    abrir('/finanzas/ventas');
+    fireEvent.click(screen.getByRole('button', { name: 'Sin formación' }));
+    expect(screen.getByText('ventas sin formación')).toBeInTheDocument();
   });
 
   it('el menú «Nueva venta» se cierra al pulsar fuera', () => {
