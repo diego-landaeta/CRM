@@ -352,6 +352,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | (anónima) | `GET /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
 | (anónima) | `POST /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
+| (anónima) | `POST /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
+| (anónima) | `DELETE /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
 | archivoLocal | `GET /api/facturas-colaborador/archivo-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | justificanteLocal | `GET /api/facturas-colaborador/justificante-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | (anónima) | `GET /api/facturas-colaborador/mias` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
