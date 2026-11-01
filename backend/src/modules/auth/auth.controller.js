@@ -3,9 +3,11 @@ import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import bcrypt from 'bcrypt';
 import { query } from '../../shared/config/db.js';
-import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema } from './auth.validation.js';
+import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema, olvidoSchema } from './auth.validation.js';
 import * as userService from '../users/user.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
+import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap, resolveUserView } from '../permissions/permissions.service.js';
 
 function getClientIp(req) {
@@ -222,4 +224,58 @@ export async function updateMyEmail(req, res, next) {
     }
     res.json({ success: true, data: { email: r.email, cambiado: r.cambiado, hayQueVolverAEntrar: r.cambiado } });
   } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/auth/forgot-password — «he olvidado la contraseña» (#37).
+ *
+ * LA RESPUESTA ES SIEMPRE LA MISMA, exista el correo o no. Es el punto del
+ * ticket que no se puede negociar: «que no diga si el correo existe o no — si
+ * lo dice, sirve para averiguar quien trabaja aqui».
+ *
+ * Eso obliga a mas de lo que parece:
+ *
+ *   - mismo cuerpo y mismo 200 en los dos casos;
+ *   - el envio del correo va SIN esperar y su fallo no toca la respuesta, que
+ *     si no, tardar mas o dar error ya distingue un correo real de uno que no
+ *     lo es. Un cronometro es tan buen delator como un 404.
+ */
+export async function forgotPassword(req, res, next) {
+  try {
+    const parsed = olvidoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+
+    const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
+
+    // TODO EL TRABAJO VA SIN ESPERAR, no solo el correo. Con un correo que
+    // existe hay que buscar, guardar el token y apuntar el registro; con uno
+    // que no, nada de eso. Si se esperara aqui, la diferencia de tiempo
+    // delataria la cuenta igual que lo haria un 404: un cronometro basta.
+    // La respuesta sale a la vez en los dos casos y lo demas pasa detras.
+    authService.pedirRecuperacion(parsed.data.email, baseUrl)
+      .then((pedido) => {
+        if (!pedido) return null;
+        return sendPasswordResetEmail({
+          nombre: pedido.user.nombre,
+          email: pedido.user.email,
+          setPasswordToken: pedido.rawToken,
+          baseUrl: pedido.baseUrl,
+        }).then((r) => {
+          if (r.sent) logger.info({ userId: pedido.user.id }, 'Correo de recuperacion enviado');
+          else logger.warn({ userId: pedido.user.id, reason: r.reason }, 'Correo de recuperacion NO enviado');
+        });
+      })
+      .catch((err) => logger.error({ err: err.message }, 'Recuperacion de contraseña: error'));
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Si ese correo tiene una cuenta activa, le llegara un enlace para poner una contrasena nueva.',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 }

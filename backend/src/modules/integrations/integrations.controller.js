@@ -4,10 +4,29 @@ import { encrypt, decrypt, maskSecret } from '../../shared/utils/crypto.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
+import { urlDeStripe } from '../../shared/config/stripeApi.js';
+
+/*
+  SUPABASE, EL TERCERO (#44).
+
+  Los proyectos IA guardan sus propios datos en Supabase --usuarios,
+  suscripciones, consumo-- y de ahi se puede leer lo que la app sabe de cada
+  cliente, que es mas de lo que dice Stripe.
+
+  Se conecta con un ACCESS TOKEN de la Management API. Lo que NO sirve es
+  sacar de ahi las claves de otros servicios: los secrets de un proyecto
+  vuelven como SHA-256 de 64 caracteres, no como su valor. Comprobado contra
+  Tarot IA: los 19, incluido `SUPABASE_URL`, que es publica. Queda escrito para
+  que nadie lo intente otra vez.
+
+  La referencia del proyecto (`project_ref`) va en `config_public`: no es
+  secreta --sale en la URL de la propia app-- y hace falta en cada llamada.
+*/
+
 
 // moodle: el campus del proyecto, para las consultas de alumnos (#187). La
 // dirección va en config_public.url y el token, cifrado, como api_key.
-const SUPPORTED = ['stripe', 'brevo', 'moodle'];
+const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle'];
 
 // Sólo aceptamos los providers conocidos. Cada provider tiene su shape de
 // config_public propia, pero validamos lo mínimo aquí (el detalle de cada
@@ -165,6 +184,7 @@ export async function test(req, res, next) {
     try {
       if (provider === 'stripe') testResult = await testStripe(apiKey);
       else if (provider === 'brevo') testResult = await testBrevo(apiKey);
+      else if (provider === 'supabase') testResult = await testSupabase(apiKey, row.config_public?.project_ref);
       else if (provider === 'moodle') testResult = await testMoodle(apiKey, row.config_public?.url, undefined, { consultas: row.config_public?.consultas === true });
     } catch (e) {
       testResult = { ok: false, message: e.message };
@@ -190,9 +210,24 @@ export async function remove(req, res, next) {
 
 // ─── Test helpers ────────────────────────────────────────────────────────
 
+/**
+ * Probar una clave de Stripe.
+ *
+ * Se prueba con `/v1/balance`, que es de solo lectura y no cuesta nada. Pero
+ * una CLAVE RESTRINGIDA —las `rk_`, las que hay que crear cuando no se tiene
+ * la secreta original— puede no llevar permiso de balance y responder 403
+ * aunque sirva perfectamente para leer cobros.
+ *
+ * Con el 403 como error, la pantalla decía «Stripe HTTP 403» y la clave
+ * parecía inválida: cerraba justo el camino recomendado, que es dar al CRM una
+ * clave de solo lectura en vez de la secreta de la cuenta.
+ *
+ * Así que ante un 403 se vuelve a preguntar por lo que el CRM de verdad
+ * necesita —los cobros— y, si eso responde, la clave vale. Se dice que es
+ * limitada, porque importa saberlo: con ella no se puede leer el saldo.
+ */
 async function testStripe(apiKey) {
-  // /v1/balance es read-only y siempre disponible. Devuelve 401 si la key es mala.
-  const r = await fetch('https://api.stripe.com/v1/balance', {
+  const r = await fetch(urlDeStripe('/v1/balance'), {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   if (r.ok) {
@@ -205,7 +240,58 @@ async function testStripe(apiKey) {
     };
   }
   if (r.status === 401) return { ok: false, message: 'API key inválida (401 Unauthorized)' };
+
+  if (r.status === 403) {
+    // Lo que el CRM lee de verdad. `limit=1` para no traerse nada.
+    const c = await fetch(urlDeStripe('/v1/charges?limit=1'), {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (c.ok) {
+      const data = await c.json().catch(() => null);
+      const livemode = data?.data?.[0]?.livemode === true;
+      return {
+        ok: true,
+        limitada: true,
+        livemode,
+        message: 'Conexión OK con una clave restringida: lee los cobros, pero no el saldo. '
+               + 'Es suficiente para el CRM.',
+      };
+    }
+    return {
+      ok: false,
+      message: 'La clave no tiene permiso ni para el saldo ni para los cobros. '
+             + 'Si es restringida, dale lectura de «Charges».',
+    };
+  }
   return { ok: false, message: `Stripe HTTP ${r.status}` };
+}
+
+/**
+ * Probar el access token de Supabase.
+ *
+ * Se pide la lista de proyectos, que es la llamada mas inocua que hay, y se
+ * comprueba ademas que el `project_ref` guardado esta entre los que el token
+ * alcanza. Un token valido de OTRA cuenta daria 200 y no serviria de nada: sin
+ * esa segunda comprobacion la pantalla diria «conectado» y no traeria un dato.
+ */
+async function testSupabase(accessToken, projectRef) {
+  const r = await fetch('https://api.supabase.com/v1/projects', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (r.status === 401) return { ok: false, message: 'Access token invalido (401 Unauthorized)' };
+  if (!r.ok) return { ok: false, message: `Supabase HTTP ${r.status}` };
+  const proyectos = await r.json().catch(() => []);
+  if (!projectRef) {
+    return { ok: false, message: `Token valido (${proyectos.length} proyectos), pero falta la referencia del proyecto.` };
+  }
+  const suyo = proyectos.find((x) => x.id === projectRef);
+  if (!suyo) {
+    return {
+      ok: false,
+      message: `El token no alcanza el proyecto ${projectRef}. Alcanza: ${proyectos.map((x) => x.name).join(', ') || 'ninguno'}.`,
+    };
+  }
+  return { ok: true, message: `Conexion OK con «${suyo.name}» (${suyo.region}).`, projectRef };
 }
 
 async function testBrevo(apiKey) {
@@ -222,6 +308,10 @@ async function testBrevo(apiKey) {
   return { ok: false, message: `Brevo HTTP ${r.status}` };
 }
 
+// Para las pruebas. `testStripe` es interna —no es un endpoint— y lo que hay
+// que fijar es su comportamiento ante el 403 de una clave restringida, que es
+// justo lo que impedia conectar los proyectos de IA.
+export { testStripe as testStripeParaPruebas };
 // Moodle: core_webservice_get_site_info es de solo lectura y es la que valida
 // el token. Además dice qué funciones tiene el servicio: si falta la de buscar
 // usuarios, el token «vale» pero no sirve para comprobar a los tutores.

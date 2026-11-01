@@ -1087,7 +1087,7 @@ export default function TutoresPage() {
               <div>
                 <Field label="Correo" disabled={!esSuperadmin} htmlFor="pago-email"
                   hint={esSuperadmin
-                    ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior y se cierran sus sesiones.'
+                    ? 'Es con lo que entra al CRM: al cambiarlo, deja de poder entrar con el anterior; una sesión que ya tenga abierta puede seguir hasta 8 horas.'
                     : 'Solo un superadmin puede cambiar el correo.'}>
                   <input autoComplete="off" id="pago-email" name="email" type="email" defaultValue={elegido.email || ''}
                     readOnly={!esSuperadmin} disabled={!esSuperadmin}

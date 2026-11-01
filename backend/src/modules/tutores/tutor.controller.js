@@ -13,6 +13,10 @@ import {
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import {
+  misCampus, exigirTutorDeMisCampus, exigirFormacionMia, exigirProyectoMio, exigirColaboracionMia,
+  exigirComisionesMias, recortarProyectos,
+} from './tutor.acceso.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 
@@ -41,19 +45,9 @@ async function exigirGestion(req) {
   }
 }
 
-/**
- * La ficha de un tutor, solo si comparte algún campus con quien la pide (#245).
- * Gestionar colaboraciones no basta: Mireia (CEDIA) podía abrir la de un
- * profesor de ICTESS cambiando el id. Se contesta «no encontrado», como si no
- * existiera, para no confirmar que ese id es un tutor de otra empresa.
- */
-async function exigirTutorDeMisCampus(req, tutorId) {
-  if (req.user.userId === tutorId || veTodoElCrm(req.user)) return;
-  const mios = await campusDeLaPersona(req.user.userId);
-  if (!(await model.tieneAlgunCampus(tutorId, mios))) {
-    throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
-  }
-}
+// Las guardas de «solo lo de tus campus» (#245) viven en `tutor.acceso.js`: la ficha de un
+// tutor, una formación, una colaboración, unas comisiones. `exigirGestion` dice QUIÉN gestiona;
+// ellas dicen DE QUÉ CAMPUS.
 
 function valida(schema, datos) {
   const r = schema.safeParse(datos);
@@ -181,6 +175,8 @@ export async function colaboraciones(req, res, next) {
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
       productId: req.query.productId ? parseInt(req.query.productId) : null,
       soloActivas: req.query.activas === '1',
+      // Quien gestiona ve las de SUS campus; el tutor, las suyas (ya filtradas por su id).
+      projectIds: esTutor ? null : await misCampus(req),
     })});
   } catch (err) { next(err); }
 }
@@ -228,6 +224,12 @@ export async function crearColaboracion(req, res, next) {
       return res.status(201).json({ success: true, data: { ...colab, campusAnadido: campus } });
     }
 
+    // Camino normal: la formación es del campus del tutor. Y ese campus, y ese tutor, tienen
+    // que ser de quien lo pide: sin esto, un admin de otra empresa le abría una colaboración
+    // —un porcentaje de comisión— a un tutor ajeno.
+    await exigirProyectoMio(req, suyo.projectId);
+    await exigirTutorDeMisCampus(req, d.tutorId);
+
     // Dos tramos del mismo tutor y formacion no pueden solaparse: no habria
     // forma de saber que porcentaje aplicar a un pago de esas fechas.
     const choques = await model.haySolape(d);
@@ -254,8 +256,7 @@ export async function editarColaboracion(req, res, next) {
     const id = parseInt(req.params.id);
     const d = valida(editarColaboracionSchema, req.body);
 
-    const actual = await model.colaboracionPorId(id);
-    if (!actual) throw new AppError('Colaboracion no encontrada', 404, 'NOT_FOUND');
+    const actual = await exigirColaboracionMia(req, id);
 
     // Si se mueven las fechas, hay que volver a comprobar el solape con las
     // demas de ese tutor en esa formacion —excluyendo esta, que si no choca
@@ -302,7 +303,9 @@ export async function cambiarCobraDesde(req, res, next) {
 export async function borrarColaboracion(req, res, next) {
   try {
     await exigirGestion(req);
-    const r = await model.borrarColaboracion(parseInt(req.params.id));
+    const id = parseInt(req.params.id);
+    await exigirColaboracionMia(req, id);
+    const r = await model.borrarColaboracion(id);
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
@@ -365,11 +368,15 @@ export async function calcular(req, res, next) {
   try {
     await exigirGestion(req);
     const d = valida(calcularSchema, req.body || {});
+    // Recortado a mis campus: «calcular» sin campus era calcular los de todas las empresas.
+    const ambito = await recortarProyectos(req, {
+      projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
+    });
     const r = await model.reconciliar({
       desde: d.desde || null,
       hasta: d.hasta || null,
-      projectId: d.projectId || null,
-      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
+      ...ambito,
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -386,7 +393,9 @@ export async function listarComisiones(req, res, next) {
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
       estado: model.ESTADOS_COMISION.includes(req.query.estado) ? req.query.estado : null,
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // El ámbito de siempre (campus, empresa o todos) recortado a los campus de quien pide:
+      // antes, `?projectId=` cualquiera enseñaba las comisiones de otra empresa.
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -419,8 +428,13 @@ export async function liquidar(req, res, next) {
     if (!d.ids?.length && !(d.periodo && d.tutorId)) {
       throw new AppError('Dime qué liquidar: unas líneas concretas, o un tutor y un mes.', 400, 'NADA_QUE_LIQUIDAR');
     }
+    // Unas líneas concretas: todas de mis campus. Un tutor y un mes: un tutor mío, y solo sus
+    // líneas de mis campus (si da clase en varias empresas, no se le paga entero).
+    if (d.ids?.length) await exigirComisionesMias(req, d.ids);
+    if (d.tutorId) await exigirTutorDeMisCampus(req, d.tutorId);
     const r = await model.liquidar({
       ids: d.ids || null, periodo: d.periodo || null, tutorId: d.tutorId || null, userId: req.user.userId,
+      projectIds: await misCampus(req),
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -432,6 +446,7 @@ export async function revertirComision(req, res, next) {
     if (!(await tienePermiso(req, 'tutores.liquidar'))) {
       throw new AppError('Solo un administrador revierte una comisión', 403, 'FORBIDDEN');
     }
+    await exigirComisionesMias(req, [parseInt(req.params.id)]);
     const c = await model.revertirComision(parseInt(req.params.id), {
       userId: req.user.userId, motivo: String(req.body?.motivo || '').slice(0, 200),
     });
@@ -468,6 +483,7 @@ export async function marcarBusqueda(req, res, next) {
     await exigirGestion(req);
     const productId = parseInt(req.params.productId, 10);
     if (!Number.isInteger(productId)) throw new AppError('Formacion no valida', 400, 'VALIDATION_ERROR');
+    await exigirFormacionMia(req, productId);
     const d = valida(busquedaDeTutorSchema, req.body || {});
     const b = await model.marcarBusquedaDeTutor({
       productId,
@@ -519,6 +535,7 @@ export async function cursoDetalle(req, res, next) {
       }
     } else {
       await exigirGestion(req);
+      await exigirFormacionMia(req, productId);
     }
     const c = await model.cursoDetalle(productId);
     if (!c) throw new AppError('Curso no encontrado', 404, 'NOT_FOUND');
@@ -542,6 +559,7 @@ export async function brochureDelCurso(req, res, next) {
       }
     } else {
       await exigirGestion(req);
+      await exigirFormacionMia(req, productId);
     }
     const d = await model.brochureDelCurso(productId);
     if (!d) throw new AppError('Este curso todavía no tiene brochure subido', 404, 'SIN_BROCHURE');
@@ -588,6 +606,7 @@ export async function retirarTutor(req, res, next) {
   try {
     await exigirGestion(req);
     const id = parseInt(req.params.id);
+    await exigirTutorDeMisCampus(req, id);
     const r = await model.retirarTutor(id);
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
@@ -598,7 +617,9 @@ export async function retirarTutor(req, res, next) {
 export async function reactivarTutor(req, res, next) {
   try {
     await exigirGestion(req);
-    const r = await model.reactivarTutor(parseInt(req.params.id));
+    const id = parseInt(req.params.id);
+    await exigirTutorDeMisCampus(req, id);
+    const r = await model.reactivarTutor(id);
     if (!r) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -618,8 +639,11 @@ function periodoDe(req) {
  */
 export async function previoDelAviso(req, res, next) {
   try {
+    // Antes bastaba con estar autenticado: cualquiera veía lo que se le debe a un tutor.
+    await exigirGestion(req);
     const periodo = periodoDe(req);
     if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    await exigirTutorDeMisCampus(req, Number(req.query.tutorId));
     const datos = await previsualizar({ tutorId: Number(req.query.tutorId), periodo });
     res.json({ success: true, data: datos });
   } catch (e) { next(e); }
@@ -628,8 +652,11 @@ export async function previoDelAviso(req, res, next) {
 /** POST /api/tutores/comisiones/avisar — lo manda y anota cuando y quien. */
 export async function avisarTutor(req, res, next) {
   try {
+    // Antes bastaba con estar autenticado: cualquiera mandaba el correo de facturación a un tutor.
+    await exigirGestion(req);
     const periodo = periodoDe(req);
     if (!periodo) throw new AppError('Falta el mes (AAAA-MM).', 400, 'SIN_PERIODO');
+    await exigirTutorDeMisCampus(req, Number(req.body?.tutorId));
     const r = await avisar({
       tutorId: Number(req.body?.tutorId),
       periodo,
@@ -653,6 +680,7 @@ export async function avisarTutor(req, res, next) {
 export async function cambiarEstadoComision(req, res, next) {
   try {
     await exigirGestion(req);
+    await exigirComisionesMias(req, [Number(req.params.id)]);
     const r = await model.cambiarEstadoComision(
       Number(req.params.id), String(req.body?.estado || ''), req.user?.userId);
     res.json({ success: true, data: r });

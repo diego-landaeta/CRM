@@ -2,6 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import CorteDeFacturacion from '../components/CorteDeFacturacion';
+import ProyectosIAConectados from '../components/ProyectosIAConectados';
+import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
+import SupabaseCard from '../components/SupabaseCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -9,7 +13,7 @@ import {
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
-type Provider = 'stripe' | 'brevo' | 'moodle';
+type Provider = 'stripe' | 'brevo' | 'supabase' | 'moodle';
 interface Integration {
   id?: number;
   project_id?: number;
@@ -65,8 +69,9 @@ function fmt(d: string | null): string {
 }
 
 export default function IntegrationsPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string; type?: string } };
   const pid = activeProject?.id;
+  const esIA = activeProject?.type === 'ia';
 
   return (
     <div className="space-y-5 pb-8">
@@ -77,7 +82,7 @@ export default function IntegrationsPage() {
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
           </span>
         ) as unknown as string}
-        subtitle={`Configura conexiones externas (Stripe, Brevo, el campus Moodle) para ${activeProject?.nombre || 'el proyecto activo'}.`}
+        subtitle={`Configura conexiones externas (Stripe, Brevo, el campus Moodle${esIA ? ', Supabase' : ''}) para ${activeProject?.nombre || 'el proyecto activo'}.`}
       />
 
       <div className="bg-info-soft border border-info/30 rounded-lg p-4 text-sm space-y-2">
@@ -89,9 +94,14 @@ export default function IntegrationsPage() {
           <p><strong>2) Probar conexión</strong> — el CRM hace 1 request a la API del proveedor para validar la key. Si responde 200, queda <em>Conectado</em>.</p>
           <p><strong>3) Uso real:</strong></p>
           <ul className="list-disc list-inside pl-2 space-y-0.5">
-            <li><strong>Stripe:</strong> en proyectos IA, el dashboard hace live fetch de MRR / suscripciones / cobros fallidos. El webhook de pagos para crear conversions automáticas <em>está en desarrollo</em>.</li>
+            <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. En proyectos IA, además, el dashboard lee MRR, suscripciones y cobros fallidos en vivo. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
             <li><strong>Campus (Moodle):</strong> las consultas de alumnos. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
+            {esIA && (
+              <li><strong>Supabase:</strong> la base de la propia app IA. De ahí salen sus usuarios y
+                suscripciones, con más detalle del que da Stripe — quién compró, qué plan y desde qué
+                país. Se trae a mano, con «Traer al CRM», y no duplica lo que ya esté.</li>
+            )}
           </ul>
           <p className="text-warning-soft-foreground pt-1">
             <strong>⚠ Importante:</strong> cada proyecto tiene sus propias credenciales. Cambiá el proyecto en el sidebar antes de configurar para no mezclar cuentas.
@@ -99,13 +109,21 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
+      {/* La lista de proyectos IA va FUERA del `pid`: sirve precisamente
+          cuando todavia no se ha elegido ninguno, para saber por cual empezar.
+          Se pinta sola solo si hay proyectos IA. */}
+      <ProyectosIAConectados />
+
       {!pid ? (
         <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground">
-          Selecciona un proyecto en el sidebar para configurar sus integraciones.
+          Selecciona un proyecto en el sidebar —o pulsa «Configurar» arriba— para configurar sus integraciones.
         </div>
       ) : (
         <div className="space-y-5">
           <StripeCard projectId={pid} />
+          {/* Supabase solo en los proyectos IA: es donde vive su app. En un
+              proyecto CRM la tarjeta no diría nada. */}
+          {esIA && <SupabaseCard projectId={pid} />}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -211,7 +229,7 @@ function StripeCard({ projectId }: { projectId: number }) {
         </div>
         <div className="flex-1">
           <h3 className="font-semibold text-base">Stripe</h3>
-          <p className="text-xs text-muted-foreground">Importar payouts y comisiones de pasarela como egresos automáticos.</p>
+          <p className="text-xs text-muted-foreground">Los cobros entran <strong>por consulta</strong>: con el access token guardado, el CRM le pregunta a Stripe cada cinco minutos. Stripe no tiene que avisar de nada.</p>
         </div>
         <StatusPill data={data} />
       </div>
@@ -219,7 +237,7 @@ function StripeCard({ projectId }: { projectId: number }) {
       <div className="p-5 space-y-4">
         <button onClick={() => setShowHelp((v) => !v)}
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-          <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo obtener mi API key de Stripe'}
+          <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo sacar el access token de Stripe'}
         </button>
         {showHelp && (
           <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-3">
@@ -233,12 +251,13 @@ function StripeCard({ projectId }: { projectId: number }) {
             </div>
 
             <div>
-              <p className="font-semibold mb-1">🔑 Paso 1 — Obtener tu API key</p>
+              <p className="font-semibold mb-1">🔑 Paso 1 — Sacar el access token</p>
               <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
                 <li>Entra a <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a></li>
-                <li><strong>Pruebas:</strong> arriba a la izquierda activa <strong>"Modo prueba"</strong> y copia la "Secret key" (empieza por <code className="px-1 rounded bg-card">sk_test_…</code>).</li>
-                <li><strong>Producción:</strong> desactiva modo prueba y copia la "Secret key live" (<code className="px-1 rounded bg-card">sk_live_…</code>). <span className="text-destructive font-semibold">Acceso real a movimientos de dinero.</span></li>
-                <li>Pégala abajo en <em>API Key</em>, pulsa <strong>Guardar</strong> y luego <strong>Probar conexión</strong>.</li>
+                <li><strong>Lo recomendado:</strong> «Create restricted key». Marca <strong>Read</strong> en <em>Charges</em> y en <em>Balance</em>, y deja todo lo demás en <em>None</em>. Sale una <code className="px-1 rounded bg-card">rk_live_…</code>.</li>
+                <li><strong>Por qué restringida:</strong> el CRM solo lee. Con la <code className="px-1 rounded bg-card">sk_live_…</code> le das además permiso para cobrar, devolver y transferir, que no usa nunca. <span className="text-destructive font-semibold">Si se filtra, esa es toda la diferencia.</span></li>
+                <li><strong>Para probar:</strong> activa «Modo prueba» arriba a la izquierda y usa la clave de test (<code className="px-1 rounded bg-card">sk_test_…</code>). Ahí no hay dinero de verdad.</li>
+                <li>Pégala abajo en <em>Access token</em>, pulsa <strong>Guardar</strong> y luego <strong>Probar conexión</strong>.</li>
               </ol>
             </div>
 
@@ -271,7 +290,8 @@ function StripeCard({ projectId }: { projectId: number }) {
             <div>
               <p className="font-semibold mb-1">🔄 Paso 3 — Cómo se cruzan los datos con el CRM</p>
               <ul className="list-disc list-inside space-y-0.5 pl-1 text-muted-foreground">
-                <li>Stripe envía evento → CRM verifica firma con el Signing Secret.</li>
+                <li><strong>Por consulta (lo normal):</strong> cada cinco minutos el CRM pide a Stripe los cargos nuevos con el access token. No hace falta nada más.</li>
+                <li><strong>Por webhook (opcional):</strong> Stripe envía el evento → el CRM verifica la firma con el Signing Secret. Solo ahorra la espera.</li>
                 <li>Busca el cliente por email en la tabla <code className="px-1 rounded bg-card">leads</code> del proyecto.</li>
                 <li>Si existe → crea/actualiza <code className="px-1 rounded bg-card">conversions</code> + <code className="px-1 rounded bg-card">conversion_payments</code>.</li>
                 <li>Si no existe → registra el pago como huérfano para que la gestora lo asocie manualmente.</li>
@@ -284,16 +304,33 @@ function StripeCard({ projectId }: { projectId: number }) {
           </div>
         )}
 
+        {/* El corte va ANTES del campo, no debajo: guardar la clave es lo que
+            arranca el sondeo, asi que el aviso tiene que leerse antes de
+            pegarla, no despues. */}
+        <CorteDeFacturacion projectId={projectId} />
+
         <div>
           <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-            API Key {data?.has_secret && <span className="font-normal text-muted-foreground/80 ml-1">(actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code> — deja vacío para no cambiar)</span>}
+            Access token {data?.has_secret && <span className="font-normal text-muted-foreground/80 ml-1">(actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code> — deja vacío para no cambiar)</span>}
           </label>
+          {/* CLAVE RESTRINGIDA DE SOLO LECTURA, NO LA SECRETA.
+
+              El CRM solo LEE de Stripe: consulta el saldo para probar la
+              conexion y lista cargos para el sondeo. Con una `sk_live_` se le
+              esta dando ademas permiso para mover dinero --cobrar, devolver,
+              transferir-- que no usa nunca. Si esa clave se filtra, la
+              diferencia entre las dos es toda la diferencia. */}
+          <p className="text-[11px] text-muted-foreground mb-1.5">
+            Usa una <strong>clave restringida de solo lectura</strong> (<code className="px-1 rounded bg-muted">rk_…</code>)
+            con permiso de lectura en <em>Charges</em> y <em>Balance</em>. El CRM no cobra ni
+            devuelve nada: con la clave secreta le estarías dando permisos que no usa.
+          </p>
           <div className="relative">
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={data?.has_secret ? 'Sin cambios' : 'sk_test_... o sk_live_...'}
+              placeholder={data?.has_secret ? 'Sin cambios' : 'rk_live_… (recomendado) o sk_test_…'}
               className="w-full h-10 pl-3 pr-10 rounded-md border border-border bg-card text-sm font-mono"
             />
             <button type="button" onClick={() => setShowKey((v) => !v)}
@@ -303,7 +340,21 @@ function StripeCard({ projectId }: { projectId: number }) {
           </div>
         </div>
 
-        <div>
+        {/* EL WEBHOOK ES OPCIONAL, Y CONVIENE QUE LO PAREZCA.
+
+            Se pedia como si fuera un paso obligatorio del alta, y no lo es:
+            los cobros entran por el sondeo con solo el access token. El
+            webhook unicamente ahorra la espera de cinco minutos.
+
+            Importa para los proyectos IA, que se conectan SIN webhook --no hay
+            secretos de firma--. Presentarlo como obligatorio dejaba el alta a
+            medias en apariencia, y empujaba a publicar un endpoint que sin
+            secreto se rechaza igual. Va plegado. */}
+        <details className="rounded-md border border-border bg-muted/20 p-3">
+          <summary className="text-[11px] font-semibold cursor-pointer select-none">
+            Webhook <span className="font-normal text-muted-foreground">— opcional, solo para no esperar los cinco minutos</span>
+          </summary>
+          <div className="pt-3">
           <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
             Secreto de firma del webhook
           </label>
@@ -325,9 +376,15 @@ function StripeCard({ projectId }: { projectId: number }) {
           <code className="block w-full px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
             {urlWebhook(projectId)}
           </code>
-        </div>
+          </div>
+        </details>
 
         <TestStatus data={data} />
+
+        {/* Como va el cron. «Probar conexion» dice que la clave sirve AHORA;
+            esto dice si los cobros estan entrando de verdad, que es otra
+            pregunta y la que importa cuando no hay webhook. */}
+        <EstadoDeLaSincronizacion projectId={projectId} />
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           <button onClick={save} disabled={saving}
@@ -335,7 +392,7 @@ function StripeCard({ projectId }: { projectId: number }) {
             <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar'}
           </button>
           <button onClick={test} disabled={testing || !data?.has_secret}
-            title={!data?.has_secret ? 'Guarda primero la API key' : 'Probar conexión con Stripe'}
+            title={!data?.has_secret ? 'Guarda primero el access token' : 'Probar conexión con Stripe'}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
             <PlugsConnected size={14} weight="bold" /> {testing ? 'Probando…' : 'Probar conexión'}
           </button>
