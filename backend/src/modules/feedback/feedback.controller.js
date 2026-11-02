@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
-import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import * as service from './feedback.service.js';
 import { CLAVES, DISPARADORES, MOTIVOS } from './motivos.js';
 import { preguntasPara } from './preguntas.js';
@@ -25,19 +25,39 @@ async function recorteDe(req) {
   const esJefe = rol === 'admin' || rol === 'superadmin' || rol === 'soporte';
   return {
     projectIds,
-    gestoraId: esJefe ? (Number(req.query.gestoraId) || null) : req.user.userId,
+    // «sin» = los envíos sin gestora (la fila «Sin gestora» del desglose).
+    gestoraId: esJefe ? (req.query.gestoraId === 'sin' ? 'sin' : (Number(req.query.gestoraId) || null)) : req.user.userId,
     deUsuario: rol === 'superadmin' || rol === 'soporte' ? null : req.user.userId,
     desde: FECHA.test(req.query.desde || '') ? req.query.desde : null,
     hasta: FECHA.test(req.query.hasta || '') ? req.query.hasta : null,
   };
 }
 
-/** Si la gestora no lleva ese prospecto, no puede tocar su correo. */
+/**
+ * Quién puede ver y decidir el correo de un prospecto, por su ALCANCE (#593):
+ *
+ *   · superadmin y soporte: cualquiera.
+ *   · gestora: solo los que lleva.
+ *   · el resto (admin, project_manager…): los de SUS campus. Antes un admin
+ *     pasaba sin más, y uno de CEDIA podía leer las respuestas de un prospecto
+ *     de ICTESS y enviarle o cancelarle el correo; y una project_manager se
+ *     llevaba un 403 en la ficha de un prospecto de su propio campus.
+ *
+ * El permiso (`feedback.view` / `feedback.enviar`) ya lo pide la ruta; aquí
+ * solo se recorta a qué prospectos llega, como `proyectosDelAmbito` (#245).
+ */
 async function exigirQueSeaSuyo(req, leadId) {
-  if (['admin', 'superadmin', 'soporte'].includes(req.user?.role)) return;
-  const { rows } = await query('SELECT responsable_id FROM leads WHERE id = $1', [leadId]);
-  if (!rows[0] || rows[0].responsable_id !== req.user.userId) {
-    throw new AppError('Este prospecto no es tuyo', 403, 'FORBIDDEN');
+  if (!Number.isInteger(leadId) || leadId <= 0) throw new AppError('Prospecto no válido', 400, 'VALIDATION_ERROR');
+  const { rows } = await query('SELECT responsable_id, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
+  if (!rows[0]) throw new AppError('Prospecto no encontrado', 404, 'NOT_FOUND');
+  if (veTodoElCrm(req.user)) return;
+  if (req.user?.role === 'gestor') {
+    if (rows[0].responsable_id !== req.user.userId) throw new AppError('Este prospecto no es tuyo', 403, 'FORBIDDEN');
+    return;
+  }
+  const suyos = await campusDeLaPersona(req.user?.userId);
+  if (!suyos.includes(Number(rows[0].project_id))) {
+    throw new AppError('Este prospecto es de un campus que no es tuyo', 403, 'FORBIDDEN');
   }
 }
 
@@ -70,6 +90,7 @@ export async function lista(req, res, next) {
       que: req.query.que,
       motivo: CLAVES.includes(req.query.motivo) ? req.query.motivo : null,
       disparador: DISPARADORES[req.query.disparador] ? req.query.disparador : null,
+      limite: Number.isInteger(Number(req.query.limite)) && Number(req.query.limite) > 0 ? Number(req.query.limite) : 500,
     });
     res.json({ success: true, data: filas });
   } catch (err) { next(err); }
