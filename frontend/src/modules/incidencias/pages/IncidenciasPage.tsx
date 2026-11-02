@@ -338,6 +338,7 @@ export default function IncidenciasPage() {
           soloLectura={abierta !== 'nueva' && !puedeEditar}
           personas={personas}
           campus={projects || []}
+          dondeInicial={activeIssuerId ? `e:${activeIssuerId}` : (!isAllProjects && activeProject?.id ? `p:${activeProject.id}` : '')}
           yo={yo}
           onCerrar={() => setAbierta(null)}
           onGuardada={() => { setAbierta(null); cargar(); }}

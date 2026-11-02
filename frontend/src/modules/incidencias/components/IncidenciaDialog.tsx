@@ -38,12 +38,24 @@ interface Props {
   soloLectura?: boolean;
   personas: Persona[];
   campus: Campus[];
+  /** Para una nueva: el campus («p:7») o la empresa («e:3») elegidos arriba. */
+  dondeInicial?: string;
   yo: number | null;
   onCerrar: () => void;
   onGuardada: (inc: Incidencia) => void;
 }
 
-export default function IncidenciaDialog({ incidencia, soloLectura = false, personas, campus, yo, onCerrar, onGuardada }: Props) {
+/** Lo de arriba solo vale si se puede elegir aquí: un campus suyo o la empresa de uno. */
+function dondeValido(donde: string | undefined, campus: Campus[]): string {
+  if (!donde) return '';
+  const [clase, id] = donde.split(':');
+  const n = Number(id);
+  if (clase === 'p') return campus.some((c) => Number(c.id) === n) ? donde : '';
+  if (clase === 'e') return campus.some((c) => Number(c.sociedad_emisora_id) === n) ? donde : '';
+  return '';
+}
+
+export default function IncidenciaDialog({ incidencia, soloLectura = false, personas, campus, dondeInicial, yo, onCerrar, onGuardada }: Props) {
   const nueva = !incidencia;
   const ref = useRef<HTMLDivElement>(null);
   const [guardando, setGuardando] = useState(false);
@@ -53,7 +65,9 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
   const [f, setF] = useState(() => ({
     ocurrioAt: comoHoraLocal(incidencia?.ocurrioAt || new Date().toISOString()),
     crm: incidencia?.crm || 'multicrm',
-    donde: incidencia ? dondeDe(incidencia) : '',
+    // Una nueva sale con el campus o la empresa de arriba: si no, se apuntaba
+    // a «todo el CRM» sin querer y no salía en la lista que se estaba mirando.
+    donde: incidencia ? dondeDe(incidencia) : dondeValido(dondeInicial, campus),
     tipos: incidencia?.tipos || (['capa8'] as TipoIncidencia[]),
     causadaPor: incidencia?.causadaPor ?? null,
     detectadaPor: incidencia ? incidencia.detectadaPor : yo,
