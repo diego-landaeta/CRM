@@ -76,8 +76,12 @@ export async function exigirAcceso(req, id) {
  *   Fuera de su alcance es el mismo 403 exista o no, como en Soporte.
  * - Las personas (causo, detecto, arreglo), que existan: una clave foranea
  *   rota saldria como un 500.
+ *
+ * Al editar (`actual`), solo las personas que CAMBIAN: el diálogo vuelve a
+ * mandar las que ya había, y una puesta por el superadmin o alguien que ya no
+ * está en el campus no dejaban al admin guardar ni cerrar la incidencia.
  */
-export async function comprobarReferencias(req, datos) {
+export async function comprobarReferencias(req, datos, actual = null) {
   const alcance = await alcanceDe(req);
 
   if (datos.projectId) {
@@ -105,6 +109,7 @@ export async function comprobarReferencias(req, datos) {
   for (const campo of ['causadaPor', 'detectadaPor', 'arregladaPor']) {
     const id = datos[campo];
     if (!id) continue;
+    if (actual && Number(actual[campo]) === Number(id)) continue;
     const vale = alcance === null
       ? await model.existe('users', id)
       : id === alcance.userId || await model.personaDeLosCampus(id, alcance.projectIds || []);

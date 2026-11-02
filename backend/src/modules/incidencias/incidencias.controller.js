@@ -6,6 +6,9 @@ import {
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 
+/** Los adjuntos de una incidencia, como mucho (el mismo número que la pantalla). */
+const MAX_ADJUNTOS = 5;
+
 /**
  * El id de la URL: un entero positivo que cabe en INTEGER. Cualquier otra cosa
  * es un 404, como un id que no existe (mismo criterio que Soporte).
@@ -70,9 +73,9 @@ export async function crear(req, res, next) {
 export async function editar(req, res, next) {
   try {
     const id = idDe(req.params.id);
-    await service.exigirAcceso(req, id);
+    const actual = await service.exigirAcceso(req, id);
     const d = parsear(editarSchema, req.body);
-    await service.comprobarReferencias(req, d);
+    await service.comprobarReferencias(req, d, actual);
     const inc = await model.editar(id, d);
     if (!inc) throw new AppError('Incidencia no encontrada', 404, 'NOT_FOUND');
     inc.adjuntos = await model.adjuntosDe(id);
@@ -85,6 +88,10 @@ export async function subirAdjunto(req, res, next) {
     const id = idDe(req.params.id);
     await service.exigirAcceso(req, id);
     if (!req.file) throw new AppError('Archivo requerido', 400, 'FILE_REQUIRED');
+    // El mismo tope que la pantalla: sin él, por la API entraban los que fueran.
+    if ((await model.adjuntosDe(id)).length >= MAX_ADJUNTOS) {
+      throw new AppError(`Máximo ${MAX_ADJUNTOS} adjuntos por incidencia`, 400, 'DEMASIADOS_ADJUNTOS');
+    }
 
     const ext = (req.file.originalname.split('.').pop() || 'bin')
       .toLowerCase().replace(/[^a-z0-9]/g, '');

@@ -261,6 +261,28 @@ describe('crear, editar y cerrar (#253)', () => {
     expect(await lista('gestoraB')).toEqual([]);
   });
 
+  // Auditoría del 02/11: el diálogo vuelve a mandar las personas que ya había.
+  // Una que apuntó el superadmin (detectó: él, que no está en el campus) no
+  // dejaba al admin del campus guardarla ni cerrarla: 400.
+  it('el admin del campus guarda y cierra una que apuntó el superadmin, mandando todo como el diálogo', async () => {
+    const alta = await request.post('/api/incidencias').set(como('superadmin'))
+      .send({ projectId: P.A, tipos: ['capa8'], causadaPor: U.gestoraA, quePaso: `${MARCA} la apuntó el superadmin` });
+    expect(alta.status).toBe(201);
+    expect(alta.body.data.detectadaPor).toBe(U.superadmin);
+    const r = await request.patch(`/api/incidencias/${alta.body.data.id}`).set(como('adminA')).send({
+      tipos: ['capa8'], causadaPor: U.gestoraA, detectadaPor: U.superadmin, arregladaPor: U.adminA,
+      quePaso: `${MARCA} la apuntó el superadmin`, comoSeArreglo: 'Cerrada por el admin del campus', estado: 'closed',
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ estado: 'closed', detectadaPor: U.superadmin, arregladaPor: U.adminA });
+  });
+
+  it('pero cambiar a alguien por una persona de otra empresa sigue sin valer: 400', async () => {
+    const r = await request.patch(`/api/incidencias/${id}`).set(como('adminA')).send({ causadaPor: U.gestoraB });
+    expect(r.status).toBe(400);
+    expect(await lista('gestoraB')).toEqual([]);
+  });
+
   it('el admin de otra empresa no la edita: 404', async () => {
     const r = await request.patch(`/api/incidencias/${id}`).set(como('adminB')).send({ estado: 'closed' });
     expect(r.status).toBe(404);
@@ -319,6 +341,16 @@ describe('los adjuntos (#253)', () => {
     const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('gestoraA'))
       .attach('file', PNG, { filename: 'x.png', contentType: 'image/png' });
     expect(r.status).toBe(403);
+  });
+
+  // Auditoría del 02/11: el tope de 5 solo estaba en la pantalla.
+  it('como mucho 5 por incidencia, también por la API: el sexto es un 400', async () => {
+    const subir = (n) => request.post(`/api/incidencias/${I.campusB}/adjuntos`).set(como('adminB'))
+      .attach('file', PNG, { filename: `c${n}.png`, contentType: 'image/png' });
+    for (let n = 1; n <= 5; n++) expect((await subir(n)).status, `el ${n}.º`).toBe(201);
+    const sexto = await subir(6);
+    expect(sexto.status).toBe(400);
+    expect(sexto.body.code).toBe('DEMASIADOS_ADJUNTOS');
   });
 });
 
