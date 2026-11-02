@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /*
-  Los valores salen TAL CUAL de los CHECK de la migracion 235: si aqui se
+  Los valores salen TAL CUAL de los CHECK de la migracion 236: si aqui se
   aceptara uno que la tabla rechaza, el error saldria como un 500 de Postgres
   en vez de como un «ese campo no vale».
 
