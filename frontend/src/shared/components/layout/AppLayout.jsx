@@ -32,6 +32,9 @@ const ALL_PROJECTS_OK = [
   // Consultas de alumnos (#188, #189): cada fila dice de qué campus es, y el
   // tutor ve lo suyo sin mirar la cabecera.
   /^\/consultas(?:\/.*)?$/,
+  // Incidencias (#253): con una empresa o «Todos», las de sus campus; cada
+  // fila dice de dónde es, y el servidor recorta a cada uno lo suyo.
+  /^\/incidencias$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto

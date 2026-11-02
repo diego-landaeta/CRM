@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   BookOpen,
   Headset,
+  WarningDiamond,
   ActivityIcon as Activity,
   ClipboardText,
   FilePdf,
@@ -388,6 +389,9 @@ export const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { label: 'Mis preferencias', to: '/preferencias', detail: 'Tus ajustes', icon: UserCircle, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador'] },
       { label: 'Soporte', to: '/soporte', detail: 'Ayuda y contacto', icon: Headset },
+      // Incidencias (#253). Diego: «en el menú, al lado de Soporte». Los mismos
+      // roles que traen `incidencias.view` de serie (la gestora ve las suyas).
+      { label: 'Incidencias', to: '/incidencias', detail: 'Lo que salió mal y cómo se arregló', icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
       // Claves y variables (#80). Los mismos roles que exige el servidor con
       // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
       // no ofrecerlo.

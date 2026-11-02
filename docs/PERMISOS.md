@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-797 rutas en 63 módulos, y 28 acciones con condición dentro de una ruta.
+804 rutas en 64 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -437,6 +437,18 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | previoSupabase | `GET /api/ia/supabase/previo/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
 | importarSupabase | `POST /api/ia/supabase/importar/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
 | quitarPruebasSupabase | `POST /api/ia/supabase/quitar-pruebas/:projectId` | (no existía) | (ruta nueva) | `ia.importar` |
+
+## incidencias
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.view` |
+| metricas | `GET /api/incidencias/metricas` | (no existía) | (ruta nueva) | `incidencias.view` |
+| descargarAdjunto | `GET /api/incidencias/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | `incidencias.view` |
+| crear | `POST /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.create` |
+| porId | `GET /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.view` |
+| editar | `PATCH /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.edit` |
+| subirAdjunto | `POST /api/incidencias/:id/adjuntos` | (no existía) | (ruta nueva) | `incidencias.create` o `incidencias.edit` |
 
 ## installation
 
@@ -1603,6 +1615,14 @@ lo que pide para tener sentido (editar pide ver).
 | Aprobar solicitudes | `change_requests.approve` | Firmar la aprobación. | Admin, Gestora, Soporte, Project manager, Tutor | `change_requests.view` |
 | Borrar solicitudes | `change_requests.delete` | Quitar una solicitud. | Admin, Soporte, Project manager | `change_requests.view` |
 | Reabrir solicitudes | `change_requests.reopen` | Volver a abrir una cerrada. | Admin, Soporte, Project manager | `change_requests.view` |
+
+### Incidencias
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver incidencias | `incidencias.view` | Las incidencias y sus cifras (una gestora, solo las suyas). | Admin, Gestora, Soporte |  |
+| Apuntar incidencias | `incidencias.create` | Registrar una incidencia nueva con sus adjuntos. | Admin, Soporte | `incidencias.view` |
+| Editar incidencias | `incidencias.edit` | Cambiar una incidencia, cerrarla o reabrirla. | Admin, Soporte | `incidencias.view` |
 
 ### Registro
 

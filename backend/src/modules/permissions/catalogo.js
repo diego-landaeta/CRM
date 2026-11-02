@@ -498,6 +498,17 @@ export const SECCIONES = [
         ],
       },
       {
+        // Incidencias (#253). Diego: «la crean y la ven super admin y admin; una
+        // gestora ve solo las suyas». Lo de «solo las suyas» es alcance y lo
+        // recorta el servidor (`incidencias.service.js`), no una clave aparte.
+        // Soporte la trae porque el menú se lo enseña todo (Sidebar).
+        clave: 'incidencias', nombre: 'Incidencias', acciones: [
+          a('view', 'Ver incidencias', 'Las incidencias y sus cifras (una gestora, solo las suyas).', ['admin', 'gestor', 'soporte']),
+          a('create', 'Apuntar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
+          a('edit', 'Editar incidencias', 'Cambiar una incidencia, cerrarla o reabrirla.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'registro', nombre: 'Registro', acciones: [
           a('view', 'Ver el registro', 'Quién cambió qué y cuándo.', ADMIN_SOPORTE),
         ],
