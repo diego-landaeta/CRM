@@ -144,6 +144,14 @@ export const VERSIONES = [
           }
         ]
       }
+    ],
+    "arreglos": [
+      "Ventas, matrículas, facturas, metas de venta, comisiones y tutores: cada uno ve y toca solo lo de sus campus (antes, con el número de otro campus se podía abrir).",
+      "Los formularios del CRM, sin el globo del navegador: todo lo que falta sale en un solo aviso, y Escape cierra las ventanas.",
+      "El programa de una venta es el del catálogo, no el nombre del cliente; las ventas viejas que lo tenían mal se han corregido.",
+      "Las ventas viejas con varias líneas del mismo curso ya dicen de qué curso son.",
+      "Soporte sigue viendo Finanzas → Facturación.",
+      "Las matrículas ya no se borran si se borra su venta: la solicitud se queda y se puede volver a unir."
     ]
   },
   {
@@ -436,7 +444,8 @@ export const VERSIONES = [
           }
         ]
       }
-    ]
+    ],
+    "arreglos": []
   },
   {
     "version": "2.1.0",
