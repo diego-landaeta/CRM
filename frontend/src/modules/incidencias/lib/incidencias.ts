@@ -42,16 +42,26 @@ export const ENTIDADES: Record<EntidadTipo, string> = {
 /**
  * A dónde lleva «sobre qué».
  *
- * Prospectos y ventas tienen ficha con su dirección. Facturas y usuarios no:
- * se abre su pantalla (Facturación, Configuración) y el número va al lado para
- * buscarla. `null` cuando no hay a dónde ir.
+ * Prospectos y ventas tienen ficha con su dirección. Facturas y usuarios no,
+ * y se hace como el buscador (Ctrl K, #591): la factura abre SU VENTA, y el
+ * usuario, la pestaña Usuarios con su nombre ya buscado. Los dos datos los da
+ * el servidor solo si son de los campus de quien mira; sin ellos, su pantalla.
+ * `null` cuando no hay a dónde ir.
  */
-export function enlaceDe(tipo: EntidadTipo | null, id: number | null): string | null {
+export function enlaceDe(
+  tipo: EntidadTipo | null,
+  id: number | null,
+  destino: { ventaId?: number | null; nombre?: string | null } = {},
+): string | null {
   if (!tipo) return null;
   if (tipo === 'lead') return id ? `/prospectos/${id}` : null;
   if (tipo === 'venta') return id ? `/finanzas/ventas/${id}` : null;
-  if (tipo === 'factura') return '/finanzas/facturas';
-  if (tipo === 'usuario') return '/configuracion';
+  if (tipo === 'factura') return destino.ventaId ? `/finanzas/ventas/${destino.ventaId}` : '/finanzas/facturas';
+  if (tipo === 'usuario') {
+    return destino.nombre
+      ? `/configuracion?pestana=users&buscar=${encodeURIComponent(destino.nombre)}`
+      : '/configuracion';
+  }
   return null;
 }
 

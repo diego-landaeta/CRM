@@ -33,6 +33,9 @@ function comoLaPantalla(r) {
     detectadaPorNombre: r.detectada_nombre || null,
     entidadTipo: r.entidad_tipo,
     entidadId: r.entidad_id,
+    // Los rellena `ponerDestinos`, según quién mira.
+    entidadVentaId: null,
+    entidadNombre: null,
     quePaso: r.que_paso,
     impacto: r.impacto || '',
     comoSeArreglo: r.como_se_arreglo || '',
@@ -284,6 +287,46 @@ export async function personaQueVale(userId, projectIds, yo) {
                WHERE up.user_id = u.id AND up.active = true AND up.project_id = ANY($2::int[])))`,
     [userId, projectIds ? projectIds.map(Number) : null, yo]);
   return rowCount > 0;
+}
+
+/**
+ * A dónde lleva «sobre qué» cuando es una factura o un usuario, que no tienen
+ * ficha propia. Lo mismo que el buscador (Ctrl K, #591): la factura abre SU
+ * VENTA, y el usuario, la pestaña Usuarios con su nombre en el buscador.
+ *
+ * Solo si es de los campus de quien mira (`projectIds`; null = todo el CRM):
+ * con el id de cualquier usuario se sabría el nombre de alguien de otra
+ * empresa. Fuera de su alcance se queda en null y el enlace va a la pantalla.
+ */
+export async function ponerDestinos(incidencias, projectIds, yo) {
+  const lista = [].concat(incidencias).filter(Boolean);
+  const ids = (tipo) => [...new Set(lista
+    .filter((i) => i.entidadTipo === tipo && i.entidadId).map((i) => Number(i.entidadId)))];
+  const campus = projectIds ? projectIds.map(Number) : null;
+  const ventas = new Map();
+  const nombres = new Map();
+  if (ids('factura').length) {
+    const { rows } = await query(
+      `SELECT id, conversion_id FROM invoices
+        WHERE id = ANY($1::int[]) AND conversion_id IS NOT NULL
+          AND ($2::int[] IS NULL OR project_id = ANY($2::int[]))`, [ids('factura'), campus]);
+    for (const r of rows) ventas.set(Number(r.id), Number(r.conversion_id));
+  }
+  if (ids('usuario').length) {
+    const { rows } = await query(
+      `SELECT u.id, u.nombre FROM users u
+        WHERE u.id = ANY($1::int[])
+          AND ($2::int[] IS NULL OR u.id = $3 OR EXISTS (
+                SELECT 1 FROM user_projects up
+                 WHERE up.user_id = u.id AND up.active = true AND up.project_id = ANY($2::int[])))`,
+      [ids('usuario'), campus, yo]);
+    for (const r of rows) nombres.set(Number(r.id), r.nombre);
+  }
+  for (const i of lista) {
+    i.entidadVentaId = i.entidadTipo === 'factura' ? ventas.get(Number(i.entidadId)) ?? null : null;
+    i.entidadNombre = i.entidadTipo === 'usuario' ? nombres.get(Number(i.entidadId)) ?? null : null;
+  }
+  return incidencias;
 }
 
 /**

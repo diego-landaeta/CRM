@@ -32,6 +32,10 @@ export interface Incidencia {
   detectadaPorNombre: string | null;
   entidadTipo: EntidadTipo | null;
   entidadId: number | null;
+  /** La venta de la factura de «sobre qué», si es de los campus de quien mira. */
+  entidadVentaId?: number | null;
+  /** El nombre del usuario de «sobre qué», si es de los campus de quien mira. */
+  entidadNombre?: string | null;
   quePaso: string;
   impacto: string;
   comoSeArreglo: string;

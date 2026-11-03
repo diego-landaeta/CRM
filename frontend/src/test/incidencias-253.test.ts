@@ -23,11 +23,18 @@ describe('el enlace a la ficha', () => {
     expect(enlaceDe('venta', null)).toBeNull();
   });
 
-  it('factura y usuario, a su pantalla; «otra cosa» y nada, a ningún sitio', () => {
+  it('factura y usuario sin lo que da el servidor, a su pantalla; «otra cosa» y nada, a ningún sitio', () => {
     expect(enlaceDe('factura', 86)).toBe('/finanzas/facturas');
     expect(enlaceDe('usuario', 7)).toBe('/configuracion');
     expect(enlaceDe('otro', 1)).toBeNull();
     expect(enlaceDe(null, 1)).toBeNull();
+  });
+
+  // Como el buscador (Ctrl K, #591): no tienen ficha propia.
+  it('la factura, a su venta; el usuario, a Usuarios con su nombre buscado', () => {
+    expect(enlaceDe('factura', 86, { ventaId: 569 })).toBe('/finanzas/ventas/569');
+    expect(enlaceDe('usuario', 7, { nombre: 'Laura García' }))
+      .toBe('/configuracion?pestana=users&buscar=Laura%20Garc%C3%ADa');
   });
 });
 

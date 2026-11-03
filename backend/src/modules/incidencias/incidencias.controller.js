@@ -5,6 +5,7 @@ import {
 } from './incidencias.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
+import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 
 /** Los adjuntos de una incidencia, como mucho (el mismo número que la pantalla). */
 const MAX_ADJUNTOS = 5;
@@ -55,12 +56,22 @@ function parsear(schema, datos) {
   return r.data;
 }
 
+/**
+ * El enlace de «sobre qué» de una factura o un usuario (`model.ponerDestinos`),
+ * con los campus de quien mira: superadmin y soporte, todo; el resto, los suyos.
+ */
+async function conDestinos(req, incidencias) {
+  const projectIds = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
+  return model.ponerDestinos(incidencias, projectIds, req.user.userId);
+}
+
 export async function listar(req, res, next) {
   try {
     const f = parsear(listarSchema, req.query);
     // El recorte lo pone el servidor, no la pantalla: una gestora que escriba
     // la direccion a mano sigue viendo solo las suyas.
     const data = await model.listar({ ...f, alcance: await service.alcanceDe(req) });
+    await conDestinos(req, data.incidencias);
     res.json({
       success: true,
       data: data.incidencias,
@@ -94,6 +105,7 @@ export async function porId(req, res, next) {
     const id = idDe(req.params.id);
     const inc = await service.exigirAcceso(req, id);
     inc.adjuntos = await model.adjuntosDe(id);
+    await conDestinos(req, inc);
     res.json({ success: true, data: inc });
   } catch (err) { next(err); }
 }
@@ -106,6 +118,7 @@ export async function crear(req, res, next) {
     // proposito («Nadie del CRM») se respeta: la detecto alguien de fuera.
     const detectadaPor = d.detectadaPor === undefined ? req.user.userId : d.detectadaPor;
     const inc = await model.crear({ ...d, detectadaPor }, req.user.userId);
+    await conDestinos(req, inc);
     res.status(201).json({ success: true, data: inc });
   } catch (err) { next(err); }
 }
@@ -119,6 +132,7 @@ export async function editar(req, res, next) {
     const inc = await model.editar(id, d);
     if (!inc) throw new AppError('Incidencia no encontrada', 404, 'NOT_FOUND');
     inc.adjuntos = await model.adjuntosDe(id);
+    await conDestinos(req, inc);
     res.json({ success: true, data: inc });
   } catch (err) { next(err); }
 }

@@ -352,6 +352,57 @@ describe('crear, editar y cerrar (#253)', () => {
   });
 });
 
+// «Sobre qué»: la issue pide «con su id y enlace a la ficha». Facturas y
+// usuarios no tienen ficha propia: como el buscador (Ctrl K, #591), la factura
+// lleva a su venta y el usuario a Usuarios con su nombre. Solo si son de los
+// campus de quien mira: con un id cualquiera no se sabe nada de otra empresa.
+describe('el enlace de una factura o un usuario (#253)', () => {
+  const D = {};
+  beforeAll(async () => {
+    D.lead = (await one(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, $2, $3, '+34600111222') RETURNING id`,
+      [P.B, `${MARCA} cliente`, `cliente.${MARCA.toLowerCase()}@test.local`])).id;
+    D.venta = (await one(`INSERT INTO conversions (lead_id, project_id, producto_contratado, importe_total, importe_pagado, fecha_conversion)
+      VALUES ($1, $2, 'x', 500, 100, CURRENT_DATE) RETURNING id`, [D.lead, P.B])).id;
+    D.factura = (await one(`INSERT INTO invoices (project_id, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items, base_imponible, total, lead_id, conversion_id)
+      VALUES ($1, 2026, 987253, $2, $3, 'X1234567L', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 100, 121, $4, $5) RETURNING id`,
+      [P.B, `${MARCA}-F`, `${MARCA} cliente`, D.lead, D.venta])).id;
+  });
+  afterAll(async () => {
+    await q('DELETE FROM invoices WHERE id = $1', [D.factura]);
+    await q('DELETE FROM conversions WHERE id = $1', [D.venta]);
+    await q('DELETE FROM leads WHERE id = $1', [D.lead]);
+  });
+
+  const apuntar = (quien, entidadTipo, entidadId) => request.post('/api/incidencias').set(como(quien))
+    .send({ tipos: ['capa8'], entidadTipo, entidadId, quePaso: `${MARCA} sobre ${entidadTipo} ${entidadId}` });
+
+  it('la factura de su campus lleva a su venta, en la ficha y en la lista', async () => {
+    const r = await apuntar('adminB', 'factura', D.factura);
+    expect(r.status).toBe(201);
+    expect(r.body.data.entidadVentaId).toBe(D.venta);
+    const ficha = await request.get(`/api/incidencias/${r.body.data.id}`).set(como('adminB'));
+    expect(ficha.body.data.entidadVentaId).toBe(D.venta);
+    const lista = await request.get('/api/incidencias').query({ limit: 200 }).set(como('superadmin'));
+    expect(lista.body.data.find((i) => i.id === r.body.data.id).entidadVentaId).toBe(D.venta);
+  });
+
+  it('el usuario de su campus lleva a Usuarios con su nombre', async () => {
+    const r = await apuntar('adminA', 'usuario', U.gestoraA);
+    expect(r.body.data.entidadNombre).toBe(`${MARCA} gestoraA`);
+  });
+
+  it('de otra empresa no se sabe nada: ni la venta de la factura ni el nombre', async () => {
+    const f = await apuntar('adminA', 'factura', D.factura);
+    expect(f.status).toBe(201);
+    expect(f.body.data.entidadVentaId).toBeNull();
+    const u = await apuntar('adminA', 'usuario', U.gestoraB);
+    expect(u.body.data.entidadNombre).toBeNull();
+    // El superadmin, que ve todo el CRM, sí.
+    const s = await request.get(`/api/incidencias/${u.body.data.id}`).set(como('superadmin'));
+    expect(s.body.data.entidadNombre).toBe(`${MARCA} gestoraB`);
+  });
+});
+
 // Auditoría del 02/11 (2.ª): el diálogo cargaba /users, sin recortar por campus,
 // y un admin elegía a alguien que luego el servidor no le aceptaba.
 describe('las personas que se pueden elegir (#253)', () => {

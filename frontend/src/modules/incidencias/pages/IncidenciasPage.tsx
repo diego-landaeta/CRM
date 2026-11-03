@@ -268,7 +268,7 @@ export default function IncidenciasPage() {
                 </thead>
                 <tbody>
                   {filas.map((i) => {
-                    const enlace = enlaceDe(i.entidadTipo, i.entidadId);
+                    const enlace = enlaceDe(i.entidadTipo, i.entidadId, { ventaId: i.entidadVentaId, nombre: i.entidadNombre });
                     return (
                       <tr key={i.id} className="border-t border-border align-top hover:bg-muted/30 cursor-pointer"
                         onClick={() => abrir(i)}>

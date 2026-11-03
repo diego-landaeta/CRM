@@ -208,7 +208,12 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     }
   }
 
-  const enlace = enlaceDe(f.entidadTipo, f.entidadId ? Number(f.entidadId) : null);
+  // La venta o el nombre que dio el servidor valen mientras «sobre qué» sea el
+  // que estaba guardado; si se cambia en el formulario, a su pantalla.
+  const mismaEntidad = !!incidencia && f.entidadTipo === incidencia.entidadTipo
+    && Number(f.entidadId) === Number(incidencia.entidadId);
+  const enlace = enlaceDe(f.entidadTipo, f.entidadId ? Number(f.entidadId) : null,
+    mismaEntidad ? { ventaId: incidencia!.entidadVentaId, nombre: incidencia!.entidadNombre } : {});
   const area = cn(inputClass, 'h-auto py-2 resize-y');
 
   return (
