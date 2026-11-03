@@ -47,6 +47,20 @@ async function persona(clave, role, campus = []) {
 }
 const como = (clave) => ({ Authorization: `Bearer ${T[clave]}` });
 
+/**
+ * El superadmin NO se crea: se usa el que ya hay en la base (el del seed).
+ * Uno nuevo y activo le cae a `certifexDiplomas`, que espera avisar a todos los
+ * superadmin activos, cuando las dos pruebas corren a la vez en la CI (pasó en
+ * la PR #612). Diego, 22/10 (#423): nunca crear usuarios con más alcance del
+ * necesario en la base compartida. No se borra al final: no es nuestro.
+ */
+async function superadminDeLaBase() {
+  const u = await one(`SELECT id, email FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1`);
+  if (!u) throw new Error('La base de pruebas no tiene ningún superadmin activo (npm run db:preparar -- --datos)');
+  U.superadmin = u.id;
+  T.superadmin = jwt.sign({ userId: u.id, email: u.email, role: 'superadmin', roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+
 /** Solo las de esta prueba: en la base hay también las del seed. */
 const nuestras = (lista) => lista.filter((i) => i.quePaso.startsWith(MARCA)).map((i) => i.quePaso.slice(MARCA.length + 1)).sort();
 
@@ -72,7 +86,7 @@ beforeAll(async () => {
       `INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id`,
       [`${MARCA} ${c}`, `${MARCA.toLowerCase()}-${c.toLowerCase()}`, `${MARCA}-${c}`, E[e]])).id;
   }
-  await persona('superadmin', 'superadmin');
+  await superadminDeLaBase();
   await persona('soporte', 'soporte');
   await persona('adminA', 'admin', ['A']);
   await persona('adminA_bis', 'admin', ['A']);
@@ -92,7 +106,8 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  const ids = Object.values(U);
+  // Las personas que creó esta prueba: el superadmin es el de la base y se queda.
+  const ids = Object.entries(U).filter(([k]) => k !== 'superadmin').map(([, id]) => id);
   await q('DELETE FROM incidencias WHERE que_paso LIKE $1', [`${MARCA}%`]);
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [ids]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [ids]);
