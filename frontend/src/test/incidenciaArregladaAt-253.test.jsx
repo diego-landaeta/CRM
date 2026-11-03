@@ -52,7 +52,14 @@ describe('la pista de «sobre qué» de una factura o un usuario', () => {
   });
 
   it('sin lo que da el servidor (de otra empresa): su pantalla', () => {
-    expect(abrirCon({ entidadTipo: 'factura', entidadId: 86, entidadVentaId: null })).toContain('Se abre su pantalla: búscala con este número.');
+    expect(abrirCon({ entidadTipo: 'factura', entidadId: 86, entidadVentaId: null })).toContain('Se abre Facturas: búscala con este número.');
+  });
+
+  // Auditoría del 03/11: a la gestora (sin `users.view`) le decía «búscala».
+  it('el usuario sin nombre (otra empresa, o la gestora): «Se abre Configuración», sin prometer buscar', () => {
+    const texto = abrirCon({ entidadTipo: 'usuario', entidadId: 7, entidadNombre: null });
+    expect(texto).toContain('Se abre Configuración.');
+    expect(texto).not.toContain('búscala');
   });
 
   // Auditoría del 03/11: lo que no estaba probado.
@@ -64,7 +71,7 @@ describe('la pista de «sobre qué» de una factura o un usuario', () => {
   it('si se cambia el número, la venta de antes ya no vale: a su pantalla', () => {
     abrirCon({ entidadTipo: 'factura', entidadId: 86, entidadVentaId: 569 });
     fireEvent.change(document.getElementById('inc-entidad-id'), { target: { value: '87' } });
-    expect(document.body.textContent).toContain('Se abre su pantalla: búscala con este número.');
+    expect(document.body.textContent).toContain('Se abre Facturas: búscala con este número.');
     expect(document.querySelector('a[aria-label="Abrir la ficha"]').getAttribute('href')).toBe('/finanzas/facturas');
   });
 });

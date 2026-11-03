@@ -215,11 +215,13 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
   const enlace = enlaceDe(f.entidadTipo, f.entidadId ? Number(f.entidadId) : null,
     mismaEntidad ? { ventaId: incidencia!.entidadVentaId, nombre: incidencia!.entidadNombre } : {});
   // Lo que hace el enlace de una factura o un usuario, que no tienen ficha propia.
-  const pistaDeEntidad = f.entidadTipo === 'factura' || f.entidadTipo === 'usuario'
-    ? (enlace && enlace.startsWith('/finanzas/ventas/') ? 'Abre la venta de esa factura.'
-      : enlace && enlace.includes('buscar=') ? 'Abre Usuarios con su nombre ya buscado.'
-        : 'Se abre su pantalla: búscala con este número.')
-    : undefined;
+  // Sin venta o sin nombre (de otra empresa, o quien no puede ver Usuarios), lo
+  // que se abre de verdad: Facturas, o Configuración sin buscar a nadie.
+  const pistaDeEntidad = f.entidadTipo === 'factura'
+    ? (enlace && enlace.startsWith('/finanzas/ventas/') ? 'Abre la venta de esa factura.' : 'Se abre Facturas: búscala con este número.')
+    : f.entidadTipo === 'usuario'
+      ? (enlace && enlace.includes('buscar=') ? 'Abre Usuarios con su nombre ya buscado.' : 'Se abre Configuración.')
+      : undefined;
   const area = cn(inputClass, 'h-auto py-2 resize-y');
 
   return (
