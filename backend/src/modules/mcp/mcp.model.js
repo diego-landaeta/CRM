@@ -44,14 +44,18 @@ export async function findUserById(id) {
  * el selector de proyecto. Los de prueba no entran: un curso inventado con
  * ventas falsas no es una respuesta.
  */
-export async function proyectosDeLaPersona(user) {
+export async function proyectosDeLaPersona(user, { conPruebas = false } = {}) {
   const cols = `p.id, p.nombre, p.type AS tipo, p.sociedad_emisora_id AS sociedad_id, s.razon_social AS sociedad_nombre`;
+  // `conPruebas`: para una pantalla en la que se ha ELEGIDO un campus o una
+  // empresa (migración 148: «un proyecto de pruebas solo se ve si lo eliges»).
+  // Claude no lo pasa nunca.
+  const pruebas = conPruebas ? '' : 'AND NOT COALESCE(p.es_prueba, false)';
   if (user.role === 'superadmin') {
     const { rows } = await query(
       `SELECT ${cols}
          FROM projects p
          LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
-        WHERE p.active = true AND NOT COALESCE(p.es_prueba, false)
+        WHERE p.active = true ${pruebas}
         ORDER BY s.razon_social NULLS LAST, p.nombre`
     );
     return rows;
@@ -62,7 +66,7 @@ export async function proyectosDeLaPersona(user) {
        JOIN projects p ON p.id = up.project_id
        LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
       WHERE up.user_id = $1 AND up.active = true AND p.active = true
-        AND NOT COALESCE(p.es_prueba, false)
+        ${pruebas}
       ORDER BY s.razon_social NULLS LAST, p.nombre`,
     [user.id]
   );
@@ -1143,19 +1147,19 @@ async function metricasDeCampanas({ projectIds, desde, hasta }) {
   const enProspectos = periodo('l.created_at::date', { desde, hasta }, params);
   const { rows } = await query(
     `WITH camp AS (
-       SELECT mc.campaign_id, mc.project_id, mc.nombre, mc.objective, mc.status, mc.effective_status, mc.daily_budget,
-              (SELECT a.currency FROM meta_ad_accounts a
-                WHERE a.project_id = mc.project_id AND a.ad_account_id = mc.ad_account_id LIMIT 1) AS moneda
+       SELECT mc.campaign_id, mc.project_id
          FROM meta_campaigns mc
         WHERE mc.project_id = ANY($1::int[])
      ),
+     -- El gasto, por el campus de la FILA DIARIA y no por el de la campaña (QA de
+     -- Diego, 22/10, punto 10), como la pantalla Publicidad (getDashboard): un día
+     -- apuntado a otro campus es gasto de ese campus, aunque la campaña sea de este.
      gasto AS (
-       SELECT d.campaign_id, SUM(d.spend) AS gasto, SUM(d.impressions) AS impresiones,
+       SELECT d.campaign_id, d.project_id, SUM(d.spend) AS gasto, SUM(d.impressions) AS impresiones,
               SUM(d.clicks) AS clics, SUM(d.leads) AS leads_segun_meta
          FROM meta_campaigns_daily d
-         JOIN camp ON camp.campaign_id = d.campaign_id
-        WHERE TRUE${enGasto}
-        GROUP BY d.campaign_id
+        WHERE d.project_id = ANY($1::int[])${enGasto}
+        GROUP BY d.campaign_id, d.project_id
      ),
      -- Una fila de UTM por prospecto (lead_utms.lead_id es UNIQUE) y sus ventas
      -- sumadas aparte: ningún JOIN multiplica nada. Solo los prospectos del
@@ -1175,19 +1179,30 @@ async function metricasDeCampanas({ projectIds, desde, hasta }) {
             WHERE c.lead_id = l.id AND NOT COALESCE(c.es_mensualidad, false)
          ) v ON TRUE
         GROUP BY camp.campaign_id
+     ),
+     -- Una fila por campaña y campus: los de su gasto y el de la campaña (sus prospectos).
+     filas AS (
+       SELECT campaign_id, project_id FROM gasto
+       UNION
+       SELECT campaign_id, project_id FROM camp
      )
-     SELECT camp.campaign_id, camp.project_id, camp.nombre, camp.objective, camp.status, camp.effective_status,
-            camp.daily_budget, camp.moneda, pr.nombre AS campus,
+     SELECT f.campaign_id, f.project_id, mc.nombre, mc.objective, mc.status, mc.effective_status, mc.daily_budget,
+            (SELECT a.currency FROM meta_ad_accounts a
+              WHERE a.ad_account_id = mc.ad_account_id
+              ORDER BY (a.project_id = f.project_id) DESC LIMIT 1) AS moneda,
+            pr.nombre AS campus,
             COALESCE(g.gasto, 0) AS gasto, COALESCE(g.impresiones, 0) AS impresiones,
             COALESCE(g.clics, 0) AS clics, COALESCE(g.leads_segun_meta, 0) AS leads_segun_meta,
             COALESCE(a.prospectos, 0) AS prospectos, COALESCE(a.compraron, 0) AS compraron,
             COALESCE(a.facturado, 0) AS facturado
-       FROM camp
-       JOIN projects pr ON pr.id = camp.project_id
-       LEFT JOIN gasto g ON g.campaign_id = camp.campaign_id
-       LEFT JOIN atrib a ON a.campaign_id = camp.campaign_id
+       FROM filas f
+       JOIN meta_campaigns mc ON mc.campaign_id = f.campaign_id
+       JOIN projects pr ON pr.id = f.project_id
+       LEFT JOIN gasto g ON g.campaign_id = f.campaign_id AND g.project_id = f.project_id
+       -- Los prospectos, como hasta ahora: solo en la fila del campus de la campaña.
+       LEFT JOIN atrib a ON a.campaign_id = f.campaign_id AND f.project_id = mc.project_id
       WHERE COALESCE(g.gasto, 0) > 0 OR COALESCE(a.prospectos, 0) > 0
-      ORDER BY COALESCE(g.gasto, 0) DESC, camp.nombre`,
+      ORDER BY COALESCE(g.gasto, 0) DESC, mc.nombre, pr.nombre`,
     params
   );
   return rows.map((r) => ({
@@ -1419,7 +1434,9 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
   const CERO = { llamadas: 0, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 0, toques: 0 };
   const porPersona = new Map();
   const de = (id, comercial) => {
-    if (!porPersona.has(id)) porPersona.set(id, { comercial: comercial || 'Sin asignar', ...CERO });
+    // `user_id` para que la pantalla (parte B) abra la lista de cada una; null
+    // en «Sin asignar».
+    if (!porPersona.has(id)) porPersona.set(id, { user_id: id ?? null, comercial: comercial || 'Sin asignar', ...CERO });
     return porPersona.get(id);
   };
   for (const { user_id: id, comercial, ...n } of contactos) Object.assign(de(id, comercial), n);
@@ -2007,4 +2024,32 @@ export async function clientesDe({ projectIds, responsableId = null, gestoraId =
     cobro: cobros,
     clientes,
   };
+}
+
+// Los contactos que hay detrás de un número de `actividadPorComercial` (#203,
+// parte B: «al pulsar un número se abre la lista de esos toques: lead, hora y
+// nota»). Los mismos filtros que la tabla, para que la lista y la cifra cuadren:
+// quien lo hizo, el día de Madrid, sin fichas borradas. `tipo` 'toques' son
+// todos los contactos (sin las notas, que no lo son).
+export const TIPOS_DE_DETALLE = ['llamada', 'whatsapp', 'email', 'nota', 'toques'];
+
+export async function detalleActividadPorComercial({ projectIds, userId, tipo, desde, hasta, limite = 500 }) {
+  const f = condiciones('l.project_id', projectIds);
+  f.cond.push('l.deleted_at IS NULL');
+  f.add('li.created_by = ?', userId);
+  f.add(`${fechaLocal('li.fecha')} >= ?::date`, desde);
+  f.add(`${fechaLocal('li.fecha')} <= ?::date`, hasta);
+  if (tipo === 'toques') f.cond.push(`li.tipo <> 'nota'`);
+  else f.add('li.tipo = ?::interaction_type', tipo);
+  f.params.push(limite);
+  const { rows } = await query(
+    `SELECT li.id, li.lead_id, l.nombre AS lead, li.tipo, li.fecha, li.nota
+       FROM lead_interactions li
+       JOIN leads l ON l.id = li.lead_id
+      ${f.where()}
+      ORDER BY li.fecha DESC, li.id DESC
+      LIMIT $${f.params.length}`,
+    f.params
+  );
+  return rows;
 }
