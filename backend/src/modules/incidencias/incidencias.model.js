@@ -129,7 +129,12 @@ function donde({ alcance = null, estado, tipo, causadaPor, projectId, issuerId, 
   return { where: cond.length ? `WHERE ${cond.join(' AND ')}` : '', params, siguiente: i };
 }
 
-export async function crear(datos, creadaPor) {
+const CERRADAS = ['resolved', 'closed'];
+
+export async function crear(entrada, creadaPor) {
+  // Apuntada ya resuelta y sin «cuándo se arregló»: la de ahora, como al cerrarla.
+  const datos = { ...entrada };
+  if (CERRADAS.includes(datos.estado) && datos.arregladaAt === undefined) datos.arregladaAt = new Date().toISOString();
   const campos = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
   const cols = [...campos.map((k) => COLUMNAS[k]), 'creada_por'];
   const vals = [...campos.map((k) => datos[k]), creadaPor];
@@ -145,8 +150,8 @@ export async function porId(id) {
 }
 
 /**
- * Cambia solo lo que llega. Al cerrar sin fecha de arreglo, se pone la de
- * ahora: «cómo se arregló, por quién y cuándo» no puede quedarse sin cuándo
+ * Cambia solo lo que llega. Al cerrar sin fecha de arreglo (al pasar a
+ * resuelta o cerrada), se pone la de ahora: «cómo se arregló, por quién y cuándo» no puede quedarse sin cuándo
  * en una incidencia resuelta. Al reabrir NO se borra: el arreglo sigue
  * siendo lo que se intentó, y quien reabre decide si cambia.
  */
@@ -158,8 +163,11 @@ export async function editar(id, entrada) {
   if (datos.sociedadId && datos.projectId === undefined) datos.projectId = null;
   const campos = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
   const sets = campos.map((k, n) => `${COLUMNAS[k]} = $${n + 2}`);
-  if (datos.estado && ['resolved', 'closed'].includes(datos.estado) && datos.arregladaAt === undefined) {
-    sets.push('arreglada_at = COALESCE(arreglada_at, NOW())');
+  // Solo cuando PASA a resuelta o cerrada (en el SET, `estado` es el de antes):
+  // si ya lo estaba y se borró la fecha a mano, guardar otra cosa no la vuelve a poner.
+  if (CERRADAS.includes(datos.estado) && datos.arregladaAt === undefined) {
+    sets.push(`arreglada_at = CASE WHEN estado IN ('resolved', 'closed') THEN arreglada_at
+                                   ELSE COALESCE(arreglada_at, NOW()) END`);
   }
   sets.push('updated_at = NOW()');
   const { rowCount } = await query(
@@ -263,12 +271,18 @@ export async function sociedadesDeLosCampus(projectIds) {
   return rows.map((r) => Number(r.id));
 }
 
-/** ¿Esta persona tiene alguno de estos campus? (activa en `user_projects`). */
-export async function personaDeLosCampus(userId, projectIds) {
-  if (!projectIds?.length) return false;
+/**
+ * ¿Se puede poner a esta persona? Activa y, con `projectIds`, con alguno de
+ * esos campus (o uno mismo). Es la misma regla que la lista de `personas`.
+ */
+export async function personaQueVale(userId, projectIds, yo) {
   const { rowCount } = await query(
-    `SELECT 1 FROM user_projects WHERE user_id = $1 AND active = true AND project_id = ANY($2::int[]) LIMIT 1`,
-    [userId, projectIds.map(Number)]);
+    `SELECT 1 FROM users u
+      WHERE u.id = $1 AND u.active
+        AND ($2::int[] IS NULL OR u.id = $3 OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.active = true AND up.project_id = ANY($2::int[])))`,
+    [userId, projectIds ? projectIds.map(Number) : null, yo]);
   return rowCount > 0;
 }
 

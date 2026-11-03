@@ -5,6 +5,7 @@ import {
 } from './incidencias.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
+import { enUtf8 } from '../whatsapp/media.service.js';
 
 /** Los adjuntos de una incidencia, como mucho (el mismo número que la pantalla). */
 const MAX_ADJUNTOS = 5;
@@ -124,7 +125,8 @@ export async function subirAdjunto(req, res, next) {
     await saveLocal(clave, req.file.buffer);
 
     const a = await model.guardarAdjunto({
-      incidenciaId: id, nombre: nombreQueCabe(req.file.originalname),
+      // multer lee el nombre como Latin-1: «año.png» llegaba como «aÃ±o.png».
+      incidenciaId: id, nombre: nombreQueCabe(enUtf8(req.file.originalname) || 'archivo'),
       clave, mime: req.file.mimetype, bytes: req.file.size, subidoPor: req.user.userId,
     });
     res.status(201).json({ success: true, data: a });

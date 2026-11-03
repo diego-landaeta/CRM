@@ -504,7 +504,8 @@ export const SECCIONES = [
         // Soporte la trae porque el menú se lo enseña todo (Sidebar).
         clave: 'incidencias', nombre: 'Incidencias', acciones: [
           a('view', 'Ver incidencias', 'Las incidencias y sus cifras (una gestora, solo las suyas).', ['admin', 'gestor', 'soporte']),
-          a('create', 'Apuntar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
+          // No «Apuntar incidencias»: así se llama ya `status.edit` (las del estado del sistema).
+          a('create', 'Registrar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
           a('edit', 'Editar incidencias', 'Cambiar una incidencia, cerrarla o reabrirla.', ADMIN_SOPORTE),
         ],
       },

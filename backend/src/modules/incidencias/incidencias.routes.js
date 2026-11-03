@@ -30,8 +30,10 @@ router.patch('/:id', puede('incidencias.edit'), ctrl.editar);
 router.post('/:id/adjuntos', puede('incidencias.create', 'incidencias.edit'), conAdjuntos, ctrl.subirAdjunto);
 
 /**
- * `uploadDoc`, pero sus errores (más de 10 MB, otro campo, varios ficheros)
- * como 400: multer los lanza sin `statusCode` y salían como un 500.
+ * `uploadDoc`, pero sus errores (más de 10 MB, otro campo, varios ficheros, un
+ * envío cortado a medias) como 400: multer y busboy los lanzan sin
+ * `statusCode` y salían como un 500. Los que ya traen el suyo (un tipo que no
+ * vale) pasan tal cual.
  *
  * Se llama `conAdjuntos` como la de Consultas: el inventario de permisos
  * (`inventario/rutas.js · TECNICOS`) la reconoce como subida y no como guardia.
@@ -42,6 +44,9 @@ function conAdjuntos(req, res, next) {
       return next(err.code === 'LIMIT_FILE_SIZE'
         ? new AppError('El archivo pasa de 10 MB', 400, 'FILE_TOO_LARGE')
         : new AppError('Sube un archivo cada vez', 400, 'VALIDATION_ERROR'));
+    }
+    if (err && !err.statusCode) {
+      return next(new AppError('No se pudo leer el archivo: vuelve a subirlo', 400, 'VALIDATION_ERROR'));
     }
     next(err);
   });

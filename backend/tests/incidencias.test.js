@@ -238,6 +238,20 @@ describe('crear, editar y cerrar (#253)', () => {
     expect(reabierta.body.data.arregladaAt).toBe(cerrada.body.data.arregladaAt);
   });
 
+  // Auditoría final del 02/11: al crearla ya resuelta no se ponía la fecha.
+  it('apuntada ya resuelta y sin fecha de arreglo, se pone la de ahora; con la suya, la suya', async () => {
+    const sin = await request.post('/api/incidencias').set(como('adminA'))
+      .send({ tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} ya resuelta` });
+    expect(sin.status).toBe(201);
+    expect(sin.body.data.arregladaAt).not.toBeNull();
+    const con = await request.post('/api/incidencias').set(como('adminA'))
+      .send({ tipos: ['capa8'], estado: 'closed', arregladaAt: '2026-10-06T10:00:00Z', quePaso: `${MARCA} cerrada con fecha` });
+    expect(new Date(con.body.data.arregladaAt).toISOString()).toBe('2026-10-06T10:00:00.000Z');
+    const abierta = await request.post('/api/incidencias').set(como('adminA'))
+      .send({ tipos: ['capa8'], quePaso: `${MARCA} abierta` });
+    expect(abierta.body.data.arregladaAt).toBeNull();
+  });
+
   it('campus O empresa: pasarla a la empresa le quita el campus', async () => {
     const r = await request.patch(`/api/incidencias/${id}`).set(como('superadmin')).send({ sociedadId: E.E1 });
     expect(r.body.data).toMatchObject({ sociedadId: E.E1, projectId: null });
@@ -289,6 +303,32 @@ describe('crear, editar y cerrar (#253)', () => {
     const r = await request.patch(`/api/incidencias/${id}`).set(como('adminA')).send({ arregladaAt: null });
     expect(r.status).toBe(200);
     expect(r.body.data.arregladaAt).toBeNull();
+  });
+
+  // Auditoría final del 02/11: borrada en una resuelta, volvía al guardar otra
+  // cosa (el diálogo manda siempre el estado).
+  it('borrada en una resuelta, guardar otra cosa no la vuelve a poner', async () => {
+    const alta = await request.post('/api/incidencias').set(como('adminA'))
+      .send({ tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} resuelta sin fecha` });
+    const otra = alta.body.data.id;
+    await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ arregladaAt: null, estado: 'resolved' });
+    const r = await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ impacto: 'otra cosa', estado: 'resolved' });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ impacto: 'otra cosa', arregladaAt: null });
+    // Pero reabrirla y volver a cerrarla sí la pone: eso es cerrarla.
+    await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ estado: 'open' });
+    const cerrada = await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ estado: 'closed' });
+    expect(cerrada.body.data.arregladaAt).not.toBeNull();
+  });
+
+  // Auditoría final del 02/11: el desplegable no las ofrecía, pero la API sí las aceptaba.
+  it('una persona desactivada no se puede poner, ni por el admin del campus ni por el superadmin', async () => {
+    await persona('gestoraA_baja', 'gestor', ['A']);
+    await q('UPDATE users SET active = false WHERE id = $1', [U.gestoraA_baja]);
+    for (const quien of ['adminA', 'superadmin']) {
+      const r = await request.patch(`/api/incidencias/${id}`).set(como(quien)).send({ causadaPor: U.gestoraA_baja });
+      expect(r.status, quien).toBe(400);
+    }
   });
 
   it('el admin de otra empresa no la edita: 404', async () => {
@@ -382,6 +422,20 @@ describe('los adjuntos (#253)', () => {
       .attach('file', Buffer.alloc(10 * 1024 * 1024 + 1), { filename: 'grande.png', contentType: 'image/png' });
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('FILE_TOO_LARGE');
+  });
+
+  it('un envío cortado a medias es un 400, no un 500', async () => {
+    const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('adminA'))
+      .set('Content-Type', 'multipart/form-data; boundary=XYZ')
+      .send('--XYZ\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\nContent-Type: image/png\r\n\r\nabc');
+    expect(r.status).toBe(400);
+  });
+
+  it('un nombre con tildes y eñes se guarda bien («año», no «aÃ±o»)', async () => {
+    const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('adminA'))
+      .attach('file', PNG, { filename: 'captura-año-Peña.png', contentType: 'image/png' });
+    expect(r.status).toBe(201);
+    expect(r.body.data.name).toBe('captura-año-Peña.png');
   });
 
   it('un nombre de más de 255 caracteres se guarda recortado, con su extensión', async () => {

@@ -1627,7 +1627,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver incidencias | `incidencias.view` | Las incidencias y sus cifras (una gestora, solo las suyas). | Admin, Gestora, Soporte |  |
-| Apuntar incidencias | `incidencias.create` | Registrar una incidencia nueva con sus adjuntos. | Admin, Soporte | `incidencias.view` |
+| Registrar incidencias | `incidencias.create` | Registrar una incidencia nueva con sus adjuntos. | Admin, Soporte | `incidencias.view` |
 | Editar incidencias | `incidencias.edit` | Cambiar una incidencia, cerrarla o reabrirla. | Admin, Soporte | `incidencias.view` |
 
 ### Registro

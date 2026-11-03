@@ -102,18 +102,19 @@ export async function comprobarReferencias(req, datos, actual = null) {
       throw new AppError('Esa empresa no es tuya', 403, 'NO_ES_TUYO');
     }
   }
-  // Las personas, que existan y —para quien no ve todo el CRM— que sean de sus
-  // campus: apuntar como causante a una gestora de otra empresa le abriría la
-  // incidencia entera (la ve quien la causó). Fuera de su alcance, el mismo 400
-  // que si no existiera: así no se averigua quién hay en otra empresa.
+  // Las personas, que existan, estén activas y —para quien no ve todo el CRM—
+  // sean de sus campus: apuntar como causante a una gestora de otra empresa le
+  // abriría la incidencia entera (la ve quien la causó). Fuera de su alcance, el
+  // mismo 400 que si no existiera: así no se averigua quién hay en otra empresa.
+  // Es la misma regla que la lista del desplegable (`model.personas`).
   for (const campo of ['causadaPor', 'detectadaPor', 'arregladaPor']) {
     const id = datos[campo];
     if (!id) continue;
     if (actual && Number(actual[campo]) === Number(id)) continue;
-    const vale = alcance === null
-      ? await model.existe('users', id)
-      : id === alcance.userId || await model.personaDeLosCampus(id, alcance.projectIds || []);
-    if (!vale) throw new AppError('Esa persona no existe o no es de tus campus', 400, 'VALIDATION_ERROR');
+    const projectIds = alcance === null ? null : (alcance.projectIds || []);
+    if (!(await model.personaQueVale(id, projectIds, alcance?.userId ?? null))) {
+      throw new AppError('Esa persona no existe o no es de tus campus', 400, 'VALIDATION_ERROR');
+    }
   }
   return alcance;
 }
