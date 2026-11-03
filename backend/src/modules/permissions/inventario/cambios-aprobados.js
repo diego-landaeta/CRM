@@ -184,6 +184,8 @@ export const CAMBIOS_DE_MENU = [
       admin: ['+ Finanzas › Facturación'],
       'gestora con factura_manager': ['+ Finanzas › Facturación'],
       'gestora+admin': ['+ Finanzas › Facturación'],
+      // Soporte, por «Configurar la facturación»: así está en producción desde la #488.
+      soporte: ['+ Finanzas › Facturación'],
     },
     rutas: { 'Finanzas › Facturación': 'GET /api/invoices/' },
     aprobadoPor: DIEGO,

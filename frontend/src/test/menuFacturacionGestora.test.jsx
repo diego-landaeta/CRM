@@ -23,8 +23,12 @@ describe('menú › Facturación', () => {
   const facturacion = entrada('/finanzas/facturas');
   const yolanda = { role: 'gestor', roles_extra: ['tutor'], factura_manager: true };
 
-  it('existe y pide «facturas.emitir» (la casilla, ya como permiso: #423)', () => {
-    expect(facturacion?.permiso).toBe('facturas.emitir');
+  it('existe y pide «facturas.emitir» (la casilla, ya como permiso: #423) o «Configurar la facturación» (soporte ya la veía)', () => {
+    expect(facturacion?.permiso).toEqual(['facturas.emitir', 'facturas.configurar']);
+  });
+
+  it('a soporte, por «Configurar la facturación», como en producción (#488)', () => {
+    expect(seVe(facturacion, ['soporte'], { role: 'soporte' }, ['facturas.configurar'])).toBe(true);
   });
 
   it('a Yolanda (gestora + tutora, con la casilla → facturas.emitir) le sale', () => {
