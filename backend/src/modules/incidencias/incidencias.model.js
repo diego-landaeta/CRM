@@ -297,8 +297,9 @@ export async function personaQueVale(userId, projectIds, yo) {
  * Solo si es de los campus de quien mira (`projectIds`; null = todo el CRM):
  * con el id de cualquier usuario se sabría el nombre de alguien de otra
  * empresa. Fuera de su alcance se queda en null y el enlace va a la pantalla.
+ * El nombre, además, solo con `conNombres` (quien puede abrir Usuarios).
  */
-export async function ponerDestinos(incidencias, projectIds, yo) {
+export async function ponerDestinos(incidencias, projectIds, yo, { conNombres = true } = {}) {
   const lista = [].concat(incidencias).filter(Boolean);
   const ids = (tipo) => [...new Set(lista
     .filter((i) => i.entidadTipo === tipo && i.entidadId).map((i) => Number(i.entidadId)))];
@@ -312,7 +313,7 @@ export async function ponerDestinos(incidencias, projectIds, yo) {
           AND ($2::int[] IS NULL OR project_id = ANY($2::int[]))`, [ids('factura'), campus]);
     for (const r of rows) ventas.set(Number(r.id), Number(r.conversion_id));
   }
-  if (ids('usuario').length) {
+  if (conNombres && ids('usuario').length) {
     const { rows } = await query(
       `SELECT u.id, u.nombre FROM users u
         WHERE u.id = ANY($1::int[])

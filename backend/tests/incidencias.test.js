@@ -406,6 +406,21 @@ describe('el enlace de una factura o un usuario (#253)', () => {
     expect(r.body.data.entidadNombre).toBe(`${MARCA} gestoraA`);
   });
 
+  // Auditoría del 03/11: a la gestora el enlace la llevaba a Usuarios, que no
+  // puede abrir (`users.view` es de admin y soporte).
+  it('a la gestora no se le da el nombre: no puede abrir Usuarios', async () => {
+    const alta = await request.post('/api/incidencias').set(como('superadmin')).send({
+      projectId: P.A, tipos: ['capa8'], causadaPor: U.gestoraA, entidadTipo: 'usuario', entidadId: U.gestoraA2,
+      quePaso: `${MARCA} sobre su compañera`,
+    });
+    expect(alta.status).toBe(201);
+    const suya = await request.get(`/api/incidencias/${alta.body.data.id}`).set(como('gestoraA'));
+    expect(suya.status).toBe(200);
+    expect(suya.body.data.entidadNombre).toBeNull();
+    const admin = await request.get(`/api/incidencias/${alta.body.data.id}`).set(como('adminA'));
+    expect(admin.body.data.entidadNombre).toBe(`${MARCA} gestoraA2`);
+  });
+
   it('de otra empresa no se sabe nada: ni la venta de la factura ni el nombre', async () => {
     const f = await apuntar('adminA', 'factura', D.factura);
     expect(f.status).toBe(201);

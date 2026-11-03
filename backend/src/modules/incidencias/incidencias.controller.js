@@ -6,6 +6,7 @@ import {
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /** Los adjuntos de una incidencia, como mucho (el mismo número que la pantalla). */
 const MAX_ADJUNTOS = 5;
@@ -62,7 +63,10 @@ function parsear(schema, datos) {
  */
 async function conDestinos(req, incidencias) {
   const projectIds = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
-  return model.ponerDestinos(incidencias, projectIds, req.user.userId);
+  // El nombre, solo a quien puede abrir Usuarios: a una gestora el enlace la
+  // llevaría a una pestaña que no puede usar (Ctrl K tampoco se los ofrece).
+  const conNombres = await tienePermiso(req, 'users.view');
+  return model.ponerDestinos(incidencias, projectIds, req.user.userId, { conNombres });
 }
 
 export async function listar(req, res, next) {
