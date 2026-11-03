@@ -539,7 +539,7 @@ export default function AppLayout() {
 
       <Toaster />
       <CommandPalette />
-      {pathname.startsWith('/manual') && !mobileOpen && (
+      {(pathname.startsWith('/manual') || pathname === '/soporte') && !mobileOpen && (
         <Suspense fallback={null}>
           <FloatingDock />
         </Suspense>
