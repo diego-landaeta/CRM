@@ -16,6 +16,7 @@ import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
 import tutoresModule from './modules/tutores/index.js';
+import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import accountingModule from './modules/accounting/index.js';
@@ -44,6 +45,7 @@ import procesoModule from './modules/proceso/index.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import iaMonitorModule from './modules/ia-monitor/index.js';
 import reportsIaModule from './modules/reports-ia/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
 import claudeChatModule from './modules/claude-chat/index.js';
 import documentsModule from './modules/documents/index.js';
 import emailTemplatesModule from './modules/email-templates/index.js';
@@ -58,13 +60,18 @@ import makeModule from './modules/make/index.js';
 import messagesModule from './modules/messages/index.js';
 import statusModule from './modules/status/index.js';
 import registroModule from './modules/registro/index.js';
+import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import actividadModule from './modules/actividad/index.js';
+import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import correosModule from './modules/correos/index.js';
 import certifexModule from './modules/certifex/index.js';
+import soporteModule from './modules/soporte/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // Los errores del navegador (ErrorBoundary) llegan al registro del servidor, como en
 // CRM-ISEIE (paridad, 15/10). Público y con límite por IP.
 import clientErrorsModule from './modules/client-errors/index.js';
 import mcpModule from './modules/mcp/index.js';
+import moodleModule from './modules/moodle/index.js';
 import tasksModule from './modules/tasks/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { resolveActiveModules } from './bundles/manifest.js';
@@ -77,11 +84,19 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
+import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
+import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
+import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
+import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMoodleAvisosScheduler } from './jobs/moodleAvisosScheduler.js';
 import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 import { startPasoVencidoScheduler } from './jobs/pasoVencidoScheduler.js';
@@ -93,6 +108,8 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
+import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -119,6 +136,18 @@ app.use(cors({
 // los mismos que deja pasar Nginx, para que no se rechace en dos sitios
 // distintos con dos mensajes distintos.
 app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+// El webhook de admisión (#198): el formulario puede mandar los documentos como
+// imagen en texto (DNI por las dos caras, foto, título, firma), y con 5 MB se
+// perdía la solicitud entera. Solo esta ruta, con 19 MB: por debajo de los 20 MB de
+// Nginx (nginx/crm.conf), para que lo que no quepa lo rechace la aplicación con su
+// motivo y no Nginx con un 413 sin explicación (QA de Diego, 22/10; antes eran 25 MB).
+// Antes de leerlo, el portero: el token tiene que existir (si no, se leían 19 MB
+// para nada con cualquier token inventado), y el envío no pasar del tope.
+app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
+  express.json({ limit: MAX_ENVIO_BYTES }), express.urlencoded({ extended: true, limit: MAX_ENVIO_BYTES }), traducirTope);
+
+// El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
+app.use('/api/woocommerce/webhook', wcWebhook);
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));  // Elementor envía form-encoded
@@ -233,6 +262,8 @@ const ALL_MODULES = [
   { name: 'sales', mod: salesModule },
   { name: 'whatsapp', mod: whatsappModule },
   { name: 'tutores', mod: tutoresModule },
+  // Consultas de alumnos (#188): la bandeja del tutor y el panel.
+  { name: 'consultas', mod: consultasModule },
   { name: 'notifications', mod: notificationsModule },
   { name: 'meta-ads', mod: metaAdsModule },
   { name: 'accounting', mod: accountingModule },
@@ -261,6 +292,7 @@ const ALL_MODULES = [
   { name: 'audiences', mod: audiencesModule },
   { name: 'ia-monitor', mod: iaMonitorModule },
   { name: 'reports-ia', mod: reportsIaModule },
+  { name: 'ia-analisis', mod: iaAnalisisModule },
   { name: 'claude-chat', mod: claudeChatModule },
   { name: 'documents', mod: documentsModule },
   { name: 'email-templates', mod: emailTemplatesModule },
@@ -275,15 +307,21 @@ const ALL_MODULES = [
   { name: 'make', mod: makeModule },
   { name: 'messages', mod: messagesModule },
   { name: 'registro', mod: registroModule },
+  // «Qué ha pasado hoy», para cada gestora con lo suyo (#13). El Registro es para admin.
+  { name: 'actividad', mod: actividadModule },
+  // Cursos pendientes para las tutoras, por campus (#336).
+  { name: 'cursos-pendientes', mod: cursosPendientesModule },
   { name: 'correos', mod: correosModule },
   // Conexion de Claude por MCP: solo consulta, con token personal.
   { name: 'mcp', mod: mcpModule },
+  { name: 'moodle', mod: moodleModule },
   { name: 'certifex', mod: certifexModule },
   // El tablero aún no está aprobado para producción: solo en local y /testeo.
   ...(tareasActivas() ? [{ name: 'tasks', mod: tasksModule }] : []),
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
+  { name: 'soporte', mod: soporteModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
@@ -419,14 +457,22 @@ if (process.env.NODE_ENV !== 'test') {
     startGoogleAdsTokenScheduler();
     startMetaAdsSyncScheduler();
     startTutorCommissionsScheduler();
+    startTutoresCampusScheduler();
+    startConsultasCampusScheduler();
+    startConsultasAlumnosScheduler();
+    startConsultasResumenScheduler();
+    startConsultasPlazoScheduler();
+    startConsultasCargaScheduler();
     startVigilanteCatalogoScheduler();
     startLeadSinTocarScheduler();
+    startCursosPendientesScheduler();
     startPasoVencidoScheduler();
     startFeedbackDia7Scheduler();
     startNovedadesScheduler();
     startResumenDiarioScheduler();
     startReporteSemanalScheduler();
     startMcpRotacionScheduler();
+    startMoodleAvisosScheduler();
     startMcpVigilanciaScheduler();
     startCorreoEntranteScheduler();
     startWebhooksSalientesScheduler();

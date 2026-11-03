@@ -78,6 +78,16 @@ export const CAMBIOS = [
     aprobadoPor: DIEGO,
   },
   {
+    id: 'metas-sin-soporte-ni-pm',
+    que: 'Poner o borrar una meta de ventas: admin (la de la gente de sus campus), gestora (la suya) y superadmin. Soporte y project manager, no.',
+    motivo: 'Las dos rutas de metas no pedían ningún rol: cualquier sesión que llegara, soporte y project manager incluidos, fijaba o borraba la meta de cualquiera (IDOR, PR #434). Lo hacían por un descuido de la ruta, no porque alguien se lo diera.',
+    filas: ['POST /api/ventas/goals', 'DELETE /api/ventas/goals/:id'],
+    roles: ['soporte', 'project_manager'],
+    sentido: 'pierde',
+    // Pendiente: hay que aprobarlo en la #423 (lo cierra un agujero, pero cambia el acceso de tres roles).
+    aprobadoPor: null,
+  },
+  {
     id: 'superadmin-su-correo',
     que: 'El superadmin también puede cambiar su propio correo desde «Mi perfil».',
     motivo: 'Hoy esa ruta es solo del tutor. En el catálogo el superadmin lo tiene todo, sin excepciones; el resto de roles sigue igual.',
@@ -167,23 +177,36 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
+    id: 'menu-facturacion',
+    que: '«Finanzas › Facturación» la ve quien puede facturar: el admin, quien lleva la cola (la casilla «factura_manager») y quien es admin como rol de más.',
+    motivo: 'Antes la entrada preguntaba por `factura_manager` como si fuera un permiso y solo la veía el superadmin, aunque el servidor ya les dejaba entrar a todos ellos.',
+    perfiles: {
+      admin: ['+ Finanzas › Facturación'],
+      'gestora con factura_manager': ['+ Finanzas › Facturación'],
+      'gestora+admin': ['+ Finanzas › Facturación'],
+    },
+    rutas: { 'Finanzas › Facturación': 'GET /api/invoices/' },
+    aprobadoPor: DIEGO,
+  },
+  {
     id: 'menu-sin-403',
-    que: 'El menú deja de enseñar lo que daba 403: 10 entradas a soporte y 3 al project manager.',
+    que: 'El menú deja de enseñar lo que daba 403: 11 entradas a soporte y 3 al project manager.',
     motivo: 'Soporte lo veía todo por un atajo del menú («ve todo»), y el project manager las pantallas de la gestora; al entrar, el servidor les respondía 403. Ninguno pierde nada que pudiera usar.',
     perfiles: {
       soporte: [
-        '- Clientes › Diplomas', '- Conexión › Conectores', '- Conexión › Webhook de transferencias',
-        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Tablero', '- Finanzas › Facturas de colaboradores',
+        '- Captación › Webhooks', '- Clientes › Diplomas', '- Conexión › Conectores', '- Conexión › Webhook de transferencias',
+        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Mi tablero', '- Finanzas › Facturas de colaboradores',
         '- Tutores › Comisiones', '- Tutores › Mis cursos', '- Tutores › Sin tutor', '- Tutores › Tutores',
       ],
       project_manager: ['- Clientes › Matrículas', '- Principal › WhatsApp › Chat', '- Principal › WhatsApp › Conexión'],
     },
     rutas: {
+      'Captación › Webhooks': 'GET /api/webhook-tokens/',
       'Clientes › Diplomas': 'GET /api/certifex/diplomas/solicitudes',
       'Conexión › Conectores': 'GET /api/connectors/',
       'Conexión › Webhook de transferencias': 'GET /api/webhooks-salientes/',
       'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias',
-      'Equipo de Desarrollo › Tablero': 'GET /api/tasks/',
+      'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/',
       'Finanzas › Facturas de colaboradores': 'GET /api/facturas-colaborador/facturas',
       'Tutores › Comisiones': 'GET /api/tutores/comisiones',
       'Tutores › Mis cursos': 'GET /api/tutores/colaboraciones',

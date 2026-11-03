@@ -75,6 +75,7 @@ export const ROUTE_TITLES = {
   '/configuracion/documentos': 'Numeración de documentos',
   '/configuracion/plantillas-email': 'Plantillas de email',
   '/informes': 'Reportes',
+  '/informes/preguntar': 'Pregunta a tus datos',
   '/mensajes': 'Mensajes',
   '/manual': 'Manual',
   '/configuracion': 'Configuración',

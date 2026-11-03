@@ -4,6 +4,9 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import ResumenDeAyerYHoy from '@/shared/components/dashboard/ResumenDeAyerYHoy';
+import ActividadDeHoy from '@/shared/components/dashboard/ActividadDeHoy';
+import { TarjetaActividad } from '@/modules/reports/components/ActividadPorComercial';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
@@ -242,6 +245,13 @@ export default function DashboardPage() {
       {/* Ayer y hoy, con datos (#130). El recorte por rol lo hace el servidor. */}
       <ResumenDeAyerYHoy projectIds={idsDelAmbito} />
 
+      {/* Actividad por comercial de ayer (#203, parte B). Al admin, las 3
+          primeras y el equipo; a una gestora, su línea (lo recorta el servidor). */}
+      <TarjetaActividad ambito={ambitoComoObjeto({ activeIssuerId, activeProject })} />
+
+      {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
+      <ActividadDeHoy projectId={proyectoReal} issuerId={activeIssuerId} mostrarProyecto={!proyectoReal} />
+
       {/* SECCION HOY */}
       {today && (
         <div className="bg-primary/5 border border-border rounded-lg p-4">
@@ -275,7 +285,7 @@ export default function DashboardPage() {
               className="bg-card rounded-md p-3 border border-border text-left hover:border-destructive/40 hover:bg-destructive-soft/30 dark:hover:bg-destructive-soft/40 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
               <p className="text-2xl font-semibold tabular-nums text-destructive">{today.cobros_vencidos || 0}</p>
-              <p className="text-[10px] text-muted-foreground">pagos atrasados</p>
+              <p className="text-[10px] text-muted-foreground" title="Cuenta ventas con saldo pendiente y fecha de pago ya pasada. «Cuentas por cobrar» (Finanzas) cuenta cuotas e importes; son dos cifras distintas.">ventas con la fecha de pago pasada</p>
             </button>
             <button onClick={() => navigate('/finanzas/ingresos')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-success/40 hover:bg-success-soft/30 transition-colors">

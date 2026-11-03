@@ -8,7 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { soloEsColaborador } from '@/shared/lib/roles';
+import { tieneWhatsapp } from '@/shared/lib/roles';
 import NeedsProjectBanner from '@/shared/components/ui/NeedsProjectBanner';
 
 // Rutas que SÍ funcionan en modo "Todos los proyectos" (vista global).
@@ -29,6 +29,9 @@ const ALL_PROJECTS_OK = [
   /^\/tutores$/,
   /^\/tutores\/sin-tutor$/,
   /^\/tutores\/comisiones$/,
+  // Consultas de alumnos (#188, #189): cada fila dice de qué campus es, y el
+  // tutor ve lo suyo sin mirar la cabecera.
+  /^\/consultas(?:\/.*)?$/,
   // Feedback (#170): sin campus ni empresa, el servidor suma todos los que ve
   // cada uno (sin los de pruebas). Diego, 02/11: «el panel de feedback está
   // fallando»: con «Todos los proyectos» salía «Selecciona un proyecto».
@@ -149,6 +152,10 @@ const CON_SOCIEDAD_OK = [
   /^\/prospectos\/\d+$/,
   /^\/clientes$/,
   /^\/clientes\/\d+$/,
+  // Matrículas (#199): «por empresa y con "Todos los proyectos", como el resto
+  // del CRM». El listado manda issuerId y el servidor lo resuelve con
+  // proyectosDelAmbito; la pestaña de webhooks pide elegir un campus.
+  /^\/clientes\/matriculas$/,
   // Facturas es la pantalla que Diego pone de ejemplo: sabia filtrar por
   // sociedad antes que nadie. Dejarla fuera era mandarle el aviso de «elige un
   // campus» justo a la unica que no lo necesitaba.
@@ -186,6 +193,9 @@ const CON_SOCIEDAD_OK = [
   /^\/tutores$/,
   /^\/tutores\/comisiones$/,
   /^\/tutores\/sin-tutor$/,
+  // Consultas de alumnos (#188, #189): el servidor acota a los campus de la
+  // empresa con `proyectosDelAmbito`; sin esto el muro tapaba la bandeja.
+  /^\/consultas(?:\/.*)?$/,
   // «Mis cursos» es lo del propio tutor: no filtra por proyecto NI por empresa,
   // asi que pedirle que elija un campus no significaba nada.
   /^\/mis-cursos$/,
@@ -351,10 +361,11 @@ const G_TARGETS = {
 };
 
 export default function AppLayout() {
-  const { user } = useAuth();
-  // Quien es solo colaborador no tiene WhatsApp ni mensajes: el servidor le
-  // responde 403, y estos avisos preguntaban cada pocos segundos (QA del 07/10).
-  const esSoloColaborador = soloEsColaborador(user);
+  const { permissions } = useAuth();
+  // Quien no tiene WhatsApp —el colaborador (QA del 07/10), el tutor (QA del
+  // 22/10)…— recibe un 403 del servidor, y estos avisos preguntaban cada pocos
+  // segundos. Se decide con el mismo criterio que el servidor: su permiso (#423).
+  const sinWhatsapp = !tieneWhatsapp(permissions);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
@@ -547,7 +558,7 @@ export default function AppLayout() {
       <Suspense fallback={null}>
         <OfflineBanner />
       </Suspense>
-      {!esSoloColaborador && (
+      {!sinWhatsapp && (
         <Suspense fallback={null}>
           <AvisoDeLlamada />
           <AvisoDeMensaje />

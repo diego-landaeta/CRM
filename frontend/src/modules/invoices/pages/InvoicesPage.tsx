@@ -387,7 +387,7 @@ export default function InvoicesPage() {
               </span>
             </div>
             <Link to="/finanzas/pagos-stripe"
-              className="h-8 px-3 rounded-md bg-destructive text-white text-[11px] font-semibold hover:bg-destructive inline-flex items-center gap-1">
+              className="h-8 px-3 rounded-md bg-destructive text-white text-[11px] font-semibold hover:bg-destructive/90 inline-flex items-center gap-1">
               Asociar en Pagos Stripe →
             </Link>
           </div>
@@ -753,7 +753,7 @@ export default function InvoicesPage() {
                       {inv.estado === 'borrador' && (
                         <button onClick={() => setEmittingInv(inv)}
                           title="Validar los datos y emitir la factura (asigna número fiscal)"
-                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Validar y emitir
                         </button>
                       )}
@@ -769,7 +769,7 @@ export default function InvoicesPage() {
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}
                           title={`Para descargar/enviar debes rellenar: ${invoiceFaltantes(inv).join(', ')}`}
-                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded bg-warning text-warning-foreground text-[11px] font-semibold hover:bg-warning/90 inline-flex items-center gap-1">
                           <CheckCircle size={11} weight="bold" /> Completar datos
                         </button>
                       )}
@@ -937,7 +937,7 @@ export default function InvoicesPage() {
                     toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
                   } finally { setDeleting(false); }
                 }}
-                className="h-9 px-4 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive inline-flex items-center gap-1.5 disabled:opacity-50">
+                className="h-9 px-4 rounded-md bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 inline-flex items-center gap-1.5 disabled:opacity-50">
                 <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar y liberar número'}
               </button>
             </div>
