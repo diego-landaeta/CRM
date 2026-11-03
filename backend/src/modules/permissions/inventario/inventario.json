@@ -5773,6 +5773,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/incidencias/personas",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create",
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/incidencias/",
   "tipo": "ruta",
   "modulo": "incidencias",

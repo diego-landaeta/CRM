@@ -272,6 +272,23 @@ export async function personaDeLosCampus(userId, projectIds) {
   return rowCount > 0;
 }
 
+/**
+ * Las personas que se pueden poner como causante, detector o quien la
+ * arregló: las mismas que acepta `comprobarReferencias`. Con `projectIds` en
+ * null, todas; si no, quien tiene alguno de esos campus, y uno mismo.
+ */
+export async function personas(projectIds, userId) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre FROM users u
+      WHERE u.active
+        AND ($1::int[] IS NULL OR u.id = $2 OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.active = true AND up.project_id = ANY($1::int[])))
+      ORDER BY u.nombre, u.id`,
+    [projectIds ? projectIds.map(Number) : null, userId]);
+  return rows;
+}
+
 /** ¿Existen? Para que una clave foranea rota salga como 400 y no como 500. */
 export async function existe(tabla, id) {
   const permitidas = { projects: 'projects', invoice_issuers: 'invoice_issuers', users: 'users' };

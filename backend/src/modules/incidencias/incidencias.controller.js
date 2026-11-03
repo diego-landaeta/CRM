@@ -22,6 +22,17 @@ function idDe(valor, que = 'Incidencia') {
   return n;
 }
 
+/**
+ * El nombre del fichero cabe en `VARCHAR(255)`: uno más largo salía como un
+ * 500. Se recorta por el medio y se conserva la extensión.
+ */
+function nombreQueCabe(nombre) {
+  if (nombre.length <= 255) return nombre;
+  const punto = nombre.lastIndexOf('.');
+  const ext = punto > 0 && nombre.length - punto <= 10 ? nombre.slice(punto) : '';
+  return nombre.slice(0, 255 - ext.length) + ext;
+}
+
 function parsear(schema, datos) {
   const r = schema.safeParse(datos);
   if (!r.success) throw new AppError(r.error.errors[0].message, 400, 'VALIDATION_ERROR');
@@ -46,6 +57,19 @@ export async function metricas(req, res, next) {
   try {
     const f = parsear(metricasSchema, req.query);
     res.json({ success: true, data: await model.metricas({ ...f, alcance: await service.alcanceDe(req) }) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * Para «quién la causó, la detectó o la arregló»: solo las personas que el
+ * servidor acepta al guardar. La lista de Usuarios no se recorta por campus, y
+ * con ella un admin elegía a alguien de otra empresa y le salía un error.
+ */
+export async function personas(req, res, next) {
+  try {
+    const alcance = await service.alcanceDe(req);
+    const projectIds = alcance === null ? null : (alcance.projectIds || []);
+    res.json({ success: true, data: await model.personas(projectIds, req.user.userId) });
   } catch (err) { next(err); }
 }
 
@@ -100,7 +124,7 @@ export async function subirAdjunto(req, res, next) {
     await saveLocal(clave, req.file.buffer);
 
     const a = await model.guardarAdjunto({
-      incidenciaId: id, nombre: req.file.originalname,
+      incidenciaId: id, nombre: nombreQueCabe(req.file.originalname),
       clave, mime: req.file.mimetype, bytes: req.file.size, subidoPor: req.user.userId,
     });
     res.status(201).json({ success: true, data: a });

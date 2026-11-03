@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Plus, ArrowClockwise, ArrowSquareOut, XCircle } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import Select from '@/shared/components/ui/Select';
-import client from '@/shared/api/client';
 import { lista } from '@/shared/lib/lista';
 import { cn } from '@/shared/lib/utils';
 import usePermission from '@/shared/hooks/usePermission';
@@ -103,9 +102,11 @@ export default function IncidenciasPage() {
 
   // Las personas, para «quién la causó» y el filtro. Solo hacen falta a quien
   // apunta o edita: la gestora ve los nombres que ya trae cada incidencia.
+  // Las da Incidencias y no /users: un admin, solo las de sus campus, que son
+  // las que el servidor acepta al guardar.
   useEffect(() => {
     if (!puedeApuntar && !puedeEditar) return;
-    client.get('/users?limit=100')
+    incidenciasApi.personas()
       .then((r) => setPersonas(lista(r?.data).map((u: any) => ({ id: u.id, nombre: u.nombre }))))
       .catch(() => {});
   }, [puedeApuntar, puedeEditar]);

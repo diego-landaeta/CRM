@@ -110,6 +110,9 @@ export const incidenciasApi = {
   metricas: (f: FiltrosIncidencias & { meses?: number } = {}) =>
     client.get<MetricasIncidencias>('/incidencias/metricas', { params: parametros(f) }),
 
+  /** Quien se puede poner como causante, detector o quien la arregló (lo decide el servidor). */
+  personas: () => client.get<{ id: number; nombre: string }[]>('/incidencias/personas'),
+
   porId: (id: number) => client.get<Incidencia>(`/incidencias/${id}`),
 
   crear: (datos: DatosIncidencia) => client.post<Incidencia>('/incidencias', datos),

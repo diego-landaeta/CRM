@@ -283,6 +283,14 @@ describe('crear, editar y cerrar (#253)', () => {
     expect(await lista('gestoraB')).toEqual([]);
   });
 
+  it('se puede borrar «cuándo se arregló» una vez puesto', async () => {
+    const puesta = await request.patch(`/api/incidencias/${id}`).set(como('adminA')).send({ arregladaAt: '2026-10-20T10:00:00Z' });
+    expect(puesta.body.data.arregladaAt).not.toBeNull();
+    const r = await request.patch(`/api/incidencias/${id}`).set(como('adminA')).send({ arregladaAt: null });
+    expect(r.status).toBe(200);
+    expect(r.body.data.arregladaAt).toBeNull();
+  });
+
   it('el admin de otra empresa no la edita: 404', async () => {
     const r = await request.patch(`/api/incidencias/${id}`).set(como('adminB')).send({ estado: 'closed' });
     expect(r.status).toBe(404);
@@ -301,6 +309,31 @@ describe('crear, editar y cerrar (#253)', () => {
       const r = await request.post('/api/incidencias').set(como('superadmin')).send(c);
       expect(r.status, JSON.stringify(c)).toBe(400);
     }
+  });
+});
+
+// Auditoría del 02/11 (2.ª): el diálogo cargaba /users, sin recortar por campus,
+// y un admin elegía a alguien que luego el servidor no le aceptaba.
+describe('las personas que se pueden elegir (#253)', () => {
+  const nombres = async (quien) => {
+    const r = await request.get('/api/incidencias/personas').set(como(quien));
+    expect(r.status, quien).toBe(200);
+    return r.body.data.map((p) => p.id);
+  };
+
+  it('un admin, solo las de sus campus (y él): las mismas que el servidor acepta al guardar', async () => {
+    const ids = await nombres('adminA');
+    for (const k of ['adminA', 'adminA_bis', 'gestoraA', 'gestoraA2']) expect(ids, k).toContain(U[k]);
+    for (const k of ['adminB', 'gestoraB', 'superadmin']) expect(ids, k).not.toContain(U[k]);
+  });
+
+  it('el superadmin, cualquiera', async () => {
+    const ids = await nombres('superadmin');
+    for (const k of ['adminA', 'gestoraB', 'adminB']) expect(ids, k).toContain(U[k]);
+  });
+
+  it('la gestora no: 403', async () => {
+    expect((await request.get('/api/incidencias/personas').set(como('gestoraA'))).status).toBe(403);
   });
 });
 
@@ -341,6 +374,22 @@ describe('los adjuntos (#253)', () => {
     const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('gestoraA'))
       .attach('file', PNG, { filename: 'x.png', contentType: 'image/png' });
     expect(r.status).toBe(403);
+  });
+
+  // Auditoría del 02/11 (2.ª): estos dos salían como un 500.
+  it('un fichero de más de 10 MB es un 400, no un 500', async () => {
+    const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('adminA'))
+      .attach('file', Buffer.alloc(10 * 1024 * 1024 + 1), { filename: 'grande.png', contentType: 'image/png' });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('FILE_TOO_LARGE');
+  });
+
+  it('un nombre de más de 255 caracteres se guarda recortado, con su extensión', async () => {
+    const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('adminA'))
+      .attach('file', PNG, { filename: `${'a'.repeat(300)}.png`, contentType: 'image/png' });
+    expect(r.status).toBe(201);
+    expect(r.body.data.name).toHaveLength(255);
+    expect(r.body.data.name.endsWith('.png')).toBe(true);
   });
 
   // Auditoría del 02/11: el tope de 5 solo estaba en la pantalla.

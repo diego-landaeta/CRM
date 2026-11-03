@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-809 rutas en 64 módulos, y 28 acciones con condición dentro de una ruta.
+810 rutas en 64 módulos, y 28 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -447,6 +447,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.view` |
 | metricas | `GET /api/incidencias/metricas` | (no existía) | (ruta nueva) | `incidencias.view` |
 | descargarAdjunto | `GET /api/incidencias/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | `incidencias.view` |
+| personas | `GET /api/incidencias/personas` | (no existía) | (ruta nueva) | `incidencias.create` o `incidencias.edit` |
 | crear | `POST /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.create` |
 | porId | `GET /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.view` |
 | editar | `PATCH /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.edit` |

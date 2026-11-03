@@ -12,8 +12,8 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- EL NÚMERO
 --
--- La 236: `staging` llega a la 235 (el buscador, #591); las 223 y 224 las tienen
--- #483 y #484, y la 233 y la 234 las PR de Ángel hacia `main` (#575, #579). Antes de aplicarla,
+-- La 236: `staging` llega a la 235 (el buscador, #591), y la 233 y la 234 de las
+-- PR abiertas son las de Ángel hacia `main` (#575, #579). Antes de aplicarla,
 -- comprobar que sigue libre. Va numerada aparte en cada CRM.
 --
 -- Se aplica como `postgres`, con `psql -v ON_ERROR_STOP=1`, y después hay que

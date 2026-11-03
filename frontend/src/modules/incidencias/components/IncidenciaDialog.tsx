@@ -170,8 +170,9 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
       gravedad: f.gravedad,
       estado: f.estado,
     };
-    // Al cerrarla sin decir cuándo se arregló, lo pone el servidor (ahora).
-    if (!f.arregladaAt) delete datos.arregladaAt;
+    // Al cerrarla sin decir cuándo se arregló, lo pone el servidor (ahora). Si
+    // ya tenía fecha y se ha vaciado, sí se manda el vacío: si no, no se podía borrar.
+    if (!f.arregladaAt && !incidencia?.arregladaAt) delete datos.arregladaAt;
     // Sin cambiar el campus, no se manda: el servidor comprueba que el campus
     // que llega es de quien guarda, y una suya de otro campus daría 403.
     if (!nueva && f.donde === dondeDe(incidencia!)) {
