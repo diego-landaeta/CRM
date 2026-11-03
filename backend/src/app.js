@@ -323,7 +323,7 @@ const ALL_MODULES = [
   // Facturas de colaboradores (#202): solo en pruebas también en el servidor, como el tablero.
   ...(facturasColaboradorActivas() ? [{ name: 'facturas-colaborador', mod: facturasColaboradorModule }] : []),
   { name: 'soporte', mod: soporteModule },
-  // Incidencias (#253), al lado de Soporte: sobre todo las de capa 8. Migración 236.
+  // Incidencias (#253), al lado de Soporte: sobre todo las de capa 8. Migración 238.
   { name: 'incidencias', mod: incidenciasModule },
 ];
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');

@@ -12,7 +12,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- EL NÚMERO
 --
--- La 236: `staging` llega a la 235 (el buscador, #591), y la 233 y la 234 de las
+-- La 238: `staging` llega a la 237 (los cobros repetidos, #610), y la 233 y la 234 de las
 -- PR abiertas son las de Ángel hacia `main` (#575, #579). Antes de aplicarla,
 -- comprobar que sigue libre. Va numerada aparte en cada CRM.
 --
