@@ -1,4 +1,4 @@
--- 236 · Feedback: una vez por PERSONA y reintentos (02/11/2026, #593)
+-- 240 · Feedback: una vez por PERSONA y reintentos (02/11/2026, #593)
 --
 -- · «Una vez por persona» (#169) era una vez por FICHA: la misma persona con
 --   dos fichas (otro campus, un duplicado) recibía dos encuestas, y quien
@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_feedback_envios_email_normalizado
 
 ALTER TABLE feedback_envios ADD COLUMN IF NOT EXISTS intentos INTEGER NOT NULL DEFAULT 0;
 COMMENT ON COLUMN feedback_envios.intentos IS
-  'Veces que se ha intentado mandar el correo (236). Un fallido o un pendiente atascado se reintenta hasta 3.';
+  'Veces que se ha intentado mandar el correo (240). Un fallido o un pendiente atascado se reintenta hasta 3.';
 
 -- Los que ya salieron o fallaron cuentan como un intento hecho.
 UPDATE feedback_envios SET intentos = 1

@@ -1,4 +1,4 @@
--- 235 · Notas del historial sin autor (02/11/2026, #593)
+-- 239 · Notas del historial sin autor (02/11/2026, #593)
 --
 -- El feedback (#169) apunta en el historial del prospecto que se le mandó el
 -- correo, lo que contestó y si pidió que le volvieran a contactar. Esas notas

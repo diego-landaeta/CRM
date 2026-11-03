@@ -37,7 +37,7 @@ const uno = async (sql, p) => (await query(sql, p)).rows[0];
 beforeAll(async () => {
   try {
     const t = await query("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_envios' AND column_name = 'intentos'");
-    if (!t.rows.length) throw new Error('Falta la migración 236.');
+    if (!t.rows.length) throw new Error('Falta la migración 240.');
     proyecto = (await uno('INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
       [`Campus ${marca}`, `campus-${marca}`, `${marca}-key`])).id;
     ids.projects.push(proyecto);
