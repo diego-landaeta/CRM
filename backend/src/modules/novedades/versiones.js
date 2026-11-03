@@ -13,6 +13,140 @@ export const CRM = { nombre: 'MultiCRM', color: '#1f3a5f' };
 
 export const VERSIONES = [
   {
+    "version": "2.6.0",
+    "fecha": "2026-11-03",
+    "titulo": "Versión 2.6.0",
+    "intro": "Las consultas de los alumnos llegan al CRM, Soporte guarda los tickets, los cursos pendientes tienen su pantalla y Claude ya consulta los Moodle de los campus. Además, la actividad de cada comercial en Reportes y una tanda de arreglos de seguridad y de cobros. Aquí está todo, con un botón para ir a cada pantalla.",
+    "grupos": [
+      {
+        "titulo": "Consultas de alumnos",
+        "items": [
+          {
+            "titulo": "Las dudas del campus, en el CRM",
+            "texto": "Lo que los alumnos escriben al tutor en el campus (Moodle) entra en el menú Consultas: la bandeja, los alumnos sin mensajes, la carga de cada tutor y las métricas de respuesta. Se responde desde el CRM y la respuesta llega al campus.",
+            "roles": [
+              "tutor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas"
+          },
+          {
+            "titulo": "Cada campus, conectado una vez",
+            "texto": "El campus se conecta en Finanzas → Integraciones con la URL y el token de su Moodle. Desde ese momento el CRM lee las consultas nuevas; lo anterior no se importa.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ir a Integraciones"
+          }
+        ]
+      },
+      {
+        "titulo": "Soporte y cursos pendientes",
+        "items": [
+          {
+            "titulo": "Los tickets de Soporte se guardan",
+            "texto": "Lo que se manda desde Soporte queda guardado en el servidor con sus pasos, lo esperado y lo observado, y llega a quien lo tiene que mirar. Se ve su estado y cuánto se tarda en responder y en cerrar.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/soporte",
+            "boton": "Ir a Soporte"
+          },
+          {
+            "titulo": "Cursos pendientes",
+            "texto": "Los cursos vendidos que aún no tienen fecha, por campus, con su tutora, la fecha comprometida y las alumnas que esperan. Avisa antes de la fecha y los lunes manda un resumen.",
+            "roles": [
+              "gestor",
+              "tutor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/productos/pendientes",
+            "boton": "Ir a Cursos pendientes"
+          }
+        ]
+      },
+      {
+        "titulo": "Claude y los informes",
+        "items": [
+          {
+            "titulo": "Claude consulta los Moodle",
+            "texto": "El MCP de Claude ve los cursos, los alumnos y los recursos de cada campus que tenga su Moodle conectado, además de matrículas, catálogo, correos, WhatsApp, nóminas, clientes y la publicidad de Meta.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion",
+            "boton": "Ir a Conexión"
+          },
+          {
+            "titulo": "Actividad por comercial",
+            "texto": "En Reportes y en el Dashboard: lo que ha hecho cada gestora en el periodo (contactos, pasos, ventas) y de dónde llegó cada prospecto.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/informes",
+            "boton": "Ir a Reportes"
+          },
+          {
+            "titulo": "Una sola tasa de cierre",
+            "texto": "La tasa de cierre se calcula igual en todas partes, con su «¿de dónde sale?», y el baremo que dice si es buena o mala se puede cambiar.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/informes",
+            "boton": "Ir a Reportes"
+          }
+        ]
+      },
+      {
+        "titulo": "Seguridad y cobros",
+        "items": [
+          {
+            "titulo": "Cada uno, solo lo de sus campus",
+            "texto": "Ventas, matrículas, facturas, metas, comisiones y tutores responden solo con lo de los campus de quien pide. Lo de otro campus no se ve ni se puede tocar.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "Cobros repetidos",
+            "texto": "Los cobros apuntados a mano que repetían un cargo de Stripe se quitan y lo pagado de cada venta vuelve a cuadrar. Lo que no estaba claro queda en una lista para revisarlo, sin borrar nada.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "Recuperar la contraseña",
+            "texto": "Desde la pantalla de entrada se puede pedir un correo para poner una contraseña nueva.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.2.0",
     "fecha": "2026-10-16",
     "titulo": "Versión 2.2.0",
