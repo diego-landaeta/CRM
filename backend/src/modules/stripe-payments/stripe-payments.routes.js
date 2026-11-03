@@ -2,6 +2,7 @@ import { Router, raw } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './stripe-payments.controller.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 // Router autenticado (montado en /api/stripe-payments)
 const router = Router();
