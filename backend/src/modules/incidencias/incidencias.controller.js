@@ -5,7 +5,6 @@ import {
 } from './incidencias.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
-import { enUtf8 } from '../whatsapp/media.service.js';
 
 /** Los adjuntos de una incidencia, como mucho (el mismo número que la pantalla). */
 const MAX_ADJUNTOS = 5;
@@ -21,6 +20,22 @@ function idDe(valor, que = 'Incidencia') {
     throw new AppError(`${que} no encontrada`, 404, 'NOT_FOUND');
   }
   return n;
+}
+
+/**
+ * El nombre del fichero tal como se escribió. multer lo lee como Latin-1:
+ * «año.png» llegaba como «aÃ±o.png», y «informe—final», un nombre en chino o
+ * la tilde suelta de los ficheros de un Mac, igual. Se vuelve a leer como
+ * UTF-8 siempre (el `enUtf8` de WhatsApp solo lo hace si ve «Ã»), salvo que ya
+ * traiga caracteres de fuera de Latin-1 o que la vuelta no cuadre. Y en NFC,
+ * para que la «é» de un Mac sea la misma que la de Windows.
+ */
+function nombreDelFichero(original) {
+  const s = String(original || '');
+  if (!s) return 'archivo';
+  if ([...s].some((c) => c.codePointAt(0) > 0xff)) return s.normalize('NFC');
+  const u = Buffer.from(s, 'latin1').toString('utf8');
+  return (u.includes('�') ? s : u).normalize('NFC');
 }
 
 /**
@@ -125,8 +140,7 @@ export async function subirAdjunto(req, res, next) {
     await saveLocal(clave, req.file.buffer);
 
     const a = await model.guardarAdjunto({
-      // multer lee el nombre como Latin-1: «año.png» llegaba como «aÃ±o.png».
-      incidenciaId: id, nombre: nombreQueCabe(enUtf8(req.file.originalname) || 'archivo'),
+      incidenciaId: id, nombre: nombreQueCabe(nombreDelFichero(req.file.originalname)),
       clave, mime: req.file.mimetype, bytes: req.file.size, subidoPor: req.user.userId,
     });
     res.status(201).json({ success: true, data: a });

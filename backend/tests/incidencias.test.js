@@ -438,6 +438,21 @@ describe('los adjuntos (#253)', () => {
     expect(r.body.data.name).toBe('captura-año-Peña.png');
   });
 
+  // Auditoría corta del 02/11: sin «ñ» ni «é» a la vista no se arreglaban.
+  it('y también una raya, un nombre en chino o la tilde suelta de un Mac', async () => {
+    const casos = [
+      ['informe—final.png', 'informe—final.png'],
+      ['截图.png', '截图.png'],
+      ['café.png', 'café.png'],
+    ];
+    for (const [envia, queda] of casos) {
+      const r = await request.post(`/api/incidencias/${I.sinCampus}/adjuntos`).set(como('superadmin'))
+        .attach('file', PNG, { filename: envia, contentType: 'image/png' });
+      expect(r.status, envia).toBe(201);
+      expect(r.body.data.name, envia).toBe(queda);
+    }
+  });
+
   it('un nombre de más de 255 caracteres se guarda recortado, con su extensión', async () => {
     const r = await request.post(`/api/incidencias/${I.deGestoraA}/adjuntos`).set(como('adminA'))
       .attach('file', PNG, { filename: `${'a'.repeat(300)}.png`, contentType: 'image/png' });
