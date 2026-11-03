@@ -214,6 +214,12 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     && Number(f.entidadId) === Number(incidencia.entidadId);
   const enlace = enlaceDe(f.entidadTipo, f.entidadId ? Number(f.entidadId) : null,
     mismaEntidad ? { ventaId: incidencia!.entidadVentaId, nombre: incidencia!.entidadNombre } : {});
+  // Lo que hace el enlace de una factura o un usuario, que no tienen ficha propia.
+  const pistaDeEntidad = f.entidadTipo === 'factura' || f.entidadTipo === 'usuario'
+    ? (enlace && enlace.startsWith('/finanzas/ventas/') ? 'Abre la venta de esa factura.'
+      : enlace && enlace.includes('buscar=') ? 'Abre Usuarios con su nombre ya buscado.'
+        : 'Se abre su pantalla: búscala con este número.')
+    : undefined;
   const area = cn(inputClass, 'h-auto py-2 resize-y');
 
   return (
@@ -296,7 +302,7 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
                     ariaLabel="Sobre qué" disabled={soloLectura} />
                 </Field>
                 <Field label="Su número (id)" htmlFor="inc-entidad-id" error={errores.entidadId}
-                  hint={f.entidadTipo === 'factura' || f.entidadTipo === 'usuario' ? 'Se abre su pantalla: búscala con este número.' : undefined}>
+                  hint={pistaDeEntidad}>
                   <div className="flex gap-2">
                     <input id="inc-entidad-id" inputMode="numeric" value={f.entidadId}
                       disabled={soloLectura || !f.entidadTipo || f.entidadTipo === 'otro'}

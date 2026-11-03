@@ -32,6 +32,30 @@ async function guardarCon(incidencia) {
   return editar.mock.calls[0][1];
 }
 
+// Auditoría del 02/11: la pista de «Su número (id)» seguía diciendo «búscala».
+describe('la pista de «sobre qué» de una factura o un usuario', () => {
+  const abrirCon = (extra) => {
+    render(
+      <MemoryRouter>
+        <IncidenciaDialog incidencia={{ ...base, arregladaAt: null, ...extra }} personas={[]} campus={[]} yo={1} onCerrar={() => {}} onGuardada={() => {}} />
+      </MemoryRouter>,
+    );
+    return document.body.textContent;
+  };
+
+  it('la factura con su venta: «Abre la venta de esa factura»', () => {
+    expect(abrirCon({ entidadTipo: 'factura', entidadId: 86, entidadVentaId: 569 })).toContain('Abre la venta de esa factura.');
+  });
+
+  it('el usuario de sus campus: «Abre Usuarios con su nombre ya buscado»', () => {
+    expect(abrirCon({ entidadTipo: 'usuario', entidadId: 7, entidadNombre: 'Laura' })).toContain('Abre Usuarios con su nombre ya buscado.');
+  });
+
+  it('sin lo que da el servidor (de otra empresa): su pantalla', () => {
+    expect(abrirCon({ entidadTipo: 'factura', entidadId: 86, entidadVentaId: null })).toContain('Se abre su pantalla: búscala con este número.');
+  });
+});
+
 describe('«Cuándo se arregló» al editar', () => {
   beforeEach(() => {
     editar.mockReset();
