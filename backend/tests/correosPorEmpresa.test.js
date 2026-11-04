@@ -87,6 +87,35 @@ vi.mock('../src/modules/reports/report.model.js', () => ({
   contactosPorGestora: (...a) => contactosPorGestora(...a),
 }));
 
+// La actividad por comercial del día (#203, parte C): una gestora de CEDIA y una
+// de ICTESS. Ana solo escribió notas en ICTESS: ahí no ocupa fila.
+const fila203 = (user_id, comercial, c = {}) => ({
+  user_id, comercial, llamadas: 0, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 0, toques: 0, ...c,
+});
+const actividadPorComercial = vi.fn();
+vi.mock('../src/modules/mcp/mcp.model.js', () => ({
+  actividadPorComercial: (...a) => actividadPorComercial(...a),
+}));
+function actividadDe({ projectIds }) {
+  if (projectIds.includes(4)) {
+    return {
+      // 3 contactos + 1 nota = los 4 contactos de ICTESS de hoy (CONTACTOS_HOY).
+      filas: [fila203(9, 'Marta ICTESS', { llamadas: 1, whatsapp: 1, correos: 1, personas: 2, toques: 3 }), fila203(3, 'Ana Gestora', { notas: 1 })],
+      equipo: { llamadas: 1, whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 0, correos: 1, notas: 1, personas: 2, toques: 3 },
+    };
+  }
+  if (projectIds.includes(1)) {
+    return {
+      filas: [
+        fila203(3, 'Ana Gestora', { llamadas: 2, whatsapp: 3, whatsapp_texto: 5, whatsapp_voz: 2, correos: 1, notas: 1, personas: 4, toques: 6 }),
+        fila203(8, 'Diego Admin', { llamadas: 0, whatsapp: 1, correos: 0, notas: 1, personas: 1, toques: 1 }),
+      ],
+      equipo: { llamadas: 2, whatsapp: 4, whatsapp_texto: 5, whatsapp_voz: 2, correos: 1, notas: 2, personas: 4, toques: 7 },
+    };
+  }
+  return { filas: [], equipo: { llamadas: 0, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 0, toques: 0 } };
+}
+
 const C = await import('../src/jobs/correosDelEquipo.js');
 
 const MANUEL = { id: 1, role: 'superadmin', nombre: 'Manuel' };
@@ -109,6 +138,7 @@ const listaContactos = (tabla, ids) => ids.filter((i) => tabla[i]).map((i) => ({
 
 beforeEach(() => {
   overview.mockClear();
+  actividadPorComercial.mockReset().mockImplementation(async (a) => actividadDe(a));
   contactosPorCampus.mockReset().mockImplementation(async ({ projectIds, from }) => {
     const tabla = from === '2026-10-19' ? CONTACTOS_HOY : from === '2026-10-12' ? CONTACTOS_SEMANA : CONTACTOS_ANTERIOR;
     return listaContactos(tabla, projectIds);
@@ -225,6 +255,62 @@ describe('Resumen del día · Manuel (superadmin, todas las empresas)', () => {
     expect(llamadas.some((a) => a.from === '2026-10-19' && a.to === '2026-10-19'
       && [...a.projectIds].sort().join() === '1,2,3')).toBe(true);
     expect(contactosPorGestora.mock.calls.every(([a]) => a.from === '2026-10-19' && a.to === '2026-10-19')).toBe(true);
+  });
+});
+
+describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
+  it('la pide para el día de hoy, con los campus de CADA empresa', async () => {
+    await C.correoDiarioDireccion(MANUEL, LUNES);
+    const pedidas = actividadPorComercial.mock.calls.map(([a]) => [...a.projectIds].sort().join());
+    expect(pedidas.sort()).toEqual(['1,2,3', '4', '5']);
+    expect(actividadPorComercial.mock.calls.every(([a]) => a.desde === '2026-10-19' && a.hasta === '2026-10-19')).toBe(true);
+  });
+
+  it('una fila por comercial y la del equipo, con escritos y voz debajo del WhatsApp', async () => {
+    const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
+    expect(t).toMatch(/Comercial Llamadas registradas WhatsApp Correos Personas Total/);
+    expect(t).toMatch(/Ana Gestora 2 3 5 escritos · 2 de voz 1 4 6/);
+    expect(t).toMatch(/Diego Admin 0 1 0 1 1/);
+    expect(t).toMatch(/Equipo 2 4 5 escritos · 2 de voz 1 4 7/);
+  });
+
+  it('las filas más las notas dan los contactos del día del propio resumen', async () => {
+    const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
+    // CEDIA: 6 + 1 = 7 contactos, más 2 notas = los 9 de «Resumen por empresa».
+    expect(t).toMatch(/CEDIA SL 8 9 1/);
+    expect(t).toContain('7 contactos y 2 notas suman los 9 contactos del día');
+    // ICTESS: 3 + 1 nota = 4.
+    expect(t).toMatch(/ICTESS SL 2 4 1/);
+    expect(t).toContain('3 contactos y 1 nota suman los 4 contactos del día');
+  });
+
+  it('quien solo escribió notas no ocupa una fila', async () => {
+    const r = await C.correoDiarioDireccion(ADMIN_ICTESS, LUNES);
+    const t = sinEtiquetas(r.html);
+    expect(t).toMatch(/Marta ICTESS 1 1 1 2 3/);
+    expect(t.slice(t.indexOf('Actividad por comercial'))).not.toContain('Ana Gestora');
+  });
+
+  it('un admin de una empresa no ve a las comerciales de otra', async () => {
+    const t = sinEtiquetas((await C.correoDiarioDireccion(ADMIN_ICTESS, LUNES)).html);
+    expect(actividadPorComercial.mock.calls.map(([a]) => a.projectIds)).toEqual([[4]]);
+    // (En «Por gestora» sí sale: ese mock no mira la empresa.)
+    expect(t.slice(t.indexOf('Actividad por comercial'))).not.toContain('Diego Admin');
+  });
+
+  it('sin actividad, no hay tabla', async () => {
+    const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
+    // Academia IA no tiene actividad: solo dos tablas, la de CEDIA y la de ICTESS.
+    expect(t.split('Actividad por comercial').length - 1).toBe(2);
+  });
+
+  it('escapa el nombre de la comercial', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [fila203(1, '<b>Eva</b>', { llamadas: 1, toques: 1, personas: 1 })],
+      equipo: { llamadas: 1, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1);
+    expect(html).toContain('&lt;b&gt;Eva&lt;/b&gt;');
+    expect(html).not.toContain('notas suman');
   });
 });
 

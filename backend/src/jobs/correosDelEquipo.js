@@ -10,6 +10,9 @@ import * as leadModel from '../modules/leads/lead.model.js';
 import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
+// Por el espacio de nombres: la actividad por comercial (#203) puede no estar en
+// ISEIE todavía. Sin ella, el resumen sale sin esa tabla.
+import * as mcpModel from '../modules/mcp/mcp.model.js';
 
 /**
  * Los correos al equipo, con datos y con la marca (Diego, 28/09):
@@ -601,6 +604,46 @@ export function prospectosConOrigen(g) {
 /** Lo que significa cada origen, debajo de la tabla. */
 export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-top:6px">Formulario: lo reparte la regla o Make. WhatsApp: pulsó el botón de la web y la gestora lo dio de alta. A mano: el resto de altas.</div>`;
 
+// ─── Actividad por comercial (#203, parte C) ─────────────────────────────────
+//
+// La tabla de Reportes y del Dashboard (parte B), en el resumen de la tarde. Sale
+// de `actividadPorComercial`, la misma consulta que Claude y la pantalla: cada
+// contacto cuenta para QUIÉN LO HIZO, no para quien lleva el prospecto (por eso
+// no cuadra con «Por gestora», que es la cartera), y el día es el de Madrid.
+//
+// Las notas internas no son contactos (ficha de Diego del 07/10), pero los
+// «Contactos» del resumen sí las cuentan, como «Trabajo hecho» de Reportes. La
+// nota de debajo dice cuántas son, para que el total más las notas dé esa cifra.
+
+/** «12 escritos · 3 de voz», debajo del WhatsApp, como en la pantalla. */
+const escritosYVoz = (f) => (n(f.whatsapp_texto) || n(f.whatsapp_voz)
+  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS}">${entero(f.whatsapp_texto)} escritos · ${entero(f.whatsapp_voz)} de voz</div>`
+  : '');
+
+const celdasDeActividad = (f) => [entero(f.llamadas), `${entero(f.whatsapp)}${escritosYVoz(f)}`, entero(f.correos), entero(f.personas), entero(f.toques)];
+
+/**
+ * `actividad`: lo que devuelve `actividadPorComercial` para la empresa.
+ * `contactos`: los «Contactos» del día de esa empresa en el propio resumen.
+ */
+export function tablaActividadPorComercial(actividad, contactos) {
+  // Quien solo escribió notas no ocupa una fila (como en la pantalla).
+  const filas = (actividad?.filas || []).filter((f) => n(f.toques) + n(f.whatsapp_texto) + n(f.whatsapp_voz) > 0);
+  if (!filas.length) return '';
+  const eq = actividad.equipo;
+  const cuerpo = filas.map((f) => [esc(f.comercial), ...celdasDeActividad(f)]);
+  cuerpo.push({
+    celdas: ['<strong>Equipo</strong>', ...celdasDeActividad(eq).map((c) => `<strong>${c}</strong>`)],
+    estilo: `;border-top:2px solid ${LINEA}`,
+  });
+  const notas = n(eq.notas)
+    ? ` Las notas internas no son contactos: ${entero(eq.toques)} contactos y ${entero(eq.notas)} ${n(eq.notas) === 1 ? 'nota' : 'notas'} suman los ${entero(contactos)} contactos del día, como los cuenta Reportes.`
+    : '';
+  return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Actividad por comercial</div>`
+    + tabla(['Comercial', 'Llamadas registradas', 'WhatsApp', 'Correos', 'Personas', 'Total'], cuerpo, { compacta: true })
+    + `<div style="font-size:11px;color:${GRIS};margin-top:6px">Cada contacto cuenta para quien lo hizo, aunque el prospecto lo lleve otra. Llamadas: solo las registradas en el CRM. Personas del equipo no es la suma: dos pueden haber contactado a la misma.${notas}</div>`;
+}
+
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
 
 /**
@@ -712,19 +755,23 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
   const resumen = [];
   for (const e of empresas) {
     const ids = e.campus.map((c) => c.id);
-    const [dia, cola, cobradoHoy, gestoras, contactosCampus] = await Promise.all([
+    const [dia, cola, cobradoHoy, gestoras, contactosCampus, actividad] = await Promise.all([
       resumenDelDia({ projectIds: ids, referencia: hoyIso }),
       resumenDeLaCola({ projectIds: ids }),
       cobrado({ from: hoyIso, to: hoyIso, projectIds: ids }),
       actividadPorGestora(ids, hoyIso, hoyIso),
       informes.contactosPorCampus({ projectIds: ids, from: hoyIso, to: hoyIso }),
+      mcpModel.actividadPorComercial
+        ? mcpModel.actividadPorComercial({ projectIds: ids, desde: hoyIso, hasta: hoyIso })
+        : null,
     ]);
     const hoy = dia.find((x) => x.dia === 'hoy') || {};
     const ayer = dia.find((x) => x.dia === 'ayer') || {};
     const filas = gestoras.map(filaDeGestora);
     const contactosDe = (id) => n((contactosCampus.find((c) => c.project_id === id) || {}).contactos);
+    const contactosEmpresa = contactosCampus.reduce((t, c) => t + n(c.contactos), 0);
     resumen.push({
-      nombre: e.nombre, leads: n(hoy.leads), contactos: contactosCampus.reduce((t, c) => t + n(c.contactos), 0),
+      nombre: e.nombre, leads: n(hoy.leads), contactos: contactosEmpresa,
       ventas: n(hoy.ventas), cobrado: cobradoHoy,
     });
     // Por campus, cuando la empresa tiene varios: TODOS, también los parados.
@@ -746,6 +793,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
       filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      tablaActividadPorComercial(actividad, contactosEmpresa),
       porCampus,
     ].join(''));
   }
