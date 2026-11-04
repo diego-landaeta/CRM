@@ -84,7 +84,8 @@ export async function filas(req, res, next) {
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const r = await conversionModel.filasDelPeriodo({
       ...(await proyectosDelAmbito(req)), from, to, responsableId,
-      producto: req.query.producto ? String(req.query.producto) : null, page, limit,
+      producto: req.query.producto ? String(req.query.producto) : null,
+      compartidas: req.query.compartidas || null, page, limit,
     });
     res.json({ success: true, data: r.filas,
       pagination: { total: r.total, page, limit, totalPages: Math.max(1, Math.ceil(r.total / limit)) } });

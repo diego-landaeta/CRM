@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { condicionDeCompartidas } from './compartidas.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
@@ -318,7 +319,7 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
+export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, compartidas = null, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -339,6 +340,10 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     conditions.push(`(c.importe_total = 0 OR c.notas_pago LIKE 'Backfill 2026-06-16%')`);
   }
   if (producto) { conditions.push(`TRIM(c.producto_contratado) = $${idx++}`); params.push(String(producto).trim()); }
+  // Solo compartidas o solo enteras (#163). Cambia qué ventas salen, no cuánto
+  // le cuenta cada una a la gestora: eso lo sigue diciendo `conversion_reparto`.
+  const deCompartidas = condicionDeCompartidas(compartidas, 'c');
+  if (deCompartidas) conditions.push(deCompartidas);
   if (from) { conditions.push(`c.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`c.fecha_conversion <= $${idx++}`); params.push(to); }
 
@@ -696,7 +701,7 @@ export async function cuotasDelPeriodo({
  * que ya se ve, y esconderlas volveria a descuadrar el recuento de facturas.
  */
 export async function filasDelPeriodo({
-  projectId = null, projectIds = null, from, to, responsableId = null, producto = null, page = 1, limit = 50,
+  projectId = null, projectIds = null, from, to, responsableId = null, producto = null, compartidas = null, page = 1, limit = 50,
 } = {}) {
   if (!from || !to) return { filas: [], total: 0 };
   const args = [from, to];
@@ -719,6 +724,9 @@ export async function filasDelPeriodo({
     args.push(String(producto).trim());
     porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`;
   }
+  // Solo compartidas o solo enteras (#163): de la venta, también para sus cuotas.
+  const deCompartidas = condicionDeCompartidas(compartidas, 'c');
+  const porCompartidas = deCompartidas ? `AND ${deCompartidas}` : '';
   args.push(limit, (Math.max(1, page) - 1) * limit);
 
   const { rows } = await query(
@@ -737,7 +745,7 @@ export async function filasDelPeriodo({
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
         WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2
-          AND ${alcanceC} ${porGestora} ${porProducto}
+          AND ${alcanceC} ${porGestora} ${porProducto} ${porCompartidas}
      ),
      facturas AS (
        SELECT (${CLASE_FACTURA})::text AS tipo, c.id AS venta_id, i.id AS clave_id, i.id AS factura_id,
@@ -755,7 +763,7 @@ export async function filasDelPeriodo({
          LEFT JOIN products p ON p.id = c.producto_contratado_id
         WHERE ${FACTURA_REAL}
           AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-          AND ${alcanceI} ${porGestora} ${porProducto}
+          AND ${alcanceI} ${porGestora} ${porProducto} ${porCompartidas}
      ),
      filas AS (
        SELECT * FROM ventas
