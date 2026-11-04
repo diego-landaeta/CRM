@@ -304,6 +304,30 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(t.split('Actividad por comercial').length - 1).toBe(2);
   });
 
+  it('«Sin asignar» (WhatsApp sin autora) va al final, en cursiva y gris', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [
+        fila203(null, 'Sin asignar', { whatsapp_texto: 2 }),
+        fila203(1, 'Eva', { llamadas: 1, toques: 1, personas: 1 }),
+      ],
+      equipo: { llamadas: 1, whatsapp: 0, whatsapp_texto: 2, whatsapp_voz: 0, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1);
+    const filas = html.match(/<tr>.*?<\/tr>/gs);
+    // Cabecera, Eva, Sin asignar, Equipo.
+    expect(filas[1]).toContain('Eva');
+    expect(filas[2]).toContain('<em>Sin asignar</em>');
+    expect(filas[2]).toContain(`color:${'#5b6572'}`);
+    expect(filas[1]).not.toContain('<em>');
+  });
+
+  it('«escritos · de voz» puede partirse en el móvil', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [fila203(1, 'Eva', { whatsapp: 1, whatsapp_texto: 3, whatsapp_voz: 1, toques: 1, personas: 1 })],
+      equipo: { llamadas: 0, whatsapp: 1, whatsapp_texto: 3, whatsapp_voz: 1, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1);
+    expect(html).toMatch(/white-space:normal">3 escritos · 1 de voz/);
+  });
+
   it('escapa el nombre de la comercial', () => {
     const html = C.tablaActividadPorComercial({
       filas: [fila203(1, '<b>Eva</b>', { llamadas: 1, toques: 1, personas: 1 })],

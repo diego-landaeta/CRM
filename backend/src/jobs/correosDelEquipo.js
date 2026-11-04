@@ -615,9 +615,12 @@ export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-t
 // «Contactos» del resumen sí las cuentan, como «Trabajo hecho» de Reportes. La
 // nota de debajo dice cuántas son, para que el total más las notas dé esa cifra.
 
-/** «12 escritos · 3 de voz», debajo del WhatsApp, como en la pantalla. */
+/**
+ * «12 escritos · 3 de voz», debajo del WhatsApp, como en la pantalla. Puede
+ * partirse en dos renglones: en el móvil era lo que más ensanchaba la tabla.
+ */
 const escritosYVoz = (f) => (n(f.whatsapp_texto) || n(f.whatsapp_voz)
-  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS}">${entero(f.whatsapp_texto)} escritos · ${entero(f.whatsapp_voz)} de voz</div>`
+  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS};white-space:normal">${entero(f.whatsapp_texto)} escritos · ${entero(f.whatsapp_voz)} de voz</div>`
   : '');
 
 const celdasDeActividad = (f) => [entero(f.llamadas), `${entero(f.whatsapp)}${escritosYVoz(f)}`, entero(f.correos), entero(f.personas), entero(f.toques)];
@@ -631,7 +634,12 @@ export function tablaActividadPorComercial(actividad, contactos) {
   const filas = (actividad?.filas || []).filter((f) => n(f.toques) + n(f.whatsapp_texto) + n(f.whatsapp_voz) > 0);
   if (!filas.length) return '';
   const eq = actividad.equipo;
-  const cuerpo = filas.map((f) => [esc(f.comercial), ...celdasDeActividad(f)]);
+  // «Sin asignar» (los WhatsApp sin autora) al final, en cursiva y gris, como
+  // «Sin gestora» en «Por gestora»: no es una comercial.
+  const sinAutora = (f) => f.user_id == null;
+  const cuerpo = [...filas.filter((f) => !sinAutora(f)), ...filas.filter(sinAutora)].map((f) => (sinAutora(f)
+    ? { celdas: ['<em>Sin asignar</em>', ...celdasDeActividad(f)], estilo: `;color:${GRIS}` }
+    : [esc(f.comercial), ...celdasDeActividad(f)]));
   cuerpo.push({
     celdas: ['<strong>Equipo</strong>', ...celdasDeActividad(eq).map((c) => `<strong>${c}</strong>`)],
     estilo: `;border-top:2px solid ${LINEA}`,
