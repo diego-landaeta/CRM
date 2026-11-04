@@ -77,6 +77,7 @@ export const CONDICIONES = {
   'webhooks-salientes.todas': 'webhooks_salientes.todas',
   'sales.sin_gestora': 'conversions.sin_gestora',
   'reports.puesto_ajeno': 'reports.puesto_ajeno',
+  'registro.sistema': 'registro.sistema',
 };
 
 /**
