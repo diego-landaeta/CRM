@@ -328,6 +328,25 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(html).toMatch(/white-space:normal">3 escritos · 1 de voz/);
   });
 
+  it('«1 escrito», en singular', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [fila203(1, 'Eva', { whatsapp: 1, whatsapp_texto: 1, toques: 1, personas: 1 })],
+      equipo: { llamadas: 0, whatsapp: 1, whatsapp_texto: 1, whatsapp_voz: 0, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1);
+    expect(html).toContain('1 escrito · 0 de voz');
+  });
+
+  it('sus cabeceras van en letra normal (en mayúsculas no caben en el móvil); las demás tablas, igual que antes', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [fila203(1, 'Eva', { llamadas: 1, toques: 1, personas: 1 })],
+      equipo: { llamadas: 1, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1);
+    const ths = html.match(/<th [^>]*>/g);
+    expect(ths).toHaveLength(6);
+    for (const th of ths) expect(th).not.toContain('uppercase');
+    expect(C.tabla(['Gestora', 'Ventas'], [['Ana', '1']])).toContain('text-transform:uppercase');
+  });
+
   it('escapa el nombre de la comercial', () => {
     const html = C.tablaActividadPorComercial({
       filas: [fila203(1, '<b>Eva</b>', { llamadas: 1, toques: 1, personas: 1 })],

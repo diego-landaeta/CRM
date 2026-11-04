@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pool from '../src/shared/config/db.js';
 import { contactosPorCampus } from '../src/modules/reports/report.model.js';
 import { actividadPorComercial } from '../src/modules/mcp/mcp.model.js';
-import { tablaActividadPorComercial } from '../src/jobs/correosDelEquipo.js';
+import { tablaActividadPorComercial, correoDiarioDireccion } from '../src/jobs/correosDelEquipo.js';
 
 /**
  * La actividad por comercial en el resumen de la tarde (#203, parte C), contra
@@ -107,10 +107,98 @@ describe('actividad por comercial en el resumen de la tarde', () => {
     expect(html).toContain('4 contactos y 2 notas suman los 6 contactos del día');
   });
 
-  it('una empresa no ve a las comerciales de otra', async () => {
+  it('una empresa no cuenta lo que se hizo en otra', async () => {
     const a = await delDia([pA]);
     expect(a.filas.map((f) => f.user_id)).not.toContain(eva);
     const b = await delDia([pB]);
     expect(b.filas.map((f) => f.user_id)).toEqual([eva]);
+  });
+});
+
+/**
+ * El correo ENTERO, de dos admins de empresas distintas, contra la base: sin
+ * nada simulado entre la consulta y el HTML. Campus de verdad (no de pruebas),
+ * porque el resumen no cuenta los de pruebas; admins INACTIVOS, como arriba.
+ */
+describe('el «Resumen del día» de verdad, de dos admins', () => {
+  const m = `${marca}R`;
+  const r = { projects: [], users: [], leads: [], issuers: [] };
+  let adminUno; let adminDos; let ana2; let dayana2; let eva2;
+  // Un día fijo, a mediodía: es el mismo día en UTC, en Madrid y en Caracas,
+  // así que la prueba no depende de la hora a la que se corra.
+  const DIA_R = '2026-10-21';
+  const ahora = new Date(`${DIA_R}T12:00:00Z`);
+  const aLas = (hora) => `${DIA_R}T${hora}:00Z`;
+
+  beforeAll(async () => {
+    const soc = async (nombre) => (await q(
+      `INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id`,
+      [`${m} ${nombre}`, `${m}${nombre}`.slice(0, 20)]))[0].id;
+    const sUno = await soc('Uno'); const sDos = await soc('Dos');
+    r.issuers.push(sUno, sDos);
+    const campus = async (clave, sociedad) => {
+      const [p] = await q(
+        `INSERT INTO projects (nombre, slug, webhook_api_key, type, sociedad_emisora_id) VALUES ($1, $2, $3, 'crm', $4) RETURNING id`,
+        [`${m} campus ${clave}`, `${m}-${clave}`.toLowerCase(), `whk_${m}_${clave}`, sociedad]);
+      r.projects.push(p.id);
+      return p.id;
+    };
+    const cUno = await campus('U1', sUno); const cDos = await campus('D1', sDos);
+    const mk = async (rol, nombre, campusIds) => {
+      const [u] = await q(
+        `INSERT INTO users (nombre, email, password_hash, role, active) VALUES ($1, $2, 'x', $3, FALSE) RETURNING id, nombre, role`,
+        [`${m} ${nombre}`, `${nombre.toLowerCase()}@${m.toLowerCase()}.test`, rol]);
+      for (const c of campusIds) await q('INSERT INTO user_projects (user_id, project_id, active) VALUES ($1, $2, TRUE)', [u.id, c]);
+      r.users.push(u.id);
+      return u;
+    };
+    adminUno = await mk('admin', 'AdminUno', [cUno]);
+    adminDos = await mk('admin', 'AdminDos', [cDos]);
+    ana2 = (await mk('gestor', 'Ana', [cUno])).id;
+    dayana2 = (await mk('gestor', 'Dayana', [cUno])).id;
+    eva2 = (await mk('gestor', 'Eva', [cDos])).id;
+    const leadDe = async (project, responsable) => {
+      const [l] = await q(
+        `INSERT INTO leads (project_id, nombre, email, status, responsable_id, created_at, fecha_solicitud)
+         VALUES ($1, $2, $3, 'nuevo', $4, '2026-01-01', '2026-01-01') RETURNING id`,
+        [project, `${m} lead`, `${m}-${Math.random().toString(36).slice(2, 8)}@act.test`, responsable]);
+      r.leads.push(l.id);
+      return l.id;
+    };
+    const deDayana = await leadDe(cUno, dayana2);
+    const deEva = await leadDe(cDos, eva2);
+    // Ana llama a un prospecto de Dayana y apunta una nota; Eva llama en la
+    // empresa Dos.
+    await contacto(deDayana, 'llamada', ana2, aLas('10:00'));
+    await contacto(deDayana, 'nota', ana2, aLas('10:05'));
+    await contacto(deEva, 'llamada', eva2, aLas('10:00'));
+  });
+
+  afterAll(async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = ANY($1::int[])', [r.leads]);
+    await q('DELETE FROM leads WHERE id = ANY($1::int[])', [r.leads]);
+    await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [r.users]);
+    await q('DELETE FROM users WHERE id = ANY($1::int[])', [r.users]);
+    await q('DELETE FROM projects WHERE id = ANY($1::int[])', [r.projects]);
+    await q('DELETE FROM invoice_issuers WHERE id = ANY($1::int[])', [r.issuers]);
+  });
+
+  const actividad = (html) => {
+    const t = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const i = t.indexOf('Actividad por comercial');
+    return i < 0 ? '' : t.slice(i, t.indexOf('Abrir Reportes'));
+  };
+
+  it('el admin de la Uno ve a Ana con la llamada, y la nota cuadra con los contactos', async () => {
+    const t = actividad((await correoDiarioDireccion(adminUno, ahora)).html);
+    expect(t).toContain(`${m} Ana 1 0 0 1 1`);
+    expect(t).not.toContain(`${m} Dayana`);
+    expect(t).toContain('1 contacto y 1 nota suman los 2 contactos del día');
+  });
+
+  it('el admin de la Dos no ve lo que se hizo en la Uno', async () => {
+    const t = actividad((await correoDiarioDireccion(adminDos, ahora)).html);
+    expect(t).toContain(`${m} Eva 1 0 0 1 1`);
+    expect(t).not.toContain(`${m} Ana`);
   });
 });

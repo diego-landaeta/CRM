@@ -10,8 +10,8 @@ import * as leadModel from '../modules/leads/lead.model.js';
 import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
-// Por el espacio de nombres: la actividad por comercial (#203) puede no estar en
-// ISEIE todavía. Sin ella, el resumen sale sin esa tabla.
+// Por el espacio de nombres, como `leadModel`: si en algún CRM faltara la
+// actividad por comercial (#203), el resumen sale sin esa tabla en vez de caerse.
 import * as mcpModel from '../modules/mcp/mcp.model.js';
 
 /**
@@ -163,11 +163,14 @@ export function tarjetas(lista) {
  * Una tabla sencilla: cabeceras y filas (la primera columna a la izquierda).
  * `compacta` para las de muchas columnas (el ranking): letra de 12 y menos aire.
  * Una fila puede ser `{ celdas, estilo }` para pintarla distinta (el Total).
+ * `mayusculas: false` deja las cabeceras en letra normal: en mayúsculas y con
+ * espaciado, seis columnas no caben en el móvil.
  */
-export function tabla(cabeceras, filas, { compacta = false } = {}) {
+export function tabla(cabeceras, filas, { compacta = false, mayusculas = true } = {}) {
   if (!filas.length) return '';
   const pad = compacta ? '6px 4px' : '7px 6px';
-  const th = cabeceras.map((c, i) => `<th style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 10 : 11}px;text-transform:uppercase;letter-spacing:.5px;color:${GRIS};padding:6px ${compacta ? 4 : 8}px;border-bottom:1px solid ${LINEA}">${esc(c)}</th>`).join('');
+  const letra = mayusculas ? 'text-transform:uppercase;letter-spacing:.5px' : 'text-transform:none';
+  const th = cabeceras.map((c, i) => `<th style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 10 : 11}px;${letra};color:${GRIS};padding:6px ${compacta ? 4 : 8}px;border-bottom:1px solid ${LINEA}">${esc(c)}</th>`).join('');
   const tr = filas.map((f) => {
     const celdas = Array.isArray(f) ? f : f.celdas;
     const extra = Array.isArray(f) ? '' : (f.estilo || '');
@@ -620,7 +623,7 @@ export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-t
  * partirse en dos renglones: en el móvil era lo que más ensanchaba la tabla.
  */
 const escritosYVoz = (f) => (n(f.whatsapp_texto) || n(f.whatsapp_voz)
-  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS};white-space:normal">${entero(f.whatsapp_texto)} escritos · ${entero(f.whatsapp_voz)} de voz</div>`
+  ? `<div style="font-size:11px;line-height:1.35;color:${GRIS};white-space:normal">${entero(f.whatsapp_texto)} ${n(f.whatsapp_texto) === 1 ? 'escrito' : 'escritos'} · ${entero(f.whatsapp_voz)} de voz</div>`
   : '');
 
 const celdasDeActividad = (f) => [entero(f.llamadas), `${entero(f.whatsapp)}${escritosYVoz(f)}`, entero(f.correos), entero(f.personas), entero(f.toques)];
@@ -645,10 +648,10 @@ export function tablaActividadPorComercial(actividad, contactos) {
     estilo: `;border-top:2px solid ${LINEA}`,
   });
   const notas = n(eq.notas)
-    ? ` Las notas internas no son contactos: ${entero(eq.toques)} contactos y ${entero(eq.notas)} ${n(eq.notas) === 1 ? 'nota' : 'notas'} suman los ${entero(contactos)} contactos del día, como los cuenta Reportes.`
+    ? ` Las notas internas no son contactos: ${entero(eq.toques)} ${n(eq.toques) === 1 ? 'contacto' : 'contactos'} y ${entero(eq.notas)} ${n(eq.notas) === 1 ? 'nota' : 'notas'} suman ${n(contactos) === 1 ? 'el 1 contacto' : `los ${entero(contactos)} contactos`} del día, como los cuenta Reportes.`
     : '';
   return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Actividad por comercial</div>`
-    + tabla(['Comercial', 'Llamadas registradas', 'WhatsApp', 'Correos', 'Personas', 'Total'], cuerpo, { compacta: true })
+    + tabla(['Comercial', 'Llamadas registradas', 'WhatsApp', 'Correos', 'Personas', 'Total'], cuerpo, { compacta: true, mayusculas: false })
     + `<div style="font-size:11px;color:${GRIS};margin-top:6px">Cada contacto cuenta para quien lo hizo, aunque el prospecto lo lleve otra. Llamadas: solo las registradas en el CRM. Personas del equipo no es la suma: dos pueden haber contactado a la misma.${notas}</div>`;
 }
 
