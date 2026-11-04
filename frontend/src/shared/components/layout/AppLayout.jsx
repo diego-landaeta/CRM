@@ -29,6 +29,10 @@ const ALL_PROJECTS_OK = [
   /^\/tutores$/,
   /^\/tutores\/sin-tutor$/,
   /^\/tutores\/comisiones$/,
+  // Feedback (#170): sin campus ni empresa, el servidor suma todos los que ve
+  // cada uno (sin los de pruebas). Diego, 02/11: «el panel de feedback está
+  // fallando»: con «Todos los proyectos» salía «Selecciona un proyecto».
+  /^\/informes\/feedback$/,
   /^\/prospectos\/pipeline$/,      // Kanban
   /^\/prospectos\/audiencias$/,    // Audiencias Meta
   /^\/prospectos\/\d+$/,           // Detalle de prospecto
