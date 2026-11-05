@@ -160,7 +160,7 @@ export default function GestoresStatsTable({ projectId, issuerId = null, classNa
                       <p className="font-medium text-[13px] truncate" title={r.email}>{r.nombre}</p>
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                         <span className="capitalize">{r.role}</span>
-                        {r.recibe_leads === false && <span className="px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground">No recibe leads</span>}
+                        {r.recibe_leads === false && <span className="px-1.5 py-0.5 whitespace-nowrap rounded bg-warning-soft text-warning-soft-foreground">No recibe leads</span>}
                       </p>
                     </td>
                     <td className="py-2.5 text-right tabular-nums">

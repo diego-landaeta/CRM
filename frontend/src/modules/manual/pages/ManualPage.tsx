@@ -99,7 +99,7 @@ function FeatureCard({ icon: Icon, title, children }: {
         </div>
       )}
       {!Icon && title && <p className="text-[13px] font-semibold text-foreground mb-1.5 tracking-tight">{title}</p>}
-      <p className="text-[13px] text-muted-foreground leading-relaxed">{children}</p>
+      <p className="text-[13px] text-muted-foreground leading-relaxed [overflow-wrap:anywhere]">{children}</p>
     </div>
   );
 }

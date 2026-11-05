@@ -352,7 +352,7 @@ export default function InvoicingConfigPage() {
           la próxima será 0201).
         </p>
 
-        <div className="grid grid-cols-4 gap-3 items-end">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
           <div>
             <label className="text-xs font-semibold text-muted-foreground">Año</label>
             <input type="number" value={resetAno} onChange={(e) => setResetAno(Number(e.target.value))}

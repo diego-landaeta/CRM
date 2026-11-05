@@ -213,9 +213,9 @@ export default function InvoiceTemplateEditorPage() {
         )}
       />
 
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* Panel izquierdo: plantillas + paleta + propiedades */}
-        <div className="w-64 shrink-0 space-y-3">
+        <div className="w-full lg:w-64 shrink-0 space-y-3">
           <div className="bg-card border border-border rounded-lg p-3">
             <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">Plantillas</h3>
             <div className="space-y-1 mb-2">

@@ -462,7 +462,7 @@ function PantallaDeReportes() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard icon={Users} label="Total prospectos" value={data.leads.total} />
         {/* Aquí había una tarjeta «Tasa conversión» con `data.tasa_conversion`,
             que es OTRA cuenta: los leads en estado «convertido», un campo que

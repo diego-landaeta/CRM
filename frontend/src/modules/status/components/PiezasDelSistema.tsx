@@ -206,8 +206,8 @@ export default function PiezasDelSistema() {
               const cuando = hace(p.desde);
               return (
                 <div key={p.nombre} className={`bg-card border rounded-xl p-5 space-y-2 ${pinta.borde}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-sm min-w-0 break-words [overflow-wrap:anywhere]">{p.titulo}</p>
+                  <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                    <p className="font-semibold text-sm min-w-0 break-words">{p.titulo}</p>
                     <Chapa estado={p.estado} />
                   </div>
 
