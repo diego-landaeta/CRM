@@ -629,13 +629,43 @@ const escritosYVoz = (f) => (n(f.whatsapp_texto) || n(f.whatsapp_voz)
 const celdasDeActividad = (f) => [entero(f.llamadas), `${entero(f.whatsapp)}${escritosYVoz(f)}`, entero(f.correos), entero(f.personas), entero(f.toques)];
 
 /**
+ * Quién vende en esos campus, para la línea «Sin actividad registrada» (ideas de
+ * Diego del 01/10: «solo las comerciales con actividad ese día» y una línea con
+ * las que no tuvieron ninguna). Activa y con el campus asignado; gestora, o admin
+ * que además es gestora (`roles_extra`); y no la de colaboraciones, que no vende
+ * (el mismo corte que el reparto de prospectos).
+ */
+export async function comercialesDe(ids) {
+  const { rows } = await query(
+    `SELECT DISTINCT u.id, u.nombre
+       FROM users u
+       JOIN user_projects up ON up.user_id = u.id AND up.active
+      WHERE u.active AND up.project_id = ANY($1::int[])
+        AND (u.role = 'gestor' OR 'gestor' = ANY(u.roles_extra::text[]))
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+      ORDER BY u.nombre`, [ids]);
+  return rows;
+}
+
+/**
  * `actividad`: lo que devuelve `actividadPorComercial` para la empresa.
  * `contactos`: los «Contactos» del día de esa empresa en el propio resumen.
+ * `comerciales`: quién vende en esa empresa (`comercialesDe`); las que no tienen
+ * fila salen en la línea de debajo.
  */
-export function tablaActividadPorComercial(actividad, contactos) {
+export function tablaActividadPorComercial(actividad, contactos, comerciales = []) {
+  const todas = actividad?.filas || [];
   // Quien solo escribió notas no ocupa una fila (como en la pantalla).
-  const filas = (actividad?.filas || []).filter((f) => n(f.toques) + n(f.whatsapp_texto) + n(f.whatsapp_voz) > 0);
-  if (!filas.length) return '';
+  const filas = todas.filter((f) => n(f.toques) + n(f.whatsapp_texto) + n(f.whatsapp_voz) > 0);
+  const conFila = new Set(filas.map((f) => f.user_id).filter((id) => id != null));
+  const soloNotas = new Set(todas.filter((f) => !conFila.has(f.user_id) && n(f.notas) > 0).map((f) => f.user_id));
+  const sinActividad = comerciales.filter((c) => !conFila.has(c.id))
+    .map((c) => `${esc(c.nombre)}${soloNotas.has(c.id) ? ' (solo notas internas)' : ''}`);
+  const titulo = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Actividad por comercial</div>`;
+  const lineaSin = sinActividad.length
+    ? `<div style="font-size:12px;color:${TINTA};margin-top:8px"><strong>Sin actividad registrada:</strong> ${sinActividad.join(', ')}.</div>`
+    : '';
+  if (!filas.length) return lineaSin ? titulo + lineaSin : '';
   const eq = actividad.equipo;
   // «Sin asignar» (los WhatsApp sin autora) al final, en cursiva y gris, como
   // «Sin gestora» en «Por gestora»: no es una comercial.
@@ -650,9 +680,10 @@ export function tablaActividadPorComercial(actividad, contactos) {
   const notas = n(eq.notas)
     ? ` Las notas internas no son contactos: ${entero(eq.toques)} ${n(eq.toques) === 1 ? 'contacto' : 'contactos'} y ${entero(eq.notas)} ${n(eq.notas) === 1 ? 'nota' : 'notas'} suman ${n(contactos) === 1 ? 'el 1 contacto' : `los ${entero(contactos)} contactos`} del día, como los cuenta Reportes.`
     : '';
-  return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Actividad por comercial</div>`
+  return titulo
     + tabla(['Comercial', 'Llamadas registradas', 'WhatsApp', 'Correos', 'Personas', 'Total'], cuerpo, { compacta: true, mayusculas: false })
-    + `<div style="font-size:11px;color:${GRIS};margin-top:6px">Cada contacto cuenta para quien lo hizo, aunque el prospecto lo lleve otra. Llamadas: solo las registradas en el CRM. Personas del equipo no es la suma: dos pueden haber contactado a la misma.${notas}</div>`;
+    + `<div style="font-size:11px;color:${GRIS};margin-top:6px">Cada contacto cuenta para quien lo hizo, aunque el prospecto lo lleve otra. Llamadas: solo las registradas en el CRM. Personas del equipo no es la suma: dos pueden haber contactado a la misma.${notas}</div>`
+    + lineaSin;
 }
 
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
@@ -768,7 +799,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
   const resumen = [];
   for (const e of empresas) {
     const ids = e.campus.map((c) => c.id);
-    const [dia, cola, cobradoHoy, gestoras, contactosCampus, actividad] = await Promise.all([
+    const [dia, cola, cobradoHoy, gestoras, contactosCampus, actividad, comerciales] = await Promise.all([
       resumenDelDia({ projectIds: ids, referencia: hoyIso }),
       resumenDeLaCola({ projectIds: ids }),
       cobrado({ from: hoyIso, to: hoyIso, projectIds: ids }),
@@ -777,6 +808,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
       mcpModel.actividadPorComercial
         ? mcpModel.actividadPorComercial({ projectIds: ids, desde: hoyIso, hasta: hoyIso })
         : null,
+      comercialesDe(ids),
     ]);
     const hoy = dia.find((x) => x.dia === 'hoy') || {};
     const ayer = dia.find((x) => x.dia === 'ayer') || {};
@@ -806,7 +838,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
       filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
-      tablaActividadPorComercial(actividad, contactosEmpresa),
+      tablaActividadPorComercial(actividad, contactosEmpresa, comerciales),
       porCampus,
     ].join(''));
   }

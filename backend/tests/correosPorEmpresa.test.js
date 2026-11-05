@@ -29,6 +29,13 @@ const suma = (ids, tabla) => ids.reduce((t, id) => t + (tabla[id] || 0), 0);
 // De los 4 de Ana, 3 entraron por formulario y 1 lo dio de alta ella desde WhatsApp.
 const LEADS_POR_GESTORA = [{ nombre: 'Ana Gestora', leads: 4, formularios: 3, whatsapp: 1 }, { nombre: 'Luis Inactivo', leads: 0 }];
 
+// Quién vende en cada campus (#203 C, línea «Sin actividad registrada»). Lucía, en
+// CEDIA, y Pablo, en ICTESS, no hacen nada hoy; Ana también está en ICTESS.
+const COMERCIALES = {
+  1: [{ id: 3, nombre: 'Ana Gestora' }, { id: 11, nombre: 'Lucía Quieta' }],
+  4: [{ id: 9, nombre: 'Marta ICTESS' }, { id: 3, nombre: 'Ana Gestora' }, { id: 12, nombre: 'Pablo Quieto' }],
+};
+
 vi.mock('../src/shared/config/db.js', () => ({
   getClient: vi.fn(),
   query: vi.fn(async (sql, params) => {
@@ -40,6 +47,12 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('FROM invoice_issuers')) return { rows: SOCIEDADES };
     if (sql.includes('FROM conversion_payments p JOIN conversions c')) return { rows: [{ cobrado: String(suma(params[2], COBRADO)) }] };
     if (sql.includes('FROM leads l JOIN users u ON u.id = l.responsable_id')) return { rows: LEADS_POR_GESTORA };
+    // `comercialesDe` (#203 C): quién vende en esos campus.
+    if (sql.includes('FROM users u') && sql.includes('gestor_colaboraciones')) {
+      const vistas = new Map();
+      for (const id of params[0]) for (const c of COMERCIALES[id] || []) vistas.set(c.id, c);
+      return { rows: [...vistas.values()] };
+    }
     return { rows: [] };
   }),
 }));
@@ -284,11 +297,22 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(t).toContain('3 contactos y 1 nota suman los 4 contactos del día');
   });
 
-  it('quien solo escribió notas no ocupa una fila', async () => {
+  it('quien solo escribió notas no ocupa una fila: va en la línea de debajo', async () => {
     const r = await C.correoDiarioDireccion(ADMIN_ICTESS, LUNES);
     const t = sinEtiquetas(r.html);
     expect(t).toMatch(/Marta ICTESS 1 1 1 2 3/);
-    expect(t.slice(t.indexOf('Actividad por comercial'))).not.toContain('Ana Gestora');
+    const laTabla = t.slice(t.indexOf('Actividad por comercial'), t.indexOf('Sin actividad registrada'));
+    expect(laTabla).not.toContain('Ana Gestora');
+    expect(t).toContain('Sin actividad registrada: Ana Gestora (solo notas internas), Pablo Quieto.');
+  });
+
+  it('«Sin actividad registrada»: las comerciales de la empresa sin ningún contacto hoy (ideas de Diego, 01/10)', async () => {
+    const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
+    // CEDIA: Ana tiene fila; Lucía no ha hecho nada. ICTESS: Ana solo notas y Pablo nada.
+    expect(t).toContain('Sin actividad registrada: Lucía Quieta.');
+    expect(t).toContain('Sin actividad registrada: Ana Gestora (solo notas internas), Pablo Quieto.');
+    // Quien tiene fila no se repite en la línea.
+    expect(t).not.toMatch(/Sin actividad registrada:[^.]*Marta ICTESS/);
   });
 
   it('un admin de una empresa no ve a las comerciales de otra', async () => {
@@ -296,6 +320,24 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(actividadPorComercial.mock.calls.map(([a]) => a.projectIds)).toEqual([[4]]);
     // (En «Por gestora» sí sale: ese mock no mira la empresa.)
     expect(t.slice(t.indexOf('Actividad por comercial'))).not.toContain('Diego Admin');
+    // Ni en la línea de las que no han hecho nada.
+    expect(t).not.toContain('Lucía Quieta');
+  });
+
+  it('sin actividad pero con comerciales: el título y la línea, sin tabla', () => {
+    const html = C.tablaActividadPorComercial({ filas: [], equipo: {} }, 0, [{ id: 1, nombre: 'Eva' }, { id: 2, nombre: '<b>Rosa</b>' }]);
+    const t = sinEtiquetas(html);
+    expect(t).toContain('Actividad por comercial');
+    expect(t).toContain('Sin actividad registrada: Eva, &lt;b&gt;Rosa&lt;/b&gt;.');
+    expect(html).not.toContain('<table');
+  });
+
+  it('todas con actividad: no hay línea', () => {
+    const html = C.tablaActividadPorComercial({
+      filas: [fila203(1, 'Eva', { llamadas: 1, toques: 1, personas: 1 })],
+      equipo: { llamadas: 1, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 1, toques: 1 },
+    }, 1, [{ id: 1, nombre: 'Eva' }]);
+    expect(html).not.toContain('Sin actividad registrada');
   });
 
   it('sin actividad, no hay tabla', async () => {
