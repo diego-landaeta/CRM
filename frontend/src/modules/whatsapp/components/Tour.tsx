@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
+import './tour.css';
 
 // El tour del chat.
 //
@@ -13,7 +14,7 @@ import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
 
 const VISTO = 'wa-tour-visto-v1';
 
-type Paso = {
+export type Paso = {
   /** A que se apunta. Si no esta en pantalla, el paso se salta. */
   donde?: string;
   titulo: string;
@@ -95,7 +96,26 @@ const PASOS: Paso[] = [
   },
 ];
 
-export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
+/**
+ * El mismo recorrido, para otra pantalla (#129).
+ *
+ * Las plantillas piden su propio tutorial guiado —lo pidio Diego con esas
+ * palabras— y montar un segundo motor de carteles para cuatro pasos seria
+ * tener dos cosas que mantener y que se van a separar a la primera. Se
+ * parametriza este: sin props se comporta exactamente igual que antes.
+ *
+ * La marca de «visto» va aparte por recorrido: haber visto el del chat no
+ * significa haber visto el de las plantillas.
+ */
+export default function Tour({
+  alCerrar,
+  pasos: pasosPropios,
+  clave = VISTO,
+}: {
+  alCerrar?: () => void;
+  pasos?: Paso[];
+  clave?: string;
+}) {
   const navegar = useNavigate();
 
   /**
@@ -112,6 +132,9 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * bailaria.
    */
   const [pasos] = useState<Paso[]>(() => {
+    // Los pasos que señalan algo que no está en esta vista (p. ej. «Nueva», que solo existe al editar) no
+    // se cuentan: si no, el contador saltaba de «2 de 4» a «4 de 4».
+    if (pasosPropios) return pasosPropios.filter((p) => !p.donde || document.querySelector(p.donde));
     const sinNumero = Boolean(document.querySelector('.wa-sin-enlazar'));
     return sinNumero
       ? PASOS.filter((p) => p.enElCorto)
@@ -140,8 +163,8 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * numero puesto para verlo entero. Lo hace `seguirGuia`.
    */
   useEffect(() => {
-    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
-  }, []);
+    try { localStorage.setItem(clave, '1'); } catch { /* navegador sin permiso */ }
+  }, [clave]);
 
   useEffect(() => {
     const alRedimensionar = () => setVentana({ w: window.innerWidth, h: window.innerHeight });
@@ -171,11 +194,11 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     // numero» no ha visto el recorrido, ha visto dos carteles, y tiene que
     // encontrarselo entero al volver con el numero puesto.
     try {
-      if (marcar) localStorage.setItem(VISTO, '1');
-      else localStorage.removeItem(VISTO);
+      if (marcar) localStorage.setItem(clave, '1');
+      else localStorage.removeItem(clave);
     } catch { /* navegador sin permiso */ }
     alCerrar?.();
-  }, [alCerrar]);
+  }, [alCerrar, clave]);
 
   // Estables a proposito. El efecto que mide llama a `saltar`, asi que tiene que
   // poder declararlo como dependencia; si cambiara de identidad en cada render,
@@ -187,7 +210,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
       if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
     }
     cerrar();
-  }, [paso, cerrar]);
+  }, [paso, cerrar, pasos]);
 
   // Se mide donde esta lo que se señala, cada vez. Guardar la posicion no vale:
   // la ventana cambia de tamaño y la lista crece mientras entra el historial.
@@ -247,7 +270,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
       const p = pasos[i];
       if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
     }
-  }, [paso]);
+  }, [paso, pasos]);
 
   // Escape cierra, como cualquier otra cosa que se abre encima. Sin esto habia
   // que buscar la X con el raton.
@@ -348,8 +371,8 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
 }
 
 /** ¿Toca enseñarlo? Solo la primera vez de cada persona en este navegador. */
-export function tourPendiente() {
-  try { return localStorage.getItem(VISTO) !== '1'; } catch { return false; }
+export function tourPendiente(clave: string = VISTO) {
+  try { return localStorage.getItem(clave) !== '1'; } catch { return false; }
 }
 
 /**
@@ -363,6 +386,6 @@ export function hayQueSeñalar() {
 }
 
 /** Para poder volver a verlo desde la guia. */
-export function reiniciarTour() {
-  try { localStorage.removeItem(VISTO); } catch { /* da igual */ }
+export function reiniciarTour(clave: string = VISTO) {
+  try { localStorage.removeItem(clave); } catch { /* da igual */ }
 }
