@@ -582,7 +582,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Seis en fila solo en pantallas grandes: a 1024px cada tarjeta medía
+          68px y el importe se salía. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3">
         <KpiCard
           icon={Receipt}
           iconBg="bg-info-soft text-info-soft-foreground"

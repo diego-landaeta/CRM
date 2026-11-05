@@ -289,6 +289,9 @@ export default function WhatsappWidgetPage() {
             Este proyecto no tiene usuarios asignados todavía.
           </div>
         ) : (
+          // Con su barra de desplazamiento: en el móvil, «Nombre visible» y su
+          // campo quedaban cortados por el `overflow-hidden` de la tarjeta.
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
               <tr>
@@ -344,6 +347,7 @@ export default function WhatsappWidgetPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

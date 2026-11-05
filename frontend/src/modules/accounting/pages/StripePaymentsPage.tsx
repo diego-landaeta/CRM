@@ -214,15 +214,17 @@ export default function StripePaymentsPage() {
         title="Pagos Stripe"
         subtitle={`Histórico de pagos sincronizados desde Stripe — ${activeProject?.nombre || ''}`}
         actions={(
-          <div className="flex gap-2">
+          // Cada botón en una línea y, si no caben, bajan: en el móvil
+          // «Importar desde el alta» salía en tres renglones dentro de 36px.
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => syncNow(false)} disabled={syncing || hayClave === false}
               title={hayClave === false ? 'Falta la clave de Stripe de este proyecto' : 'Trae los ultimos 30 dias'}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 h-9 px-3 whitespace-nowrap rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
               <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
             <button onClick={() => syncNow(true)} disabled={syncing || hayClave === false}
               title="Trae todo desde el alta del proyecto (puede tardar varios minutos)"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 h-9 px-3 whitespace-nowrap rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
               <ArrowCounterClockwise size={14} weight="bold" /> Importar desde el alta
             </button>
             {/* EL HISTÓRICO ABSOLUTO, APARTE Y CON AVISO.
@@ -244,7 +246,7 @@ export default function StripePaymentsPage() {
               }}
               disabled={syncing}
               title="Incluye lo anterior a la fecha de alta. No lo hace facturable."
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-warning/40 bg-card text-sm font-semibold text-warning hover:bg-warning-soft disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 h-9 px-3 whitespace-nowrap rounded-md border border-warning/40 bg-card text-sm font-semibold text-warning hover:bg-warning-soft disabled:opacity-50">
               <ArrowCounterClockwise size={14} weight="bold" /> Histórico absoluto
             </button>
             {/* Solo cuando YA hay cobros: sirve para cuadrar con Stripe, y

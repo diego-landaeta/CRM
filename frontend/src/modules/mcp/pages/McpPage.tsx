@@ -430,6 +430,9 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
             <UsersThree size={18} weight="bold" className="text-primary" />
             <h2 className="font-semibold text-sm">Quién tiene acceso</h2>
           </div>
+          {/* Con su barra de desplazamiento: en el móvil, «Último uso» y
+              «Acceso» quedaban cortadas por el `overflow-hidden` de la tarjeta. */}
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr className="text-[11px] uppercase text-muted-foreground">
@@ -470,6 +473,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

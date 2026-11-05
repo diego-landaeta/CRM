@@ -207,7 +207,7 @@ export default function PiezasDelSistema() {
               return (
                 <div key={p.nombre} className={`bg-card border rounded-xl p-5 space-y-2 ${pinta.borde}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-sm min-w-0">{p.titulo}</p>
+                    <p className="font-semibold text-sm min-w-0 break-words [overflow-wrap:anywhere]">{p.titulo}</p>
                     <Chapa estado={p.estado} />
                   </div>
 

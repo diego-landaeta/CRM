@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -359,7 +358,6 @@ function PantallaDeReportes() {
                   </button>
                 ))}
               </div>
-              <RangoRapido valor={range} alElegir={(r) => setRange(r)} />
               <input
                 type="date"
                 value={range.from}

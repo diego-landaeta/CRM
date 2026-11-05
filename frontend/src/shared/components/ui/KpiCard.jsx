@@ -45,7 +45,8 @@ export default function KpiCard({
   return (
     <div
       className={cn(
-        'bg-card p-5 rounded-lg border border-border transition-colors hover:border-foreground/20',
+        // `min-w-0`: en una rejilla estrecha, la tarjeta no ensancha su columna.
+        'min-w-0 bg-card p-5 rounded-lg border border-border transition-colors hover:border-foreground/20',
         className,
       )}
     >
@@ -68,7 +69,9 @@ export default function KpiCard({
         )}
       </div>
       <p className="text-muted-foreground text-sm">{label}</p>
-      <h3 className="text-cifra mt-1 tabular-nums">
+      {/* 24px por debajo de 1280px y, si aun así no cabe, se parte: el importe
+          se salía de la tarjeta («0,00 €» en Ingresos a 1024px). */}
+      <h3 className="text-2xl xl:text-cifra font-semibold mt-1 tabular-nums break-words">
         {useAnimation ? <AnimatedValue numericValue={numericValue} format={format} /> : value}
       </h3>
     </div>

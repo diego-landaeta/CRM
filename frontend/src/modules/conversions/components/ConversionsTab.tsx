@@ -202,9 +202,12 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 
             return (
               <div key={c.id} className="bg-card border border-border rounded-md p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
+                {/* Se parte en dos renglones si no cabe: los botones (hasta cinco)
+                    no cedían, se salían de la tarjeta y el nombre del programa
+                    salía palabra a palabra. */}
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0 flex-1 basis-48">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h3 className="font-semibold">{c.producto_contratado}</h3>
                       {pagado && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-soft text-success-soft-foreground"><CheckCircle size={10} weight="fill" /> Pagado</span>}
                       {vencido && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive-soft text-destructive-soft-foreground"><WarningCircle size={10} weight="fill" /> Vencido</span>}
@@ -216,7 +219,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                     </div>
                   </div>
                   {canManage && (
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {!pagado && (
                         <button
                           onClick={() => setPaymentDialogConv(c)}

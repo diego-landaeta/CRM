@@ -213,15 +213,18 @@ export default function ClientDetailPage() {
         <span className="text-foreground font-medium truncate">{lead.nombre}</span>
       </div>
 
-      {/* Header card */}
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+      {/* Header card. Una fila que se parte: los datos tienen su ancho mínimo y,
+          si los botones no caben al lado, bajan debajo. Antes no cedían y
+          aplastaban los datos («Cliente desde» salía palabra a palabra, con
+          «WhatsApp» encima del teléfono). */}
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center gap-4">
         {/* Avatar */}
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${avatarColor}`}>
           {initials}
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 basis-60">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-xl font-bold">{lead.nombre}</h2>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-success-soft text-success-soft-foreground">
@@ -245,7 +248,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           {waPhone && (
             <button type="button" onClick={abrirChatAqui} aria-label="Abrir el chat en el CRM"
               className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-success-soft text-muted-foreground hover:text-success-soft-foreground transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">

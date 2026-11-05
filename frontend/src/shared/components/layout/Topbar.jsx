@@ -61,10 +61,11 @@ export default function Topbar({ onAbrirMenu, className }) {
             para que la pantalla lo encuentre en cuanto se pinta. */}
         <div
           ref={ctx?.registrarHueco}
-          /* `flex-wrap` en el móvil: si los botones no caben junto al título, bajan a
-             otra línea. Sin él se comían todo el ancho y el título se quedaba en 0 px
-             (Ventas, Feedback, Tareas: tres botones). */
-          className={cn('min-w-0 flex-wrap items-center gap-3 sm:flex-nowrap', ocupado ? 'order-last flex basis-full sm:order-none sm:flex-1 sm:basis-auto' : 'hidden')}
+          /* `flex-wrap`: si los botones no caben junto al título, bajan a otra
+             línea. Sin él se comían todo el ancho y el título se quedaba en 0 px
+             (Ventas, Feedback, Tareas: tres botones). Antes solo en el móvil; en el
+             ordenador pasaba lo mismo con Reportes y Tareas a 1024px. */
+          className={cn('min-w-0 flex-wrap items-center gap-3', ocupado ? 'order-last flex basis-full sm:order-none sm:flex-1 sm:basis-auto' : 'hidden')}
         />
 
         {/* Pantalla sin cabecera propia: el nombre de la ruta.
