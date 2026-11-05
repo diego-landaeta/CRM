@@ -256,7 +256,7 @@ export default function ExpensesPage() {
         title="Egresos"
         subtitle={`${ambitoNombre} · ${resumen?.num ?? 0} registros · Total: ${fmt(resumen?.total ?? 0)}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleExport}
               aria-label="Exportar a CSV"

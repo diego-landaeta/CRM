@@ -332,13 +332,18 @@ export default function StripePaymentsPage() {
           <option value="yes">Asociados</option>
           <option value="no">Sin asociar</option>
         </select>
-        <div className="flex items-center gap-1 text-xs">
-          <label className="text-muted-foreground">Desde</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-muted-foreground ml-1">Hasta</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        {/* Como en Facturas: en el móvil «Hasta» baja de línea, no se sale. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
+          <span className="flex items-center gap-1">
+            <label className="text-muted-foreground">Desde</label>
+            <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          </span>
+          <span className="flex items-center gap-1">
+            <label className="text-muted-foreground">Hasta</label>
+            <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          </span>
           {(filters.from || filters.to) && (
             <button onClick={() => setFilters(f => ({ ...f, from: '', to: '' }))}
               className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground">×</button>

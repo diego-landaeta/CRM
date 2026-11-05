@@ -156,7 +156,7 @@ export default function RegistroPage() {
         title="Registro"
         subtitle="Qué ha pasado en el sistema, y quién lo hizo."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={cargar} disabled={cargando}
               className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-50">
               <ArrowClockwise size={15} className={cargando ? 'animate-spin' : ''} /> Actualizar

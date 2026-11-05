@@ -286,7 +286,7 @@ export default function AIChatPage() {
         title="Preguntar a la IA"
         subtitle={`Sobre los datos de ${activeProject?.nombre || 'este proyecto'}, en castellano.`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {gasto && <Gasto g={gasto} />}
             {/* Solo con algo que exportar. Un boton que genera un PDF de una
                 pagina en blanco es peor que no tenerlo. */}
