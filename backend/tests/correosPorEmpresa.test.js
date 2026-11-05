@@ -202,7 +202,7 @@ describe('las piezas sueltas', () => {
 
   it('el correo cabe en un móvil de 360 px (#203 C)', () => {
     const h = C.envoltorio({ preTitulo: 'X', titulo: 'Y', contenido: 'Z' });
-    expect(h).toMatch(/<style>@media only screen and \(max-width:420px\)\{\.crm-marco\{[^}]+\}\.crm-caja\{padding:20px 16px 24px !important\}\}<\/style>/);
+    expect(h).toMatch(/<style>@media only screen and \(max-width:420px\)\{\.crm-marco\{[^}]+\}\.crm-caja\{padding:20px 16px 24px !important\}[^<]*\}<\/style>/);
     expect(h).toContain('class="crm-marco"');
     expect(h).toContain('class="crm-caja"');
     // Los estilos en línea siguen siendo la base, por si un cliente se come el <style>.
@@ -218,6 +218,22 @@ describe('las piezas sueltas', () => {
     expect(h).toContain('max-width:600px;table-layout:fixed');
     // El pie, en el gris de los textos (antes #8a939e: poco contraste sobre el fondo).
     expect(h).not.toContain('#8a939e');
+  });
+
+  it('«Resumen por empresa», compacta y sin mayúsculas (era la que ensanchaba el correo)', () => {
+    const t = C.tablaResumenPorEmpresa([
+      { nombre: 'A', leads: 1, contactos: 1, ventas: 1, cobrado: 1 },
+      { nombre: 'B', leads: 0, contactos: 0, ventas: 0, cobrado: 0 },
+    ]);
+    expect(t).not.toContain('uppercase');
+    expect(t).toContain('padding:6px 4px');
+  });
+
+  it('el ranking avisa en el móvil de que se desliza (la pista solo la enciende la regla del móvil)', async () => {
+    const { html } = await C.correoSemanalDireccion(MANUEL, LUNES);
+    expect(html).toContain('<div class="crm-pista" style="display:none;');
+    expect(html).toContain('Desliza la tabla para ver todas las columnas');
+    expect(html).toContain('.crm-pista{display:block !important}');
   });
 
   it('el semanal: «Por gestora» compacta y el ranking sin mayúsculas', async () => {
