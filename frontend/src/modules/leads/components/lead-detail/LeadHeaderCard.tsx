@@ -63,8 +63,12 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
       </nav>
 
       <div className={`bg-card border border-border border-l-4 ${getPriorityStyle(getLeadPriority(lead)).borderClass} rounded-xl p-4`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        {/* Una fila que se parte: el nombre tiene su ancho mínimo y, si los
+            botones no caben al lado (un admin tiene seis), bajan debajo. Antes
+            los botones no cedían y aplastaban el nombre hasta hacerlo
+            desaparecer, con «Compartir» encima del avatar. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1 basis-72">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-base font-semibold flex-shrink-0 ${avatarColor(lead.id)}`}>
               {getInitials(lead.nombre)}
             </div>
@@ -79,7 +83,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack, onMe
               </p>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
             {/* «Compartir» va antes de «Reasignar» porque son la misma familia:
                 reasignar es pasarsela a otra, compartir es atenderla entre dos.
                 Diego: «no es nada intuitivo» — la funcion existia pero habia que
