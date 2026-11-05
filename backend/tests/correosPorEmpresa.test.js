@@ -209,6 +209,26 @@ describe('las piezas sueltas', () => {
     expect(h).toContain('padding:26px 28px 30px');
   });
 
+  it('una tabla que no cabe se desliza ella, no el correo entero (el ranking del semanal)', () => {
+    const t = C.tabla(['A', 'B'], [['x', '1']]);
+    expect(t).toMatch(/^<div style="overflow-x:auto;[^"]*max-width:100%"><table /);
+    expect(t).toMatch(/<\/table><\/div>$/);
+    const h = C.envoltorio({ preTitulo: 'X', titulo: 'Y', contenido: 'Z' });
+    // Sin ancho fijo, la tabla del correo se estira con lo de dentro y el contenedor no desliza.
+    expect(h).toContain('max-width:600px;table-layout:fixed');
+    // El pie, en el gris de los textos (antes #8a939e: poco contraste sobre el fondo).
+    expect(h).not.toContain('#8a939e');
+  });
+
+  it('el semanal: «Por gestora» compacta y el ranking sin mayúsculas', async () => {
+    const { html } = await C.correoSemanalDireccion(MANUEL, LUNES);
+    const desde = html.indexOf('Por gestora · prospectos');
+    expect(desde).toBeGreaterThan(-1);
+    expect(html.slice(desde, html.indexOf('</table>', desde))).not.toContain('uppercase');
+    const ranking = html.indexOf('Ranking de la semana');
+    expect(html.slice(ranking, html.indexOf('</table>', ranking))).not.toContain('uppercase');
+  });
+
   it('en modo oscuro el correo se declara claro: nadie le inventa colores a medias (#203 C)', () => {
     const h = C.envoltorio({ preTitulo: 'X', titulo: 'Y', contenido: 'Z' });
     expect(h).toContain('<meta name="color-scheme" content="light">');

@@ -129,7 +129,7 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
 <style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}</style></head>
 <body style="margin:0;padding:0;background:#f2f4f7">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td class="crm-marco" align="center" style="padding:24px 12px">
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;table-layout:fixed">
     <tr><td>${cabecera}</td></tr>
     <tr><td class="crm-caja" style="background:#ffffff;padding:26px 28px 30px;border-radius:0 0 12px 12px;font-family:Arial,Helvetica,sans-serif;color:${TINTA}">
       <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:${CRM.color};font-weight:bold">${esc(preTitulo)}</div>
@@ -137,7 +137,7 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
       ${subtitulo ? `<div style="font-size:14px;color:${GRIS};line-height:1.5">${subtitulo}</div>` : ''}
       ${contenido}
     </td></tr>
-    <tr><td style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#8a939e;text-align:center">
+    <tr><td style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:${GRIS};text-align:center">
       ${pie ? `${pie}<br>` : ''}Correo automático de ${esc(CRM.nombre)}: no lo contestes. Puedes apagarlo en «Mis preferencias».
     </td></tr>
   </table>
@@ -189,7 +189,10 @@ export function tabla(cabeceras, filas, { compacta = false, mayusculas = true } 
     const extra = Array.isArray(f) ? '' : (f.estilo || '');
     return `<tr>${celdas.map((v, i) => `<td style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 12 : 13}px;padding:${pad};border-bottom:1px solid #f1f3f6;color:${TINTA}${i ? ';white-space:nowrap' : ''}${extra}">${v}</td>`).join('')}</tr>`;
   }).join('');
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${`<tr>${th}</tr>`}${tr}</table>`;
+  // Si en un móvil no cabe (el ranking del semanal, con ocho columnas; o un
+  // móvil de 320 px), se desliza de lado la tabla y no el correo entero. El
+  // cliente que no entiende `overflow` la enseña como siempre.
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${`<tr>${th}</tr>`}${tr}</table></div>`;
 }
 
 // ─── Las cifras separadas del ranking (Diego, 19/10/2026) ────────────────────
@@ -263,7 +266,9 @@ export function tablaDelRanking(puesto, { periodo = 'semana', tope = 12 } = {}) 
   const grandes = [...filas.map((g) => ({ quien: g.nombre || '—', l: anterioresGrandes(g.anteriores_grandes) })),
     ...(sg ? [{ quien: 'Sin gestora', l: anterioresGrandes(sg.anteriores_grandes) }] : [])]
     .flatMap((x) => x.l.map((t) => `${esc(x.quien)} · ${t}`));
-  return `${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true })}
+  // Ocho columnas no caben en un móvil: se desliza de lado (ver `tabla`), y sin
+  // mayúsculas hay que deslizar menos.
+  return `${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true, mayusculas: false })}
     ${grandes.length ? `<div style="font-size:12px;color:${TINTA};margin:10px 0 0"><strong>De ventas anteriores, lo grande:</strong><br>${grandes.join('<br>')}</div>` : ''}
     ${notaDeLasFechas(periodo)}`;
 }
@@ -936,7 +941,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       porCampus = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus · con la semana anterior</div>${tablaPorCampus(filasCampus, { conAnterior: true })}`;
     }
     const porGestora = gestoras.length
-      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora))}${LEYENDA_ORIGEN}`
+      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora), { compacta: true, mayusculas: false })}${LEYENDA_ORIGEN}`
       : '';
 
     // LA LECTURA DE LA SEMANA, escrita por IA (#30). Apagada por defecto:
