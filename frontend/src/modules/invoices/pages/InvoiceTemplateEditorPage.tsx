@@ -213,7 +213,9 @@ export default function InvoiceTemplateEditorPage() {
         )}
       />
 
-      <div className="flex flex-col lg:flex-row gap-4 items-start">
+      {/* En columna (móvil) el lienzo ocupa el ancho de la pantalla y el A4
+          se desplaza dentro de él; con `items-start` tomaba los 794 px del A4. */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:items-start">
         {/* Panel izquierdo: plantillas + paleta + propiedades */}
         <div className="w-full lg:w-64 shrink-0 space-y-3">
           <div className="bg-card border border-border rounded-lg p-3">
@@ -286,7 +288,7 @@ export default function InvoiceTemplateEditorPage() {
         </div>
 
         {/* Lienzo A4 */}
-        <div className="flex-1 min-w-0 overflow-auto">
+        <div className="w-full flex-1 min-w-0 overflow-auto">
           <div className="mb-3 flex flex-wrap items-center gap-2 bg-card border border-border rounded-lg p-3">
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre de la plantilla" className="h-9 px-2 rounded border border-border bg-background text-sm w-48" />
             <select value={condicion} onChange={(e) => setCondicion(e.target.value as 'todos')} title="¿A qué clientes se aplica esta plantilla?" className="h-9 px-2 rounded border border-border bg-card text-sm">
