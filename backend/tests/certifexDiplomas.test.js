@@ -178,6 +178,9 @@ describe('POST /api/certifex/solicitudes (desde el servidor de Certifex)', () =>
     expect(r.body.data.enCrm).toBe(false);
     const { rows: [s] } = await pool.query('SELECT * FROM certifex_solicitudes WHERE matricula_id = $1', [base + 1]);
     expect(JSON.stringify(s)).not.toContain('12345678Z');
+    // Su aviso («Ana Gil») sale aparte: se espera aquí para que no caiga en la
+    // prueba siguiente (con la máquina cargada llegaba tarde y era el que leía).
+    await vi.waitFor(() => expect(avisos).toHaveLength(1));
     expect((await entregar(solicitud({ matriculaId: base + 3, solicitadaEn: 'ayer' }))).status).toBe(400);
     expect((await entregar(solicitud({ matriculaId: 'x' }))).status).toBe(400);
   });

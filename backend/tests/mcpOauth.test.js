@@ -32,6 +32,26 @@ const conexiones = {
 };
 vi.mock('../src/modules/mcp/mcp.conexiones.js', () => conexiones);
 
+// `puedeUsarMcp` lee los permisos de la base por el id. Con la base de las otras
+// pruebas, el id 9 del «tutor» de abajo podía ser un admin de verdad y entraba
+// (pasaba en GitHub y fallaba en local según el orden). Aquí salen de la persona
+// simulada, con el mismo resolver y las mismas casillas que el servidor.
+vi.mock('../src/modules/permissions/permissions.service.js', async (importOriginal) => {
+  const real = await importOriginal();
+  const { resolverPermisos } = await import('../src/modules/permissions/resolver.js');
+  const { excepcionesDeCasillas } = await import('../src/modules/permissions/casillas.js');
+  return {
+    ...real,
+    explicarPermisos: async (id) => {
+      const u = await model.findUserById(id);
+      if (!u) return null;
+      const { mapa } = resolverPermisos({ role: u.role, roles_extra: u.roles_extra || [], excepciones: excepcionesDeCasillas(u) });
+      if (u.active === false) for (const k of Object.keys(mapa)) mapa[k] = false;
+      return { mapa };
+    },
+  };
+});
+
 const { huella } = await import('../src/modules/mcp/mcp.acceso.js');
 const { default: oauth, secretoDe, vueltaPermitida, sellar } = await import('../src/modules/mcp/mcp.oauth.js');
 
