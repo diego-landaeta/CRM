@@ -126,8 +126,7 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
   //   <style> y es un añadido: si un cliente se lo come, los márgenes de siempre.
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
-<style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}
-@media only screen and (max-width:560px){.crm-pista{display:block !important}}</style></head>
+<style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}</style></head>
 <body style="margin:0;padding:0;background:#f2f4f7">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td class="crm-marco" align="center" style="padding:24px 12px">
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;table-layout:fixed">
@@ -269,10 +268,10 @@ export function tablaDelRanking(puesto, { periodo = 'semana', tope = 12 } = {}) 
     .flatMap((x) => x.l.map((t) => `${esc(x.quien)} · ${t}`));
   // Ocho columnas no caben en un móvil: se desliza de lado (ver `tabla`), y sin
   // mayúsculas hay que deslizar menos. En el móvil la barra no se ve, así que se
-  // avisa; la pista solo sale con su regla de `envoltorio` (hasta 560 px: desde
-  // ahí hacia abajo la tabla ya no cabe), y `mso-hide` la esconde en el Outlook
-  // de Windows, que no lee esas reglas.
-  return `<div class="crm-pista" style="display:none;mso-hide:all;font-size:11px;color:${GRIS};margin-top:4px">Desliza la tabla para ver todas las columnas →</div>${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true, mayusculas: false })}
+  // avisa. Siempre, y dicho en condicional: si la tabla cabe o no depende de la
+  // pantalla Y de lo grandes que sean los importes (con «125.400 €» no cabe ni
+  // a 600 px), y eso un correo no lo puede saber.
+  return `<div style="font-size:11px;color:${GRIS};margin-top:4px">Si no ves todas las columnas, desliza la tabla →</div>${tabla(['Gestora', 'Vendido', 'Facturado', 'Cobrado', `De la ${periodo}`, 'Anteriores', 'Cuotas', 'Pendiente'], cuerpo, { compacta: true, mayusculas: false })}
     ${grandes.length ? `<div style="font-size:12px;color:${TINTA};margin:10px 0 0"><strong>De ventas anteriores, lo grande:</strong><br>${grandes.join('<br>')}</div>` : ''}
     ${notaDeLasFechas(periodo)}`;
 }

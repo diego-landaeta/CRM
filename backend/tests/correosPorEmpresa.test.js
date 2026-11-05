@@ -229,12 +229,12 @@ describe('las piezas sueltas', () => {
     expect(t).toContain('padding:6px 4px');
   });
 
-  it('el ranking avisa en el móvil de que se desliza (la pista solo la enciende la regla del móvil)', async () => {
+  it('el ranking avisa de que se puede deslizar, siempre y en condicional', async () => {
     const { html } = await C.correoSemanalDireccion(MANUEL, LUNES);
-    expect(html).toContain('<div class="crm-pista" style="display:none;mso-hide:all;');
-    expect(html).toContain('Desliza la tabla para ver todas las columnas');
-    // Hasta 560 px: entre 421 y 550 la tabla ya se desliza (iPhone Plus / Pro Max).
-    expect(html).toContain('@media only screen and (max-width:560px){.crm-pista{display:block !important}}');
+    const ranking = html.indexOf('Ranking de la semana');
+    // Justo antes de la tabla del ranking, sin depender de reglas que un cliente pueda no leer.
+    expect(html.slice(ranking, html.indexOf('<table', ranking))).toContain('Si no ves todas las columnas, desliza la tabla →');
+    expect(html).not.toContain('crm-pista');
   });
 
   it('el semanal: «Por gestora» compacta y el ranking sin mayúsculas', async () => {
