@@ -240,12 +240,12 @@ export function AvisoDireccionPublica({ conexion }: { conexion: ConexionCertifex
 }
 
 /**
- * ¿Va la firma del alumno en el diploma? Diego, 20/10/2026: «las firmas no van en los
- * diplomas, solo el DNI». Apagado, el panel no enseña ni sube firmas, y el servidor no las
- * manda a Certifex (FIRMA_EN_DIPLOMA en backend/src/modules/certifex/certifex.emision.js).
- * Para volver a ponerla, true aquí y allí.
+ * ¿Va la firma del alumno en el diploma? Apagada el 20/10/2026 (Diego: «las firmas no van en
+ * los diplomas, solo el DNI») y encendida otra vez el 05/11/2026 (Ángel). Encendida, el panel
+ * enseña y sube la firma, y el servidor la manda a Certifex. Va a la par con
+ * FIRMA_EN_DIPLOMA en backend/src/modules/certifex/certifex.emision.js.
  */
-export const FIRMA_EN_DIPLOMA = false;
+export const FIRMA_EN_DIPLOMA = true;
 
 /** ¿Tiene DNI (o NIE o pasaporte)? Es obligatorio para emitir el diploma (Diego, 20/10). */
 export const tieneDni = (c: { titular?: { dni?: string | null } | null }) => !!c.titular?.dni?.trim();
@@ -267,7 +267,7 @@ export function AvisoCasiListo() {
         <p className="font-medium">El DNI del alumno es obligatorio en el diploma</p>
         <p className="mt-0.5 text-xs">
           {FIRMA_EN_DIPLOMA
-            ? 'La firma del alumno se coge de su solicitud de admisión o se sube en «Revisar datos antes de aprobar», y se imprime sobre «El interesado». '
+            ? 'La firma del alumno se coge de su solicitud de admisión o se sube en «Revisar datos antes de aprobar», y se imprime sobre su línea («El interesado» o «Alumno»). '
             : 'La firma de la institución ya va impresa. La del alumno no va en el diploma: sobre «El interesado» sale solo su nombre. '}
           Junto al nombre se imprime su DNI (o NIE o pasaporte): sin él no se aprueba ni se emite. Si falta, ponlo con «Sin DNI · Poner».
         </p>

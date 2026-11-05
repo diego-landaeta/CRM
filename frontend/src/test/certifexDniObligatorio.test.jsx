@@ -148,17 +148,15 @@ describe('el DNI es obligatorio para emitir el diploma', () => {
     expect(aviso.description).toMatch(/1 sin DNI, que es obligatorio/);
   });
 
-  it('«Revisar datos» dice que el DNI es obligatorio, y la firma ya no aparece', async () => {
+  it('«Revisar datos» dice que el DNI es obligatorio, y vuelve a pedir la firma del alumno (05/11/2026)', async () => {
     await abrir();
-    expect(screen.queryByText(/Sin firma/)).toBeNull();
-    expect(screen.queryByText(/Con firma/)).toBeNull();
+    expect(screen.getAllByText(/Sin firma/).length).toBeGreaterThan(0);
     fireEvent.click(within(screen.getByText('Luis Sin Documento').closest('tr')).getByRole('button', { name: /Sin DNI · Poner/ }));
     const dialogo = await screen.findByRole('dialog');
     expect(dialogo.textContent).toContain('DNI / NIE / pasaporte (obligatorio)');
     expect(dialogo.textContent).toContain('Es obligatorio: sin él no se puede aprobar ni emitir.');
     expect(dialogo.textContent).toContain('Todavía no lo tiene: escríbelo para poder emitir.');
     expect(dialogo.textContent).not.toContain('escríbelo si debe salir');
-    expect(dialogo.textContent).not.toContain('Firma del alumno');
-    expect(dialogo.textContent).not.toMatch(/Subir firma/);
+    expect(dialogo.textContent).toContain('Firma del alumno');
   });
 });

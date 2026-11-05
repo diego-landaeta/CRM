@@ -115,12 +115,11 @@ describe('prepararEmision: el DNI de cada matrícula, de Certifex', () => {
     await expect(prepararEmision([1])).rejects.toMatchObject({ statusCode: 503, code: 'CERTIFEX_SIN_CONFIGURAR' });
   });
 
-  it('la firma del alumno ya no va en el diploma: ni se busca', async () => {
-    expect(FIRMA_EN_DIPLOMA).toBe(false);
+  it('la firma del alumno va en el diploma (otra vez desde el 05/11/2026): se busca', async () => {
+    expect(FIRMA_EN_DIPLOMA).toBe(true);
     estado.candidatos = [cand(1, '12345678Z')];
-    const p = await prepararEmision([1]);
-    expect(p.firmas.size).toBe(0);
-    expect(consultas.some((sql) => /firma/i.test(sql))).toBe(false);
+    await prepararEmision([1]);
+    expect(consultas.some((sql) => /firma/i.test(sql))).toBe(true);
   });
 });
 
@@ -145,7 +144,7 @@ describe('«Aprobar y emitir»: sin DNI ni se aprueba ni se emite', () => {
     const { json } = await llamar(diplomas.aprobarEmitir, { matriculaIds: [1, 2, 3, 4] });
     expect(rutas()).toEqual(['/candidatos', '/decisiones', '/emitir']);
     expect(llamadas[1].cuerpo.decisiones.map((d) => d.matriculaId)).toEqual([1, 4]);
-    // Sin la firma del alumno (FIRMA_EN_DIPLOMA apagado).
+    // Sin firma guardada para estas matrículas: los items van sin `firmaAlumno`.
     expect(llamadas[2].cuerpo.items).toEqual([{ matriculaId: 1 }, { matriculaId: 4 }]);
     const r = json.data.resultados;
     expect(r.map((x) => [x.matriculaId, x.ok, x.fase, x.codigo ?? null])).toEqual([
