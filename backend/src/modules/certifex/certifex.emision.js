@@ -24,12 +24,14 @@ import { firmasParaEmitir } from './certifex.firma.js';
  */
 
 /**
- * ¿Va la firma del alumno en el diploma? Diego, 20/10/2026: «las firmas no van en los
- * diplomas, solo el DNI». Apagado, ni se busca ni se manda `firmaAlumno` a Certifex (y un
- * item sin firma borra en Certifex la que tuviera guardada esa matricula: no sale). Para
- * volver a ponerla, true (y lo mismo en el panel: components/piezas.tsx).
+ * ¿Va la firma del alumno en el diploma? Diego la apagó el 20/10/2026 («las firmas no van en
+ * los diplomas, solo el DNI»); Ángel la vuelve a encender el 05/11/2026: los diplomas llevan
+ * otra vez la línea donde firma el alumno (Certifex, feat/iseie-tres-firmas). Encendida, se
+ * busca (subida a mano o de la solicitud de admisión) y se manda `firmaAlumno` a Certifex.
+ * Apagada, ni se busca ni se manda (y un item sin firma borra en Certifex la que tuviera
+ * guardada esa matricula). Va a la par con el panel: components/piezas.tsx.
  */
-export const FIRMA_EN_DIPLOMA = false;
+export const FIRMA_EN_DIPLOMA = true;
 
 /** Lo que dice cada matricula que no se emite por el DNI (y su `codigo`, para el panel). */
 export const FALTA_DNI = 'FALTA_DNI';
