@@ -303,16 +303,16 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(t).toMatch(/Marta ICTESS 1 1 1 2 3/);
     const laTabla = t.slice(t.indexOf('Actividad por comercial'), t.indexOf('Sin actividad registrada'));
     expect(laTabla).not.toContain('Ana Gestora');
-    expect(t).toContain('Sin actividad registrada: Ana Gestora (solo notas internas), Pablo Quieto.');
+    expect(t).toContain('Sin actividad registrada en esta empresa: Ana Gestora (solo notas internas), Pablo Quieto.');
   });
 
   it('«Sin actividad registrada»: las comerciales de la empresa sin ningún contacto hoy (ideas de Diego, 01/10)', async () => {
     const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
     // CEDIA: Ana tiene fila; Lucía no ha hecho nada. ICTESS: Ana solo notas y Pablo nada.
-    expect(t).toContain('Sin actividad registrada: Lucía Quieta.');
-    expect(t).toContain('Sin actividad registrada: Ana Gestora (solo notas internas), Pablo Quieto.');
+    expect(t).toContain('Sin actividad registrada en esta empresa: Lucía Quieta.');
+    expect(t).toContain('Sin actividad registrada en esta empresa: Ana Gestora (solo notas internas), Pablo Quieto.');
     // Quien tiene fila no se repite en la línea.
-    expect(t).not.toMatch(/Sin actividad registrada:[^.]*Marta ICTESS/);
+    expect(t).not.toMatch(/Sin actividad registrada en esta empresa:[^.]*Marta ICTESS/);
   });
 
   it('un admin de una empresa no ve a las comerciales de otra', async () => {
@@ -328,8 +328,21 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     const html = C.tablaActividadPorComercial({ filas: [], equipo: {} }, 0, [{ id: 1, nombre: 'Eva' }, { id: 2, nombre: '<b>Rosa</b>' }]);
     const t = sinEtiquetas(html);
     expect(t).toContain('Actividad por comercial');
-    expect(t).toContain('Sin actividad registrada: Eva, &lt;b&gt;Rosa&lt;/b&gt;.');
+    expect(t).toContain('Sin actividad registrada en esta empresa: Eva, &lt;b&gt;Rosa&lt;/b&gt;.');
     expect(html).not.toContain('<table');
+  });
+
+  it('quien no está disponible ese día se dice, para que no parezca que no hizo nada', () => {
+    const html = C.tablaActividadPorComercial({ filas: [], equipo: {} }, 0, [{ id: 1, nombre: 'Eva', noDisponible: true }]);
+    expect(sinEtiquetas(html)).toContain('Sin actividad registrada en esta empresa: Eva (no disponible).');
+  });
+
+  it('pide quién vende con el día del resumen (para saber quién está de vacaciones)', async () => {
+    const { query } = await import('../src/shared/config/db.js');
+    query.mockClear();
+    await C.correoDiarioDireccion(ADMIN_ICTESS, LUNES);
+    const pedida = query.mock.calls.find(([sql]) => sql.includes('gestor_colaboraciones'));
+    expect(pedida[1]).toEqual([[4], '2026-10-19']);
   });
 
   it('todas con actividad: no hay línea', () => {

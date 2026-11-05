@@ -123,7 +123,7 @@ describe('actividad por comercial en el resumen de la tarde', () => {
 describe('el «Resumen del día» de verdad, de dos admins', () => {
   const m = `${marca}R`;
   const r = { projects: [], users: [], leads: [], issuers: [] };
-  let adminUno; let adminDos; let ana2; let dayana2; let eva2; let luz2; let rita2;
+  let adminUno; let adminDos; let ana2; let dayana2; let eva2; let luz2; let rita2; let nora2; let olga2; let pepa2;
   // Un día fijo, a mediodía: es el mismo día en UTC, en Madrid y en Caracas,
   // así que la prueba no depende de la hora a la que se corra.
   const DIA_R = '2026-10-21';
@@ -144,12 +144,17 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
       return p.id;
     };
     const cUno = await campus('U1', sUno); const cDos = await campus('D1', sDos);
-    const mk = async (rol, nombre, campusIds, { rolesExtra = [], colaboraciones = false } = {}) => {
+    const mk = async (rol, nombre, campusIds, {
+      rolesExtra = [], colaboraciones = false, disponible = true, asignacionActiva = true, recibeLeads = false,
+    } = {}) => {
       const [u] = await q(
-        `INSERT INTO users (nombre, email, password_hash, role, active, roles_extra, gestor_colaboraciones)
-         VALUES ($1, $2, 'x', $3, FALSE, $4::user_role[], $5) RETURNING id, nombre, role`,
-        [`${m} ${nombre}`, `${nombre.toLowerCase()}@${m.toLowerCase()}.test`, rol, rolesExtra, colaboraciones]);
-      for (const c of campusIds) await q('INSERT INTO user_projects (user_id, project_id, active) VALUES ($1, $2, TRUE)', [u.id, c]);
+        `INSERT INTO users (nombre, email, password_hash, role, active, roles_extra, gestor_colaboraciones, is_available)
+         VALUES ($1, $2, 'x', $3, FALSE, $4::user_role[], $5, $6) RETURNING id, nombre, role`,
+        [`${m} ${nombre}`, `${nombre.toLowerCase()}@${m.toLowerCase()}.test`, rol, rolesExtra, colaboraciones, disponible]);
+      for (const c of campusIds) {
+        await q('INSERT INTO user_projects (user_id, project_id, active, recibe_leads) VALUES ($1, $2, $3, $4)',
+          [u.id, c, asignacionActiva, recibeLeads]);
+      }
       r.users.push(u.id);
       return u;
     };
@@ -163,6 +168,11 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
     luz2 = (await mk('admin', 'Luz', [cUno], { rolesExtra: ['gestor'] })).id;
     rita2 = (await mk('gestor', 'Rita', [cUno], { colaboraciones: true })).id;
     await mk('gestor', 'Bea', [cUno]);
+    // Como en el reparto: la admin que recibe prospectos en ese campus vende; una
+    // asignación ya no activa no cuenta; y quien no está disponible se dice.
+    nora2 = (await mk('admin', 'Nora', [cUno], { recibeLeads: true })).id;
+    olga2 = (await mk('gestor', 'Olga', [cUno], { asignacionActiva: false })).id;
+    pepa2 = (await mk('gestor', 'Pepa', [cUno], { disponible: false })).id;
     const leadDe = async (project, responsable) => {
       const [l] = await q(
         `INSERT INTO leads (project_id, nombre, email, status, responsable_id, created_at, fecha_solicitud)
@@ -210,14 +220,16 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
 
   it('«Sin actividad registrada»: quien vende en esa empresa y no hizo ningún contacto', async () => {
     // Activas solo durante esta prueba: así ninguna otra las ve.
-    const activas = [ana2, dayana2, eva2, luz2, rita2];
+    const activas = [ana2, dayana2, eva2, luz2, rita2, nora2, olga2, pepa2];
     await q('UPDATE users SET active = TRUE WHERE id = ANY($1::int[])', [activas]);
     try {
       const t = actividad((await correoDiarioDireccion(adminUno, ahora)).html);
-      // Dayana (su prospecto lo llamó Ana) y Luz (admin que vende); por nombre.
-      expect(t).toContain(`Sin actividad registrada: ${m} Dayana, ${m} Luz.`);
+      // Dayana (su prospecto lo llamó Ana), Luz (admin que además es gestora),
+      // Nora (admin que recibe prospectos) y Pepa (no disponible); por nombre.
+      expect(t).toContain(`Sin actividad registrada en esta empresa: ${m} Dayana, ${m} Luz, ${m} Nora, ${m} Pepa (no disponible).`);
       expect(t).not.toContain(`${m} Rita`); // colaboraciones: no vende
       expect(t).not.toContain(`${m} Bea`);  // inactiva
+      expect(t).not.toContain(`${m} Olga`); // su asignación al campus ya no está activa
       expect(t).not.toContain(`${m} Eva`);  // es de la otra empresa
       // En la Dos, Eva tiene su fila y no queda nadie sin actividad.
       expect(actividad((await correoDiarioDireccion(adminDos, ahora)).html)).not.toContain('Sin actividad registrada');
