@@ -200,20 +200,23 @@ describe('las piezas sueltas', () => {
     expect(filaCon(html, 'Vivo')).not.toContain(GRIS_PARADO);
   });
 
-  it('el correo cabe en un móvil de 360 px y trae sus colores para el modo oscuro (#203 C)', () => {
+  it('el correo cabe en un móvil de 360 px (#203 C)', () => {
     const h = C.envoltorio({ preTitulo: 'X', titulo: 'Y', contenido: 'Z' });
-    expect(h).toContain('<meta name="color-scheme" content="light dark">');
-    expect(h).toMatch(/@media only screen and \(max-width:420px\)\{\.crm-marco\{[^}]+\}\.crm-caja\{padding:20px 16px 24px !important\}/);
-    expect(h).toMatch(/@media \(prefers-color-scheme: dark\)\{\.crm-fondo\{background-color:#18181b !important\}/);
+    expect(h).toMatch(/<style>@media only screen and \(max-width:420px\)\{\.crm-marco\{[^}]+\}\.crm-caja\{padding:20px 16px 24px !important\}\}<\/style>/);
+    expect(h).toContain('class="crm-marco"');
     expect(h).toContain('class="crm-caja"');
     // Los estilos en línea siguen siendo la base, por si un cliente se come el <style>.
     expect(h).toContain('padding:26px 28px 30px');
   });
 
-  it('una fila en gris lleva su clase, para seguir en gris en oscuro; el Total no', () => {
-    const html = C.tabla(['A', 'B'], [{ celdas: ['Parado', '0'], estilo: ';color:#9ca3af' }, { celdas: ['Total', '1'], estilo: ';border-top:2px solid #e6e9ee' }]);
-    expect(filaCon(html, 'Parado')).toContain('class="crm-tenue"');
-    expect(filaCon(html, 'Total')).not.toContain('crm-tenue');
+  it('en modo oscuro el correo se declara claro: nadie le inventa colores a medias (#203 C)', () => {
+    const h = C.envoltorio({ preTitulo: 'X', titulo: 'Y', contenido: 'Z' });
+    expect(h).toContain('<meta name="color-scheme" content="light">');
+    expect(h).toContain('<meta name="supported-color-schemes" content="light">');
+    // Ninguna paleta oscura: este envoltorio lo usan también los correos de las
+    // gestoras, y una a medias dejaba texto oscuro sobre fondo oscuro.
+    expect(h).not.toContain('prefers-color-scheme');
+    expect(h).toContain('<meta charset="utf-8">');
   });
 
   it('«Por gestora» del día, compacta y sin mayúsculas (si no, no cabe en el móvil)', async () => {

@@ -113,21 +113,22 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
   const cabecera = cabeceraUrl
     ? `<img src="${esc(cabeceraUrl)}" width="600" alt="${esc(CRM.nombre)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px 12px 0 0">`
     : `<div style="background:${CRM.color};border-radius:12px 12px 0 0;padding:20px 28px;color:#ffffff;font:bold 18px Arial,Helvetica,sans-serif">${esc(CRM.nombre)}</div>`;
-  // El <style> es un AÑADIDO: los estilos en línea siguen siendo la base, y si un
-  // cliente se lo come el correo se ve como siempre, en claro y de escritorio.
-  //
+  // · Modo oscuro (#203 C: «en claro y en oscuro»): el correo se declara CLARO.
+  //   Este envoltorio lo usan también los correos de las gestoras, con colores en
+  //   línea por todas partes; darle una paleta oscura a medias dejaba textos y
+  //   enlaces oscuros sobre fondo oscuro. Declarado claro, Apple Mail y los que
+  //   respetan `color-scheme` lo enseñan tal cual (se lee bien); Gmail y
+  //   Outlook invierten por su cuenta, como con cualquier correo, y eso no lo
+  //   cambia ningún CSS: los colores en línea de cada texto y cada celda son lo
+  //   que hace que su inversión se lea.
   // · Móvil estrecho (360 px): los márgenes de siempre dejaban sin sitio a las
-  //   tablas de seis columnas y el correo se desplazaba de lado.
-  // · Modo oscuro (#203 C: «en claro y en oscuro»): como en email-plantilla, se
-  //   declara que el correo admite los dos y se le dan sus colores. Sin ellos,
-  //   Gmail en Android se los inventa y Apple Mail deja texto oscuro sobre
-  //   fondo oscuro. La cabecera y el botón se quedan con el color de la marca.
+  //   tablas de seis columnas y el correo se desplazaba de lado. Va en su propio
+  //   <style> y es un añadido: si un cliente se lo come, los márgenes de siempre.
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
-<style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}
-@media (prefers-color-scheme: dark){.crm-fondo{background-color:#18181b !important}.crm-caja{background-color:#0f1115 !important;color:#e4e4e7 !important}.crm-caja div,.crm-caja td,.crm-caja th,.crm-caja strong,.crm-caja span{color:#e4e4e7 !important;border-color:#2a2f3a !important}.crm-caja .crm-tenue{color:#9ca3af !important}.crm-caja .crm-sube{color:#4ade80 !important}.crm-caja .crm-baja{color:#f87171 !important}.crm-pie{color:#9ca3af !important}}</style></head>
-<body class="crm-fondo" style="margin:0;padding:0;background:#f2f4f7">
-<table class="crm-fondo" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td class="crm-marco" align="center" style="padding:24px 12px">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<style>@media only screen and (max-width:420px){.crm-marco{padding:16px 6px !important}.crm-caja{padding:20px 16px 24px !important}}</style></head>
+<body style="margin:0;padding:0;background:#f2f4f7">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td class="crm-marco" align="center" style="padding:24px 12px">
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px">
     <tr><td>${cabecera}</td></tr>
     <tr><td class="crm-caja" style="background:#ffffff;padding:26px 28px 30px;border-radius:0 0 12px 12px;font-family:Arial,Helvetica,sans-serif;color:${TINTA}">
@@ -136,7 +137,7 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
       ${subtitulo ? `<div style="font-size:14px;color:${GRIS};line-height:1.5">${subtitulo}</div>` : ''}
       ${contenido}
     </td></tr>
-    <tr><td class="crm-pie" style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#8a939e;text-align:center">
+    <tr><td style="padding:16px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#8a939e;text-align:center">
       ${pie ? `${pie}<br>` : ''}Correo automático de ${esc(CRM.nombre)}: no lo contestes. Puedes apagarlo en «Mis preferencias».
     </td></tr>
   </table>
@@ -163,7 +164,7 @@ export function tarjetas(lista) {
       <div style="border:1px solid ${LINEA};border-radius:10px;padding:12px 14px">
         <div style="font-size:12px;color:${GRIS}">${esc(k.etiqueta)}</div>
         <div style="font-size:24px;font-weight:bold;color:${k.destaca ? CRM.color : TINTA};margin-top:2px">${k.valor}</div>
-        ${cmp || k.nota ? `<div${cmp?.signo === 'sube' ? ' class="crm-sube"' : cmp?.signo === 'baja' ? ' class="crm-baja"' : ''} style="font-size:12px;color:${color};margin-top:2px">${cmp ? `${flecha}${esc(cmp.texto)}${k.nota ? ' · ' : ''}` : ''}${k.nota ? `<span class="crm-tenue" style="color:${GRIS}">${k.nota}</span>` : ''}</div>` : ''}
+        ${cmp || k.nota ? `<div style="font-size:12px;color:${color};margin-top:2px">${cmp ? `${flecha}${esc(cmp.texto)}${k.nota ? ' · ' : ''}` : ''}${k.nota ? `<span style="color:${GRIS}">${k.nota}</span>` : ''}</div>` : ''}
       </div></td>`;
   };
   const filas = [];
@@ -186,9 +187,7 @@ export function tabla(cabeceras, filas, { compacta = false, mayusculas = true } 
   const tr = filas.map((f) => {
     const celdas = Array.isArray(f) ? f : f.celdas;
     const extra = Array.isArray(f) ? '' : (f.estilo || '');
-    // Una fila en gris (campus parado, «Sin gestora») lo sigue siendo en oscuro.
-    const clase = extra.includes('color:') ? ' class="crm-tenue"' : '';
-    return `<tr>${celdas.map((v, i) => `<td${clase} style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 12 : 13}px;padding:${pad};border-bottom:1px solid #f1f3f6;color:${TINTA}${i ? ';white-space:nowrap' : ''}${extra}">${v}</td>`).join('')}</tr>`;
+    return `<tr>${celdas.map((v, i) => `<td style="text-align:${i ? 'right' : 'left'};font-size:${compacta ? 12 : 13}px;padding:${pad};border-bottom:1px solid #f1f3f6;color:${TINTA}${i ? ';white-space:nowrap' : ''}${extra}">${v}</td>`).join('')}</tr>`;
   }).join('');
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${`<tr>${th}</tr>`}${tr}</table>`;
 }
