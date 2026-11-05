@@ -235,6 +235,15 @@
   se puede tipar y componer.)
 */
 
+/*
+  Gráficas: el recuadro emergente vacío se queda donde estaba al estrechar la
+  ventana (o girar el móvil) y ensanchaba la página. Recharts ya lo mantiene
+  dentro de la gráfica, así que recortar ahí no esconde nada.
+*/
+.recharts-wrapper {
+  overflow: hidden;
+}
+
 @layer components {
   /*
     Un código: número de factura, NIF, identificador, clave.

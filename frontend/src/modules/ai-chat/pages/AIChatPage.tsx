@@ -281,7 +281,9 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-8.5rem)] min-h-[30rem]">
+    // 4rem más que antes: el hueco de abajo de AppLayout para el botón de tickets,
+    // que así no tapa la caja de escribir.
+    <div className="flex flex-col gap-4 h-[calc(100vh-12.5rem)] min-h-[30rem]">
       <PageHeader
         title="Preguntar a la IA"
         subtitle={`Sobre los datos de ${activeProject?.nombre || 'este proyecto'}, en castellano.`}

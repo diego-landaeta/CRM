@@ -665,7 +665,10 @@ export default function AppLayout() {
           role="main"
           aria-label="Contenido principal"
           tabIndex={-1}
-          className="p-4 lg:p-6 xl:p-8 focus:outline-none"
+          // `pb-20`: el botón flotante de tickets (abajo a la derecha, en todas
+          // las pantallas) tapaba lo último de la página; así siempre se puede
+          // subir por encima de él.
+          className="p-4 pb-20 lg:p-6 lg:pb-20 xl:p-8 xl:pb-20 focus:outline-none"
         >
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">

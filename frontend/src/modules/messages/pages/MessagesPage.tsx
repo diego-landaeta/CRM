@@ -79,7 +79,8 @@ export default function MessagesPage() {
   }, [refetch]);
 
   return (
-    <div className="-m-4 lg:-m-6 xl:-m-8 flex h-[calc(100vh-56px)] lg:h-screen bg-background">
+    // `-mb-20`: deshace el hueco de abajo que deja AppLayout para el botón de tickets.
+    <div className="-m-4 -mb-20 lg:-m-6 lg:-mb-20 xl:-m-8 xl:-mb-20 flex h-[calc(100vh-56px)] lg:h-screen bg-background">
       <div className={`w-[340px] border-r border-border flex-shrink-0 flex flex-col bg-card ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         <ConversationList
           conversations={conversations}
