@@ -13,6 +13,7 @@ import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
 } from '@phosphor-icons/react';
+import { EtiquetaEnPruebas } from '@/modules/tutores/components/EnPruebas';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 type Provider = 'stripe' | 'brevo' | 'supabase' | 'moodle';
@@ -698,6 +699,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
       </div>
 
       <div className="p-5 space-y-4">
+        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#679). */}
+        <PluginDelCrm projectId={projectId} alConectar={load} />
+        <p className="text-xs font-semibold text-muted-foreground">O, sin el plugin, a mano:</p>
         <button onClick={() => setShowHelp((v) => !v)}
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
           <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo obtener el token del campus'}
@@ -760,6 +764,7 @@ function MoodleCard({ projectId }: { projectId: number }) {
           )}
         </div>
 
+
         <TestStatus data={data} />
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
@@ -781,6 +786,137 @@ function MoodleCard({ projectId }: { projectId: number }) {
         </div>
       </div>
       {loading && <div className="px-5 py-3 text-xs text-muted-foreground border-t border-border">Cargando…</div>}
+    </div>
+  );
+}
+
+// ─── Plugin del CRM en el Moodle (#679) ───────────────────────────────────
+interface EstadoPlugin {
+  configurado: boolean;
+  activo: boolean;
+  ultimo_aviso_at: string | null;
+  clave_desde: string | null;
+  ruta: string;
+  /** El repaso de cada 15 minutos (plugin 1.8.0). */
+  sincronizado_at?: string | null;
+  sincronizacion_error?: string | null;
+  version_plugin?: string | null;
+}
+
+/**
+ * Conectar el campus con el plugin `local_crm`, como Certifex: se instala el plugin
+ * en el Moodle y se pega UN código. El plugin crea su token y se presenta al CRM, que
+ * guarda la conexión (dirección, token, «Leer las consultas») y le da su clave. Aquí
+ * se genera el código y se ve si el campus está avisando.
+ */
+function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar: () => void }) {
+  const [estado, setEstado] = useState<EstadoPlugin | null>(null);
+  const [codigo, setCodigo] = useState<{ codigo: string; expira_at: string } | null>(null);
+  const [trabajando, setTrabajando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    try {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) setEstado(res.data);
+    } catch {/* sin permiso: no se enseña */}
+  }, [projectId]);
+  useEffect(() => { setCodigo(null); cargar(); }, [cargar]);
+
+  // Mientras hay un código a la vista, se mira cada 5 s si el campus ya se ha conectado.
+  useEffect(() => {
+    if (!codigo) return undefined;
+    const t = setInterval(async () => {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`).catch(() => null);
+      if (res?.success && res.data.activo && res.data.clave_desde && (!estado?.clave_desde || res.data.clave_desde !== estado.clave_desde)) {
+        setEstado(res.data); setCodigo(null);
+        toast({ title: 'Campus conectado', description: 'El plugin ya está avisando al CRM.' });
+        alConectar();
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [codigo, projectId, estado?.clave_desde, alConectar]);
+
+  async function generar() {
+    setTrabajando(true);
+    try {
+      const res = await client.post<{ codigo: string; expira_at: string }>(`/consultas/campus/${projectId}/plugin/codigo`);
+      if (res.success) setCodigo(res.data);
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido generar el código', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setTrabajando(false); }
+  }
+
+  async function apagar() {
+    if (!confirm('El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?')) return;
+    setTrabajando(true);
+    try {
+      const res = await client.delete<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) { setEstado(res.data); setCodigo(null); }
+    } finally { setTrabajando(false); }
+  }
+
+  if (!estado) return null;
+  const conectado = estado.activo;
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-4" data-testid="plugin-del-crm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">Plugin del CRM <EtiquetaEnPruebas /></p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Los mensajes del campus llegan al momento y las tutoras contestan desde el CRM.
+          </p>
+        </div>
+        {conectado ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[11px] font-bold text-success-soft-foreground">
+            <CheckCircle size={12} weight="fill" aria-hidden />
+            {estado.ultimo_aviso_at ? `Conectado · último aviso ${fmt(estado.ultimo_aviso_at)}` : 'Conectado · sin mensajes todavía'}
+          </span>
+        ) : (
+          <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-bold text-muted-foreground">Sin conectar</span>
+        )}
+      </div>
+      {conectado && (estado.sincronizado_at || estado.sincronizacion_error) && (
+        <p className={`mt-2 text-xs ${estado.sincronizacion_error ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {estado.sincronizacion_error
+            ? <>{estado.sincronizacion_error}{estado.sincronizado_at ? ` · último repaso bueno ${fmt(estado.sincronizado_at)}` : ''}</>
+            : <>Al día · repasado {fmt(estado.sincronizado_at!)}{estado.version_plugin ? ` · plugin ${estado.version_plugin}` : ''}</>}
+        </p>
+      )}
+
+      {codigo ? (
+        <div className="space-y-2 rounded-md bg-muted/60 p-3">
+          <ol className="list-decimal space-y-1 pl-4 text-xs text-foreground">
+            <li>Instala el plugin <code>local_crm</code> en el Moodle (Extensiones › Instalar complementos, con el ZIP).</li>
+            <li>En el Moodle: <strong>Extensiones › Extensiones locales › Conectar con el CRM</strong>.</li>
+            <li>Pega este código y pulsa <strong>Conectar</strong>. Nada más.</li>
+          </ol>
+          <div className="flex items-start gap-2">
+            <code className="min-w-0 flex-1 break-all rounded border border-border bg-card px-2 py-1.5 text-[11px] leading-5" data-testid="codigo-de-conexion">{codigo.codigo}</code>
+            <button type="button"
+              onClick={() => navigator.clipboard?.writeText(codigo.codigo).then(() => toast({ title: 'Código copiado' }), () => {})}
+              className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+              Copiar
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Sirve una vez y caduca el {fmt(codigo.expira_at)}. Esta pantalla avisa sola cuando el campus se conecte.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={generar} disabled={trabajando}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" aria-hidden /> {conectado ? 'Volver a conectar' : 'Conectar campus'}
+          </button>
+          {conectado && (
+            <button type="button" onClick={apagar} disabled={trabajando}
+              className="inline-flex h-9 items-center rounded-md border border-destructive/30 bg-card px-3 text-sm font-semibold text-destructive hover:bg-destructive-soft disabled:opacity-50">
+              Desconectar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

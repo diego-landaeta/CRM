@@ -43,6 +43,14 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 
 // La ficha del curso que imparte, sin poder tocarla.
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
+// «Mi campus» (#681): sus cursos de Moodle con alumnos, dudas y tareas por corregir. Solo lo suyo.
+router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
+// Corregir desde el CRM (#681): la tarea con sus entregas, un archivo entregado y la nota.
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo', puede('tutores.mis_cursos'), ctrl.archivoEntregado);
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId', puede('tutores.mis_cursos'), ctrl.verTarea);
+// El curso entero, como en Moodle: temas y todas sus actividades.
+router.get('/mi-campus/cursos/:projectId/:cursoId', puede('tutores.mis_cursos'), ctrl.verCurso);
+router.post('/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar', puede('tutores.mis_cursos'), ctrl.calificar);
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.
@@ -63,6 +71,11 @@ router.delete('/:id', puede('tutores.gestionar'), ctrl.retirarTutor);
 router.get('/:id/campus', ctrl.campusDelTutor);
 router.post('/:id/campus', puede('tutores.gestionar'), ctrl.asignarCampus);
 router.post('/:id/campus/comprobar', puede('tutores.gestionar'), ctrl.comprobarCampus);
+// Su cuenta de Moodle cambió de verdad: olvidar la vinculada y buscarla de nuevo (#679).
+router.post('/:id/campus/:projectId/desvincular', puede('tutores.gestionar'), ctrl.desvincularCuenta);
+// Su correo del CRM no es el de Moodle: buscar su cuenta y vincularla a mano.
+router.get('/:id/campus/:projectId/buscar-cuenta', puede('tutores.gestionar'), ctrl.buscarCuentaMoodle);
+router.post('/:id/campus/:projectId/vincular', puede('tutores.gestionar'), ctrl.vincularCuentaMoodle);
 router.post('/:id/empresas', puede('tutores.gestionar'), ctrl.asignarEmpresa);
 router.delete('/:id/empresas/:issuerId', puede('tutores.gestionar'), ctrl.quitarEmpresa);
 router.patch('/:id/disponible', puede('tutores.gestionar'), ctrl.cambiarDisponible);

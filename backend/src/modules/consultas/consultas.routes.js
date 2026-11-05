@@ -62,11 +62,26 @@ router.get('/tutores-panel', administracion, ctrl.panelDeTutores);
 router.get('/campus-sin-tutor', administracion, ctrl.campusSinTutor);
 router.post('/sincronizar-alumnos', gestion, ctrl.sincronizarAlumnosAhora);
 router.get('/metricas', suyasOTodas, ctrl.verMetricas);
+// El plugin del CRM en el Moodle de cada campus (#679): su clave y si avisa.
+router.get('/campus/:projectId/plugin', gestion, ctrl.estadoDelPlugin);
+// El código da la conexión entera del campus (token incluido): lo genera quien edita integraciones.
+router.post('/campus/:projectId/plugin/codigo', gestion, puede('integrations.edit'), ctrl.codigoDeConexion);
+router.delete('/campus/:projectId/plugin', gestion, ctrl.desactivarPlugin);
+
+// Respuestas guardadas (#679): las suyas y las de sus campus. Antes que /:id.
+router.get('/respuestas', ctrl.respuestas);
+router.post('/respuestas', ctrl.crearRespuesta);
+router.post('/respuestas/importar', ctrl.importarRespuestas);
+router.put('/respuestas/:rid', ctrl.cambiarRespuesta);
+router.delete('/respuestas/:rid', ctrl.borrarRespuesta);
 
 router.get('/', administracion, ctrl.panel);
 router.get('/:id', ctrl.ver);
+router.get('/:id/contexto', ctrl.contexto);
 router.post('/:id/responder', conAdjuntos, ctrl.responder);
 router.post('/:id/cerrar', ctrl.cerrar);
+// Nota interna (#679): para el relevo y coordinación; el alumno no la ve.
+router.post('/:id/notas', ctrl.anotar);
 router.get('/:id/tutores', gestion, ctrl.tutoresPosibles);
 router.post('/:id/reasignar', gestion, ctrl.reasignar);
 

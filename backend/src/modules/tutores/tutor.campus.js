@@ -22,8 +22,9 @@
 import { query } from '../../shared/config/db.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
+import { AppError } from '../../shared/utils/AppError.js';
 import {
-  usuarioPorCorreo, estadoDeLaMatricula, MoodleError,
+  usuarioPorCorreo, usuarioPor, estadoDeLaMatricula, MoodleError,
 } from '../../shared/services/moodle.client.js';
 
 // Tutor = rol principal o añadido. `roles_extra` es un array de ENUM: se pide
@@ -163,14 +164,27 @@ async function comprobarUno(tutor, projectId, anterior, opciones = {}) {
   }
   try {
     const usuario = await usuarioPorCorreo(conexion, tutor.email, opciones);
-    const estado = estadoDeLaMatricula(usuario, anterior);
+    // La tutora puede cambiar su correo del CRM. Si con el correo nuevo sale OTRA cuenta del
+    // campus, no se cambia la vinculada: con eso podría escribir y calificar como otro profesor.
+    const { rows: [vinculada] } = await query(
+      'SELECT moodle_user_id FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2', [tutor.id, projectId]);
+    const yaVinculada = vinculada?.moodle_user_id != null ? Number(vinculada.moodle_user_id) : null;
+    if (yaVinculada && usuario?.id && Number(usuario.id) !== yaVinculada) {
+      const mensaje = OTRA_CUENTA;
+      logger.warn({ tutorId: tutor.id, projectId, vinculada: yaVinculada, nueva: usuario.id }, 'tutores/campus: el correo apunta a otra cuenta');
+      await guardarError(tutor.id, projectId, anterior, mensaje);
+      return { project_id: projectId, estado: anterior, error: mensaje };
+    }
+    // Vinculada a mano (su correo del CRM no es el de Moodle): se mira esa cuenta por su id.
+    const cuenta = usuario || (yaVinculada ? await usuarioPor(conexion, 'id', yaVinculada, opciones) : null);
+    const estado = estadoDeLaMatricula(cuenta, anterior);
     await query(
       `INSERT INTO tutor_campus (tutor_id, project_id, estado, moodle_user_id, comprobado_at, error)
        VALUES ($1, $2, $3, $4, NOW(), NULL)
        ON CONFLICT (tutor_id, project_id) DO UPDATE
-         SET estado = EXCLUDED.estado, moodle_user_id = EXCLUDED.moodle_user_id,
+         SET estado = EXCLUDED.estado, moodle_user_id = COALESCE(tutor_campus.moodle_user_id, EXCLUDED.moodle_user_id),
              comprobado_at = NOW(), error = NULL`,
-      [tutor.id, projectId, estado, usuario?.id || null]
+      [tutor.id, projectId, estado, cuenta?.id || null]
     );
     return { project_id: projectId, estado, antes: anterior };
   } catch (err) {
@@ -195,6 +209,61 @@ async function guardarError(tutorId, projectId, anterior, mensaje) {
  * Comprueba el tutor en todos sus campus (o solo en `soloProyectos`).
  * Devuelve sus campus ya actualizados y la lista de lo que ha pasado.
  */
+/** El error cuando su correo lleva a otra cuenta del campus (el panel ofrece «Vincular de nuevo»). */
+export const OTRA_CUENTA = 'El correo apunta a otra cuenta del campus distinta de la vinculada. Si es correcto, pulsa «Vincular de nuevo».';
+
+/**
+ * Olvida la cuenta de Moodle vinculada en ese campus y vuelve a buscarla por su correo.
+ * Para cuando su cuenta del campus cambia de verdad (se rehízo, cambió de correo): lo
+ * decide quien gestiona tutores, no la propia tutora.
+ */
+export async function desvincularCuenta(tutorId, projectId, opciones = {}) {
+  await query(
+    'UPDATE tutor_campus SET moodle_user_id = NULL, error = NULL WHERE tutor_id = $1 AND project_id = $2',
+    [tutorId, projectId]);
+  return comprobarTutor(tutorId, { soloProyectos: [projectId], ...opciones });
+}
+
+/**
+ * Buscar la cuenta de Moodle de una tutora cuando su correo del CRM no es el de Moodle,
+ * por su correo de Moodle. (Por nombre de usuario no: Moodle solo lo enseña a quien puede
+ * editar usuarios, y el usuario del servicio no puede.) Devuelve lo justo para confirmar
+ * que es ella (nombre y correo), o null.
+ */
+export async function buscarCuentaMoodle(projectId, texto, opciones = {}) {
+  const conexion = await conexionDelCampus(projectId);
+  if (!conexion) throw new AppError('Este campus no está conectado en Integraciones', 409, 'SIN_CONEXION');
+  if (conexion.error) throw new AppError(conexion.error, 409, 'SIN_CONEXION');
+  const q = String(texto || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) throw new AppError('Escribe su correo de Moodle', 400, 'VALIDATION_ERROR');
+  try {
+    return await usuarioPorCorreo(conexion, q, opciones);
+  } catch (err) {
+    throw new AppError(err instanceof MoodleError ? err.message : 'No se ha podido buscar en el campus.', 502, 'MOODLE');
+  }
+}
+
+/**
+ * Vincula a mano la tutora con esa cuenta de Moodle (la que ha confirmado quien gestiona
+ * tutores). La comprobación de cada hora la respeta: busca esa cuenta por su id.
+ */
+export async function vincularAMano(tutorId, projectId, moodleUserId, opciones = {}) {
+  const conexion = await conexionDelCampus(projectId);
+  if (!conexion || conexion.error) throw new AppError(conexion?.error || 'Este campus no está conectado en Integraciones', 409, 'SIN_CONEXION');
+  let cuenta;
+  try { cuenta = await usuarioPor(conexion, 'id', moodleUserId, opciones); } catch (err) {
+    throw new AppError(err instanceof MoodleError ? err.message : 'No se ha podido leer el campus.', 502, 'MOODLE');
+  }
+  if (!cuenta) throw new AppError('Esa cuenta no existe en el campus', 404, 'NOT_FOUND');
+  await query(
+    `INSERT INTO tutor_campus (tutor_id, project_id, estado, moodle_user_id, comprobado_at, error)
+     VALUES ($1, $2, $3, $4, NOW(), NULL)
+     ON CONFLICT (tutor_id, project_id) DO UPDATE
+       SET estado = EXCLUDED.estado, moodle_user_id = EXCLUDED.moodle_user_id, comprobado_at = NOW(), error = NULL`,
+    [tutorId, projectId, estadoDeLaMatricula(cuenta), cuenta.id]);
+  return cuenta;
+}
+
 export async function comprobarTutor(tutorId, { soloProyectos = null, ...opciones } = {}) {
   const { rows } = await query('SELECT id, email FROM users WHERE id = $1', [tutorId]);
   const tutor = rows[0];

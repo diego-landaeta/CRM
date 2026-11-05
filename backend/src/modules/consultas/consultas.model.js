@@ -70,6 +70,11 @@ export async function guardarMensajeDelAlumno({
   projectId, conversacionId, alumno, curso = null, texto, externoId, escritoAt, origen = 'moodle',
 }, elegirTutor) {
   return enTransaccion(async (db) => {
+    // Un mensaje del mismo alumno cada vez: con dos seguidos («Hola», «tengo una duda») el
+    // plugin y la lectura periódica pueden llegar a la vez, y sin consulta previa no hay fila
+    // que bloquear con FOR UPDATE: las dos crearían una consulta.
+    await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('consulta:' || $1::text || ':' || $2::text, 0))`,
+      [projectId, alumno.moodleId]);
     if (externoId != null) {
       const ya = await db.query(
         'SELECT 1 FROM consulta_mensajes WHERE project_id = $1 AND externo_id = $2', [projectId, externoId]);
@@ -88,8 +93,24 @@ export async function guardarMensajeDelAlumno({
     let nueva = false;
     let reabierta = false;
 
+    if (!c && curso?.moodleId && conversacionId != null) {
+      const delCurso = await db.query(
+        `SELECT * FROM consultas
+          WHERE project_id = $1 AND alumno_moodle_id = $2 AND curso_moodle_id = $3 AND estado <> 'cerrada'
+          ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+        [projectId, alumno.moodleId, curso.moodleId]);
+      if (delCurso.rows[0]) {
+        const u = await db.query(
+          `UPDATE consultas SET conversaciones_extra = array_append(COALESCE(conversaciones_extra, '{}'), $2::bigint), updated_at = NOW()
+            WHERE id = $1 AND conversacion_externa_id IS DISTINCT FROM $2::bigint
+              AND NOT ($2::bigint = ANY(COALESCE(conversaciones_extra, '{}'))) RETURNING *`,
+          [delCurso.rows[0].id, conversacionId]);
+        c = u.rows[0] || delCurso.rows[0];
+      }
+    }
+
     if (!c) {
-      const tutorId = await elegirTutor();
+      const tutorId = await elegirTutor(null, curso?.moodleId ?? null);
       const r = await db.query(
         `INSERT INTO consultas (project_id, issuer_id, alumno_moodle_id, alumno_nombre, alumno_email,
                                 curso_moodle_id, curso_nombre, tutor_id, estado, origen,
@@ -118,15 +139,18 @@ export async function guardarMensajeDelAlumno({
       }
       // Datos del alumno que no se tenían (el correo llega aparte).
       if (!c.alumno_email && alumno.email) cambios.push(`alumno_email = ${valor(alumno.email)}`);
+      // El curso, si la consulta no lo tenía y el mensaje llega por el chat de un curso.
+      if (!c.curso_moodle_id && curso?.moodleId) cambios.push(`curso_moodle_id = ${valor(curso.moodleId)}`);
       if (cambios.length) {
         const r = await db.query(
           `UPDATE consultas SET ${cambios.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`, valores);
         c = r.rows[0];
       }
       if (reabierta) await evento(db, c.id, 'reabierta');
-      // Al reabrir, si su tutor ya no puede (no disponible, sin matrícula), a otro.
-      if (reabierta || !c.tutor_id) {
-        const tutorId = await elegirTutor(c.tutor_id);
+      // Con cada mensaje del alumno: si su tutora ya no puede (no disponible, sin matrícula,
+      // fuera del curso), la consulta pasa a otra de ese curso. Si puede, sigue con ella.
+      {
+        const tutorId = await elegirTutor(c.tutor_id, c.curso_moodle_id ? Number(c.curso_moodle_id) : null);
         if (tutorId && tutorId !== c.tutor_id) {
           const r = await db.query(
             'UPDATE consultas SET tutor_id = $2, asignada_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *',
@@ -163,8 +187,37 @@ export async function guardarRespuestaDesdeElCampus({ projectId, conversacionId,
         ORDER BY id DESC LIMIT 1 FOR UPDATE`,
       [projectId, alumnoMoodleId, conversacionId]
     );
-    const c = rows[0];
-    if (!c) return { sinConsulta: true };
+    let c = rows[0];
+    if (!c) {
+      // La tutora contesta desde SU conversación con el alumno, que no tiene por qué ser
+      // la de la consulta (el alumno escribió a coordinación y el reparto se la dio a ella).
+      // Va a la consulta abierta de ese alumno con ella, y esa conversación queda unida.
+      const suya = await db.query(
+        `SELECT * FROM consultas WHERE project_id = $1 AND alumno_moodle_id = $2 AND tutor_id = $3 AND estado <> 'cerrada'
+          ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+        [projectId, alumnoMoodleId, tutorId]);
+      c = suya.rows[0];
+      if (!c) return { sinConsulta: true };
+      if (conversacionId != null) {
+        await db.query(
+          `UPDATE consultas SET conversaciones_extra = array_append(COALESCE(conversaciones_extra, '{}'), $2::bigint)
+            WHERE id = $1 AND NOT ($2::bigint = ANY(COALESCE(conversaciones_extra, '{}')))`,
+          [c.id, conversacionId]);
+      }
+    }
+    // ¿Es la respuesta que se escribió en el CRM y el envío dio por fallida (Moodle tardó,
+    // pero el mensaje salió)? Entonces es la misma: se le pone su id y deja de estar en error.
+    const mismo = await db.query(
+      `UPDATE consulta_mensajes SET externo_id = $3, enviado_campus_at = $4, error_envio = NULL
+        WHERE id = (SELECT id FROM consulta_mensajes
+                     WHERE consulta_id = $1 AND autor = 'tutor' AND externo_id IS NULL AND $2::int IS NOT NULL
+                       AND escrito_at > $4::timestamptz - INTERVAL '30 minutes'
+                       AND position(btrim(regexp_replace(lower(texto), '\\s+', ' ', 'g'))
+                                    IN regexp_replace(lower($5), '\\s+', ' ', 'g')) = 1
+                     ORDER BY escrito_at DESC LIMIT 1)
+        RETURNING id`,
+      [c.id, tutorId, externoId, escritoAt, texto]);
+    if (mismo.rowCount) return { consulta: c, yaEstaba: true };
     await db.query(
       `INSERT INTO consulta_mensajes (consulta_id, project_id, autor, autor_user_id, texto, externo_id, escrito_at, enviado_campus_at)
        VALUES ($1, $2, 'tutor', $3, $4, $5, $6, $6)`,
@@ -374,10 +427,16 @@ export async function detalle(id) {
     if (!porMensaje.has(a.mensaje_id)) porMensaje.set(a.mensaje_id, []);
     porMensaje.get(a.mensaje_id).push(a);
   }
+  const { rows: notas } = await query(
+    `SELECT n.id, n.texto, n.created_at AS at, n.autor_user_id, u.nombre AS autor_nombre
+       FROM consulta_notas n LEFT JOIN users u ON u.id = n.autor_user_id
+      WHERE n.consulta_id = $1 ORDER BY n.created_at, n.id`, [id]);
   return {
     ...c,
     mensajes: mensajes.rows.map((m) => ({ ...m, adjuntos: porMensaje.get(m.id) || [] })),
     eventos: eventos.rows,
+    // Notas internas (#679): solo del personal, nunca salen al campus.
+    notas,
   };
 }
 
