@@ -124,6 +124,7 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
   const m = `${marca}R`;
   const r = { projects: [], users: [], leads: [], issuers: [] };
   let adminUno; let adminDos; let ana2; let dayana2; let eva2; let luz2; let rita2; let nora2; let olga2; let pepa2;
+  let teo2; let ugo2; let vera2; let xime2;
   // Un día fijo, a mediodía: es el mismo día en UTC, en Madrid y en Caracas,
   // así que la prueba no depende de la hora a la que se corra.
   const DIA_R = '2026-10-21';
@@ -173,6 +174,16 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
     nora2 = (await mk('admin', 'Nora', [cUno], { recibeLeads: true })).id;
     olga2 = (await mk('gestor', 'Olga', [cUno], { asignacionActiva: false })).id;
     pepa2 = (await mk('gestor', 'Pepa', [cUno], { disponible: false })).id;
+    // Un admin sin «recibe prospectos» no vende; ni el que solo los recibe en la
+    // OTRA empresa (Teo: recibe en la Dos y está asignado a la Uno sin recibir).
+    ugo2 = (await mk('admin', 'Ugo', [cUno])).id;
+    teo2 = (await mk('admin', 'Teo', [cDos], { recibeLeads: true })).id;
+    await q('INSERT INTO user_projects (user_id, project_id, active, recibe_leads) VALUES ($1, $2, TRUE, FALSE)', [teo2, cUno]);
+    // De vacaciones el día del resumen (Vera) y otro día (Xime).
+    vera2 = (await mk('gestor', 'Vera', [cUno])).id;
+    xime2 = (await mk('gestor', 'Xime', [cUno])).id;
+    await q('INSERT INTO user_availability_blocks (user_id, fecha_inicio, fecha_fin) VALUES ($1, $2, $3), ($4, $5, $6)',
+      [vera2, '2026-10-20', '2026-10-22', xime2, '2026-10-25', '2026-10-26']);
     const leadDe = async (project, responsable) => {
       const [l] = await q(
         `INSERT INTO leads (project_id, nombre, email, status, responsable_id, created_at, fecha_solicitud)
@@ -220,19 +231,23 @@ describe('el «Resumen del día» de verdad, de dos admins', () => {
 
   it('«Sin actividad registrada»: quien vende en esa empresa y no hizo ningún contacto', async () => {
     // Activas solo durante esta prueba: así ninguna otra las ve.
-    const activas = [ana2, dayana2, eva2, luz2, rita2, nora2, olga2, pepa2];
+    const activas = [ana2, dayana2, eva2, luz2, rita2, nora2, olga2, pepa2, teo2, ugo2, vera2, xime2];
     await q('UPDATE users SET active = TRUE WHERE id = ANY($1::int[])', [activas]);
     try {
       const t = actividad((await correoDiarioDireccion(adminUno, ahora)).html);
       // Dayana (su prospecto lo llamó Ana), Luz (admin que además es gestora),
-      // Nora (admin que recibe prospectos) y Pepa (no disponible); por nombre.
-      expect(t).toContain(`Sin actividad registrada en esta empresa: ${m} Dayana, ${m} Luz, ${m} Nora, ${m} Pepa (no disponible).`);
+      // Nora (admin que recibe prospectos), Pepa (no disponible), Vera (de
+      // vacaciones ese día) y Xime (de vacaciones otro día); por nombre.
+      expect(t).toContain(`Sin actividad registrada en esta empresa: ${m} Dayana, ${m} Luz, ${m} Nora, ${m} Pepa (no disponible), ${m} Vera (no disponible), ${m} Xime.`);
       expect(t).not.toContain(`${m} Rita`); // colaboraciones: no vende
       expect(t).not.toContain(`${m} Bea`);  // inactiva
       expect(t).not.toContain(`${m} Olga`); // su asignación al campus ya no está activa
+      expect(t).not.toContain(`${m} Ugo`);  // admin que no recibe prospectos
+      expect(t).not.toContain(`${m} Teo`);  // los recibe, pero en la otra empresa
       expect(t).not.toContain(`${m} Eva`);  // es de la otra empresa
-      // En la Dos, Eva tiene su fila y no queda nadie sin actividad.
-      expect(actividad((await correoDiarioDireccion(adminDos, ahora)).html)).not.toContain('Sin actividad registrada');
+      // En la Dos, Eva tiene su fila; Teo, que recibe prospectos ahí, no hizo nada.
+      expect(actividad((await correoDiarioDireccion(adminDos, ahora)).html))
+        .toContain(`Sin actividad registrada en esta empresa: ${m} Teo.`);
     } finally {
       await q('UPDATE users SET active = FALSE WHERE id = ANY($1::int[])', [activas]);
     }
