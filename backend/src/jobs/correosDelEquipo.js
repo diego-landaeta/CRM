@@ -755,7 +755,9 @@ export function tablaResumenPorEmpresa(empresas, { etiquetaCobrado = 'Cobrado' }
     estilo: `;border-top:2px solid ${LINEA}`,
   });
   return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Resumen por empresa</div>`
-    + tabla(['Empresa', 'Prospectos', 'Contactos', 'Ventas', etiquetaCobrado], cuerpo);
+    // Compacta y sin mayúsculas, como «Actividad por comercial»: con cinco
+    // columnas en mayúsculas era la que ensanchaba el correo en el móvil (479 px).
+    + tabla(['Empresa', 'Prospectos', 'Contactos', 'Ventas', etiquetaCobrado], cuerpo, { compacta: true, mayusculas: false });
 }
 
 export async function correoDiarioDireccion(persona, ahora = new Date()) {
