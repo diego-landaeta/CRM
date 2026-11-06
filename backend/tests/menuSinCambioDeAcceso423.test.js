@@ -10,17 +10,24 @@ import { describe, it, expect, beforeAll } from 'vitest';
 
 process.env.LOG_LEVEL = 'silent';
 const inv = await import('../src/modules/permissions/inventario/index.js');
-const { CAMBIOS_DE_MENU } = await import('../src/modules/permissions/inventario/cambios-aprobados.js');
+const { CAMBIOS_DE_MENU, CAMBIOS_DE_REGLA, cambioPrevisto } = await import('../src/modules/permissions/inventario/cambios-aprobados.js');
 const { resolverPermisos } = await import('../src/modules/permissions/resolver.js');
 const { excepcionesDeCasillas } = await import('../src/modules/permissions/casillas.js');
 
 // Los perfiles de la foto del menú (frontend/src/test/menuPorPerfil423.test.jsx).
 const PERFILES = {
   admin: inv.personaDePrueba('admin'),
+  tutor: inv.personaDePrueba('tutor'),
   soporte: inv.personaDePrueba('soporte'),
   project_manager: inv.personaDePrueba('project_manager'),
   'gestora con factura_manager': inv.personaDePrueba('gestor', { factura_manager: true }),
   'gestora+admin': inv.personaDePrueba('gestor', { roles_extra: ['admin'] }),
+  gestora: inv.personaDePrueba('gestor'),
+  'gestora+tutor': inv.personaDePrueba('gestor', { roles_extra: ['tutor'] }),
+  'gestora con editar_fechas_factura': inv.personaDePrueba('gestor', { editar_fechas_factura: true }),
+  'gestora con usa_mcp': inv.personaDePrueba('gestor', { usa_mcp: true }),
+  'gestora con diplomas.view': inv.personaDePrueba('gestor', { excepciones: { 'diplomas.view': true } }),
+  'gestora con tasks.close': inv.personaDePrueba('gestor', { excepciones: { 'tasks.view_own': true, 'tasks.close': true, 'tasks.manage': true } }),
 };
 
 let porId;
@@ -50,6 +57,20 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
       const antes = inv.puedeAntes(p, fila);
       const despues = inv.puedeDespues(p, fila, mapa);
       const esperado = x.signo === '+';
+      // Un cambio de ACCESO aprobado aparte (`CAMBIOS`, p. ej. `admin-ve-claves`,
+      // CRM#632): antes no entraba, y el menú enseña lo que ahora sí abre.
+      const aprobado = [p.role, ...(p.roles_extra || [])].some((r) => cambioPrevisto(x.ruta, r));
+      if (aprobado && !antes && despues === esperado) continue;
+      // Una ruta que antes no existía (`antes` null) no esconde ningún cambio de
+      // acceso: basta con que ahora diga lo que enseña el menú (Cursos pendientes,
+      // que el project manager ve desde el 04/11, `menu-pm-ve-todo`).
+      if (antes === null && despues === esperado) continue;
+      // Un cambio de REGLA aprobado con el mismo id (`CAMBIOS_DE_REGLA`): el corte del
+      // tutor (`RUTAS_DEL_TUTOR`), que la comparación evalúa con la copia congelada de
+      // antes (`tutores-tablero`, Diego 04/11). Lo que gana lo dice esa entrada.
+      const regla = CAMBIOS_DE_REGLA.find((c) => c.id === x.id && c.aprobadoPor
+        && c.roles.some((r) => [p.role, ...(p.roles_extra || [])].includes(r)));
+      if (regla && !antes && esperado) continue;
       if (antes !== esperado || despues !== esperado) mal.push(`${x.perfil} ${x.signo} ${x.entrada} (${x.ruta}): antes ${antes}, ahora ${despues}`);
     }
     expect(mal).toEqual([]);

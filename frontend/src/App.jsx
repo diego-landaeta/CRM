@@ -6,6 +6,7 @@ import { tituloDeRuta } from './shared/lib/rutasTitulos';
 
 import { SOLO_EN_PRUEBAS } from './shared/lib/soloEnPruebas';
 import ConPermiso from './shared/components/layout/ConPermiso';
+import { MARCA } from '@/shared/config/marca';
 const APP_BASE_URL = import.meta.env.BASE_URL || '';
 const IS_TESTEO_PREVIEW_BASE = APP_BASE_URL.startsWith('/testeo/');
 const IS_TESTEO2_BASE = APP_BASE_URL.startsWith('/testeo2/');
@@ -21,7 +22,7 @@ function DocumentTitle() {
   const { pathname } = useLocation();
   const { activeProject: project, activeIssuer } = useProjectContext();
   useEffect(() => {
-    const base = 'MultiCRM';
+    const base = MARCA;
     // El nombre sale del mismo sitio que usa la cabecera: una pantalla no
     // puede llamarse de una forma en la pestaña y de otra encima del contenido.
     const route = tituloDeRuta(pathname);
@@ -181,6 +182,8 @@ const TaskBoardConfigPage = lazy(() => import('./modules/tasks/pages/TaskBoardCo
 const FacturasColaboradoresPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturasColaboradoresPage'));
 const MiFacturaPage = lazy(() => import('./modules/facturas-colaborador/pages/MiFacturaPage'));
 const FacturaEnlacePage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaEnlacePage'));
+// «He recibido el pago y lo confirmo» (Diego, 04/11): el botón del correo de «Factura pagada».
+const FacturaPagoPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaPagoPage'));
 const EmbedFormPage = lazy(() => import('./modules/forms/pages/EmbedFormPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const AunNoConectadoPage = lazy(() => import('./shared/pages/AunNoConectadoPage'));
@@ -204,6 +207,12 @@ const DevComponentsPage = (UI_PREVIEW_ENABLED || IS_TESTEO2_BASE)
   ? lazy(() => import('./modules/dev/pages/DevComponentsPage'))
   : null;
 
+// Las direcciones de Finanzas de antes, sin el prefijo /finanzas (CRM#633).
+const FINANZAS_SIN_PREFIJO = [
+  'comisiones', 'facturas', 'pagos-stripe', 'por-cobrar', 'por-pagar', 'ingresos', 'egresos',
+  'nominas', 'conversiones', 'integraciones', 'pendiente-facturar', 'facturas-colaboradores',
+];
+
 function App() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center text-muted-foreground">Cargando…</div>}>
@@ -217,6 +226,8 @@ function App() {
         <Route path="/set-password" element={<SetPasswordPage />} />
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave. */}
         <Route path="/factura-colaborador/:token" element={<FacturaEnlacePage />} />
+        {/* Y la confirmación del pago, desde el correo de «Factura pagada»: también sin usuario. */}
+        <Route path="/factura-colaborador/pago/:token" element={<FacturaPagoPage />} />
         {IS_TESTEO2_BASE && SuiteDashCrmPreviewPage && (
           <Route path="/suite-dash" element={<ProtectedRoute><SuiteDashCrmPreviewPage /></ProtectedRoute>} />
         )}
@@ -417,6 +428,12 @@ function App() {
           <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
           <Route path="/ai-chat" element={<Navigate to="/chat-ia" replace />} />
           <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
+          {/* Finanzas sin su prefijo (CRM#633). Eran las direcciones de antes de
+              agrupar Finanzas bajo /finanzas: alguien las tiene guardadas y la
+              auditoría del 03/11 las encontró dando «página no encontrada». */}
+          {FINANZAS_SIN_PREFIJO.map((r) => (
+            <Route key={r} path={`/${r}`} element={<Navigate to={`/finanzas/${r}`} replace />} />
+          ))}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

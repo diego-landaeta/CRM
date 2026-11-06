@@ -67,6 +67,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import { rolesDe, soloEsColaborador, soloEsTutor } from '@/shared/lib/roles';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
@@ -79,6 +80,7 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { moduloApagado } from '@/shared/lib/modulos';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/soloEnPruebas';
+import { MARCA } from '@/shared/config/marca';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
 const NotificationsBell = lazy(() => import('./NotificationsBell'));
@@ -167,7 +169,9 @@ export const NAV_SECTIONS = [
           // es el chat: uno sirve para conversar y este para buscar, auditar y
           // llevarse una copia. El servidor recorta lo que ve cada cual — un
           // admin lo ve entero, una gestora solo su numero.
-          { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText },
+          // El servidor pide usarlo, supervisarlo o verlo (#631; `whatsapp.banco`, el project
+          // manager, Diego 04/11: «el project manager ve todo», con las líneas de sus campus).
+          { label: 'Banco de mensajes', to: '/whatsapp/banco', detail: 'Buscar y auditar', icon: ChatText, permiso: ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'] },
           // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
           { label: 'Actividad', to: '/whatsapp/actividad', detail: 'Quién responde', icon: ChartBar, permiso: 'reports.view' },
           // «WhatsApp del equipo» no esta: entraba en la sesion de cada gestora
@@ -199,7 +203,8 @@ export const NAV_SECTIONS = [
     label: 'Equipo de Desarrollo',
     icon: Code,
     items: [
-      { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: ROLES_TAREAS, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
+      // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
+      { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { label: 'Por revisar', to: '/tareas/revisar', detail: 'Aprobar o devolver', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
@@ -382,7 +387,7 @@ export const NAV_SECTIONS = [
     icon: Gear,
     items: [
       // Lo que trae cada versión del CRM (Diego, 28/09). Para todo el equipo.
-      { label: 'Novedades', to: '/novedades', detail: 'Versión 2.0.0', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' },
+      { label: 'Novedades', to: '/novedades', detail: 'Lo nuevo de cada versión', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' },
       { label: 'Mensajes', to: '/mensajes', detail: 'Del equipo', icon: ChatsCircle, permiso: 'mensajes.usar' },
       { label: 'Solicitudes de cambio', to: '/solicitudes-cambio', detail: 'Pedir un cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { label: 'Notificaciones', to: '/notificaciones', detail: 'Lo que ha pasado', icon: BookOpen },
@@ -392,10 +397,9 @@ export const NAV_SECTIONS = [
       // Incidencias (#253). Diego: «en el menú, al lado de Soporte». Los mismos
       // roles que traen `incidencias.view` de serie (la gestora ve las suyas).
       { label: 'Incidencias', to: '/incidencias', detail: 'Lo que salió mal y cómo se arregló', icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
-      // Claves y variables (#80). Los mismos roles que exige el servidor con
-      // `soloRoles`: ofrecer en el menu lo que la API va a negar es peor que
-      // no ofrecerlo.
-      { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'soporte'], permiso: 'credentials.view' },
+      // Claves y variables (#80). Desde CRM#632 (03/11) también el admin, que
+      // ve las de sus campus; guardar y revelar siguen siendo de soporte.
+      { label: 'Claves y variables', to: '/configuracion/claves', detail: 'Credenciales del proyecto', icon: Key, roles: ['superadmin', 'admin', 'soporte'], permiso: 'credentials.view' },
       // El registro (#111). Los mismos roles que exige el servidor con
       // `roleGuard('admin', 'superadmin')`: cruza todas las fichas y a todos
       // los compañeros, y ofrecerlo a quien la API va a negar es peor que no
@@ -404,7 +408,9 @@ export const NAV_SECTIONS = [
       // Los correos que salen del CRM (#146). Mismos roles que el Registro, y
       // aqui pesa mas: esto enseña el TEXTO de correos a personas.
       { label: 'Correos', to: '/correos', detail: 'Lo que ha mandado el CRM', icon: EnvelopeSimple, roles: ['superadmin', 'admin'], permiso: 'correos.view' },
-      { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity },
+      // Lo que enseña pide `status.view` (piezas y correos), `credentials.view` o
+      // `woocommerce.view`: sin ninguno, la pantalla era solo 403 (#631).
+      { label: 'Status', to: '/status', detail: 'Si algo está caído', icon: Activity, permiso: ['status.view', 'credentials.view', 'woocommerce.view'] },
       { label: 'Manual de usuario', to: '/manual', detail: 'Cómo se usa cada cosa', icon: BookOpen },
     ],
   },
@@ -522,6 +528,39 @@ export function pasaPermisoDeRoles(item, can) {
   return [].concat(item.permiso).some((p) => !String(p).includes('.') || (typeof can === 'function' && can(p) === true));
 }
 
+/**
+ * ¿Puede abrir esta pantalla, por la dirección? (#631)
+ *
+ * El menú ya esconde lo que no se puede usar cuando la entrada declara su
+ * `permiso`, pero escribiendo la dirección la pantalla se abría igual y luego
+ * llegaba el 403. Esta es la misma regla, para la ruta: todas las entradas del
+ * menú que llevan a ella (Clientes sale dos veces); si alguna pide `permiso` y
+ * ninguna lo cumple, está cerrada. Solo el permiso, nunca el rol (#423): los
+ * `roles` de cada entrada dicen a quién se le enseña de serie, no quién entra.
+ * Lo que no está en el menú (fichas de detalle…) no se toca.
+ */
+const SIN_ENTRADA = {
+  // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
+  '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+};
+
+export function rutaPermitida(pathname, can) {
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const suyas = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta) suyas.push(it);
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  // Rutas sin entrada propia en el menú: su permiso, aquí.
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length) return true;
+  return suyas.some((it) => !it.permiso || pasaPermisoDeRoles(it, can)
+    || (it.oPermiso && [].concat(it.oPermiso).some((p) => typeof can === 'function' && can(p) === true)));
+}
+
 export function canSeeItem(item, roles, modules, projectType, soloColaboraciones, permisos, can) {
   const suyos = Array.isArray(roles) ? roles.filter(Boolean) : [roles].filter(Boolean);
   const es = (...r) => r.some((x) => suyos.includes(x));
@@ -587,6 +626,14 @@ export function canSeeItem(item, roles, modules, projectType, soloColaboraciones
 
   // soporte ve todo (rol generico tipo dev)
   if (es('soporte', 'superadmin')) {
+    if (item.module && modules && modules[item.module] === false) return false;
+    return true;
+  }
+  // El project manager ve todo (Diego, 04/11): cada pantalla cuyo permiso tiene,
+  // aunque su rol no esté en `roles` (que dicen a quién se le enseña de serie).
+  // Lo que no pide permiso sigue la regla de siempre. Lo que ve dentro, de sus
+  // campus: lo recorta el servidor.
+  if (es('project_manager') && item.permiso && !item.comingSoon) {
     if (item.module && modules && modules[item.module] === false) return false;
     return true;
   }
@@ -971,10 +1018,17 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+  // Los campus de «Todos» o de la empresa de arriba, para el contador (#218).
+  const idsDelAmbito = useIdsDelAmbito();
+  const idsDelAmbitoCsv = idsDelAmbito.join(',');
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
   const [tasksReviewBadge, setTasksReviewBadge] = useState(0);
   const { can } = usePermission();
+  // Para los contadores: un sí o un no, no la función `can`, que es nueva en
+  // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
+  const veProspectosNuevos = can('leads.view');
+  const veReportesDeSpam = can('leads.spam');
 
   // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
@@ -1090,18 +1144,23 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   useEffect(() => { setUserMenuOpen(false); }, [location.pathname]);
 
   useEffect(() => {
-    // El tutor tampoco: no ve prospectos y el servidor se los niega (#187).
-    if (!activeProject?.id || soloEsColaborador(user) || soloEsTutor(user)) return;
+    // El tutor tampoco: no ve prospectos y el servidor se los niega (#187). Y quien
+    // no tiene «Ver prospectos», tampoco: el servidor se lo niega (#631).
+    if (!activeProject?.id || !veProspectosNuevos || soloEsColaborador(user) || soloEsTutor(user)) return;
     let cancelled = false;
     let interval = null;
 
     async function fetchBadge() {
       if (typeof document !== 'undefined' && document.hidden) return;
       try {
-        // -1 = «Todos» o una empresa: sin proyecto, cuenta los nuevos de todo lo
-        // suyo (con -1 el servidor lo rechazaba cada vez).
-        const pid = activeProject.id > 0 ? `projectId=${activeProject.id}&` : '';
-        const res = await client.get(`/leads?${pid}status=nuevo&limit=1`);
+        // -1 = «Todos» o una empresa: cuenta los nuevos de sus campus. Sin
+        // campus el servidor lo rechaza (`projectId o projectIds requerido`),
+        // y así fallaba con 400 cada 5 minutos (#218, /testeo 05/11).
+        const ambito = activeProject.id > 0
+          ? `projectId=${activeProject.id}&`
+          : (idsDelAmbitoCsv ? `projectIds=${idsDelAmbitoCsv}&` : null);
+        if (ambito === null) return;
+        const res = await client.get(`/leads?${ambito}status=nuevo&limit=1`);
         if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
       } catch {}
     }
@@ -1130,11 +1189,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         document.removeEventListener('visibilitychange', onVisibilityChange);
       }
     };
-  }, [activeProject?.id, user]);
+  }, [activeProject?.id, user, veProspectosNuevos, idsDelAmbitoCsv]);
 
-  // Badge de reportes de spam pendientes — solo superadmin
+  // Badge de reportes de spam pendientes: quien puede verlos (`leads.spam`), por
+  // permiso y no por rol (#423, #631).
   useEffect(() => {
-    if (user?.role !== 'superadmin') return;
+    if (!veReportesDeSpam) return;
     let cancelled = false;
     async function fetchSpamCount() {
       try {
@@ -1145,7 +1205,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchSpamCount();
     const interval = setInterval(fetchSpamCount, 60000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user?.role]);
+  }, [veReportesDeSpam]);
 
   // Badge de mensajes no leidos
   useEffect(() => {
@@ -1236,7 +1296,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         {!collapsed && (
           <div className="mt-2 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-semibold text-sm text-foreground truncate">MultiCRM</span>
+              <span className="font-semibold text-sm text-foreground truncate">{MARCA}</span>
               {BETA_MODE && (
                 <span className="text-[9px] font-bold uppercase tracking-wider bg-warning-soft text-warning-soft-foreground px-1.5 py-0.5 rounded flex-shrink-0">
                   BETA {BETA_VERSION}
@@ -1480,7 +1540,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
                   label="Mi perfil"
                   onClick={() => { setUserMenuOpen(false); navigate('/perfil'); onNavigate?.(); }}
                 />
-                {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                {/* Y el project manager, que ve todo (Diego, 04/11): Usuarios y Roles, en solo lectura. */}
+                {(user?.role === 'admin' || user?.role === 'superadmin' || rolesDe(user).includes('project_manager')) && (
                   // «del CRM»: desde el menú personal se esperaba llegar a lo
                   // suyo, y esto son los proyectos, usuarios y APIs de todo el
                   // CRM (#208). Lo personal es «Mi perfil», justo encima.

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-810 rutas en 64 módulos, y 28 acciones con condición dentro de una ruta.
+823 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -97,6 +97,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | porAvisar | `GET /api/certifex/diplomas/por-avisar` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | terminados | `GET /api/certifex/diplomas/terminados` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | diplomas | `GET /api/certifex/diplomas` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
+| envios | `GET /api/certifex/diplomas/envios` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
 | editar | `POST /api/certifex/diplomas/editar` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | pedir | `POST /api/certifex/diplomas/pedir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | aprobarEmitir | `POST /api/certifex/diplomas/aprobar-emitir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
@@ -248,6 +249,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | ofrecer | `POST /api/convocatorias/:id/ofrecer` | sesión | superadmin, admin, gestor, soporte, project_manager | `convocatorias.ofrecer` |
 | actualizarOfrecimiento | `PATCH /api/convocatorias/ofrecimientos/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `convocatorias.ofrecer` |
 | listar | `GET /api/convocatorias/` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `convocatorias.view` |
+| listarDelAmbito | `GET /api/convocatorias/ambito` | (no existía) | (ruta nueva) | `convocatorias.view` |
 | crear | `POST /api/convocatorias/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.create` |
 | editar | `PATCH /api/convocatorias/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.edit` |
 
@@ -356,6 +358,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `DELETE /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
 | archivoLocal | `GET /api/facturas-colaborador/archivo-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | justificanteLocal | `GET /api/facturas-colaborador/justificante-local/:id` | nada (pública) | cualquiera, sin sesión | — |
+| (anónima) | `GET /api/facturas-colaborador/pago/:token` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/confirmar` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/opinion` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/no-recibido` | (no existía) | (ruta nueva) | — |
 | (anónima) | `GET /api/facturas-colaborador/mias` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
 | (anónima) | `POST /api/facturas-colaborador/mias/:id` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
 | (anónima) | `GET /api/facturas-colaborador/mias/:id/archivo` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
@@ -465,6 +471,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | list | `GET /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
+| estado | `GET /api/integrations/estado` | (no existía) | (ruta nueva) | `integrations.view` |
 | getOne | `GET /api/integrations/:provider` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | upsert | `PUT /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
 | test | `POST /api/integrations/:provider/test` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
@@ -771,6 +778,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | getTree | `GET /api/product-categories/tree` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
+| arbolesDelAmbito | `GET /api/product-categories/ambito` | (no existía) | (ruta nueva) | `products.view` |
 | listByProject | `GET /api/product-categories/project/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | getAncestors | `GET /api/product-categories/:id/ancestors` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | create | `POST /api/product-categories/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `products.categorias` |
@@ -782,6 +790,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | list | `GET /api/products/` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
+| list | `GET /api/products/ambito` | (no existía) | (ruta nueva) | `products.view` |
 | exportAll | `GET /api/products/export` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.export` |
 | leadsStats | `GET /api/products/leads-stats` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | getById | `GET /api/products/:id` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
@@ -833,6 +842,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/registro/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | fuentes | `GET /api/registro/fuentes` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | csv | `GET /api/registro/csv` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
+| listar · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/` | (no existía) | (ruta nueva) | `registro.sistema` |
+| fuentes · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/fuentes` | (no existía) | (ruta nueva) | `registro.sistema` |
+| csv · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/csv` | (no existía) | (ruta nueva) | `registro.sistema` |
 
 ## reports
 
@@ -871,6 +883,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
+| listarDelAmbito | `GET /api/reports-ia/ambito` | (no existía) | (ruta nueva) | `reports_ia.view` |
 | list | `GET /api/reports-ia/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports_ia.view` |
 | getDetail | `GET /api/reports-ia/detail/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `reports_ia.view` |
 | generate | `POST /api/reports-ia/:projectId/generate` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo | superadmin, admin, soporte | `reports_ia.generar` |
@@ -1017,6 +1030,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | anunciosDeTutores | `GET /api/tutores/anuncios` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cursoDetalle | `GET /api/tutores/curso/:productId` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | brochureDelCurso | `GET /api/tutores/curso/:productId/brochure` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
+| buscar | `GET /api/tutores/buscar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | alta | `POST /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | ficha | `GET /api/tutores/:id` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
@@ -1049,6 +1063,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | cambiarMiAviso | `PATCH /api/users/mis-avisos` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | list | `GET /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | buscar | `GET /api/users/buscar` | (no existía) | (ruta nueva) | `users.view` |
+| rolesAsignables | `GET /api/users/roles-asignables` | (no existía) | (ruta nueva) | `users.create` |
 | listAvailability | `GET /api/users/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | deleteBlock | `DELETE /api/users/availability-blocks/:blockId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
@@ -1110,8 +1125,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | formaDeAvisos | `GET /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | olvidarFormaDeAvisos | `DELETE /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | vozOTextoCtrl | `GET /api/whatsapp/voz-o-texto` | (no existía) | (ruta nueva) | `whatsapp.usar` |
-| banco | `GET /api/whatsapp/banco` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
-| bancoNumeros | `GET /api/whatsapp/banco/numeros` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
+| banco | `GET /api/whatsapp/banco` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` o `whatsapp.banco` |
+| bancoNumeros | `GET /api/whatsapp/banco/numeros` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` o `whatsapp.banco` |
 | etiquetasDeWhatsapp | `GET /api/whatsapp/etiquetas` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
 | chats | `GET /api/whatsapp/chats` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
 | abrirChat | `POST /api/whatsapp/chats` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
@@ -1164,6 +1179,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listMappings | `GET /api/woocommerce/mappings` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
 | setMappings | `PUT /api/woocommerce/mappings` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.edit` |
 | listRuns | `GET /api/woocommerce/runs` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
+| estado | `GET /api/woocommerce/estado` | (no existía) | (ruta nueva) | `woocommerce.view` |
 | getCurrentRun | `GET /api/woocommerce/runs/current` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
 | importNow | `POST /api/woocommerce/runs/start` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.sync` |
 | autoDiscoverCpts | `POST /api/woocommerce/auto-discover-cpts` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.sync` |
@@ -1187,9 +1203,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver prospectos | `leads.view` | Abrir la lista y la ficha de los prospectos (una gestora, solo los suyos). | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Crear prospectos | `leads.create` | Dar de alta prospectos, uno a uno o en bloque. | Admin, Gestora, Soporte, Project manager, Tutor | `leads.view` |
-| Editar prospectos | `leads.edit` | Cambiar datos y estado, apuntar llamadas y recordatorios, fusionar fichas. | Admin, Gestora, Soporte, Project manager, Tutor | `leads.view` |
+| Ver prospectos | `leads.view` | Abrir la lista y la ficha de los prospectos (una gestora, solo los suyos). | Admin, Gestora, Soporte, Project manager |  |
+| Crear prospectos | `leads.create` | Dar de alta prospectos, uno a uno o en bloque. | Admin, Gestora, Soporte, Project manager | `leads.view` |
+| Editar prospectos | `leads.edit` | Cambiar datos y estado, apuntar llamadas y recordatorios, fusionar fichas. | Admin, Gestora, Soporte, Project manager | `leads.view` |
 | Borrar prospectos | `leads.delete` | Borrar un prospecto suyo por prueba, spam o duplicado. | Admin, Soporte | `leads.view` |
 | Borrar cualquier prospecto | `leads.delete_cualquiera` | Borrar por cualquier motivo, aunque no sea suyo o tenga ventas. | Admin, Soporte | `leads.delete`, `leads.view` |
 | Recuperar prospectos borrados | `leads.restaurar` | Devolver a la lista un prospecto borrado. | Soporte | `leads.view` |
@@ -1197,16 +1213,16 @@ lo que pide para tener sentido (editar pide ver).
 | Revisar duplicados | `leads.duplicados` | Ver la cola de posibles duplicados y decidir qué se hace con cada uno. | Admin, Soporte | `leads.view` |
 | Marcar como spam | `leads.reportar_spam` | Avisar de que un prospecto es spam. | Admin, Soporte | `leads.view` |
 | Revisar avisos de spam | `leads.spam` | Ver y resolver los avisos de spam. | Soporte | `leads.view` |
-| Escribir a un prospecto | `leads.enviar_correo` | Mandar un correo desde la ficha. | Admin, Gestora, Soporte, Project manager, Tutor | `leads.view` |
-| Exportar para Wasapi | `leads.exportar_wasapi` | Descargar la lista de prospectos con el formato de Wasapi. | Admin, Gestora, Soporte, Project manager, Tutor | `leads.view` |
+| Escribir a un prospecto | `leads.enviar_correo` | Mandar un correo desde la ficha. | Admin, Gestora, Soporte, Project manager | `leads.view` |
+| Exportar para Wasapi | `leads.exportar_wasapi` | Descargar la lista de prospectos con el formato de Wasapi. | Admin, Gestora, Soporte, Project manager | `leads.view` |
 | Exportar la lista | `leads.export` | Descargar en CSV los prospectos que se ven en pantalla. (solo pantalla) | Admin | `leads.view` |
 
 ### Proceso comercial
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver la cola y el seguimiento | `proceso.view` | La cola del día, el seguimiento de fin de mes y los pasos de cada prospecto. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Trabajar la cola | `proceso.trabajar` | Marcar pasos hechos y añadir seguimientos a un prospecto. | Admin, Gestora, Soporte, Project manager, Tutor | `proceso.view` |
+| Ver la cola y el seguimiento | `proceso.view` | La cola del día, el seguimiento de fin de mes y los pasos de cada prospecto. | Admin, Gestora, Soporte, Project manager |  |
+| Trabajar la cola | `proceso.trabajar` | Marcar pasos hechos y añadir seguimientos a un prospecto. | Admin, Gestora, Soporte, Project manager | `proceso.view` |
 | Configurar los pasos | `proceso.configurar_pasos` | Crear, ordenar, editar y quitar los pasos del proceso. | Admin, Soporte | `proceso.view` |
 | Replanificar un prospecto | `proceso.replanificar` | Volver a calcular los pasos de un prospecto desde hoy. | Admin, Soporte | `proceso.view` |
 
@@ -1214,8 +1230,8 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver convocatorias | `convocatorias.view` | Las convocatorias, su embudo y a quién se le han ofrecido. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Ofrecer plaza | `convocatorias.ofrecer` | Ofrecer una convocatoria a un prospecto y apuntar su respuesta. | Admin, Gestora, Soporte, Project manager, Tutor | `convocatorias.view` |
+| Ver convocatorias | `convocatorias.view` | Las convocatorias, su embudo y a quién se le han ofrecido. | Admin, Gestora, Soporte, Project manager |  |
+| Ofrecer plaza | `convocatorias.ofrecer` | Ofrecer una convocatoria a un prospecto y apuntar su respuesta. | Admin, Gestora, Soporte, Project manager | `convocatorias.view` |
 | Crear convocatorias | `convocatorias.create` | Abrir una convocatoria nueva. | Admin, Soporte | `convocatorias.view` |
 | Editar convocatorias | `convocatorias.edit` | Cambiar fechas, plazas y datos de una convocatoria. | Admin, Soporte | `convocatorias.view` |
 
@@ -1225,8 +1241,9 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador, Project manager | Admin, Gestora, Soporte |  |
 | Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador | Admin |  |
-| Ver la cola de WhatsApp | `whatsapp.cola` | Los prospectos que esperan respuesta por WhatsApp. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador | Project manager |  |
+| Ver la cola de WhatsApp | `whatsapp.cola` | Los prospectos que esperan respuesta por WhatsApp. | Admin, Gestora, Soporte, Project manager |  |
+| Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager |  |
 | Plantillas compartidas | `whatsapp.plantillas_compartidas` | Crear y cambiar las plantillas de todo el equipo, y las de otras personas. | Admin, Soporte | `whatsapp.plantillas` |
 | Forma de los avisos | `whatsapp.forma_avisos` | Ver y reiniciar cómo llegan los avisos de WhatsApp (diagnóstico). | Soporte |  |
 
@@ -1234,9 +1251,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver sus ventas | `ventas.view` | Sus cifras: por cliente, por producto, facturado y su evolución. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver sus ventas | `ventas.view` | Sus cifras: por cliente, por producto, facturado y su evolución. | Admin, Gestora, Soporte, Project manager |  |
 | Registrar una venta | `ventas.registrar` | Apuntar una venta nueva desde Ventas. | Admin, Gestora, Soporte | `ventas.view` |
-| Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte | `ventas.view` |
+| Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte, Project manager | `ventas.view` |
 | Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente). · nunca: Tutor, Soporte, Project manager, Colaborador | Admin, Gestora | `ventas.view` |
 
 ## Tareas
@@ -1245,11 +1262,11 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador |  |
+| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor |  |
 | Ver todo el equipo | `tasks.view_all` | El tablero de cualquiera, «Todo el equipo» y las métricas. | Admin |  |
 | Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador | `tasks.view_own` |
 | Asignar tareas | `tasks.assign` | Asignar o reasignar tareas a otras personas. | Admin | `tasks.view_own` |
-| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador | `tasks.view_own` |
+| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor | `tasks.view_own` |
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
 | Aprobar y cerrar | `tasks.close` | Aprobar, devolver, cerrar y reabrir tareas en «Por revisar». | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
@@ -1261,7 +1278,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver secuencias | `email_sequences.view` | Las secuencias de correo y sus envíos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver secuencias | `email_sequences.view` | Las secuencias de correo y sus envíos. | Admin, Gestora, Soporte, Project manager |  |
 | Crear secuencias | `email_sequences.create` | Montar una secuencia nueva. | Admin, Soporte | `email_sequences.view` |
 | Editar secuencias | `email_sequences.edit` | Cambiar los correos y los tiempos de una secuencia. | Admin, Soporte | `email_sequences.view` |
 | Borrar secuencias | `email_sequences.delete` | Quitar una secuencia. | Admin, Soporte | `email_sequences.view` |
@@ -1271,7 +1288,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver plantillas | `email_templates.view` | Las plantillas de correo y su vista previa. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver plantillas | `email_templates.view` | Las plantillas de correo y su vista previa. | Admin, Gestora, Soporte, Project manager |  |
 | Crear plantillas | `email_templates.create` | Una plantilla nueva. | Admin, Soporte | `email_templates.view` |
 | Editar plantillas | `email_templates.edit` | Cambiar el texto de una plantilla. | Admin, Soporte | `email_templates.view` |
 | Borrar plantillas | `email_templates.delete` | Quitar una plantilla. | Admin, Soporte | `email_templates.view` |
@@ -1280,7 +1297,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver formularios | `forms.view` | Los formularios de la web y lo que han recibido. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver formularios | `forms.view` | Los formularios de la web y lo que han recibido. | Admin, Gestora, Soporte, Project manager |  |
 | Crear formularios | `forms.create` | Conectar un formulario nuevo. | Admin, Soporte | `forms.view` |
 | Editar formularios | `forms.edit` | Cambiar un formulario y ponerlo a escuchar. | Admin, Soporte | `forms.view` |
 | Borrar formularios | `forms.delete` | Quitar un formulario. | Admin, Soporte | `forms.view` |
@@ -1289,7 +1306,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver escenarios de Make | `make.view` | Las entradas de Make y lo que han entregado. | Admin, Soporte |  |
+| Ver escenarios de Make | `make.view` | Las entradas de Make y lo que han entregado. | Admin, Soporte, Project manager |  |
 | Crear entradas de Make | `make.create` | Una entrada nueva. | Admin, Soporte | `make.view` |
 | Editar entradas de Make | `make.edit` | Cambiarla o renovar su secreto. | Admin, Soporte | `make.view` |
 | Borrar entradas de Make | `make.delete` | Quitar una entrada. | Admin, Soporte | `make.view` |
@@ -1298,7 +1315,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin |  |
+| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin, Project manager |  |
 | Crear webhooks | `webhooks.create` | Un webhook nuevo. | Admin | `webhooks.view` |
 | Editar webhooks | `webhooks.edit` | Cambiarlo o ponerlo a escuchar. | Admin | `webhooks.view` |
 | Borrar webhooks | `webhooks.delete` | Quitar un webhook. | Admin | `webhooks.view` |
@@ -1307,14 +1324,14 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el widget | `widget.view` | La configuración del botón de WhatsApp de la web. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Configurar el widget | `widget.edit` | Cambiar el botón y los teléfonos que salen en él. | Admin, Gestora, Soporte, Project manager, Tutor | `widget.view` |
+| Ver el widget | `widget.view` | La configuración del botón de WhatsApp de la web. | Admin, Gestora, Soporte, Project manager |  |
+| Configurar el widget | `widget.edit` | Cambiar el botón y los teléfonos que salen en él. | Admin, Gestora, Soporte, Project manager | `widget.view` |
 
 ### Audiencias
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver audiencias | `audiences.view` | Previsualizar una audiencia y lo que se ha subido a Meta. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver audiencias | `audiences.view` | Previsualizar una audiencia y lo que se ha subido a Meta. | Admin, Gestora, Soporte, Project manager |  |
 | Exportar audiencias | `audiences.export` | Descargar una audiencia o subirla a Meta. | Admin, Soporte | `audiences.view` |
 
 ## Publicidad
@@ -1323,7 +1340,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte |  |
+| Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte, Project manager |  |
 | Conectar y sincronizar Meta Ads | `meta_ads.edit` | Conectar cuentas, sincronizarlas y asociar campañas a productos. | Admin, Soporte | `meta_ads.view` |
 
 ## Catálogo
@@ -1332,25 +1349,25 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver productos | `products.view` | El catálogo, sus categorías y sus módulos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver productos | `products.view` | El catálogo, sus categorías y sus módulos. | Admin, Gestora, Soporte, Project manager |  |
 | Crear productos | `products.create` | Un producto nuevo. | Admin, Soporte | `products.view` |
 | Editar productos | `products.edit` | Datos, imagen y módulos de un producto. | Admin, Soporte | `products.view` |
 | Borrar productos | `products.delete` | Quitar un producto. | Admin, Soporte | `products.view` |
 | Árbol de categorías | `products.categorias` | Crear, mover y quitar categorías. | Admin, Soporte | `products.view` |
-| Exportar el catálogo | `products.export` | Descargar el catálogo. | Admin, Gestora, Soporte, Project manager, Tutor | `products.view` |
+| Exportar el catálogo | `products.export` | Descargar el catálogo. | Admin, Gestora, Soporte, Project manager | `products.view` |
 
 ### Dossieres
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver dossieres | `dossiers.view` | Abrir el dossier de un producto y su historial. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver dossieres | `dossiers.view` | Abrir el dossier de un producto y su historial. | Admin, Gestora, Soporte, Project manager |  |
 | Subir dossieres | `dossiers.upload` | Subir una versión nueva del dossier. | Admin, Soporte | `dossiers.view` |
 
 ### WooCommerce
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver WooCommerce | `woocommerce.view` | La conexión, el mapeo y las importaciones. | Admin, Soporte |  |
+| Ver WooCommerce | `woocommerce.view` | La conexión, el mapeo y las importaciones. | Admin, Soporte, Project manager |  |
 | Configurar WooCommerce | `woocommerce.edit` | Credenciales y mapeo de campos. | Admin, Soporte | `woocommerce.view` |
 | Importar de WooCommerce | `woocommerce.sync` | Lanzar una importación de productos. | Admin, Soporte | `woocommerce.view` |
 | Pedidos de WooCommerce | `woocommerce.pedidos` | Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14). | Admin | `woocommerce.view` |
@@ -1363,7 +1380,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor |  |
 | Gestionar colaboraciones | `tutores.gestionar` | Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus. | Admin |  |
-| Avisar de comisiones | `tutores.avisar` | Ver el aviso de comisiones y mandarlo al tutor. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Avisar de comisiones | `tutores.avisar` | Ver el aviso de comisiones y mandarlo al tutor. | Admin, Gestora, Soporte, Project manager |  |
 | Liquidar comisiones | `tutores.liquidar` | Pagar o revertir las comisiones de un tutor (mueve dinero). | Admin | `tutores.gestionar` |
 | Ajustes de comisiones | `tutores.ajustes` | Cambiar los porcentajes y reglas de las comisiones. | Admin | `tutores.gestionar` |
 | Contraseña de un tutor | `tutores.contrasena` | Ponerle contraseña nueva a un tutor de sus campus. | Admin | `tutores.gestionar` |
@@ -1373,7 +1390,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte |  |
+| Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte, Project manager |  |
 | Gestionar consultas | `consultas.gestionar` | Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor. | Admin, Soporte | `consultas.view` |
 | Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor |  |
 
@@ -1383,18 +1400,18 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el dashboard de finanzas | `accounting.view` | La caja del mes. | Admin, Soporte |  |
-| Cuentas por cobrar | `accounting.por_cobrar` | Lo pendiente de cobro (una gestora, lo suyo). | Admin, Gestora, Soporte |  |
+| Ver el dashboard de finanzas | `accounting.view` | La caja del mes. | Admin, Soporte, Project manager |  |
+| Cuentas por cobrar | `accounting.por_cobrar` | Lo pendiente de cobro (una gestora, lo suyo). | Admin, Gestora, Soporte, Project manager |  |
 
 ### Conversiones
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver conversiones | `conversions.view` | Los que compraron, sus cobros y sus cuotas. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Crear conversiones | `conversions.create` | Registrar una conversión. | Admin, Gestora, Soporte, Project manager, Tutor | `conversions.view` |
-| Editar conversiones | `conversions.edit` | Cambiar los datos de una conversión. | Admin, Gestora, Soporte, Project manager, Tutor | `conversions.view` |
-| Borrar conversiones | `conversions.delete` | Quitar una conversión (una gestora, solo las suyas). | Admin, Gestora, Soporte, Project manager, Tutor | `conversions.view` |
-| Cobros y cuotas | `conversions.cobros` | Apuntar cobros, generar y pagar cuotas. | Admin, Gestora, Soporte, Project manager, Tutor | `conversions.view` |
+| Ver conversiones | `conversions.view` | Los que compraron, sus cobros y sus cuotas. | Admin, Gestora, Soporte, Project manager |  |
+| Crear conversiones | `conversions.create` | Registrar una conversión. | Admin, Gestora, Soporte, Project manager | `conversions.view` |
+| Editar conversiones | `conversions.edit` | Cambiar los datos de una conversión. | Admin, Gestora, Soporte, Project manager | `conversions.view` |
+| Borrar conversiones | `conversions.delete` | Quitar una conversión (una gestora, solo las suyas). | Admin, Gestora, Soporte, Project manager | `conversions.view` |
+| Cobros y cuotas | `conversions.cobros` | Apuntar cobros, generar y pagar cuotas. | Admin, Gestora, Soporte, Project manager | `conversions.view` |
 | Repartir una venta | `conversions.reparto` | Repartir una venta entre varias gestoras. | Admin | `conversions.view` |
 | Devoluciones | `conversions.devoluciones` | Apuntar y quitar devoluciones. | Admin, Soporte | `conversions.view` |
 | Venta sin gestora | `conversions.sin_gestora` | Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora. | Admin | `conversions.view` |
@@ -1403,13 +1420,13 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver facturas | `facturas.view` | Facturas, series, emisores y su PDF (una gestora, las suyas). | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Crear facturas | `facturas.create` | Hacer una factura o una proforma. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
-| Completar datos y marcar entregada | `facturas.completar` | Rellenar los datos fiscales del cliente y marcarla entregada. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
-| Enviar facturas | `facturas.enviar` | Mandar la factura al cliente. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
-| Marcar cobrada | `facturas.cobrar` | Marcar una factura como cobrada. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
-| Anular facturas | `facturas.anular` | Anular una factura sin emitir. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
-| Emitir un borrador | `facturas.emitir_borrador` | Darle número a un borrador. | Admin, Gestora, Soporte, Project manager, Tutor | `facturas.view` |
+| Ver facturas | `facturas.view` | Facturas, series, emisores y su PDF (una gestora, las suyas). | Admin, Gestora, Soporte, Project manager |  |
+| Crear facturas | `facturas.create` | Hacer una factura o una proforma. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Completar datos y marcar entregada | `facturas.completar` | Rellenar los datos fiscales del cliente y marcarla entregada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Enviar facturas | `facturas.enviar` | Mandar la factura al cliente. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Marcar cobrada | `facturas.cobrar` | Marcar una factura como cobrada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Anular facturas | `facturas.anular` | Anular una factura sin emitir. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Emitir un borrador | `facturas.emitir_borrador` | Darle número a un borrador. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Poner número al cobrar | `facturas.emitir` | Que el cobro salga facturado y la proforma sin esperar visto bueno. | Admin | `facturas.view` |
 | Corregir y abonar | `facturas.gestionar` | Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas). | Admin | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
@@ -1421,7 +1438,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver egresos | `expenses.view` | Los gastos y sus comprobantes. | Admin, Soporte |  |
+| Ver egresos | `expenses.view` | Los gastos y sus comprobantes. | Admin, Soporte, Project manager |  |
 | Apuntar egresos | `expenses.create` | Un gasto nuevo con su comprobante. | Admin, Soporte | `expenses.view` |
 | Editar egresos | `expenses.edit` | Cambiar un gasto. | Admin, Soporte | `expenses.view` |
 | Borrar egresos | `expenses.delete` | Quitar un gasto. | Admin, Soporte | `expenses.view` |
@@ -1430,7 +1447,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver cuentas por pagar | `accounts_payable.view` | Lo pendiente de pago. | Admin, Soporte |  |
+| Ver cuentas por pagar | `accounts_payable.view` | Lo pendiente de pago. | Admin, Soporte, Project manager |  |
 | Apuntar cuentas por pagar | `accounts_payable.create` | Una deuda nueva. | Admin, Soporte | `accounts_payable.view` |
 | Editar y pagar | `accounts_payable.edit` | Cambiarla y apuntar pagos. | Admin, Soporte | `accounts_payable.view` |
 | Borrar cuentas por pagar | `accounts_payable.delete` | Quitarla. | Admin, Soporte | `accounts_payable.view` |
@@ -1439,7 +1456,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver comisiones | `commissions.view` | Las comisiones del equipo comercial y sus reglas. | Admin, Soporte |  |
+| Ver comisiones | `commissions.view` | Las comisiones del equipo comercial y sus reglas. | Admin, Soporte, Project manager |  |
 | Recalcular comisiones | `commissions.edit` | Volver a calcular la comisión de una venta. | Admin, Soporte | `commissions.view` |
 | Pagar comisiones | `commissions.pagar` | Marcar una comisión como pagada. | Admin, Soporte | `commissions.view` |
 | Reglas de comisión | `commissions.reglas` | Crear, cambiar y quitar las reglas. | Soporte | `commissions.view` |
@@ -1448,7 +1465,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver nóminas | `payroll.view` | Planes, horas y periodos. | Admin, Soporte |  |
+| Ver nóminas | `payroll.view` | Planes, horas y periodos. | Admin, Soporte, Project manager |  |
 | Apuntar horas | `payroll.create` | Registrar horas trabajadas. | Admin, Gestora, Soporte |  |
 | Gestionar nóminas | `payroll.edit` | Planes, generar, cerrar y pagar periodos, ajustes. | Admin, Soporte | `payroll.view` |
 | Borrar en nóminas | `payroll.delete` | Quitar planes, horas y ajustes. | Admin, Soporte | `payroll.view` |
@@ -1457,7 +1474,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver pagos de Stripe | `stripe.view` | Los cobros por Stripe, y traer los nuevos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver pagos de Stripe | `stripe.view` | Los cobros por Stripe, y traer los nuevos. | Admin, Gestora, Soporte, Project manager |  |
 | Asociar pagos de Stripe | `stripe.edit` | Enlazar un pago con su venta y llevar las disputas. | Admin, Soporte | `stripe.view` |
 
 ### Facturas de colaboradores
@@ -1465,7 +1482,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador |  |
-| Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin |  |
+| Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin, Project manager |  |
 | Gestionar colaboradores | `facturas_colaborador.gestionar` | Dar de alta colaboradores y reenviarles el enlace. | Admin |  |
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
 | Pagar facturas de colaboradores | `facturas_colaborador.pagar` | Marcarlas pagadas con su justificante. | Admin | `facturas_colaborador.ver_todas` |
@@ -1474,7 +1491,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte |  |
+| Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte, Project manager |  |
 | Configurar integraciones | `integrations.edit` | Conectarlos, probarlos y desconectarlos. | Admin, Soporte | `integrations.view` |
 
 ## Análisis
@@ -1483,38 +1500,38 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver informes | `reports.mis_informes` | Los informes de ventas, prospectos y seguimiento (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte |  |
-| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin | `reports.view` |
+| Ver informes | `reports.mis_informes` | Los informes de ventas, prospectos y seguimiento (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager |  |
+| Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte, Project manager |  |
+| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin, Project manager | `reports.view` |
 | Cambiar el baremo de la tasa de cierre | `reports.editar_baremo` | Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin. | Admin | `reports.view` |
-| El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte | `reports.mis_informes` |
+| El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte, Project manager | `reports.mis_informes` |
 
 ### Feedback
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver feedback | `feedback.view` | El panel y las respuestas de los clientes. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Enviar la encuesta | `feedback.enviar` | Mandar, o no, la encuesta revisada a un cliente. | Admin, Gestora, Soporte, Project manager, Tutor | `feedback.view` |
+| Ver feedback | `feedback.view` | El panel y las respuestas de los clientes. | Admin, Gestora, Soporte, Project manager |  |
+| Enviar la encuesta | `feedback.enviar` | Mandar, o no, la encuesta revisada a un cliente. | Admin, Gestora, Soporte, Project manager | `feedback.view` |
 
 ### Análisis IA
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver análisis IA | `reports_ia.view` | Los análisis generados de cada proyecto. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver análisis IA | `reports_ia.view` | Los análisis generados de cada proyecto. | Admin, Gestora, Soporte, Project manager |  |
 | Generar análisis IA | `reports_ia.generar` | Pedir un análisis nuevo y exportarlo. | Admin, Soporte | `reports_ia.view` |
 
 ### Monitor IA
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el monitor IA | `ia.view` | Métricas y gasto de los proyectos de IA. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver el monitor IA | `ia.view` | Métricas y gasto de los proyectos de IA. | Admin, Gestora, Soporte, Project manager |  |
 | Traer datos de una app de IA | `ia.importar` | Ver lo que hay en el Supabase de una app de IA (cuánto factura y desde cuándo) e importarlo al CRM (#44). | Admin | `ia.view` |
 
 ### Chat IA
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar el chat IA | `chat_ia.usar` | Preguntar al asistente sobre los datos del CRM. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Usar el chat IA | `chat_ia.usar` | Preguntar al asistente sobre los datos del CRM. | Admin, Gestora, Soporte, Project manager |  |
 
 ## Clientes
 
@@ -1532,7 +1549,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte |  |
+| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
 | Crear matrículas | `matriculas.create` | Una matrícula nueva. | Admin, Gestora, Soporte | `matriculas.view` |
 | Editar matrículas | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
 | Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una matrícula. | Admin, Soporte | `matriculas.view` |
@@ -1542,9 +1559,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver diplomas | `diplomas.view` | La pantalla Diplomas en solo lectura (de sus campus). | Admin |  |
+| Ver diplomas | `diplomas.view` | La pantalla Diplomas en solo lectura (de sus campus). | Admin, Project manager |  |
 | Emitir diplomas | `diplomas.emit` | Revisar los datos (nombre, DNI, correo, formación), pasar a pendientes, aprobar y emitir, enviar el diploma al alumno y crear uno nuevo, en sus campus. Rechazar, corregir y revocar, no. | Admin |  |
-| Ver emisiones y firmas | `diplomas.view_emisiones` | El historial de emisiones, las formaciones y las firmas. | Admin | `diplomas.view` |
+| Ver emisiones y firmas | `diplomas.view_emisiones` | El historial de emisiones, las formaciones y las firmas. | Admin, Project manager | `diplomas.view` |
 | Aprobar y emitir | `diplomas.aprobar` | Aprobar, rechazar y emitir diplomas, y crear uno nuevo. | Admin | `diplomas.view` |
 | Corregir diplomas | `diplomas.edit` | Corregir datos, subir la firma y sincronizar formaciones. | Admin | `diplomas.view` |
 | Avisar al alumno | `diplomas.avisar` | Mandar el aviso de diploma emitido o rechazado. | Admin | `diplomas.view` |
@@ -1555,7 +1572,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver consultas | `certifex_consultas.view` | Lo que escriben los centros desde la web de Certifex. | Admin, Soporte |  |
+| Ver consultas | `certifex_consultas.view` | Lo que escriben los centros desde la web de Certifex. | Admin, Soporte, Project manager |  |
 | Responder consultas | `certifex_consultas.edit` | Marcar una consulta como atendida. | Admin, Soporte | `certifex_consultas.view` |
 
 ## Conexión
@@ -1572,7 +1589,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver conectores | `connectors.view` | Los conectores de sus campus. | Admin |  |
+| Ver conectores | `connectors.view` | Los conectores de sus campus. | Admin, Project manager |  |
 | Crear conectores | `connectors.create` | Un conector nuevo. | Admin | `connectors.view` |
 | Editar conectores | `connectors.edit` | Cambiarlo, probarlo e importar. | Admin | `connectors.view` |
 | Borrar conectores | `connectors.delete` | Quitar un conector. | Admin | `connectors.view` |
@@ -1582,14 +1599,14 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin |  |
+| Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
 
 ### Webhooks de salida
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver webhooks de salida | `webhooks_salientes.view` | Los avisos que el CRM manda a otros sistemas y sus envíos. | Admin |  |
+| Ver webhooks de salida | `webhooks_salientes.view` | Los avisos que el CRM manda a otros sistemas y sus envíos. | Admin, Project manager |  |
 | Crear webhooks de salida | `webhooks_salientes.create` | Uno nuevo. | Admin | `webhooks_salientes.view` |
 | Editar webhooks de salida | `webhooks_salientes.edit` | Cambiarlo, probarlo y reenviar. | Admin | `webhooks_salientes.view` |
 | Borrar webhooks de salida | `webhooks_salientes.delete` | Quitarlo. | Admin | `webhooks_salientes.view` |
@@ -1602,7 +1619,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver novedades | `novedades.view` | Lo que trae cada versión del CRM. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Ver a quién llegó | `novedades.envios` | A quién se ha mandado cada versión. | Admin, Soporte | `novedades.view` |
+| Ver a quién llegó | `novedades.envios` | A quién se ha mandado cada versión. | Admin, Soporte, Project manager | `novedades.view` |
 | Mandar novedades | `novedades.enviar` | Mandar el correo de una versión. | Soporte | `novedades.view` |
 
 ### Mensajes internos
@@ -1615,10 +1632,10 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver solicitudes | `change_requests.view` | Las solicitudes de cambio y sus adjuntos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Pedir un cambio | `change_requests.create` | Abrir una solicitud. | Admin, Gestora, Soporte, Project manager, Tutor | `change_requests.view` |
-| Editar solicitudes | `change_requests.edit` | Cambiarla y adjuntar. | Admin, Gestora, Soporte, Project manager, Tutor | `change_requests.view` |
-| Aprobar solicitudes | `change_requests.approve` | Firmar la aprobación. | Admin, Gestora, Soporte, Project manager, Tutor | `change_requests.view` |
+| Ver solicitudes | `change_requests.view` | Las solicitudes de cambio y sus adjuntos. | Admin, Gestora, Soporte, Project manager |  |
+| Pedir un cambio | `change_requests.create` | Abrir una solicitud. | Admin, Gestora, Soporte, Project manager | `change_requests.view` |
+| Editar solicitudes | `change_requests.edit` | Cambiarla y adjuntar. | Admin, Gestora, Soporte, Project manager | `change_requests.view` |
+| Aprobar solicitudes | `change_requests.approve` | Firmar la aprobación. | Admin, Gestora, Soporte, Project manager | `change_requests.view` |
 | Borrar solicitudes | `change_requests.delete` | Quitar una solicitud. | Admin, Soporte, Project manager | `change_requests.view` |
 | Reabrir solicitudes | `change_requests.reopen` | Volver a abrir una cerrada. | Admin, Soporte, Project manager | `change_requests.view` |
 
@@ -1634,28 +1651,29 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte |  |
+| Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte, Project manager |  |
+| Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
 
 ### Correos
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver correos | `correos.view` | Los correos entrantes del equipo. | Admin, Soporte |  |
+| Ver correos | `correos.view` | Los correos entrantes del equipo. | Admin, Soporte, Project manager |  |
 | Traer correos | `correos.sincronizar` | Sincronizar el buzón. | Admin, Soporte | `correos.view` |
 
 ### Estado del sistema
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el estado | `status.view` | Errores, piezas y correos del sistema. | Admin, Soporte |  |
+| Ver el estado | `status.view` | Errores, piezas y correos del sistema. | Admin, Soporte, Project manager |  |
 | Apuntar incidencias | `status.edit` | Abrir y cerrar incidencias y cambiar el estado de cada pieza. | Admin, Soporte | `status.view` |
-| Vista previa de correos | `status.vista_previa_correos` | Ver cómo salen los correos del sistema. | Soporte | `status.view` |
+| Vista previa de correos | `status.vista_previa_correos` | Ver cómo salen los correos del sistema. | Soporte, Project manager | `status.view` |
 
 ### Claves y variables
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. | Soporte |  |
+| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. El admin, las de sus campus. | Admin, Soporte, Project manager |  |
 | Guardar claves | `credentials.edit` | Guardar, probar y quitar claves de servicios. | Soporte | `credentials.view` |
 | Revelar una clave | `credentials.revelar` | Ver el valor de una clave guardada. | Soporte | `credentials.view` |
 
@@ -1663,11 +1681,11 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver documentos | `documents.view` | Los documentos generados y descargarlos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver documentos | `documents.view` | Los documentos generados y descargarlos. | Admin, Gestora, Soporte, Project manager |  |
 | Generar documentos | `documents.create` | Generar, regenerar y reenviar documentos. | Admin, Soporte | `documents.view` |
 | Numeración | `documents.numeracion` | Ver y cambiar el siguiente número. | Admin, Soporte | `documents.view` |
 | Borrar documentos | `documents.delete` | Quitar un documento. | Admin, Soporte | `documents.view` |
-| Auditoría de documentos | `documents.auditar` | Quién generó y descargó cada documento. | Soporte | `documents.view` |
+| Auditoría de documentos | `documents.auditar` | Quién generó y descargó cada documento. | Soporte, Project manager | `documents.view` |
 
 ## Configuración
 
@@ -1675,7 +1693,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver usuarios | `users.view` | La lista del equipo y su disponibilidad. | Admin, Soporte |  |
+| Ver usuarios | `users.view` | La lista del equipo y su disponibilidad. | Admin, Soporte, Project manager |  |
 | Crear usuarios | `users.create` | Dar de alta a alguien (con su bienvenida por correo). | Admin, Soporte | `users.view` |
 | Editar usuarios | `users.edit` | Datos, campus, disponibilidad y reactivar. | Admin, Soporte | `users.view` |
 | Desactivar usuarios | `users.delete` | Dar de baja a alguien. | Admin, Soporte | `users.view` |
@@ -1688,14 +1706,14 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver roles | `roles.view` | Qué trae cada rol y los roles a medida. | Admin |  |
+| Ver roles | `roles.view` | Qué trae cada rol y los roles a medida. | Admin, Project manager |  |
 | Cambiar roles | `roles.edit` | Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas), sin darles lo que uno no tiene. | Admin | `roles.view` |
 
 ### Proyectos
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver proyectos | `projects.view` | Los campus, sus empresas y sus atajos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver proyectos | `projects.view` | Los campus, sus empresas y sus atajos. | Admin, Gestora, Soporte, Project manager |  |
 | Crear proyectos | `projects.create` | Un campus o una empresa nueva. | Soporte | `projects.view` |
 | Configurar proyectos | `projects.edit` | Datos de un campus y su clave de webhook. | Soporte | `projects.view` |
 | Logo y atajos | `projects.personalizar` | El logo y los atajos de un campus. | Admin, Soporte | `projects.view` |
@@ -1704,21 +1722,21 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver canales | `channels.view` | Los canales de entrada de cada campus. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver canales | `channels.view` | Los canales de entrada de cada campus. | Admin, Gestora, Soporte, Project manager |  |
 | Configurar canales | `channels.edit` | Crear, cambiar y quitar canales. | Admin, Soporte | `channels.view` |
 
 ### Campos personalizados
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver campos | `field_defs.view` | Los campos de más de cada campus. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver campos | `field_defs.view` | Los campos de más de cada campus. | Admin, Gestora, Soporte, Project manager |  |
 | Configurar campos | `field_defs.edit` | Crear, ordenar y quitar campos. | Admin, Soporte | `field_defs.view` |
 
 ### Instalación
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver la instalación | `installation.view` | Qué módulos del CRM están encendidos. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+| Ver la instalación | `installation.view` | Qué módulos del CRM están encendidos. | Admin, Gestora, Soporte, Project manager |  |
 | Encender módulos | `installation.edit` | Encender y apagar módulos del CRM. | Soporte | `installation.view` |
 
 ### Su cuenta

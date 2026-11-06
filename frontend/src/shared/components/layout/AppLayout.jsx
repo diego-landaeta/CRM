@@ -10,6 +10,10 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
 import NeedsProjectBanner from '@/shared/components/ui/NeedsProjectBanner';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { LockKey } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from './Sidebar';
 
 // Rutas que SÍ funcionan en modo "Todos los proyectos" (vista global).
 // El resto requiere un proyecto concreto (catálogo, settings, finanzas, etc.).
@@ -93,6 +97,89 @@ const ALL_PROJECTS_OK = [
   // «Mi factura» son las del propio colaborador, a todas sus empresas.
   /^\/finanzas\/facturas-colaboradores$/,
   /^\/mi-factura$/,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // #218, tanda 1 (03/11). Ya funcionaban con una EMPRESA (están abajo, en
+  // `CON_SOCIEDAD_OK`) y su servidor, sin campus, se queda en los de quien pide
+  // (`proyectosDelAmbito`; super admin y soporte, todos). Con «Todos» solo les
+  // faltaba esta lista. Probado entrando como super admin y como admin.
+  //
+  // Seguimiento y Reportes, después de cerrar su fuga en el servidor (#620): antes,
+  // sin campus, enseñaban los de todas las empresas.
+  /^\/finanzas$/,
+  /^\/finanzas\/ingresos$/,
+  /^\/finanzas\/conversiones$/,
+  /^\/finanzas\/egresos$/,
+  /^\/finanzas\/por-cobrar$/,
+  /^\/finanzas\/por-pagar$/,
+  /^\/finanzas\/comisiones$/,
+  /^\/finanzas\/pendiente-facturar$/,
+  /^\/finanzas\/ventas-analisis$/,
+  /^\/informes$/,
+  /^\/prospectos\/seguimiento$/,
+  // Las que no miran el campus: lo suyo de cada uno.
+  /^\/correos$/,
+  /^\/mensajes$/,
+  /^\/mis-cursos$/,
+  /^\/novedades$/,
+  /^\/solicitudes-cambio$/,
+  /^\/solicitudes-cambio\/\d+$/,
+  /^\/configuracion\/claves$/,
+  // WhatsApp es de la gestora, no del campus (el mismo motivo que con una empresa).
+  /^\/whatsapp$/,
+  /^\/whatsapp\/chat$/,
+  /^\/whatsapp\/banco$/,
+  /^\/whatsapp\/conexion$/,
+  /^\/whatsapp\/ayuda$/,
+
+  // #218, tanda 2: su servidor no entendía «Todos» (pedía un campus) y ahora,
+  // sin campus, se queda en los de quien pide. Facturas: la lista, las cifras y
+  // las ventas sin factura (emitir una sigue pidiendo su campus).
+  /^\/finanzas\/facturas$/,
+  // Pagos Stripe y Nóminas (leer): a super admin y soporte, sin campus, todos los
+  // campus menos los de pruebas. Sincronizar Stripe o crear una nómina sigue
+  // pidiendo UN campus: cada uno tiene su cuenta y sus nóminas.
+  /^\/finanzas\/pagos-stripe$/,
+  /^\/finanzas\/nominas$/,
+  // #218, tanda 3: pantallas de UN campus que, con una empresa o «Todos», ya no
+  // se tapian: piden el campus DENTRO (Proceso comercial, Buscar duplicados,
+  // Meta Ads, Chat IA; `useCampusDeLaPantalla`), suman los campus de quien mira
+  // (Revisión de duplicados, #620) o listan sus campus (Moodle).
+  /^\/prospectos\/proceso$/,
+  /^\/prospectos\/duplicados$/,
+  /^\/prospectos\/revision-duplicados$/,
+  /^\/meta-ads$/,
+  /^\/chat-ia$/,
+  /^\/conexion\/moodle(?:\/\d+)?$/,
+  // CRM#632 (auditoría del 03/11): el admin con varios campus se quedaba en el
+  // muro en Configuración › Documentos y › Plantillas de email. Numeración de
+  // documentos lista los campus del ámbito, cada uno con lo suyo; las plantillas
+  // piden el campus dentro (`useCampusDeLaPantalla`).
+  /^\/configuracion\/documentos$/,
+  /^\/configuracion\/plantillas-email$/,
+  // #218, tanda 4 (Diego, 04/11): Convocatorias con todos sus campus juntos, cada
+  // una con su campus. El embudo y los pendientes ya recortaban por campus
+  // (#620); crear una convocatoria sigue pidiendo un campus.
+  /^\/prospectos\/convocatorias$/,
+  // #218, tanda 4 (Diego, 04/11): el catálogo de todos los campus juntos, cada
+  // producto con su campus; el Árbol de categorías y WooCommerce, el de cada
+  // campus solo para ver. Crear, sincronizar o configurar sigue pidiendo un
+  // campus. Cursos pendientes ya tenía su pestaña «Todos los campus» (#336).
+  /^\/productos(?:\/(?:arbol|categorias|pendientes|woocommerce))?$/,
+  // #218, tanda 4 (Diego, 04/11): Integraciones enseña el estado de cada campus
+  // en una lista, solo para ver. Conectar o cambiar una clave sigue pidiendo
+  // elegir el campus.
+  /^\/finanzas\/integraciones$/,
+  // #218, tanda 4 (Diego, 04/11): Análisis IA con los informes de todos sus campus
+  // (generar uno pide su campus dentro) y Pregunta a tus datos, que ya contestaba
+  // con los campus de la empresa o de quien pregunta (#245).
+  /^\/informes\/(?:ia|preguntar)$/,
+  // #218, tanda 4 (Diego, 04/11): el Registro, con lo de los campus de quien mira
+  // (#620, #641); la pantalla manda el campus o la empresa de la cabecera.
+  /^\/registro$/,
+  // #218: Campañas (y Google Ads y Tráfico orgánico) solo dicen «Aún no
+  // conectado» (#216): no leen ningún campus, y con «Todos» salía el muro.
+  /^\/campanas(?:\/(?:google|seo))?$/,
 ];
 
 // Exportadas para la prueba del muro (#208): que «Mi perfil» no vuelva a quedar
@@ -295,10 +382,71 @@ const CON_SOCIEDAD_OK = [
   // factura» no depende de la cabecera: son las del propio colaborador.
   /^\/finanzas\/facturas-colaboradores$/,
   /^\/mi-factura$/,
+  // #218, tanda 3: pantallas de UN campus que, con una empresa o «Todos», ya no
+  // se tapian: piden el campus DENTRO (Proceso comercial, Buscar duplicados,
+  // Meta Ads, Chat IA; `useCampusDeLaPantalla`), suman los campus de quien mira
+  // (Revisión de duplicados, #620) o listan sus campus (Moodle).
+  /^\/prospectos\/proceso$/,
+  /^\/prospectos\/duplicados$/,
+  /^\/prospectos\/revision-duplicados$/,
+  /^\/meta-ads$/,
+  /^\/chat-ia$/,
+  /^\/conexion\/moodle(?:\/\d+)?$/,
+  // CRM#632 (auditoría del 03/11): el admin con varios campus se quedaba en el
+  // muro en Configuración › Documentos y › Plantillas de email. Numeración de
+  // documentos lista los campus del ámbito, cada uno con lo suyo; las plantillas
+  // piden el campus dentro (`useCampusDeLaPantalla`).
+  /^\/configuracion\/documentos$/,
+  /^\/configuracion\/plantillas-email$/,
+  // #218, tanda 4 (Diego, 04/11): Convocatorias con todos sus campus juntos, cada
+  // una con su campus. El embudo y los pendientes ya recortaban por campus
+  // (#620); crear una convocatoria sigue pidiendo un campus.
+  /^\/prospectos\/convocatorias$/,
+  // #218, tanda 4 (Diego, 04/11): el catálogo de todos los campus juntos, cada
+  // producto con su campus; el Árbol de categorías y WooCommerce, el de cada
+  // campus solo para ver. Crear, sincronizar o configurar sigue pidiendo un
+  // campus. Cursos pendientes ya tenía su pestaña «Todos los campus» (#336).
+  /^\/productos(?:\/(?:arbol|categorias|pendientes|woocommerce))?$/,
+  // #218, tanda 4 (Diego, 04/11): Integraciones enseña el estado de cada campus
+  // en una lista, solo para ver. Conectar o cambiar una clave sigue pidiendo
+  // elegir el campus.
+  /^\/finanzas\/integraciones$/,
+  // #218, tanda 4 (Diego, 04/11): Análisis IA con los informes de todos sus campus
+  // (generar uno pide su campus dentro) y Pregunta a tus datos, que ya contestaba
+  // con los campus de la empresa o de quien pregunta (#245).
+  /^\/informes\/(?:ia|preguntar)$/,
+  // #218, tanda 4 (Diego, 04/11): el Registro, con lo de los campus de quien mira
+  // (#620, #641); la pantalla manda el campus o la empresa de la cabecera.
+  /^\/registro$/,
+  // #218: Campañas (y Google Ads y Tráfico orgánico) solo dicen «Aún no
+  // conectado» (#216): no leen ningún campus, y con «Todos» salía el muro.
+  /^\/campanas(?:\/(?:google|seo))?$/,
 ];
 
 export function rutaAceptaSociedad(pathname) {
   return CON_SOCIEDAD_OK.some((rx) => rx.test(pathname));
+}
+
+/**
+ * Una pantalla que el menú no le enseña —le falta su permiso— tampoco se abre
+ * escribiendo la dirección (#631): dice «No tienes acceso» en vez de abrirse a
+ * medias y llenarse de 403.
+ */
+function PantallaConPermiso({ pathname, children }) {
+  const { can } = usePermission();
+  const { permissions } = useAuth();
+  // Sin el mapa de permisos todavía (al entrar), `can` dice que no a todo: no se
+  // decide nada hasta que llegue, o saldría un «No tienes acceso» falso.
+  if (!permissions || rutaPermitida(pathname, can)) return children;
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <EmptyState
+        icon={LockKey}
+        title="No tienes acceso a esta pantalla"
+        description="Si crees que deberías verla, pídeselo a un administrador."
+      />
+    </div>
+  );
 }
 
 function AllProjectsGuard({ pathname, children }) {
@@ -529,9 +677,11 @@ export default function AppLayout() {
         }>
           {/* Fade-in suave en cada cambio de ruta — key={pathname} fuerza remount */}
           <div key={pathname} className="animate-in fade-in duration-200">
-            <AllProjectsGuard pathname={pathname}>
-              <Outlet />
-            </AllProjectsGuard>
+            <PantallaConPermiso pathname={pathname}>
+              <AllProjectsGuard pathname={pathname}>
+                <Outlet />
+              </AllProjectsGuard>
+            </PantallaConPermiso>
           </div>
           </Suspense>
         </main>

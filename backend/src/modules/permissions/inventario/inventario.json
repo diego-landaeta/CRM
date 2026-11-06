@@ -914,6 +914,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/envios",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/envios",
+  "relativa": "GET /diplomas/envios",
+  "controlador": "envios",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.view",
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/editar",
   "tipo": "ruta",
   "modulo": "certifex",
@@ -3162,6 +3185,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/convocatorias/ambito",
+  "tipo": "ruta",
+  "modulo": "convocatorias",
+  "metodo": "GET",
+  "ruta": "/api/convocatorias/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "listarDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "convocatorias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/convocatorias/",
   "tipo": "ruta",
   "modulo": "convocatorias",
@@ -3935,6 +3980,10 @@
     "claves": [
      "email_sequences.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -4515,6 +4564,54 @@
   "ruta": "/api/facturas-colaborador/justificante-local/:id",
   "relativa": "GET /justificante-local/:id",
   "controlador": "justificanteLocal",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturas-colaborador/pago/:token",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "GET",
+  "ruta": "/api/facturas-colaborador/pago/:token",
+  "relativa": "GET /pago/:token",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/confirmar",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/confirmar",
+  "relativa": "POST /pago/:token/confirmar",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/opinion",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/opinion",
+  "relativa": "POST /pago/:token/opinion",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/no-recibido",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/no-recibido",
+  "relativa": "POST /pago/:token/no-recibido",
+  "controlador": null,
   "publica": true,
   "guardias": [],
   "puertas": []
@@ -5372,6 +5469,10 @@
     "claves": [
      "forms.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -5955,6 +6056,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/integrations/estado",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/integrations/:provider",
   "tipo": "ruta",
   "modulo": "integrations",
@@ -6088,6 +6211,10 @@
     "claves": [
      "facturas.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -6110,6 +6237,10 @@
     "claves": [
      "facturas.cola"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": [
@@ -7420,6 +7551,10 @@
     "claves": [
      "leads.duplicados"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -8014,6 +8149,10 @@
     "claves": [
      "make.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -10946,6 +11085,32 @@
     "claves": [
      "products.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/product-categories/ambito",
+  "tipo": "ruta",
+  "modulo": "product-categories",
+  "metodo": "GET",
+  "ruta": "/api/product-categories/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "arbolesDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
    }
   ],
   "puertas": []
@@ -11082,6 +11247,28 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/ambito",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
    }
   ],
   "puertas": []
@@ -12519,6 +12706,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/reports-ia/ambito",
+  "tipo": "ruta",
+  "modulo": "reports-ia",
+  "metodo": "GET",
+  "ruta": "/api/reports-ia/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "listarDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports_ia.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/reports-ia/:projectId",
   "tipo": "ruta",
   "modulo": "reports-ia",
@@ -12536,6 +12745,10 @@
     "claves": [
      "reports_ia.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -12580,6 +12793,10 @@
     "claves": [
      "reports_ia.generar"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -13320,6 +13537,10 @@
     "claves": [
      "stripe.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -15058,6 +15279,28 @@
   ]
  },
  {
+  "id": "GET /api/tutores/buscar",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/buscar",
+  "relativa": "GET /buscar",
+  "controlador": "buscar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/",
   "tipo": "ruta",
   "modulo": "tutores",
@@ -15516,6 +15759,28 @@
     "tipo": "puede",
     "claves": [
      "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/users/roles-asignables",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/roles-asignables",
+  "relativa": "GET /roles-asignables",
+  "controlador": "rolesAsignables",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.create"
     ]
    }
   ],
@@ -16407,7 +16672,8 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.usar",
-     "whatsapp.supervisar"
+     "whatsapp.supervisar",
+     "whatsapp.banco"
     ]
    }
   ],
@@ -16432,7 +16698,8 @@
     "tipo": "puede",
     "claves": [
      "whatsapp.usar",
-     "whatsapp.supervisar"
+     "whatsapp.supervisar",
+     "whatsapp.banco"
     ]
    }
   ],
@@ -17148,6 +17415,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17170,6 +17441,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17192,6 +17467,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17214,6 +17493,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17236,6 +17519,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17248,6 +17535,32 @@
   "ruta": "/api/woocommerce/runs",
   "relativa": "GET /runs",
   "controlador": "listRuns",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/woocommerce/estado",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "GET",
+  "ruta": "/api/woocommerce/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
   "publica": false,
   "guardias": [
    {
@@ -17280,6 +17593,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17302,6 +17619,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17324,6 +17645,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17346,6 +17671,10 @@
     "claves": [
      "woocommerce.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17368,6 +17697,10 @@
     "claves": [
      "woocommerce.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17390,6 +17723,10 @@
     "claves": [
      "woocommerce.sync"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -17805,6 +18142,42 @@
   "condicion": "webhooks para todas las empresas",
   "regla": "soloSuperadmin",
   "puerta": "webhooks-salientes.todas"
+ },
+ {
+  "id": "GET /api/registro/ · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/",
+  "controlador": "listar",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/fuentes · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/fuentes",
+  "controlador": "fuentes",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/csv · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/csv",
+  "controlador": "csv",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
  },
  {
   "id": "GET /api/informes/mi-puesto · reports.puesto_ajeno",

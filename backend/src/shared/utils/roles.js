@@ -70,6 +70,9 @@ export const RUTAS_DEL_COLABORADOR = [
   // Meta Ads, solo ver y solo con su permiso (`meta_ads.view`, 26/10/2026): la
   // guardia de la ruta lo mira; sin él, 403 igual.
   /^\/api\/meta-ads(?:\/|$)/,
+  // «Mis preferencias» lee el catálogo del menú para «Mi vista», como el tutor
+  // (más abajo). Es solo la lista de nombres; sin ella, 403 al abrirla (#631).
+  /^\/api\/permissions\/system-defaults\/?$/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
@@ -97,6 +100,9 @@ export const RUTAS_DEL_TUTOR = [
   /^\/api\/consultas(?:\/|$)/,
   // Sus cursos pendientes (#336): el servicio le deja solo los que tiene asignados.
   /^\/api\/cursos-pendientes(?:\/|$)/,
+  // Su tablero de tutores (Diego, 04/11): el servicio le deja ver solo lo suyo y lo
+  // de su equipo de tutores; lo de desarrollo, no (no es de ese equipo).
+  /^\/api\/tasks(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
   /^\/api\/novedades(?:\/|$)/,
   // Los mensajes internos entre usuarios del CRM (la campana de «Mensajes»).
