@@ -68,31 +68,60 @@ export async function pedirCodigo({ userId, emailNuevo, porUserId = userId, ip =
 }
 
 /**
- * Con el código bueno, cambia el correo. Cada fallo suma un intento; al
- * quinto, la petición se anula.
+ * Con el código bueno, cambia el correo. Cada intento cuenta; al quinto fallo,
+ * la petición se anula.
+ *
+ * Revisión de Diego (#688, 05/11):
+ *   - El intento se cuenta ANTES de comparar y en una sola sentencia
+ *     (`intentos = intentos + 1 … WHERE intentos < 5`). Si se leía, se
+ *     comparaba y luego se escribía, varias peticiones a la vez leían
+ *     `intentos = 0` y cada una probaba un código: el límite de 5 no valía.
+ *   - Con el bueno, la petición se marca confirmada ANTES de cambiar el
+ *     correo, y solo si seguía viva: así no se puede usar dos veces. Si el
+ *     cambio falla (p. ej. el correo ya lo ha cogido otra persona), la
+ *     petición se anula: no queda viva con el correo sin cambiar.
  */
 export async function confirmarCodigo({ userId, codigo, porUserId = userId, ip = null }) {
   const { rows: [p] } = await query(
-    `SELECT * FROM cambios_de_correo
-      WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL`, [userId]);
-  if (!p) throw new AppError('No hay ningún cambio de correo pendiente. Pide un código nuevo.', 400, 'SIN_CODIGO');
+    `UPDATE cambios_de_correo SET intentos = intentos + 1
+      WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL AND intentos < $2
+      RETURNING id, intentos, codigo_hash, expira_at, email_nuevo`, [userId, INTENTOS]);
+  if (!p) {
+    // Viva pero sin intentos: se anula y se dice. Si no, es que no hay ninguna.
+    const { rows: [agotada] } = await query(
+      `UPDATE cambios_de_correo SET anulado_at = NOW()
+        WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL RETURNING id`, [userId]);
+    if (agotada) throw new AppError('Demasiados intentos. Pide un código nuevo.', 429, 'DEMASIADOS_INTENTOS');
+    throw new AppError('No hay ningún cambio de correo pendiente. Pide un código nuevo.', 400, 'SIN_CODIGO');
+  }
   if (new Date(p.expira_at) < new Date()) {
     await query('UPDATE cambios_de_correo SET anulado_at = NOW() WHERE id = $1', [p.id]);
     throw new AppError('El código ha caducado. Pide uno nuevo.', 400, 'CODIGO_CADUCADO');
   }
   const bueno = crypto.timingSafeEqual(Buffer.from(p.codigo_hash), Buffer.from(hash(String(codigo || '').trim())));
   if (!bueno) {
-    const intentos = p.intentos + 1;
-    const agotado = intentos >= INTENTOS;
-    await query(`UPDATE cambios_de_correo SET intentos = $2, anulado_at = CASE WHEN $3::boolean THEN NOW() ELSE NULL END WHERE id = $1`,
-      [p.id, intentos, agotado]);
-    if (agotado) throw new AppError('Demasiados intentos. Pide un código nuevo.', 429, 'DEMASIADOS_INTENTOS');
-    throw new AppError(`Código incorrecto. Te quedan ${INTENTOS - intentos}.`, 400, 'CODIGO_INCORRECTO');
+    if (p.intentos >= INTENTOS) {
+      await query('UPDATE cambios_de_correo SET anulado_at = NOW() WHERE id = $1', [p.id]);
+      throw new AppError('Demasiados intentos. Pide un código nuevo.', 429, 'DEMASIADOS_INTENTOS');
+    }
+    throw new AppError(`Código incorrecto. Te quedan ${INTENTOS - p.intentos}.`, 400, 'CODIGO_INCORRECTO');
   }
 
+  // Se reclama la petición: solo una confirmación puede ganarla.
+  const { rows: [mia] } = await query(
+    `UPDATE cambios_de_correo SET confirmado_at = NOW()
+      WHERE id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL RETURNING id`, [p.id]);
+  if (!mia) throw new AppError('No hay ningún cambio de correo pendiente. Pide un código nuevo.', 400, 'SIN_CODIGO');
+
   // El cambio de verdad, con todo lo que ya hacía (sesiones, aviso, registro).
-  const r = await cambiarCorreo(userId, p.email_nuevo, { porUserId, ip });
-  await query('UPDATE cambios_de_correo SET confirmado_at = NOW() WHERE id = $1', [p.id]);
+  let r;
+  try {
+    r = await cambiarCorreo(userId, p.email_nuevo, { porUserId, ip });
+  } catch (err) {
+    await query('UPDATE cambios_de_correo SET confirmado_at = NULL, anulado_at = NOW() WHERE id = $1', [p.id])
+      .catch((e) => logger.error({ err: e.message, id: p.id }, 'No se pudo anular la petición de cambio de correo'));
+    throw err;
+  }
   await anotar(porUserId, 'usuario.confirmar_cambio_correo', { usuario_id: userId, a: p.email_nuevo }, ip);
   return r;
 }

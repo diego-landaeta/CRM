@@ -109,4 +109,45 @@ describe('#211 · el código', () => {
     await expect(pedirCodigo({ userId: ANA, emailNuevo: `OTRA@${MARCA.toLowerCase()}.test`, enviar })).rejects.toMatchObject({ code: 'EMAIL_EXISTS' });
     expect(enviado).toBeNull();
   });
+
+  // Revisión de Diego (#688, 05/11): el intento se cuenta en una sola sentencia.
+  it('a la vez, 20 intentos con códigos malos no pasan de 5: el resto ya no compara', async () => {
+    await pedirCodigo({ userId: ANA, emailNuevo: NUEVO(), enviar });
+    const bueno = enviado.codigo;
+    // Veinte códigos malos, distintos del bueno, todos a la vez.
+    const malos = [];
+    for (let n = 0; malos.length < 20; n++) { const c = String(n).padStart(6, '0'); if (c !== bueno) malos.push(c); }
+    const r = await Promise.allSettled(malos.map((c) => confirmarCodigo({ userId: ANA, codigo: c })));
+    const codigos = r.map((x) => x.reason?.code);
+    // Solo 5 llegan a comparar (4 «incorrecto» y el quinto anula); el resto, sin intentos.
+    expect(codigos.filter((c) => c === 'CODIGO_INCORRECTO').length).toBeLessThanOrEqual(INTENTOS - 1);
+    expect(codigos.every((c) => ['CODIGO_INCORRECTO', 'DEMASIADOS_INTENTOS', 'SIN_CODIGO'].includes(c))).toBe(true);
+    const fila = await one('SELECT intentos, anulado_at FROM cambios_de_correo WHERE user_id = $1 ORDER BY id DESC LIMIT 1', [ANA]);
+    expect(fila.intentos).toBe(INTENTOS);
+    expect(fila.anulado_at).not.toBeNull();
+    // Y ni el bueno vale ya.
+    await expect(confirmarCodigo({ userId: ANA, codigo: bueno })).rejects.toMatchObject({ code: 'SIN_CODIGO' });
+    expect(await correoDe(ANA)).toBe(`ana@${MARCA.toLowerCase()}.test`);
+  });
+
+  it('con el bueno dos veces a la vez, cambia una sola', async () => {
+    await pedirCodigo({ userId: ANA, emailNuevo: NUEVO(), enviar });
+    const r = await Promise.allSettled([1, 2].map(() => confirmarCodigo({ userId: ANA, codigo: enviado.codigo })));
+    expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+    expect(await correoDe(ANA)).toBe(NUEVO());
+  });
+
+  it('si el cambio falla (el correo lo ha cogido otra persona), la petición no queda viva', async () => {
+    await pedirCodigo({ userId: ANA, emailNuevo: NUEVO(), enviar });
+    // Entre pedir el código y meterlo, otra persona se queda con ese correo.
+    await q('UPDATE users SET email = $2 WHERE id = $1', [OTRA, NUEVO()]);
+    try {
+      await expect(confirmarCodigo({ userId: ANA, codigo: enviado.codigo })).rejects.toMatchObject({ code: 'EMAIL_EXISTS' });
+      const fila = await one('SELECT confirmado_at, anulado_at FROM cambios_de_correo WHERE user_id = $1 ORDER BY id DESC LIMIT 1', [ANA]);
+      expect(fila.confirmado_at).toBeNull();
+      expect(fila.anulado_at).not.toBeNull();
+    } finally {
+      await q('UPDATE users SET email = $2 WHERE id = $1', [OTRA, `otra@${MARCA.toLowerCase()}.test`]);
+    }
+  });
 });
