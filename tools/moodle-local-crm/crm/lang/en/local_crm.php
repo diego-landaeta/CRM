@@ -1,0 +1,99 @@
+<?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
+/**
+ * local_crm: la mensajería del campus, unida al CRM (CRM #679).
+ *
+ * @package    local_crm
+ * @copyright  2026 ISEIE Innovation School
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+defined('MOODLE_INTERNAL') || die();
+
+$string['pluginname'] = 'CRM';
+$string['errorenvio'] = 'The CRM did not accept the notice: {$a}';
+$string['crm:enviarcomo'] = 'Send messages and grade on behalf of campus staff (CRM)';
+$string['privacy:metadata:crm'] = 'Private messages are forwarded to the institution\'s CRM so tutors can answer them from there.';
+$string['privacy:metadata:crm:userid'] = 'The Moodle id of the sender and the recipients.';
+$string['privacy:metadata:crm:fullname'] = 'The full name of the sender and the recipients.';
+$string['privacy:metadata:crm:email'] = 'The email of the sender and the recipients.';
+$string['privacy:metadata:crm:message'] = 'The text of the message.';
+$string['conectar_titulo'] = 'Connect to the CRM';
+$string['conectar_falta'] = 'This campus is not connected to the CRM yet.';
+$string['conectar_como'] = 'Get this campus code in the CRM (Integrations › Campus › Connect campus) and paste it in «Connect to the CRM». That is all it takes.';
+$string['conectar_abrir'] = 'Connect to the CRM';
+$string['conectar_rehacer'] = 'Connect again';
+$string['conectar_intro'] = 'Paste the code the CRM gives for this campus (Integrations › Campus › Connect campus). The plugin does the rest: it enables web services, creates its token and introduces itself to the CRM.';
+$string['conectar_otra_vez'] = 'If you switch CRM or the connection was lost, paste a new code and press «Connect».';
+$string['conectar_codigo'] = 'Connection code';
+$string['conectar_boton'] = 'Connect';
+$string['conectar_ok'] = 'Connected to the CRM: {$a}. From now on every private message on the campus reaches the CRM.';
+$string['conectar_error'] = 'Could not connect: {$a}';
+$string['conectar_codigo_malo'] = 'That is not a CRM code. Copy it whole from the CRM (it starts with «crm1.»).';
+$string['conectar_inseguro'] = 'The code points to an address without https: the campus token is not sent there.';
+$string['conectar_sin_respuesta'] = 'the CRM does not answer ({$a}).';
+$string['conectar_sesskey'] = 'This page session has expired. Paste the code again and press «Connect».';
+$string['conectado_con'] = 'Connected to the CRM: {$a}';
+$string['conectado_que'] = 'Private messages on the campus reach the CRM and tutors can answer from there.';
+$string['desconectar_boton'] = 'Disconnect this campus from the CRM';
+$string['desconectar_ok'] = 'Campus disconnected. The CRM no longer receives its messages.';
+$string['errorcalificar'] = 'The grade could not be saved.';
+$string['paso_1'] = 'In the CRM: Finance › Integrations › the project › Campus (Moodle) › «Connect campus».';
+$string['paso_2'] = 'Copy the code shown (it starts with «crm1.»).';
+$string['paso_3'] = 'Paste it here and press «Connect». The plugin does the rest.';
+$string['conectado_titulo'] = 'Connection to the CRM';
+$string['estado_conectado'] = 'Connected';
+$string['dato_campus'] = 'Campus in the CRM';
+$string['dato_desde'] = 'Connected since';
+$string['dato_crm'] = 'CRM';
+$string['desconectar_que'] = 'When disconnected, the CRM stops receiving this campus messages. You can connect again with a new code.';
+$string['crms'] = 'Allowed CRMs';
+$string['crms_desc'] = 'The only CRMs this site may connect to (one per line, domain only). A code pointing anywhere else is rejected, so nobody can take the site token with a fake code.';
+$string['conectar_no_permitido'] = 'The code points to {$a}, which is not in the plugin list of allowed CRMs. If you trust it, add it in the plugin settings.';
+$string['chat_directo'] = 'Direct chat with the tutor';
+$string['chat_directo_desc'] = '«Enter the chat» on each course Chat activity opens the student private conversation with a tutor of that course (not the room). If the student already talked to one, that one; otherwise they are shared out among the course tutors. Tutors marked «Not available» in the CRM get no new students.';
+$string['excluir_nombre'] = 'Do not count as tutors accounts named';
+$string['excluir_nombre_desc'] = 'Accounts whose name starts with this never get the chat even with a teacher role (e.g. inspection accounts).';
+$string['chat_sin_tutora'] = 'There is no tutor available in this course for the direct chat right now. Please try later or use messaging.';
+$string['privacy:metadata:chat'] = 'Which course each direct student-tutor conversation opened from a course chat belongs to.';
+$string['privacy:metadata:chat:conversationid'] = 'The messaging conversation.';
+$string['privacy:metadata:chat:courseid'] = 'The course it was opened from.';
+$string['privacy:metadata:chat:alumnoid'] = 'The student.';
+$string['privacy:metadata:chat:tutoraid'] = 'The tutor.';
+$string['autoactualizar'] = 'Update the plugin automatically';
+$string['autoactualizar_desc'] = 'Every night it asks the CRM for a new version and, if it is signed by the CRM, installs it (keeping a copy to roll back). Turn it off to install versions by hand.';
+$string['task_actualizar'] = 'Check for and install the new CRM plugin version';
+$string['act_titulo'] = 'Updates';
+$string['act_version'] = 'Installed version: {$a}';
+$string['act_sola'] = 'updates itself every night';
+$string['act_apagada'] = 'automatic updates are off';
+$string['act_boton'] = 'Check for updates now';
+$string['act_en_cola'] = 'It will check within the next minute. Come back to this page to see the result.';
+$string['act_sin_conexion'] = 'This site is not connected to the CRM.';
+$string['act_nada_publicado'] = 'The CRM has not published any version yet.';
+$string['act_sin_respuesta'] = 'Could not ask the CRM ({$a}).';
+$string['act_manifiesto_malo'] = 'The CRM answered something that is not a plugin version: nothing is installed.';
+$string['act_al_dia'] = 'Up to date (version {$a}).';
+$string['act_firma_mala'] = 'Version {$a} has no valid CRM signature: not installed.';
+$string['act_moodle_viejo'] = 'There is a new version ({$a}), but it needs a newer Moodle.';
+$string['act_disponible'] = 'There is a new version ({$a}). Install it by hand or turn on automatic updates.';
+$string['act_bloqueada_sitio'] = 'There is a new version ({$a}), but this Moodle does not allow installing add-ons automatically: install it by hand.';
+$string['act_sin_permisos'] = 'There is a new version ({$a}), but Moodle cannot write to the plugin folder: install it by hand.';
+$string['act_descarga_mala'] = 'The download of version {$a} does not match the published one: not installed.';
+$string['act_zip_malo'] = 'The downloaded package is not the CRM plugin: not installed.';
+$string['act_fallo_instalar'] = 'Could not install; the previous version was restored: {$a}';
+$string['act_hecho'] = 'Updated from {$a->de} to {$a->a}.';

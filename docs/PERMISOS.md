@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-815 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+833 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -199,10 +199,20 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusSinTutor | `GET /api/consultas/campus-sin-tutor` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.view` |
 | sincronizarAlumnosAhora | `POST /api/consultas/sincronizar-alumnos` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | verMetricas | `GET /api/consultas/metricas` | sesión · a mano: consultas.controller.js · quienYAmbito (sin ?todas) | tutor | `consultas.atender` |
+| estadoDelPlugin | `GET /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| codigoDeConexion | `POST /api/consultas/campus/:projectId/plugin/codigo` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| desactivarPlugin | `DELETE /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| respuestas | `GET /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| crearRespuesta | `POST /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| importarRespuestas | `POST /api/consultas/respuestas/importar` | (no existía) | (ruta nueva) | lo de cada uno |
+| cambiarRespuesta | `PUT /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
+| borrarRespuesta | `DELETE /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
 | panel | `GET /api/consultas/` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.view` |
 | ver | `GET /api/consultas/:id` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
+| contexto | `GET /api/consultas/:id/contexto` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/consultas/:id/responder` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
 | cerrar | `POST /api/consultas/:id/cerrar` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
+| anotar | `POST /api/consultas/:id/notas` | (no existía) | (ruta nueva) | lo de cada uno |
 | tutoresPosibles | `GET /api/consultas/:id/tutores` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | reasignar | `POST /api/consultas/:id/reasignar` | sesión · a mano: consultas.controller.js · esAdministracion / exigirVer(…) === «admin» | superadmin, admin, soporte | `consultas.gestionar` |
 | adjuntoPublico | `GET /api/adjunto-consulta/:token` | nada (pública) | cualquiera, sin sesión | — |
@@ -1016,6 +1026,11 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | marcarBusqueda | `PUT /api/tutores/formaciones/:productId/busqueda` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | anunciosDeTutores | `GET /api/tutores/anuncios` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cursoDetalle | `GET /api/tutores/curso/:productId` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
+| miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
 | brochureDelCurso | `GET /api/tutores/curso/:productId/brochure` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | buscar | `GET /api/tutores/buscar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
@@ -1029,6 +1044,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusDelTutor | `GET /api/tutores/:id/campus` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | lo de cada uno |
 | asignarCampus | `POST /api/tutores/:id/campus` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | comprobarCampus | `POST /api/tutores/:id/campus/comprobar` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
+| desvincularCuenta | `POST /api/tutores/:id/campus/:projectId/desvincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| buscarCuentaMoodle | `GET /api/tutores/:id/campus/:projectId/buscar-cuenta` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| vincularCuentaMoodle | `POST /api/tutores/:id/campus/:projectId/vincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | asignarEmpresa | `POST /api/tutores/:id/empresas` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | quitarEmpresa | `DELETE /api/tutores/:id/empresas/:issuerId` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cambiarDisponible | `PATCH /api/tutores/:id/disponible` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |

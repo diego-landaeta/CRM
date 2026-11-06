@@ -16,6 +16,8 @@ const { excepcionesDeCasillas } = await import('../src/modules/permissions/casil
 
 // Los perfiles de la foto del menú (frontend/src/test/menuPorPerfil423.test.jsx).
 const PERFILES = {
+  superadmin: inv.personaDePrueba('superadmin'),
+  tutor: inv.personaDePrueba('tutor'),
   admin: inv.personaDePrueba('admin'),
   tutor: inv.personaDePrueba('tutor'),
   soporte: inv.personaDePrueba('soporte'),
@@ -36,7 +38,7 @@ beforeAll(async () => {
 }, 60000);
 
 const casos = CAMBIOS_DE_MENU.flatMap((c) => Object.entries(c.perfiles).flatMap(([perfil, lineas]) =>
-  lineas.map((l) => ({ id: c.id, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)] }))));
+  lineas.map((l) => ({ id: c.id, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)], movidaA: c.seMueve?.[l.slice(2)] || null }))));
 
 describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
   it('cada entrada tiene su ruta y su perfil', () => {
@@ -71,6 +73,10 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
       const regla = CAMBIOS_DE_REGLA.find((c) => c.id === x.id && c.aprobadoPor
         && c.roles.some((r) => [p.role, ...(p.roles_extra || [])].includes(r)));
       if (regla && !antes && esperado) continue;
+      // Sale del menú pero se abre desde otra entrada que sigue (`seMueve`, #681): no pierde
+      // nada, siempre que ese perfil siga entrando ahora y vea la entrada de destino.
+      if (x.signo === '-' && x.movidaA && despues === true
+        && casos.some((o) => o.perfil === x.perfil && o.signo === '+' && o.entrada === x.movidaA)) continue;
       if (antes !== esperado || despues !== esperado) mal.push(`${x.perfil} ${x.signo} ${x.entrada} (${x.ruta}): antes ${antes}, ahora ${despues}`);
     }
     expect(mal).toEqual([]);

@@ -12,6 +12,11 @@ import {
   empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
+import * as campusDeLaTutora from './tutor.micampus.js';
+import * as correccion from './tutor.correccion.js';
+import { query } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
+import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import {
   misCampus, exigirTutorDeMisCampus, exigirFormacionMia, exigirProyectoMio, exigirColaboracionMia,
@@ -84,6 +89,62 @@ export async function buscar(req, res, next) {
 }
 
 // GET /api/tutores/:id
+// GET /api/tutores/mi-campus — lo de la propia tutora, nunca el de otra (#681)
+export async function miCampus(req, res, next) {
+  try {
+    const refrescar = req.query.refrescar === '1';
+    res.json({ success: true, data: await campusDeLaTutora.miCampus(req.user.userId, { refrescar }) });
+  } catch (err) { next(err); }
+}
+
+const entero = (v) => { const n = parseInt(v); if (!Number.isInteger(n) || n <= 0) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR'); return n; };
+
+// GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId — la tarea con sus entregas (#681)
+export async function verTarea(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    res.json({ success: true, data: await correccion.verTarea(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/cursos/:projectId/:cursoId — el curso entero: temas y actividades
+export async function verCurso(req, res, next) {
+  try {
+    const { projectId, cursoId } = req.params;
+    res.json({ success: true, data: await correccion.verCurso(req.user.userId, entero(projectId), entero(cursoId)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar — { alumnoId, nota, comentario }
+export async function calificar(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    const { alumnoId, nota, comentario } = req.body || {};
+    const n = Number(nota);
+    if (!Number.isFinite(n) || n < 0) throw new AppError('La nota tiene que ser un número de 0 en adelante', 400, 'VALIDATION_ERROR');
+    if (comentario != null && (typeof comentario !== 'string' || comentario.length > 20000)) throw new AppError('Comentario no válido', 400, 'VALIDATION_ERROR');
+    res.json({ success: true, data: await correccion.calificar(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId), { alumnoId: entero(alumnoId), nota: n, comentario: comentario || '' }) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo?alumnoId=&n= — un archivo
+// entregado, sin enseñar el token del campus. Lo que no es PDF, imagen o texto se descarga:
+// un HTML o un SVG que suba un alumno nunca se ejecuta con la sesión de la tutora.
+export async function archivoEntregado(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    const n = Number(req.query.n);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR');
+    const a = await correccion.archivo(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId), entero(req.query.alumnoId), n);
+    res.setHeader('Content-Type', a.tipo);
+    res.setHeader('Content-Disposition', `${a.enLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.nombre)}`);
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(a.cuerpo);
+  } catch (err) { next(err); }
+}
+
 export async function ficha(req, res, next) {
   try {
     // Un tutor puede ver SU ficha; el resto necesita permiso de gestion.
@@ -829,12 +890,52 @@ export async function comprobarCampus(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /api/tutores/:id/campus/:projectId/desvincular — olvida su cuenta de Moodle en ese campus y la busca de nuevo
+export async function desvincularCuenta(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const projectId = parseInt(req.params.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Campus no válido', 400, 'VALIDATION_ERROR');
+    const { resultados, campus } = await campusTutor.desvincularCuenta(id, projectId);
+    res.json({ success: true, data: await panelDelTutor(id, avisosDeLaComprobacion(resultados, campus)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/:id/campus/:projectId/buscar-cuenta?q= — su cuenta de Moodle por correo o usuario
+export async function buscarCuentaMoodle(req, res, next) {
+  try {
+    await exigirTutorGestionable(req);
+    const projectId = parseInt(req.params.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Campus no válido', 400, 'VALIDATION_ERROR');
+    const cuenta = await campusTutor.buscarCuentaMoodle(projectId, req.query.q);
+    res.json({ success: true, data: cuenta ? { id: cuenta.id, nombre: cuenta.nombre, email: cuenta.email, suspendido: cuenta.suspendido } : null });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId } — vincular a mano esa cuenta
+export async function vincularCuentaMoodle(req, res, next) {
+  try {
+    const id = await exigirTutorGestionable(req);
+    const projectId = parseInt(req.params.projectId);
+    const moodleUserId = parseInt(req.body?.moodleUserId);
+    if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(moodleUserId) || moodleUserId <= 0) {
+      throw new AppError('Datos no válidos', 400, 'VALIDATION_ERROR');
+    }
+    await campusTutor.vincularAMano(id, projectId, moodleUserId);
+    res.json({ success: true, data: await panelDelTutor(id, []) });
+  } catch (err) { next(err); }
+}
+
 // PATCH /api/tutores/:id/disponible  { disponible, motivo }
 export async function cambiarDisponible(req, res, next) {
   try {
     const id = await exigirTutorGestionable(req);
     const { disponible, motivo } = valida(disponibleSchema, req.body);
     await campusTutor.ponerDisponible(id, disponible, motivo);
+    // El chat directo de los campus deja de llevarle alumnos (o vuelve a hacerlo).
+    query('SELECT project_id FROM tutor_campus WHERE tutor_id = $1', [id])
+      .then(({ rows }) => avisarDisponibilidad(rows.map((r) => Number(r.project_id))))
+      .catch((err) => logger.warn({ tutorId: id, err: err.message }, 'tutores: no se ha avisado a los campus de la disponibilidad'));
     res.json({ success: true, data: await panelDelTutor(id) });
   } catch (err) { next(err); }
 }

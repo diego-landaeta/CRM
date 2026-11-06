@@ -24,6 +24,9 @@ export interface CampusDelTutor {
   error: string | null;
 }
 
+/** Una cuenta de Moodle encontrada al vincular a mano. */
+export interface CuentaMoodle { id: number; nombre: string | null; email: string | null; suspendido: boolean }
+
 export interface EmpresaDelTutor {
   issuer_id: number;
   empresa: string;
@@ -52,6 +55,15 @@ export const campusTutorApi = {
     client.delete(`/tutores/${tutorId}/empresas/${issuerId}`) as Promise<ApiResponse<PanelCampusTutor>>,
   comprobar: (tutorId: number) =>
     client.post(`/tutores/${tutorId}/campus/comprobar`, {}) as Promise<ApiResponse<PanelCampusTutor>>,
+  /** Buscar su cuenta de Moodle por su correo de Moodle (cuando no es el mismo que el del CRM). */
+  buscarCuenta: (tutorId: number, projectId: number, q: string) =>
+    client.get(`/tutores/${tutorId}/campus/${projectId}/buscar-cuenta?q=${encodeURIComponent(q)}`) as Promise<ApiResponse<CuentaMoodle | null>>,
+  /** Vincularla a mano: desde entonces la comprobación de cada hora mira esa cuenta. */
+  vincular: (tutorId: number, projectId: number, moodleUserId: number) =>
+    client.post(`/tutores/${tutorId}/campus/${projectId}/vincular`, { moodleUserId }) as Promise<ApiResponse<PanelCampusTutor>>,
+  /** Su cuenta de Moodle cambió de verdad: olvidar la vinculada y buscarla por su correo. */
+  vincularDeNuevo: (tutorId: number, projectId: number) =>
+    client.post(`/tutores/${tutorId}/campus/${projectId}/desvincular`, {}) as Promise<ApiResponse<PanelCampusTutor>>,
   disponible: (tutorId: number, disponible: boolean, motivo?: string | null) =>
     client.patch(`/tutores/${tutorId}/disponible`, { disponible, motivo: motivo || null }) as Promise<ApiResponse<PanelCampusTutor>>,
 };

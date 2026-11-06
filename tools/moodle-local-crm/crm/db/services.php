@@ -1,0 +1,86 @@
+<?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
+/**
+ * local_crm: la mensajería del campus, unida al CRM (CRM #679).
+ *
+ * @package    local_crm
+ * @copyright  2026 ISEIE Innovation School
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+// La función que usa el CRM para contestar desde el CRM como la tutora, y el
+// servicio que la agrupa (junto a las de lectura que ya usaba el CRM).
+
+defined('MOODLE_INTERNAL') || die();
+
+$functions = [
+    'local_crm_enviar_mensaje' => [
+        'classname'    => '\local_crm\external\enviar_mensaje',
+        'description'  => 'Envía un mensaje privado en nombre de un miembro del personal del campus (tutora) a un usuario.',
+        'type'         => 'write',
+        'capabilities' => 'local/crm:enviarcomo',
+    ],
+];
+
+$functions['local_crm_disponibilidad'] = [
+    'classname'    => '\local_crm\external\disponibilidad',
+    'description'  => 'Guarda qué tutoras tiene el CRM como «No disponible»: el chat directo no lleva a ellas.',
+    'type'         => 'write',
+    'capabilities' => 'local/crm:enviarcomo',
+];
+
+$functions['local_crm_mensajes_desde'] = [
+    'classname'    => '\local_crm\external\mensajes_desde',
+    'description'  => 'Los mensajes privados desde uno dado, para que el CRM se ponga al día aunque se haya perdido un aviso.',
+    'type'         => 'read',
+    'capabilities' => 'local/crm:enviarcomo',
+];
+
+$functions['local_crm_calificar'] = [
+    'classname'    => '\local_crm\external\calificar',
+    'description'  => 'Califica una entrega (nota y comentario) a nombre de la tutora que corrige.',
+    'type'         => 'write',
+    'capabilities' => 'local/crm:enviarcomo',
+];
+
+$services = [
+    'CRM' => [
+        'functions' => [
+            'local_crm_enviar_mensaje',
+            'core_webservice_get_site_info',
+            'core_user_get_users_by_field',
+            'core_message_get_conversations',
+            'core_message_get_conversation_messages',
+            'core_enrol_get_users_courses',
+            'core_enrol_get_enrolled_users',
+            'core_course_get_contents',
+            'mod_assign_get_assignments',
+            'mod_assign_get_submissions',
+            'mod_assign_get_grades',
+            'local_crm_calificar',
+            'local_crm_disponibilidad',
+            'local_crm_mensajes_desde',
+        ],
+        'shortname'       => 'local_crm',
+        // Sin lista de usuarios autorizados: el token lo crea el propio plugin al
+        // conectar, para el administrador que conecta (como local_certifex).
+        'restrictedusers' => 0,
+        'enabled'         => 1,
+        // Para abrir desde el CRM los archivos que entregan los alumnos (corregir, #681).
+        'downloadfiles'   => 1,
+    ],
+];
