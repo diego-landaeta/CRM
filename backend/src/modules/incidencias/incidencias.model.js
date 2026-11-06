@@ -107,8 +107,8 @@ function donde({ alcance = null, estado, tipo, causadaPor, projectId, issuerId, 
     const yo = p(alcance.userId);
     const campus = p((alcance.projectIds || []).map(Number));
     const empresas = p((alcance.sociedadIds || []).map(Number));
+    // Las sin campus, no: solo superadmin y soporte, y quien está en ella (PR #612).
     cond.push(`(i.project_id = ANY(${campus}::int[]) OR i.sociedad_id = ANY(${empresas}::int[])
-               OR (i.project_id IS NULL AND i.sociedad_id IS NULL)
                OR i.causada_por = ${yo} OR i.detectada_por = ${yo} OR i.creada_por = ${yo})`);
   }
 

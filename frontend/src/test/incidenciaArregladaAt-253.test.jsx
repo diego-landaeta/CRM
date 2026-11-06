@@ -18,7 +18,8 @@ vi.mock('@/modules/incidencias/api/incidencias.api', async (original) => ({
 
 const { default: IncidenciaDialog } = await import('@/modules/incidencias/components/IncidenciaDialog');
 
-const base = { id: 7, projectId: null, sociedadId: null, tipos: ['capa8'], quePaso: 'Se borró un prospecto', estado: 'resolved', gravedad: 'medium', ocurrioAt: '2026-10-06T10:00:00Z', adjuntos: [] };
+// Con campus: sin él, un admin no la guarda (PR #612), y aquí se mira otra cosa.
+const base = { id: 7, projectId: 1, sociedadId: null, tipos: ['capa8'], quePaso: 'Se borró un prospecto', estado: 'resolved', gravedad: 'medium', ocurrioAt: '2026-10-06T10:00:00Z', adjuntos: [] };
 
 async function guardarCon(incidencia) {
   render(

@@ -11,16 +11,19 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
  * gestora no puede leer las de una compañera.
  *
  *   superadmin y soporte     todas: llevan el CRM entero (`veTodoElCrm`).
- *   quien apunta o edita     las de sus campus y sus empresas, las de «todo
- *                            el CRM» (sin campus) y las suyas.
+ *   quien apunta o edita     las de sus campus y sus empresas, y las suyas.
  *   el resto (la gestora)    las suyas: las que causo o apunto.
  *
  * Lo segundo va por el PERMISO y no por el rol (#423): si mañana se le da
  * «Editar incidencias» a otra persona, ve lo de sus campus sin tocar codigo.
  * Lo de «sus campus» es el mismo criterio que el resto del CRM (#245): un
- * admin de CEDIA no ve las de ICTESS. Las de «todo el CRM» las ve cualquier
- * admin (la issue: «la ve el resto de admin»): no llevan datos de ningun
- * campus.
+ * admin de CEDIA no ve las de ICTESS.
+ *
+ * Las de «todo el CRM» (sin campus ni empresa) no las ve cualquier admin
+ * (Diego, PR #612: «nadie ve incidencias de otra empresa»): solo superadmin y
+ * soporte, y quien esta en ella. Por eso quien no ve todo el CRM no puede
+ * apuntar una sin campus (`comprobarReferencias`): con eso la sacaba de su
+ * empresa y se la enseñaba a las demas.
  *
  * A la gestora NO le salen las que solo detecto: la causo una compañera, y
  * verla —con su nombre en las cifras— es justo «señalar».
@@ -48,7 +51,6 @@ export function alcanza(alcance, inc) {
   if (alcance.tipo !== 'campus') return false;
   // Quien administra sí ve las que detectó él: no es señalar a nadie.
   if (inc.detectadaPor === yo) return true;
-  if (inc.projectId == null && inc.sociedadId == null) return true;
   if (inc.projectId != null && alcance.projectIds.includes(Number(inc.projectId))) return true;
   return inc.sociedadId != null && alcance.sociedadIds.includes(Number(inc.sociedadId));
 }
@@ -100,6 +102,14 @@ export async function comprobarReferencias(req, datos, actual = null) {
       }
     } else if (!(alcance.sociedadIds || []).includes(Number(datos.sociedadId))) {
       throw new AppError('Esa empresa no es tuya', 403, 'NO_ES_TUYO');
+    }
+  }
+  // Sin campus ni empresa, solo quien ve todo el CRM. Al editar cuenta como
+  // queda: lo que no llega es lo que ya tenía (y `null` es quitarlo).
+  if (alcance !== null) {
+    const queda = (campo) => (datos[campo] !== undefined ? datos[campo] : actual?.[campo]);
+    if (!queda('projectId') && !queda('sociedadId')) {
+      throw new AppError('Elige el campus o la empresa de la incidencia', 400, 'VALIDATION_ERROR');
     }
   }
   // Las personas, que existan, estén activas y —para quien no ve todo el CRM—

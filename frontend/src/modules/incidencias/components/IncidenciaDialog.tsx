@@ -40,6 +40,8 @@ interface Props {
   campus: Campus[];
   /** Para una nueva: el campus («p:7») o la empresa («e:3») elegidos arriba. */
   dondeInicial?: string;
+  /** Superadmin y soporte: pueden dejarla sin campus («todo el CRM»). */
+  veTodo?: boolean;
   yo: number | null;
   onCerrar: () => void;
   onGuardada: (inc: Incidencia) => void;
@@ -55,7 +57,7 @@ function dondeValido(donde: string | undefined, campus: Campus[]): string {
   return '';
 }
 
-export default function IncidenciaDialog({ incidencia, soloLectura = false, personas, campus, dondeInicial, yo, onCerrar, onGuardada }: Props) {
+export default function IncidenciaDialog({ incidencia, soloLectura = false, personas, campus, dondeInicial, veTodo = false, yo, onCerrar, onGuardada }: Props) {
   const nueva = !incidencia;
   const ref = useRef<HTMLDivElement>(null);
   const [guardando, setGuardando] = useState(false);
@@ -91,8 +93,10 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     for (const c of campus) {
       if (c.sociedad_emisora_id) empresas.set(Number(c.sociedad_emisora_id), c.sociedad_nombre || 'Empresa');
     }
+    // «Todo el CRM» solo para superadmin y soporte: para el resto, el servidor
+    // la pide con campus o empresa (400), o la vería cualquier otra empresa.
     const lista = [
-      { value: '', label: 'Ninguno (todo el CRM)' },
+      ...(veTodo ? [{ value: '', label: 'Ninguno (todo el CRM)' }] : []),
       ...[...empresas].map(([id, nombre]) => ({ value: `e:${id}`, label: `Empresa · ${nombre}` })),
       ...campus.map((c) => ({ value: `p:${c.id}`, label: `Campus · ${c.nombre}` })),
     ];
@@ -103,7 +107,7 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
       lista.push({ value: suyo, label: incidencia!.projectName || incidencia!.sociedadName || 'Otro campus' });
     }
     return lista;
-  }, [campus, incidencia]);
+  }, [campus, incidencia, veTodo]);
 
   const opcionesPersona = useMemo(() => {
     const lista = [{ value: null as number | null, label: 'Nadie del CRM' }, ...personas.map((p) => ({ value: p.id as number | null, label: p.nombre }))];
@@ -143,6 +147,7 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     if (f.quePaso.trim().length < 3) e.quePaso = 'Cuenta qué pasó';
     if (!f.tipos.length) e.tipos = 'Elige al menos un tipo';
     if (!f.ocurrioAt) e.ocurrioAt = 'Pon cuándo pasó';
+    if (!veTodo && !f.donde) e.donde = 'Elige el campus o la empresa';
     if (f.entidadId && !/^\d{1,10}$/.test(f.entidadId)) e.entidadId = 'Solo el número';
     setErrores(e);
     return Object.keys(e).length === 0;
@@ -262,9 +267,9 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
                   <Select id="inc-crm" value={f.crm} onChange={(v) => poner({ crm: v })} ariaLabel="CRM" disabled={soloLectura}
                     options={[{ value: 'multicrm', label: 'MultiCRM' }, { value: 'iseie', label: 'CRM de ISEIE' }] as { value: 'multicrm' | 'iseie'; label: string }[]} />
                 </Field>
-                <Field label="Campus o empresa" htmlFor="inc-donde">
+                <Field label="Campus o empresa" required={!veTodo} htmlFor="inc-donde" error={errores.donde}>
                   <Select id="inc-donde" value={f.donde} onChange={(v) => poner({ donde: v })} options={opcionesDonde}
-                    ariaLabel="Campus o empresa" disabled={soloLectura} />
+                    placeholder="Elige…" ariaLabel="Campus o empresa" disabled={soloLectura} />
                 </Field>
               </FilaCampos>
 

@@ -1,14 +1,18 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import IncidenciaDialog from '@/modules/incidencias/components/IncidenciaDialog';
+import { incidenciasApi } from '@/modules/incidencias/api/incidencias.api';
 
 /**
  * Incidencias (#253): una nueva sale con el campus o la empresa de arriba.
  *
  * Visto en la prueba a mano (02/11): con Psiko arriba, «Campus o empresa» salía
  * en «Ninguno (todo el CRM)», y la incidencia no aparecía en la lista de Psiko
- * que se estaba mirando. Con «Todos» arriba sigue en «Ninguno».
+ * que se estaba mirando.
+ *
+ * PR #612 (Diego): «todo el CRM» solo para superadmin y soporte. Para el resto,
+ * con «Todos» arriba no sale nada elegido y obliga a elegir.
  */
 
 const campus = [
@@ -34,16 +38,32 @@ describe('el campus de una incidencia nueva', () => {
     expect(abrir({ dondeInicial: 'e:10' })).toContain('Empresa · CEDIA');
   });
 
-  it('con «Todos» arriba, sigue en «Ninguno (todo el CRM)»', () => {
-    expect(abrir({ dondeInicial: '' })).toContain('Ninguno (todo el CRM)');
+  it('un admin con «Todos» arriba: no sale «Ninguno», sale «Elige…»', () => {
+    const texto = abrir({ dondeInicial: '' });
+    expect(texto).toContain('Elige…');
+    expect(texto).not.toContain('Ninguno');
   });
 
-  it('un campus que no es suyo no se pone: «Ninguno»', () => {
-    expect(abrir({ dondeInicial: 'p:99' })).toContain('Ninguno (todo el CRM)');
+  it('un campus que no es suyo no se pone: «Elige…»', () => {
+    expect(abrir({ dondeInicial: 'p:99' })).toContain('Elige…');
+  });
+
+  it('el superadmin o soporte con «Todos» arriba: «Ninguno (todo el CRM)»', () => {
+    expect(abrir({ dondeInicial: '', veTodo: true })).toContain('Ninguno (todo el CRM)');
   });
 
   it('al editar una que ya existe, manda la suya y no la de arriba', () => {
     const inc = { id: 5, projectId: 2, tipos: ['capa8'], quePaso: 'x', estado: 'open', gravedad: 'medium', ocurrioAt: '2026-10-06T10:00:00Z' };
     expect(abrir({ incidencia: inc, dondeInicial: 'p:1' })).toContain('Campus · ISEIH');
+  });
+
+  it('un admin no la apunta sin campus: avisa y no la manda', () => {
+    const crear = vi.spyOn(incidenciasApi, 'crear');
+    abrir({ dondeInicial: '' });
+    fireEvent.change(document.getElementById('inc-que'), { target: { value: 'Se dio de alta en otro campus' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apuntar incidencia/ }));
+    expect(screen.getByText('Elige el campus o la empresa')).toBeTruthy();
+    expect(crear).not.toHaveBeenCalled();
+    crear.mockRestore();
   });
 });

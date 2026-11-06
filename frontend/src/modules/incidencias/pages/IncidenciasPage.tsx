@@ -24,7 +24,8 @@ import CifrasIncidencias from '../components/CifrasIncidencias';
  *
  * Qué ve cada uno lo decide el servidor: superadmin, todas; un admin, las de
  * sus campus; una gestora, solo las suyas. Esta pantalla no filtra por rol,
- * solo enseña u oculta los botones de apuntar y editar.
+ * solo enseña u oculta los botones de apuntar y editar, y la opción «todo el
+ * CRM» del formulario (solo superadmin y soporte, PR #612).
  *
  * Sigue al selector de arriba: un campus, una empresa o «Todos».
  */
@@ -33,7 +34,9 @@ type Vista = 'lista' | 'cifras';
 
 export default function IncidenciasPage() {
   const { can } = usePermission();
-  const { user } = useAuth() as { user: { id?: number } | null };
+  const { user } = useAuth() as { user: { id?: number; role?: string } | null };
+  // Como el servidor (`veTodoElCrm`): superadmin y soporte, solo como rol principal.
+  const veTodo = ['superadmin', 'soporte'].includes(user?.role || '');
   const { projects, isAllProjects, activeProject, activeIssuerId } = useProjectContext() as {
     projects: Campus[]; isAllProjects: boolean; activeProject: { id: number | null } | null; activeIssuerId: number | null;
   };
@@ -340,6 +343,7 @@ export default function IncidenciasPage() {
           personas={personas}
           campus={projects || []}
           dondeInicial={activeIssuerId ? `e:${activeIssuerId}` : (!isAllProjects && activeProject?.id ? `p:${activeProject.id}` : '')}
+          veTodo={veTodo}
           yo={yo}
           onCerrar={() => setAbierta(null)}
           onGuardada={() => { setAbierta(null); cargar(); }}

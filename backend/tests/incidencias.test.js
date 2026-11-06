@@ -129,9 +129,11 @@ describe('quién ve qué (#253)', () => {
     expect(await lista('soporte')).toHaveLength(7);
   });
 
-  it('un admin ve las de su campus, las de su empresa, las de «todo el CRM» y las suyas', async () => {
+  // PR #612 (Diego): «nadie ve incidencias de otra empresa». Las de «todo el
+  // CRM» solo superadmin, soporte y quien está en ella.
+  it('un admin ve las de su campus, las de su empresa y las suyas; las de «todo el CRM», no', async () => {
     expect(await lista('adminA')).toEqual([
-      'causó gestoraA en A', 'causó gestoraA2 en A', 'de la empresa E1', 'detectó gestoraA en A', 'sin campus',
+      'causó gestoraA en A', 'causó gestoraA2 en A', 'de la empresa E1', 'detectó gestoraA en A',
     ]);
   });
 
@@ -144,7 +146,21 @@ describe('quién ve qué (#253)', () => {
   });
 
   it('el admin de la otra empresa no ve ninguna de E1', async () => {
-    expect(await lista('adminB')).toEqual(['en B', 'sin campus']);
+    expect(await lista('adminB')).toEqual(['en B']);
+  });
+
+  it('una sin campus apuntada por un admin la ve él, no el admin de otra empresa ni su compañero', async () => {
+    const legada = (await apuntar({ que: 'sin campus de adminA', crea: 'adminA' })).id;
+    try {
+      expect(await lista('adminA')).toContain('sin campus de adminA');
+      expect(await lista('adminB')).not.toContain('sin campus de adminA');
+      expect(await lista('adminA_bis')).not.toContain('sin campus de adminA');
+      expect(await lista('soporte')).toContain('sin campus de adminA');
+      const porId = await request.get(`/api/incidencias/${legada}`).set(como('adminB'));
+      expect(porId.status).toBe(404);
+    } finally {
+      await q('DELETE FROM incidencias WHERE id = $1', [legada]);
+    }
   });
 
   it('la gestora ve solo las que causó; ni las de su compañera, ni las que detectó y causó otra', async () => {
@@ -231,7 +247,7 @@ describe('crear, editar y cerrar (#253)', () => {
 
   it('«Nadie del CRM» en quién la detectó se respeta: no se pone a quien la apunta', async () => {
     const r = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['externo'], detectadaPor: null, quePaso: `${MARCA} la vio un alumno` });
+      .send({ projectId: P.A, tipos: ['externo'], detectadaPor: null, quePaso: `${MARCA} la vio un alumno` });
     expect(r.status).toBe(201);
     expect(r.body.data.detectadaPor).toBeNull();
   });
@@ -256,14 +272,14 @@ describe('crear, editar y cerrar (#253)', () => {
   // Auditoría final del 02/11: al crearla ya resuelta no se ponía la fecha.
   it('apuntada ya resuelta y sin fecha de arreglo, se pone la de ahora; con la suya, la suya', async () => {
     const sin = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} ya resuelta` });
+      .send({ projectId: P.A, tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} ya resuelta` });
     expect(sin.status).toBe(201);
     expect(sin.body.data.arregladaAt).not.toBeNull();
     const con = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['capa8'], estado: 'closed', arregladaAt: '2026-10-06T10:00:00Z', quePaso: `${MARCA} cerrada con fecha` });
+      .send({ projectId: P.A, tipos: ['capa8'], estado: 'closed', arregladaAt: '2026-10-06T10:00:00Z', quePaso: `${MARCA} cerrada con fecha` });
     expect(new Date(con.body.data.arregladaAt).toISOString()).toBe('2026-10-06T10:00:00.000Z');
     const abierta = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['capa8'], quePaso: `${MARCA} abierta` });
+      .send({ projectId: P.A, tipos: ['capa8'], quePaso: `${MARCA} abierta` });
     expect(abierta.body.data.arregladaAt).toBeNull();
   });
 
@@ -283,9 +299,39 @@ describe('crear, editar y cerrar (#253)', () => {
     expect([campus.status, empresa.status, mover.status]).toEqual([403, 403, 403]);
   });
 
+  // PR #612: sin campus la vería solo quien ve todo el CRM; un admin la sacaba
+  // así de su empresa.
+  it('un admin no la deja sin campus ni empresa, ni al apuntarla ni al editarla: 400', async () => {
+    const nueva = await request.post('/api/incidencias').set(como('adminA'))
+      .send({ tipos: ['capa8'], quePaso: `${MARCA} sin campus por un admin` });
+    const vaciar = await request.patch(`/api/incidencias/${id}`).set(como('adminA')).send({ projectId: null });
+    expect([nueva.status, vaciar.status]).toEqual([400, 400]);
+    expect(nueva.body.error).toMatch(/campus o la empresa/);
+    const sigue = await request.get(`/api/incidencias/${id}`).set(como('adminA'));
+    expect(sigue.body.data.projectId).toBe(P.A);
+  });
+
+  it('una suya que ya estaba sin campus no se guarda sin elegirle uno; con uno, sí', async () => {
+    const legada = (await apuntar({ que: 'sin campus de antes', crea: 'adminA' })).id;
+    const solo = await request.patch(`/api/incidencias/${legada}`).set(como('adminA')).send({ estado: 'closed' });
+    expect(solo.status).toBe(400);
+    const conCampus = await request.patch(`/api/incidencias/${legada}`).set(como('adminA')).send({ projectId: P.A, estado: 'closed' });
+    expect(conCampus.status).toBe(200);
+    expect(conCampus.body.data.projectId).toBe(P.A);
+  });
+
+  it('el superadmin y soporte sí la apuntan para todo el CRM', async () => {
+    for (const quien of ['superadmin', 'soporte']) {
+      const r = await request.post('/api/incidencias').set(como(quien))
+        .send({ tipos: ['fallo_crm'], quePaso: `${MARCA} todo el CRM por ${quien}` });
+      expect(r.status, quien).toBe(201);
+      expect(r.body.data).toMatchObject({ projectId: null, sociedadId: null });
+    }
+  });
+
   it('un admin no pone como causante a alguien de otra empresa: le abriría la incidencia', async () => {
     const r = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['capa8'], causadaPor: U.gestoraB, quePaso: `${MARCA} causante ajena` });
+      .send({ projectId: P.A, tipos: ['capa8'], causadaPor: U.gestoraB, quePaso: `${MARCA} causante ajena` });
     expect(r.status).toBe(400);
     expect(await lista('gestoraB')).toEqual([]);
   });
@@ -324,7 +370,7 @@ describe('crear, editar y cerrar (#253)', () => {
   // cosa (el diálogo manda siempre el estado).
   it('borrada en una resuelta, guardar otra cosa no la vuelve a poner', async () => {
     const alta = await request.post('/api/incidencias').set(como('adminA'))
-      .send({ tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} resuelta sin fecha` });
+      .send({ projectId: P.A, tipos: ['capa8'], estado: 'resolved', quePaso: `${MARCA} resuelta sin fecha` });
     const otra = alta.body.data.id;
     await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ arregladaAt: null, estado: 'resolved' });
     const r = await request.patch(`/api/incidencias/${otra}`).set(como('adminA')).send({ impacto: 'otra cosa', estado: 'resolved' });
@@ -388,8 +434,10 @@ describe('el enlace de una factura o un usuario (#253)', () => {
     await q('DELETE FROM leads WHERE id = $1', [D.lead]);
   });
 
+  // En el campus de quien la apunta: un admin no puede dejarla sin campus (PR #612).
   const apuntar = (quien, entidadTipo, entidadId) => request.post('/api/incidencias').set(como(quien))
-    .send({ tipos: ['capa8'], entidadTipo, entidadId, quePaso: `${MARCA} sobre ${entidadTipo} ${entidadId}` });
+    .send({ projectId: quien === 'adminB' ? P.B : P.A, tipos: ['capa8'], entidadTipo, entidadId,
+      quePaso: `${MARCA} sobre ${entidadTipo} ${entidadId}` });
 
   it('la factura de su campus lleva a su venta, en la ficha y en la lista', async () => {
     const r = await apuntar('adminB', 'factura', D.factura);
