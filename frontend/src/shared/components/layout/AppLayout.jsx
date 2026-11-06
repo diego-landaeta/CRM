@@ -167,6 +167,16 @@ const ALL_PROJECTS_OK = [
   // en una lista, solo para ver. Conectar o cambiar una clave sigue pidiendo
   // elegir el campus.
   /^\/finanzas\/integraciones$/,
+  // #218, tanda 4 (Diego, 04/11): Análisis IA con los informes de todos sus campus
+  // (generar uno pide su campus dentro) y Pregunta a tus datos, que ya contestaba
+  // con los campus de la empresa o de quien pregunta (#245).
+  /^\/informes\/(?:ia|preguntar)$/,
+  // #218, tanda 4 (Diego, 04/11): el Registro, con lo de los campus de quien mira
+  // (#620, #641); la pantalla manda el campus o la empresa de la cabecera.
+  /^\/registro$/,
+  // #218: Campañas (y Google Ads y Tráfico orgánico) solo dicen «Aún no
+  // conectado» (#216): no leen ningún campus, y con «Todos» salía el muro.
+  /^\/campanas(?:\/(?:google|seo))?$/,
 ];
 
 // Exportadas para la prueba del muro (#208): que «Mi perfil» no vuelva a quedar
@@ -398,6 +408,16 @@ const CON_SOCIEDAD_OK = [
   // en una lista, solo para ver. Conectar o cambiar una clave sigue pidiendo
   // elegir el campus.
   /^\/finanzas\/integraciones$/,
+  // #218, tanda 4 (Diego, 04/11): Análisis IA con los informes de todos sus campus
+  // (generar uno pide su campus dentro) y Pregunta a tus datos, que ya contestaba
+  // con los campus de la empresa o de quien pregunta (#245).
+  /^\/informes\/(?:ia|preguntar)$/,
+  // #218, tanda 4 (Diego, 04/11): el Registro, con lo de los campus de quien mira
+  // (#620, #641); la pantalla manda el campus o la empresa de la cabecera.
+  /^\/registro$/,
+  // #218: Campañas (y Google Ads y Tráfico orgánico) solo dicen «Aún no
+  // conectado» (#216): no leen ningún campus, y con «Todos» salía el muro.
+  /^\/campanas(?:\/(?:google|seo))?$/,
 ];
 
 export function rutaAceptaSociedad(pathname) {

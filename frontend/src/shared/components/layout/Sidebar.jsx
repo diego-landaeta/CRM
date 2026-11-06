@@ -66,6 +66,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import { rolesDe, soloEsColaborador, soloEsTutor } from '@/shared/lib/roles';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import { lazy, Suspense } from 'react';
@@ -201,7 +202,8 @@ export const NAV_SECTIONS = [
     label: 'Equipo de Desarrollo',
     icon: Code,
     items: [
-      { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: ROLES_TAREAS, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
+      // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
+      { label: 'Mi tablero', to: '/tareas', detail: 'Lo que llevas, supervisas y creaste', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { label: 'Por revisar', to: '/tareas/revisar', detail: 'Aprobar o devolver', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
       { label: 'Configurar tablero', to: '/tareas/configurar', detail: 'Columnas, áreas y proyectos', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
@@ -1012,6 +1014,9 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const [userMenuView, setUserMenuView] = useState('main'); // 'main' | 'hide-dock'
   const [dockHidden, setDockHidden] = useState(() => isFloatingDockHidden());
   const [newLeadsBadge, setNewLeadsBadge] = useState(0);
+  // Los campus de «Todos» o de la empresa de arriba, para el contador (#218).
+  const idsDelAmbito = useIdsDelAmbito();
+  const idsDelAmbitoCsv = idsDelAmbito.join(',');
   const [spamReportsBadge, setSpamReportsBadge] = useState(0);
   const [msgUnreadBadge, setMsgUnreadBadge] = useState(0);
   const [tasksReviewBadge, setTasksReviewBadge] = useState(0);
@@ -1144,10 +1149,14 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     async function fetchBadge() {
       if (typeof document !== 'undefined' && document.hidden) return;
       try {
-        // -1 = «Todos» o una empresa: sin proyecto, cuenta los nuevos de todo lo
-        // suyo (con -1 el servidor lo rechazaba cada vez).
-        const pid = activeProject.id > 0 ? `projectId=${activeProject.id}&` : '';
-        const res = await client.get(`/leads?${pid}status=nuevo&limit=1`);
+        // -1 = «Todos» o una empresa: cuenta los nuevos de sus campus. Sin
+        // campus el servidor lo rechaza (`projectId o projectIds requerido`),
+        // y así fallaba con 400 cada 5 minutos (#218, /testeo 05/11).
+        const ambito = activeProject.id > 0
+          ? `projectId=${activeProject.id}&`
+          : (idsDelAmbitoCsv ? `projectIds=${idsDelAmbitoCsv}&` : null);
+        if (ambito === null) return;
+        const res = await client.get(`/leads?${ambito}status=nuevo&limit=1`);
         if (!cancelled && res.success) setNewLeadsBadge(res.pagination?.total || 0);
       } catch {}
     }
@@ -1176,7 +1185,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         document.removeEventListener('visibilitychange', onVisibilityChange);
       }
     };
-  }, [activeProject?.id, user, veProspectosNuevos]);
+  }, [activeProject?.id, user, veProspectosNuevos, idsDelAmbitoCsv]);
 
   // Badge de reportes de spam pendientes: quien puede verlos (`leads.spam`), por
   // permiso y no por rol (#423, #631).
