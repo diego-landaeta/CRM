@@ -289,8 +289,13 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
   it('a las 09:00, uno por empresa con cuántas, el total y cuánto llevan esperando', async () => {
     encender();
     sendEmail.mockClear();
-    // La de pedro, recibida hace 12 días.
-    await q("UPDATE facturas_colaborador SET subida_at = NOW() - interval '12 days' WHERE id = $1", [F.pedro]);
+    // La de pedro, recibida hace 12 días contados en Madrid, como los cuenta
+    // `porPagar`: a mediodía de Madrid. Con `NOW() - 12 days` la cuenta fallaba
+    // cerca de medianoche (y con el cambio de hora del 25/10 por medio): la CI de
+    // staging del 05/11 a las 22:23 UTC no daba 12.
+    await q(`UPDATE facturas_colaborador
+                SET subida_at = (((NOW() AT TIME ZONE 'Europe/Madrid')::date - 12) + time '12:00') AT TIME ZONE 'Europe/Madrid'
+              WHERE id = $1`, [F.pedro]);
     await runPorPagar({ ahora: MANANA });
     const correos = correosA(CORREO_A);
     expect(correos).toHaveLength(1);
