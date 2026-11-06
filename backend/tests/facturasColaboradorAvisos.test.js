@@ -291,8 +291,8 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
     sendEmail.mockClear();
     // La de pedro, recibida hace 12 días contados en Madrid, como los cuenta
     // `porPagar`: a mediodía de Madrid. Con `NOW() - 12 days` la cuenta fallaba
-    // cerca de medianoche (y con el cambio de hora del 25/10 por medio): la CI de
-    // staging del 05/11 a las 22:23 UTC no daba 12.
+    // cuando el cambio de hora caía dentro de esos 12 días (el del 25/10): la CI
+    // de staging del 05/11 a las 22:23 UTC daba 11.
     await q(`UPDATE facturas_colaborador
                 SET subida_at = (((NOW() AT TIME ZONE 'Europe/Madrid')::date - 12) + time '12:00') AT TIME ZONE 'Europe/Madrid'
               WHERE id = $1`, [F.pedro]);
