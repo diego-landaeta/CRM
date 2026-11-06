@@ -1,6 +1,7 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, buscarUsersSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, buscarUsersSchema, confirmarCorreoSchema } from './user.validation.js';
+import { pedirCodigo, confirmarCodigo } from './cambio-de-correo.js';
 import { veTodoElCrm, campusDeLaPersona, campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
@@ -101,6 +102,24 @@ export async function create(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * POST /api/users/:id/email/confirmar — el código que le llegó a la persona a
+ * su dirección nueva (#211). El mismo permiso que cambiarle el correo (#248).
+ */
+export async function confirmarCorreo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    if (!(await tienePermiso(req, 'users.empresas'))) {
+      throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
+    }
+    const parsed = confirmarCorreoSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const r = await confirmarCodigo({ userId: id, codigo: parsed.data.codigo, porUserId: req.user.userId, ip: req.ip });
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
 export async function update(req, res, next) {
   try {
     const id = parseInt(req.params.id);
@@ -111,7 +130,7 @@ export async function update(req, res, next) {
     }
     // El correo de otro, solo el super admin (#248). Un admin que lo mande se
     // lleva un 403 aunque la pantalla no se lo ofrezca: no basta con ocultarlo.
-    const { email, reenviarEnlace, ...resto } = parsed.data;
+    const { email, reenviarEnlace, conCodigo, ...resto } = parsed.data;
     if (email !== undefined && !(await tienePermiso(req, 'users.empresas'))) {
       throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
     }
@@ -142,7 +161,11 @@ export async function update(req, res, next) {
       await exigirQueNoDeMasDeLoQueTiene(req.user, id, { role: resto.role, roles_extra: resto.roles_extra });
     }
     // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
-    const correo = email !== undefined
+    // Con `conCodigo` (#211) todavía no cambia: le llega un código a la dirección
+    // nueva, y entra cuando alguien lo mete en POST /users/:id/email/confirmar.
+    const correo = email !== undefined && conCodigo === true
+      ? { pendiente: true, ...(await pedirCodigo({ userId: id, emailNuevo: email, porUserId: req.user.userId, ip: req.ip })) }
+      : email !== undefined
       ? await userService.cambiarCorreo(id, email, {
         reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
         // El rol con el que se va a guardar, para el freno de tutores (#262).
