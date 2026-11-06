@@ -102,6 +102,17 @@ beforeAll(async () => {
   await contacto('DAYANA', 'DAYANA_2', 'email', '2026-09-30 18:00');
   await contacto('DAYANA', 'DAYANA_2', 'nota', '2026-09-30 18:30');
   await contacto('ANA', 'DE_PRUEBA', 'llamada', '2026-09-30 16:00');
+
+  // 01/10, para el orden (revisión de Diego del 05/11: «el orden por llamadas con
+  // varias comerciales» no se pudo ver en /testeo). Otro día, para no mover las
+  // cifras del 30/09.
+  await persona('EVA', 'gestor', 'A');
+  await contacto('DAYANA', 'DAYANA_1', 'llamada', '2026-10-01 09:00');
+  await contacto('DAYANA', 'DAYANA_2', 'llamada', '2026-10-01 09:30');
+  await contacto('EVA', 'DAYANA_1', 'llamada', '2026-10-01 10:00');
+  for (const h of ['10:10', '10:20', '10:30']) await contacto('EVA', 'DAYANA_2', 'whatsapp', `2026-10-01 ${h}`);
+  await contacto('ANA', 'DAYANA_1', 'llamada', '2026-10-01 11:00');
+  await contacto('ANA', 'DAYANA_2', 'email', '2026-10-01 11:30');
 }, 60000);
 
 afterAll(async () => {
@@ -149,6 +160,15 @@ describe('actividad por comercial en Reportes (#203, parte B)', () => {
   it('una fecha que no existe se rechaza (no llega a la base)', async () => {
     const e = await pedir(actividadComercial, 'ADMIN', { desde: '2026-02-30' }).catch((x) => x);
     expect(e).toMatchObject({ statusCode: 400, code: 'FECHA_NO_VALIDA' });
+  });
+
+  it('con varias comerciales, ordenadas por llamadas y, a igualdad, por contactos', async () => {
+    // 01/10: Dayana 2 llamadas (2 contactos); Eva 1 llamada y 3 WhatsApp (4);
+    // Ana 1 llamada y 1 correo (2). Dayana va primera aunque tenga menos
+    // contactos que Eva, y Eva delante de Ana por los contactos.
+    const r = await pedir(actividadComercial, 'ADMIN', { desde: '2026-10-01', hasta: '2026-10-01', projectId: String(C.A) });
+    expect(r.filas.map((f) => f.comercial)).toEqual([`DAYANA ${marca}`, `EVA ${marca}`, `ANA ${marca}`]);
+    expect(r.filas.map((f) => [f.llamadas, f.toques])).toEqual([[2, 2], [1, 4], [1, 2]]);
   });
 
   it('el campus de pruebas se ve si se elige, y con «Todos» no (migración 148)', async () => {
