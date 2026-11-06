@@ -83,7 +83,11 @@ export async function listar({ projectId, projectIds = null, activos = true }) {
                     AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            u.set_password_token IS NOT NULL AS pendiente_de_entrar,
+            -- «Aun no ha entrado»: tiene un enlace pendiente Y nunca ha iniciado
+            -- sesion. Lo segundo es lo que distingue la invitacion real (caducada o
+            -- no, sigue sin haber entrado) de «he olvidado mi clave» (#37), que deja
+            -- un token en un tutor que ya entraba, y que nadie limpia al caducar.
+            (u.set_password_token IS NOT NULL AND u.last_login_at IS NULL) AS pendiente_de_entrar,
             perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c

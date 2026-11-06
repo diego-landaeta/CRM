@@ -559,3 +559,35 @@ export async function sendMcpAlertasEmail({ para, alertas, enlace }) {
   });
   return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-alertas', 'crm'] });
 }
+
+/**
+ * El correo de «he olvidado la contraseña» (#37).
+ *
+ * Lleva al MISMO sitio que el del alta —`/set-password?token=`—, porque es el
+ * mismo camino. Lo que cambia es el texto: a quien recupera no se le da la
+ * bienvenida, y sobre todo se le dice que hacer si NO ha sido el, que es la
+ * unica señal que tiene alguien de que le estan intentando entrar.
+ */
+export async function sendPasswordResetEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Recuperar contraseña',
+    saludo: nombre,
+    resumen: 'Pon una contraseña nueva para entrar al CRM',
+    bloques: [
+      P.parrafo('Has pedido recuperar tu contraseña del CRM. Pon una nueva desde aquí:'),
+      P.boton({ texto: 'Poner una contraseña nueva', url: link }),
+      P.nota('El enlace caduca en 24 horas y solo sirve una vez.'),
+      letraPequena('Si no has sido tú, ignora este correo: tu contraseña sigue como estaba y el enlace caduca solo. Si se repite, avisa a quien administra el CRM.'),
+    ],
+  });
+  return await sendEmail({
+    to: [{ email, name: nombre }],
+    subject: 'Recuperar tu contraseña del CRM',
+    htmlContent,
+    textContent,
+    tags: ['password-reset', 'crm'],
+  });
+}
