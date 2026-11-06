@@ -408,6 +408,15 @@ describe('Resumen del día · actividad por comercial (#203, parte C)', () => {
     expect(pedida[1]).toEqual([[4], '2026-10-19']);
   });
 
+  it('sin la consulta de actividad (un CRM que aún no la tiene), no hay sección ni línea', async () => {
+    actividadPorComercial.mockReset().mockResolvedValue(null);
+    const t = sinEtiquetas((await C.correoDiarioDireccion(MANUEL, LUNES)).html);
+    expect(t).not.toContain('Actividad por comercial');
+    expect(t).not.toContain('Sin actividad registrada');
+    // El resto del resumen sigue saliendo.
+    expect(t).toContain('Resumen por empresa');
+  });
+
   it('todas con actividad: no hay línea', () => {
     const html = C.tablaActividadPorComercial({
       filas: [fila203(1, 'Eva', { llamadas: 1, toques: 1, personas: 1 })],

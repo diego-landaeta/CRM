@@ -390,7 +390,9 @@ export default function LeadsPipelinePage() {
       </div>
 
       {/* Pipeline columns */}
-      <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 lg:mx-0 lg:px-0">
+      {/* Sin `-mx-4`: dentro del contenedor con scroll de Prospectos, el margen
+          negativo lo hacía deslizarse 16 px de lado en el móvil. */}
+      <div className="flex gap-3 overflow-x-auto pb-4">
         {COLUMNS.map((col) => {
           const colLeads = grouped[col.key] || [];
           return (

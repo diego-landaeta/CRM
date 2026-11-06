@@ -873,7 +873,9 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
       // Compacta y sin mayúsculas, como las otras dos tablas del día: así era la
       // que ensanchaba el correo en el móvil (no cabía en 390 px).
       filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas, { compacta: true, mayusculas: false })}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
-      tablaActividadPorComercial(actividad, contactosEmpresa, comerciales),
+      // Sin la consulta (un CRM que aún no la tiene) no hay sección: no se puede
+      // decir quién no ha hecho nada sin saber quién ha hecho algo.
+      actividad ? tablaActividadPorComercial(actividad, contactosEmpresa, comerciales) : '',
       porCampus,
     ].join(''));
   }

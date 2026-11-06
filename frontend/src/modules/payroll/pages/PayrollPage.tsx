@@ -81,7 +81,9 @@ export default function PayrollPage() {
   return (
     <div className="space-y-5 pb-8">
       <PageHeader title="Nominas" subtitle={`Plantilla y pagos en ${activeProject?.nombre || 'este proyecto'}`} />
-      <div className="flex border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+      {/* Sin `-mx-4`: dentro del contenedor con scroll de Finanzas, el margen
+          negativo lo hacía deslizarse 16 px de lado en el móvil. */}
+      <div className="flex border-b border-border overflow-x-auto">
         {TABS.map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-bold border-b-2 whitespace-nowrap ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>
             {t.label}
