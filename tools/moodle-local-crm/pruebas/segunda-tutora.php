@@ -2,7 +2,7 @@
 // Solo local: Carmen (coord679) pasa a ser profesora del curso CRM679, y Sofía es una
 // tutora del campus que NO está en ese curso.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
 require_once($CFG->dirroot . '/user/lib.php');
 global $DB;

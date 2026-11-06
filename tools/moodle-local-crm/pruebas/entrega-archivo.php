@@ -1,7 +1,7 @@
 <?php
 // María entrega el caso práctico con texto y un PDF. Solo local.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 global $DB;
 \core\session\manager::set_user(get_admin());

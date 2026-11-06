@@ -105,6 +105,10 @@ export async function tutorasDelCurso(projectId, { cursoId = null, alumnoMoodleI
   if (!conexion || conexion.error) return null;
   try {
     const cursos = cursoId ? [Number(cursoId)] : (await cursosDe(conexion, alumnoMoodleId, opciones)).map((k) => k.id).slice(0, 15);
+    // Un alumno sin cursos (dado de baja, o que escribe por la mensajería general): no hay
+    // curso por el que filtrar. Sin esto, la lista vacía dejaba la consulta sin nadie, ni
+    // siquiera la tutora a la que escribió.
+    if (!cursos.length) return null;
     const profesoras = new Set();
     for (const id of cursos) {
       const clave = `${projectId}:${id}`;

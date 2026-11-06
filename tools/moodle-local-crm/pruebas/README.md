@@ -5,17 +5,54 @@ entregas) para probar de punta a punta el chat directo, «Mi campus», corregir 
 el repaso y la actualización automática. **Solo local**: las contraseñas de aquí son de este
 Moodle de pruebas y no sirven en ningún otro sitio.
 
-> Los campus reales están en **Moodle 5.x**. Este entorno es 4.5: lo que funcione aquí hay
-> que confirmarlo también en un Moodle 5 antes de instalarlo en un campus.
+Los campus van en tres versiones, y hay un entorno para cada una:
+
+| Moodle | Campus | Archivo | Dirección |
+|---|---|---|---|
+| 4.5 | ISAEG, Fono, Psiko | `docker-compose.yml` | http://localhost:8085 |
+| 5.0 | ISEIH | `docker-compose.moodle50.yml` | http://localhost:8086 |
+| 5.2 | ISECD, ISEF | `docker-compose.moodle52.yml` | http://localhost:8087 |
+
+Probado el 06/11/2026 de punta a punta en los tres: chat directo, relevo, respuesta desde el
+CRM, repaso sin duplicados, «Mi campus», corregir y la actualización automática (y que una
+firma falsa no se instala).
 
 ## 1. Levantar el Moodle
 
 ```bash
 docker compose -f tools/moodle-local-crm/pruebas/docker-compose.yml up -d
+# o, cada uno con su nombre para que no se pisen:
+docker compose -p moodle50 -f tools/moodle-local-crm/pruebas/docker-compose.moodle50.yml up -d
+docker compose -p moodle52 -f tools/moodle-local-crm/pruebas/docker-compose.moodle52.yml up -d
 ```
 
-Tarda unos minutos la primera vez. Queda en http://localhost:8085 (usuario `admin`,
-contraseña `AdminLocal-679!`).
+Tarda unos minutos la primera vez. Usuario `admin`, contraseña `AdminLocal-679!`.
+
+**Moodle 5.x no trae el Chat.** Salió del núcleo en la 5.0 y los campus tienen el adicional
+`mod_chat` 5.0.0 (github.com/moodlehq/moodle-mod_chat). Hay que instalarlo en `mod/chat`
+(en 5.2, `public/mod/chat`) y después `actividad-chat.php`, que además lo ACTIVA: Moodle lo
+instala desactivado y la actividad da «Invalid course module ID».
+
+**Moodle 5.2** (desde la 5.1 el código público va en `public/`) no tiene imagen de Bitnami: se
+usa la de Moodle HQ, que no trae el código.
+
+```bash
+M=moodle52-moodle-1
+docker exec $M sh -c "cd /tmp && curl -sSL -o m.tgz https://download.moodle.org/download.php/direct/stable502/moodle-latest-502.tgz \
+  && tar -xzf m.tgz && cp -a moodle/. /var/www/html/ && chown -R www-data:www-data /var/www/html /var/www/moodledata"
+docker exec $M su -s /bin/sh www-data -c "php /var/www/html/admin/cli/install.php --non-interactive --agree-license \
+  --lang=en --wwwroot=http://localhost:8087 --dataroot=/var/www/moodledata --dbtype=pgsql --dbhost=db --dbname=moodle \
+  --dbuser=moodle --dbpass=moodle-local --fullname='Campus local CRM 5.2' --shortname=crm52 --adminuser=admin \
+  --adminpass='AdminLocal-679!' --adminemail=admin@example.com"
+docker restart $M   # para que la imagen sirva desde public/
+```
+
+En ese Moodle: el plugin va en `public/local/crm`, los comandos como `www-data`, los scripts
+de datos con `MOODLE_CONFIG=/var/www/html/config.php`, y **no hay cron**: los avisos al CRM
+salen al lanzar `php /var/www/html/admin/cli/cron.php --keep-alive=0`.
+
+Con dos Moodle abiertos a la vez en el navegador, los dos están en `localhost` y comparten la
+cookie de sesión: entra en cada uno en una ventana privada distinta.
 
 **Los comandos de Moodle, siempre como el usuario del servidor web (`daemon`)**. Si se lanza
 alguno como root, Moodle deja carpetas que luego no puede escribir («Invalid permissions
@@ -40,6 +77,7 @@ Crea el curso `CRM679` con la tutora **tutora679** (Laura), los alumnos **alumno
 |---|---|
 | `casos-limite.php` | Tareas con escala, con flujo de calificación y en grupo; un .html y un .svg en una entrega |
 | `segunda-tutora.php` | Carmen (coord679) como segunda profesora del curso y Sofía, tutora de otro curso |
+| `actividad-chat.php` | La actividad Chat del curso («Entrar al chat»), y activa el módulo Chat |
 | `curso-contenido.php` | Temas y actividades variadas (página, enlace, cuestionario, foro, PDF, tema oculto) |
 | `grupos-separados.php poner\|quitar` | Grupos separados con la tutora solo en el Grupo A |
 | `mensaje-cli.php <de> <para> "<texto>"` | Un mensaje privado como si se escribiera en el campus |

@@ -1,7 +1,7 @@
 <?php
 // Datos de prueba del Moodle local para el plugin local_crm (#679). Solo local.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->dirroot . '/user/lib.php');
 require_once($CFG->dirroot . '/course/lib.php');
 require_once($CFG->libdir . '/externallib.php');

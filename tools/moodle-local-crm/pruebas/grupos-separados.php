@@ -3,7 +3,7 @@
 // poner: la tutora pasa a profesora SIN edición, solo en el Grupo A, y el curso a grupos separados.
 // quitar: vuelve a profesora con edición, sin grupo, y el curso sin grupos.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->dirroot . '/group/lib.php');
 global $DB;
 $curso = $DB->get_record('course', ['shortname' => 'CRM679'], '*', MUST_EXIST);

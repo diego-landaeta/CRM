@@ -2,7 +2,7 @@
 // Manda un mensaje privado de un usuario a otro, como si lo escribiera en el campus.
 // Uso: php mensaje-cli.php <de> <para> <texto>
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 [$_, $de, $para, $texto] = $argv;
 $desde = core_user::get_user((int) $de, '*', MUST_EXIST);
 \core\session\manager::set_user($desde);

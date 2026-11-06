@@ -4,7 +4,7 @@
 //   · grupos A (María) y B (Pedro) en el curso;
 //   · Pedro añade a su entrega del caso práctico un .html y un .svg con script.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 require_once($CFG->dirroot . '/group/lib.php');

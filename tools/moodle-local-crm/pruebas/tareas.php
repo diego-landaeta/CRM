@@ -1,7 +1,7 @@
 <?php
 // Dos tareas en el curso de prueba: una entregada sin corregir y otra corregida. Solo local.
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 global $DB;

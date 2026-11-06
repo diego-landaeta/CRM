@@ -313,7 +313,9 @@ export async function sincronizarCampus(projectId, { procesar, desdeFecha = null
     return r;
   } catch (err) {
     // Un plugin anterior a la 1.8.0 no tiene la función: se dice qué hacer.
-    const viejo = /access|function|función|invalid/i.test(`${err.codigo || ''} ${err.message}`);
+    // Por el código que pone el cliente de Moodle, no por las palabras del mensaje: el mensaje
+    // ya viene traducido («El token no tiene permiso…») y no decía nunca «access».
+    const viejo = ['PERMISO', 'SIN_FUNCION'].includes(err.codigo);
     const mensaje = viejo
       ? 'El plugin del campus es anterior a la 1.8.0: se actualizará solo esta noche (o actualízalo desde «Conectar con el CRM»).'
       : `No se ha podido repasar el campus: ${err.message}`;

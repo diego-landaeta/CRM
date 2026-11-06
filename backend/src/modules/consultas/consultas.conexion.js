@@ -12,7 +12,7 @@ import net from 'node:net';
 import { query } from '../../shared/config/db.js';
 import { encrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
-import { llamar, urlDelCampus, MoodleError } from '../../shared/services/moodle.client.js';
+import { llamar, urlDelCampus } from '../../shared/services/moodle.client.js';
 import * as integraciones from '../integrations/integrations.model.js';
 import { emparejar, avisarDisponibilidad } from './consultas.plugin.js';
 

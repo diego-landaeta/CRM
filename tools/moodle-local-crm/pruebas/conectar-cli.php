@@ -2,7 +2,7 @@
 // Conecta el campus local con el CRM como lo haría la página «Conectar con el CRM».
 // Uso: php conectar-cli.php <codigo>
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 $admin = get_admin();
 \core\session\manager::set_user($admin);
 $r = \local_crm\conexion::conectar($argv[1], context_system::instance(), (int) $admin->id);

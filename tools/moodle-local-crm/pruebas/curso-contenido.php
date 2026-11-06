@@ -1,7 +1,7 @@
 <?php
 // Temas y actividades variadas en el curso de prueba (solo local), para «Ver el curso completo».
 define('CLI_SCRIPT', true);
-require('/bitnami/moodle/config.php');
+require(getenv('MOODLE_CONFIG') ?: '/bitnami/moodle/config.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
 require_once($CFG->dirroot . '/course/lib.php');
 global $DB;
