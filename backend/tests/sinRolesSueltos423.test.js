@@ -56,6 +56,7 @@ const DECLARADAS = {
   'asignacion/asignacion.controller.js': [3, 'alcance: el superadmin ve todas las configuraciones de la asignación; la de todas las empresas, solo él'],
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
+  'whatsapp/vozOTexto.js': [1, 'alcance: admin, superadmin y soporte ven a todas las gestoras; la gestora, solo a si misma'],
 };
 
 function ficheros(dir) {
