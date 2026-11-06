@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { gestoresDelReparto, aQuienLeToca } from '../leads/reparto.js';
+import { activasEntre } from '../asignacion/asignacion.actividad.js';
 
 // GET /api/projects/:id/ultimo-lead — que ha recibido cada gestora, de verdad
 //
@@ -107,6 +108,20 @@ export async function getUltimoLead(req, res, next) {
       }
     }
 
+    // QUIÉN ESTÁ ACTIVA AHORA (CRM#524, Carlos, 28/10: «para saber quién está
+    // activa, que me haga un sombreado»). La misma regla que la asignación por
+    // actividad —lo que cuenta como acción y lo que no— y la misma ventana que
+    // tenga configurada el campus; con varios campus, la más corta.
+    const { rows: [v] } = await query(
+      `SELECT MIN(ventana_min)::int AS min FROM asignacion_destinos
+        WHERE activo AND ($1::int[] IS NULL OR project_id = ANY($1::int[]))`, [proyectos]);
+    const ventanaMin = v?.min || 5;
+    const activas = await activasEntre(filas.map((f) => f.id), ventanaMin).catch(() => new Map());
+    for (const f of filas) {
+      const a = activas.get(Number(f.id));
+      f.activa = a ? { hace_min: Math.max(0, Math.round((Date.now() - new Date(a.ultima).getTime()) / 60000)), que: a.que } : null;
+    }
+
     const { rows: sueltos } = await query(
       `SELECT COUNT(*)::int AS n FROM leads
         WHERE ($1::int[] IS NULL OR project_id = ANY($1::int[]))
@@ -119,9 +134,10 @@ export async function getUltimoLead(req, res, next) {
       data: {
         gestoras: filas,
         sin_responsable: sueltos[0]?.n || 0,
+        ventana_min: ventanaMin,
         // Se dice de donde viene el reparto para que nadie lea esta pantalla
         // como una prediccion. Es lo que paso, no lo que va a pasar.
-        nota: 'Los leads automáticos los reparte Make; el round-robin del CRM solo actúa en el alta manual.',
+        nota: `Sombreada, la que ha hecho algo en los últimos ${ventanaMin} min: con la asignación por actividad, el próximo formulario es para una de ellas (la que menos lleva hoy). Si no hay ninguna, reparte el turno de siempre.`,
       },
     });
   } catch (err) { next(err); }

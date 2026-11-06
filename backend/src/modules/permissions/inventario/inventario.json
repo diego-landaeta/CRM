@@ -898,6 +898,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/envios",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/envios",
+  "relativa": "GET /diplomas/envios",
+  "controlador": "envios",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.view",
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/editar",
   "tipo": "ruta",
   "modulo": "certifex",
@@ -3888,6 +3911,30 @@
   "puertas": []
  },
  {
+  "id": "POST /api/facturas-colaborador/enlace/:token/sin-factura",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/enlace/:token/sin-factura",
+  "relativa": "POST /enlace/:token/sin-factura",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/facturas-colaborador/enlace/:token/sin-factura",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "DELETE",
+  "ruta": "/api/facturas-colaborador/enlace/:token/sin-factura",
+  "relativa": "DELETE /enlace/:token/sin-factura",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/archivo-local/:id",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",
@@ -3907,6 +3954,54 @@
   "ruta": "/api/facturas-colaborador/justificante-local/:id",
   "relativa": "GET /justificante-local/:id",
   "controlador": "justificanteLocal",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturas-colaborador/pago/:token",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "GET",
+  "ruta": "/api/facturas-colaborador/pago/:token",
+  "relativa": "GET /pago/:token",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/confirmar",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/confirmar",
+  "relativa": "POST /pago/:token/confirmar",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/opinion",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/opinion",
+  "relativa": "POST /pago/:token/opinion",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/no-recibido",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/no-recibido",
+  "relativa": "POST /pago/:token/no-recibido",
+  "controlador": null,
   "publica": true,
   "guardias": [],
   "puertas": []
@@ -13893,6 +13988,28 @@
   "ruta": "/api/users/",
   "relativa": "GET /",
   "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/users/buscar",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/buscar",
+  "relativa": "GET /buscar",
+  "controlador": "buscar",
   "publica": false,
   "guardias": [
    {

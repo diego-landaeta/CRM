@@ -79,6 +79,7 @@ afterAll(async () => {
   await q('DELETE FROM asignacion_destinos WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM leads WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM products WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [us]);
@@ -180,6 +181,30 @@ describe('a quién y a qué escenario', () => {
     await llamada('bea');
     const r = await entrar('ana-y-bea');
     expect(r.body.data.gestora.id).toBe(U.bea.id);
+  });
+
+  it('el lead ya había entrado por el formulario (ISECD, lead 4450): Make avisa a quien lo tiene, no a la elegida', async () => {
+    // La web manda el formulario directo al CRM (se lo da a Cris) y además por Make,
+    // que pregunta aquí con Ana activa. El CRM junta los dos en el lead de Cris:
+    // el escenario tiene que avisar a Cris, o a Ana le llega por el bot y no lo tiene.
+    const email = `isecd_${MARCA.toLowerCase()}@cliente.test`;
+    const prod = await one(`INSERT INTO products (project_id, nombre, precio, moneda, active) VALUES ($1, $2, 100, 'EUR', true) RETURNING id`,
+      [ids.project, `${MARCA} Máster en OSINT`]);
+    const yaEstaba = await one(`INSERT INTO leads (project_id, nombre, email, telefono, responsable_id, producto_interes_id) VALUES ($1, $2, $3, '+34600000000', $4, $5) RETURNING id`,
+      [ids.project, `${MARCA} cliente isecd`, email, U.cris.id, prod.id]);
+    await sinActividad();
+    await llamada('ana');
+    sendEmail.mockClear();
+    const r = await entrar('isecd', { email, producto_interes_id: prod.id });
+    expect(r.body.data).toMatchObject({ escenario: 2, lead_id: yaEstaba.id, gestora: { id: U.cris.id } });
+    const leads = await q('SELECT id, responsable_id FROM leads WHERE email = $1 AND deleted_at IS NULL', [email]);
+    expect(leads).toEqual([{ id: yaEstaba.id, responsable_id: U.cris.id }]);
+    const dec = await one('SELECT responsable_id FROM asignacion_decisiones WHERE uid = $1', [`${MARCA}-isecd`]);
+    expect(dec.responsable_id).toBe(U.cris.id);
+    await esperar();
+    const [correo] = correosA(MAIL2);
+    expect(correo.textContent).toContain(`GESTORA ASIGNADA: ${MARCA} cris`);
+    expect(correo.textContent).not.toContain(`GESTORA ASIGNADA: ${MARCA} ana`);
   });
 
   it('crear un lead a mano cuenta como acción (actividad_crm)', async () => {
@@ -424,5 +449,20 @@ describe('formularios que entran directos al CRM (Diego, 29/10: «arregla todo»
     await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
     const decision = await service.decidirFormulario(ids.project);
     expect(decision?.elegida ?? null).toBeNull();
+  });
+});
+
+describe('el sombreado de la gestora activa en Prospectos (CRM#524)', () => {
+  it('«Último lead de cada gestora» dice quién está activa, hace cuánto y por qué', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.cris.id]);
+    const r = await request.get(`/api/projects/${ids.project}/ultimo-lead`).set(como('superadmin'));
+    expect(r.status).toBe(200);
+    const cris = r.body.data.gestoras.find((g) => g.id === U.cris.id);
+    const ana = r.body.data.gestoras.find((g) => g.id === U.ana.id);
+    expect(cris.activa).toMatchObject({ que: 'contacto' });
+    expect(cris.activa.hace_min).toBeLessThanOrEqual(1);
+    expect(ana.activa ?? null).toBeNull();
+    expect(r.body.data.ventana_min).toBeGreaterThan(0);
   });
 });
