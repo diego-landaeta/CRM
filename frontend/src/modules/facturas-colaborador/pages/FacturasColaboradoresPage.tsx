@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowClockwise, ArrowCounterClockwise, ClockCounterClockwise, CurrencyEur, FileText, FileZip, LockKey, PaperPlaneTilt, PencilSimple, Plus, Prohibit,
-  Receipt, UserMinus, UserPlus, UsersThree,
+  ArrowClockwise, ClockCounterClockwise, FileText, FileZip, LockKey, PencilSimple, Plus,
+  UserMinus, UserPlus, UsersThree,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
@@ -22,6 +22,8 @@ import {
 } from '../components/DialogosFacturas';
 import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
 import EtiquetaDelPdf from '../components/EtiquetaDelPdf';
+import ConfirmacionDelPago from '../components/ConfirmacionDelPago';
+import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
 
 /**
  * Finanzas › Facturas de colaboradores (#202).
@@ -273,7 +275,10 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
         {datos && r && (
           <div className="px-4 py-2.5 border-b border-border text-sm">
             <strong>{primeraMayuscula(datos.mes.replace(' de ', ' '))}</strong>
-            <span className="text-muted-foreground"> · {r.recibidas} de {r.total} recibidas · {euros(r.importe_recibido)} de {euros(r.importe_acordado)} acordados</span>
+            <span className="text-muted-foreground"> · {r.recibidas} de {r.total} recibidas · {r.por_moneda
+              // Cada moneda por su lado (234): «356,03 US$ de 0,00 US$ acordados y 600,00 € de 600,00 € acordados».
+              ? r.por_moneda.map((s) => `${euros(s.importe_recibido, s.moneda)} de ${euros(s.importe_acordado, s.moneda)} acordados`).join(' y ')
+              : `${euros(r.importe_recibido)} de ${euros(r.importe_acordado)} acordados`}</span>
           </div>
         )}
         {!datos || datos.facturas.length === 0 ? (
@@ -301,7 +306,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                     <td className="px-2 py-2 font-medium">{f.colaborador_nombre}</td>
                     <td className="px-2 py-2">{AREA_ES[f.area]}</td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado, f.moneda)}</td>
                     <td className="px-2 py-2 text-xs text-muted-foreground"><div className="max-w-[6.5rem] truncate" title={f.email}>{f.email}</div></td>
                     <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
                       {f.abierto_at ? <>Abierto<br />{diaMes(f.abierto_at)}</> : f.enviado_at ? <>Enviado<br />{diaMes(f.enviado_at)}</> : '—'}
@@ -321,34 +326,35 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                             className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap bg-success-soft text-success-soft-foreground">
                             Pagada {diaDelPago(f.pagada_at)}
                           </span>
+                          <ConfirmacionDelPago f={f} />
                         </div>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe, f.moneda)}</td>
                     <td className={`px-2 py-2 text-right tabular-nums ${f.diferencia && Number(f.diferencia) !== 0 ? 'text-warning-soft-foreground font-semibold' : ''}`}>
-                      {f.diferencia === null ? '—' : euros(f.diferencia)}
+                      {f.diferencia === null ? '—' : euros(f.diferencia, f.moneda)}
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-0.5">
                         {f.nombre_original && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><FileText size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><ACCION.archivo.Icono size={15} /></Button>
                         )}
-                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ClockCounterClockwise size={15} /></Button>
+                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ACCION.registro.Icono size={15} /></Button>
                         {puedeReenviar && !f.subida_at && !f.anulada_at && (
                           <Button variant="ghost" size="sm" className="px-2" title="Reenviar el enlace" aria-label="Reenviar el enlace"
-                            disabled={reenviando !== null} onClick={() => reenviar(f)}><PaperPlaneTilt size={15} /></Button>
+                            disabled={reenviando !== null} onClick={() => reenviar(f)}><ACCION.reenviar.Icono size={15} /></Button>
                         )}
                         {puedePagar && f.subida_at && !f.anulada_at && !f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar(f)}><CurrencyEur size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar(f)}><ACCION.pagar.Icono size={15} /></Button>
                         )}
                         {f.pagada_at && f.con_justificante && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => verJustificante(f)}><Receipt size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => verJustificante(f)}><ACCION.justificante.Icono size={15} /></Button>
                         )}
                         {puedePagar && f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ArrowCounterClockwise size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ACCION.deshacer.Icono size={15} /></Button>
                         )}
                         {puedeAnular && !f.anulada_at && !f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><Prohibit size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><ACCION.anular.Icono size={15} /></Button>
                         )}
                       </div>
                     </td>
@@ -362,6 +368,9 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
 
       {/* Con la lista del mes: al anular, pagar o «Actualizar», el coste se vuelve a pedir
           (antes se quedaba con las cifras viejas, también las de una factura ya anulada). */}
+      {/* Qué es cada botón y cada estado (#586): sin el ratón, en el móvil no se sabía. */}
+      {datos && datos.facturas.length > 0 && <LeyendaFacturas conEnlace />}
+
       <CostePorCampus periodo={periodo} issuerId={issuerId} recargar={vueltas} />
 
       {anular && (
@@ -369,7 +378,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
           alCerrar={() => setAnular(null)} alGuardar={() => { setAnular(null); void cargar(); }} />
       )}
       {pagar && (
-        <PagarDialog facturas={[{ id: pagar.id, quien: `${pagar.colaborador_nombre} · ${empresaCorta(pagar.empresa)}`, importe: pagar.importe }]}
+        <PagarDialog facturas={[{ id: pagar.id, quien: `${pagar.colaborador_nombre} · ${empresaCorta(pagar.empresa)}`, importe: pagar.importe, moneda: pagar.moneda }]}
           alCerrar={() => setPagar(null)} alGuardar={() => { setPagar(null); void cargar(); }} />
       )}
       {deshacer && (
@@ -420,7 +429,7 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
   );
 
   const acordado = useMemo(() => (c: Colaborador) => c.empresas
-    .map((e) => (e.importe_acordado === null ? '—' : `${euros(e.importe_acordado)}/mes`)).join(' · '), []);
+    .map((e) => (e.importe_acordado === null ? '—' : `${euros(e.importe_acordado, e.moneda)}/mes`)).join(' · '), []);
 
   return (
     <div className="space-y-3">

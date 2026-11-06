@@ -1,5 +1,6 @@
 import { sendEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { conMoneda } from './moneda.js';
 import {
   correo, parrafo, boton, nota, esc, enlace,
 } from '../../shared/services/email-plantilla.service.js';
@@ -37,8 +38,8 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
 const mesDe = (periodo) => MESES[Number(periodo.slice(5, 7)) - 1];
 const anioDe = (periodo) => periodo.slice(0, 4);
 
-// `useGrouping: 'always'`: «1.113,00 €» y no «1113,00 €» (en español el punto de miles solo sale desde cinco cifras).
-const euros = (n) => `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })} €`;
+// En la moneda de la factura (234): «1.113,00 €» o «356,03 US$».
+const euros = (n, f) => conMoneda(n, f?.moneda);
 const tz = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
 const diaMes = (d) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', timeZone: tz() });
 
@@ -84,7 +85,7 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
   let asunto = recordatorio
     ? `Falta tu factura de ${mes} para ${corta}`
     : `Tu factura de ${mes} para ${corta}`;
-  if (!recordatorio && acordado !== null) asunto += ` · ${euros(acordado)}`;
+  if (!recordatorio && acordado !== null) asunto += ` · ${euros(acordado, f)}`;
 
   const { htmlContent, textContent } = correo({
     // La misma cabecera con logo que el resumen diario (definición del 01/10).
@@ -94,7 +95,7 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
     resumen: `Súbela desde tu enlace personal: ${mes} ${anioDe(f.periodo)} · ${corta}`,
     bloques: [
       nuevo ? parrafo('Te mandamos un enlace nuevo para subir esta factura. El anterior ya no sirve.') : null,
-      acordado !== null ? parrafo(`Importe acordado: <strong>${esc(euros(acordado))}</strong>`) : null,
+      acordado !== null ? parrafo(`Importe acordado: <strong>${esc(euros(acordado, f))}</strong>`) : null,
       aNombreDe({
         razon_social: f.razon_social, nif: f.empresa_nif, direccion: f.direccion,
         cp: f.cp, ciudad: f.ciudad, pais: f.pais,
@@ -120,7 +121,7 @@ export function armarAcuse({ f, marca = null }) {
       parrafo(`Hemos recibido tu factura de ${esc(mes)} para ${esc(corta)}. Te adjuntamos la copia.`),
       nota([
         `Número de recepción: <strong>${esc(f.numero_recepcion)}</strong>`,
-        f.importe !== null && f.importe !== undefined ? `Importe: <strong>${esc(euros(f.importe))}</strong>` : null,
+        f.importe !== null && f.importe !== undefined ? `Importe: <strong>${esc(euros(f.importe, f))}</strong>` : null,
         f.numero_factura ? `Número de factura: <strong>${esc(f.numero_factura)}</strong>` : null,
       ].filter(Boolean).join('<br>')),
     ],
@@ -138,14 +139,14 @@ const FORMAS_PAGO = { transferencia: 'transferencia', bizum: 'Bizum', paypal: 'P
  * El aviso de pago: «Tu factura de septiembre para CEDIA está pagada ·
  * 636,00 € · transferencia del 05/10» (el ejemplo de Diego, 01/10 tarde).
  */
-export function armarAvisoDePago({ f, marca = null }) {
+export function armarAvisoDePago({ f, marca = null, urlConfirmar = null }) {
   const mes = mesDe(f.periodo);
   const corta = empresaCorta(f.razon_social);
   // La fecha del pago es un día («2026-10-05»): «05/10», con sus dos cifras, como en el ejemplo.
   const dia = String(f.pagada_at).slice(0, 10);
   const como = `${FORMAS_PAGO[f.forma_pago] || 'pago'} del ${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
   const linea = [`Tu factura de ${mes} para ${corta} está pagada`,
-    f.importe !== null && f.importe !== undefined ? euros(f.importe) : null, como].filter(Boolean).join(' · ');
+    f.importe !== null && f.importe !== undefined ? euros(f.importe, f) : null, como].filter(Boolean).join(' · ');
   const { htmlContent, textContent } = correo({
     proyecto: marca || {},
     titulo: 'Factura pagada',
@@ -158,6 +159,10 @@ export function armarAvisoDePago({ f, marca = null }) {
         f.numero_recepcion ? `Número de recepción: <strong>${esc(f.numero_recepcion)}</strong>` : null,
         f.referencia_pago ? `Referencia del pago: <strong>${esc(f.referencia_pago)}</strong>` : null,
       ].filter(Boolean).join('<br>')),
+      // «He recibido el pago y lo confirmo» (Diego, 04/11): sin entrar en el CRM; en
+      // la página, si quiere, su opinión. Sin enlace (p. ej. sin JWT_SECRET), sin botón.
+      urlConfirmar ? parrafo('Cuando lo veas en tu cuenta, confírmalo con un clic:') : null,
+      urlConfirmar ? boton({ texto: 'He recibido el pago y lo confirmo', url: urlConfirmar }) : null,
     ],
   });
   return { asunto: linea, htmlContent, textContent, fromName: `${corta} · Facturación` };
@@ -169,8 +174,8 @@ const para = (f) => [{ email: f.colaborador_email, name: f.colaborador_nombre }]
  * Manda el aviso de pago. La clave lleva la vez que se paga: un reintento no lo
  * repite, y si se deshace y se vuelve a pagar (aunque sea el mismo día) sale otro.
  */
-export async function enviarAvisoDePago({ f, vez = 1, marca = null }) {
-  const c = armarAvisoDePago({ f, marca });
+export async function enviarAvisoDePago({ f, vez = 1, marca = null, urlConfirmar = null }) {
+  const c = armarAvisoDePago({ f, marca, urlConfirmar });
   return despachar({
     projectId: marca?.id ?? null,
     to: para(f), subject: c.asunto, htmlContent: c.htmlContent, textContent: c.textContent,

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-726 rutas en 57 módulos, y 25 acciones con condición dentro de una ruta.
+734 rutas en 57 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -90,6 +90,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | porAvisar | `GET /api/certifex/diplomas/por-avisar` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | terminados | `GET /api/certifex/diplomas/terminados` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | diplomas | `GET /api/certifex/diplomas` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
+| envios | `GET /api/certifex/diplomas/envios` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
 | editar | `POST /api/certifex/diplomas/editar` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | pedir | `POST /api/certifex/diplomas/pedir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | aprobarEmitir | `POST /api/certifex/diplomas/aprobar-emitir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
@@ -304,8 +305,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | (anónima) | `GET /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
 | (anónima) | `POST /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
+| (anónima) | `POST /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
+| (anónima) | `DELETE /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
 | archivoLocal | `GET /api/facturas-colaborador/archivo-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | justificanteLocal | `GET /api/facturas-colaborador/justificante-local/:id` | nada (pública) | cualquiera, sin sesión | — |
+| (anónima) | `GET /api/facturas-colaborador/pago/:token` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/confirmar` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/opinion` | (no existía) | (ruta nueva) | — |
+| (anónima) | `POST /api/facturas-colaborador/pago/:token/no-recibido` | (no existía) | (ruta nueva) | — |
 | (anónima) | `GET /api/facturas-colaborador/mias` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
 | (anónima) | `POST /api/facturas-colaborador/mias/:id` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
 | (anónima) | `GET /api/facturas-colaborador/mias/:id/archivo` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |
@@ -931,6 +938,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | misAvisos | `GET /api/users/mis-avisos` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | cambiarMiAviso | `PATCH /api/users/mis-avisos` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor, colaborador | lo de cada uno |
 | list | `GET /api/users/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
+| buscar | `GET /api/users/buscar` | (no existía) | (ruta nueva) | `users.view` |
 | listAvailability | `GET /api/users/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
 | deleteBlock | `DELETE /api/users/availability-blocks/:blockId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | getById | `GET /api/users/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |

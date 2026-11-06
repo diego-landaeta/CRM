@@ -20,9 +20,13 @@ const pct = z.number().min(0, 'El porcentaje va de 0 a 100').max(100, 'El porcen
 // proyecto (por horas). Sin modalidad, como las fichas de la primera parte.
 export const MODALIDADES = ['fijo', 'hora', 'proyecto'];
 
+// En qué moneda se acuerda y se factura (234, 31/10): Andrea factura a CEDIA en dólares.
+export const MONEDAS = ['EUR', 'USD'];
+
 const empresa = z.object({
   issuer_id: id,
   importe_acordado: importe.optional(),
+  moneda: z.enum(MONEDAS, { message: 'Moneda inválida: EUR o USD' }).optional(),
   modalidad: z.enum(MODALIDADES, { message: `Modalidad inválida: ${MODALIDADES.join(', ')}` }).nullable().optional(),
   importe_fijo: importe.optional(),
   tarifa_hora: tarifa.optional(),
@@ -97,7 +101,7 @@ export const listarColaboradoresSchema = z.object({
  * Se aplica una sola vez, en el servidor: la pantalla manda lo escrito tal cual.
  */
 export function normalizarImporte(texto) {
-  const t = String(texto).trim().replace(/\s|€/g, '');
+  const t = String(texto).trim().replace(/\s|€|\$/g, '');
   const coma = t.lastIndexOf(',');
   const punto = t.lastIndexOf('.');
   // Con los dos, el decimal es el que va último: «1.234,56» y «1,234.56».
@@ -112,10 +116,12 @@ export function normalizarImporte(texto) {
 // Lo que manda el colaborador con el archivo. Llega por multipart: todo texto.
 export const subidaSchema = z.object({
   importe: z.string().trim().min(1, 'Escribe el importe de tu factura')
-    // Solo cifras, puntos, comas, espacios y «€»: «0x10» o «1e5» no son un importe (revisión del 10/10).
-    .regex(/^[\d.,\s€]+$/, 'Escribe el importe solo con cifras')
+    // Solo cifras, puntos, comas, espacios, «€» y «$»: «0x10» o «1e5» no son un importe (revisión del 10/10).
+    .regex(/^[\d.,\s€$]+$/, 'Escribe el importe solo con cifras')
     .transform((v) => Number(normalizarImporte(v)))
     .refine((n) => Number.isFinite(n) && n >= 0 && n <= 9999999999.99, 'Importe inválido'),
+  // Si no llega, la de su ficha (234).
+  moneda: z.enum(MONEDAS, { message: 'Moneda inválida: EUR o USD' }).optional(),
   numero_factura: z.string().trim().min(1, 'Escribe el número de tu factura').max(60, 'El número de factura es demasiado largo: 60 caracteres como mucho'),
   // El desglose (segunda parte): las horas, si cobra por hora; las líneas
   // (JSON), si cobra por proyecto. Lo comprueba y lo calcula desglose.js.
@@ -173,4 +179,18 @@ export const pagarSchema = z.object({
 
 export const deshacerPagoSchema = z.object({
   motivo: z.string().trim().min(3, 'Escribe por qué se deshace el pago').max(1000, 'El motivo es demasiado largo: 1000 caracteres como mucho'),
+});
+
+// Su opinión del pago, desde el correo de «Factura pagada» (Diego, 04/11): de 1 a 5
+// y un comentario, los dos opcionales (pero al menos uno, lo mira el servicio).
+export const opinionDelPagoSchema = z.object({
+  valoracion: z.coerce.number({ invalid_type_error: 'La valoración va de 1 a 5' })
+    .int('La valoración va de 1 a 5').min(1, 'La valoración va de 1 a 5').max(5, 'La valoración va de 1 a 5')
+    .nullable().optional(),
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
+});
+
+// «No lo he recibido» (Diego, 04/11): el comentario es opcional («me llegó otra cantidad»).
+export const noRecibidoSchema = z.object({
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
 });
