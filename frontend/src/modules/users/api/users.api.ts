@@ -135,6 +135,8 @@ export interface CreateUserPayload {
   projects: ProjectAssignment[];
   /** Empresas enteras (#220). Solo lo acepta el servidor de un super admin. */
   empresaIds?: number[];
+  /** #694: excepciones de permisos, ya en el alta. Pide «Permisos de cada persona». */
+  excepciones?: Record<string, boolean>;
 }
 
 export interface CreateUserResult {

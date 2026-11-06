@@ -324,6 +324,51 @@ export async function fichaDePermisos(userId, quien) {
 }
 
 /**
+ * #694 · Lo que tendría alguien que todavía no existe: con este rol, estos
+ * roles de más y estas excepciones. Es lo que enseña el alta de Usuarios
+ * antes de crear a la persona, con el mismo «de dónde le viene» que su ficha.
+ * `puedeEditar`: si quien pregunta puede poner excepciones (`users.excepciones`).
+ * `misPermisos`: lo que tiene él, para que la pantalla no ofrezca dar lo que
+ * no tiene (el servidor lo vuelve a comprobar al crear).
+ */
+export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = {} }, quien) {
+  soloClavesDelCatalogo(excepciones);
+  const ajustesRol = await model.ajustesDeRoles();
+  const { mapa, origenes } = resolverPermisos({ role, roles_extra, excepciones, ajustesRol });
+  const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  return {
+    mapa, origenes,
+    puedeEditar: mios ? mios['users.excepciones'] === true : true,
+    misPermisos: mios ? Object.keys(mios).filter((k) => mios[k] === true) : null,
+  };
+}
+
+/**
+ * #694 · Las excepciones de un alta, comprobadas ANTES de crear a nadie, con
+ * las mismas reglas que `guardarExcepciones`: que existan en el catálogo, que
+ * su rol pueda tenerlas, que quien da tenga lo que da, y que los permisos de
+ * un admin solo los toque el superadmin. Así el alta no se queda a medias.
+ */
+export async function exigirExcepcionesDeAlta(quien, { role, roles_extra = [] }, cambios) {
+  soloClavesDelCatalogo(cambios);
+  if (!Object.keys(cambios || {}).length) return;
+  const suyos = [role, ...(roles_extra || [])];
+  if (quien.role !== 'superadmin' && (suyos.includes('superadmin') || suyos.includes('admin'))) {
+    throw new AppError('Los permisos de un admin los cambia el superadmin', 403, 'FORBIDDEN');
+  }
+  const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  for (const [clave, valor] of Object.entries(cambios)) {
+    const x = POR_CLAVE[clave];
+    if (valor === true && vetada(x, role, roles_extra)) {
+      throw new AppError(`«${x.nombre}» no se le puede dar a quien es ${suyos.filter(Boolean).join(' y ')}`, 400, 'NUNCA');
+    }
+    if (valor === true && mios && mios[clave] !== true) {
+      throw new AppError(`No puedes dar «${x.nombre}»: tú no lo tienes`, 403, 'NO_LO_TIENES');
+    }
+  }
+}
+
+/**
  * Cambia excepciones de una persona: `{ clave: true | false | null }` (null =
  * como diga su rol). Solo las claves que se mandan; las demás, igual.
  */

@@ -75,6 +75,19 @@ export async function guardarExcepciones(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /api/permissions/vista-previa-alta   { role, roles_extra, excepciones } (#694)
+export async function vistaPreviaDeAlta(req, res, next) {
+  try {
+    const roles = z.enum(['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador']);
+    const d = validar(z.object({
+      role: roles,
+      roles_extra: z.array(roles).max(6).default([]),
+      excepciones: z.record(z.boolean()).default({}),
+    }), req.body);
+    res.json({ success: true, data: await editar.vistaPreviaDeAlta(d, req.user) });
+  } catch (err) { next(err); }
+}
+
 // PUT /api/permissions/personas/:id/rol-a-medida   { customRoleId: number | null }
 export async function cambiarRolAMedida(req, res, next) {
   try {

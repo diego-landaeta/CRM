@@ -85,6 +85,8 @@ export default function UsersPanel() {
           roles_extra: values.roles_extra,
           projects: values.projects,
           ...(values.empresaIds?.length ? { empresaIds: values.empresaIds } : {}),
+          // #694: sus excepciones, en la misma operación que el alta.
+          ...(values.excepciones && Object.keys(values.excepciones).length ? { excepciones: values.excepciones } : {}),
         });
         if (setPasswordToken) {
           const base = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '');
