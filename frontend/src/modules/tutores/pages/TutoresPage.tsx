@@ -1260,7 +1260,11 @@ export default function TutoresPage() {
                 </Field>
               </section>
 
-              {projects.length > 1 && (
+              {/* Las marcas de lo que hay arriba (#219, Diego 05/11): con una
+                  empresa, solo sus campus, igual que el desplegable «Campus»
+                  (#346). Una marca que ya tuviera de otra empresa no se pierde:
+                  sigue en `marcas`, solo no se ofrece aquí. */}
+              {campus.length > 1 && (
                 <section className="space-y-2 border-t border-border pt-4">
                   <h3 className="text-tabla uppercase text-muted-foreground">
                     En qué marcas da clase
@@ -1268,8 +1272,8 @@ export default function TutoresPage() {
                   <p className="px-1 text-secundario text-muted-foreground">
                     Solo podrá cobrar de cursos de las marcas que marques aquí.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {projects.map((p) => {
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="En qué marcas da clase">
+                    {campus.map((p) => {
                       const puesta = marcas.includes(p.id);
                       return (
                         <button key={p.id} type="button"
