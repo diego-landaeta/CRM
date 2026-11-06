@@ -538,6 +538,10 @@ export function pasaPermisoDeRoles(item, can) {
 const SIN_ENTRADA = {
   // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
   '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // La pestaña Tutores de Consultas: la del panel de tutores en el servidor
+  // (`/api/consultas/tutores-panel`). Escrita a mano por una tutora decía «No
+  // hay tutores aquí» en vez de que no tiene acceso (#188).
+  '/consultas/tutores': 'consultas.view',
 };
 
 export function rutaPermitida(pathname, can) {
@@ -1025,6 +1029,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // cada render y, en las dependencias de un efecto, lo relanzaría sin parar.
   const veProspectosNuevos = can('leads.view');
   const veReportesDeSpam = can('leads.spam');
+  const usaMensajes = can('mensajes.usar');
 
   // Estado de secciones colapsadas (Captación, Catálogo, Finanzas, etc.).
   // Persistido en localStorage. Por defecto, abierto: Principal + la sección
@@ -1203,9 +1208,11 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     return () => { cancelled = true; clearInterval(interval); };
   }, [veReportesDeSpam]);
 
-  // Badge de mensajes no leidos
+  // Badge de mensajes no leidos: solo a quien puede usar Mensajes. A quien se lo
+  // han quitado (la tutora de prueba de /testeo) el servidor le daba un 403 en
+  // cada página (#188).
   useEffect(() => {
-    if (soloEsColaborador(user)) return;
+    if (soloEsColaborador(user) || !usaMensajes) return;
     let cancelled = false;
     async function fetchMsgCount() {
       try {
@@ -1216,7 +1223,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     fetchMsgCount();
     const interval = setInterval(fetchMsgCount, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user]);
+  }, [user, usaMensajes]);
 
   // «Por revisar (n)» en el menú: solo a quien puede cerrar tareas.
   const puedeRevisar = can('tasks.close');
