@@ -146,6 +146,8 @@ async function filtrosDeQuery(req) {
     to: dateRe2.test(req.query.to || '') ? req.query.to : null,
     responsableId,
     search: (req.query.search || '').trim() || null,
+    // Todas · Solo compartidas · Solo enteras (#163).
+    compartidas: req.query.compartidas || null,
     page: req.query.page,
     limit: req.query.limit,
   };
