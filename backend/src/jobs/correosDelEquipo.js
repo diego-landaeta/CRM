@@ -7,6 +7,7 @@ import { resumenDeLaCola } from '../modules/proceso/proceso.model.js';
 // listado (`contarFiltrosRapidos`) y un import por nombre tumbaria el modulo.
 // Sin ellos, el correo de la gestora sale sin el bloque de recordatorios.
 import * as leadModel from '../modules/leads/lead.model.js';
+import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
 
@@ -700,6 +701,22 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
     // del Total es el de la tarjeta de arriba —los dos son los pagos
     // registrados de la semana por su fecha de cobro—.
     const ranking = tablaDelRanking(puesto, { periodo: 'semana' });
+
+    // LA LECTURA DE LA SEMANA, escrita por IA (#30). Apagada por defecto:
+    // `IA_ANALISIS_SEMANAL=1` la enciende. Lee las mismas cifras que las tarjetas
+    // de arriba y NO sale si alguna cifra del texto no esta en ellas. Si no hay
+    // clave, el tope esta agotado o la IA falla, devuelve `null` y el correo sale
+    // exactamente como siempre: el reporte no depende de ella.
+    const lectura = process.env.IA_ANALISIS_SEMANAL === '1'
+      ? await lecturaDeLaSemana({
+        empresa: e.nombre,
+        periodo: semana,
+        esta: { prospectos: n(ls.total), convertidos: n(ls.convertido), ventas: n(cs.total), cobrado: n(cob) },
+        anterior: { prospectos: n(la.total), convertidos: n(la.convertido), ventas: n(ca.total), cobrado: n(cobA) },
+        userId: persona.id,
+      })
+      : null;
+
     partes.push([
       apartado(e.nombre, { logoUrl: e.logoUrl, detalle: e.campus.length > 1 ? `${e.campus.length} campus` : '' }),
       tarjetas([
@@ -708,6 +725,11 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado', valor: eur(cob), cmp: comparar(cob, cobA), nota: 'por fecha de cobro' },
         { etiqueta: 'Conversión', valor: `${entero(tasa)} %`, nota: `la anterior ${entero(tasaA)} %` },
       ]),
+      lectura
+        ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 4px">Lectura de la semana</div>`
+          + `<div style="font-size:14px;line-height:1.5">${esc(lectura.texto)}</div>`
+          + `<div style="font-size:11px;color:${GRIS};margin-top:4px">Escrita por IA a partir de las cifras de arriba.</div>`
+        : '',
       ranking ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana · por lo cobrado</div>${ranking}` : '',
     ].join(''));
   }

@@ -67,6 +67,33 @@ export const catalogoEnTexto = () =>
   NOMBRES.map((n) => `- ${n}: ${CONSULTAS[n].descripcion} (parámetros: ${CONSULTAS[n].parametros.join(', ')})`)
     .join('\n');
 
+/**
+ * Las consultas como herramientas de Claude (#30, segunda subfase).
+ *
+ * Se generan del mismo objeto que se ejecuta, por lo mismo que `catalogoEnTexto`.
+ *
+ * EL PROYECTO NO ES UN PARAMETRO. El modelo no ve `projectId` ni `projectIds` y
+ * no puede pedirlos: el alcance lo pone el servidor segun quien pregunta (ver
+ * `ejecutar`). Si fuera un parametro, bastaria que alguien escribiera «y ahora
+ * los de ICTESS» para que el modelo se lo pidiera a la base.
+ */
+export function herramientasParaClaude() {
+  return NOMBRES.map((nombre) => {
+    const c = CONSULTAS[nombre];
+    const propiedades = {
+      from: { type: 'string', description: 'Inicio del periodo, formato YYYY-MM-DD.' },
+      to: { type: 'string', description: 'Fin del periodo, formato YYYY-MM-DD, incluido.' },
+    };
+    if (c.parametros.includes('asesoraId')) {
+      propiedades.asesoraId = {
+        type: 'integer',
+        description: 'Id de una asesora concreta. Solo si la pregunta es por una persona y se conoce su id.',
+      };
+    }
+    return { name: nombre, description: c.descripcion, input_schema: { type: 'object', properties: propiedades } };
+  });
+}
+
 /** Una fecha de las que acepta Postgres, y no cualquier cosa. */
 const esFecha = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
@@ -102,7 +129,7 @@ export function limpiarParametros(nombre, dados = {}) {
  * comprobar la respuesta a mano: si contesto «julio» pero se ejecuto sin fechas,
  * se ve.
  */
-export async function ejecutar(nombre, parametros = {}) {
+export async function ejecutar(nombre, parametros = {}, { alcance = null } = {}) {
   const consulta = CONSULTAS[nombre];
   if (!consulta) {
     // Se dice QUE se pidio y que hay: si el modelo se inventa un nombre, el
@@ -112,7 +139,19 @@ export async function ejecutar(nombre, parametros = {}) {
     throw err;
   }
 
+  // EL ALCANCE LO PONE EL SERVIDOR (#30, #245). Con `alcance`, lo que el modelo
+  // haya puesto de proyecto se tira y manda el de quien pregunta: un admin de
+  // una empresa solo mide sus campus, diga lo que diga el modelo. Sin `alcance`
+  // se comporta como siempre. `alcance: {}` es «sin recorte» (superadmin).
   const limpios = limpiarParametros(nombre, parametros);
+  if (alcance) {
+    delete limpios.projectId;
+    const id = parseInt(alcance.projectId, 10);
+    if (Number.isInteger(id) && id > 0) limpios.projectId = id;
+    if (Array.isArray(alcance.projectIds) && alcance.projectIds.length) {
+      limpios.projectIds = alcance.projectIds.map(Number).filter((n) => Number.isInteger(n));
+    }
+  }
 
   // El tope va aqui y no en la consulta: `statement_timeout` de Postgres corta
   // la consulta pero no libera al que espera si el pool esta lleno, y lo que se
