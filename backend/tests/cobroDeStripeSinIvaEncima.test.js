@@ -43,6 +43,10 @@ function responder(sql, p = []) {
   const s = sql.replace(/\s+/g, ' ').trim();
   sqls.push(s);
   if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return r([]);
+  // El enlace de un cargo va de uno en uno (#680): el bloqueo, y la fila leída de nuevo
+  // (vacía aquí: se sigue con la que devolvió upsertPayment).
+  if (/^SELECT pg_advisory_(un)?lock\(/.test(s)) return r([]);
+  if (s === 'SELECT * FROM stripe_payments WHERE id = $1') return r([]);
 
   // conversion.model.addPayment
   if (/^SELECT id, importe_total, importe_pagado FROM conversions WHERE id = \$1 FOR UPDATE/.test(s)) {

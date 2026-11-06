@@ -3,7 +3,7 @@ import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
-import { query } from '../../shared/config/db.js';
+import { query, getClient } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
 import * as tutores from '../tutores/tutor.model.js';
 
@@ -109,7 +109,30 @@ export async function reengancharCobro(payment, dbRow) {
     'cargo de Stripe sin cobro: enganchado al cobro que ya estaba');
 }
 
+/**
+ * Enlaza un cargo con su venta, de UNO EN UNO por cargo (#680, #635).
+ *
+ * El mismo cargo llega por varios caminos: el aviso de Stripe, el sondeo de cada 5 minutos
+ * y el botón «Sincronizar». Si dos llegaban a la vez, los dos veían la fila aún sin venta,
+ * los dos pasaban por la comprobación de duplicados antes de que el otro escribiera y los
+ * dos sumaban el cobro: la venta acababa con el mismo pago dos veces. Ahora el segundo
+ * espera al primero (bloqueo de PostgreSQL por proyecto y cargo) y, con la fila leída de
+ * nuevo, ve que ya está enlazado y no suma nada.
+ */
 async function autoLinkIfPossible(projectId, payment, dbRow) {
+  const clave = `stripe-enlace:${projectId}:${payment.stripe_id}`;
+  const cliente = await getClient();
+  try {
+    await cliente.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [clave]);
+    const { rows: [fresca] } = await query('SELECT * FROM stripe_payments WHERE id = $1', [dbRow.id]);
+    return await enlazarSiSePuede(projectId, payment, fresca || dbRow);
+  } finally {
+    await cliente.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [clave]).catch(() => {});
+    cliente.release();
+  }
+}
+
+async function enlazarSiSePuede(projectId, payment, dbRow) {
   if (dbRow.conversion_id) {
     await reengancharCobro(payment, dbRow);
     return;
