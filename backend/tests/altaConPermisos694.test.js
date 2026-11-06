@@ -26,7 +26,7 @@ const MARCA = `A694${Date.now().toString(36)}`.toLowerCase();
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const one = async (sql, p) => (await q(sql, p))[0];
 const ids = { users: [], projects: [] };
-let CAMPUS; let SUPER; let ADMIN;
+let CAMPUS; let OTRO_CAMPUS; let SUPER; let ADMIN;
 // Una clave que una gestora no trae de serie, que se le puede dar, y que un admin tampoco tiene.
 let DAR; let NO_LA_TIENE_EL_ADMIN; let VETADA;
 
@@ -50,6 +50,10 @@ beforeAll(async () => {
   CAMPUS = (await one(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
     [`${MARCA} campus`, MARCA, `${MARCA}-k`])).id;
   ids.projects.push(CAMPUS);
+  // Un campus que no es del admin de la prueba.
+  OTRO_CAMPUS = (await one(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
+    [`${MARCA} otro`, `${MARCA}-otro`, `${MARCA}-k2`])).id;
+  ids.projects.push(OTRO_CAMPUS);
   SUPER = await persona('super', 'superadmin');
   ADMIN = await persona('admin', 'admin');
   const deAdmin = (await explicarPermisos(ADMIN)).mapa;
@@ -148,5 +152,75 @@ describe('#694 · crear con excepciones', () => {
     expect(error?.message).toBeUndefined();
     expect(estado).toBe(201);
     expect(await existe(email)).toBe(true);
+  });
+});
+
+/*
+  Revisión de la #698: las altas con éxito de arriba las hace el superadmin, que se
+  salta la comprobación de campus. Un admin solo toca los permisos de gente de sus
+  campus (`exigirQuePuedaTocar`), y alguien sin campus —un tutor, un colaborador o
+  soporte, a quienes el alta no se lo exige— no es de los suyos: se creaba, sus
+  excepciones fallaban con «Usuario no encontrado» y se borraba.
+*/
+describe('#694 · un admin da de alta con excepciones', () => {
+  const comoAdmin = { userId: 0, role: 'admin' };
+  beforeAll(() => { comoAdmin.userId = ADMIN; olvidarPermisos(ADMIN); });
+  const tutor = (email, extra = {}) => ({ nombre: `${MARCA} Tutor`, email, role: 'tutor', ...extra });
+
+  it('a una gestora de su campus: se crea y ya la tiene', async () => {
+    const email = `gestora-del-admin@${MARCA}.test`;
+    const { error, estado, cuerpo } = await llamar(userController.create,
+      { body: alta(email, { excepciones: { [DAR]: true } }), user: comoAdmin });
+    expect(error?.message).toBeUndefined();
+    expect(estado).toBe(201);
+    olvidarPermisos(cuerpo.data.id);
+    expect((await explicarPermisos(cuerpo.data.id)).excepciones[DAR]).toBe(true);
+  });
+
+  it('a un tutor sin campus: lo dice claro antes de crear a nadie, y no sale el correo', async () => {
+    const email = `tutor-sin-campus@${MARCA}.test`;
+    const { error } = await llamar(userController.create,
+      { body: tutor(email, { excepciones: { 'tasks.view_own': false } }), user: comoAdmin });
+    expect(error?.code).toBe('SIN_CAMPUS_SUYO');
+    expect(error?.statusCode).toBe(400);
+    expect(error?.message).toMatch(/uno de tus campus/);
+    expect(await existe(email)).toBe(false);
+    expect(correos).not.toContain(email);
+  });
+
+  it('con un campus que no es suyo, igual', async () => {
+    const email = `tutor-otro-campus@${MARCA}.test`;
+    const { error } = await llamar(userController.create,
+      { body: tutor(email, { projectIds: [OTRO_CAMPUS], excepciones: { 'tasks.view_own': false } }), user: comoAdmin });
+    expect(error?.code).toBe('SIN_CAMPUS_SUYO');
+    expect(await existe(email)).toBe(false);
+  });
+
+  it('el tutor de su campus, sí (con `projects`, como lo manda la pantalla)', async () => {
+    const email = `tutor-con-campus@${MARCA}.test`;
+    const { error, estado, cuerpo } = await llamar(userController.create, {
+      body: tutor(email, { projects: [{ projectId: CAMPUS, recibeLeads: false }], excepciones: { 'tasks.view_own': false } }),
+      user: comoAdmin });
+    expect(error?.message).toBeUndefined();
+    expect(estado).toBe(201);
+    olvidarPermisos(cuerpo.data.id);
+    expect((await explicarPermisos(cuerpo.data.id)).excepciones['tasks.view_own']).toBe(false);
+  });
+
+  it('sin excepciones, un tutor sin campus se sigue dando de alta como siempre', async () => {
+    const email = `tutor-sin-nada@${MARCA}.test`;
+    const { estado } = await llamar(userController.create, { body: tutor(email), user: comoAdmin });
+    expect(estado).toBe(201);
+  });
+
+  it('la vista previa dice por qué no deja tocarlas hasta elegir uno de sus campus', async () => {
+    const sin = await editar.vistaPreviaDeAlta({ role: 'tutor' }, comoAdmin);
+    expect(sin.puedeEditar).toBe(false);
+    expect(sin.motivo).toMatch(/uno de tus campus/);
+    const con = await editar.vistaPreviaDeAlta({ role: 'tutor', projectIds: [CAMPUS] }, comoAdmin);
+    expect(con.puedeEditar).toBe(true);
+    expect(con.motivo).toBeNull();
+    const superadmin = await editar.vistaPreviaDeAlta({ role: 'tutor' }, { userId: SUPER, role: 'superadmin' });
+    expect(superadmin.puedeEditar).toBe(true);
   });
 });

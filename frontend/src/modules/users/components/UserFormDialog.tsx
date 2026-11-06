@@ -451,6 +451,7 @@ export default function UserFormDialog({
               {esEdicion && user
                 ? <PermisosDePersona userId={user.id} enLinea />
                 : <PermisosDelAlta role={role} rolesExtra={rolesExtra.filter((r) => r !== role)}
+                    projectIds={seleccionados.map((p) => p.projectId)}
                     excepciones={excepciones} onCambiar={setExcepciones} />}
             </div>
 

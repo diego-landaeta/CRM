@@ -331,16 +331,44 @@ export async function fichaDePermisos(userId, quien) {
  * `misPermisos`: lo que tiene él, para que la pantalla no ofrezca dar lo que
  * no tiene (el servidor lo vuelve a comprobar al crear).
  */
-export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = {} }, quien) {
+export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = {}, projectIds = [] }, quien) {
   soloClavesDelCatalogo(excepciones);
   const ajustesRol = await model.ajustesDeRoles();
   const { mapa, origenes } = resolverPermisos({ role, roles_extra, excepciones, ajustesRol });
   const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  const tieneElPermiso = mios ? mios['users.excepciones'] === true : true;
+  // Con el permiso, pero sin un campus suyo todavía elegido: se dice por qué no.
+  const sinCampus = tieneElPermiso && !(await campusSuyoEnElAlta(quien, projectIds));
   return {
     mapa, origenes,
-    puedeEditar: mios ? mios['users.excepciones'] === true : true,
+    puedeEditar: tieneElPermiso && !sinCampus,
+    motivo: sinCampus ? SIN_CAMPUS_SUYO : null,
     misPermisos: mios ? Object.keys(mios).filter((k) => mios[k] === true) : null,
   };
+}
+
+/**
+ * #694 · ¿Lleva el alta algún campus de quien da de alta? Sus permisos solo los
+ * toca quien comparte campus con ella (`exigirQuePuedaTocar`), y una persona sin
+ * campus no es de los suyos: sin esto, el alta de un tutor o un colaborador sin
+ * campus se creaba, sus excepciones fallaban con «Usuario no encontrado» y se
+ * borraba. El superadmin, siempre.
+ */
+const SIN_CAMPUS_SUYO = 'Para darle permisos, ponle primero uno de tus campus.';
+
+export async function campusSuyoEnElAlta(quien, projectIds = []) {
+  if (quien.role === 'superadmin') return true;
+  const ids = [...new Set((projectIds || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return false;
+  const { rows } = await query(
+    'SELECT 1 FROM user_projects WHERE user_id = $1 AND active AND project_id = ANY($2::int[]) LIMIT 1',
+    [quien.userId, ids]);
+  return rows.length > 0;
+}
+
+/** Los campus de un alta, vengan como `projectIds` o como `projects` (`{ projectId }`). */
+export function campusDelAlta({ projectIds = [], projects = [] } = {}) {
+  return [...(projectIds || []), ...(projects || []).map((p) => p?.projectId)];
 }
 
 /**
@@ -349,13 +377,14 @@ export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = 
  * su rol pueda tenerlas, que quien da tenga lo que da, y que los permisos de
  * un admin solo los toque el superadmin. Así el alta no se queda a medias.
  */
-export async function exigirExcepcionesDeAlta(quien, { role, roles_extra = [] }, cambios) {
+export async function exigirExcepcionesDeAlta(quien, { role, roles_extra = [], projectIds = [] }, cambios) {
   soloClavesDelCatalogo(cambios);
   if (!Object.keys(cambios || {}).length) return;
   const suyos = [role, ...(roles_extra || [])];
   if (quien.role !== 'superadmin' && (suyos.includes('superadmin') || suyos.includes('admin'))) {
     throw new AppError('Los permisos de un admin los cambia el superadmin', 403, 'FORBIDDEN');
   }
+  if (!(await campusSuyoEnElAlta(quien, projectIds))) throw new AppError(SIN_CAMPUS_SUYO, 400, 'SIN_CAMPUS_SUYO');
   const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
   for (const [clave, valor] of Object.entries(cambios)) {
     const x = POR_CLAVE[clave];

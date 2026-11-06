@@ -15,13 +15,17 @@ import ListaDePermisos, { type Eleccion } from './ListaDePermisos';
  * antes de crear a nadie y las guarda en la misma operación.
  *
  * «Sí» no se ofrece para lo que quien da de alta no tiene: nadie da lo que no
- * tiene (el servidor lo vuelve a comprobar).
+ * tiene (el servidor lo vuelve a comprobar). Y hasta que no se elija uno de sus
+ * campus no se pueden tocar: sus permisos solo los cambia quien comparte campus
+ * con ella, y el servidor lo dice (`motivo`).
  */
 export default function PermisosDelAlta({
-  role, rolesExtra, excepciones, onCambiar,
+  role, rolesExtra, projectIds = [], excepciones, onCambiar,
 }: {
   role: string;
   rolesExtra: string[];
+  /** Los campus elegidos en el alta. */
+  projectIds?: number[];
   excepciones: Record<string, boolean>;
   onCambiar: (excepciones: Record<string, boolean>) => void;
 }) {
@@ -35,11 +39,11 @@ export default function PermisosDelAlta({
     return () => { vivo = false; };
   }, []);
 
-  // Se recalcula con cada rol, rol de más o excepción.
-  const clave = JSON.stringify([role, rolesExtra, excepciones]);
+  // Se recalcula con cada rol, rol de más, campus o excepción.
+  const clave = JSON.stringify([role, rolesExtra, [...projectIds].sort(), excepciones]);
   useEffect(() => {
     let vivo = true;
-    api.vistaPreviaDeAlta({ role, roles_extra: rolesExtra, excepciones })
+    api.vistaPreviaDeAlta({ role, roles_extra: rolesExtra, excepciones, projectIds })
       .then((v) => { if (vivo) { setVista(v); setError(null); } })
       .catch((e) => { if (vivo) setError(e instanceof Error ? e.message : 'No se pudo calcular'); });
     return () => { vivo = false; };
@@ -65,8 +69,9 @@ export default function PermisosDelAlta({
         <p className="text-secundario text-muted-foreground">
           Lo que trae el rol{vista && catalogo ? `: podrá ${total.filter((k) => vista.mapa[k]).length} de ${total.length}` : ''}
           {cuantas > 0 && ` · ${cuantas} ${cuantas === 1 ? 'excepción' : 'excepciones'} suyas`}
-          {vista && !vista.puedeEditar && ' · solo lectura'}
+          {vista && !vista.puedeEditar && !vista.motivo && ' · solo lectura'}
         </p>
+        {vista?.motivo && <p className="text-secundario text-muted-foreground">{vista.motivo}</p>}
       </div>
       {error && <p className="rounded-lg bg-destructive-soft p-3 text-normal text-destructive-soft-foreground">{error}</p>}
       {(!vista || !catalogo) && !error && <p className="text-normal text-muted-foreground">Cargando…</p>}

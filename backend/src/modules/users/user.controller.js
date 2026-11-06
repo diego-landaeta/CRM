@@ -105,7 +105,8 @@ export async function create(req, res, next) {
       if (!(await tienePermiso(req, 'users.excepciones'))) {
         throw new AppError('Poner excepciones de permisos es «Permisos de cada persona»', 403, 'FORBIDDEN');
       }
-      await editar.exigirExcepcionesDeAlta(req.user, { role: datos.role, roles_extra: datos.roles_extra || [] }, excepciones);
+      await editar.exigirExcepcionesDeAlta(req.user,
+        { role: datos.role, roles_extra: datos.roles_extra || [], projectIds: editar.campusDelAlta(datos) }, excepciones);
     }
     const user = await userService.create(datos, {
       porUserId: req.user?.userId ?? null,
