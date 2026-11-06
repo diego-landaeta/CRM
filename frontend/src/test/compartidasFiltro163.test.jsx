@@ -50,6 +50,32 @@ describe('#163 · Ingresos', () => {
   });
 });
 
+describe('#163 · Ingresos, «Ver las cuotas» (revisión de Diego, 05/11)', () => {
+  const vacio = { n: 0, importe: 0 };
+  const TOTALES = {
+    importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0,
+    facturasDeAntes: { n: 1, importe: 40 }, facturadoEnPeriodo: { n: 1, importe: 40 },
+    cobrosDelPeriodo: { matricula: vacio, cuotas: vacio },
+    facturasPorClase: { venta: vacio, cuota: { n: 1, importe: 40 }, parte: vacio, suelta: vacio }, porProyecto: [],
+  };
+  it('manda el filtro, y al cambiarlo se vuelve a pedir', async () => {
+    get.mockImplementation(async (url) => (url === '/conversions'
+      ? { success: true, data: [], pagination: { total: 0 }, totales: TOTALES }
+      : { success: true, data: [], pagination: { total: 0 } }));
+    render(<MemoryRouter><IncomePage /></MemoryRouter>);
+    // El desglose de cuotas sale con unas fechas puestas.
+    fireEvent.click(screen.getByRole('button', { name: 'Este mes' }));
+    fireEvent.change(screen.getByLabelText('Reparto:'), { target: { value: 'solo' } });
+    const boton = await screen.findByRole('button', { name: 'Ver las cuotas' });
+    fireEvent.click(boton);
+    await waitFor(() => expect(ultima('/conversions/cuotas')).toMatchObject({ compartidas: 'solo' }));
+    // Cambiar el «Reparto» tira el desglose: era el del filtro de antes.
+    fireEvent.change(screen.getByLabelText('Reparto:'), { target: { value: 'enteras' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver las cuotas' }));
+    await waitFor(() => expect(ultima('/conversions/cuotas')).toMatchObject({ compartidas: 'enteras' }));
+  });
+});
+
 describe('#163 · Análisis de ventas', () => {
   it('el resumen y las demás pestañas mandan el filtro', async () => {
     render(<MemoryRouter><SalesAnalysisPage /></MemoryRouter>);

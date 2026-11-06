@@ -12,6 +12,7 @@ import {
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { opcionDeCompartidas } from './compartidas.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
@@ -62,6 +63,8 @@ export async function cuotas(req, res, next) {
 
     const data = await conversionModel.cuotasDelPeriodo({
       ...(await proyectosDelAmbito(req)), from, to, responsableId,
+      // #163: el mismo «Reparto» que la lista. Solo vale 'solo' o 'enteras'.
+      compartidas: opcionDeCompartidas(req.query.compartidas),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }

@@ -223,7 +223,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // Cualquier cambio de filtro devuelve a la primera pagina, y tira el desglose
   // de cuotas: era el de las fechas de antes.
   useEffect(() => { setCuotas([]); setVerCuotas(false); },
-    [projectIdParam, issuerIdParam, effectiveResponsableId, rango.from, rango.to]);
+    [projectIdParam, issuerIdParam, effectiveResponsableId, filterCompartidas, rango.from, rango.to]);
   useEffect(() => { setPage(1); }, [projectIdParam, issuerIdParam, effectiveResponsableId, filterCurso, filterCompartidas, rango.from, rango.to]);
 
   useEffect(() => {
@@ -293,6 +293,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       if (projectIdParam) params.projectId = projectIdParam;
       if (issuerIdParam) params.issuerId = issuerIdParam;
       if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+      // #163: el mismo «Reparto» que la lista y las tarjetas.
+      if (filterCompartidas !== 'todas') params.compartidas = filterCompartidas;
       const r = await client.get('/conversions/cuotas', { params });
       setCuotas(r?.success ? (r.data || []) : []);
     } catch { setCuotas([]); }

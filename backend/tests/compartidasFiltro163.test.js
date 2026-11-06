@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pool from '../src/shared/config/db.js';
-import { findAll, filasDelPeriodo } from '../src/modules/conversions/conversion.model.js';
+import { findAll, filasDelPeriodo, cuotasDelPeriodo } from '../src/modules/conversions/conversion.model.js';
 import { getResumenVentas, getVentasPorCliente, getVentasPorAsesora } from '../src/modules/sales/sales.service.js';
 import { opcionDeCompartidas, condicionDeCompartidas } from '../src/modules/conversions/compartidas.js';
 
@@ -17,7 +17,7 @@ import { opcionDeCompartidas, condicionDeCompartidas } from '../src/modules/conv
 const MARCA = `C163${Date.now().toString(36)}`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const one = async (sql, p) => (await q(sql, p))[0];
-const ids = { users: [], leads: [], ventas: [] };
+const ids = { users: [], leads: [], ventas: [], facturas: [] };
 let PROYECTO; let FABIOLA; let RAQUEL; let COMPARTIDA; let DE_FABIOLA; let DE_RAQUEL;
 const DESDE = '2026-02-01'; const HASTA = '2026-02-28';
 
@@ -49,12 +49,31 @@ beforeAll(async () => {
   await q(`INSERT INTO conversion_vendedoras (conversion_id, user_id, porcentaje) VALUES ($1, $2, 50), ($1, $3, 50)`, [COMPARTIDA, FABIOLA, RAQUEL]);
   DE_FABIOLA = await venta('sara', FABIOLA, 100);
   DE_RAQUEL = await venta('marta', RAQUEL, 200);
+
+  // Revisión de Diego (05/11): una CUOTA de la compartida y otra de una entera
+  // (un segundo cobro, con su factura), y una factura suelta, sin venta.
+  let numero = 990000 + Math.floor(Math.random() * 9000);
+  const factura = async (conversionId, paymentId, total) => {
+    const f = await one(
+      `INSERT INTO invoices (project_id, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
+                             items, base_imponible, total, conversion_id, payment_id, fecha_emision)
+       VALUES ($1, 2026, $2, $3, 'Cliente', 'X1234567L', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, $4, $4, $5, $6, '2026-02-20') RETURNING id`,
+      [PROYECTO, numero, `${MARCA}-${numero}`, total, conversionId, paymentId]);
+    numero += 1;
+    ids.facturas.push(f.id);
+  };
+  const segundoCobro = async (conversionId, importe) => (await one(
+    `INSERT INTO conversion_payments (conversion_id, importe, fecha, metodo) VALUES ($1, $2, '2026-02-20', 'tarjeta') RETURNING id`,
+    [conversionId, importe])).id;
+  await factura(COMPARTIDA, await segundoCobro(COMPARTIDA, 40), 40);
+  await factura(DE_FABIOLA, await segundoCobro(DE_FABIOLA, 10), 10);
+  await factura(null, null, 7);
 }, 60000);
 
 afterAll(async () => {
   await q('DELETE FROM conversion_vendedoras WHERE conversion_id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [ids.ventas]);
-  await q('DELETE FROM invoices WHERE conversion_id = ANY($1::int[])', [ids.ventas]);
+  await q('DELETE FROM invoices WHERE id = ANY($1::int[]) OR conversion_id = ANY($2::int[])', [ids.facturas, ids.ventas]);
   await q('DELETE FROM matriculas WHERE conversion_id = ANY($1::int[])', [ids.ventas]).catch(() => {});
   await q('DELETE FROM conversions WHERE id = ANY($1::int[])', [ids.ventas]);
   await q('DELETE FROM lead_status_history WHERE lead_id = ANY($1::int[])', [ids.leads]);
@@ -131,5 +150,46 @@ describe('Análisis de ventas', () => {
     expect(JSON.stringify(resumen)).not.toContain(`${MARCA} viviana`);
     const porAsesora = await getVentasPorAsesora({ ...base, compartidas: 'solo' });
     expect(porAsesora.reduce((t, a) => t + a.ventas, 0)).toBe(1);
+  });
+});
+
+describe('Ingresos · las tarjetas de facturas, «Por proyecto» y «Ver cuotas» (revisión de Diego, 05/11)', () => {
+  const lista = (extra) => findAll({ projectId: PROYECTO, from: DESDE, to: HASTA, page: 1, limit: 50, ...extra });
+  const cuotasDeLaLista = async (compartidas) => (await filasDelPeriodo({ projectId: PROYECTO, from: DESDE, to: HASTA, compartidas }))
+    .filas.filter((f) => f.tipo === 'cuota').map((f) => f.venta_id);
+
+  it('con «Solo compartidas», la tarjeta de Cuotas dice las mismas que la lista', async () => {
+    const t = (await lista({ compartidas: 'solo' })).totales;
+    expect(await cuotasDeLaLista('solo')).toEqual([COMPARTIDA]);
+    expect(t.facturasPorClase.cuota.n).toBe(1);
+    expect(Number(t.facturasPorClase.cuota.importe)).toBe(40);
+    // La factura suelta no es de ninguna venta: no es compartida.
+    expect(t.facturasPorClase.suelta.n).toBe(0);
+  });
+
+  it('con «Solo enteras», la cuota de la entera, y la suelta sí entra', async () => {
+    const t = (await lista({ compartidas: 'enteras' })).totales;
+    expect(await cuotasDeLaLista('enteras')).toEqual([DE_FABIOLA]);
+    expect(t.facturasPorClase.cuota.n).toBe(1);
+    expect(t.facturasPorClase.suelta.n).toBe(1);
+  });
+
+  it('sin filtro, las dos cuotas y la suelta', async () => {
+    const t = (await lista({})).totales;
+    expect(t.facturasPorClase.cuota.n).toBe(2);
+    expect(t.facturasPorClase.suelta.n).toBe(1);
+  });
+
+  it('«Por proyecto» suma lo mismo que las tarjetas con el filtro puesto', async () => {
+    const delCampus = async (compartidas) => (await lista({ compartidas })).totales.porProyecto.find((p) => p.project_id === PROYECTO);
+    expect((await delCampus('solo'))).toMatchObject({ ventas: { n: 1, importe: 400 }, cuotas: { n: 1, importe: 40 } });
+    expect((await delCampus('enteras'))).toMatchObject({ ventas: { n: 2, importe: 300 }, cuotas: { n: 1, importe: 10 } });
+  });
+
+  it('«Ver cuotas» sigue al filtro', async () => {
+    const de = async (compartidas) => (await cuotasDelPeriodo({ projectId: PROYECTO, from: DESDE, to: HASTA, compartidas })).map((c) => c.venta_id);
+    expect(await de('solo')).toEqual([COMPARTIDA]);
+    expect(await de('enteras')).toEqual([DE_FABIOLA]);
+    expect((await de(null)).sort((a, b) => a - b)).toEqual(ordenados(COMPARTIDA, DE_FABIOLA));
   });
 });
