@@ -6,6 +6,7 @@ import Field from '@/shared/components/ui/Field';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
+import { MARCA } from '@/shared/config/marca';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useModalAccesible } from '@/shared/hooks/useDialogA11y';
@@ -95,8 +96,9 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     }
     // «Todo el CRM» solo para superadmin y soporte: para el resto, el servidor
     // la pide con campus o empresa (400), o la vería cualquier otra empresa.
+    // En solo lectura se enseña tal cual está, no un «Elige…» que no se puede.
     const lista = [
-      ...(veTodo ? [{ value: '', label: 'Ninguno (todo el CRM)' }] : []),
+      ...(veTodo || soloLectura ? [{ value: '', label: 'Ninguno (todo el CRM)' }] : []),
       ...[...empresas].map(([id, nombre]) => ({ value: `e:${id}`, label: `Empresa · ${nombre}` })),
       ...campus.map((c) => ({ value: `p:${c.id}`, label: `Campus · ${c.nombre}` })),
     ];
@@ -107,7 +109,7 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
       lista.push({ value: suyo, label: incidencia!.projectName || incidencia!.sociedadName || 'Otro campus' });
     }
     return lista;
-  }, [campus, incidencia, veTodo]);
+  }, [campus, incidencia, veTodo, soloLectura]);
 
   const opcionesPersona = useMemo(() => {
     const lista = [{ value: null as number | null, label: 'Nadie del CRM' }, ...personas.map((p) => ({ value: p.id as number | null, label: p.nombre }))];
@@ -150,6 +152,15 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     if (!veTodo && !f.donde) e.donde = 'Elige el campus o la empresa';
     if (f.entidadId && !/^\d{1,10}$/.test(f.entidadId)) e.entidadId = 'Solo el número';
     setErrores(e);
+    // Al primer campo con error: con el botón abajo, el aviso de arriba no se veía.
+    const primero = ([
+      ['ocurrioAt', 'inc-cuando'], ['donde', 'inc-donde'], ['entidadId', 'inc-entidad-id'], ['quePaso', 'inc-que'],
+    ] as const).find(([k]) => e[k]);
+    if (primero) {
+      const el = document.getElementById(primero[1]);
+      el?.scrollIntoView?.({ block: 'center' });
+      el?.focus();
+    }
     return Object.keys(e).length === 0;
   }
 
@@ -265,9 +276,9 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
                 </Field>
                 <Field label="CRM" htmlFor="inc-crm">
                   <Select id="inc-crm" value={f.crm} onChange={(v) => poner({ crm: v })} ariaLabel="CRM" disabled={soloLectura}
-                    options={[{ value: 'multicrm', label: 'MultiCRM' }, { value: 'iseie', label: 'CRM de ISEIE' }] as { value: 'multicrm' | 'iseie'; label: string }[]} />
+                    options={[{ value: 'multicrm', label: MARCA }, { value: 'iseie', label: 'CRM de ISEIE' }] as { value: 'multicrm' | 'iseie'; label: string }[]} />
                 </Field>
-                <Field label="Campus o empresa" required={!veTodo} htmlFor="inc-donde" error={errores.donde}>
+                <Field label="Campus o empresa" required={!veTodo && !soloLectura} htmlFor="inc-donde" error={errores.donde}>
                   <Select id="inc-donde" value={f.donde} onChange={(v) => poner({ donde: v })} options={opcionesDonde}
                     placeholder="Elige…" ariaLabel="Campus o empresa" disabled={soloLectura} />
                 </Field>

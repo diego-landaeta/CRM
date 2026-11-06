@@ -64,6 +64,13 @@ describe('el campus de una incidencia nueva', () => {
     fireEvent.click(screen.getByRole('button', { name: /Apuntar incidencia/ }));
     expect(screen.getByText('Elige el campus o la empresa')).toBeTruthy();
     expect(crear).not.toHaveBeenCalled();
+    // El aviso está arriba y el botón abajo: se lleva al campus para que se vea.
+    expect(document.activeElement).toBe(document.getElementById('inc-donde'));
     crear.mockRestore();
+  });
+
+  it('en solo lectura, una sin campus dice «todo el CRM», no «Elige…»', () => {
+    const inc = { id: 6, projectId: null, sociedadId: null, tipos: ['capa8'], quePaso: 'x', estado: 'open', gravedad: 'medium', ocurrioAt: '2026-10-06T10:00:00Z', adjuntos: [] };
+    expect(abrir({ incidencia: inc, soloLectura: true })).toContain('Ninguno (todo el CRM)');
   });
 });
