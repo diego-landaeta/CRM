@@ -29,10 +29,11 @@ const ACTIVIDAD = {
   hasta: '2026-10-28',
   filas: [
     fila(7, 'Yolanda', { llamadas: 5, whatsapp: 15, whatsapp_texto: 12, whatsapp_voz: 3, correos: 1, personas: 12, toques: 21 }),
-    fila(8, 'Dayana', { llamadas: 2, whatsapp: 15, correos: 2, personas: 18, toques: 19 }),
-    fila(9, 'Ana', { whatsapp: 21, personas: 21, toques: 21 }),
+    fila(8, 'Dayana', { llamadas: 2, whatsapp: 15, whatsapp_texto: 15, correos: 2, personas: 18, toques: 19 }),
+    fila(9, 'Ana', { whatsapp: 21, whatsapp_texto: 21, personas: 21, toques: 21 }),
   ],
-  equipo: { llamadas: 7, whatsapp: 51, whatsapp_texto: 12, whatsapp_voz: 3, correos: 3, notas: 0, personas: 50, toques: 61 },
+  // Escritos + voz = WhatsApp, en cada fila y en el equipo (revisión de Diego del 05/11).
+  equipo: { llamadas: 7, whatsapp: 51, whatsapp_texto: 48, whatsapp_voz: 3, correos: 3, notas: 0, personas: 50, toques: 61 },
 };
 
 beforeEach(() => {
@@ -107,10 +108,20 @@ describe('el bloque de Reportes (#203 B)', () => {
     expect(within(screen.getAllByRole('row').at(-1)).getByText('7')).toBeInTheDocument();
   });
 
-  it('quien solo mandó WhatsApp (sin contacto apuntado) sí sale', async () => {
-    get.mockResolvedValue({ data: { ...ACTIVIDAD, filas: [fila(11, 'Marta', { whatsapp_texto: 3 })] } });
+  // Revisión de Diego del 05/11: «1 WhatsApp y 0 escritos y 0 de voz… tienen que
+  // sumar el total». El desglose va dentro de la celda y suma el número de encima.
+  it('el WhatsApp lleva debajo escritos y de voz, que suman el número', async () => {
+    const marta = fila(11, 'Marta', { whatsapp: 1, whatsapp_texto: 1, toques: 1, personas: 1 });
+    get.mockResolvedValue({ data: { ...ACTIVIDAD, filas: [...ACTIVIDAD.filas, marta] } });
     pintar(<ActividadPorComercial ambito={{}} />);
-    expect(await screen.findByText('Marta')).toBeInTheDocument();
+    await screen.findByText('Marta');
+    const celdaWhatsapp = (nombre) => {
+      const r = screen.getAllByRole('row').find((x) => within(x).queryByText(nombre));
+      return within(r).getAllByRole('cell')[2].textContent;
+    };
+    expect(celdaWhatsapp('Yolanda')).toBe('1512 escritos · 3 de voz');
+    expect(celdaWhatsapp('Marta')).toBe('11 escrito · 0 de voz'); // en singular
+    expect(celdaWhatsapp('Equipo')).toBe('5148 escritos · 3 de voz');
   });
 
   it('los ceros no se pulsan', async () => {

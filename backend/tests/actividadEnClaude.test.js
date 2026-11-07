@@ -116,6 +116,24 @@ beforeAll(async () => {
   await mensaje(conv.id, 'saliente', 'sticker', 'ANA', '2026-09-30 10:05');
   await mensaje(conv.id, 'saliente', 'texto', null, '2026-09-30 10:06');
   await mensaje(conv.id, 'saliente', 'audio', 'DAYANA', '2026-09-30 00:30');
+
+  // 01/10, aparte (revisión de Diego del 05/11: escritos + voz = WhatsApp):
+  //   Dayana apunta un WhatsApp a DAYANA_2 y ese día le mandó un audio DESDE SU
+  //   MÓVIL (sin `enviado_por`, por su número «…-u<id>»): de voz, y suyo.
+  //   Ana apunta un WhatsApp a ANA_B sin ningún mensaje en el CRM: escrito.
+  //   Ana apunta otro a DAYANA_1, donde ese día solo hay un audio de Dayana:
+  //   el audio no es de Ana, así que el de Ana es escrito.
+  const suNumero = await uno(
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, lead_id, project_id)
+     VALUES ($1, $2, '+34600000002', $3, $4) RETURNING id`,
+    [`crm-${marca}-u${U.DAYANA}`, `34600000002-${marca}@s.whatsapp.net`, L.DAYANA_2, C.A]
+  );
+  ids.conversaciones.push(suNumero.id);
+  await mensaje(suNumero.id, 'saliente', 'audio', null, '2026-10-01 10:50');
+  await contacto('DAYANA', 'DAYANA_2', 'whatsapp', '2026-10-01 11:00');
+  await contacto('ANA', 'ANA_B', 'whatsapp', '2026-10-01 12:00');
+  await mensaje(conv.id, 'saliente', 'audio', 'DAYANA', '2026-10-01 09:00');
+  await contacto('ANA', 'DAYANA_1', 'whatsapp', '2026-10-01 09:30');
 }, 60000);
 
 afterAll(async () => {
@@ -157,7 +175,7 @@ describe('actividad_por_comercial', () => {
 
   it('ordenadas por llamadas y después por toques', async () => {
     const r = await herramienta.ejecutar(admin('A'), DIA);
-    expect(r.filas.map((f) => f.comercial)).toEqual([`ANA ${marca}`, `DAYANA ${marca}`, 'Sin asignar']);
+    expect(r.filas.map((f) => f.comercial)).toEqual([`ANA ${marca}`, `DAYANA ${marca}`]);
   });
 
   it('solo los campus pedidos y sin fichas borradas', async () => {
@@ -176,8 +194,8 @@ describe('actividad_por_comercial', () => {
   it('solo «desde»: hasta hoy en Madrid; solo «hasta»: ese día', async () => {
     const desde = await herramienta.ejecutar(admin('A'), { desde: '2026-09-29' });
     expect(desde).toMatchObject({ desde: '2026-09-29', hasta: hoyEnMadrid() });
-    // Del 29 en adelante: la llamada de Dayana del 29 y todo lo del 30.
-    expect(fila(desde, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 1, correos: 1 });
+    // Del 29 en adelante: la llamada de Dayana del 29, lo del 30 y el WhatsApp del 01/10.
+    expect(fila(desde, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 2, correos: 1 });
     const hasta = await herramienta.ejecutar(admin('A'), { hasta: '2026-09-29' });
     expect(hasta).toMatchObject({ desde: '2026-09-29', hasta: '2026-09-29' });
     expect(fila(hasta, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 0 });
@@ -191,21 +209,39 @@ describe('actividad_por_comercial', () => {
     expect(hoyEnMadrid(new Date('2026-09-30T23:30:00Z'))).toBe('2026-10-01');
   });
 
-  it('el WhatsApp que salió, escrito y por voz, para quien lo mandó (#128)', async () => {
-    const r = await herramienta.ejecutar(admin('A'), DIA);
-    // Ni el audio que entró ni el sticker: 2 escritos y 1 de voz.
-    expect(fila(r, 'ANA')).toMatchObject({ whatsapp_texto: 2, whatsapp_voz: 1 });
-    // La nota de voz de Dayana de las 00:30 es del 30.
-    expect(fila(r, 'DAYANA')).toMatchObject({ whatsapp_texto: 0, whatsapp_voz: 1 });
-    // Lo que no tiene autora no se pierde: «Sin asignar», y el total cuadra.
-    expect(r.filas.find((f) => f.comercial === 'Sin asignar')).toMatchObject({ whatsapp_texto: 1, whatsapp_voz: 0, toques: 0 });
-    expect(r.equipo).toMatchObject({ whatsapp_texto: 3, whatsapp_voz: 2 });
+  // Revisión de Diego del 05/11: «1 WhatsApp y 0 escritos y 0 de voz… tienen que
+  // sumar el total». Se parte cada WhatsApp apuntado: de voz si ese día quien lo
+  // apuntó mandó algún audio (saliente) a ese prospecto; escrito si no.
+  it('escritos + voz = WhatsApp, en cada fila y en el equipo', async () => {
+    for (const periodo of [DIA, { desde: '2026-10-01', hasta: '2026-10-01' }, { desde: '2026-09-29', hasta: '2026-10-01' }]) {
+      const r = await herramienta.ejecutar(admin('A', 'B'), periodo);
+      for (const f of [...r.filas, r.equipo]) expect(f.whatsapp_texto + f.whatsapp_voz).toBe(f.whatsapp);
+    }
   });
 
-  it('a una gestora, solo sus mensajes: ni los de otra ni los sin autora', async () => {
+  it('el 30/09: los dos WhatsApp son de voz (cada una mandó un audio ese día), y nada sin autora', async () => {
+    const r = await herramienta.ejecutar(admin('A'), DIA);
+    // Ana: su audio de las 10:03 (el que entró y el sticker no cuentan).
+    expect(fila(r, 'ANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 1 });
+    // Dayana: su nota de voz de las 00:30, que es del 30.
+    expect(fila(r, 'DAYANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 1 });
+    // Ya no hay fila «Sin asignar» de mensajes sueltos: se parten los contactos.
+    expect(r.filas.find((f) => f.comercial === 'Sin asignar')).toBeUndefined();
+    expect(r.equipo).toMatchObject({ whatsapp: 2, whatsapp_texto: 0, whatsapp_voz: 2 });
+  });
+
+  it('lo escrito desde su móvil cuenta para la dueña del número; sin mensajes, escrito; el audio de otra no cuenta', async () => {
+    const r = await herramienta.ejecutar(admin('A', 'B'), { desde: '2026-10-01', hasta: '2026-10-01' });
+    // Dayana: el audio salió de su número sin `enviado_por` (desde el móvil): es suyo.
+    expect(fila(r, 'DAYANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 1 });
+    // Ana: uno sin mensajes y otro donde el único audio es de Dayana: dos escritos.
+    expect(fila(r, 'ANA')).toMatchObject({ whatsapp: 2, whatsapp_texto: 2, whatsapp_voz: 0 });
+  });
+
+  it('a una gestora, solo lo suyo, también el desglose', async () => {
     const r = await herramienta.ejecutar(comoGestora('ANA', 'A'), DIA);
     expect(r.filas.map((f) => f.comercial)).toEqual([`ANA ${marca}`]);
-    expect(r.equipo).toMatchObject({ whatsapp_texto: 2, whatsapp_voz: 1 });
+    expect(r.equipo).toMatchObject({ whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 1 });
   });
 
   it('un periodo al revés se rechaza', async () => {

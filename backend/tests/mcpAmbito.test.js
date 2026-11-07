@@ -273,9 +273,11 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     // esta mira las de la actividad (#203).
     consultas.length = 0;
     await HERRAMIENTAS.find((h) => h.nombre === 'actividad_por_comercial').ejecutar(ambitoDe('gestor'), ARGS.actividad_por_comercial);
-    expect(consultas.length).toBe(3);
+    // Dos: los contactos (con el desglose escrito/voz dentro, revisión de Diego
+    // del 05/11) y las personas del equipo.
+    expect(consultas.length).toBe(2);
     for (const { sql, params } of consultas) {
-      expect(sql).toMatch(/li\.created_by = \$\d|m\.enviado_por = \$\d/);
+      expect(sql).toMatch(/li\.created_by = \$\d/);
       expect(params).toContain(7);
     }
   });
