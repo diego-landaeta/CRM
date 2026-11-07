@@ -77,7 +77,13 @@ function useActividad(ambito: Ambito, clave: string) {
 // servidor la manda igual (Claude sí cuenta las notas, aparte); los totales del
 // equipo no cambian (prueba de Diana del 30/10).
 const conContactos = (filas: FilaActividad[]) =>
-  filas.filter((f) => f.toques + f.whatsapp_texto + f.whatsapp_voz > 0);
+  filas.filter((f) => f.toques > 0);
+
+// «1 escrito · 2 de voz»: el desglose de los WhatsApp (revisión de Diego del
+// 05/11), que suma el número de encima. Cada WhatsApp apuntado es de voz si ese
+// día quien lo apuntó mandó algún audio a ese prospecto, y escrito si no.
+const escritosYVoz = (texto: number, voz: number) =>
+  `${texto} ${texto === 1 ? 'escrito' : 'escritos'} · ${voz} de voz`;
 
 type Pulsado = { fila: FilaActividad; tipo: TipoDeDetalle };
 
@@ -247,10 +253,10 @@ export default function ActividadPorComercial({ ambito }: { ambito: Ambito }) {
                   </td>
                   <td className="py-2 px-3 text-right">
                     <Cifra n={f.whatsapp} onAbrir={abrir(f, 'whatsapp')} etiqueta={`WhatsApp de ${f.comercial}`} />
-                    {/* Escrito y de voz, de los mensajes que salieron (#128). */}
-                    {(f.whatsapp_texto > 0 || f.whatsapp_voz > 0) && (
+                    {/* Escritos + de voz = este WhatsApp (revisión de Diego del 05/11). */}
+                    {f.whatsapp > 0 && (
                       <span className="block text-xs text-muted-foreground whitespace-nowrap">
-                        {f.whatsapp_texto} escritos · {f.whatsapp_voz} de voz
+                        {escritosYVoz(f.whatsapp_texto, f.whatsapp_voz)}
                       </span>
                     )}
                   </td>
@@ -270,9 +276,9 @@ export default function ActividadPorComercial({ ambito }: { ambito: Ambito }) {
                 <td className="py-2 px-3"><span className="inline-block w-6 text-right">{datos.equipo.llamadas}</span></td>
                 <td className="py-2 px-3 text-right">
                   {datos.equipo.whatsapp}
-                  {(datos.equipo.whatsapp_texto > 0 || datos.equipo.whatsapp_voz > 0) && (
+                  {datos.equipo.whatsapp > 0 && (
                     <span className="block text-xs font-normal text-muted-foreground whitespace-nowrap">
-                      {datos.equipo.whatsapp_texto} escritos · {datos.equipo.whatsapp_voz} de voz
+                      {escritosYVoz(datos.equipo.whatsapp_texto, datos.equipo.whatsapp_voz)}
                     </span>
                   )}
                 </td>
@@ -287,8 +293,10 @@ export default function ActividadPorComercial({ ambito }: { ambito: Ambito }) {
 
       <p className="text-xs text-muted-foreground mt-3">
         <strong className="text-foreground">Llamadas registradas en el CRM:</strong> solo cuentan las apuntadas en el CRM; con
-        Zadarma (#137) entrarán solas. Las notas internas no son contactos. «Personas» del equipo no es la suma: dos
-        comerciales pueden haber contactado a la misma. Pulsa un número para ver la lista.
+        Zadarma (#137) entrarán solas. WhatsApp: cada uno apuntado es «de voz» si ese día se le mandó un audio a esa
+        persona (desde el CRM o desde el móvil conectado), y «escrito» si no. Las notas internas no son contactos.
+        «Personas» del equipo no es la suma: dos comerciales pueden haber contactado a la misma. Pulsa un número para
+        ver la lista.
       </p>
 
       {pulsado && datos && (

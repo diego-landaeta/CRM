@@ -1379,10 +1379,33 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
   if (responsableId) f.add('li.created_by = ?', responsableId);
   f.add(`${fechaLocal('li.fecha')} >= ?::date`, desde);
   f.add(`${fechaLocal('li.fecha')} <= ?::date`, hasta);
-  const { rows: contactos } = await query(
+
+  // WhatsApp escrito y de voz (la issue: «sacados de `wa_mensajes`»), y que
+  // SUMEN el WhatsApp (revisión de Diego del 05/11: «1 WhatsApp y 0 escritos y
+  // 0 de voz… tienen que sumar el total»). El WhatsApp son contactos, como en su
+  // tabla del 01/10 (Toques = llamadas + WhatsApp + correos), así que se parte
+  // cada CONTACTO, no se cuentan mensajes: es de voz si ese día quien lo apuntó
+  // mandó algún audio a ese prospecto, y escrito si no (también el apuntado sin
+  // ningún mensaje en el CRM, p. ej. sin número conectado).
+  //
+  // Solo lo SALIENTE (lo que hace ella, no lo que le mandan), como en
+  // `seguimientoYTiempos` (#128). Y para quien lo mandó: lo enviado desde el
+  // CRM lleva `enviado_por`; lo escrito desde su móvil entra sin él, y entonces
+  // cuenta para la dueña del número (la instancia «…-u<id>»), como en
+  // «Actividad de WhatsApp» (`whatsapp/actividad.model.js`). Antes iba a
+  // «Sin asignar».
+  const conVoz = `COUNT(*) FILTER (WHERE li.tipo = 'whatsapp' AND EXISTS (
+              SELECT 1 FROM wa_mensajes m
+                JOIN wa_conversaciones c ON c.id = m.conversacion_id
+               WHERE c.lead_id = li.lead_id
+                 AND m.direccion = 'saliente' AND m.tipo = 'audio'
+                 AND COALESCE(m.enviado_por, NULLIF(substring(c.instancia from '-u([0-9]+)$'), '')::int) = li.created_by
+                 AND ${fechaLocal('m.ts')} = ${fechaLocal('li.fecha')}))::int`;
+  const contactosCon = (voz) => query(
     `SELECT u.id AS user_id, u.nombre AS comercial,
             COUNT(*) FILTER (WHERE li.tipo = 'llamada')::int  AS llamadas,
             COUNT(*) FILTER (WHERE li.tipo = 'whatsapp')::int AS whatsapp,
+            ${voz} AS whatsapp_voz,
             COUNT(*) FILTER (WHERE li.tipo = 'email')::int    AS correos,
             COUNT(*) FILTER (WHERE li.tipo = 'nota')::int     AS notas,
             COUNT(DISTINCT li.lead_id) FILTER (WHERE li.tipo <> 'nota')::int AS personas,
@@ -1394,6 +1417,11 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
       GROUP BY u.id, u.nombre`,
     f.params
   );
+  const { rows: contactos } = await contactosCon(conVoz).catch((err) => {
+    // Sin las tablas de WhatsApp (un CRM donde no se ha instalado): todo escrito.
+    if (err.code !== '42P01') throw err;
+    return contactosCon('0');
+  });
   // «Personas» del equipo no es la suma: dos comerciales pueden haber tocado a
   // la misma persona.
   const { rows: [eq] } = await query(
@@ -1404,48 +1432,11 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
     f.params
   );
 
-  // WhatsApp escrito y por voz (la issue: «sacados de `wa_mensajes`, que ya se
-  // calcula para el equipo (#128)»). Las mismas reglas que `seguimientoYTiempos`:
-  // solo lo SALIENTE (lo que hace la gestora, no lo que le mandan), «texto» es
-  // escrito y «audio» es voz. Cuenta para quien lo mandó (`enviado_por`); lo que
-  // no tiene autora va a «Sin asignar», para que el total cuadre (#128).
-  const w = condiciones('l.project_id', projectIds);
-  w.cond.push('l.deleted_at IS NULL', `m.direccion = 'saliente'`);
-  if (responsableId) w.add('m.enviado_por = ?', responsableId);
-  w.add(`${fechaLocal('m.ts')} >= ?::date`, desde);
-  w.add(`${fechaLocal('m.ts')} <= ?::date`, hasta);
-  const { rows: mensajes } = await query(
-    `SELECT m.enviado_por AS user_id, u.nombre AS comercial,
-            COUNT(*) FILTER (WHERE m.tipo = 'texto')::int AS whatsapp_texto,
-            COUNT(*) FILTER (WHERE m.tipo = 'audio')::int AS whatsapp_voz
-       FROM wa_mensajes m
-       JOIN wa_conversaciones c ON c.id = m.conversacion_id
-       JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN users u ON u.id = m.enviado_por
-      ${w.where()}
-      GROUP BY m.enviado_por, u.nombre`,
-    w.params
-  ).catch((err) => {
-    // Sin las tablas de WhatsApp (un CRM donde no se ha instalado), sin desglose.
-    if (err.code !== '42P01') throw err;
-    return { rows: [] };
-  });
-
-  const CERO = { llamadas: 0, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, notas: 0, personas: 0, toques: 0 };
-  const porPersona = new Map();
-  const de = (id, comercial) => {
-    // `user_id` para que la pantalla (parte B) abra la lista de cada una; null
-    // en «Sin asignar».
-    if (!porPersona.has(id)) porPersona.set(id, { user_id: id ?? null, comercial: comercial || 'Sin asignar', ...CERO });
-    return porPersona.get(id);
-  };
-  for (const { user_id: id, comercial, ...n } of contactos) Object.assign(de(id, comercial), n);
-  for (const m of mensajes) {
-    const fila = de(m.user_id, m.comercial);
-    fila.whatsapp_texto = m.whatsapp_texto;
-    fila.whatsapp_voz = m.whatsapp_voz;
-  }
-  const filas = [...porPersona.values()].filter((r) => r.toques + r.notas + r.whatsapp_texto + r.whatsapp_voz > 0)
+  // `user_id` para que la pantalla (parte B) abra la lista de cada una. Escritos
+  // + voz = WhatsApp siempre: lo que no es de voz es escrito.
+  const filas = contactos
+    .map((r) => ({ ...r, whatsapp_texto: r.whatsapp - r.whatsapp_voz }))
+    .filter((r) => r.toques + r.notas > 0)
     .sort((a, b) => b.llamadas - a.llamadas || b.toques - a.toques || a.comercial.localeCompare(b.comercial, 'es'));
   const suma = (k) => filas.reduce((s, r) => s + r[k], 0);
   return {
