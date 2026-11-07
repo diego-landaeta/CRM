@@ -30,7 +30,8 @@
 // solicitud y «terminado»). Qué NO: lo que es propio del 360 (lead_id y producto_id
 // son ids de SU base; la firma vive en SU almacenamiento; la edición y el aviso de
 // rechazo los hizo su equipo). Si una fila trae algo de eso, sale marcada
-// «tocada en el 360» para que alguien lo mire antes de borrarla.
+// «tocada en esta base» y «borrar» NO la quita (ni sus campanas): alguien tiene que
+// mirarla antes. Para borrarla igual, --tambien-tocadas.
 //
 // «meter» no pisa nada: si la matrícula ya está en ese CRM, solo rellena lo que allí
 // está vacío. La ficha del alumno se busca por su correo en ESA base.
@@ -38,9 +39,15 @@
 // La campana en ISEIE la decide Diego: por defecto NO suena (son avisos de hace días y
 // los alumnos ya están en su lista). Con --con-campana, cada aviso que entra nuevo
 // suena a quien le habría sonado si hubiera llegado bien (super admin y los admin de
-// ese campus), con el texto de siempre, su fecha original y una nota de que llegó
-// por error al otro CRM. El enlace es el de ISEIE si la base es crm_iseie; si no, el
-// del 360 (o el que se diga con --enlace-diplomas). No repite una campana que ya esté.
+// ese campus), con el texto de siempre y una nota con la fecha en que llegó al otro
+// CRM. Sale con la fecha de hoy para que se vea arriba en la campana. Si el alumno ya
+// pidió el diploma, solo suena la solicitud (Certifex tampoco avisa de «terminado» a
+// quien ya lo pidió). El enlace es el de ISEIE si la base es crm_iseie; si no, el del
+// 360 (o el que se diga con --enlace-diplomas). No repite una campana que ya esté.
+//
+// Antes de nada, «sacar» comprueba que los campus que Certifex manda al 360 (su
+// migración 0037) casan con un proyecto de esta base: uno que no case vería rechazados
+// sus avisos desde la #630 aunque no tenga filas aquí. Otra lista: --centros A,B,C.
 // Cada paso solo toca campus de su lado: «meter» salta los que no son de ese CRM y
 // «borrar» los que sí lo son. Se puede repetir: lo ya hecho no cambia.
 //
@@ -57,15 +64,23 @@ const valor = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i +
 const aFichero = valor('--a-fichero');
 const desdeFichero = valor('--desde-fichero');
 const conCampana = args.includes('--con-campana') && paso === 'meter';
+const tambienTocadas = args.includes('--tambien-tocadas') && paso === 'borrar';
+// Los campus que Certifex manda al 360 (Certifex, migración 0037_avisos_por_integracion).
+const CENTROS_DEL_360 = (valor('--centros') || 'PSIKO,ISEIH,FONO,ISAEG,ISSLOGG,ISECD,ISEF,ACADEMIAIA')
+  .split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
 
 if (!['sacar', 'meter', 'borrar'].includes(paso)) {
-  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar --a-fichero <metidos.json>] [--con-campana] | borrar --desde-fichero <metidos.json> [--aplicar]');
+  console.error('Uso: sacar --a-fichero <ruta.json> [--centros A,B] | meter --desde-fichero <ruta.json> [--aplicar --a-fichero <metidos.json>] [--con-campana] [--enlace-diplomas <ruta>] | borrar --desde-fichero <metidos.json> [--aplicar] [--tambien-tocadas]');
   process.exit(1);
 }
 if (paso === 'sacar' && !aFichero) { console.error('sacar: falta --a-fichero <ruta.json>'); process.exit(1); }
 if (paso !== 'sacar' && !desdeFichero) { console.error(`${paso}: falta --desde-fichero <ruta.json>`); process.exit(1); }
 if (paso === 'meter' && aplicar && !aFichero) {
   console.error('meter --aplicar: falta --a-fichero <metidos.json> (lo que quede en esta base; es lo único que «borrar» quitará del origen)');
+  process.exit(1);
+}
+if (aFichero && desdeFichero && aFichero === desdeFichero) {
+  console.error('--a-fichero y --desde-fichero no pueden ser el mismo fichero: se perdería el de entrada');
   process.exit(1);
 }
 
@@ -126,6 +141,11 @@ const leer = () => {
   }
   if (paso === 'meter' && d.origen === base) throw new Error(`se sacaron de ${base}: hay que meterlos en la OTRA base`);
   if (paso === 'borrar' && d.origen !== base) throw new Error(`se sacaron de ${d.origen}: «borrar» va en esa base, no en ${base}`);
+  if (paso === 'borrar' && (!d.destino || d.destino === base)) throw new Error('el fichero no dice en qué otra base se metieron');
+  // En producción, lo del 360 solo se borra si se metió en la de ISEIE de producción.
+  if (paso === 'borrar' && base === 'crm_prod_db' && d.destino !== 'crm_iseie') {
+    throw new Error(`se metieron en ${d.destino}, no en crm_iseie: no se borra nada de producción`);
+  }
   return d;
 };
 
@@ -147,6 +167,12 @@ const filas = [];
 console.log(`\n${paso.toUpperCase()} · ${aplicar ? 'APLICANDO' : 'ENSAYO (solo lectura)'} · base ${base}\n`);
 
 if (paso === 'sacar') {
+  // Comprobación previa: los campus que Certifex manda aquí, ¿casan todos?
+  const noCasan = CENTROS_DEL_360.filter((c) => !esDeEsteCrm(c));
+  console.log(`Campus que Certifex manda a esta base: ${CENTROS_DEL_360.join(', ')}`);
+  console.log(noCasan.length
+    ? `  ⚠ NO casan con ningún proyecto de esta base: ${noCasan.join(', ')}. Desde la #630 sus avisos se RECHAZARÍAN. Revísalo antes de fusionar.\n`
+    : '  ✓ Todos casan con un proyecto de esta base.\n');
   const { rows } = await query(`SELECT * FROM certifex_solicitudes ORDER BY recibida_en, matricula_id`);
   const ajenos = rows.filter((r) => !esDeEsteCrm(r.centro));
   const avisos = ajenos.map((r) => ({
@@ -175,7 +201,7 @@ async function sonarAqui(a, nuevos, leadId) {
   const tipos = [];
   if (nuevos.terminado) {
     tipos.push({
-      type: 'certifex_completado', cuando: a.completado_recibido_en,
+      type: 'certifex_completado', llego: a.completado_recibido_en,
       title: `Terminó sin pedir el diploma: ${a.nombre_moodle || a.email || 'Un alumno'}`,
       cuerpo: `${a.centro}${curso}. Moodle da la formación por terminada y aún no ha pedido su diploma.${sinFicha}`,
       link_path: `${RUTA_DIPLOMAS}?pestana=terminados`,
@@ -185,7 +211,7 @@ async function sonarAqui(a, nuevos, leadId) {
     const quien = a.nombre_diploma || a.nombre_moodle || 'Un alumno';
     const nombre = a.nombre_diploma ? `Nombre para el diploma: «${a.nombre_diploma}».` : 'Sin nombre para el diploma: revísalo antes de aprobar.';
     tipos.push({
-      type: 'certifex_solicitud', cuando: a.recibida_en || a.solicitada_en,
+      type: 'certifex_solicitud', llego: a.solicitada_en,
       title: `Diploma: ${quien} lo pide`,
       cuerpo: `${a.centro}${curso}. ${nombre}${sinFicha}`,
       link_path: RUTA_DIPLOMAS,
@@ -196,16 +222,18 @@ async function sonarAqui(a, nuevos, leadId) {
     const { rows: [hay] } = await query(
       `SELECT 1 FROM admin_notifications WHERE type = $1 AND metadata->>'matriculaId' = $2 LIMIT 1`, [t.type, String(a.matricula_id)]);
     if (hay) continue;
+    // Sin destinatarios sería una campana para todos: no.
+    const ids = await idsAdministracionDeCentro(a.centro);
+    if (!ids.length) continue;
     n++;
     if (!aplicar) continue;
-    const ids = await idsAdministracionDeCentro(a.centro);
-    if (!ids.length) { n--; continue; } // sin destinatarios sería para todos: no
-    const nota = ` Llegó el ${fecha(t.cuando)} al otro CRM por error; se ha traído aquí (#630).`;
+    // Con la fecha de hoy, para que se vea arriba; la del aviso, en el texto.
+    const nota = ` Llegó el ${fecha(t.llego)} al otro CRM por error; se ha traído aquí (#630).`;
     await query(
-      `INSERT INTO admin_notifications (type, title, message, link_path, metadata, target_user_ids, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, NOW()))`,
+      `INSERT INTO admin_notifications (type, title, message, link_path, metadata, target_user_ids)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [t.type, t.title.slice(0, 255), `${t.cuerpo}${nota}`.slice(0, 300), t.link_path,
-        { matriculaId: Number(a.matricula_id), centro: a.centro, leadId, movidoDeOtroCrm: true }, ids, t.cuando ?? null],
+        { matriculaId: Number(a.matricula_id), centro: a.centro, leadId, movidoDeOtroCrm: true, llegoAlOtroCrm: t.llego ?? null }, ids],
     );
   }
   return n;
@@ -230,7 +258,8 @@ if (paso === 'meter') {
       const { rows: [ya] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
       // Lo que este aviso trae de nuevo a esta base (para la campana, si se pide).
       const nuevos = conCampana ? {
-        terminado: !ya?.completado_recibido_en && !!a.completado_recibido_en,
+        // Como Certifex: no se avisa de «terminado» a quien ya pidió el diploma.
+        terminado: !ya?.completado_recibido_en && !!a.completado_recibido_en && !a.solicitada_en && !ya?.solicitada_en,
         solicitud: !ya?.solicitada_en && !!a.solicitada_en,
       } : null;
       const sonar = async () => { if (nuevos) fila.campanas = await sonarAqui(a, nuevos, lead?.id ?? ya?.lead_id ?? null); };
@@ -302,13 +331,19 @@ if (paso === 'borrar') {
       const { rows: [r] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
       // Lo que manda es el campus que hay EN ESTA BASE, no el del fichero.
       if (r && esDeEsteCrm(r.centro)) { fila.accion = 'SALTA'; fila.nota = `el campus ${r.centro} es de esta base`; continue; }
+      // Tocada aquí (firma, edición, aviso de rechazo): no se pierde sin que alguien la mire.
+      const tocada = r ? tocadaAqui(r) : [];
+      if (tocada.length && !tambienTocadas) {
+        fila.accion = 'SE QUEDA';
+        fila.nota = `tocada en esta base: ${tocada.join(', ')} (mírala; para borrarla igual, --tambien-tocadas)`;
+        continue;
+      }
       const campanas = await campanasAjenas(a.matricula_id);
       fila.campanas = campanas.length;
       if (aplicar && campanas.length) await query(`DELETE FROM admin_notifications WHERE id = ANY($1::int[])`, [campanas]);
       if (!r) { fila.accion = 'YA NO ESTÁ'; continue; }
       fila.accion = 'BORRA';
-      const tocada = tocadaAqui(r);
-      if (tocada.length) fila.nota = `tocada en esta base: ${tocada.join(', ')}`;
+      if (tocada.length) fila.nota = `tocada en esta base: ${tocada.join(', ')} (--tambien-tocadas)`;
       if (aplicar) await query(`DELETE FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
     } catch (err) {
       fila.accion = 'ERROR';

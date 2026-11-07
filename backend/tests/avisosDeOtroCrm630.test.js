@@ -41,9 +41,13 @@ const insertar = (id, centro, extra = {}) => pool.query(
 
 let proyecto;
 let lead;
+let adminDelCampus;
 beforeAll(async () => {
   proyecto = (await pool.query(
     `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Zpropia630', $1, 'whk_test') RETURNING id`, [`zpropia630-${base}`])).rows[0].id;
+  // Un admin activo con este campus: la campana de un aviso movido tiene que llegarle.
+  adminDelCampus = (await pool.query(`SELECT id FROM users WHERE active AND role = 'admin' ORDER BY id LIMIT 1`)).rows[0].id;
+  await pool.query(`INSERT INTO user_projects (user_id, project_id, active) VALUES ($1, $2, true)`, [adminDelCampus, proyecto]);
   lead = (await pool.query(
     `INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Alumna 630', $2) RETURNING id`, [proyecto, correo.toUpperCase()])).rows[0].id;
   await insertar(base, 'ZAJENA630');
@@ -53,6 +57,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query('DELETE FROM certifex_solicitudes WHERE matricula_id >= $1 AND matricula_id < $2', [base, base + 10]);
   await pool.query('DELETE FROM leads WHERE id = $1', [lead]);
+  await pool.query('DELETE FROM user_projects WHERE project_id = $1', [proyecto]);
   await pool.query('DELETE FROM projects WHERE id = $1', [proyecto]);
   await pool.end();
 });
@@ -91,6 +96,12 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     expect(a).not.toHaveProperty('lead_id');
     expect(a).not.toHaveProperty('firma_key');
     expect(mios.find((x) => x.matricula_id === base + 1).tocada_en_origen).toEqual(['email_crm', 'firma_key']);
+    // La comprobación previa: con la lista por defecto (los 8 de Certifex) y con otra.
+    expect(r.stdout).toMatch(/Campus que Certifex manda a esta base: PSIKO, ISEIH, FONO, ISAEG, ISSLOGG, ISECD, ISEF, ACADEMIAIA/);
+    const otra = correr(['sacar', '--a-fichero', join(dir, 'sacados-b.json'), '--centros', 'zpropia630,ZNOCASA630']);
+    expect(otra.stdout).toMatch(/NO casan con ningún proyecto de esta base: ZNOCASA630\./);
+    const todos = correr(['sacar', '--a-fichero', join(dir, 'sacados-c.json'), '--centros', 'ZPROPIA630,ISEIH']);
+    expect(todos.stdout).toMatch(/Todos casan/);
   });
 
   it('cada paso solo acepta el fichero del paso anterior, y en su base', () => {
@@ -106,10 +117,19 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     const otra = correr(['borrar', '--desde-fichero', escribir('otra.json', { paso: 'meter', origen: 'crm_otra', avisos: [] })]);
     expect(otra.status).toBe(1);
     expect(otra.stderr).toMatch(/va en esa base/);
+    // borrar con un fichero que no dice en qué otra base se metió: no.
+    const sinDestino = correr(['borrar', '--desde-fichero', escribir('sin-destino.json', { paso: 'meter', origen: BASE_AQUI, avisos: [] })]);
+    expect(sinDestino.status).toBe(1);
+    expect(sinDestino.stderr).toMatch(/no dice en qué otra base/);
     // meter --aplicar sin decir dónde apuntar lo hecho: no.
     const sinFichero = correr(['meter', '--desde-fichero', sacados, '--aplicar']);
     expect(sinFichero.status).toBe(1);
     expect(sinFichero.stderr).toMatch(/falta --a-fichero/);
+    // El mismo fichero de entrada y de salida: no (se perdería el de entrada).
+    const mismoFichero = correr(['meter', '--desde-fichero', sacados, '--aplicar', '--a-fichero', sacados]);
+    expect(mismoFichero.status).toBe(1);
+    expect(mismoFichero.stderr).toMatch(/no pueden ser el mismo fichero/);
+    expect(leerJson(sacados).paso).toBe('sacar');
   });
 
   it('meter: el ensayo no escribe; con --aplicar crea, completa lo vacío sin pisar, salta lo ajeno y apunta lo hecho', async () => {
@@ -175,28 +195,36 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
       expect(ensayo.stdout).toMatch(/campanas/);
       expect(await campanas()).toHaveLength(0);
 
-      const r = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', join(dir, 'm-campana.json'), '--con-campana']);
+      // Con el enlace de ISEIE (allí Diplomas no cuelga de «/clientes»).
+      const antes = Date.now();
+      const r = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', join(dir, 'm-campana.json'), '--con-campana',
+        '--enlace-diplomas', '/matriculas/diplomas']);
       expect(r.status, r.stderr).toBe(0);
       const c = await campanas();
-      expect(c.map((x) => x.type)).toEqual(['certifex_completado', 'certifex_completado', 'certifex_solicitud']);
-      const [cinco, seis, seisPide] = c;
-      expect(cinco).toMatchObject({ title: 'Terminó sin pedir el diploma: Alumna 630', link_path: '/clientes/matriculas/diplomas?pestana=terminados' });
+      // La seis ya pidió el diploma: solo suena la solicitud, no «terminó sin pedir» (como Certifex).
+      expect(c.map((x) => x.type)).toEqual(['certifex_completado', 'certifex_solicitud']);
+      const [cinco, seisPide] = c;
+      expect(cinco).toMatchObject({ title: 'Terminó sin pedir el diploma: Alumna 630', link_path: '/matriculas/diplomas?pestana=terminados' });
       expect(cinco.message).toMatch(/^ZPROPIA630 · Máster en Prueba\. Moodle da la formación por terminada/);
-      expect(cinco.message).toMatch(/al otro CRM por error.*#630/);
-      expect(cinco.created_at.toISOString()).toBe('2026-10-20T08:01:00.000Z'); // la fecha en que llegó
-      expect(cinco.metadata).toMatchObject({ matriculaId: base + 5, centro: 'ZPROPIA630', leadId: lead, movidoDeOtroCrm: true });
-      // A quien le habría sonado: al menos los super admin activos.
+      // La fecha en que llegó al otro CRM va en el texto (hora de Madrid) y en metadata;
+      // la campana, con la de hoy, para que se vea arriba.
+      expect(cinco.message).toMatch(/Llegó el 20\/10\/26, 10:01 al otro CRM por error; se ha traído aquí \(#630\)/);
+      expect(cinco.created_at.getTime()).toBeGreaterThanOrEqual(antes - 5000);
+      expect(cinco.metadata).toMatchObject({ matriculaId: base + 5, centro: 'ZPROPIA630', leadId: lead, movidoDeOtroCrm: true, llegoAlOtroCrm: '2026-10-20T08:01:00.000Z' });
+      // A quien le habría sonado: los super admin activos y el admin de este campus.
       const { rows: sas } = await pool.query(`SELECT id FROM users WHERE active AND role = 'superadmin'`);
       for (const u of sas) expect(cinco.target_user_ids).toContain(u.id);
-      expect(seis.title).toBe('Terminó sin pedir el diploma: Alumna 630');
-      expect(seisPide).toMatchObject({ title: 'Diploma: Alumna Seis lo pide', link_path: '/clientes/matriculas/diplomas' });
-      expect(seisPide.message).toMatch(/Nombre para el diploma: «Alumna Seis»/);
-      expect(seisPide.created_at.toISOString()).toBe('2026-10-21T09:00:05.000Z');
+      expect(cinco.target_user_ids).toContain(adminDelCampus);
+      expect(seisPide).toMatchObject({ title: 'Diploma: Alumna Seis lo pide', link_path: '/matriculas/diplomas' });
+      expect(seisPide.message).toMatch(/Nombre para el diploma: «Alumna Seis»\./);
+      // La fecha de la SOLICITUD (21/10, 11:00 en Madrid), no la del «terminado».
+      expect(seisPide.message).toMatch(/Llegó el 21\/10\/26, 11:00/);
+      expect(seisPide.metadata.llegoAlOtroCrm).toBe('2026-10-21T09:00:00.000Z');
 
       // Otra vez: no repite.
       const otra = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', join(dir, 'm-campana2.json'), '--con-campana']);
       expect(otra.status, otra.stderr).toBe(0);
-      expect(await campanas()).toHaveLength(3);
+      expect(await campanas()).toHaveLength(2);
     } finally {
       await pool.query(`DELETE FROM admin_notifications WHERE metadata->>'matriculaId' IN ($1, $2, $3)`, [String(base + 5), String(base + 6), String(base + 7)]);
     }
@@ -205,9 +233,12 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
   it('borrar: solo lo que «meter» dejó en la otra base; el ensayo no borra; manda el campus de esta base', async () => {
     // Como si «meter» se hubiera hecho en la otra base con lo sacado de aquí: base sí
     // entró allí; base + 1 NO (se saltó o falló), así que no está en el fichero.
+    // base + 8: ajena pero TOCADA aquí (firma, edición): no se borra sin --tambien-tocadas.
+    await insertar(base + 8, 'ZAJENA630', { firma_key: 'firmas/ocho.png', email_crm: 'ocho@prueba.test' });
     const lista = escribir('metidos-aqui.json', { paso: 'meter', origen: BASE_AQUI, destino: 'crm_otra', avisos: [
       { matricula_id: base, centro: 'ZAJENA630' },
       { matricula_id: base + 2, centro: 'ZAJENA630' }, // en el fichero dice ajeno, pero aquí es ZPROPIA630
+      { matricula_id: base + 8, centro: 'ZAJENA630' },
       { matricula_id: base + 9, centro: 'ZAJENA630' },
     ] });
     // Las campanas que dejaron esos avisos aquí (lo que se veía desde el admin).
@@ -221,13 +252,14 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
       sinMeter: await campana('certifex_completado', base + 1, 'ZAJENA630'),
       propia: await campana('certifex_completado', base + 2, 'ZPROPIA630'),
       yaSinFila: await campana('certifex_completado', base + 9, 'ZAJENA630'),
+      tocada: await campana('certifex_completado', base + 8, 'ZAJENA630'),
     };
     const quedan = async () => (await pool.query('SELECT id FROM admin_notifications WHERE id = ANY($1::int[])', [Object.values(c)])).rows.map((x) => x.id).sort();
     try {
       const ensayo = correr(['borrar', '--desde-fichero', lista]);
       expect(ensayo.status, ensayo.stderr).toBe(0);
       expect(await fila(base)).toBeDefined();
-      expect(await quedan()).toHaveLength(6);
+      expect(await quedan()).toHaveLength(7);
 
       const r = correr(['borrar', '--desde-fichero', lista, '--aplicar']);
       expect(r.status, r.stderr).toBe(0);
@@ -235,8 +267,17 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
       expect(await fila(base + 1)).toBeDefined(); // no la metió nadie: se queda
       expect(await fila(base + 2)).toBeDefined(); // su campus es de esta base: se queda
       expect(r.stdout).toMatch(/YA NO ESTÁ: 1/);
+      expect(r.stdout).toMatch(/SE QUEDA: 1/);
       // Se van las campanas de avisos (terminado y solicitud) de lo que se movió, también
-      // si la fila ya no estaba; se quedan las de otro tipo, las de lo no movido y las propias.
+      // si la fila ya no estaba; se quedan las de otro tipo, las de lo no movido, las
+      // propias y las de la tocada (con su fila: la firma no se pierde).
+      expect(await fila(base + 8)).toMatchObject({ firma_key: 'firmas/ocho.png' });
+      expect(await quedan()).toEqual([c.deOtroTipo, c.sinMeter, c.propia, c.tocada].sort());
+
+      // Con --tambien-tocadas, sí (alguien la ha mirado y lo decide).
+      const igual = correr(['borrar', '--desde-fichero', lista, '--aplicar', '--tambien-tocadas']);
+      expect(igual.status, igual.stderr).toBe(0);
+      expect(await fila(base + 8)).toBeUndefined();
       expect(await quedan()).toEqual([c.deOtroTipo, c.sinMeter, c.propia].sort());
     } finally {
       await pool.query('DELETE FROM admin_notifications WHERE id = ANY($1::int[])', [Object.values(c)]);
