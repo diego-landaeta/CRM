@@ -15,8 +15,15 @@ const dir = mkdtempSync(join(tmpdir(), 'avisos630-'));
 const base = 630_000_000 + Math.floor(Math.random() * 1_000_000) * 10;
 const correo = `alumna.630.${base}@prueba.test`;
 
+// El script corre como lo correría Diego: un node limpio, sin lo que vitest deja en el
+// entorno (NODE_OPTIONS, VITEST_*).
+const entorno = (extra = {}) => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_OPTIONS' && !k.startsWith('VITEST'))),
+  LOG_LEVEL: 'silent',
+  ...extra,
+});
 const correr = (...args) => spawnSync(process.execPath, [SCRIPT, ...args], {
-  env: { ...process.env, LOG_LEVEL: 'silent' }, encoding: 'utf8', cwd: resolve(dirname(SCRIPT), '..'),
+  env: entorno(), encoding: 'utf8', cwd: resolve(dirname(SCRIPT), '..'),
 });
 const fila = async (id) => (await pool.query('SELECT * FROM certifex_solicitudes WHERE matricula_id = $1', [id])).rows[0];
 const insertar = (id, centro, extra = {}) => pool.query(
@@ -120,7 +127,7 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     const u = new URL(process.env.DATABASE_URL);
     u.pathname = '/crm_iseie';
     const r = spawnSync(process.execPath, [SCRIPT, 'meter', '--desde-fichero', join(dir, 'destino.json'), '--aplicar'], {
-      env: { ...process.env, DATABASE_URL: u.toString(), RECUPERAR_EN_PRODUCCION: '' }, encoding: 'utf8',
+      env: entorno({ DATABASE_URL: u.toString(), RECUPERAR_EN_PRODUCCION: '' }), encoding: 'utf8',
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/PRODUCCIÓN/);
