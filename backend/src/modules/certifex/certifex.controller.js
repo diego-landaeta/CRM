@@ -42,8 +42,11 @@ function puertaDeCertifex(req) {
 /**
  * Los avisos de un alumno (solicitud de diploma, formacion terminada) solo entran si su
  * campus es de este CRM (#630): del 19/10 al 01/11 llegaron al 360 avisos de ISEIE.
- * Se contesta 422 y no 2xx a proposito: Certifex reintenta lo que no recibe un 2xx,
- * asi que el aviso no se pierde y le llega al CRM bueno cuando se corrija el envio.
+ * Se contesta 422 y no 2xx a proposito, para que Certifex no lo de por entregado: el
+ * «terminado» lo vuelve a mandar la proxima vez que pone al dia a ese alumno; la
+ * solicitud no se reintenta, pero sigue en su lista (`/candidatos?solicitadas=1`), que
+ * es de donde sale «Pendientes». Con un 2xx sin guardar, el «terminado» se perderia.
+ * Los que entraron antes de esto se copian con scripts/avisos-de-otro-crm-630.mjs.
  * El rechazo queda en el registro («Peticion rechazada», con el motivo): errorHandler.
  */
 async function exigirCentroDeEsteCrm(centro) {

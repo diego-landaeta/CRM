@@ -1,0 +1,201 @@
+// Los avisos de Certifex que entraron en el CRM equivocado (#630).
+//
+// Del 19/10 al 01/11/2026 Certifex mandaba TODOS sus avisos al 360, también los de
+// ISEIE (solicitudes de diploma y «ha terminado la formación»): 27 de «terminado»
+// quedaron en certifex_solicitudes del 360. Desde Certifex#103 (migración 0037) cada
+// CRM recibe los de sus centros, y el 360 ya rechaza los de un campus que no es suyo.
+// Certifex no los va a reenviar (el 360 contestó 2xx y los dio por avisados), así
+// que se copian a mano. Los alumnos ya salen en «Terminaron sin pedir» de ISEIE (esa
+// lista la da Certifex); lo que falta allí es el aviso: cuándo terminó, la nota y
+// cuándo llegó.
+//
+// Tres pasos, cada uno contra SU base (DATABASE_URL):
+//
+//   1. En el 360, sacarlos a un fichero (SIEMPRE solo lectura):
+//        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs sacar --a-fichero avisos-630.json
+//   2. En ISEIE, meterlos (ensayo; para escribir, --aplicar):
+//        DATABASE_URL=<la de ISEIE> node scripts/avisos-de-otro-crm-630.mjs meter --desde-fichero avisos-630.json
+//   3. En el 360, quitarlos (ensayo; para escribir, --aplicar):
+//        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs borrar --desde-fichero avisos-630.json
+//
+// Qué se copia: lo que dijo Certifex (matrícula, campus, curso, nombres, correo,
+// solicitud y «terminado»). Qué NO: lo que es propio del 360 (lead_id y producto_id
+// son ids de SU base; la firma vive en SU almacenamiento; la edición y el aviso de
+// rechazo los hizo su equipo). Si una fila trae algo de eso, sale marcada
+// «tocada en el 360» para que alguien lo mire antes de borrarla.
+//
+// «meter» no pisa nada: si la matrícula ya está en ese CRM, solo rellena lo que allí
+// está vacío. La ficha del alumno se busca por su correo en ESA base. No suena la
+// campana: son avisos de hace días y los alumnos ya están en la lista.
+// Cada paso solo toca campus de su lado: «meter» salta los que no son de ese CRM y
+// «borrar» los que sí lo son. Se puede repetir: lo ya hecho no cambia.
+//
+// El ensayo abre la base en SOLO LECTURA (default_transaction_read_only).
+// En producción (crm_prod_db, crm_iseie), --aplicar exige RECUPERAR_EN_PRODUCCION=1
+// (lo decide Diego).
+
+import fs from 'node:fs';
+
+const args = process.argv.slice(2);
+const paso = args[0];
+const aplicar = args.includes('--aplicar') && paso !== 'sacar';
+const valor = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+const aFichero = valor('--a-fichero');
+const desdeFichero = valor('--desde-fichero');
+
+if (!['sacar', 'meter', 'borrar'].includes(paso)) {
+  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar] | borrar --desde-fichero <ruta.json> [--aplicar]');
+  process.exit(1);
+}
+if (paso === 'sacar' && !aFichero) { console.error('sacar: falta --a-fichero <ruta.json>'); process.exit(1); }
+if (paso !== 'sacar' && !desdeFichero) { console.error(`${paso}: falta --desde-fichero <ruta.json>`); process.exit(1); }
+
+const URL_BD = process.env.DATABASE_URL || '';
+if (!URL_BD) { console.error('Falta DATABASE_URL (node --env-file=.env …)'); process.exit(1); }
+const base = new URL(URL_BD).pathname.slice(1);
+if (aplicar && ['crm_prod_db', 'crm_iseie'].includes(base) && process.env.RECUPERAR_EN_PRODUCCION !== '1') {
+  console.error(`\n  ${base} es PRODUCCIÓN. Para aplicar hace falta RECUPERAR_EN_PRODUCCION=1.\n`);
+  process.exit(1);
+}
+if (!aplicar) {
+  // Antes de importar nada que abra el pool: la conexión entera, de solo lectura.
+  const u = new URL(URL_BD);
+  u.searchParams.set('options', '-c default_transaction_read_only=on');
+  process.env.DATABASE_URL = u.toString();
+}
+
+const { query, default: pool } = await import('../src/shared/config/db.js');
+const { proyectosDeCentro } = await import('../src/modules/certifex/certifex.programa.js');
+
+if (!aplicar) {
+  const { rows } = await query('SHOW default_transaction_read_only');
+  if (rows[0]?.default_transaction_read_only !== 'on') { console.error('El ensayo no ha quedado en solo lectura: paro.'); process.exit(1); }
+}
+
+// La misma regla que las entradas de Certifex (esCentroDeEsteCrm): un campus es de
+// este CRM si casa con algún proyecto que no sea de prueba.
+const { rows: proyectos } = await query(`SELECT id, nombre, slug FROM projects WHERE NOT COALESCE(es_prueba, false)`);
+const esDeEsteCrm = (centro) => proyectosDeCentro(centro, proyectos).length > 0;
+
+// Lo que dijo Certifex: se copia. El resto es del CRM que lo recibió.
+const COPIABLES = ['centro', 'curso_ref', 'curso_nombre', 'nombre_diploma', 'nombre_moodle', 'email',
+  'solicitada_en', 'veces', 'recibida_en', 'completado_en', 'completado_nota', 'completado_recibido_en'];
+const PROPIOS = ['email_crm', 'producto_id', 'programa_editado', 'editado_en', 'aviso_rechazo_en', 'firma_key'];
+
+const fecha = (d) => (d ? new Date(d).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'short', timeStyle: 'short' }) : '');
+const tapar = (e) => {
+  if (!e) return '—';
+  const [u, d] = String(e).split('@');
+  return `${u.slice(0, 1)}***@${d || ''}`;
+};
+const tocadaAqui = (r) => PROPIOS.filter((c) => r[c] != null);
+const leer = () => {
+  const d = JSON.parse(fs.readFileSync(desdeFichero, 'utf8'));
+  if (!Array.isArray(d.avisos)) throw new Error(`${desdeFichero} no es un fichero de «sacar» (falta «avisos»)`);
+  return d.avisos;
+};
+
+const filas = [];
+console.log(`\n${paso.toUpperCase()} · ${aplicar ? 'APLICANDO' : 'ENSAYO (solo lectura)'} · base ${base}\n`);
+
+if (paso === 'sacar') {
+  const { rows } = await query(`SELECT * FROM certifex_solicitudes ORDER BY recibida_en, matricula_id`);
+  const ajenos = rows.filter((r) => !esDeEsteCrm(r.centro));
+  const avisos = ajenos.map((r) => ({
+    matricula_id: Number(r.matricula_id),
+    ...Object.fromEntries(COPIABLES.map((c) => [c, r[c] ?? null])),
+    tocada_en_origen: tocadaAqui(r),
+  }));
+  fs.writeFileSync(aFichero, JSON.stringify({ origen: base, sacado_en: new Date().toISOString(), avisos }, null, 2));
+  for (const a of avisos) {
+    filas.push({
+      matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email),
+      terminado: fecha(a.completado_recibido_en), solicitud: fecha(a.solicitada_en),
+      nota: a.tocada_en_origen.length ? `tocada en esta base: ${a.tocada_en_origen.join(', ')}` : '',
+    });
+  }
+  console.log(`${avisos.length} avisos de campus que no son de esta base → ${aFichero}`);
+}
+
+if (paso === 'meter') {
+  for (const a of leer()) {
+    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, rellena: '', ficha: '' };
+    filas.push(fila);
+    try {
+      if (!esDeEsteCrm(a.centro)) { fila.accion = 'SALTA'; fila.rellena = 'el campus tampoco es de esta base'; continue; }
+      const { rows: [lead] } = await query(
+        `SELECT l.id FROM leads l
+          WHERE l.deleted_at IS NULL AND lower(l.email) = lower($1)
+            AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)
+          ORDER BY l.id DESC LIMIT 1`,
+        [String(a.email || '').trim()],
+      );
+      const { rows: [ya] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+      if (!ya) {
+        fila.accion = 'CREA';
+        fila.ficha = lead ? `#${lead.id}` : 'sin ficha';
+        if (aplicar) {
+          await query(
+            `INSERT INTO certifex_solicitudes (matricula_id, ${COPIABLES.join(', ')}, lead_id)
+             VALUES ($1, ${COPIABLES.map((_, i) => `$${i + 2}`).join(', ')}, $${COPIABLES.length + 2})
+             ON CONFLICT (matricula_id) DO NOTHING`,
+            [a.matricula_id, ...COPIABLES.map((c) => (c === 'veces' ? (a.veces ?? 1) : c === 'recibida_en' ? (a.recibida_en ?? new Date().toISOString()) : a[c])), lead?.id ?? null],
+          );
+        }
+        continue;
+      }
+      // Ya está: solo lo vacío. veces y recibida_en nunca están vacíos (NOT NULL).
+      const vacias = COPIABLES.filter((c) => !['veces', 'recibida_en'].includes(c) && ya[c] == null && a[c] != null);
+      const sinFicha = ya.lead_id == null && lead;
+      if (!vacias.length && !sinFicha) { fila.accion = 'YA ESTABA'; continue; }
+      fila.accion = 'COMPLETA';
+      fila.rellena = [...vacias, ...(sinFicha ? ['lead_id'] : [])].join(', ');
+      fila.ficha = ya.lead_id ? `#${ya.lead_id}` : lead ? `#${lead.id}` : 'sin ficha';
+      if (aplicar) {
+        await query(
+          `UPDATE certifex_solicitudes SET
+             ${vacias.map((c, i) => `${c} = COALESCE(${c}, $${i + 2})`).join(', ')}${vacias.length ? ',' : ''}
+             lead_id = COALESCE(lead_id, $${vacias.length + 2}),
+             updated_at = NOW()
+           WHERE matricula_id = $1`,
+          [a.matricula_id, ...vacias.map((c) => a[c]), lead?.id ?? null],
+        );
+      }
+    } catch (err) {
+      fila.accion = 'ERROR';
+      fila.rellena = err.message;
+    }
+  }
+}
+
+if (paso === 'borrar') {
+  for (const a of leer()) {
+    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, nota: '' };
+    filas.push(fila);
+    try {
+      const { rows: [r] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+      if (!r) { fila.accion = 'YA NO ESTÁ'; continue; }
+      // Lo que manda es el campus que hay EN ESTA BASE, no el del fichero.
+      if (esDeEsteCrm(r.centro)) { fila.accion = 'SALTA'; fila.nota = `el campus ${r.centro} es de esta base`; continue; }
+      fila.accion = 'BORRA';
+      const tocada = tocadaAqui(r);
+      if (tocada.length) fila.nota = `tocada en esta base: ${tocada.join(', ')}`;
+      if (aplicar) await query(`DELETE FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+    } catch (err) {
+      fila.accion = 'ERROR';
+      fila.nota = err.message;
+    }
+  }
+}
+
+if (filas.length) console.table(filas);
+if (paso !== 'sacar') {
+  const resumen = {};
+  for (const f of filas) resumen[f.accion] = (resumen[f.accion] || 0) + 1;
+  console.log('\nResumen:');
+  for (const [k, n] of Object.entries(resumen)) console.log(`  ${k}: ${n}`);
+  console.log(aplicar ? '\nHecho.' : '\nEnsayo: no se ha escrito nada. Para aplicar: --aplicar');
+}
+
+await pool.end();
+process.exit(0);

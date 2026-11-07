@@ -252,6 +252,12 @@ describe('avisos de un campus que no es de este CRM (#630)', () => {
   it('el secreto se mira antes: sin el bueno, 401 aunque el campus sea ajeno', async () => {
     expect((await entregar(solicitud({ matriculaId: ajeno + 3, centro: 'iseie' }), 'otro')).status).toBe(401);
   });
+
+  it('y la validacion antes que el campus: mal formado y ajeno, 400 (no 422)', async () => {
+    const r = await entregar(solicitud({ matriculaId: 'x', centro: 'iseie' }));
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+  });
 });
 
 // ───────────────────────────────────────────────────────────── permisos
