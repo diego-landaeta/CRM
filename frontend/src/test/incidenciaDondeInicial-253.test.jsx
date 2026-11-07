@@ -69,6 +69,18 @@ describe('el campus de una incidencia nueva', () => {
     crear.mockRestore();
   });
 
+  it('sin ningún tipo, lleva al primer botón de «Tipo», que también está arriba', () => {
+    const crear = vi.spyOn(incidenciasApi, 'crear');
+    abrir({ dondeInicial: 'p:1' });
+    fireEvent.change(document.getElementById('inc-que'), { target: { value: 'Se dio de alta en otro campus' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Capa 8' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apuntar incidencia/ }));
+    expect(screen.getByText('Elige al menos un tipo')).toBeTruthy();
+    expect(crear).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(document.getElementById('inc-tipos').querySelector('button'));
+    crear.mockRestore();
+  });
+
   it('en solo lectura, una sin campus dice «todo el CRM», no «Elige…»', () => {
     const inc = { id: 6, projectId: null, sociedadId: null, tipos: ['capa8'], quePaso: 'x', estado: 'open', gravedad: 'medium', ocurrioAt: '2026-10-06T10:00:00Z', adjuntos: [] };
     expect(abrir({ incidencia: inc, soloLectura: true })).toContain('Ninguno (todo el CRM)');

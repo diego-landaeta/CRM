@@ -152,12 +152,15 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
     if (!veTodo && !f.donde) e.donde = 'Elige el campus o la empresa';
     if (f.entidadId && !/^\d{1,10}$/.test(f.entidadId)) e.entidadId = 'Solo el número';
     setErrores(e);
-    // Al primer campo con error: con el botón abajo, el aviso de arriba no se veía.
+    // Al primer campo con error, en el orden en que se pintan: con el botón
+    // abajo, el aviso de arriba no se veía. De «Tipo», su primer botón.
     const primero = ([
-      ['ocurrioAt', 'inc-cuando'], ['donde', 'inc-donde'], ['entidadId', 'inc-entidad-id'], ['quePaso', 'inc-que'],
+      ['ocurrioAt', 'inc-cuando'], ['donde', 'inc-donde'], ['tipos', 'inc-tipos'],
+      ['entidadId', 'inc-entidad-id'], ['quePaso', 'inc-que'],
     ] as const).find(([k]) => e[k]);
     if (primero) {
-      const el = document.getElementById(primero[1]);
+      const caja = document.getElementById(primero[1]);
+      const el = primero[0] === 'tipos' ? caja?.querySelector('button') : caja;
       el?.scrollIntoView?.({ block: 'center' });
       el?.focus();
     }
@@ -285,7 +288,7 @@ export default function IncidenciaDialog({ incidencia, soloLectura = false, pers
               </FilaCampos>
 
               <Field label="Tipo" required error={errores.tipos} hint="Puede ser más de uno: capa 8 y fallo del CRM a la vez.">
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tipo">
+                <div id="inc-tipos" className="flex flex-wrap gap-1.5" role="group" aria-label="Tipo">
                   {ORDEN_TIPOS.map((t) => {
                     const activo = f.tipos.includes(t);
                     return (
