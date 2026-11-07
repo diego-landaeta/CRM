@@ -33,9 +33,14 @@
 // «tocada en el 360» para que alguien lo mire antes de borrarla.
 //
 // «meter» no pisa nada: si la matrícula ya está en ese CRM, solo rellena lo que allí
-// está vacío. La ficha del alumno se busca por su correo en ESA base. No suena la
-// campana en ISEIE (pendiente de que Diego diga si la quiere: son avisos de hace días
-// y los alumnos ya están en la lista; además allí el enlace es otro).
+// está vacío. La ficha del alumno se busca por su correo en ESA base.
+//
+// La campana en ISEIE la decide Diego: por defecto NO suena (son avisos de hace días y
+// los alumnos ya están en su lista). Con --con-campana, cada aviso que entra nuevo
+// suena a quien le habría sonado si hubiera llegado bien (super admin y los admin de
+// ese campus), con el texto de siempre, su fecha original y una nota de que llegó
+// por error al otro CRM. El enlace es el de ISEIE si la base es crm_iseie; si no, el
+// del 360 (o el que se diga con --enlace-diplomas). No repite una campana que ya esté.
 // Cada paso solo toca campus de su lado: «meter» salta los que no son de ese CRM y
 // «borrar» los que sí lo son. Se puede repetir: lo ya hecho no cambia.
 //
@@ -51,9 +56,10 @@ const aplicar = args.includes('--aplicar') && paso !== 'sacar';
 const valor = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
 const aFichero = valor('--a-fichero');
 const desdeFichero = valor('--desde-fichero');
+const conCampana = args.includes('--con-campana') && paso === 'meter';
 
 if (!['sacar', 'meter', 'borrar'].includes(paso)) {
-  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar --a-fichero <metidos.json>] | borrar --desde-fichero <metidos.json> [--aplicar]');
+  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar --a-fichero <metidos.json>] [--con-campana] | borrar --desde-fichero <metidos.json> [--aplicar]');
   process.exit(1);
 }
 if (paso === 'sacar' && !aFichero) { console.error('sacar: falta --a-fichero <ruta.json>'); process.exit(1); }
@@ -66,6 +72,14 @@ if (paso === 'meter' && aplicar && !aFichero) {
 const URL_BD = process.env.DATABASE_URL || '';
 if (!URL_BD) { console.error('Falta DATABASE_URL (node --env-file=.env …)'); process.exit(1); }
 const base = new URL(URL_BD).pathname.slice(1);
+// Donde está Diplomas en el frontal de cada CRM (ISEIE no tiene el «/clientes»).
+const RUTA_DIPLOMAS = valor('--enlace-diplomas') || (base === 'crm_iseie' ? '/matriculas/diplomas' : '/clientes/matriculas/diplomas');
+// Git Bash de Windows convierte «/matriculas/…» en «C:/Program Files/Git/matriculas/…»:
+// un enlace así no lleva a ningún sitio, así que se para antes.
+if (!/^\/[a-z0-9/_-]+$/i.test(RUTA_DIPLOMAS)) {
+  console.error(`--enlace-diplomas tiene que ser una ruta del CRM, como /matriculas/diplomas (llegó «${RUTA_DIPLOMAS}»; en Git Bash usa MSYS_NO_PATHCONV=1).`);
+  process.exit(1);
+}
 if (aplicar && ['crm_prod_db', 'crm_iseie'].includes(base) && process.env.RECUPERAR_EN_PRODUCCION !== '1') {
   console.error(`\n  ${base} es PRODUCCIÓN. Para aplicar hace falta RECUPERAR_EN_PRODUCCION=1.\n`);
   process.exit(1);
@@ -79,6 +93,7 @@ if (!aplicar) {
 
 const { query, default: pool } = await import('../src/shared/config/db.js');
 const { proyectosDeCentro } = await import('../src/modules/certifex/certifex.programa.js');
+const { idsAdministracionDeCentro } = await import('../src/modules/certifex/certifex.model.js');
 
 if (!aplicar) {
   const { rows } = await query('SHOW default_transaction_read_only');
@@ -151,12 +166,57 @@ if (paso === 'sacar') {
   console.log(`${avisos.length} avisos de campus que no son de esta base → ${aFichero}`);
 }
 
+// La campana de un aviso movido (--con-campana): la misma que habría puesto la entrada
+// de Certifex al llegar (certifex.controller.js), con su fecha y una nota. Devuelve
+// cuántas pone (o pondría, en el ensayo). No repite una que ya esté en esta base.
+async function sonarAqui(a, nuevos, leadId) {
+  const curso = a.curso_nombre ? ` · ${a.curso_nombre}` : '';
+  const sinFicha = leadId ? '' : ' Su correo no está en el CRM.';
+  const tipos = [];
+  if (nuevos.terminado) {
+    tipos.push({
+      type: 'certifex_completado', cuando: a.completado_recibido_en,
+      title: `Terminó sin pedir el diploma: ${a.nombre_moodle || a.email || 'Un alumno'}`,
+      cuerpo: `${a.centro}${curso}. Moodle da la formación por terminada y aún no ha pedido su diploma.${sinFicha}`,
+      link_path: `${RUTA_DIPLOMAS}?pestana=terminados`,
+    });
+  }
+  if (nuevos.solicitud) {
+    const quien = a.nombre_diploma || a.nombre_moodle || 'Un alumno';
+    const nombre = a.nombre_diploma ? `Nombre para el diploma: «${a.nombre_diploma}».` : 'Sin nombre para el diploma: revísalo antes de aprobar.';
+    tipos.push({
+      type: 'certifex_solicitud', cuando: a.recibida_en || a.solicitada_en,
+      title: `Diploma: ${quien} lo pide`,
+      cuerpo: `${a.centro}${curso}. ${nombre}${sinFicha}`,
+      link_path: RUTA_DIPLOMAS,
+    });
+  }
+  let n = 0;
+  for (const t of tipos) {
+    const { rows: [hay] } = await query(
+      `SELECT 1 FROM admin_notifications WHERE type = $1 AND metadata->>'matriculaId' = $2 LIMIT 1`, [t.type, String(a.matricula_id)]);
+    if (hay) continue;
+    n++;
+    if (!aplicar) continue;
+    const ids = await idsAdministracionDeCentro(a.centro);
+    if (!ids.length) { n--; continue; } // sin destinatarios sería para todos: no
+    const nota = ` Llegó el ${fecha(t.cuando)} al otro CRM por error; se ha traído aquí (#630).`;
+    await query(
+      `INSERT INTO admin_notifications (type, title, message, link_path, metadata, target_user_ids, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, NOW()))`,
+      [t.type, t.title.slice(0, 255), `${t.cuerpo}${nota}`.slice(0, 300), t.link_path,
+        { matriculaId: Number(a.matricula_id), centro: a.centro, leadId, movidoDeOtroCrm: true }, ids, t.cuando ?? null],
+    );
+  }
+  return n;
+}
+
 if (paso === 'meter') {
   // Lo que queda en esta base (creado, completado o que ya estaba): lo único que
   // «borrar» podrá quitar del origen.
   const metidos = [];
   for (const a of entrada.avisos) {
-    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, rellena: '', ficha: '' };
+    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, rellena: '', ficha: '', ...(conCampana ? { campanas: 0 } : {}) };
     filas.push(fila);
     try {
       if (!esDeEsteCrm(a.centro)) { fila.accion = 'SALTA'; fila.rellena = 'el campus tampoco es de esta base'; continue; }
@@ -168,6 +228,12 @@ if (paso === 'meter') {
         [String(a.email || '').trim()],
       );
       const { rows: [ya] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
+      // Lo que este aviso trae de nuevo a esta base (para la campana, si se pide).
+      const nuevos = conCampana ? {
+        terminado: !ya?.completado_recibido_en && !!a.completado_recibido_en,
+        solicitud: !ya?.solicitada_en && !!a.solicitada_en,
+      } : null;
+      const sonar = async () => { if (nuevos) fila.campanas = await sonarAqui(a, nuevos, lead?.id ?? ya?.lead_id ?? null); };
       if (!ya) {
         fila.accion = 'CREA';
         fila.ficha = lead ? `#${lead.id}` : 'sin ficha';
@@ -180,6 +246,7 @@ if (paso === 'meter') {
           );
         }
         metidos.push(a);
+        await sonar();
         continue;
       }
       // Ya está: solo lo vacío. veces y recibida_en nunca están vacíos (NOT NULL).
@@ -200,6 +267,7 @@ if (paso === 'meter') {
         );
       }
       metidos.push(a);
+      await sonar();
     } catch (err) {
       fila.accion = 'ERROR';
       fila.rellena = err.message;

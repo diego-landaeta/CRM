@@ -152,6 +152,56 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     expect(leerJson(metidos2).avisos).toHaveLength(2);
   });
 
+  it('meter --con-campana: suena una vez por aviso nuevo, con su fecha y la nota; sin la opción, no', async () => {
+    const a = leerJson(sacados).avisos.find((x) => x.matricula_id === base);
+    const desde = escribir('campana.json', { paso: 'sacar', origen: 'crm_otra', avisos: [
+      { ...a, matricula_id: base + 5, centro: 'ZPROPIA630' },
+      { ...a, matricula_id: base + 6, centro: 'ZPROPIA630', nombre_diploma: 'Alumna Seis', solicitada_en: '2026-10-21T09:00:00.000Z', recibida_en: '2026-10-21T09:00:05.000Z' },
+    ] });
+    const campanas = async () => (await pool.query(
+      `SELECT type, title, message, link_path, metadata, target_user_ids, created_at FROM admin_notifications
+        WHERE metadata->>'matriculaId' IN ($1, $2) ORDER BY metadata->>'matriculaId', type`, [String(base + 5), String(base + 6)])).rows;
+    try {
+      // Sin la opción: entra el aviso, pero no suena.
+      const sin = correr(['meter', '--desde-fichero', escribir('sin.json', { paso: 'sacar', origen: 'crm_otra', avisos: [{ ...a, matricula_id: base + 7, centro: 'ZPROPIA630' }] }),
+        '--aplicar', '--a-fichero', join(dir, 'm-sin.json')]);
+      expect(sin.status, sin.stderr).toBe(0);
+      expect(await fila(base + 7)).toBeDefined();
+      expect((await pool.query(`SELECT 1 FROM admin_notifications WHERE metadata->>'matriculaId' = $1`, [String(base + 7)])).rows).toHaveLength(0);
+
+      // El ensayo dice cuántas pondría y no pone ninguna.
+      const ensayo = correr(['meter', '--desde-fichero', desde, '--con-campana']);
+      expect(ensayo.status, ensayo.stderr).toBe(0);
+      expect(ensayo.stdout).toMatch(/campanas/);
+      expect(await campanas()).toHaveLength(0);
+
+      const r = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', join(dir, 'm-campana.json'), '--con-campana']);
+      expect(r.status, r.stderr).toBe(0);
+      const c = await campanas();
+      expect(c.map((x) => x.type)).toEqual(['certifex_completado', 'certifex_completado', 'certifex_solicitud']);
+      const [cinco, seis, seisPide] = c;
+      expect(cinco).toMatchObject({ title: 'Terminó sin pedir el diploma: Alumna 630', link_path: '/clientes/matriculas/diplomas?pestana=terminados' });
+      expect(cinco.message).toMatch(/^ZPROPIA630 · Máster en Prueba\. Moodle da la formación por terminada/);
+      expect(cinco.message).toMatch(/al otro CRM por error.*#630/);
+      expect(cinco.created_at.toISOString()).toBe('2026-10-20T08:01:00.000Z'); // la fecha en que llegó
+      expect(cinco.metadata).toMatchObject({ matriculaId: base + 5, centro: 'ZPROPIA630', leadId: lead, movidoDeOtroCrm: true });
+      // A quien le habría sonado: al menos los super admin activos.
+      const { rows: sas } = await pool.query(`SELECT id FROM users WHERE active AND role = 'superadmin'`);
+      for (const u of sas) expect(cinco.target_user_ids).toContain(u.id);
+      expect(seis.title).toBe('Terminó sin pedir el diploma: Alumna 630');
+      expect(seisPide).toMatchObject({ title: 'Diploma: Alumna Seis lo pide', link_path: '/clientes/matriculas/diplomas' });
+      expect(seisPide.message).toMatch(/Nombre para el diploma: «Alumna Seis»/);
+      expect(seisPide.created_at.toISOString()).toBe('2026-10-21T09:00:05.000Z');
+
+      // Otra vez: no repite.
+      const otra = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', join(dir, 'm-campana2.json'), '--con-campana']);
+      expect(otra.status, otra.stderr).toBe(0);
+      expect(await campanas()).toHaveLength(3);
+    } finally {
+      await pool.query(`DELETE FROM admin_notifications WHERE metadata->>'matriculaId' IN ($1, $2, $3)`, [String(base + 5), String(base + 6), String(base + 7)]);
+    }
+  });
+
   it('borrar: solo lo que «meter» dejó en la otra base; el ensayo no borra; manda el campus de esta base', async () => {
     // Como si «meter» se hubiera hecho en la otra base con lo sacado de aquí: base sí
     // entró allí; base + 1 NO (se saltó o falló), así que no está en el fichero.
