@@ -293,8 +293,10 @@ export default function ActividadPorComercial({ ambito }: { ambito: Ambito }) {
 
       <p className="text-xs text-muted-foreground mt-3">
         <strong className="text-foreground">Llamadas registradas en el CRM:</strong> solo cuentan las apuntadas en el CRM; con
-        Zadarma (#137) entrarán solas. Las notas internas no son contactos. «Personas» del equipo no es la suma: dos
-        comerciales pueden haber contactado a la misma. Pulsa un número para ver la lista.
+        Zadarma (#137) entrarán solas. WhatsApp: cada uno apuntado es «de voz» si ese día se le mandó un audio a esa
+        persona (desde el CRM o desde el móvil conectado), y «escrito» si no. Las notas internas no son contactos.
+        «Personas» del equipo no es la suma: dos comerciales pueden haber contactado a la misma. Pulsa un número para
+        ver la lista.
       </p>
 
       {pulsado && datos && (

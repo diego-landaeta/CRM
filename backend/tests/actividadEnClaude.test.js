@@ -134,6 +134,34 @@ beforeAll(async () => {
   await contacto('ANA', 'ANA_B', 'whatsapp', '2026-10-01 12:00');
   await mensaje(conv.id, 'saliente', 'audio', 'DAYANA', '2026-10-01 09:00');
   await contacto('ANA', 'DAYANA_1', 'whatsapp', '2026-10-01 09:30');
+
+  // 02/10, los casos que NO hacen de voz un WhatsApp de Ana a DAYANA_1:
+  //   un audio suyo a OTRO prospecto (DAYANA_2), solo texto a DAYANA_1, un
+  //   audio que ENTRA, y un audio suyo de pasada la medianoche (ya es el 03).
+  //   Y uno de Dayana a DAYANA_2: en el número de Dayana sale un audio que
+  //   mandó ANA desde el CRM (`enviado_por` = Ana): es de Ana, no de la dueña.
+  const otro = await uno(
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, lead_id, project_id)
+     VALUES ($1, $2, '+34600000003', $3, $4) RETURNING id`,
+    [`otra-${marca}`, `34600000003-${marca}@s.whatsapp.net`, L.DAYANA_2, C.A]
+  );
+  ids.conversaciones.push(otro.id);
+  await mensaje(otro.id, 'saliente', 'audio', 'ANA', '2026-10-02 10:00');
+  await mensaje(conv.id, 'saliente', 'texto', 'ANA', '2026-10-02 10:10');
+  await mensaje(conv.id, 'entrante', 'audio', null, '2026-10-02 10:20');
+  // Y un audio que ENTRA en el número de Ana (sin `enviado_por`, por su «…-u<id>»):
+  // le hablan a ella, no lo manda ella.
+  const deAna = await uno(
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, lead_id, project_id)
+     VALUES ($1, $2, '+34600000001', $3, $4) RETURNING id`,
+    [`crm-${marca}-u${U.ANA}`, `34600000001-${marca}@s.whatsapp.net`, L.DAYANA_1, C.A]
+  );
+  ids.conversaciones.push(deAna.id);
+  await mensaje(deAna.id, 'entrante', 'audio', null, '2026-10-02 10:30');
+  await mensaje(conv.id, 'saliente', 'audio', 'ANA', '2026-10-03 00:10');
+  await contacto('ANA', 'DAYANA_1', 'whatsapp', '2026-10-02 23:50');
+  await mensaje(suNumero.id, 'saliente', 'audio', 'ANA', '2026-10-02 12:00');
+  await contacto('DAYANA', 'DAYANA_2', 'whatsapp', '2026-10-02 12:30');
 }, 60000);
 
 afterAll(async () => {
@@ -194,8 +222,8 @@ describe('actividad_por_comercial', () => {
   it('solo «desde»: hasta hoy en Madrid; solo «hasta»: ese día', async () => {
     const desde = await herramienta.ejecutar(admin('A'), { desde: '2026-09-29' });
     expect(desde).toMatchObject({ desde: '2026-09-29', hasta: hoyEnMadrid() });
-    // Del 29 en adelante: la llamada de Dayana del 29, lo del 30 y el WhatsApp del 01/10.
-    expect(fila(desde, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 2, correos: 1 });
+    // Del 29 en adelante: la llamada de Dayana del 29, lo del 30 y los WhatsApp del 01 y el 02/10.
+    expect(fila(desde, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 3, correos: 1 });
     const hasta = await herramienta.ejecutar(admin('A'), { hasta: '2026-09-29' });
     expect(hasta).toMatchObject({ desde: '2026-09-29', hasta: '2026-09-29' });
     expect(fila(hasta, 'DAYANA')).toMatchObject({ llamadas: 1, whatsapp: 0 });
@@ -236,6 +264,16 @@ describe('actividad_por_comercial', () => {
     expect(fila(r, 'DAYANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 0, whatsapp_voz: 1 });
     // Ana: uno sin mensajes y otro donde el único audio es de Dayana: dos escritos.
     expect(fila(r, 'ANA')).toMatchObject({ whatsapp: 2, whatsapp_texto: 2, whatsapp_voz: 0 });
+  });
+
+  it('no lo hacen de voz: un audio a otro prospecto, solo texto, un audio que entra, ni el de otro día', async () => {
+    const r = await herramienta.ejecutar(admin('A'), { desde: '2026-10-02', hasta: '2026-10-02' });
+    expect(fila(r, 'ANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 1, whatsapp_voz: 0 });
+  });
+
+  it('el audio que mandó otra desde el CRM en el número de Dayana es de quien lo mandó, no de la dueña', async () => {
+    const r = await herramienta.ejecutar(admin('A'), { desde: '2026-10-02', hasta: '2026-10-02' });
+    expect(fila(r, 'DAYANA')).toMatchObject({ whatsapp: 1, whatsapp_texto: 1, whatsapp_voz: 0 });
   });
 
   it('a una gestora, solo lo suyo, también el desglose', async () => {
