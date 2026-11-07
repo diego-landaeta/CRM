@@ -40,6 +40,18 @@ function puertaDeCertifex(req) {
 }
 
 /**
+ * Los avisos de un alumno (solicitud de diploma, formacion terminada) solo entran si su
+ * campus es de este CRM (#630): del 19/10 al 01/11 llegaron al 360 avisos de ISEIE.
+ * Se contesta 422 y no 2xx a proposito: Certifex reintenta lo que no recibe un 2xx,
+ * asi que el aviso no se pierde y le llega al CRM bueno cuando se corrija el envio.
+ * El rechazo queda en el registro («Peticion rechazada», con el motivo): errorHandler.
+ */
+async function exigirCentroDeEsteCrm(centro) {
+  if (await model.esCentroDeEsteCrm(centro)) return;
+  throw new AppError(`El campus ${String(centro).toUpperCase()} no es de este CRM`, 422, 'CENTRO_DE_OTRO_CRM');
+}
+
+/**
  * PUBLICO, con secreto: Certifex entrega aqui cada consulta de su web.
  *
  * El aviso va por la CAMPANA, no por correo, igual que los tickets de soporte: el
@@ -107,6 +119,7 @@ export async function recibirSolicitud(req, res, next) {
   try {
     puertaDeCertifex(req);
     const d = parsear(solicitudSchema, req.body);
+    await exigirCentroDeEsteCrm(d.centro);
     const { solicitud: s, estado } = await model.recibirSolicitud(d);
 
     if (estado !== 'repetida') {
@@ -149,6 +162,7 @@ export async function recibirCompletado(req, res, next) {
   try {
     puertaDeCertifex(req);
     const d = parsear(completadoSchema, req.body);
+    await exigirCentroDeEsteCrm(d.centro);
     const { completado: c, estado } = await model.recibirCompletado(d);
 
     if (estado === 'nueva') {
