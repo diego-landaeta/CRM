@@ -1,19 +1,22 @@
 // scripts/avisos-de-otro-crm-630.mjs: los avisos de Certifex que entraron en el CRM
 // equivocado (#630). En producción va de una base (el 360) a otra (ISEIE); aquí, con
 // una sola base, «el otro CRM» es un campus sin proyecto (ZAJENA630) y «este» uno con
-// proyecto creado para la prueba (ZPROPIA630).
+// proyecto creado para la prueba (ZPROPIA630). Los ficheros entre pasos se escriben a
+// mano cuando hace falta fingir que vienen de la otra base.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pool from '../src/shared/config/db.js';
+import { proyectosDeCentro } from '../src/modules/certifex/certifex.programa.js';
 
 const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'avisos-de-otro-crm-630.mjs');
 const dir = mkdtempSync(join(tmpdir(), 'avisos630-'));
 const base = 630_000_000 + Math.floor(Math.random() * 1_000_000) * 10;
 const correo = `alumna.630.${base}@prueba.test`;
+const BASE_AQUI = new URL(process.env.DATABASE_URL).pathname.slice(1);
 
 // El script corre como lo correría Diego: un node limpio, sin lo que vitest deja en el
 // entorno (NODE_OPTIONS, VITEST_*).
@@ -22,9 +25,11 @@ const entorno = (extra = {}) => ({
   LOG_LEVEL: 'silent',
   ...extra,
 });
-const correr = (...args) => spawnSync(process.execPath, [SCRIPT, ...args], {
-  env: entorno(), encoding: 'utf8', cwd: resolve(dirname(SCRIPT), '..'),
+const correr = (args, extra) => spawnSync(process.execPath, [SCRIPT, ...args], {
+  env: entorno(extra), encoding: 'utf8', cwd: resolve(dirname(SCRIPT), '..'),
 });
+const escribir = (nombre, datos) => { const f = join(dir, nombre); writeFileSync(f, JSON.stringify(datos)); return f; };
+const leerJson = (f) => JSON.parse(readFileSync(f, 'utf8'));
 const fila = async (id) => (await pool.query('SELECT * FROM certifex_solicitudes WHERE matricula_id = $1', [id])).rows[0];
 const insertar = (id, centro, extra = {}) => pool.query(
   `INSERT INTO certifex_solicitudes (matricula_id, centro, curso_ref, curso_nombre, nombre_moodle, email,
@@ -52,14 +57,32 @@ afterAll(async () => {
   await pool.end();
 });
 
+describe('la regla del campus, con los centros reales (#630)', () => {
+  it('los 8 campus que Certifex manda al 360 (migración 0037 de Certifex) casan; ISEIE no', () => {
+    // Los nombres y slugs del 360 (seed y migraciones 079 y 179).
+    const del360 = [
+      { id: 1, nombre: 'Psiko Aprende', slug: 'psiko-aprende' }, { id: 2, nombre: 'ISEIH', slug: 'iseih' },
+      { id: 3, nombre: 'Fono Aprende', slug: 'fono-aprende' }, { id: 4, nombre: 'ISAEG', slug: 'isaeg' },
+      { id: 5, nombre: 'ISSLOGG', slug: 'isslogg' }, { id: 6, nombre: 'ISECD', slug: 'isecd' },
+      { id: 7, nombre: 'ISEF', slug: 'isef' }, { id: 8, nombre: 'Academia IA', slug: 'academia-ia' },
+      { id: 9, nombre: 'ICTESS', slug: 'ictess' },
+    ];
+    for (const c of ['PSIKO', 'ISEIH', 'FONO', 'ISAEG', 'ISSLOGG', 'ISECD', 'ISEF', 'ACADEMIAIA']) {
+      expect(proyectosDeCentro(c, del360).length, c).toBeGreaterThan(0);
+    }
+    expect(proyectosDeCentro('ISEIE', del360)).toEqual([]);
+  });
+});
+
 describe('avisos-de-otro-crm-630 (#630)', () => {
-  const fichero = join(dir, 'avisos.json');
+  const sacados = join(dir, 'sacados.json');
 
   it('sacar: solo los de campus que no son de esta base, con lo copiable y lo «tocado aquí»', () => {
-    const r = correr('sacar', '--a-fichero', fichero);
+    const r = correr(['sacar', '--a-fichero', sacados]);
     expect(r.status, r.stderr).toBe(0);
-    const { avisos } = JSON.parse(readFileSync(fichero, 'utf8'));
-    const mios = avisos.filter((a) => a.matricula_id >= base && a.matricula_id < base + 10);
+    const d = leerJson(sacados);
+    expect(d).toMatchObject({ paso: 'sacar', origen: BASE_AQUI });
+    const mios = d.avisos.filter((a) => a.matricula_id >= base && a.matricula_id < base + 10);
     expect(mios.map((a) => a.matricula_id).sort()).toEqual([base, base + 1]);
     const a = mios.find((x) => x.matricula_id === base);
     expect(a).toMatchObject({ centro: 'ZAJENA630', email: correo, curso_nombre: 'Máster en Prueba', tocada_en_origen: [] });
@@ -70,25 +93,43 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     expect(mios.find((x) => x.matricula_id === base + 1).tocada_en_origen).toEqual(['email_crm', 'firma_key']);
   });
 
-  it('meter: el ensayo no escribe; con --aplicar crea, completa lo vacío sin pisar y salta lo ajeno', async () => {
-    // Como si llegaran a la base de su campus: el mismo aviso, con el campus de aquí.
-    const { avisos } = JSON.parse(readFileSync(fichero, 'utf8'));
-    const a = avisos.find((x) => x.matricula_id === base);
-    const destino = join(dir, 'destino.json');
-    writeFileSync(destino, JSON.stringify({ avisos: [
+  it('cada paso solo acepta el fichero del paso anterior, y en su base', () => {
+    // meter con lo sacado de ESTA misma base: no.
+    const mismo = correr(['meter', '--desde-fichero', sacados]);
+    expect(mismo.status).toBe(1);
+    expect(mismo.stderr).toMatch(/OTRA base/);
+    // borrar con el fichero de sacar (sin pasar por meter): no.
+    const sinMeter = correr(['borrar', '--desde-fichero', sacados]);
+    expect(sinMeter.status).toBe(1);
+    expect(sinMeter.stderr).toMatch(/no es el fichero de «meter»/);
+    // borrar en una base que no es la de origen: no.
+    const otra = correr(['borrar', '--desde-fichero', escribir('otra.json', { paso: 'meter', origen: 'crm_otra', avisos: [] })]);
+    expect(otra.status).toBe(1);
+    expect(otra.stderr).toMatch(/va en esa base/);
+    // meter --aplicar sin decir dónde apuntar lo hecho: no.
+    const sinFichero = correr(['meter', '--desde-fichero', sacados, '--aplicar']);
+    expect(sinFichero.status).toBe(1);
+    expect(sinFichero.stderr).toMatch(/falta --a-fichero/);
+  });
+
+  it('meter: el ensayo no escribe; con --aplicar crea, completa lo vacío sin pisar, salta lo ajeno y apunta lo hecho', async () => {
+    const a = leerJson(sacados).avisos.find((x) => x.matricula_id === base);
+    // Como si vinieran de la otra base, con el campus de esta.
+    const desde = escribir('desde.json', { paso: 'sacar', origen: 'crm_otra', avisos: [
       { ...a, matricula_id: base + 3, centro: 'ZPROPIA630' },
       { ...a, matricula_id: base + 2, centro: 'ZPROPIA630', curso_nombre: 'Otro nombre', completado_nota: '9' },
       { ...a, matricula_id: base + 4 },
-    ] }));
+    ] });
     // base + 2 ya está aquí, pero sin nota ni ficha.
     await pool.query('UPDATE certifex_solicitudes SET completado_nota = NULL, lead_id = NULL WHERE matricula_id = $1', [base + 2]);
 
-    const ensayo = correr('meter', '--desde-fichero', destino);
+    const ensayo = correr(['meter', '--desde-fichero', desde]);
     expect(ensayo.status, ensayo.stderr).toBe(0);
     expect(ensayo.stdout).toMatch(/ENSAYO/);
     expect(await fila(base + 3)).toBeUndefined();
 
-    const r = correr('meter', '--desde-fichero', destino, '--aplicar');
+    const metidos = join(dir, 'metidos.json');
+    const r = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', metidos]);
     expect(r.status, r.stderr).toBe(0);
     const nueva = await fila(base + 3);
     expect(nueva).toMatchObject({ centro: 'ZPROPIA630', email: correo, lead_id: lead, veces: 1, firma_key: null, email_crm: null });
@@ -99,37 +140,48 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
     expect(completada.lead_id).toBe(lead);
     expect(await fila(base + 4)).toBeUndefined(); // ZAJENA630 tampoco es de esta base
 
-    // Otra vez: nada que hacer.
-    const otra = correr('meter', '--desde-fichero', destino, '--aplicar');
+    // Lo apuntado: lo que quedó aquí, y nada de lo saltado.
+    const hecho = leerJson(metidos);
+    expect(hecho).toMatchObject({ paso: 'meter', origen: 'crm_otra', destino: BASE_AQUI });
+    expect(hecho.avisos.map((x) => x.matricula_id).sort()).toEqual([base + 2, base + 3]);
+
+    // Otra vez: nada que hacer, y lo que ya estaba también cuenta como hecho.
+    const metidos2 = join(dir, 'metidos2.json');
+    const otra = correr(['meter', '--desde-fichero', desde, '--aplicar', '--a-fichero', metidos2]);
     expect(otra.stdout).toMatch(/YA ESTABA: 2/);
+    expect(leerJson(metidos2).avisos).toHaveLength(2);
   });
 
-  it('borrar: el ensayo no borra; con --aplicar quita solo lo que de verdad no es de esta base', async () => {
-    const lista = join(dir, 'borrar.json');
-    // Con un campus «falso» en el fichero: manda el que hay en la base.
-    writeFileSync(lista, JSON.stringify({ avisos: [
+  it('borrar: solo lo que «meter» dejó en la otra base; el ensayo no borra; manda el campus de esta base', async () => {
+    // Como si «meter» se hubiera hecho en la otra base con lo sacado de aquí: base sí
+    // entró allí; base + 1 NO (se saltó o falló), así que no está en el fichero.
+    const lista = escribir('metidos-aqui.json', { paso: 'meter', origen: BASE_AQUI, destino: 'crm_otra', avisos: [
       { matricula_id: base, centro: 'ZAJENA630' },
-      { matricula_id: base + 2, centro: 'ZAJENA630' },
+      { matricula_id: base + 2, centro: 'ZAJENA630' }, // en el fichero dice ajeno, pero aquí es ZPROPIA630
       { matricula_id: base + 9, centro: 'ZAJENA630' },
-    ] }));
-    const ensayo = correr('borrar', '--desde-fichero', lista);
+    ] });
+    const ensayo = correr(['borrar', '--desde-fichero', lista]);
     expect(ensayo.status, ensayo.stderr).toBe(0);
     expect(await fila(base)).toBeDefined();
 
-    const r = correr('borrar', '--desde-fichero', lista, '--aplicar');
+    const r = correr(['borrar', '--desde-fichero', lista, '--aplicar']);
     expect(r.status, r.stderr).toBe(0);
     expect(await fila(base)).toBeUndefined();
-    expect(await fila(base + 2)).toBeDefined();
+    expect(await fila(base + 1)).toBeDefined(); // no la metió nadie: se queda
+    expect(await fila(base + 2)).toBeDefined(); // su campus es de esta base: se queda
     expect(r.stdout).toMatch(/YA NO ESTÁ: 1/);
   });
 
-  it('en producción, --aplicar necesita RECUPERAR_EN_PRODUCCION=1', () => {
-    const u = new URL(process.env.DATABASE_URL);
-    u.pathname = '/crm_iseie';
-    const r = spawnSync(process.execPath, [SCRIPT, 'meter', '--desde-fichero', join(dir, 'destino.json'), '--aplicar'], {
-      env: entorno({ DATABASE_URL: u.toString(), RECUPERAR_EN_PRODUCCION: '' }), encoding: 'utf8',
-    });
-    expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/PRODUCCIÓN/);
+  it('en producción, --aplicar necesita RECUPERAR_EN_PRODUCCION=1 (en las dos bases)', () => {
+    const en = (nombre) => { const u = new URL(process.env.DATABASE_URL); u.pathname = `/${nombre}`; return u.toString(); };
+    const meter = correr(['meter', '--desde-fichero', join(dir, 'desde.json'), '--aplicar', '--a-fichero', join(dir, 'x.json')],
+      { DATABASE_URL: en('crm_iseie'), RECUPERAR_EN_PRODUCCION: '' });
+    expect(meter.status).toBe(1);
+    expect(meter.stderr).toMatch(/PRODUCCIÓN/);
+    const borrar = correr(['borrar', '--desde-fichero', join(dir, 'metidos-aqui.json'), '--aplicar'],
+      { DATABASE_URL: en('crm_prod_db'), RECUPERAR_EN_PRODUCCION: '' });
+    expect(borrar.status).toBe(1);
+    expect(borrar.stderr).toMatch(/PRODUCCIÓN/);
+    expect(existsSync(join(dir, 'x.json'))).toBe(false);
   });
 });

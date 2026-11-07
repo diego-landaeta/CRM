@@ -13,10 +13,16 @@
 //
 //   1. En el 360, sacarlos a un fichero (SIEMPRE solo lectura):
 //        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs sacar --a-fichero avisos-630.json
-//   2. En ISEIE, meterlos (ensayo; para escribir, --aplicar):
+//   2. En ISEIE, meterlos (ensayo; para escribir, --aplicar y el fichero de lo hecho):
 //        DATABASE_URL=<la de ISEIE> node scripts/avisos-de-otro-crm-630.mjs meter --desde-fichero avisos-630.json
-//   3. En el 360, quitarlos (ensayo; para escribir, --aplicar):
-//        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs borrar --desde-fichero avisos-630.json
+//        DATABASE_URL=<la de ISEIE> node scripts/avisos-de-otro-crm-630.mjs meter --desde-fichero avisos-630.json --aplicar --a-fichero metidos-630.json
+//   3. En el 360, quitar SOLO lo que ya está en ISEIE (ensayo; para escribir, --aplicar):
+//        node --env-file=.env scripts/avisos-de-otro-crm-630.mjs borrar --desde-fichero metidos-630.json
+//
+// «borrar» solo acepta el fichero que deja «meter --aplicar» (las matrículas que han
+// quedado en la base de destino) y solo en la base de donde se sacaron: lo que «meter»
+// saltó (un campus de prueba del 360, por ejemplo) o dio error, no se borra.
+// Los ficheros llevan nombres y correos de alumnos: bórralos al acabar.
 //
 // Qué se copia: lo que dijo Certifex (matrícula, campus, curso, nombres, correo,
 // solicitud y «terminado»). Qué NO: lo que es propio del 360 (lead_id y producto_id
@@ -44,11 +50,15 @@ const aFichero = valor('--a-fichero');
 const desdeFichero = valor('--desde-fichero');
 
 if (!['sacar', 'meter', 'borrar'].includes(paso)) {
-  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar] | borrar --desde-fichero <ruta.json> [--aplicar]');
+  console.error('Uso: sacar --a-fichero <ruta.json> | meter --desde-fichero <ruta.json> [--aplicar --a-fichero <metidos.json>] | borrar --desde-fichero <metidos.json> [--aplicar]');
   process.exit(1);
 }
 if (paso === 'sacar' && !aFichero) { console.error('sacar: falta --a-fichero <ruta.json>'); process.exit(1); }
 if (paso !== 'sacar' && !desdeFichero) { console.error(`${paso}: falta --desde-fichero <ruta.json>`); process.exit(1); }
+if (paso === 'meter' && aplicar && !aFichero) {
+  console.error('meter --aplicar: falta --a-fichero <metidos.json> (lo que quede en esta base; es lo único que «borrar» quitará del origen)');
+  process.exit(1);
+}
 
 const URL_BD = process.env.DATABASE_URL || '';
 if (!URL_BD) { console.error('Falta DATABASE_URL (node --env-file=.env …)'); process.exit(1); }
@@ -89,11 +99,31 @@ const tapar = (e) => {
   return `${u.slice(0, 1)}***@${d || ''}`;
 };
 const tocadaAqui = (r) => PROPIOS.filter((c) => r[c] != null);
+// Cada paso solo acepta el fichero del paso anterior, y en la base que toca.
 const leer = () => {
   const d = JSON.parse(fs.readFileSync(desdeFichero, 'utf8'));
-  if (!Array.isArray(d.avisos)) throw new Error(`${desdeFichero} no es un fichero de «sacar» (falta «avisos»)`);
-  return d.avisos;
+  const espera = paso === 'meter' ? 'sacar' : 'meter';
+  if (d.paso !== espera || !Array.isArray(d.avisos)) {
+    throw new Error(`${desdeFichero} no es el fichero de «${espera}»: «${paso}» va después de «${espera}»`);
+  }
+  if (paso === 'meter' && d.origen === base) throw new Error(`se sacaron de ${base}: hay que meterlos en la OTRA base`);
+  if (paso === 'borrar' && d.origen !== base) throw new Error(`se sacaron de ${d.origen}: «borrar» va en esa base, no en ${base}`);
+  return d;
 };
+
+// Si el fichero no es el que toca, se para antes de escribir nada.
+let entrada = null;
+if (paso !== 'sacar') {
+  try {
+    entrada = leer();
+  } catch (e) {
+    console.error(`
+  ${e.message}
+`);
+    await pool.end();
+    process.exit(1);
+  }
+}
 
 const filas = [];
 console.log(`\n${paso.toUpperCase()} · ${aplicar ? 'APLICANDO' : 'ENSAYO (solo lectura)'} · base ${base}\n`);
@@ -106,7 +136,7 @@ if (paso === 'sacar') {
     ...Object.fromEntries(COPIABLES.map((c) => [c, r[c] ?? null])),
     tocada_en_origen: tocadaAqui(r),
   }));
-  fs.writeFileSync(aFichero, JSON.stringify({ origen: base, sacado_en: new Date().toISOString(), avisos }, null, 2));
+  fs.writeFileSync(aFichero, JSON.stringify({ paso: 'sacar', origen: base, sacado_en: new Date().toISOString(), avisos }, null, 2));
   for (const a of avisos) {
     filas.push({
       matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email),
@@ -118,7 +148,10 @@ if (paso === 'sacar') {
 }
 
 if (paso === 'meter') {
-  for (const a of leer()) {
+  // Lo que queda en esta base (creado, completado o que ya estaba): lo único que
+  // «borrar» podrá quitar del origen.
+  const metidos = [];
+  for (const a of entrada.avisos) {
     const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, rellena: '', ficha: '' };
     filas.push(fila);
     try {
@@ -142,12 +175,13 @@ if (paso === 'meter') {
             [a.matricula_id, ...COPIABLES.map((c) => (c === 'veces' ? (a.veces ?? 1) : c === 'recibida_en' ? (a.recibida_en ?? new Date().toISOString()) : a[c])), lead?.id ?? null],
           );
         }
+        metidos.push(a);
         continue;
       }
       // Ya está: solo lo vacío. veces y recibida_en nunca están vacíos (NOT NULL).
       const vacias = COPIABLES.filter((c) => !['veces', 'recibida_en'].includes(c) && ya[c] == null && a[c] != null);
       const sinFicha = ya.lead_id == null && lead;
-      if (!vacias.length && !sinFicha) { fila.accion = 'YA ESTABA'; continue; }
+      if (!vacias.length && !sinFicha) { fila.accion = 'YA ESTABA'; metidos.push(a); continue; }
       fila.accion = 'COMPLETA';
       fila.rellena = [...vacias, ...(sinFicha ? ['lead_id'] : [])].join(', ');
       fila.ficha = ya.lead_id ? `#${ya.lead_id}` : lead ? `#${lead.id}` : 'sin ficha';
@@ -161,15 +195,23 @@ if (paso === 'meter') {
           [a.matricula_id, ...vacias.map((c) => a[c]), lead?.id ?? null],
         );
       }
+      metidos.push(a);
     } catch (err) {
       fila.accion = 'ERROR';
       fila.rellena = err.message;
     }
   }
+  if (aplicar) {
+    fs.writeFileSync(aFichero, JSON.stringify({
+      paso: 'meter', origen: entrada.origen, destino: base, metido_en: new Date().toISOString(),
+      avisos: metidos.map((a) => ({ matricula_id: a.matricula_id, centro: a.centro, email: a.email })),
+    }, null, 2));
+    console.log(`${metidos.length} quedan en ${base} → ${aFichero} (para «borrar» en ${entrada.origen})`);
+  }
 }
 
 if (paso === 'borrar') {
-  for (const a of leer()) {
+  for (const a of entrada.avisos) {
     const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, nota: '' };
     filas.push(fila);
     try {
