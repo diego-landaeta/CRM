@@ -160,16 +160,37 @@ describe('avisos-de-otro-crm-630 (#630)', () => {
       { matricula_id: base + 2, centro: 'ZAJENA630' }, // en el fichero dice ajeno, pero aquí es ZPROPIA630
       { matricula_id: base + 9, centro: 'ZAJENA630' },
     ] });
-    const ensayo = correr(['borrar', '--desde-fichero', lista]);
-    expect(ensayo.status, ensayo.stderr).toBe(0);
-    expect(await fila(base)).toBeDefined();
+    // Las campanas que dejaron esos avisos aquí (lo que se veía desde el admin).
+    const campana = async (type, matriculaId, centro) => (await pool.query(
+      `INSERT INTO admin_notifications (type, title, metadata) VALUES ($1, 'Prueba 630', $2) RETURNING id`,
+      [type, { matriculaId, centro }])).rows[0].id;
+    const c = {
+      ajena: await campana('certifex_completado', base, 'ZAJENA630'),
+      solicitud: await campana('certifex_solicitud', base, 'ZAJENA630'),
+      deOtroTipo: await campana('certifex_consulta', base, 'ZAJENA630'),
+      sinMeter: await campana('certifex_completado', base + 1, 'ZAJENA630'),
+      propia: await campana('certifex_completado', base + 2, 'ZPROPIA630'),
+      yaSinFila: await campana('certifex_completado', base + 9, 'ZAJENA630'),
+    };
+    const quedan = async () => (await pool.query('SELECT id FROM admin_notifications WHERE id = ANY($1::int[])', [Object.values(c)])).rows.map((x) => x.id).sort();
+    try {
+      const ensayo = correr(['borrar', '--desde-fichero', lista]);
+      expect(ensayo.status, ensayo.stderr).toBe(0);
+      expect(await fila(base)).toBeDefined();
+      expect(await quedan()).toHaveLength(6);
 
-    const r = correr(['borrar', '--desde-fichero', lista, '--aplicar']);
-    expect(r.status, r.stderr).toBe(0);
-    expect(await fila(base)).toBeUndefined();
-    expect(await fila(base + 1)).toBeDefined(); // no la metió nadie: se queda
-    expect(await fila(base + 2)).toBeDefined(); // su campus es de esta base: se queda
-    expect(r.stdout).toMatch(/YA NO ESTÁ: 1/);
+      const r = correr(['borrar', '--desde-fichero', lista, '--aplicar']);
+      expect(r.status, r.stderr).toBe(0);
+      expect(await fila(base)).toBeUndefined();
+      expect(await fila(base + 1)).toBeDefined(); // no la metió nadie: se queda
+      expect(await fila(base + 2)).toBeDefined(); // su campus es de esta base: se queda
+      expect(r.stdout).toMatch(/YA NO ESTÁ: 1/);
+      // Se van las campanas de avisos (terminado y solicitud) de lo que se movió, también
+      // si la fila ya no estaba; se quedan las de otro tipo, las de lo no movido y las propias.
+      expect(await quedan()).toEqual([c.deOtroTipo, c.sinMeter, c.propia].sort());
+    } finally {
+      await pool.query('DELETE FROM admin_notifications WHERE id = ANY($1::int[])', [Object.values(c)]);
+    }
   });
 
   it('en producción, --aplicar necesita RECUPERAR_EN_PRODUCCION=1 (en las dos bases)', () => {

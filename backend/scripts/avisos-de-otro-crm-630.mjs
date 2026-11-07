@@ -21,7 +21,9 @@
 //
 // «borrar» solo acepta el fichero que deja «meter --aplicar» (las matrículas que han
 // quedado en la base de destino) y solo en la base de donde se sacaron: lo que «meter»
-// saltó (un campus de prueba del 360, por ejemplo) o dio error, no se borra.
+// saltó (un campus de prueba del 360, por ejemplo) o dio error, no se borra. Quita la
+// fila y también las campanas que dejó ese aviso en el 360 («Terminó sin pedir el
+// diploma: …»), que es lo que se veía desde el admin.
 // Los ficheros llevan nombres y correos de alumnos: bórralos al acabar.
 //
 // Qué se copia: lo que dijo Certifex (matrícula, campus, curso, nombres, correo,
@@ -32,7 +34,8 @@
 //
 // «meter» no pisa nada: si la matrícula ya está en ese CRM, solo rellena lo que allí
 // está vacío. La ficha del alumno se busca por su correo en ESA base. No suena la
-// campana: son avisos de hace días y los alumnos ya están en la lista.
+// campana en ISEIE (pendiente de que Diego diga si la quiere: son avisos de hace días
+// y los alumnos ya están en la lista; además allí el enlace es otro).
 // Cada paso solo toca campus de su lado: «meter» salta los que no son de ese CRM y
 // «borrar» los que sí lo son. Se puede repetir: lo ya hecho no cambia.
 //
@@ -141,6 +144,7 @@ if (paso === 'sacar') {
     filas.push({
       matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email),
       terminado: fecha(a.completado_recibido_en), solicitud: fecha(a.solicitada_en),
+      campanas: (await campanasAjenas(a.matricula_id)).length,
       nota: a.tocada_en_origen.length ? `tocada en esta base: ${a.tocada_en_origen.join(', ')}` : '',
     });
   }
@@ -210,15 +214,30 @@ if (paso === 'meter') {
   }
 }
 
+// Las campanas que dejó cada aviso aquí («Terminó sin pedir el diploma: …», «Diploma:
+// … lo pide»): es lo que se veía desde el admin. Solo las de un campus que no es de
+// esta base, por el campus que guardó la propia campana.
+async function campanasAjenas(matriculaId) {
+  const { rows } = await query(
+    `SELECT id, metadata->>'centro' AS centro FROM admin_notifications
+      WHERE type IN ('certifex_completado', 'certifex_solicitud') AND metadata->>'matriculaId' = $1`,
+    [String(matriculaId)],
+  );
+  return rows.filter((n) => !esDeEsteCrm(n.centro)).map((n) => n.id);
+}
+
 if (paso === 'borrar') {
   for (const a of entrada.avisos) {
-    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, nota: '' };
+    const fila = { matricula: a.matricula_id, campus: a.centro, correo: tapar(a.email), accion: null, campanas: 0, nota: '' };
     filas.push(fila);
     try {
       const { rows: [r] } = await query(`SELECT * FROM certifex_solicitudes WHERE matricula_id = $1`, [a.matricula_id]);
-      if (!r) { fila.accion = 'YA NO ESTÁ'; continue; }
       // Lo que manda es el campus que hay EN ESTA BASE, no el del fichero.
-      if (esDeEsteCrm(r.centro)) { fila.accion = 'SALTA'; fila.nota = `el campus ${r.centro} es de esta base`; continue; }
+      if (r && esDeEsteCrm(r.centro)) { fila.accion = 'SALTA'; fila.nota = `el campus ${r.centro} es de esta base`; continue; }
+      const campanas = await campanasAjenas(a.matricula_id);
+      fila.campanas = campanas.length;
+      if (aplicar && campanas.length) await query(`DELETE FROM admin_notifications WHERE id = ANY($1::int[])`, [campanas]);
+      if (!r) { fila.accion = 'YA NO ESTÁ'; continue; }
       fila.accion = 'BORRA';
       const tocada = tocadaAqui(r);
       if (tocada.length) fila.nota = `tocada en esta base: ${tocada.join(', ')}`;
